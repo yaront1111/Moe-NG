@@ -19,9 +19,95 @@
     "This task is the durable consumer of task-0325dcf7ee744123b40cf583230c7b6a; it must import and call that production surface.",
     "Target <=250 physical lines per production source and split before 400; this cap is per file."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE AT THE THEN-CURRENT HEAD. The description's gaps date from HEAD 1ce0059 and four prerequisite tasks have landed since, so every claim is stale by default and must be re-run in BOTH directions. No production bytes written.\n\n1. `git rev-parse --short HEAD`; `ls apps/daemon/src/recovery/effect-inventory*` — must still be ABSENT. If it exists, a peer started this; STOP and re-plan.\n2. CARDINALITY, the crux the prior architect blocked on. Read recovery-inventory-contract.ts and record BOTH arrays literally: RECOVERY_PROOF_CLASSES (expect SIX) and RECOVERY_INVENTORY_POPULATIONS (expect SEVEN), plus RECOVERY_CLASS_POPULATION_ROWS which joins them. DoD 6's 'seven configured classes' conflates the two axes; there are six CLASSES and seven POPULATIONS, and PROVIDER_PROCESS_LAUNCH_LOCK covers two populations. Do NOT invent a seventh class and do NOT duplicate a combined proof to reach seven.\n3. VERIFY DoD 4 IS ALREADY SATISFIED, by reading not editing: activation-ingress.ts:286 runEffectActivateCommand reads readActivationEmbargo at :299 BEFORE claimStage at :303, and claimStage calls claimWork from ../work/work-claim.js. activation-embargo.ts:32 pins ACTIVATION_EMBARGO_CODE = \"RECOVERY_RECONCILIATION_REQUIRED\". Record this as satisfied. If it is NOT, report blocked naming task-e33747f9 — do not edit that directory.\n4. Confirm the open gap: restart-reconciliation.ts:235 reconcileOnRestart still iterates request.attempts at :241 (caller-supplied). This is the work.\n5. VERIFY THE DEPENDENCY EDGE to @moe/runner's node-side inventory surface by COMPILED PROBE with a positive and a NEGATIVE control, probe deleted in the same command via a shell trap. A barrel grep is not sufficient and can produce a false BLOCKED — the runner re-exports through differently-named surface files.\n6. `grep -c ''` the modules you will compose, and record which are already over the 250 target (ledger 289, contract 287) so you do not add to them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/restart-reconciliation.ts",
+        "apps/daemon/src/activation/activation-ingress.ts"
+      ],
+      "note": "Re-measured at HEAD 9d60091. effect-inventory* remains absent. Frozen contract is six RECOVERY_PROOF_CLASSES (PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING) and seven RECOVERY_INVENTORY_POPULATIONS (EFFECT_LOCK_WRAPPER_REGISTRATION, PROVIDER_RUN, RESOURCE, PROJECT_TAGGED_WORKSPACE, INTEGRATION_TARGET, GIT_BRANCH_REF, ARTIFACT_STAGING), joined canonically by six RECOVERY_CLASS_POPULATION_ROWS with provider class covering two populations. DoD 4 verified already satisfied in foreign activation WIP: activation-ingress.ts reads readActivationEmbargo at 299 before claimStage at 303; claimStage invokes claimWork; activation-embargo.ts pins RECOVERY_RECONCILIATION_REQUIRED. Open gap confirmed: restart-reconciliation.ts:241 iterates caller request.attempts. Dependency edge verified: apps/daemon/package.json declares @moe/runner, pnpm-lock importer lines 104-106 links it, compiled in-package bare-root positive probe importing/calling createRecoveryInventoryRegistry and naming collectRecoveryInventory exited 0; negative missing-export control exited 1 with TS2305; probe deleted in same command. Existing physical counts: ledger 289, contract 287; will not edit. No production bytes written.",
+      "startedAt": "2026-08-15T18:22:03.173Z",
+      "completedAt": "2026-08-15T18:24:11.581Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD — WRITE THE COORDINATOR'S CARDINALITY AND COVERAGE TESTS FIRST. Create `apps/daemon/src/recovery/effect-inventory.test.ts`.\n\nASSERT BOTH CARDINALITIES, and assert them so they cannot go vacuous:\n- The SIX proof classes by literal NAME, with the count derived from the imported RECOVERY_PROOF_CLASSES.\n- The SEVEN populations by literal NAME, count derived from RECOVERY_INVENTORY_POPULATIONS.\n- The class-to-population mapping covers every population exactly once across the six rows — this is what proves seven collapses to six by the frozen mapping rather than by a duplicated proof.\nDeriving the EXPECTED NAMES from the same array you are testing compares the array with itself and survives any rename or addition; pin the names literally and derive only the count.\n\nCOVERAGE CASES (DoD 1): one COMPLETE cursor/incarnation-bound proof per class satisfies; evidence that OMITS a class, DUPLICATES one, names an UNKNOWN one, or supplies an EXTRA one each fails with its specific stable code. recovery-inventory-record.ts:98-105 already returns CLASS_EXTRA, CLASS_UNKNOWN and CLASS_OMITTED — assert those production codes, do not invent new ones.\n\nFAIL-CLOSED CASES (DoD 3): missing inventory, adapter/coverage uncertainty, non-fenceable unknown state, artifact/key proof failure and an unresolved item each answer UNKNOWN_TRUTH at layer RECOVERY_INVENTORY while RETAINING the precise upstream code. Assert the coordinator code AND the retained upstream tuple AND which layer answered first — more than one layer can refuse, so 'it refused' is one layer away from vacuous.\n\nAN EMPTY ENUMERATOR MUST NOT READ AS CLEAR. Include a case where nothing is enumerated and require UNKNOWN_TRUTH, not coverage. 'We measured nothing' and 'we measured everything and it was empty' are the two readings this test keeps apart.\n\nThese fail until step 5 lands; that is the intended order.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/effect-inventory.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/effect-inventory.test.ts"
+      ],
+      "note": "Added TDD coverage/cardinality suite. It pins six literal proof classes, seven literal populations, exactly-once 7->6 mapping, and production builder reason codes for omitted/duplicate/unknown/extra configured classes. Coordinator cases pin COMPLETE six-proof coverage; empty enumerator, missing durable inventory, node adapter uncertainty, non-fenceable resource, unverifiable artifact/key proof, and unresolved population each assert UNKNOWN_TRUTH at RECOVERY_INVENTORY plus exact retained upstream code/layer. Fresh focused RED exited 1 because ./effect-inventory.js is absent, which is the planned missing coordinator rather than a passing helper-only test.",
+      "startedAt": "2026-08-15T18:24:24.940Z",
+      "completedAt": "2026-08-15T18:30:51.473Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE ITEM JOIN AND DISPOSITION CLASSIFIER (DoD 2) — the one genuinely new authority in this task. Create `apps/daemon/src/recovery/effect-inventory-join.ts`, separate from the coordinator entry so both stay under 250 lines.\n\nEvery post-N item is deterministically classified into exactly one disposition:\n- PROVEN ABSENT — the item is demonstrably gone, with the adapter proof that shows it.\n- SAFELY ADOPTED — ONLY when it joins an EXACT restored intent under the CURRENT incarnation. Both qualifiers are load-bearing: an exact match under a PRIOR incarnation is NOT adoptable, and neither is a near match.\n- QUARANTINED — an orphan, or anything the first two cannot establish.\n\nTWO HARD PROHIBITIONS, both from DoD 2: an unmatched item is NEVER inserted into restored history, and it is NEVER automatically repeated. Adoption may only ever bind to history that already exists.\n\nDeterminism is required, not incidental: the same inputs must produce the same dispositions in the same canonical order, because a digest is computed over the result in step 5. Order the output by the canonical class order the contract already fixes (recovery-inventory-contract.ts:68 states row order is canonical).\n\nRE-DECLARE NOTHING. Proof classes, populations, the UNKNOWN_TRUTH code and the RECOVERY_INVENTORY layer all come from recovery-inventory-contract.ts. Node-side classes come from @moe/runner's package ROOT by bare specifier — never a deep path (TS6059, no escape hatch).\n\nAdd the `.js` bridge: bytes exactly `export * from \"./effect-inventory-join.ts\";` plus LF.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/effect-inventory-join.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.js"
+      ],
+      "startedAt": "2026-08-15T18:30:58.961Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "JOIN TESTS (DoD 2), written to separate the cases that look alike. Create `apps/daemon/src/recovery/effect-inventory-join.test.ts`.\n\nThe three dispositions each get positive coverage, but the cases that matter are the NEGATIVE ones around adoption, because adoption is the only disposition that grants anything:\n- An item matching an exact restored intent under the CURRENT incarnation -> ADOPTED.\n- An item matching an exact intent under a PRIOR incarnation -> QUARANTINED, not adopted. Assert the code, and assert it is the incarnation that decided.\n- An item matching NO intent -> QUARANTINED.\n- An item whose match cannot be established because the adapter was uncertain -> UNKNOWN_TRUTH with the upstream code retained, NOT quarantined-by-default. Uncertainty and orphanhood are different facts.\n\nAssert that an unmatched item produced NO insertion into restored history and NO repeat — the two prohibitions DoD 2 names. These are absence assertions, so state what must NOT be present explicitly rather than inferring it from a passing happy path.\n\nDETERMINISM: run the join twice over the same inputs and assert byte-identical ordered output, since step 5 digests it. Also run it over a shuffled input set and assert the same canonical order comes back — an order that depends on input order would make the digest unstable and the record unverifiable.\n\nDrive PRODUCTION runner/scheduler surfaces (DoD 6), never a fixture that reimplements them: a property asserted against a test helper proves only that the helper agrees with itself.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/effect-inventory-join.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE COORDINATOR ENTRY (DoD 1, 3, 5). Create `apps/daemon/src/recovery/effect-inventory.ts`, composing what already exists rather than rebuilding it.\n\nFlow:\n1. Derive the required class set from daemon configuration and demand ONE cursor/incarnation-bound COMPLETE coverage proof for each of the six proof classes. The class-set validation already exists — recovery-inventory-record.ts:98-105 returns CLASS_EXTRA / CLASS_UNKNOWN / CLASS_OMITTED — so CALL it; do not write a second validator.\n2. Run the step-3 join over the post-N items.\n3. Build the frozen canonical record via `buildRecoveryReconciliationRecord` (recovery-inventory-record.ts:126) binding project, backup cursor/generation, current incarnation/key epoch, configured class set, source proof digests, item dispositions and quarantine references (DoD 5).\n4. Persist via `recordRecoveryReconciliation` (recovery-inventory-ledger.ts:144); read back with `readRecoveryReconciliation` (:242).\n5. Answer UNKNOWN_TRUTH at RECOVERY_INVENTORY on any missing inventory, adapter/coverage uncertainty, non-fenceable unknown state, artifact/key proof failure, or unresolved item — RETAINING the precise upstream code. recovery-inventory-contract.ts:106 already warns that flattening an upstream refusal erases which layer refused; :268 states the coordinator answer is always UNKNOWN_TRUTH at that layer.\n\nDO NOT TOUCH apps/daemon/src/activation/**. DoD 4 is already satisfied there (verified in step 1) and task-e33747f9 owns it while WORKING.\n\nAdd the `.js` bridge. Keep under 250 lines — if it overruns, move composition helpers into effect-inventory-join.ts rather than trimming behaviour. Run the step-2 tests; they must now pass.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/recovery/effect-inventory.ts",
+        "apps/daemon/src/recovery/effect-inventory.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS (DoD 6, which requires mutation-checking the production embargo branch). Capture `sha256sum` of each target BEFORE mutating; restore by Edit and verify by `sha256sum` against the captured hash. NEVER `git checkout` (reverts to HEAD, destroying this task's uncommitted work) and never accept an empty `git diff` as proof — it is blind to untracked paths and every new file here is untracked.\n\nRequired drills, each naming the test that must redden and the assertion it reddens on:\n- D1 EMBARGO BRANCH. Invert the coordinator's fail-closed answer so an unresolved or unknown inventory reports clear instead of holding. A named test must redden on the UNKNOWN_TRUTH assertion. This is the drill DoD 6 names explicitly and it is the one that matters most: the inverted branch is what would let a broken recovery authorise execution.\n- D2 EMPTY ENUMERATOR. Make an empty item set report COMPLETE coverage instead of UNKNOWN. The empty-enumerator test must redden. If it stays green, the coordinator is treating 'measured nothing' as 'nothing to measure'.\n- D3 INCARNATION QUALIFIER. Drop the current-incarnation check from the adoption path so a prior-incarnation match adopts. The prior-incarnation join test must redden — this is the guard that separates a safe adoption from resurrecting a dead run.\n- D4 CLASS SET. Remove one member from the required class set so five classes satisfy coverage. The CLASS_OMITTED test must redden.\n- D5 UPSTREAM CODE. Restamp a carried upstream code as UNKNOWN_TRUTH instead of retaining it. The test asserting the retained upstream tuple must redden — task rail 3 forbids restamping and this proves the test enforces it.\n\nConfirm each drill reddens ON ITS TARGET ASSERTION, not on a crash: a crash proves the module was reached, not that the assertion is load-bearing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/effect-inventory.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATE AND STRUCTURAL CHECKS (DoD 7), each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for two legs and a piped run reports the pipe's tail:\n1. `pnpm --filter @moe/daemon typecheck; echo \"TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"TEST_EXIT=$?\"`\n\nStructural, all mechanical:\n- Every new PRODUCTION module has its sibling `.js` bridge with bytes exactly `export * from \"./<basename>.ts\";` plus LF. A missing bridge is caught by NEITHER tsc NOR vitest, so it ships silently. Test files get none — that is the measured convention (recovery-test-fixtures.ts and restore-test-harness.ts have no bridges).\n- `grep -c ''` each new production file: under 250. Do NOT add lines to recovery-inventory-ledger.ts (289) or recovery-inventory-contract.ts (287) — both are already over target and pre-existing, and growing them is a new violation attributable to this task.\n- `apps/daemon/src/index.ts` unchanged unless a consumer genuinely needs the root export; index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61, so any publish must update that count deliberately and is not a silent edit.\n- `git status --porcelain apps/daemon/src/activation/` must show NOTHING attributable to this task.\n\nFOREIGN RED: the worktree is shared and task-e33747f9 is WORKING in apps/daemon/src/activation/. Apply the path-attributed-baseline rail — repo-wide failures at the merge-base, at HEAD, subtract, intersect with apps/daemon/src/recovery/effect-inventory*. That intersection must be EMPTY. Disclose any foreign red verbatim with exact failing lines and paths; never repair it, never hide it, never fabricate green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/effect-inventory.ts",
+        "apps/daemon/src/recovery/effect-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL SELF-REVIEW, COMMIT, HANDOFF. Invoke the adversarial-self-review skill, then work the checklist aimed at how THIS task fails while looking finished:\n\n1. SEVEN VS SIX. Is there any invented seventh proof class, or a combined proof duplicated to reach seven? The frozen answer is six classes and seven populations joined by RECOVERY_CLASS_POPULATION_ROWS. The prior architect blocked this task once over exactly this; do not reintroduce it.\n2. Does any cardinality assertion derive its expected NAMES from the array it is testing? That compares the array with itself and survives every rename and addition.\n3. Can the coordinator ever report clear from an absence of evidence? Missing inventory, an empty enumerator, an unreadable store and adapter uncertainty must ALL hold and answer UNKNOWN_TRUTH. Epic rail 4: unverifiable evidence never gains authority.\n4. Is any upstream code restamped rather than retained? Task rail 3, and recovery-inventory-contract.ts:106 says so in production.\n5. Can an unmatched item reach restored history, or be automatically repeated? Both are forbidden by DoD 2.\n6. Was any authority re-implemented that recovery-inventory-record/-ledger/-proofs/-invariants already owns? A second class-set validator or a second record builder is a silent duplicate.\n7. Was apps/daemon/src/activation/** touched? It must not be — DoD 4 is already satisfied there and the directory belongs to a live task.\n8. Any probe, scratch or generated evidence file left behind? Epic rail 5 — the step-1 dependency probe must be long gone.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the `apps/daemon/src/recovery/effect-inventory*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit already swept your bytes in, do NOT amend, reset or re-commit to claim it — hand QA the base-ref diff over the owned paths.\n\nHANDOFF must record: that DoD 4 was verified as already satisfied by task-e33747f9 at activation-ingress.ts:299 rather than implemented here; that DoD 6's 'seven configured classes' is six classes plus seven populations under the frozen mapping; and that this task is the durable consumer of task-0325dcf7ee744123b40cf583230c7b6a's node-side inventory surface (task rail 4), naming the call site that imports it from the @moe/runner root.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/effect-inventory.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-cf1f58d0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,7 +115,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
-  "order": 13.6,
+  "order": 25,
   "comments": [
     {
       "id": "comment-4063ffd4d1964fcd87ad4d89bbd7c6aa",
@@ -40,19 +126,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:49.319Z",
-  "updatedAt": "2026-08-15T11:11:13.766Z",
+  "updatedAt": "2026-08-15T18:30:58.961Z",
   "contextFetchedBy": [
     "governor-7c5e6be6",
     "architect-a42f4965",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "architect-7f301fa7",
+    "worker-cf1f58d0"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-13T15:42:43.029Z"
+    "firstClaimAt": "2026-08-13T15:42:43.029Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 2
   },
-  "blockedReason": "Current production cannot satisfy the task without inventing authority. At HEAD c0c5929, @moe/runner exposes only four combined inventory classes and does not root-export any of the four adapter registration factories; @moe/scheduler has an in-memory ResourceRow transition surface but no durable inventory reader; no production integration-attempt inventory record exists; no daemon recovery quarantine/reconciliation persistence exists; claimWork (four execution-authority legs) and @moe/runner activateEffect have no daemon production caller, so the required zero attempt/slot/lease/effect/spend embargo assertion would be vacuous. Cardinality is mechanically contradictory: design line 978 names seven semantic populations, CORE-S14 names six categories, runner has four combined classes, adding resource gives five proof classes, the task description lists six groups, and DoD 6 requires seven generated classes while the collector rejects unknown/extra classes. Created prerequisite tasks task-fb997625e61f487a9afa1cc56c67687a, task-47eecd22b3b94a57a9632672c19ebd97, task-e33747f982e0452a9f9d784fd1cb914d, and task-f6cf8d16c2654641a92b0ee36924de0c.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T15:51:35.144Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured current production, identified the non-vacuous capability gaps and cardinality contradiction, created four prerequisite production tasks, commented the parent, reported it BLOCKED, and wrote Serena handoff memory.",
@@ -63,5 +154,35 @@
       "releasedBy": "architect-a42f4965",
       "reason": "Explicit handoff after reporting the task blocked; user requested the next planning task."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T18:16:35.815Z",
+  "planningNotes": {
+    "approachesConsidered": "THE PRIOR ARCHITECT'S BLOCK IS NOW RESOLVED, AND THE CARDINALITY CONTRADICTION WAS NOT A CONTRADICTION. architect-a42f4965 blocked this at HEAD c0c5929 with an exact conflict: 'design line 978 names 7 populations; CORE-S14 names 6 categories; runner contract has 4 combined classes; adding resource yields 5 proof classes; description lists 6; DoD says 7. Do not duplicate combined proofs to fabricate seven.' task-f6cf8d16 has since frozen the mapping and the answer is that SIX and SEVEN are both correct on DIFFERENT AXES:\n\n  RECOVERY_PROOF_CLASSES (6)  = PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING\n  RECOVERY_INVENTORY_POPULATIONS (7) = EFFECT_LOCK_WRAPPER_REGISTRATION, PROVIDER_RUN, RESOURCE, PROJECT_TAGGED_WORKSPACE, INTEGRATION_TARGET, GIT_BRANCH_REF, ARTIFACT_STAGING\n  RECOVERY_CLASS_POPULATION_ROWS joins them; PROVIDER_PROCESS_LAUNCH_LOCK covers TWO populations, which is where 7 collapses to 6.\n\nSo DoD 1's six named items are the PROOF CLASSES and DoD 6's 'seven configured classes' conflates populations with classes. The reconciliation the prior architect asked for does NOT require narrowing anything: the tests assert BOTH cardinalities, each derived from its own imported production array. That satisfies both numbers honestly and is strictly stronger than picking one. No proof is duplicated to fabricate seven — the many-to-one row is the production mapping, not a fabrication.\n\nMOST OF DoD 1, 3 AND 5 IS ALREADY LANDED and must be composed, not rebuilt. task-f6cf8d16 shipped recovery-inventory-contract.ts (287), -record.ts (188, with CLASS_EXTRA / CLASS_UNKNOWN / CLASS_OMITTED already implementing DoD 1's 'omitted, duplicate, unknown, or extra cannot satisfy coverage'), -ledger.ts (289), -proofs.ts (166), -invariants.ts (186), -reader.ts, -codec.ts, -subject.ts. Re-implementing any of it is the silent-duplicate defect.\n\nDoD 4 IS ALREADY SATISFIED BY ANOTHER TASK, verified on disk rather than assumed: apps/daemon/src/activation/activation-ingress.ts:286 runEffectActivateCommand reads readActivationEmbargo(store, request.projectId) at :299 BEFORE claimStage at :303, and claimStage calls claimWork imported from ../work/work-claim.js at :7. So both the work-claim and effect-activation paths consult the persisted embargo before allocating authority, and ACTIVATION_EMBARGO_CODE is exactly RECOVERY_RECONCILIATION_REQUIRED (activation-embargo.ts:32). That file belongs to task-e33747f9, which is still WORKING — so this plan VERIFIES DoD 4 and does not touch apps/daemon/src/activation/**.\n\nWHAT IS ACTUALLY LEFT is DoD 2: the coordinator itself. apps/daemon/src/recovery/effect-inventory.* does not exist, and restart-reconciliation.ts:235 reconcileOnRestart still iterates request.attempts at :241 — caller-supplied, which is precisely the original gap and the one thing none of the four prerequisites closed.\n\nREJECTED: editing apps/daemon/src/activation/** to 'complete' DoD 4. It is already done, it belongs to a live task, and a second edit there is the shared-worktree collision epic rail 3 prevents.",
+    "codebaseInsights": "RE-MEASURED AT HEAD a967199. The description's gap claims are from HEAD 1ce0059 and the four prerequisite tasks have landed since, so every claim was re-run in both directions.\n\nGAP CLAIM 'no service enumerates configured classes' — PARTLY CLOSED. `grep -rn RECOVERY_PROOF_CLASSES apps/daemon/src/ | grep -v '\\.test\\.'` shows real production consumers: recovery-inventory-invariants.ts:3,28; -proofs.ts:2,3,73,76,140; -reader.ts:3,7,108,113,158,201,204,252; -record.ts:2,98,101,105,166. The class SET is validated in production (record.ts:98-105 returns CLASS_EXTRA, CLASS_UNKNOWN, CLASS_OMITTED). What is still absent is the coordinator that DEMANDS one COMPLETE coverage proof per class and joins items.\n\nGAP CLAIM 'daemon reconcileOnRestart trusts caller-supplied attempts' — STILL OPEN and it is this task's core work. restart-reconciliation.ts:235 `reconcileOnRestart(request)`, :241 `for (const attempt of request.attempts)`, with `attempts: readonly InFlightAttempt[]` declared at :61.\n\nGAP CLAIM 'no production claim gate reads a disaster-recovery embargo' — CLOSED. activation-ingress.ts:299 reads the embargo before the four-leg claim at :303-312 (arm, slot, budget stages follow). activation-embargo.ts:32 `ACTIVATION_EMBARGO_CODE = \"RECOVERY_RECONCILIATION_REQUIRED\"`, with ActivationEmbargoCause, ActivationEmbargoUpstream and an unreadableStore() path at :92 that holds the embargo when the store cannot be read — fail-closed, as epic rail 4 requires.\n\nTHE COORDINATOR IS ABSENT: `ls apps/daemon/src/recovery/effect-inventory*` -> 'No such file or directory'. This is absence-is-the-work, confirmed rather than assumed.\n\nTHE FROZEN VOCABULARY THE COORDINATOR MUST USE, not re-declare:\n- recovery-inventory-contract.ts:24 `RECOVERY_COORDINATOR_UNKNOWN_CODE = \"UNKNOWN_TRUTH\"`, :25 `RECOVERY_INVENTORY_LAYER = \"RECOVERY_INVENTORY\"` — exactly the code/layer DoD 3 demands.\n- :36 RECOVERY_PROOF_CLASSES (6), :56 RECOVERY_INVENTORY_POPULATIONS (7), :69 RECOVERY_CLASS_POPULATION_ROWS (ordered canonically, 'order is canonical' per :68).\n- recovery-inventory-contract.ts:268 states the coordinator answer is ALWAYS UNKNOWN_TRUTH at RECOVERY_INVENTORY and :106 warns that flattening an upstream refusal into UNKNOWN_TRUTH 'would erase which layer refused and why' — the carried-upstream-code rule is already written down.\n\nSURFACES TO COMPOSE:\n- recovery-inventory-record.ts:126 `buildRecoveryReconciliationRecord(...)` -> RecoveryReconciliationBuilt (:41).\n- recovery-inventory-ledger.ts:144 `recordRecoveryReconciliation(...)`, :242 `readRecoveryReconciliation(...)`, with RecoveryReconciliationExternalFacts (:43), RecoveryDurableReconcileRequest (:52), RecoveryReconciliationRecorded (:59), RecoveryReconciliationFound (:68).\n- Node-side classes come from @moe/runner: packages/runner/src/recovery-inventory/recovery-inventory-contract.ts:24 RECOVERY_INVENTORY_CLASSES (4) with layer INVENTORY_ADAPTER, root-published via surface/recovery-inventory-surface.ts:35.\n- Durable daemon classes: durable-recovery-inventory-contract.ts:33 DURABLE_RECOVERY_INVENTORY_CLASSES = [RESOURCE, INTEGRATION_TARGET], 'Ordered exactly as the daemon's frozen proof classes order them'. 4 node-side + 2 durable = the 6 proof classes.\n\nLINE BUDGET: recovery-inventory-ledger.ts is 289 and recovery-inventory-contract.ts is 287 — both already over the 250 target and under the 400 split point, both PRE-EXISTING and not this task's to fix. New coordinator files must come in under 250, which is why the join is a separate module from the entry point.\n\nCONVENTION: apps/daemon requires a physical `.js` bridge per production module (every .ts in src/recovery/ has one; the test-only recovery-test-fixtures.ts and restore-test-harness.ts do not). apps/daemon/src/index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61.",
+    "risks": "DO NOT TOUCH apps/daemon/src/activation/**. task-e33747f9 is WORKING (5/8 steps, worker-fd8f822b) and owns that directory; its files were last written at 17:04. DoD 4 is ALREADY satisfied there — verify it by reading activation-ingress.ts:299-312, do not re-implement it, and do not 'improve' it. A second worker editing that directory is the collision epic rail 3 exists to prevent. If the verification shows DoD 4 is NOT satisfied when the worker arrives, report blocked naming task-e33747f9 rather than editing it.\n\nTHE SEVEN-VS-SIX TRAP IS THE ONE THAT PRODUCES A WRONG PLAN. DoD 6 says 'all seven configured classes'. There are SIX proof classes and SEVEN populations. Do NOT invent a seventh class, and do NOT duplicate a combined proof to reach seven — the prior architect's comment names that failure explicitly. Assert BOTH cardinalities from their own production arrays.\n\nA CARDINALITY ASSERTION THAT DERIVES ITS EXPECTATION FROM THE ARRAY IT IS TESTING COMPARES THE ARRAY WITH ITSELF and survives any addition or deletion. Pin the six class NAMES and the seven population NAMES literally, and derive only the COUNT from the imported arrays, so both a rename and a silent addition redden.\n\nFAIL-CLOSED IS THE WHOLE POINT AND IT IS EASY TO INVERT. An empty enumerator, a missing adapter, or an unreadable store must all hold the embargo and answer UNKNOWN_TRUTH — never 'no items found, therefore clear'. 'We measured nothing' and 'we measured everything and it was empty' are the two readings the coverage class exists to keep apart; the runner's own countCoverage() makes an empty set UNKNOWN rather than vacuously COMPLETE, and the coordinator must inherit that. A test that only drives the happy path cannot see this inversion.\n\nCARRIED UPSTREAM CODES MUST NOT BE RESTAMPED (task rail 3, and recovery-inventory-contract.ts:106 says so in production). The coordinator answers UNKNOWN_TRUTH at RECOVERY_INVENTORY while RETAINING the precise upstream adapter code — INVENTORY_ADAPTER from the runner, or the scheduler's own. Tests must assert the coordinator code AND the retained upstream tuple AND which layer answered first; more than one layer can refuse here, so an assertion of 'it refused' is one layer away from vacuous.\n\nADOPTION IS THE DANGEROUS DISPOSITION. DoD 2 permits adoption ONLY to an exact restored intent under the CURRENT incarnation. An unmatched item must never be inserted into restored history and never automatically repeated. The negative cases — an item matching an intent from a PRIOR incarnation, and an item matching nothing — both quarantine, and both need their own test; a plan that only tests successful adoption cannot distinguish them.\n\nSHARED WORKTREE, ACTIVE. Read any premise outside owned paths with `git show HEAD:<path>`; a peer's in-flight drill flipped a file mid-session earlier today. Apply the path-attributed-baseline rail to any foreign red.\n\nCONSUMER EDGE (task rail 4): this task is the durable consumer of task-0325dcf7's node-side inventory surface and MUST import and call it from @moe/runner's package root — published at surface/recovery-inventory-surface.ts. Verify the dependency edge by compiled probe with a negative control, not by a barrel grep: a grep for 'recovery-inventory' in packages/runner/src/index.ts can miss a re-export routed through a differently-named surface file, which is exactly how a false BLOCKED was nearly filed on the telemetry family this session.",
+    "keyFiles": [
+      "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+      "apps/daemon/src/recovery/recovery-inventory-record.ts",
+      "apps/daemon/src/recovery/recovery-inventory-ledger.ts",
+      "apps/daemon/src/recovery/restart-reconciliation.ts",
+      "apps/daemon/src/activation/activation-ingress.ts",
+      "apps/daemon/src/activation/activation-embargo.ts",
+      "packages/runner/src/recovery-inventory/recovery-inventory-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-15T18:21:23.000Z",
+    "escalatedAt": "2026-08-15T18:21:23.000Z"
+  },
+  "planApprovedAt": "2026-08-15T18:16:37.884Z",
+  "workStartedAt": "2026-08-15T18:22:03.173Z"
 }

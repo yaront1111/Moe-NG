@@ -21,26 +21,35 @@
   "implementationPlan": [
     {
       "stepId": "step-1",
-      "description": "Before editing, re-measure HEAD and the five owned paths, then require tasks task-0c21ba2f07cc4f4a829e475bbd7f0562 and task-bcea70569f714367b2e50c1734433631 to be DONE on disk: grep the @moe/contracts ProjectConfigurationManifest/parser exports and @moe/core create/encode/decode exports and inspect their handoffs/mutation evidence. Verify the consumer edges again in all three forms required by the rail: apps/daemon/package.json dependencies, the apps/daemon importer in pnpm-lock.yaml, and a uniquely named temporary TypeScript probe inside apps/daemon importing the new symbols from bare @moe/contracts/@moe/core plus SqliteEventStore from bare @moe/store; run the package typecheck and delete the probe in the same try/finally command. If any prerequisite/symbol/edge is absent, report blocked rather than adding a daemon copy. Record the exact verification command's merge-base output before the diff for later path-attributed comparison, and recheck that no active task owns the proposed configuration paths or daemon barrel/surface test.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "description": "Baseline and re-confirm reachability (the block premise is already cleared — this is a confirm-and-proceed, not a gate to re-block on unless it actually fails). HEAD may have moved since planning; re-run the three edge forms the workspace rail requires: (a) `grep -n \"@moe/contracts\\|@moe/core\\|@moe/store\" apps/daemon/package.json` — all three must be `workspace:*`; (b) the `apps/daemon:` importer block in pnpm-lock.yaml must carry entries for all three; (c) write a uniquely named temporary probe under apps/daemon/src importing ONLY bare specifiers — `parseProjectConfigurationManifest` + `PROJECT_CONFIGURATION_SCHEMA_VERSION` + type `ProjectConfigurationManifest` from @moe/contracts, `createProjectConfigurationManifest(projectId, settings)` (TWO arguments) / `encodeProjectConfigurationManifest(manifest)` / `decodeProjectConfigurationManifestBytes(bytes)` from @moe/core, and `SqliteEventStore` from @moe/store — then run `pnpm --filter @moe/daemon typecheck` and delete the probe in the SAME command via try/finally so a failure cannot leave residue; confirm `git status --porcelain` shows no probe. Only if an import genuinely fails to resolve, report blocked with the failing import verbatim — never add a daemon copy of a contracts/core symbol. Then capture the merge-base baseline for the path-attributed comparison step 6 needs: run the exact verification command at the merge-base and record which paths fail BEFORE this diff. Finally recheck that no other active task currently owns apps/daemon/src/index.ts, apps/daemon/src/index-surface.test.ts, or apps/daemon/src/configuration/**.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Reconfirmed @moe/contracts/@moe/core/@moe/store workspace:* edges in apps/daemon/package.json and pnpm-lock importer. A unique bare-specifier probe under apps/daemon type-resolved all named symbols (createProjectConfigurationManifest two-arg signature included) and was deleted in the same command; no residue. Task baseline ref: f0f62c0b96073582f1dc917043560862a4460174. Fresh baseline gate: contracts 416/416 green, core 730/730 green, daemon 1687 tests green but suite exit 1 only because foreign untracked apps/daemon/src/telemetry/provider-run-contracts.test.ts imports its TDD-pending missing provider-run-contracts.js. Owned-path baseline failures: none. Rechecked live peers: telemetry owns only telemetry slice and explicitly does not publish daemon root; activation plan owns activation and registry paths, not index/index-surface/configuration; owned paths show no foreign status.",
+      "startedAt": "2026-08-15T18:05:14.599Z",
+      "completedAt": "2026-08-15T18:09:10.905Z"
     },
     {
       "stepId": "step-2",
-      "description": "TDD red: create the focused daemon test through the production public roots. Freeze the APIs as `selectProjectConfiguration(store, unknown)` and `readCurrentProjectConfiguration(store, unknown)`, with an exact selection request (projectId, command/correlation/timestamp, expected aggregate version, canonical manifest bytes) and an exact current-read request (projectId, expectedSettingsDigest). Pin frozen success as SELECTED/CURRENT with DAEMON_VERIFIED durable evidence, exact canonical bytes/manifest/selectionVersion, and every failure as UNKNOWN/NONE with one of PROJECT_CONFIGURATION_ABSENT, PROJECT_CONFIGURATION_STALE, PROJECT_CONFIGURATION_CONFLICT, or PROJECT_CONFIGURATION_UNREADABLE at PROJECT_CONFIGURATION_SELECTION plus exact upstream code/layer where another layer refused. Add real file-backed SQLite cases for first select, current read, update, exact replay, replay after a newer selection, CAS loser, close/reopen byte equality, and zero duplicate events; add bounded structural-port cases for stable-tail interleavings/store throws. Add a hand-written forged-record matrix covering event type/schema/aggregate/project/sequence/page shape, missing or mismatched command decision/receipt/request digest/result bytes, and malformed canonical manifest bytes; assert its exact positive case count, exact code/layer/upstream, and no default/authority on every refusal.",
-      "status": "PENDING",
+      "description": "TDD red: create apps/daemon/src/configuration/project-configuration-selection.test.ts driving the production public roots only. Freeze the APIs as `selectProjectConfiguration(store, unknown)` and `readCurrentProjectConfiguration(store, unknown)`. Selection request = exact keys (projectId, commandId, correlationId, decidedAt, principalId, expectedVersion, manifestBytes); current-read request = exact keys (projectId, expectedSettingsDigest). Pin frozen success as SELECTED/CURRENT carrying DAEMON_VERIFIED durable evidence plus the exact canonical bytes, decoded manifest and selectionVersion. Pin EVERY failure as {ok:false, outcome:\"UNKNOWN\", authority:\"NONE\"} with one of the four closed codes PROJECT_CONFIGURATION_ABSENT | PROJECT_CONFIGURATION_STALE | PROJECT_CONFIGURATION_CONFLICT | PROJECT_CONFIGURATION_UNREADABLE at this module's OWN layer PROJECT_CONFIGURATION_SELECTION, plus a separate `upstream` field carrying the refusing layer's own {code, layer} VERBATIM when @moe/contracts (PROJECT_CONFIGURATION_MANIFEST), @moe/core (PROJECT_CONFIGURATION_CODEC / _CANONICALIZATION / _DIGEST) or the store refused — never flattened. Real file-backed SQLite cases (open in beforeEach/it, never a describe body; afterAll close then rmSync): first select, current read, update to a new manifest, exact replay, replay after a NEWER selection, CAS loser at a stale expectedVersion, close/reopen byte equality, and zero duplicate events. Bounded structural-port cases for stable-tail interleavings and store throws. Hand-written forged-record matrix over event type / schemaVersion / aggregateId / projectId / aggregateSequence / page shape, missing or mismatched command decision / receipt / request digest / result bytes, and malformed canonical manifest bytes; assert the matrix's exact non-zero positive-case count (a sweep that generates zero cases passes while testing nothing) and, on every row, the exact code + layer + upstream and that NO manifest and NO authority were returned.",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.test.ts",
         "apps/daemon/src/index-surface.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts"
+      ],
+      "note": "TDD red added against bare package roots plus the intended relative daemon production bridge. Focused Vitest exit 1 for the exact intended cause: Cannot find module './project-configuration-selection.js'; zero tests executed, so the absent production surface is the sole red. Suite pins real SQLite select/update/replay/stale-CAS/reopen/no-duplicate behavior, stable-tail and store throws, hostile exact-record input, and a hand-written 14-case nonzero forged event/decision/receipt/page/codec matrix with exact code, own layer, upstream provenance, and no-authority/no-manifest assertions.",
+      "startedAt": "2026-08-15T18:09:16.211Z",
+      "completedAt": "2026-08-15T18:13:25.527Z"
     },
     {
       "stepId": "step-3",
-      "description": "Implement the current-read half in one focused production module. Derive one fixed project-scoped configuration-selection aggregate from the already validated projectId; perform a bounded before-version/read-one-latest/after-version loop using `getAggregateVersion` and `readAggregateEvents`, and return CONFLICT if no stable tail is observed. Snapshot store-returned objects/arrays/bytes through own enumerable data descriptors before use. Require one exact `ProjectConfigurationSelected` event/schema/aggregate sequence and resolve its exact `getCommandDecision` record; cross-check command key, target aggregate, EFFECTS_COMMITTED disposition, business event id, request digest, and byte-for-byte decision result/event payload. Decode only through bare-root `decodeProjectConfigurationManifestBytes`, require the embedded projectId to match, then compare the freshly decoded settingsDigest with the caller's expectedSettingsDigest. Map absence, expected-digest mismatch, structural/integrity disagreement, codec refusal, and thrown store faults to the four closed UNKNOWN results without a synthesized manifest. Freeze/detach every returned record and keep the source <=250 physical lines.",
-      "status": "PENDING",
+      "description": "Implement the current-read half in one focused production module, apps/daemon/src/configuration/project-configuration-selection.ts. Declare this module's OWN frozen closed code list (the four above) and its OWN layer constant PROJECT_CONFIGURATION_SELECTION — do NOT append to the contracts' closed PROJECT_CONFIGURATION_REFUSAL_CODES (2 entries) or PROJECT_CONFIGURATION_REFUSAL_LAYERS (1 entry); those are swept by contracts surface tests and widening them pushes the diff outside this task's owned paths. Mirror the upstream-preservation shape @moe/core already ships in ProjectConfigurationCodecRefusal: own code + own layer + `upstream` holding the foreign refusal verbatim, null when this layer refused. Derive one fixed project-scoped configuration-selection aggregate id from the already-validated projectId. Perform the bounded before-version / read-one-latest / after-version stable-tail loop modelled on apps/daemon/src/documents/document-work-read.ts:88-100 using `store.getAggregateVersion` and `store.readAggregateEvents`; if no stable tail is observed within the bound, return CONFLICT — never loop unbounded. Snapshot every store-returned object/array/byte view through own enumerable data descriptors before use. Require exactly one `ProjectConfigurationSelected` event at the expected schemaVersion and aggregate sequence, then resolve its `store.getCommandDecision` record and cross-check command key, target aggregate, EFFECTS_COMMITTED disposition, business event id, request digest, and byte-for-byte equality of decision result bytes against the event payload. Decode ONLY through bare-root `decodeProjectConfigurationManifestBytes`; require the embedded manifest.projectId to equal the requested projectId; then compare the FRESHLY decoded settingsDigest against the caller's expectedSettingsDigest. Map absence, expected-digest mismatch, structural/integrity disagreement, codec refusal and thrown store faults onto the four closed UNKNOWN results — never synthesize or default a manifest. Freeze/detach every returned record. Keep this source <=250 physical lines (measure with `grep -c ''`, not PowerShell Measure-Object -Line).",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js"
@@ -48,56 +57,92 @@
       "newFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.ts",
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts"
+      ],
+      "note": "Implemented the current-read half with a 3-attempt stable-tail loop, descriptor-exact page/event/trace/decision/receipt snapshots, detached bytes, fixed hashed project aggregate, decision+receipt integrity checks, bare-root codec decode, exact project/current-digest comparison, frozen CURRENT/UNKNOWN outputs, own four-code vocabulary/layer, and verbatim codec/store upstream provenance. Added an isolated stable-empty-head current-read test: 1 passed, 9 skipped; daemon typecheck exit 0. Source is 242 physical lines (<250). selectProjectConfiguration remains a fail-closed placeholder for step 4, so no untested authority was introduced.",
+      "startedAt": "2026-08-15T18:14:14.984Z",
+      "completedAt": "2026-08-15T18:16:19.480Z"
     },
     {
       "stepId": "step-4",
-      "description": "Implement selection/write composition in the same module without creating a second authority policy. Exact-snapshot the request and manifest byte array once, decode through @moe/core before touching the store, reject project mismatch, and persist the identical canonical manifest bytes as both the sole `ProjectConfigurationSelected` event payload and committed decision result via `SqliteEventStore.commitExpectedVersionDecision` on the fixed aggregate. Map EXPECTED_VERSION_CONFLICT to PROJECT_CONFIGURATION_STALE, idempotency/identity disagreement to PROJECT_CONFIGURATION_CONFLICT, and store faults to PROJECT_CONFIGURATION_UNREADABLE, preserving upstream provenance. On DECIDED and REPLAYED responses, call the production current-read path with the submitted settingsDigest before returning SELECTED so an old replay after a newer selection cannot regain authority. Emit only one event on first acceptance and none on replay/refusal. Add concise TSDoc explaining the latest-stable-tail currentness definition and the self-digest exclusion; create the exact one-line LF bridge `export * from \"./project-configuration-selection.ts\";`.",
-      "status": "PENDING",
+      "description": "Implement the selection/write composition in the same module without creating a second authority policy. Exact-snapshot the request and the manifest byte array ONCE, decode through @moe/core BEFORE touching the store, reject a projectId mismatch between request and decoded manifest, then persist the IDENTICAL canonical bytes as both the sole `ProjectConfigurationSelected` event payload and the committed decision result via `store.commitExpectedVersionDecision` on the fixed aggregate. Map the store's EXPECTED_VERSION_CONFLICT to PROJECT_CONFIGURATION_STALE, idempotency/identity disagreement to PROJECT_CONFIGURATION_CONFLICT, and thrown store faults to PROJECT_CONFIGURATION_UNREADABLE, preserving upstream provenance in `upstream` each time. On BOTH the DECIDED and REPLAYED responses, call the production current-read path with the submitted settingsDigest before returning SELECTED — this is what stops an old replay after a newer selection from regaining authority, and it is the guard step 5's mutation drill targets. Emit exactly one event on first acceptance and none on replay or refusal. Add concise TSDoc stating the latest-stable-tail definition of currentness and why settingsDigest is excluded from its own preimage. Create the bridge apps/daemon/src/configuration/project-configuration-selection.js containing exactly the one line `export * from \"./project-configuration-selection.ts\";` with LF and double quotes — tsc and vitest are both blind to a missing bridge, so verify the byte content after writing.",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js",
         "apps/daemon/src/configuration/project-configuration-selection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.ts",
+        "apps/daemon/src/configuration/project-configuration-selection.js",
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts"
+      ],
+      "note": "Implemented exact one-snapshot selection: descriptor-exact request, detached manifest bytes, bare-core decode before any store call, project binding, one decision-backed ProjectConfigurationSelected event with identical event/result bytes, CAS stale and identity-conflict provenance, and mandatory fresh current-read on both DECIDED and REPLAYED. Exact/current replay emits no duplicate event; old replay after replacement is STALE. Focused suite 11/11 passed plus daemon typecheck exit 0. Production source is 244 physical lines. Bridge byte check matched exactly `export * from \"./project-configuration-selection.ts\";\\n` (LF, double quotes). Debugging found and corrected one false integrity assumption: store event/receipt requestSha identifies the internal effect while decisionTrace/decision requestSha identifies the scoped command; each pair is now checked without wrongly equating the two domains.",
+      "startedAt": "2026-08-15T18:16:28.074Z",
+      "completedAt": "2026-08-15T18:22:30.474Z"
     },
     {
       "stepId": "step-5",
-      "description": "Publish the complete runtime/type closure from the @moe/daemon root and update the exact namespace/type assertions, keeping apps/daemon/src/index.ts at or below its pre-task 333 physical lines by consolidating only semantically equivalent adjacent export statements. Complete the public-consumer test with a Windows-safe child `execFile(process.execPath, ['--experimental-strip-types', ...])` smoke: from apps/daemon import only bare @moe/contracts/@moe/core/@moe/daemon/@moe/store roots, create a manifest, select it into a temporary project store, close, reopen, and read the exact current record. Use no shell, set windowsHide, bound timeout/buffers, close all handles before `rmSync` in a finally block, and assert the full result rather than truthiness. Run the reversible currentness mutation drill by removing/inverting the production `decoded.settingsDigest === expectedSettingsDigest` comparison, prove the named stale-replay/current test goes red with its exact code/layer assertion, then restore production bytes and prove green. Inspect task-bcea70569f714367b2e50c1734433631's recorded canonicalization mutation drill rather than modifying its foreign-owned core file.",
-      "status": "PENDING",
+      "description": "Publish the complete runtime and type closure from the @moe/daemon root and update the exact namespace/type assertions in index-surface.test.ts (573 physical lines at HEAD 43b18dd). apps/daemon/src/index.ts is 347 physical lines at HEAD 43b18dd — NOTE this supersedes the earlier plan's stale 333 figure; add the exports while keeping the file at or below 347 by consolidating only semantically equivalent adjacent export statements, and re-measure with `grep -c ''`. Complete the public-consumer proof with a Windows-safe child smoke: `execFile(process.execPath, ['--experimental-strip-types', <script>], {windowsHide: true, timeout, maxBuffer})` — no shell, never shell:true, argument arrays only. From apps/daemon the child imports ONLY the bare roots @moe/contracts, @moe/core, @moe/daemon and @moe/store (no deep imports — this repo has no tsconfig paths and no project references, so a deep relative import is TS6059), creates a manifest, selects it into a temporary project store, CLOSES the store in the child, reopens, and reads the exact current record. Assert the full result object, never truthiness. Close every handle in the child before the parent `rmSync`es the temp directory in a finally block. Then run the reversible currentness mutation drill: remove or invert the production `decoded.settingsDigest === expectedSettingsDigest` comparison, run ONLY the named stale-replay/current test and prove it goes RED on its exact code/layer assertion — not on a crash, and bounded so a hang cannot read as a hold — then restore the exact pre-drill bytes from your own saved copy (NEVER `git checkout`, which reverts to HEAD and destroys uncommitted work in this shared worktree) and prove green again. For the canonicalization guard, inspect task-bcea70569f714367b2e50c1734433631's recorded mutation-drill evidence rather than modifying its foreign-owned packages/core file.",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.test.ts",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.ts",
+        "apps/daemon/src/configuration/project-configuration-selection.js",
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Published all 4 runtime values/functions and all 8 exported selection types from @moe/daemon. Updated exact sorted namespace count 61->65 and type closure. Added Windows-safe execFile child smoke using argument arrays, windowsHide, timeout/maxBuffer; child imports only @moe/contracts/@moe/core/@moe/daemon/@moe/store, deep-asserts full SELECTED and reopened CURRENT objects, and closes both SQLite handles before cleanup. Combined focused tests 98/98 and daemon typecheck exit 0; smoke temp dirs absent. Reversible currentness drill replaced the sole digest comparison with `if (false)`: named old-replay test exit 1 at expectUnknown's exact PROJECT_CONFIGURATION_STALE/layer assertion because SELECTED v2 escaped; own saved bytes restored byte-exact, rerun exit 0. Canonicalization drill evidence inspected in task-bcea7056 handoff: QA mutated policy preimage/domain/NONCANONICAL/digest/duplicate/species guards and each named test reddened, with SHA-restored bytes. index.ts is 346 lines (<=347); selection source 244; bridge exact.",
+      "startedAt": "2026-08-15T18:22:37.405Z",
+      "completedAt": "2026-08-15T18:26:55.623Z"
     },
     {
       "stepId": "step-6",
-      "description": "Run exactly `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` in the foreground and capture its exit code/output as complete_task evidence. Compare this fresh HEAD output with the merge-base baseline from step 1 and report any foreign failing paths verbatim; owned-package legs must be exit 0 and the new failing-path intersection with the five owned paths must be empty. Also mechanically assert the new production source is <=250 lines, daemon index.ts did not exceed its pre-task 333 lines, the bridge is exact double-quoted LF bytes, both temporary probes/smoke directories are gone, and `git diff --check` plus `git status --porcelain` show no generated evidence or unowned staged paths.",
-      "status": "PENDING",
+      "description": "Run exactly `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` in the foreground, `&&`-chained (a `;`-chained run masks a red leg) and never piped through tail (a piped run reports tail's exit code, not the suite's). Capture the real exit code and output as complete_task evidence. Compare against the step-1 merge-base baseline: owned-package legs must be exit 0, and the HEAD-minus-merge-base failing-path set intersected with this task's five owned paths must be EMPTY. Report any foreign red verbatim with its exact failing lines and paths — disclosed, never hidden, never fabricated green. Then mechanically assert: project-configuration-selection.ts is <=250 physical lines by `grep -c ''`; apps/daemon/src/index.ts is <=347 physical lines; the .js bridge is the exact one-line double-quoted LF text; the step-1 probe and the step-5 smoke temp directory are both gone; and `git diff --check` plus `git status --porcelain` show no generated evidence file and no unowned staged path.",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js",
         "apps/daemon/src/configuration/project-configuration-selection.test.ts",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.ts",
+        "apps/daemon/src/configuration/project-configuration-selection.js",
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Exact foreground &&-chained gate run disclosed foreign red: contracts 12 files/416 tests passed; core 29/730 passed; daemon 85 files/1746 tests passed but package exit 1 solely at foreign untracked apps/daemon/src/recovery/recovery-completion.test.ts:5, `Cannot find module './recovery-completion-digest.js'`. Baseline had the same TDD-missing-production class at foreign telemetry path; HEAD-minus-baseline failing-path intersection with the five owned paths is empty. Owned focused package legs remain 98/98 and typecheck 0. Mechanical: selection.ts 244, index.ts 346, bridge exact LF line, probe false, smoke dirs [], owned diff --check clean, staged path list empty, no generated owned residue. Shared HEAD advanced to f344458 during the run; no reset/stash/amend performed. Final step will rerun the exact gate fresh after the active recovery worker lands its production half, because complete_task requires real exit 0.",
+      "startedAt": "2026-08-15T18:27:03.448Z",
+      "completedAt": "2026-08-15T18:28:02.278Z"
     },
     {
       "stepId": "step-7",
-      "description": "Load adversarial-self-review and read the owned diff as an attacker: replay twice and replay after replacement, two writers at one expected version, head movement on every stable-tail attempt, malformed/proxy/accessor/symbol/sparse/oversized requests and byte views, event/decision transplantation across projects, absent decisions, mutated result bytes, unsupported manifest versions, codec UNKNOWN propagation, closed-store exceptions, and Windows SQLite cleanup. Confirm no physical path, default configuration, profileRevisionId substitution, deep package import, unbounded loop, or caller-owned alias can cross the boundary. If review changes any byte, rerun the exact verification command from the prior step and replace the evidence with the fresh output. Before handoff, inspect the shared index and stage/commit only the five explicit owned paths by pathspec; unstage foreign entries and verify the resulting commit/diff contains nothing else.",
-      "status": "PENDING",
+      "description": "Load the `adversarial-self-review` skill and read the owned diff as an attacker. Concretely: replay twice, and replay after a replacement selection; two writers at the same expectedVersion; the aggregate head moving on every stable-tail attempt; malformed / proxy / accessor / symbol-keyed / sparse / oversized requests and byte views (note Array.isArray throws on a revoked proxy, and `.slice()` on caller bytes consults Symbol.species — the codec already uses the `new Uint8Array(bytes)` constructor form for this reason, so do not weaken it); event and decision records transplanted across projects; an absent decision for a present event; mutated decision result bytes; an unsupported manifest schemaVersion; codec UNKNOWN propagation with `upstream` intact; a closed store throwing; and Windows SQLite handle cleanup. Confirm that no physical configuration path, no defaulted manifest, no profileRevisionId substituted for settingsDigest or the orchestration sourceSha, no deep package import, no unbounded loop and no caller-owned alias can cross the boundary. Verify every refusal assertion in the new suite pins a code AND a layer AND (where foreign) upstream — a bare `!ok` is one added layer away from vacuous — and that each of the four closed codes actually appears in the test file. If review changes any byte, rerun the exact step-6 command and REPLACE the evidence with the fresh output. Before handoff, inspect the shared index and stage/commit ONLY the five owned paths by explicit pathspec; unstage foreign entries; never `git add -A`, reset or stash; then verify the resulting commit contains nothing else.",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js",
         "apps/daemon/src/configuration/project-configuration-selection.test.ts",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T18:28:14.328Z"
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-797c65f6",
+  "status": "WORKING",
+  "assignedWorkerId": "worker-83b3c121",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -116,29 +161,39 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:23.828Z",
-  "updatedAt": "2026-08-15T17:57:21.612Z",
+  "updatedAt": "2026-08-15T18:28:14.328Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:29:14.156Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-a9210e34",
-    "architect-797c65f6"
+    "architect-797c65f6",
+    "worker-83b3c121"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
-  "planSubmittedAt": "2026-08-13T22:51:42.973Z",
+  "planSubmittedAt": "2026-08-15T18:00:33.017Z",
   "planningNotes": {
-    "approachesConsidered": "SPIDR split on existing package seams. A single contracts+core+daemon implementation would require at least 12 files once each production module has its required LF bridge, focused package test, and root export; it was split into browser-safe contract task task-0c21ba2f07cc4f4a829e475bbd7f0562, Node/core digest-codec task task-bcea70569f714367b2e50c1734433631, and this final daemon persistence/current-read integration task. Extending core ProjectState was rejected because it would ripple through project validation/reducers/bootstrap/restore and make configuration currentness share an unrelated aggregate. A generic open settings map was rejected because it cannot mechanically prove every authority field is present. New normalized SQLite tables were rejected because the existing event+decision ledger already provides atomic CAS, replay, reopen, and integrity surfaces for one fixed project selection aggregate.",
-    "codebaseInsights": "Current-byte measurement at HEAD faf5ee5fb6f21f0b2c1851e5fdd08cdd44fa359a: `rg -n \"ProjectConfigurationManifest|settingsDigest|PROJECT_CONFIGURATION|createProjectConfigurationManifest|readCurrentProjectConfiguration|selectProjectConfiguration\" packages apps` returned NO_MATCHES, and all three proposed production paths were absent. The pinned design SHA-256 was reverified as 1D9D1EC97D3F07247FBBC088045E0BA2FD6DA8307F10A9026C55106419383191; design lines 57-66, 228, 617-630, 688-712, 811-817, 1135-1139, 1264, and 1271 define the effective limits, approval/network/isolation truth, path-neutral manifest, and benchmark binding. The benchmark spec SHA-256 is A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C and lines 101,106,118,354,492 require the model/harness/config triple and settingsDigest/orchestration binding. Dependency-edge measurement: packages/core/package.json declares @moe/contracts; apps/daemon/package.json declares @moe/contracts, @moe/core, and @moe/store; pnpm-lock.yaml importer entries at core 135-139 and daemon 87-112 carry those links. Temporary probes inside packages/core and apps/daemon imported the existing bare roots and `pnpm --filter @moe/core typecheck` plus `pnpm --filter @moe/daemon typecheck` exited 0; both probe files were deleted and `git status` showed no residue. Existing durable patterns are `SqliteEventStore.commitExpectedVersionDecision`, `getAggregateVersion`, `readAggregateEvents`, `getCommandDecision`, and the bounded before/read/after stable-tail loop in document-work-read.ts. Existing line counts: contracts index 155, core index 283, core index-surface test 385, daemon index 333, daemon index-surface test 544; current owned paths were clean.",
-    "risks": "The two prerequisite symbols are deliberately absent today: do not stub/reimplement them in daemon; this task may start only after task-0c21ba2f07cc4f4a829e475bbd7f0562 and task-bcea70569f714367b2e50c1734433631 are DONE and live bare-root probes pass. task-d23a913f0586431d9dccc0cfd1f66fd5 owns launch-time model/effort evidence; avoid a digest cycle by consuming only the configuration manifest primitive selection refs and never importing runner selection policy. Selection replay is dangerous after a later update: a historical replay is success only if a fresh stable read still equals its settingsDigest. Stable-tail races, mismatched event/decision bytes, project transplant, malformed descriptors, and store throws must remain UNKNOWN. `apps/daemon/src/index.ts` is already over the 250 target but under 400; add the export without increasing its physical line count. task-311adb23a3964146a25fa8bddf7123e9 currently has daemon index-surface work in REVIEW, so recheck ownership/current bytes before editing. Windows smoke cleanup must close SQLite in the child before the parent removes the temp directory; use execFile/argument arrays, windowsHide, and never shell:true.",
+    "approachesConsidered": "The SPIDR split stands and is now vindicated: browser-safe contract task task-0c21ba2f07cc4f4a829e475bbd7f0562 and Node/core digest-codec task task-bcea70569f714367b2e50c1734433631 both landed, leaving this task only the daemon persistence + current-read integration. Re-planning from scratch was rejected — the approved 7-step shape is sound and only its measured premises were stale. Extending core ProjectState was rejected (ripples through project validation/reducers/bootstrap/restore and makes configuration currentness share an unrelated aggregate). A generic open settings map was rejected (cannot mechanically prove every authority field is present). New normalized SQLite tables were rejected (the existing event + decision ledger already provides atomic CAS, replay, reopen and integrity surfaces for one fixed project selection aggregate). NEW this pass: declaring the four selection refusal codes inside the DAEMON module rather than appending them to the contracts' closed PROJECT_CONFIGURATION_REFUSAL_CODES/LAYERS arrays — those arrays are swept by contracts surface tests, and widening them drags the diff outside the five owned paths for no gain. @moe/core's ProjectConfigurationCodecRefusal already models the correct shape (own code + own layer + verbatim `upstream`); the daemon copies that shape rather than the enum.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 43b18dd this session. The block premise is CLEARED — both prerequisites are on disk AND reachable, verified at the public roots rather than from their DONE statuses:\n- `grep -rn \"ProjectConfigurationManifest|settingsDigest|PROJECT_CONFIGURATION|createProjectConfigurationManifest\" packages apps -l` now returns packages/contracts/src/configuration/{project-configuration-contract.ts, project-configuration-parser.ts, +3 test files}, packages/core/src/configuration/project-configuration-manifest.ts, and both package index.ts roots. The earlier NO_MATCHES measurement at faf5ee5f is obsolete.\n- @moe/contracts root (packages/contracts/src/index.ts:157-197) exports the PROJECT_CONFIGURATION_* constants, the types ProjectConfigurationManifest / Settings / Selection / Policy / Network / Isolation / LimitEntry / Refusal / RefusalCode / RefusalLayer / SchemaVersions / *Result, and the runtime parsers parseProjectConfigurationManifest + parseProjectConfigurationSettings.\n- @moe/core root (packages/core/src/index.ts:21,26) exports createProjectConfigurationManifest(projectId, settings) — TWO arguments — encodeProjectConfigurationManifest(manifest), decodeProjectConfigurationManifestBytes(bytes), PROJECT_CONFIGURATION_CODEC_CODES/LAYERS, PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN and ProjectConfigurationCodecRefusal.\n- DEPENDENCY EDGE, all three forms: apps/daemon/package.json declares @moe/contracts, @moe/core and @moe/store as workspace:*; pnpm-lock.yaml carries the apps/daemon importer entries at lines 89, 95 and 110; and a temporary bare-specifier probe inside apps/daemon importing all of the above ran `pnpm --filter @moe/daemon typecheck` to EXIT 0, was deleted in the same command, and left no `git status` residue. (A first probe attempt failed only on TS2554 — my own arity error calling createProjectConfigurationManifest with one argument — which itself proves resolution and type surfacing work.)\nCONTRACT SHAPE satisfies DoD 1 already: ProjectConfigurationManifest = {projectId, schemaVersion, settings, settingsDigest}; ProjectConfigurationSettings = {isolation, limits[], network, orchestrationSource, policy, schemaVersions, selection}; orchestrationSource is DistributionSource = {objectFormat, sourceSha} — source-commit-bound and PATH-FREE; ProjectConfigurationSelection = {modelRef, profileRef, providerRef, reasoningEffortRef, runtimeRef, snapshotRef, structuredOutputSchemaRef}. No physical path anywhere in the identity.\nUPSTREAM VOCABULARIES the daemon must preserve verbatim: contracts = codes {PROJECT_CONFIGURATION_INPUT_INVALID, PROJECT_CONFIGURATION_VERSION_UNSUPPORTED} at layer PROJECT_CONFIGURATION_MANIFEST; core = codes {BYTES_INVALID, DUPLICATE_KEY, NONCANONICAL, DIGEST_MISMATCH} at layers {PROJECT_CONFIGURATION_CODEC, _CANONICALIZATION, _DIGEST}. Both closed arrays; do not extend either.\nSTORE APIs all present: sqlite-event-store.ts:261 commitExpectedVersionDecision, :278 getAggregateVersion, :282 getCommandDecision, :312 readAggregateEvents. The bounded stable-tail loop to copy is apps/daemon/src/documents/document-work-read.ts:88-100.\nSTALE FIGURES CORRECTED: apps/daemon/src/index.ts is 347 physical lines, NOT the 333 the approved plan pinned; apps/daemon/src/index-surface.test.ts is 573, not 544. apps/daemon/src/configuration/ does not exist yet — this task creates it. task-311adb23a3964146a25fa8bddf7123e9, which previously held daemon index-surface work in REVIEW, is DONE, so the index/index-surface ownership conflict named in the old risks is resolved.",
+    "risks": "1. The old blocking risk is retired — do NOT stub or reimplement the contract/codec in daemon; they exist and typecheck from bare specifiers. If HEAD has moved and an import genuinely fails at step 1, re-block with the failing import rather than working around it.\n2. REPLAY AFTER REPLACEMENT is the sharpest hazard: a historical replay is success ONLY if a fresh stable read still equals its settingsDigest. That comparison is the single production guard step 5's drill targets; if the drill goes red because a fixture crashed rather than because the code/layer assertion failed, the drill is broken, not the guard held.\n3. Restore drilled bytes from your own saved copy. `git checkout` reverts to HEAD and destroys uncommitted work in this shared worktree, and the drill anchor can go ambiguous.\n4. Stable-tail races, mismatched event/decision bytes, cross-project transplant, malformed descriptors and store throws must all remain UNKNOWN with the exact code+layer+upstream — never a default manifest.\n5. A refusal test asserting only `!ok` is one added layer away from vacuous; the forged-record matrix must also assert its own non-zero case count, because a sweep that generates zero cases passes while testing nothing.\n6. task-d23a913f0586431d9dccc0cfd1f66fd5 owns launch-time model/effort evidence — consume only the configuration manifest primitive selection refs and never import runner selection policy, or the digest cycles.\n7. Windows: the child smoke must CLOSE SQLite before the parent rmSync's the temp directory; use execFile with an argument array and windowsHide, never shell:true. A held SQLite handle kills the vitest worker outright.\n8. apps/daemon/src/index.ts is already above the 250 target but below 400; add the export without increasing its 347-line count. Measure with `grep -c ''` — PowerShell Measure-Object -Line undercounts.\n9. A focused daemon vitest run needs `--root .` or it resolves the root config and finds ZERO tests, which exits 0 and reads as green.",
     "keyFiles": [
       "packages/contracts/src/configuration/project-configuration-contract.ts",
+      "packages/contracts/src/configuration/project-configuration-parser.ts",
+      "packages/contracts/src/index.ts",
       "packages/core/src/configuration/project-configuration-manifest.ts",
+      "packages/core/src/index.ts",
       "apps/daemon/src/documents/document-work-read.ts",
-      "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
-      "packages/store/src/store-contracts.ts",
       "packages/store/src/sqlite-event-store.ts",
       "apps/daemon/src/index.ts",
       "apps/daemon/src/index-surface.test.ts"
@@ -149,9 +204,10 @@
     "warnedAt": "2026-08-15T17:57:18.041Z",
     "escalatedAt": "2026-08-15T17:57:18.041Z"
   },
-  "planApprovedAt": "2026-08-13T22:51:45.037Z",
+  "planApprovedAt": "2026-08-15T18:00:35.119Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
-  "blockedResourceId": null
+  "blockedResourceId": null,
+  "workStartedAt": "2026-08-15T18:05:14.599Z"
 }

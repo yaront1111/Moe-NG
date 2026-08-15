@@ -1,7 +1,14 @@
 /** Package-root publication contract for the daemon command surface. */
+import { execFile } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as daemon from "@moe/daemon";
+import type { ProjectConfigurationManifest } from "@moe/contracts";
 // Imported through the PUBLIC package roots, so these assertions also prove the
 // daemon's published closure is expressible without a deep import.
 import type { EffectIntent } from "@moe/runner";
@@ -89,6 +96,12 @@ import type {
   ListenerRefused,
   PortRefusal,
   PrerequisiteRefusalCode,
+  CurrentProjectConfiguration,
+  ProjectConfigurationSelectionCode,
+  ProjectConfigurationSelectionUnknown,
+  ProjectConfigurationSelectionUpstream,
+  ProjectConfigurationStore,
+  ReadCurrentProjectConfigurationResult,
   RecoveryIncarnationBinding,
   RecoveryIncarnationCryptoPort,
   RecoveryIncarnationErrorCode,
@@ -133,6 +146,8 @@ import type {
   ServiceOutcome,
   ServiceRefused,
   ServiceRefusedBy,
+  SelectedProjectConfiguration,
+  SelectProjectConfigurationResult,
   ShutdownResult,
   StartedDaemon,
   StartListenerOptions,
@@ -205,6 +220,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["MAX_EVENT_PAGE_SIZE", "number"],
   ["PLANNING_HANDLERS", "object"],
   ["PREREQUISITE_REFUSAL_CODES", "object"],
+  ["PROJECT_CONFIGURATION_SELECTION_CODES", "object"],
+  ["PROJECT_CONFIGURATION_SELECTION_LAYER", "string"],
   ["RECOVERY_INCARNATION_ERROR_CODES", "object"],
   ["RECOVERY_INCARNATION_SCHEMA_VERSION", "string"],
   ["RECOVERY_SUCCESSION_ERROR_CODES", "object"],
@@ -233,11 +250,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["isDependencyProvider", "function"],
   ["parseWorkRequest", "function"],
   ["readAnchoredIncarnation", "function"],
+  ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
   ["readSuccessionChain", "function"],
   ["refuseEntry", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
+  ["selectProjectConfiguration", "function"],
   ["startControlRoomListener", "function"],
   ["startDaemon", "function"],
 ];
@@ -261,10 +280,11 @@ const FORBIDDEN_FIXTURES = [
 ] as const;
 
 const surface: Readonly<Record<string, unknown>> = daemon;
+const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(61);
+    expect(EXPECTED_EXPORTS.length).toBe(65);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -569,5 +589,94 @@ describe("daemon package-root type closure", () => {
       ok: false,
       outcome: "REQUEST_INVALID",
     });
+  });
+});
+
+describe("project configuration package-root consumer edge", () => {
+  it("publishes the complete current-selection type closure", () => {
+    expectTypeOf<(typeof daemon.PROJECT_CONFIGURATION_SELECTION_CODES)[number]>()
+      .toEqualTypeOf<ProjectConfigurationSelectionCode>();
+    expectTypeOf<typeof daemon.PROJECT_CONFIGURATION_SELECTION_LAYER>()
+      .toEqualTypeOf<"PROJECT_CONFIGURATION_SELECTION">();
+    expectTypeOf<Parameters<typeof daemon.selectProjectConfiguration>>()
+      .toEqualTypeOf<[store: ProjectConfigurationStore, input: unknown]>();
+    expectTypeOf<ReturnType<typeof daemon.selectProjectConfiguration>>()
+      .toEqualTypeOf<SelectProjectConfigurationResult>();
+    expectTypeOf<ReturnType<typeof daemon.readCurrentProjectConfiguration>>()
+      .toEqualTypeOf<ReadCurrentProjectConfigurationResult>();
+    expectTypeOf<SelectedProjectConfiguration["manifest"]>()
+      .toEqualTypeOf<ProjectConfigurationManifest>();
+    expectTypeOf<CurrentProjectConfiguration["authority"]>().toEqualTypeOf<"DAEMON_VERIFIED">();
+    expectTypeOf<ProjectConfigurationSelectionUnknown["upstream"]>()
+      .toEqualTypeOf<ProjectConfigurationSelectionUpstream | null>();
+  });
+
+  it("selects and reopens exact current bytes through bare package roots", async () => {
+    const daemonDirectory = join(fileURLToPath(new URL(".", import.meta.url)), "..");
+    const directory = mkdtempSync(join(daemonDirectory, ".project-configuration-smoke-"));
+    const scriptPath = join(directory, "consumer.ts");
+    const databasePath = join(directory, "consumer.db");
+    const source = `
+import assert from "node:assert/strict";
+import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import { createProjectConfigurationManifest, encodeProjectConfigurationManifest } from "@moe/core";
+import { readCurrentProjectConfiguration, selectProjectConfiguration } from "@moe/daemon";
+import { SqliteEventStore } from "@moe/store";
+const projectId = "package-root-configuration-smoke";
+const settings = {
+  isolation: { hostContainment: "NOT_CLAIMED", workspace: "PER_ATTEMPT_WORKTREE" },
+  limits: PROJECT_CONFIGURATION_LIMIT_KEYS.map((key, index) => ({ key, value: index + 1 })),
+  network: { daemonExposure: "LOOPBACK_ONLY", providerEgress: "EGRESS_ALLOWLISTED" },
+  orchestrationSource: { objectFormat: "sha256", sourceSha: "2".repeat(64) },
+  policy: { acceptanceGate: "MANUAL_HUMAN_APPROVAL", autoApprovalOptInDigest: null,
+    evaluatorVersion: "policy-evaluator-v1", expansionGate: "MANUAL_HUMAN_APPROVAL",
+    planningGate: "MANUAL_HUMAN_APPROVAL", policyRevisionId: "policy-revision-1", revision: 1 },
+  schemaVersions: { commandSchemaVersion: "moe-command-1", errorSchemaVersion: "moe-error-1",
+    querySchemaVersion: "moe-query-1" },
+  selection: { modelRef: "model-1", profileRef: "profile-1", providerRef: "provider-1",
+    reasoningEffortRef: "effort-1", runtimeRef: "runtime-1", snapshotRef: "snapshot-1",
+    structuredOutputSchemaRef: "schema-1" },
+};
+const created = createProjectConfigurationManifest(projectId, settings);
+if (!created.ok) throw new Error(created.code);
+const encoded = encodeProjectConfigurationManifest(created.manifest);
+if (!encoded.ok) throw new Error(encoded.code);
+let store = SqliteEventStore.openForProject(${JSON.stringify(databasePath)}, projectId);
+try {
+  const selected = selectProjectConfiguration(store, { projectId, commandId: "command-1",
+    correlationId: "correlation-1", decidedAt: "2026-08-15T18:00:00.000Z",
+    principalId: "principal-1", expectedVersion: 0, manifestBytes: encoded.bytes });
+  assert.deepStrictEqual(selected, { authority: "DAEMON_VERIFIED", evidence: "DURABLE",
+    manifest: created.manifest, manifestBytes: encoded.bytes, ok: true, outcome: "SELECTED",
+    selectionVersion: 1 });
+} finally { store.close(); }
+store = SqliteEventStore.openForProject(${JSON.stringify(databasePath)}, projectId);
+try {
+  const current = readCurrentProjectConfiguration(store, { projectId,
+    expectedSettingsDigest: created.manifest.settingsDigest });
+  assert.deepStrictEqual(current, { authority: "DAEMON_VERIFIED", evidence: "DURABLE",
+    manifest: created.manifest, manifestBytes: encoded.bytes, ok: true, outcome: "CURRENT",
+    selectionVersion: 1 });
+  process.stdout.write(JSON.stringify({ authority: current.authority, evidence: current.evidence,
+    outcome: current.outcome, selectionVersion: current.selectionVersion }));
+} finally { store.close(); }
+`;
+    try {
+      writeFileSync(scriptPath, source, { encoding: "utf8" });
+      const result = await execFileAsync(process.execPath, ["--experimental-strip-types", scriptPath], {
+        windowsHide: true,
+        timeout: 20_000,
+        maxBuffer: 1_048_576,
+      });
+      expect(result.stderr).toBe("");
+      expect(JSON.parse(result.stdout)).toEqual({
+        authority: "DAEMON_VERIFIED",
+        evidence: "DURABLE",
+        outcome: "CURRENT",
+        selectionVersion: 1,
+      });
+    } finally {
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });

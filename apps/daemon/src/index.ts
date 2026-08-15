@@ -4,20 +4,11 @@ import type { BoundedJsonDecodeError, JsonObject, JsonValue } from "@moe/contrac
 import type { GraphPreviewOptions, GraphPreviewResult } from "@moe/scheduler";
 
 export {
-  BOOTSTRAP_COMMAND_KINDS,
-  BOOTSTRAP_REFUSAL_CODES,
-  BOOTSTRAP_REQUEST_KEYS,
-  BOOTSTRAP_SCHEMA_VERSION,
-  decodeBootstrapRequestBytes,
-  type BootstrapCommandKind,
-  type BootstrapDecodeRefusal,
-  type BootstrapDecodeResult,
-  type BootstrapInputRejected,
-  type BootstrapRefusalCode,
-  type BootstrapRefusedBy,
-  type BootstrapRequest,
-  type BootstrapRequestAccepted,
-  type BootstrapRequestRefused,
+  BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS,
+  BOOTSTRAP_SCHEMA_VERSION, decodeBootstrapRequestBytes,
+  type BootstrapCommandKind, type BootstrapDecodeRefusal, type BootstrapDecodeResult,
+  type BootstrapInputRejected, type BootstrapRefusalCode, type BootstrapRefusedBy,
+  type BootstrapRequest, type BootstrapRequestAccepted, type BootstrapRequestRefused,
 } from "./bootstrap/bootstrap-contracts.js";
 export {
   PREREQUISITE_REFUSAL_CODES,
@@ -238,6 +229,14 @@ export {
   type RecoverySuccessionRequest, type RecoverySuccessionResult,
   type RecoverySuccessionService,
 } from "./recovery/recovery-succession.js";
+export {
+  PROJECT_CONFIGURATION_SELECTION_CODES, PROJECT_CONFIGURATION_SELECTION_LAYER,
+  readCurrentProjectConfiguration, selectProjectConfiguration,
+  type CurrentProjectConfiguration, type ProjectConfigurationSelectionCode,
+  type ProjectConfigurationSelectionUnknown, type ProjectConfigurationSelectionUpstream,
+  type ProjectConfigurationStore, type ReadCurrentProjectConfigurationResult,
+  type SelectedProjectConfiguration, type SelectProjectConfigurationResult,
+} from "./configuration/project-configuration-selection.js";
 
 const SCHEMA_VERSION = "moe-graph-preview-request/1";
 const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);

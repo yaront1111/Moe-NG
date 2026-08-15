@@ -16,8 +16,8 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-7f301fa7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 14,
+  "order": 24,
   "comments": [
     {
       "id": "comment-38459f966b4c495e8deb16840402d3e9",
@@ -42,7 +42,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-12T07:25:34.366Z",
+  "updatedAt": "2026-08-15T18:31:13.002Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8a4a1764",
@@ -53,10 +53,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-09T10:39:13.320Z"
   },
-  "blockedReason": "Restoring architect-8a4a1764's original block. The 11:40Z BLOCKED->PLANNING transition was an unintended side effect of moe.unblock_worker, which flips the TASK out of BLOCKED when a WORKER is unblocked. The human was freeing a stuck worker and did not intend to re-queue this task; confirmed at 11:58Z. Mechanism found by architect-8c9073cd.\n\nTHE BLOCK STANDS ON ITS ORIGINAL EVIDENCE, which I re-verified independently on disk at 11:29Z rather than reading off the block note. What EXISTS is vocabulary: recovery.restore_quiesce and recovery.complete as a contract union (packages/core/src/project/project-contract.ts:11-12); RestoreQuiesceWitness and RecoveryCompletionWitness shapes; two reducer transitions (project-reducer.ts:35-36); shape guards in project-validation.ts; and a command builder in the generated control-room client. What does NOT exist is the controller: nothing mints an incarnation, installs a slot, or advances a key epoch. grep for mintIncarnation/slotInstall/keyEpoch returns only the recoveryIncarnationRef FIELD inside the witness shapes.\n\nA proof planned against this today would certify the shapes, which Clause 2 explicitly forbids: \"a proof that only proves the shapes is worse than no proof — it retires the gap.\" architect-8a4a1764's read was exact and does not need redoing.\n\nRequired output is a prerequisite production task for the restore controller, with the gap measured symbol by symbol. That authoring is in flight — architect-8c9073cd is routing platform and doctor-inventory prerequisites in the same family, and this one belongs beside them.\n\narchitect-f39f0c46 held this task in PLANNING when the flip was reversed; they lose no work, since the hold I posted at 11:57Z asked them to wait before spending a context load on it. Unblock when the restore controller exists and is verifiable by grep or probe, not on a status flip.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T11:58:29.354Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Measured the production gaps; created eight prerequisite tasks (task-5606947a, task-684e6972, task-b6e3dd2a, task-8a01c025, task-0325dcf7, task-cf7fb147, task-6f786c58, task-b5e9bd64); recorded exact sequence/unblock probe in comment-01dac749064641d9850276e3ee2ba02c; wrote Serena handoff memory.",

@@ -1,0 +1,37 @@
+{
+  "id": "task-5d8f11c86a3a41b4a8a420ef0d52a444",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Approval policy contract with an unconditional human-authority gate",
+  "description": "Objective: give moe-next a durable, typed representation of WHEN a submitted plan may proceed without a human, and make certain work incapable of proceeding without one regardless of that setting.\n\nRAISED BY: governor-18a42000 audit, 2026-08-15, at the human's direction, after a live incident on the orchestrating board. Measured on current bytes before filing. (This task replaces task-2212cfd25bbe4cd3a32770987a2b834d, which I deleted for carrying 8 DoD items against the 3-7 target; content is unchanged apart from folding the cross-cutting quality items together.)\n\nWHAT ALREADY EXISTS — do not rebuild it:\n- `approvePlan` at packages/core/src/planning/planning-run-submission.ts:172, dispatched as the `plan.approve` command at packages/core/src/planning/planning-run-reducer.ts:174. The approval COMMAND and its reducer arm are landed.\n- apps/control-room/src/approvals/approval-gating.ts carries an approval refusal-reason channel, explicitly marked PROVISIONAL pending the daemon's stable reason registry (spec section 13-D2).\n- Roughly 70 non-test files reference approval in some form.\n\nWHAT IS ABSENT — measured, each zero non-test hits repo-wide: `approvalMode`, `approvalPolicy`, `ApprovalPolicy`, `requiresApproval`, `autoApprove`, `auto_approve`. A positive control on the identical query shape (`createStoreDependencies`, 3 files) confirms the greps are well scoped and these zeros are real absences rather than a mis-typed path.\n\nTHE GAP, stated exactly: moe-next can EXECUTE an approval but cannot EXPRESS AN APPROVAL POLICY. No typed value anywhere answers \"may this plan proceed without a human, and under what conditions\". Approval is therefore implicit and unrecorded — a property of whoever happens to call plan.approve, not a decision the system holds and can be audited against.\n\nTHE INCIDENT THAT MOTIVATES IT, so the shape is grounded rather than abstract. On the orchestrating board on 2026-08-15, every BLOCKED task was promoted to PLANNING inside a two-minute window, clearing each task's recorded blockedReason. Two were release-cutover tasks whose own descriptions name an explicit human authority gate as a hard dependency: a GA activation record requiring GO_ACTIVATE, and a legacy quiesce drill requiring GO_QUIESCE. Neither GO had ever been issued — verified by scanning every message channel. Both became claimable, and that board runs auto-approval on a 2s delay, so no human would have seen a plan before a worker began executing it.\n\nThe lesson is NOT \"add a global mode\". A single project-wide switch would not have prevented this: fast delegation was the correct setting for most of that board, and flipping everything to manual review to protect two tasks is the wrong trade. What was needed is a gate that binds to the WORK, survives a bulk status change that clears other fields, and cannot be satisfied by any agent.\n\nSCOPE — a pure typed contract in @moe/core plus its reducer integration. NOT IN SCOPE: control-room UI, daemon wiring or transport, the external orchestrator's settings file, migrating existing approval call sites, or the provisional reason channel in approval-gating.ts. Those are follow-on consumer tasks; name them rather than building them.\n\nVerification: pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm typecheck.",
+  "definitionOfDone": [
+    "A closed, frozen ApprovalPolicy vocabulary is published from the @moe/core root, expressing at minimum proceed-without-human (its delay an explicit typed value, never an implicit default) and require-human. The set is exhaustive by construction: adding a member is a compile error at every exhaustive switch over it.",
+    "A per-unit-of-work HUMAN AUTHORITY GATE is representable independently of the policy, and when present it refuses regardless of policy - no ApprovalPolicy value or combination can approve gated work. A test enumerates EVERY policy member against a gated unit and asserts refusal for each, pinning a nonzero exact cardinality equal to the vocabulary size so a shrunk enum cannot silently reduce coverage.",
+    "Satisfying the gate requires a named human principal and is recorded durably with that principal and the moment it was given. A missing, empty, or non-human principal is refused with an exact stable reason code AND its refusing layer, asserted literally rather than by matching an Error message; where two layers can refuse the same input, the test asserts which one answered.",
+    "The landed approvePlan (planning-run-submission.ts:172) and its plan.approve reducer arm (planning-run-reducer.ts:174) keep their current behaviour for ungated work, with their existing tests green and unmodified - the policy composes with them rather than replacing them.",
+    "Mutation drills prove the guards are attached to production: removing the human-authority check turns a NAMED test red on the refusal assertion, and independently weakening the principal requirement turns a NAMED test red. Each drill is restored byte-exact and verified by hash.",
+    "Fresh pnpm --filter @moe/core typecheck && pnpm --filter @moe/core test && pnpm typecheck exits 0 with each leg's exit code read separately, and the consuming task ids are recorded per Clause 1 - this lands a pure contract and does not itself compose a consumer edge."
+  ],
+  "taskRails": [
+    "The human authority gate is the point of this task. It must be UNCONDITIONAL: no policy value, configuration, or agent action may satisfy it. If your design lets any ApprovalPolicy member approve gated work, the design is wrong.",
+    "Do not add a project-wide mode as the primary mechanism. A blanket switch is what failed in the motivating incident. The gate binds to the unit of work and must survive a bulk status change that clears other fields.",
+    "Assert the reason code, not the outcome: every refusal test pins the exact stable code and the refusing layer. A test asserting only that approval did not happen is one added layer away from vacuous.",
+    "A closed vocabulary must be exhaustive by construction, and any sweep over it must assert a nonzero exact cardinality equal to the vocabulary size - a sweep that silently generates zero cases passes while testing nothing.",
+    "This is a pure @moe/core contract. Do not wire the daemon, the control room, or the external orchestrator's settings; name the consumer tasks instead. Keep each production source under 250 physical lines and split before 400.",
+    "Re-measure the absent symbols before planning. approvalMode, approvalPolicy, ApprovalPolicy, requiresApproval and autoApprove all measured zero non-test hits today, but the tree moves and a duplicate would collide with its owner in this shared worktree."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 103.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T18:23:14.137Z",
+  "updatedAt": "2026-08-15T18:23:14.137Z"
+}

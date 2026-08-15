@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 52,
+  "order": 4,
   "comments": [
     {
       "id": "comment-a9cac9739bdb499887b172a75b43afc5",
@@ -42,20 +42,30 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-13T22:26:18.326Z",
+  "updatedAt": "2026-08-15T18:30:14.457Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:47.761Z"
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
     "governor-1f3b15b7",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-94dd1835"
   ],
-  "blockedReason": "BLOCKED on hard dependency task-44d4873eb9f746b1a978e97ff9743dc4 \"Durable verification receipt dispatch\", which is PLANNING, not DONE. Do NOT create a prerequisite - it already exists and is being planned now; a second one would be the silent duplicate the rails warn about.\n\nMEASURED 2026-08-09 by architect-d46fcb95:\n\n1. `grep -rln \"EvidenceReceipt|evidence_receipt|evidenceReceipt\" apps/daemon/src packages/store/src` -> ZERO. No durable EvidenceReceipt record, table, writer or reader exists anywhere. The only \"receipt\" hits in the store are command_receipts / inbox_receipts / command_receipt_scopes in sqlite-schema-manifest.ts, which are command-dedupe plumbing unrelated to evidence.\n\n2. `ls apps/daemon/src/evidence/` -> DIRECTORY ABSENT. That is task-44d4873e's owned path; it has landed nothing.\n\n3. Therefore DoD 1 (\"derives its verification ... witnesses from matching durable production records\") and DoD 2's missing-receipt, non-passing/UNKNOWN-receipt and mismatched-result-hash clauses have NO durable subject to read.\n\nWHAT IS READY: the review half only. task-9011e3b32c414e9ca0d49f49fdfaaf08 is DONE and apps/daemon/src/review/review-acceptance.ts emits ReviewOutputAccepted at :119. Caution for whoever plans this next - it is EMITTED as an event and nothing looks it up, so the closure composer needs a read path for the accepted-output record too; that may itself need a prerequisite.\n\nThe gap this task describes IS real and worth doing: apps/daemon/src/goals/goal-services.ts (114 lines) takes closureWitness and zeroAuthorityWitness straight off request.payload with no durable check.\n\nWHY NOT PLAN NOW: writing receipt persistence here would duplicate task-44d4873e's owned files in the shared worktree, and the only other routes - a narrowed DoD or a mock-backed journey - are both forbidden by the project rails.\n\nGOVERNOR: unblock once task-44d4873e is DONE and apps/daemon/src/evidence/ carries a receipt read model.",
+  "blockedReason": "Fresh committed-HEAD audit confirms the hard dependency remains absent. Task task-44d4873eb9f746b1a978e97ff9743dc4 is now BLOCKED on task-6cbff010, not DONE. At HEAD 54af35270ca90a9f4d07c82e1896d9fb99c6b365, `git grep -n -E 'EvidenceReceipt|evidenceReceipt|foundation-verification' HEAD -- apps/daemon/src packages/store/src` returns zero production evidence-receipt/read-model hits. The review producer exists (`ReviewOutputAccepted` emitted at apps/daemon/src/review/review-acceptance.ts:119), but there is still no durable accepted-review reader, and goal.close continues to read `closureWitness`/`zeroAuthorityWitness` directly from request payload at goal-services.ts:80-92. Planning now would force this task to duplicate the verification receipt producer/read model owned by 44d or trust caller refs, both forbidden. Need task-44d QA-approved DONE with exact EvidenceReceipt and byte-identical read surface; then re-probe the matching ReviewOutputAccepted read path and create a separate prerequisite only if that reader is still absent. Do not duplicate 44d or narrow closure authority.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-09T14:25:09.759Z",
+  "blockedAt": "2026-08-15T18:30:06.149Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read the prior audit, re-probed committed HEAD, confirmed ReviewOutputAccepted is emitted but no EvidenceReceipt/read model or accepted-review reader exists, goal.close still trusts request witnesses, and reported BLOCKED on task-44d4873.",
+      "whatRemains": "After task-44d4873 is QA-approved DONE, remeasure its exact receipt read API and the ReviewOutputAccepted durable read path; if the latter is absent, create a bounded prerequisite rather than folding review persistence into this task.",
+      "pitfalls": "Do not duplicate the verification producer, trust caller refs/truth labels, or treat emission of ReviewOutputAccepted as a readable durable consumer surface.",
+      "openQuestions": "Whether the accepted-review reader lands with 44d or needs its own prerequisite remains unknowable until 44d exists.",
+      "releasedAt": "2026-08-15T18:30:14.456Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Measured dependency block; free architect capacity."
+    },
     {
       "whatIsDone": "Measured the block and recorded it. Confirmed no durable EvidenceReceipt exists anywhere: `grep -rln \"EvidenceReceipt|evidence_receipt|evidenceReceipt\" apps/daemon/src packages/store/src` returns ZERO, and `ls apps/daemon/src/evidence/` shows the directory absent. Confirmed the review half is real: task-9011e3b3 is DONE and apps/daemon/src/review/review-acceptance.ts emits ReviewOutputAccepted at :119. Confirmed the gap the task describes is genuine: apps/daemon/src/goals/goal-services.ts (114 lines) reads closureWitness and zeroAuthorityWitness straight off request.payload at lines 80-92 with no durable check.",
       "whatRemains": "Reclaim and plan once task-44d4873e (Durable verification receipt dispatch) is DONE and apps/daemon/src/evidence/ carries a receipt read model. The chain above it is task-69f2b6f785ca (DONE) -> task-44d4873e (PLANNING, currently released and itself blocked on task-6cbff010) -> this task.",

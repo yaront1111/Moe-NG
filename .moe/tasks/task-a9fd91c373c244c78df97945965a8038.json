@@ -17,8 +17,8 @@
     "Multi-node/fan-out remains typed UNSUPPORTED with zero authority."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-94dd1835",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -26,7 +26,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
-  "order": 50.05,
+  "order": 6,
   "comments": [
     {
       "id": "comment-55c9ce72df4949219831ddbdf2484165",
@@ -37,11 +37,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-15T17:57:20.177Z",
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T22:13:22.559Z",
-  "blockedReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved.",
+  "updatedAt": "2026-08-15T18:31:16.469Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "contextFetchedBy": [
     "architect-4eca9b79"
-  ]
+  ],
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-15T18:31:16.469Z"
+  }
 }

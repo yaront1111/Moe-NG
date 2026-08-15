@@ -16,21 +16,28 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Returned to BLOCKED by governor-18a42000 on the human's instruction to fix small problems directly. Promoted to PLANNING with an unmet hard dependency and no recorded justification (reopenReason empty). BLOCKED rather than BACKLOG so the gate is recorded and cannot be silently re-promoted by the next readiness sweep.\n\nLITERAL CLAUSE: \"Hard dependencies: every implementation/release gate and Benchmark telemetry harness.\"\n\nMEASURED: \"Benchmark telemetry harness\" = task-b937811e8b72459ea169e5fff1238ce1, currently BLOCKED. Its own block is deep — an audit today resolved its condition and found THREE blocked prerequisite children (task-159f4c21, task-5dfc98fc, task-1eeb2dcc at the time of that measurement) plus several capability phrases that resolve to absent production surfaces, including an observed-run telemetry record and an achieved-concurrency symbol that returns zero files repo-wide.\n\nNote that some of those have since moved — task-5dfc98fc and task-1eeb2dcc are now in PLANNING — so the harness is closer than it was, but it is not DONE and this task's clause requires it to be.\n\nThe first half of the clause, \"every implementation/release gate\", is a capability phrase with no ids; it cannot be satisfied while the board still carries 16+ BLOCKED tasks across the release chain.\n\nWHY THIS MATTERS BEYOND ORDERING: a confirmatory corpus frozen against an incomplete telemetry harness would freeze a corpus that cannot record the measurements it exists to confirm. Task-8af4562f (Comparative benchmark campaign) then consumes THIS task, so an early freeze propagates into the campaign as a proof of shapes — the Clause 2 failure mode where a proof retires a question without answering it.\n\nDO NOT RE-PROMOTE UNTIL task-b937811e is DONE and its telemetry surface is re-probed on disk, symbol by symbol, rather than read off a status field. Re-measure yourself; this reason goes stale fast.\n\nNOTE ON AUTHORITY: governor-74ff6cb3 drives board state and promoted this task; I hold an audit role and acted only because the human authorised it. If the promotion was deliberate, that reasoning belongs in this task before it moves again.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 6,
+  "order": 19,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.495Z",
-  "updatedAt": "2026-08-09T10:23:41.223Z",
+  "updatedAt": "2026-08-15T18:20:45.578Z",
   "contextFetchedBy": [
     "architect-da724bb7"
-  ]
+  ],
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:20:38.968Z",
+  "blockedReason": "Dependency unmet, measured MYSELF minutes ago rather than read off a status field — the prior reopenReason warned it goes stale fast.\n\nCLAUSE: \"Hard dependencies: every implementation/release gate and Benchmark telemetry harness.\"\n\nHALF ONE — the harness is task-b937811e8b72459ea169e5fff1238ce1. I audited and BLOCKED it at HEAD a967199, minutes before claiming this. Its measurement sources are not emitted in production; non-test hits under apps/:\n  launchClaudeWithTelemetry    0\n  parseClaudeResultTelemetry   0\n  ClaudeTelemetryHandoff       0\n  normalizeUsageMeasurement    0\n`grep -rln 'effort|Effort' apps/control-room/src/live/` returns 0 files; packages/benchmark does not exist. Five named owner tasks remain WORKING or BLOCKED.\n\nHALF TWO — \"every implementation/release gate\" is a capability phrase with no ids and cannot hold while the release chain still carries many BLOCKED tasks.\n\nNOT MERELY ORDERING. A corpus frozen against an incomplete harness freezes a corpus that cannot record the measurements it exists to confirm. task-8af4562ff1ae41b28876aaee63f05ea3 then consumes this task, so an early freeze propagates into the campaign as a proof of shapes — the Clause 2 failure the epic calls worse than no proof. Task rail 3 also forbids generating corpus bytes until the implementation commit is frozen exactly as specified; that commit does not exist yet.\n\nFURTHER HAZARD from the harness audit, which bites here too: `pnpm --filter @moe/benchmark test` prints \"No projects matched the filters\" and EXITS 0. Any gate leaning on a --filter leg can read green while executing nothing. Require a nonzero executed test count, never exit 0.\n\nUNBLOCK, re-runnable — do not trust status flags:\n(a) task-b937811e8b72459ea169e5fff1238ce1 DONE;\n(b) each of the four greps returns >0 non-test hits under apps/;\n(c) packages/benchmark exists and its test leg reports a NONZERO passed count;\n(d) the implementation commit this corpus freezes against is named and exists.",
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-15T18:20:05.606Z"
+  }
 }

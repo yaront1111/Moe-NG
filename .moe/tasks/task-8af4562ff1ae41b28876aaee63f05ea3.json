@@ -16,21 +16,39 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Returned to BLOCKED by governor-18a42000 on the human's instruction to fix small problems directly. Promoted to PLANNING with its single hard dependency unmet and no recorded justification (reopenReason empty). BLOCKED rather than BACKLOG so the gate is recorded rather than left as untriaged.\n\nLITERAL CLAUSE: \"Hard dependency: Confirmatory corpus freeze.\"\n\nMEASURED: \"Confirmatory corpus freeze\" = task-3a34adcabd03489e84f8dfbec913633a. It is NOT DONE. It was promoted to PLANNING in the same sweep as this task, and I have returned it to BLOCKED in this same action because its own dependency — Benchmark telemetry harness, task-b937811e — is BLOCKED.\n\nSo this task was promoted behind a dependency that was itself only promoted, not completed. PLANNING is not DONE. A campaign cannot compare against a corpus that has not been frozen; there is nothing yet to compare against.\n\nTHE CHAIN, so the ordering is explicit and nobody re-promotes any link out of sequence:\n  task-b937811e (Benchmark telemetry harness, BLOCKED)\n    -> task-3a34adca (Confirmatory corpus freeze, BLOCKED)\n      -> task-8af4562f (this task)\nEach link requires the one above it DONE, not merely claimable.\n\nDO NOT RE-PROMOTE UNTIL task-3a34adca is DONE and the frozen corpus exists on disk and is verifiable. Re-measure yourself rather than trusting this reason.\n\nNOTE ON AUTHORITY: governor-74ff6cb3 drives board state and promoted this task; I hold an audit role and acted only because the human authorised it. If the promotion was deliberate, record that reasoning here before this moves again.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 7,
+  "order": 20,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.652Z",
-  "updatedAt": "2026-08-09T10:23:41.344Z",
+  "updatedAt": "2026-08-15T18:21:20.680Z",
   "contextFetchedBy": [
     "architect-da724bb7"
+  ],
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:21:07.776Z",
+  "blockedReason": "Dependency unmet. I measured every link of this chain myself in the last few minutes, so this is first-hand rather than inherited.\n\nCLAUSE: \"Hard dependency: Confirmatory corpus freeze.\"\n\nMEASURED: that is task-3a34adcabd03489e84f8dfbec913633a, which I BLOCKED minutes ago. Its own dependency, task-b937811e8b72459ea169e5fff1238ce1 (Benchmark telemetry harness), I also audited and BLOCKED minutes before that, on the strongest evidence available — its measurement sources are not emitted in production at all. Non-test hits under apps/:\n  launchClaudeWithTelemetry    0\n  parseClaudeResultTelemetry   0\n  ClaudeTelemetryHandoff       0\n  normalizeUsageMeasurement    0\npackages/benchmark does not exist.\n\nTHE CHAIN, each link needing the one above DONE and not merely claimable:\n  task-b937811e (harness, BLOCKED — sources absent)\n    -> task-3a34adca (corpus freeze, BLOCKED)\n      -> task-8af4562f (this task)\n\nA campaign cannot compare against a corpus that has not been frozen; there is nothing to compare against. And the corpus cannot be frozen against a harness that cannot record the measurements the corpus exists to confirm — so an early start here inherits a proof of shapes, the Clause 2 failure the epic calls worse than no proof.\n\nHAZARD THAT PROPAGATES DOWN THIS WHOLE CHAIN: `pnpm --filter @moe/benchmark test` prints \"No projects matched the filters\" and EXITS 0. Any gate in this chain that leans on a --filter leg can read green while executing nothing. Require a nonzero executed test count, never exit 0.\n\nUNBLOCK, re-runnable — do not trust status flags, re-measure:\n(a) task-3a34adcabd03489e84f8dfbec913633a is DONE and the frozen corpus exists on disk and verifies;\n(b) task-b937811e8b72459ea169e5fff1238ce1 is DONE and the four greps above return >0 non-test hits under apps/;\n(c) the single implementation commit the corpus was frozen against is named and matches the commit this campaign will run against.",
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-15T18:20:47.371Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Dependency audit only; no plan, no code. Measured the whole release chain first-hand within minutes: the Benchmark telemetry harness (task-b937811e) has ZERO production emitters for launchClaudeWithTelemetry, parseClaudeResultTelemetry, ClaudeTelemetryHandoff and normalizeUsageMeasurement under apps/, and packages/benchmark does not exist; the Confirmatory corpus freeze (task-3a34adca) is therefore blocked; this campaign is blocked behind both. All three blocks were filed by me in this session with re-runnable conditions.",
+      "whatRemains": "Plan the comparative campaign only after the corpus is frozen and verifiable on disk against one named implementation commit. Nothing about the campaign can be designed earlier without inheriting a proof of shapes.",
+      "pitfalls": "`pnpm --filter @moe/benchmark test` prints 'No projects matched the filters' and EXITS 0 - this hazard propagates down the entire chain, so no gate here may be accepted on exit 0 alone; require a nonzero executed test count. See mem:pnpm-filter-on-a-missing-package-exits-zero. Also: the campaign consumes the corpus, so any weakness frozen upstream becomes a claim here - epic architectureNotes make best-tool copy forbidden unless the pinned benchmark gates pass, and task rail 2 makes missing, partial, cross-basis or unverifiable evidence UNKNOWN, never PASS.",
+      "openQuestions": "None from this audit. The ordering question is settled and recorded in all three block reasons; the chain is task-b937811e -> task-3a34adca -> task-8af4562f, each link requiring the one above DONE rather than merely claimable.",
+      "releasedAt": "2026-08-15T18:21:20.678Z",
+      "releasedBy": "architect-7f301fa7",
+      "reason": "Releasing the ASSIGNMENT only; task stays BLOCKED with its measured chain and re-runnable unblock condition."
+    }
   ]
 }

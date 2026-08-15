@@ -16,7 +16,7 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,17 +25,17 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
-  "order": 22.402,
+  "order": 9,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-13T23:29:21.446Z",
+  "updatedAt": "2026-08-15T18:10:39.508Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T23:27:37.173Z",
-  "blockedReason": "Hard dependency task-6cbff010 is not DONE and does not yet expose the required durable released-attempt reader. Planning now would invent safe-release authority; re-promote only after dispatch is QA-approved and its exact public reader is re-measured.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "contextFetchedBy": [
     "architect-a9210e34"
   ],
@@ -49,5 +49,6 @@
       "releasedBy": "architect-a9210e34",
       "reason": "Explicit architect handoff after reporting the task blocked; user requested the next planning task."
     }
-  ]
+  ],
+  "blockedResourceId": null
 }

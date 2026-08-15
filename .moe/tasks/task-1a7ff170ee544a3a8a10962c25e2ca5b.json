@@ -21,18 +21,36 @@
     "Scope is apps/daemon/src/telemetry/provider-run-ledger.* only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "PARKED BY GOVERNOR at architect-7f301fa7's measured request, 2026-08-15T18:13Z. SERIAL SPIDR FAMILY — slice 4 of 4, LAST in the chain. Promoted ahead of its prerequisites once already; that cost a full claim-measure-block cycle. It was the third sibling of the same family served to the same architect back to back.\n\nPROMOTE WHEN ALL OF THESE HOLD, re-run literally rather than read off status columns:\n1. task-8e3076177f87458f934a776eca68ba16 (record contract) DONE, with apps/daemon/src/telemetry/provider-run-contracts.ts present and exporting the contract.\n2. task-fc6581042426444a826981943f441908 (canonical codec) DONE, with its bytes/digest exports present on disk. THIS slice is the codec's real consumer.\n3. task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize composition) DONE.\n\nTHIS SLICE CARRIES TWO THINGS THE FAMILY OWES OUTWARD, so it cannot be dropped or merged:\n- the four-leg gate for the whole family, and\n- the CONSUMER-EDGE DECLARATION for task-6cbff01023b14b26a78fc5e3eb1dd8a9 (Durable Claude attempt dispatch). Sequence that declaration against a task that is about to move: task-6cbff010's other five producers are already DONE and its last one, task-e33747f9, is WORKING now. Do not write the declaration against it as though it were permanently blocked.\n\nIt also owns DoD 4 and the real-store half of DoD 5, which moved off task-8e307617 in the split. The stored DoD on task-8e307617 still shows the pre-split text; the authoritative scope of record is comment-d5574cd7a922 on that task.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 4.6043,
+  "order": 105.9,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:57:08.294Z",
-  "updatedAt": "2026-08-15T17:57:08.294Z"
+  "updatedAt": "2026-08-15T18:14:37.722Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T18:08:33.234Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measurement only; no plan submitted, no production code written. Re-measured at HEAD f0f62c0: apps/daemon/src/telemetry/ holds provider-run-contracts.test.ts (8654 bytes, 21:05) and no provider-run-contracts.ts. Slice 1 was WORKING at 3/7 steps with worker-d6220bc6 live in that directory; codec and normalize siblings both BLOCKED. Reported BLOCKED on that measurement rather than a speculative plan.",
+      "whatRemains": "Plan the durable ledger once the chain lands: one commitExpectedVersionDecision through slice 1's narrow port, expectedVersion pinned to 0 against the derived aggregate id, REPLAYED answered by reading the aggregate back, store error mapped onto the slice-1 vocabulary with the store's own code preserved verbatim alongside. Three files: provider-run-ledger.ts, its .js bridge, provider-run-ledger.test.ts against a real SqliteEventStore.",
+      "pitfalls": "THE REPLAY-ECHO DEFECT IS THE ONE THAT SHIPS GREEN. The store's replay identity does NOT cover the events array (activation-ledger-commit.ts:16-21), so answering REPLAYED with the caller's own record makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. The changed-byte replay case is the only test that kills it, and the mutation drill that switches the branch to echo MUST redden a named test. NEVER call commitWithApply or commitExpectedVersionDecisionWithApply - they hand the callback a raw DatabaseSync, which is how the no-new-schema rail gets violated by accident; slice 1's port deliberately does not name them, so verify it still does not. Real SqliteEventStore only, opened per test and closed in a finally - a handle held into teardown kills the vitest worker. apps/daemon REQUIRES a physical .js bridge per production module. Do not publish from apps/daemon/src/index.ts (index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61). Template to mirror: apps/daemon/src/activation/activation-ledger-commit.ts:160-210 and bootstrap-ledger.ts:206,246.",
+      "openQuestions": "Confirm before planning whether normalize is truly a prerequisite of this slice or only the contract and codec are. I over-specified the family's dependency prose when I created it - the codec's bytes/digest are consumed HERE, but this ledger may not need the normalizer's output directly if the composed record is passed in by the caller. Resolving that could let this slice and normalize proceed in parallel instead of serially. This slice also carries the consumer-edge obligation for the whole family: name task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the live dispatch consumer in the completion handoff, after checking what task-cbc42f33 already recorded for task-159f4c21 and task-6cbff010 so the same edge is not declared twice.",
+      "releasedAt": "2026-08-15T18:10:20.138Z",
+      "releasedBy": "architect-7f301fa7",
+      "reason": "Releasing the ASSIGNMENT only, so the task is claimable in place once its chain lands. It stays BLOCKED with its recorded reason and four-part unblock condition. No plannable PLANNING work remains on this epic — everything else is WORKING or BLOCKED on real dependencies."
+    }
+  ]
 }

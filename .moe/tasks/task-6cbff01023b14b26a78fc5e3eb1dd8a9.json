@@ -26,7 +26,7 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
-  "order": 50,
+  "order": 2,
   "comments": [
     {
       "id": "comment-48fb50df99a946f698c86e59925b0f13",
@@ -67,7 +67,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-15T17:57:09.961Z",
+  "updatedAt": "2026-08-15T18:28:47.405Z",
   "contextFetchedBy": [
     "architect-8c9073cd",
     "architect-21f667ae",
@@ -75,16 +75,26 @@
     "governor-7c5e6be6",
     "architect-a42f4965",
     "architect-a9210e34",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "architect-94dd1835"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z"
   },
-  "blockedReason": "Reasserting the measured dependency block after claim_next_task immediately re-served this released PLANNING task. The missing production authorities and newly created prerequisite task IDs are recorded in comment-0a2ff71dcbc644b7a0c8c1781a7fb5b9 and Serena handoff. Do not re-promote until the durable activation ledger, narrow durable launcher ports, Foundation ledger bridge, registry extraction, and effect.activate composition are DONE; no speculative five-file plan can meet the task DoD.",
+  "blockedReason": "Fresh committed-HEAD audit blocks planning. Board task task-e33747f982e0452a9f9d784fd1cb914d (Durable effect activation ingress with recovery embargo) is still WORKING at 7/8 steps, not DONE. At HEAD 4eab9e8faddcceb1ff48b65db9d679076255a601, `git grep -n -E 'effect\\.activate|runEffectActivateCommand|EFFECT_ACTIVATE_COMMAND_KIND' HEAD -- apps/daemon/src` finds only the negative registry test (`agentCapabilitiesFor(\"effect.activate\")).toBeNull()`; there is no committed production effect.activate command/handler. The apparent activation ingress exists only as foreign untracked files plus an unstaged edit to daemon-command-registry.ts, so this task may not depend on it or plan against it. This is the literal trigger previously recorded by governor comment-e80f682ec687: re-promote only after e337 is DONE and its public production path is re-probed. Other prerequisites are now landed (runner launcher authority ports c81953d2, activation ledger bridge 996e5318, runtime binding de496f47, df298/9cba/c956/311), and the five task-owned foundation-attempt files remain absent as expected. Need e337 QA-approved DONE with committed `effect.activate` reachable through the daemon registry/public host; then remeasure and submit the service plan. Do not absorb or copy the foreign activation ingress.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T21:36:53.721Z",
+  "blockedAt": "2026-08-15T18:27:49.516Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read both prior handoffs/comments, rechecked the dependency board and committed HEAD, confirmed all launcher/ledger/runtime bridge prerequisites except effect.activate are landed, and reported the task BLOCKED with exact evidence.",
+      "whatRemains": "Wait for task-e33747f982e0452a9f9d784fd1cb914d to reach QA-approved DONE; then re-probe committed effect.activate through the daemon registry/public host, reload current runner/bridge contracts, and submit the service-only plan.",
+      "pitfalls": "Do not plan against the foreign untracked activation-ingress files or unstaged daemon-command-registry edit. Do not absorb ingress into the five owned foundation-attempt paths, persist PREFLIGHT as priorRegistration, or duplicate runtime/activation binding.",
+      "openQuestions": "None until e337 lands; governor already decided a9fd91c3 is downstream, not a prerequisite.",
+      "releasedAt": "2026-08-15T18:28:47.403Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Current-byte prerequisite audit complete; free architect capacity while e337 finishes."
+    },
     {
       "whatIsDone": "Re-measured launcher/store/daemon production seams, proved the five-file task cannot satisfy durable grant CAS, process registration, activation ledger, authenticated ingress, or current effect/session binding; reported BLOCKED; created prerequisite tasks c81953d2, 996e5318, and a9fd91c3; recorded detailed Serena handoff and decision memory.",
       "whatRemains": "Land task-311 QA, df298 activation ledger, c81953d2 launcher ports, 996e5318 daemon durable bridge, registry extraction/e337 activation ingress; then remeasure and plan 6cb.",

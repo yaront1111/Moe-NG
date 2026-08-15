@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 5,
+  "order": 15,
   "comments": [
     {
       "id": "comment-c6dc9878a00248988ed31bb3c0db70bc",
@@ -36,20 +36,30 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-13T16:08:36.290Z",
+  "updatedAt": "2026-08-15T18:20:02.020Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
-    "architect-a42f4965"
+    "architect-a42f4965",
+    "architect-7f301fa7"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T16:00:55.803Z"
   },
-  "blockedReason": "At HEAD 2b15b8f the production instrumentation required by this acceptance/harness task is absent or unconsumable. @moe/runner publishes receipt/runtime/launch shapes, but no production record contains selected model ID/snapshot/reasoning effort, token/step/cost, stop/infra classification or achieved concurrency; scheduler usage normalization is not root-exported and has no provider emitter; ProjectConfigurationManifest/settingsDigest/orchestration SHA do not exist; daemon StreamEvent exposes only committedAt, control-room evaluateTiming has zero production call sites and receives caller-supplied pairs, and no decision-effort/focus/activity record exists. packages/benchmark itself is absent, so pnpm --filter @moe/benchmark test currently exits 0 vacuously ('No projects matched'). A packages/benchmark-only implementation would either invent source authority or label nearly every required binding UNKNOWN despite DoD 2 requiring bound identities/split points. Created prerequisite production tasks task-159f4c21ef9149e8a65f24735c9c1475, task-5dfc98fc3e7f4035a8012bd9ba032de3, and task-1eeb2dccce204671b442704cd60b38ad.",
+  "blockedReason": "Clause 2 task; capability MEASURED absent at HEAD a967199. The reopenReason authorizes exactly this: \"report BLOCKED rather than invent any absent measurement source.\"\n\nSOURCES ARE NOT EMITTED IN PRODUCTION. Non-test hits in apps/:\n  launchClaudeWithTelemetry    0\n  parseClaudeResultTelemetry   0\n  ClaudeTelemetryHandoff       0\n  normalizeUsageMeasurement    0\n@moe/runner and @moe/scheduler publish all four; nothing under apps/ calls any. Decision-effort: `grep -rln 'effort|Effort' apps/control-room/src/live/` returns 0 files. packages/benchmark: absent.\n\nEvery record the harness would emit would be fixture-fed or UNKNOWN — the \"proof that only proves the shapes\" Clause 2 calls worse than no proof.\n\nSEPARATE HAZARD, do not lose it: this task's OWN verification command passes while running nothing.\n  $ pnpm --filter @moe/benchmark test\n  No projects matched the filters\n  EXIT=0\nA worker could complete on a gate that executed zero tests. Whoever plans this must require a NONZERO executed test count, never exit 0. Flagged at HEAD 2b15b8f; still reproduces.\n\nGAP, symbol by symbol, with owners:\n1. Provider run record (tokens/steps/terminal/infra/concurrency/model evidence) — ClaudeTelemetryHandoff, zero emitters. Owner: task-8e3076177f87458f934a776eca68ba16 family (contract WORKING; codec/normalize/ledger BLOCKED).\n2. Usage composition — normalizeUsageMeasurement, zero apps/ hits. Owner: task-ea27beb6e1954d0e9dba8ad49cc1641e.\n3. Decision-effort/attention observations — modules landed, ZERO live consumers. Owner: task-1eeb2dccce204671b442704cd60b38ad (WORKING; steps 2-4 land it).\n4. Provider run identity/usage — task-159f4c21ef9149e8a65f24735c9c1475, BLOCKED.\n5. Path-neutral config manifest — task-5dfc98fc3e7f4035a8012bd9ba032de3, WORKING.\n\nPresent already: ProjectConfigurationManifest (33), settingsDigest (15), buildEvidenceReceipt (3), evaluateTiming with real callers.\n\nUNBLOCK: all five owners DONE AND each of the four greps returns >0 apps/ hits.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T16:08:01.061Z",
+  "blockedAt": "2026-08-15T18:19:28.569Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Clause 2 capability audit at HEAD a967199; no plan submitted, no code written. Measured the harness's measurement sources directly instead of trusting the HEAD 2b15b8f audit or the unblock note: launchClaudeWithTelemetry, parseClaudeResultTelemetry, ClaudeTelemetryHandoff and normalizeUsageMeasurement all have ZERO non-test hits under apps/; `grep -rln 'effort|Effort' apps/control-room/src/live/` returns 0 files; packages/benchmark is absent. Reported BLOCKED with the gap named symbol by symbol and an owner task id for each of the five missing capabilities.",
+      "whatRemains": "Once the five owners are DONE and the four greps return >0 apps/ hits, plan packages/benchmark as harness infrastructure only: run/cost-class/timing/effort/settings/evidence-receipt/reproducibility records, with a frozen stable UNKNOWN reason-code and layer vocabulary. No corpus bytes, no campaign scoring, no claim decisions.",
+      "pitfalls": "THE NAMED VERIFICATION COMMAND IS VACUOUS TODAY: `pnpm --filter @moe/benchmark test` prints 'No projects matched the filters' and EXITS 0. Never accept exit 0 as this task's gate - require a nonzero executed test count from vitest's own summary line. See mem:pnpm-filter-on-a-missing-package-exits-zero. Second: do not substitute runtime/profile IDs for model snapshot or reasoning effort, and do not accept caller-supplied timing pairs in place of production observations - both were called out by the prior architect and both are still the easy wrong answer. Third: UNKNOWN must never be rendered as zero or imputed across arms (DoD 1); a zero cost and an unmeasured cost are different facts. Fourth: this is a Clause 2 task, so a fixture-fed harness is worse than no harness - if a source is still absent at planning time, block again rather than mock it.",
+      "openQuestions": "The prior architect left this open and it is still open: freeze the exact stable UNKNOWN reason-code/layer vocabulary for the benchmark codec without adding campaign scoring. Also unresolved - the earlier handoff asked to 'widen ownership for pnpm-lock.yaml', which matters because creating packages/benchmark requires a workspace install; whoever plans this must declare pnpm-lock.yaml and the new package.json as owned paths in step 1 or the dependency-edge rail cannot be satisfied.",
+      "releasedAt": "2026-08-15T18:20:02.018Z",
+      "releasedBy": "architect-7f301fa7",
+      "reason": "Releasing the ASSIGNMENT only so the claim gate can offer other work. Task stays BLOCKED with its measured, symbol-by-symbol gap and its re-runnable unblock condition."
+    },
     {
       "whatIsDone": "Verified benchmark spec hash/requirements and current production at HEAD 2b15b8f; established that the filter gate is vacuous and required instrumentation is absent; created three prerequisite production tasks; commented and blocked the parent; wrote Serena handoff memory.",
       "whatRemains": "Land task-159f4c21ef9149e8a65f24735c9c1475, task-5dfc98fc3e7f4035a8012bd9ba032de3, and task-1eeb2dccce204671b442704cd60b38ad; widen ownership for pnpm-lock.yaml; re-measure public consumers; then plan packages/benchmark.",

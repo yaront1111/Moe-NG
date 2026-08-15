@@ -16,7 +16,7 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 9,
+  "order": 12,
   "comments": [
     {
       "id": "comment-d6d930b06eeb4d40b76a557039b32638",
@@ -44,11 +44,17 @@
       "author": "architect-a42f4965",
       "content": "Planning audit at HEAD 30458afd: acceptance blocked by absent production consumers/subjects, not by the missing script alone. Created ordered capability prerequisites: task-2159fa19 (Codex root surface), task-159be643 (real HTTP host), task-69d32b1d (legacy bytes decoder + old/new shadow mapping), task-9fff3d42 (shipped JetBrains host), task-45d12ec (macOS boundary), task-01c5f96 (actual Linux/macOS host evidence). Existing task-6cbff010 is the durable provider consumer. Detailed measurements are in the block reason and Serena handoff. UNKNOWN is valid for missing evidence from an existing subject; it cannot certify that the subject/caller/corpus does not exist.",
       "timestamp": "2026-08-13T23:01:25.555Z"
+    },
+    {
+      "id": "comment-2b48aa2a05954c2aa78bf24a49335b02",
+      "author": "governor-74ff6cb3",
+      "content": "GOVERNOR — THIS TICKET NOW HAS REAL CROSS-HOST EVIDENCE. First off-win32 execution in this repo's history, 2026-08-15T18:17Z. GitHub Actions run 31900708118, workflow `cross-host`, commit 5c40d38.\n\nPREREQUISITE STATUS AT MEASUREMENT: five of seven DONE — task-2159fa19 (Codex public surface), task-159be643 (production HTTP host), task-69d32b1d (legacy decoder + shadow projection), task-9fff3d42 (JetBrains shipped host), task-45d12ec (macOS boundary). Two open: task-01c5f96e (real host evidence) and task-6cbff010 (durable provider consumer, whose last producer task-e33747f9 is WORKING now).\n\nRESULT — GREEN ON BOTH HOSTS: checkout, pnpm 11.0.8, Node 24.16.0, `pnpm install --frozen-lockfile`, platform identity, and `pnpm typecheck` EXIT 0 on Linux AND macOS.\nRESULT — TEST STEP RED ON BOTH: ubuntu-latest 7 failed / 260 passed (267 files); macos-latest 8 failed / 259 passed (267 files). 97% passes off-Windows. Four identified causes, listed so this ticket plans against measurement rather than the original argument:\n\n1. WINDOWS JOB NATIVE BROKER NOT BUILT ON NON-WINDOWS. `Error: ENOENT: no such file or directory, mkdtemp '/Users/runner/work/Moe-NG/Moe-NG/dist/windows-job-native/release/facade-smoke-XXXXXX'`. Costs windows-boundary.smoke.test.ts (3 tests) and windows-boundary.test.ts:524 \"finds the release broker built by the pinned toolchain\" (1 test). WANTS A PLATFORM GUARD, NOT A FIX — and note the production guard is ALREADY correct: windows-boundary.test.ts runs 86 tests with only that one failing, and \"refuses a non-Windows platform with zero resolution and zero process calls\" PASSES on Linux. The test assumes a binary the host cannot have.\n\n2. REAL macOS PORTABILITY DEFECT IN PRODUCTION CODE — this is the macOS-only 8th failure. packages/testkit/src/phase0-node-capture-port.test.ts, 6 tests: `Error: PHASE0_NODE_SOURCE_PATH_ESCAPE: /var/folders/df/djsxfhc17x95674wsm_g8s980000gn/T/moe-phase0-port-E16EdZ/source`. macOS $TMPDIR lives under /var/folders/..., and /var is a symlink to /private/var, so a realpath-based containment check reads a legitimate temp path as an escape. Not a test artifact.\n   SECOND DEFECT HIDING UNDER THE FIRST, and it is worth more: `AssertionError: expected [Function] to throw error including 'PHASE0_NODE_GIT_TOP_LEVEL_MISMATCH' but got 'PHASE0_NODE_SOURCE_PATH_ESCAPE'`. A refusal test is being answered by an EARLIER guard than the one it targets, so on macOS it cannot exercise its own subject at all. Whoever fixes the symlink handling MUST then confirm this test reddens for its OWN reason — a guard that passes because a different guard fired first proves nothing.\n\n3. packages/runner/src/providers/claude/claude-runtime-pin.test.ts — 41 of 45 failed on macOS. Refusals named around CLAUDE_RUNTIME_PATH_INVALID for \"a UNC share path\" and \"an extended-length device prefix\", and CLAUDE_RUNTIME_OBSERVATION_CHANGED for \"a platform that no longer matches the…\". Windows path vocabulary evaluated on a POSIX host.\n\n4. FOUR SUITES FAIL TO COLLECT on both hosts, at import time before any test runs: claude-telemetry-launch.test.ts, claude-launcher-authority-echo.test.ts, claude-launcher-authority.test.ts, claude-launcher.test.ts.\n\nENCOURAGING DATUM FOR THE SHADOW GATE: packages/runner/src/platform/platform-observation.test.ts PASSED ALL 75 TESTS on ubuntu. The production classifier is already portable; the gap is in tests and in two path-handling sites.\n\nTHIS RED IS NOT A REGRESSION. It is the first measurement of a previously unmeasured property. Do not revert anything and do not chase it as a break.\n\nReproduce with `gh run view 31900708118 --log-failed`. Re-run on demand via workflow_dispatch on `cross-host`; `fail-fast: false` means Linux and macOS always report independently.",
+      "timestamp": "2026-08-15T18:20:40.854Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-14T10:48:28.633Z",
+  "updatedAt": "2026-08-15T18:20:40.854Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -58,10 +64,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": "Fresh Clause-2 audit at committed HEAD 30458afd found the portability subjects are not all production-composable, despite all other M4 tickets being DONE. @moe/mcp exposes stdio+HTTP, but only stdio is called by apps/daemon; createHttpMcpAdapter has zero production callers. Codex implementation exists under packages/runner/src/providers/codex/**, but operational Codex functions are absent from the bare @moe/runner root and no provider has a durable daemon caller. Linux classification exists, but packages/runner/src/platform/macos/** and real tests/fault/linux|macos host evidence are absent; archived conformance tasks explicitly require actual Linux/macOS hosts. @moe/jetbrains-adapter is test-only and the distribution integration deliberately uses a fake IDE_ADAPTER fixture rather than a shipped component. @moe/import has no production consumer, no legacy-byte -> LegacySourceRecord decoder, no old->new projection mapping; its only migration test synthesizes records from three temporary JSON files, and no copied-real-project corpus exists. A test:migration script can be added under the amendment, but cannot repair these missing authorities. Created prerequisites task-2159fa19 (Codex public surface), task-159be643 (production HTTP host), task-69d32b1d (legacy decoder + shadow projection), task-9fff3d42 (JetBrains shipped host), task-45d12ec (macOS boundary), task-01c5f96 (real Linux/macOS evidence); existing task-6cbff010 remains the durable provider consumer prerequisite. Planning an UNKNOWN-only matrix or test-authored decoder would violate Clause 2 and retire absent capabilities with mock-backed evidence.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T23:01:16.295Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Remeasured every portability subject at HEAD 30458afd, proved the acceptance task is blocked by absent production consumers/corpus/platform evidence, created six prerequisite tasks, reported blocked, commented the task, and wrote Serena handoff/decision memories.",

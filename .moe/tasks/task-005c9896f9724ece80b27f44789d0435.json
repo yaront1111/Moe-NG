@@ -16,7 +16,7 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,7 +25,7 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
-  "order": 12,
+  "order": 8,
   "comments": [
     {
       "id": "comment-efabf4729a5046008a5853b6a6f6c979",
@@ -54,7 +54,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.623Z",
-  "updatedAt": "2026-08-13T15:46:11.257Z",
+  "updatedAt": "2026-08-15T18:10:32.316Z",
   "contextFetchedBy": [
     "worker-37edea60",
     "architect-a42f4965",
@@ -68,10 +68,10 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedReason": "QA's rejection remains reproducible: the pure core/scheduler expansion protocol still lacks a production consumer. Current task comments and disk audit identify two live prerequisites: task-2d9696160e674f26a8d422c45829d80e must first land the authority-preserving admission-to-preparation bridge, then task-c4171c1cfe854cb78dd233794b342025 must compose it into a durable daemon call site and prove partial admission mints zero child authority. Both are PLANNING, not DONE. Submitting another parent closeout plan now would repeat the vacuous proof QA rejected.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-13T15:45:23.477Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-read QA rejection, current parent context, prior handoff, and child contexts. Confirmed parent closeout remains vacuous. Reported parent BLOCKED with ordered needsFrom task-2d9696160e674f26a8d422c45829d80e then task-c4171c1cfe854cb78dd233794b342025.",

@@ -79,19 +79,25 @@
     {
       "stepId": "step-4",
       "description": "RED — ingress service tests. Create apps/daemon/src/activation/activation-ingress.test.ts against the not-yet-written `runEffectActivateCommand`. Build ONE coherent request fixture in-file: reuse the hand-written four-leg payload shape from ./work/work-claim.test.ts (budget/effect/lease/liveClaims/slot with intent state PENDING version 0) and the activation half modelled on ../recovery/recovery-test-fixtures.ts — attempt {state:\"LAUNCH_REQUESTED\"}, claim, leaseProof matching the intent's leaseBinding on leaseToken/epoch/authorityHashRef/ownerSessionRef with expectedVersion === lease.version, tombstone null, wrapperIdentity, lockIdentity, observedGraphEpoch === intent.expectedGraphEpoch, desiredState === intent.desiredState, dependencyWitnesses, observedRuntimeDigest === intent.runtimeObservationDigest. NEVER hand-forge a grant: parseActivationGrant needs hex64 and a digest-derived grantId and canonicalDigest is not exported (mem:gotcha-coherent-activation-fixture-needs-activateeffect); the record must come out of the production chain. Do NOT reuse activation-ledger-fixtures.ts — its GRANT_ID \"grant-0001\" is codec-legal but parser-illegal. Cases: (1) POSITIVE CONTROL, unembargoed: one accepted call; assert ok, disposition DECIDED, and read the durable aggregate back with `readActivationLedgerRecord(deriveActivationAggregateId(intent.aggregateId, intent.idempotencyKey), store.readEvents(...))` asserting providerSlot.state===\"ACTIVE\" with attemptRef bound, budgetReservation.state===\"ACTIVATED\", effectIntent.state===\"ACTIVE\", attempt.state===\"RUNNING\", grant.state===\"UNUSED\", lease present, and effectIntent.version===predecessorIntentVersion+1 && attempt.version===predecessorAttemptVersion+1. (2) EMBARGO ZERO-AUTHORITY: quiesce the project via runRestoreQuiesce, re-run the SAME request, assert code RECOVERY_RECONCILIATION_REQUIRED and refusedBy/layer RECOVERY_INVENTORY, then assert store.readEvents(derived aggregate) length === 0 AND that the total committed decision count for the project is unchanged versus a snapshot taken before the call — count-based, so no attempt/slot/lease/effect/grant/spend row or event was created. (3) RELEASE STAYS OPEN under the same embargo: `runWorkClaimCommand(store, <work.release bytes>)` still returns ok — embargo fences allocation, not drain. (4) PRECEDENCE, both directions: a structurally broken ENVELOPE under embargo returns ACTIVATION_INGRESS_REQUEST_MALFORMED / DAEMON_INGRESS (structural wins); a well-formed envelope with a domain-broken four-leg payload under embargo returns RECOVERY_RECONCILIATION_REQUIRED / RECOVERY_INVENTORY, NOT flattened and NOT the WORK_* code; unembargoed, that same domain-broken payload returns its verbatim upstream WORK_* code at layer AUTHORITY. (5) REPLAY: same commandId+identical bytes twice unembargoed -> second is ok with disposition REPLAYED, event count still exactly 1, and the returned record digest equals the first (the replay is answered from durable bytes, not echoed). (6) CONCURRENCY: two DISTINCT commandIds targeting the same (aggregateId, idempotencyKey) -> exactly one ok, the other refuses ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT at layer ACTIVATION_LEDGER, and the aggregate still holds exactly one event. (7) A second activation reusing the same grantId under a different aggregate refuses ACTIVATION_LEDGER_GRANT_ID_CONFLICT. Every refusal assertion pins code AND layer AND the event/decision counts — never bare `!ok`. Record the suite RED.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/activation/activation-ingress.test.ts"
       ],
-      "startedAt": "2026-08-15T17:59:02.900Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ingress.test.ts",
+        "apps/daemon/src/activation/activation-ingress-contracts.ts"
+      ],
+      "note": "RED recorded. activation-ingress.test.ts: 9 cases. Accepted path: one coherent in-file fixture (four-leg payload from work-claim.test.ts + an activation section modelled on recovery-test-fixtures.ts; no grant is hand-forged, the record comes out of the production chain), asserting providerSlot ACTIVE with attemptRef bound, budgetReservation ACTIVATED, effectIntent ACTIVE, attempt RUNNING, grant UNUSED, lease present, budgetView = the post-reservation view (v3), and both predecessor+1 version identities read back through readActivationLedgerRecord. Plus REPLAY (second identical command -> REPLAYED, still exactly 1 event, grantId == eventId) and CONCURRENCY (two distinct commandIds on one activation identity -> exactly one DECIDED, other ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT at layer ACTIVATION_LEDGER, still 1 event). Embargo: zero-authority proved by a count pair (project decisionCount + ledger aggregate event count) unchanged across the refused call, with cause PROJECT_RECOVERY_REQUIRED and upstream null asserted unflattened; release-stays-open under the same embargo; precedence both directions (broken envelope -> ACTIVATION_INGRESS_REQUEST_MALFORMED/DAEMON_INGRESS wins over the embargo; domain-broken payload under embargo -> RECOVERY_RECONCILIATION_REQUIRED/RECOVERY_INVENTORY, and the SAME payload unembargoed -> WORK_INTENT_COMMAND_MISMATCH/AUTHORITY verbatim); smuggled `intent` key in the activation section -> ACTIVATION_INGRESS_PAYLOAD_MALFORMED. Every refusal pins code AND refusedBy AND the count pair. DEVIATION from plan case 7: ACTIVATION_LEDGER_GRANT_ID_CONFLICT is UNREACHABLE from this ingress and is not asserted here — grantId = deriveGrantId(intentId, canonicalDigest({intent, attempt, grantBinding})) hashes the whole successor intent, and the ledger aggregate derives from that same intent's aggregateId+idempotencyKey, so a different aggregate always yields a different grant id. Forging one would assert only that the fixture was forged. The code stays covered where it is reachable: activation-ledger-commit.test.ts:260. Reason recorded in the suite header. Run: 2 failed | 78 passed — activation-ingress.test.ts \"Cannot find module './activation-ingress.js'\" (intended RED) and runtime-entrypoint.test.ts flagging activation-ingress-contracts.js as an unexpected bridge because no runtime-tier module imports it yet; step 5 closes that.",
+      "startedAt": "2026-08-15T17:59:02.900Z",
+      "completedAt": "2026-08-15T18:04:09.745Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN — the activation ingress service. Create apps/daemon/src/activation/activation-ingress.ts (target <=250 lines, split before 400) + its .js bridge. Export `runEffectActivateCommand(store: SqliteEventStore, input: unknown): ActivationIngressOutcome` running these stages in EXACTLY this order (the boundary confirmed with the human this session): (A) `decodeActivationRequestBytes(input)` — refuse ACTIVATION_INGRESS_REQUEST_MALFORMED / DAEMON_INGRESS; (B) `readActivationEmbargo(store, request.projectId)` — refuse RECOVERY_RECONCILIATION_REQUIRED / RECOVERY_INVENTORY, preserving `cause` and `upstream` unflattened. NOTHING below runs until the embargo clears; (C) `claimWork({budget, effect, lease, liveClaims, slot})` from ../work/work-claim.js — on refusal surface its WorkFailure code and layer VERBATIM; (D) `applyEffectCommand(successors.effectIntent, {kind:\"arm\"})` from @moe/runner — CLAIMED->ARMED; surface EFFECT_* code and layer verbatim; keep `armed.version` as predecessorIntentVersion; (E) `activateEffect({intent: armed, ...request.payload.activation})` — the intent is SERVER-DERIVED from (D) and must never be taken from the caller payload; surface SupervisorFailure code/layer verbatim; keep request attempt.version as predecessorAttemptVersion; (F) `activateProviderSlot(successors.providerSlot, {dimension: successors.providerSlot.dimension, slotRef: successors.providerSlot.slotRef, requestId: successors.providerSlot.requestId, attemptRef: commit.attempt.attemptId})` from @moe/scheduler — the sole RESERVED->ACTIVE transition; NEVER spread `{...slot, state:\"ACTIVE\"}`; (G) `activateReservation(successors.budgetView, successors.budgetReservation, {expectedVersion: successors.budgetReservation.version, attemptRef: commit.attempt.attemptId})` — yields state ACTIVATED, moves no units; both command fields are server-derived, not caller-supplied; (H) assemble the ActivationLedgerRecord with recordVersion ACTIVATION_LEDGER_RECORD_VERSION, lease/budgetView from (C) — budgetView is reserveForAdmission's own post-reservation view, never recomputed — providerSlot from (F), budgetReservation from (G), effectIntent/attempt/grant/activationDigest/activationVersion from (E)'s commit, and the two predecessor versions from (D)/(E); (I) `commitActivationLedgerRecord(store, {correlationId, decidedAt, key: {commandId, principalId, projectId}, record, requestBytes})` — one atomic store decision that writes attempt, slot, lease, effect, grant and spend authority together or not at all; surface ACTIVATION_LEDGER_* code at layer ACTIVATION_LEDGER verbatim, never flattened into a generic code. On success map the CommandDecisionResponse into the accepted outcome shape. All step-4 cases go green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-ingress.js"
@@ -99,36 +105,59 @@
       "newFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-ingress.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ingress.ts",
+        "apps/daemon/src/activation/activation-ingress.js",
+        "apps/daemon/src/activation/activation-ingress-contracts.ts"
+      ],
+      "note": "GREEN. activation-ingress.ts (321 lines) + .js bridge; activation-ingress-contracts.ts grew to 233 (decoder now returns the caller's bytes verbatim so the store's replay identity sees identical bytes on a retry, and requires input instanceof Uint8Array instead of casting). runEffectActivateCommand runs A decode -> B readActivationEmbargo -> C claimWork -> D arm -> E activateEffect -> F activateProviderSlot -> G activateReservation -> H assemble -> I commitActivationLedgerRecord. Only the envelope decode sits above the embargo; every domain stage is below it. All authority inputs below C are server-derived: the intent handed to activateEffect is stage D's output and is spread LAST over the caller section (which is additionally fenced to the exact 10 activation-only keys, so `intent` cannot be smuggled), and the slot/budget commands are built from C's own successors plus E's own attemptId. Slot goes RESERVED->ACTIVE only through activateProviderSlot; no {...slot,state:\"ACTIVE\"} anywhere. predecessorIntentVersion is the ARMED intent's own version and predecessorAttemptVersion is the version the REQUEST carried, read as an own data property — deriving it as commit.attempt.version-1 would have made the ledger reader's `+1` check true by construction. The accepted outcome's CommandDecisionRecord is read back with store.getCommandDecision; a null read refuses ACTIVATION_LEDGER_EVIDENCE_ABSENT rather than claiming authority. Runs: 21/21 green across the two new suites; whole activation dir 82/82; pnpm --filter @moe/daemon test = 1687 passed, 0 failed tests. FOREIGN RED disclosed: apps/daemon/src/telemetry/ is entirely UNTRACKED peer work (git status shows `?? apps/daemon/src/telemetry/`) and its provider-run-contracts.test.ts fails with \"Cannot find module './provider-run-contracts.js'\", reddening both the daemon typecheck and the daemon vitest exit code. Not my diff; attributed at step 7.",
+      "startedAt": "2026-08-15T18:04:12.325Z",
+      "completedAt": "2026-08-15T18:08:15.797Z"
     },
     {
       "stepId": "step-6",
       "description": "Production daemon ingress wiring. In apps/daemon/src/daemon-command-registry.ts (247 lines at HEAD 5c5afb1; expect ~256 after — within the epic rail's 400-line split threshold, and no extraction is taken because it would push the task past the 10-file cap): import EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS, ACTIVATION_INGRESS_SCHEMA_VERSION and type ActivationIngressOutcome from ./activation/activation-ingress-contracts.js and runEffectActivateCommand from ./activation/activation-ingress.js; widen `WiredCommandKind` and `decisionOf`'s union with the new kind/outcome; add `[EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS` to PAYLOAD_KEYS; in `entryOf` add `const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;` and extend the schemaVersion ternary, the handler chain (`if (activation) return decisionOf(runEffectActivateCommand(store, bytes));`) and the requiredCapability ternary (CAPABILITIES.WORK); add the kind to `agentCapabilitiesFor` returning Object.freeze([CAPABILITIES.WORK]) to match the work family. Then update apps/daemon/src/daemon-command-registry.test.ts, which will go RED on a closed table: its ROWS array and the `expect(ROWS).toHaveLength(20)` / `expect(deps.registry.size).toBe(20)` assertions at ~line 151 must become 21 (rename the it() title off \"twenty\") with one new row {agent:[WORK], capability: WORK, kind: \"effect.activate\", code/layer = the ingress refusal a smuggled-key-free empty payload actually produces, payloadKeys: the exact sorted allow-list}. Do not weaken the smuggled-key case — the new row must pass it unchanged. This step is what makes claimWork and activateEffect reachable from production daemon ingress rather than from a test harness.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "effect.activate is now reachable from PRODUCTION daemon ingress, not a test harness. daemon-command-registry.ts (261 lines, under the 400 split threshold): imports the ingress contracts + runEffectActivateCommand, widens WiredCommandKind and decisionOf's union, adds [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS to PAYLOAD_KEYS, adds `const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND` with the schemaVersion/handler/requiredCapability branches, and agentCapabilitiesFor returns frozen [work.write]. daemon-command-registry.test.ts: ROWS 20 -> 21 with the measured row {agent:[WORK], capability: work.write, code: ACTIVATION_INGRESS_REQUEST_MALFORMED, layer: DAEMON_INGRESS, payloadKeys: the exact sorted 6-section allow-list}; the title, toHaveLength and both registry.size assertions moved to 21; the smuggled-key case is unchanged and passes on the new row; the \"unknown kind\" negative control was retargeted from effect.activate (now wired) to cutover.preview, so it still proves an unwired kind returns null. ONE FILE BEYOND THE PLANNED SET: daemon-store-dependencies.test.ts:352 carried a second closed count (`registrySize: 20`) inside a plain-Node child probe, which the registry change forces to 21. That is a compelled one-line update to a closed count, not scope growth; without it a wired command would be invisible to the probe that proves the registry loads under real Node. Runs: pnpm --filter @moe/daemon typecheck exit 0; pnpm --filter @moe/daemon test = 81 files passed, 1716 tests passed, 0 failed. The earlier telemetry red is gone: the peer landed their .js bridges during this step.",
+      "startedAt": "2026-08-15T18:08:18.925Z",
+      "completedAt": "2026-08-15T18:10:18.818Z"
     },
     {
       "stepId": "step-7",
       "description": "Mutation drill + verification. Drill the production embargo COMPARISON, not a sibling guard: in activation-ingress.ts replace the `if (!embargo.ok) return ...` early return with a no-op that falls through (or in activation-embargo.ts force the PROJECT_RECOVERY_REQUIRED branch to return {ok:true}), then run ONLY the named embargo test with `pnpm --filter @moe/daemon test -- --root . -t \"<embargo zero-authority test name>\"` and confirm it goes RED for the RIGHT reason — the assertion that must fail is the zero-event/zero-decision count and the code assertion, not a crash in a serialiser (a crash is not a refusal, mem:a-crash-is-not-a-refusal). Bound the run so a hang cannot read as a hold. Restore the exact pre-drill bytes from your own saved copy — NEVER `git checkout` the file, which reverts to HEAD and destroys uncommitted work in this shared worktree. Then run the full gate fresh and paste real output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test` (`&&`-chained, never `;`, and never piped through tail — a piped run reports tail's exit code). Note that a focused daemon vitest run needs `--root .` or it resolves the root config and finds zero tests. If a repo-wide leg is red, attribute it by the merge-base vs HEAD failing-path delta intersected with this task's owned paths before completing, and disclose any foreign red verbatim.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-embargo.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ingress.test.ts"
+      ],
+      "note": "DRILL 1 (the production embargo comparison in activation-ingress.ts, `if (!embargo.ok) return ...` replaced by a fall-through): the named test \"creates zero attempt, slot, lease, effect, grant or spend authority when embargoed\" went RED on a value diff, not a crash. First run failed only on the code assertion, so I STRENGTHENED the test into one assertion over code + refusedBy + both counts; re-drilled, and the diff is now complete: {decisions 6 -> 7, events 0 -> 1, code RECOVERY_RECONCILIATION_REQUIRED -> ACCEPTED, refusedBy RECOVERY_INVENTORY -> DURABLE_DECISION}. Split across three expects the first failure would have stopped the case and the zero-authority measurement would never have run — a bypass could have committed the whole activation with the test still reporting only a code. DRILL 2 (activation-embargo.ts, PROJECT_RECOVERY_REQUIRED branch forced to return ok:true) proves WHICH branch answers: exactly the 4 embargo-dependent cases reddened; the 3 CLEAR cases and the 5 corruption/upstream cases stayed green, so the drill hits the comparison, not a sibling guard, and does not over-redden. Both files restored from my own out-of-repo backups and verified byte-identical with `cmp` (grep DRILL/DRILL2 = 0); backups deleted; no scratch file remains in the tree. GATE, fresh and &&-chained, never piped: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test` -> GATE_EXIT=0; daemon 85 files / 1746 tests passed, runner 60 files / 2014 tests passed. FOREIGN RED, disclosed: this shared worktree has at least two other agents writing into apps/daemon right now. Over ~15 minutes the gate flickered red on paths none of which are mine — apps/daemon/src/telemetry/ and apps/daemon/src/configuration/ (both ENTIRELY untracked peer trees, so absent at the merge base), plus uncommitted peer edits to apps/daemon/src/mcp-dispatch-port.test.ts (TS2353 'subscriptions' not in McpDispatchPortConfig), apps/daemon/src/mcp-http/mcp-http-host.test.ts (TS2353 'database' not in McpHttpHostOptions) and apps/daemon/src/index-surface.test.ts (TS6133/TS6192 unused imports). `git status --porcelain -- apps/daemon/src packages` shows the ONLY tracked source edits are my three (daemon-command-registry.ts, daemon-command-registry.test.ts, daemon-store-dependencies.test.ts) plus mcp-dispatch-port.test.ts which I never opened. The failing-path set at HEAD minus merge-base, intersected with this task's owned paths, is EMPTY. I did not narrow the gate; I polled it to a genuinely green window and recorded that run.",
+      "startedAt": "2026-08-15T18:10:21.467Z",
+      "completedAt": "2026-08-15T18:26:09.609Z"
     },
     {
       "stepId": "step-8",
       "description": "Adversarial self-review before complete_task. Load the `adversarial-self-review` skill and read your own diff as an attacker. Specifically check: (1) can any path reach claimWork/activateEffect/activateProviderSlot/activateReservation/commitActivationLedgerRecord without passing readActivationEmbargo — including a thrown-and-caught store error that lands in a `catch` above the embargo; (2) does any refusal assertion in the two new suites pass with only `!ok`, and is every asserted code actually present in the test file (a code absent from the file means that whole branch is unguarded); (3) is the embargo refusal answered by an EARLIER guard than the one you think — trace which branch answers for each of the six causes and confirm the drill in step 7 reddens the embargo comparison rather than a sibling; (4) does `activateEffect` ever receive a caller-supplied `intent`, or `activateProviderSlot`/`activateReservation` a caller-supplied attemptRef/expectedVersion — all four must be server-derived; (5) do the two new .js bridges exist and re-export the .ts siblings; (6) count physical lines with `grep -c ''` (PowerShell Measure-Object -Line undercounts) on every touched production file and confirm none exceeds 400 and each new module is at or near its <=250 target; (7) confirm no debug/probe/scratch file remains and that you stage and commit ONLY this task's owned paths by explicit pathspec — never git add -A.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-embargo.ts",
         "apps/daemon/src/activation/activation-ingress.test.ts",
         "apps/daemon/src/activation/activation-embargo.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T18:26:12.112Z"
     }
   ],
   "status": "WORKING",
@@ -157,12 +186,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T17:59:02.900Z",
+  "updatedAt": "2026-08-15T18:26:12.112Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -191,7 +220,11 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T17:51:47.361Z",
