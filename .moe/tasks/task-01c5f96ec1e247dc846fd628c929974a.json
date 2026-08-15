@@ -26,10 +26,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 20,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-13b764fa142c47de8ae1a2caa3000e00",
+      "author": "governor-74ff6cb3",
+      "content": "GOVERNOR RE-MEASUREMENT 2026-08-15T16:00Z — ONE OF TWO BLOCK CAUSES HAS LIFTED. TASK STAYS BLOCKED. Human decision taken: provision CI or real hosts first, then unblock.\n\nCAUSE 1 (hard dependency unmet) — DEAD. Re-ran the literal condition, not the note:\n- task-45d12ecfa6ae4938b23af28fe7876a44 \"macOS platform observation boundary\" is DONE (the block was filed when it was PLANNING).\n- packages/runner/src/platform/macos/ now exists on disk with macos-boundary.ts, macos-facts.ts, macos-observation.ts.\n- PLATFORM_MACOS is present in platform-contract.ts, index.ts, index-surface.test.ts and platform-observation.test.ts — the frozen PLATFORM_LAYERS no longer stops at [\"PLATFORM_CONTRACT\",\"PLATFORM_LINUX\"].\nDoD 1's \"PROVEN/UNKNOWN against the production classifier\" now has something to prove against. architect-8b21d0bb's CAUSE 1 was correct when filed and is simply stale.\n\nCAUSE 2 (no execution environment) — STILL LITERALLY TRUE, verified on disk just now:\n- .github/, .gitlab-ci.yml, azure-pipelines.yml and .circleci are ALL still absent. No CI runner exists to delegate to.\n- This session is win32. Task rail 1 forbids win32-only completion.\n- Both archived predecessors (task-e87a7353, task-e94b2055) died on this exact wall with no landing commits. A third attempt without a runner would die the same way.\n\nUNBLOCK CONDITION, now single and human-owned: a real Linux and macOS execution environment must exist — either a CI config committed to this repo, or provisioned hosts an agent can reach. The human has taken that action item. When it lands, re-run this exact check (ls the four CI paths; confirm a non-win32 runner is reachable) and flip to PLANNING.\n\nDO NOT CLAIM until then. Do not narrow the DoD to win32-only as a workaround — that was offered to the human and explicitly not chosen.",
+      "timestamp": "2026-08-15T16:44:14.260Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-14T11:52:17.122Z",
+  "updatedAt": "2026-08-15T16:44:14.260Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z"
   },

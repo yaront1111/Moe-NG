@@ -1,0 +1,38 @@
+{
+  "id": "task-1a7ff170ee544a3a8a10962c25e2ca5b",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Durable provider-run telemetry ledger",
+  "description": "SPIDR slice 4 of 4, cut from task-8e3076177f87458f934a776eca68ba16. This is the PATH slice and the FINAL slice of the family: it owns the durable commit, the full four-leg gate, and the consumer-edge declaration for the whole group.\n\nHard dependencies: task-8e3076177f87458f934a776eca68ba16 (record contract), task-fc6581042426444a826981943f441908 (canonical codec) and task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize composition), all DONE.\n\nDELIVERABLE: apps/daemon/src/telemetry/provider-run-ledger.ts plus its .js bridge and provider-run-ledger.test.ts. Mirror apps/daemon/src/activation/activation-ledger-commit.ts, which is the in-repo template and already encodes every hard decision below.\n\nBEHAVIOUR:\n- ONE call to the store's existing commitExpectedVersionDecision through the narrow port declared by slice 1. The durable record IS the event payload - no side table, no bespoke SQLite schema.\n- DO NOT reach for commitWithApply or commitExpectedVersionDecisionWithApply. Those hand the callback a raw DatabaseSync and exist for callers writing their own tables, which the no-new-schema rail forbids. Slice 1's port deliberately does not name them, so the mistake should be unreachable - verify it still is.\n- expectedVersion pinned to 0 against the derived aggregate id, so a distinct command targeting a run that already committed observes version 1 and the STORE rejects it. Conflict is borrowed from the aggregate head, never hand-checked.\n- REPLAY IS ANSWERED BY READING THE AGGREGATE BACK, NEVER BY ECHOING THE CALLER. This is the defect most likely to ship green in this whole family. The store's replay identity does NOT cover the events array - activation-ledger-commit.ts:16-21 states this outright - so a ledger that returns the caller's own record on REPLAYED makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. On disposition REPLAYED, re-read the aggregate and answer from the STORED bytes, verified through the slice-2 decoder.\n- Map a thrown store error onto the slice-1 vocabulary while PRESERVING the store's own code verbatim in a separate field. An expected-version conflict and a reused event id are different facts; flattening them destroys a distinction the tests must assert separately.\n\nTESTS use a REAL SqliteEventStore via openEphemeralForProjectTest(projectId) - no fake store. Open the handle inside the it or beforeEach and close it in a finally: a handle opened in a describe body and still held at teardown kills the vitest worker process, which reads as unrelated infrastructure failure rather than as your bug.\n\nMEASURED CONTEXT (re-measure before planning; taken at HEAD 5c5afb1):\n- Store public API is sufficient with no new schema: commitExpectedVersionDecision, getCommandDecision(key: CommandDecisionKey), readEvents(aggregateId), readAggregateEvents, openEphemeralForProjectTest. CommandDecisionKey = {commandId, principalId, projectId}. packages/store/src/sqlite-event-store.ts:94.\n- Daemon precedent for the same shape: apps/daemon/src/activation/activation-ledger-commit.ts:160-210 and apps/daemon/src/bootstrap/bootstrap-ledger.ts:206,246.\n- Do not publish from apps/daemon/src/index.ts: index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61.\n- A focused daemon vitest run needs `--root .` or it silently matches ZERO tests and reads exactly like a pass; the package script is `vitest run --root . --config package.json src`.\n\nCONSUMER EDGE: this slice closes the family, so it carries the consumer-edge obligation for all four. task-6cbff01023b14b26a78fc5e3eb1dd8a9 is the real live dispatch consumer and MUST be named in the handoff with its id. Check what task-cbc42f3383444c05a20c6bf56129e8c8 already recorded for task-159f4c21 and task-6cbff010 before declaring an edge, so the same edge is not declared twice.\n\nScope: apps/daemon/src/telemetry/provider-run-ledger.* only.",
+  "definitionOfDone": [
+    "Exactly one content-bound record is durably committed per provider run through the existing commitExpectedVersionDecision API, with no bespoke SQLite table or schema added, verified by grep showing no CREATE TABLE and no use of the *WithApply commit variants.",
+    "A replay of the same commandId with the SAME bytes returns the STORED record read back from the aggregate, not the caller's, and a mutation drill that switches the REPLAYED branch to echo the caller reddens a NAMED test - the drill is mandatory because an echoing implementation passes every other test in this file.",
+    "A replay of the same commandId with CHANGED record bytes fails closed with a specific stable reason code naming its layer, and the durable bytes are asserted unchanged afterwards.",
+    "A distinct command targeting an already-committed run is rejected on the aggregate head, asserting this module's stable code AND the store's own code preserved verbatim alongside it rather than flattened into one.",
+    "Malformed, truncated and digest-mismatched durable reads each return the stable telemetry-unreadable code naming its layer, asserted by code and layer rather than merely that the read failed.",
+    "Tests run against a real SqliteEventStore opened per test and closed in a finally, and every added assertion is proven load-bearing by a mutation drill naming the test that reddens, restored and verified by sha256 rather than git diff.",
+    "Fresh pnpm --filter @moe/runner test, pnpm --filter @moe/scheduler test, pnpm --filter @moe/daemon typecheck and pnpm --filter @moe/daemon test each exit 0 with exit codes read SEPARATELY, and the handoff names task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the live dispatch consumer of the composed surface."
+  ],
+  "taskRails": [
+    "No new store schema or table; use only the public event/decision transactions and strict canonical bytes. Never call commitWithApply or commitExpectedVersionDecisionWithApply - they expose a raw DatabaseSync.",
+    "Answer REPLAYED by reading the aggregate back, never by echoing the caller's record. The store's replay identity does not cover the events array, so an echo passes every idempotence test while proving nothing.",
+    "Preserve the store's own reason code verbatim alongside this module's code; an expected-version conflict and a reused event id are different facts and must stay separately assertable.",
+    "Tests use a real SqliteEventStore, never a fake. Open per test and close in a finally - a held handle kills the vitest worker at teardown.",
+    "This slice closes the four-slice family and carries the consumer-edge obligation: name task-6cbff01023b14b26a78fc5e3eb1dd8a9 in the handoff.",
+    "Scope is apps/daemon/src/telemetry/provider-run-ledger.* only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.6043,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T17:57:08.294Z",
+  "updatedAt": "2026-08-15T17:57:08.294Z"
+}

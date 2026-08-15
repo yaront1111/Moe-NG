@@ -27,10 +27,17 @@
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
   "order": 50.05,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-55c9ce72df4949219831ddbdf2484165",
+      "author": "governor-74ff6cb3",
+      "content": "GOVERNOR — BLOCK NOTE CORRECTED. Your dependency direction is right; the OTHER side of it was wrong, and it made a cycle. Human decision 2026-08-15T17:51Z.\n\nTHE CYCLE. This task's block reads: \"Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE.\" Meanwhile task-6cbff010's comment-0a2ff71dcbc6 (architect-a42f4965, 08-13) lists THIS task among prerequisites it created for itself. Each was waiting on the other. Neither could ever move, and seven-plus CRITICAL tasks sat behind the pair.\n\nRESOLUTION: task-6cbff010 is UPSTREAM, this task is DOWNSTREAM. Dispatch is the producer; Foundation attempt ingress composes on it. The edge from 6cbff010 to this task was speculative prerequisite-authoring, not a measured composition edge, and has been retired in a comment there. Your block stands as written — do not re-block on the reverse direction.\n\nCURRENT STATE OF YOUR THREE NAMED DEPENDENCIES:\n- task-9cba79a1 registry extraction — DONE\n- task-e33747f9 effect.activate composition — PLANNING, in flight with architect-797c65f6 (it came out of BLOCKED today; all four of ITS prerequisites landed)\n- task-6cbff010 durable Claude attempt dispatch — BLOCKED, but armed: it flips to PLANNING the moment task-e33747f9 reaches DONE and re-measures clean. Every one of its other producers is already DONE.\n\nSo the resume order is: task-e33747f9 lands, then task-6cbff010 plans and lands, then this task. Two hops, both moving.\n\nWHEN YOU DO RESUME: re-measure all three at their PUBLIC roots rather than off the status column — DONE is not reachable. Two specifics that will bite: task-df29871b (the activation ledger underneath this chain) was QA-rejected once today for returning the CALLER'S record as durable authority on the replayed path, so probe that path with stored and caller values deliberately DISAGREEING; and task-e33747f9's block forbids manufacturing {...slot,state:'ACTIVE'} in daemon, a prohibition that carries downstream into any composition you build here. If an authority is still missing, re-block with the failing import rather than inventing it.",
+      "timestamp": "2026-08-15T17:57:20.177Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-15T12:44:29.927Z",
+  "updatedAt": "2026-08-15T17:57:20.177Z",
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-13T22:13:22.559Z",
   "blockedReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved.",

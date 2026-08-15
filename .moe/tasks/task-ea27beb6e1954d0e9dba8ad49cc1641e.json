@@ -1,0 +1,37 @@
+{
+  "id": "task-ea27beb6e1954d0e9dba8ad49cc1641e",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Compose provider telemetry with the scheduler usage authority",
+  "description": "SPIDR slice 3 of 4, cut from task-8e3076177f87458f934a776eca68ba16. This is the RULES slice and the heart of the original task: the daemon-side composition of runner telemetry with the scheduler usage authority.\n\nHard dependencies: task-8e3076177f87458f934a776eca68ba16 (record contract) and the canonical codec slice, both DONE.\n\nDELIVERABLE: apps/daemon/src/telemetry/provider-run-normalize.ts plus its .js bridge and provider-run-normalize.test.ts.\n\nBEHAVIOUR:\n- Import ONLY from the @moe/runner and @moe/scheduler package ROOTS via bare specifiers. A deep path into packages/** fails with TS6059; this repo has no tsconfig paths and no project references, so there is no escape hatch.\n- Validate ONE raw launch-bound ClaudeTelemetryHandoff. Refuse a malformed handoff with a stable code and layer.\n- Delegate EVERY usage envelope to production normalizeUsageMeasurement, IN ORIGINAL PROVIDER SEQUENCE, threading the previous accepted NormalizedMeasurement as the `prior` argument. Threading `prior` is not bookkeeping: it is what makes BUDGET_OBSERVATION_SEQUENCE_GAP, SEQUENCE_REGRESSION, IDENTITY_CONFLICT and STREAM_MISMATCH reachable at all. Passing null every time silently disables four of the ten measurement codes and no test can tell.\n- COPY NONE of the authority's source/coverage matrix. If the daemon decides COMPLETE vs PARTIAL vs UNKNOWN, or picks a BUDGET_MEASUREMENT_SOURCES member itself, the authority has been duplicated.\n- PRESERVE BOTH PROVENANCES SEPARATELY. The upstream ProviderTelemetryRefusal {code: ProviderTelemetryCode, layer: ProviderTelemetryLayer} and the scheduler's LayeredIssue {layer: \"CONTRACT\"|\"MEASUREMENT\", code} occupy DIFFERENT record fields. Do not flatten, translate, or invent a pass.\n- UNKNOWN usage retains quantity null and the exact upstream code/layer. PARTIAL retains its measured lower bound. No client-estimated Claude cost may be persisted with source ACTUAL_BILLED.\n\nMEASURED CONTEXT (re-measure before planning; taken at HEAD 5c5afb1):\n- DEPENDENCY EDGE VERIFIED on all three clauses. apps/daemon/package.json declares @moe/runner and @moe/scheduler; pnpm-lock.yaml:87-112 carries the apps/daemon importer; a compiled probe importing parseClaudeResultTelemetry and launchClaudeWithTelemetry from the BARE \"@moe/runner\" typechecked exit 0, with a negative control failing TS2305 exit 1.\n- TRAP: `grep telemetry packages/runner/src/index.ts` returns ZERO hits and is a FALSE NEGATIVE. The surface is re-exported through `export * from \"./surface/claude-surface.js\"` at index.ts:162; claude-surface.ts:167-212 re-exports all three telemetry modules by name. Do not report blocked on the grep.\n- normalizeUsageMeasurement(input: unknown, prior?: NormalizedMeasurement | null): MeasurementResult<NormalizedMeasurement> at packages/scheduler/src/budget/budget-measurement.ts:210. Input is a {measurement, pricebookBinding, truncated} envelope.\n- ClaudeTelemetryHandoff at packages/runner/src/providers/telemetry/claude-telemetry-launch.ts:70-86.\n- BUDGET_MEASUREMENT_SOURCES has SIX members: PROVIDER_REPORTED_COMPLETE, PROVIDER_REPORTED_PARTIAL, DERIVED_LIST_PRICE, SUBSCRIPTION_QUOTA, ACTUAL_BILLED, UNKNOWN.\n\nScope: apps/daemon/src/telemetry/provider-run-normalize.* only. Persistence belongs to the ledger slice.\n\nVerification: pnpm --filter @moe/runner test, pnpm --filter @moe/scheduler test, pnpm --filter @moe/daemon typecheck, pnpm --filter @moe/daemon test - each leg's exit code read SEPARATELY.",
+  "definitionOfDone": [
+    "The module imports only @moe/runner and @moe/scheduler public roots by bare specifier, validates one raw launch-bound ClaudeTelemetryHandoff, and refuses a malformed handoff with a stable code naming its layer.",
+    "Every usage envelope is delegated to production normalizeUsageMeasurement in original provider sequence with the previous accepted record threaded as `prior`, proven by a test where an out-of-order or duplicate-identity envelope surfaces the scheduler's own sequence or identity code.",
+    "No source/coverage decision is made locally: grep shows the daemon never selects a BUDGET_MEASUREMENT_SOURCES member or a coverage class itself, and no test injects a fake normalizer.",
+    "Upstream ProviderTelemetryRefusal code/layer and scheduler LayeredIssue CONTRACT/MEASUREMENT code/layer are retained in separate record fields, with a test asserting BOTH codes AND which layer answered for an upstream refusal and a scheduler refusal separately.",
+    "UNKNOWN retains quantity null with the exact upstream code/layer, PARTIAL retains its measured lower bound, and a hostile case feeding a client-estimated Claude cost asserts the persisted source is NOT ACTUAL_BILLED.",
+    "A sweep covers all six BUDGET_MEASUREMENT_SOURCES members and asserts the generated case count equals the length of the imported production array, so a sweep producing zero or partial cases reddens instead of passing silently.",
+    "Every added assertion is proven load-bearing by a mutation drill naming the test that reddens, restored and verified by sha256 rather than git diff, and fresh runner/scheduler/daemon-typecheck/daemon-test legs each exit 0 with exit codes read separately."
+  ],
+  "taskRails": [
+    "Daemon is the direction-safe composition boundary; runner must not depend on scheduler and tests must not inject a fake normalizer.",
+    "Preserve upstream provider reason code/layer separately from scheduler CONTRACT/MEASUREMENT code/layer; do not flatten or invent a pass.",
+    "Import only from @moe/runner and @moe/scheduler package roots. A deep relative import fails TS6059 and there is no tsconfig paths escape hatch.",
+    "Compose normalizeUsageMeasurement; never re-derive its source/coverage matrix. Re-implementing a landed authority is a silent duplicate that collides with its owner.",
+    "Scope is apps/daemon/src/telemetry/provider-run-normalize.* only. Persistence belongs to the ledger slice."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.6042,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T17:56:31.168Z",
+  "updatedAt": "2026-08-15T17:56:31.168Z"
+}

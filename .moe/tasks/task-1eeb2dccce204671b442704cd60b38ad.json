@@ -19,12 +19,12 @@
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-directed next unblock after live architect audit: current daemon/control-room timing surfaces are present but lack a real production instrumentation edge; this prerequisite independently owns command/run identity, clock-bound timing, and decision-effort observations. Cross-clock uncertainty must remain UNKNOWN.",
+  "reopenReason": "Block condition met, re-run literally by governor-74ff6cb3 and approved by the human at 2026-08-15T16:00Z. This task was never blocked on a missing dependency — it was OVERSIZED and SPIDR-split into 3 children, with its own note reading \"PROMOTE THEM ONCE 1 LANDS or this epic stalls silently\". All three children are now DONE: task-1430dfae (Daemon stream command identity and server timing observations), task-371c80bd (Live control-room timing consumer edge), task-bcae0b7e (Decision-effort and attention observation records). Re-plan this parent as the final integration/hardening slice — cross-package mutation drills and the 4-package gate — exactly as the block note instructs. ARCHITECT: re-measure the four gap claims at current HEAD before planning; they were confirmed at HEAD 6ffb4fe and the children have landed since, so the wire fields the children added are the whole point of this slice. Two hazards carried over from the children: packages/store is NOT owned by the stream seam (its own header says so), and generated-client.ts is codegen from @moe/contracts marked DO NOT EDIT BY HAND.",
   "createdBy": "WORKER",
   "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
   "priority": "HIGH",
@@ -39,17 +39,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-14T09:48:27.647Z",
+  "updatedAt": "2026-08-15T16:42:58.668Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:36.184Z"
   },
   "contextFetchedBy": [
     "architect-2aea4111"
   ],
-  "blockedReason": "OVERSIZED, SPIDR-split into 3 children. NOT blocked on a missing dependency — the description's gap measurement is ACCURATE; the task just cannot be planned within the plan-shape thresholds.\n\nSize: needs >=13 distinct files against the 10 hard cap, across 3-4 packages (@moe/daemon, @moe/control-room, @moe/control-room-client, plus @moe/contracts if the generated client changes), ~15 steps against the 12 cap. Split on plan shape, never LOC.\n\nChildren created (parentTaskId set):\n1. task-1430dfae1a0e4e8c88fafc7bf011ba9f Daemon stream command identity + server timing observations — promoted to PLANNING, the claimable head.\n2. task-371c80bd94094db48b15d32eb8e4b931 Live control-room timing consumer edge — BACKLOG, hard-depends on 1.\n3. task-bcae0b7e74bd4590baf0d901039e5401 Decision-effort and attention observation records — BACKLOG, depends on 1.\n\n2 and 3 are deliberately BACKLOG so nobody plans against wire fields that do not exist yet. PROMOTE THEM ONCE 1 LANDS or this epic stalls silently.\n\nRe-measured at HEAD 6ffb4fe (description cited 2b15b8f). All four gap claims CONFIRMED: StreamEvent/WireEvent are exactly 5 fields, no commandId/actor/session (event-stream-contract.ts:30); LiveEventRow copies wire fields and adds nothing (live-event-feed.ts:13); evaluateTiming has ZERO production callers — command-latency.tsx takes the receipt as a PROP, only tests call it; the attention/effort domain does not exist at all (grep attentionSwitch/focusInterval/decisionEffort/recoveryBurden = zero files; positive control, same grep form for committedAt = 60 files).\n\nTwo hazards recorded in the children: packages/store is NOT owned by the stream seam (its own header says so), and generated-client.ts is codegen from @moe/contracts marked DO NOT EDIT BY HAND.\n\nRe-plan this parent as the final integration/hardening slice — cross-package mutation drills and the 4-package gate — after the children land.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-14T09:09:34.859Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measurement at HEAD 6ffb4fe and a SPIDR split into three children (task-1430dfae1a0e4e8c88fafc7bf011ba9f PLANNING, task-371c80bd94094db48b15d32eb8e4b931 BACKLOG, task-bcae0b7e74bd4590baf0d901039e5401 BACKLOG). Full detail in Serena memory task-task-1eeb2dccce204671b442704cd60b38ad-handoff. No plan submitted for the parent and no production code written.",

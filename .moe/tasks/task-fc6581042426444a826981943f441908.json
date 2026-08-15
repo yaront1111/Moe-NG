@@ -1,0 +1,35 @@
+{
+  "id": "task-fc6581042426444a826981943f441908",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Provider-run telemetry canonical codec",
+  "description": "SPIDR slice 2 of 4, cut from task-8e3076177f87458f934a776eca68ba16 after the daemon hard-rejected a 17-file single plan. This is the INTERFACE slice: canonical bytes, digest, and the unreadable-read path.\n\nHard dependency: task-8e3076177f87458f934a776eca68ba16 (provider-run record contract and closed vocabularies) must be DONE. It supplies the record interface, the closed reason-code/layer arrays including the unreadable-record code, and the aggregate-id derivation. Do not re-declare any of them here.\n\nDELIVERABLE: apps/daemon/src/telemetry/provider-run-codec.ts plus its .js bridge and provider-run-codec.test.ts. Mirror apps/daemon/src/activation/activation-ledger-codec.ts, which solves exactly this problem for the activation ledger and is the in-repo template.\n\nencodeProviderRunRecord(record) returns {ok:true, bytes, digest, record} or a refusal carrying a stable code and its layer. The decoder verifies BEFORE trusting.\n\nTWO GUARDS, NOT ONE — this is the whole point of the slice. The decode must BOTH recompute the digest over the decoded value AND re-encode and compare bytes. Each guard alone LOOKS sufficient and is not: a digest check alone accepts bytes that decode to an equal value through a different encoding, and a re-encode check alone accepts a consistently-forged pair. A drill that disables one guard must redden a named test; if it does not, the second guard is decorative.\n\nMalformed, truncated and digest-mismatched reads each return the stable unreadable code naming its layer - never a throw, never a partially adopted record.\n\nMEASURED CONTEXT (re-measure before planning; this was taken at HEAD 5c5afb1):\n- apps/daemon/src/telemetry/ did not exist; slice 1 creates it.\n- Template: apps/daemon/src/activation/activation-ledger-codec.ts, with activation-ledger-commit.ts:160-170 showing the encode-then-commit call shape the ledger slice will use.\n- Every production .ts in apps/daemon/src/activation/ has a sibling .js bridge with bytes exactly `export * from \"./<basename>.ts\";` and an LF newline. Test files get none. A missing bridge is invisible to BOTH tsc and vitest.\n- Do not publish from apps/daemon/src/index.ts: index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61.\n\nScope: apps/daemon/src/telemetry/provider-run-codec.* only. Do not touch the contract module slice 1 owns, and do not start the normalizer or the ledger.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test, each leg's exit code read SEPARATELY.",
+  "definitionOfDone": [
+    "encodeProviderRunRecord produces frozen canonical bytes plus a digest over those bytes, and is deterministic: encoding the same record twice yields byte-identical output, asserted by comparing the bytes, not the digest alone.",
+    "The decoder verifies with BOTH guards - it recomputes the digest AND re-encodes and compares bytes - and a mutation drill that disables either guard alone reddens a NAMED test, proving neither is decorative.",
+    "Malformed, truncated and digest-mismatched durable bytes each return the stable unreadable reason code from the slice-1 vocabulary, naming its layer, asserted by code and layer rather than merely that decoding failed.",
+    "No reason code, record field, or layer is re-declared here; all are imported from the slice-1 contract module, verified by grep showing zero local re-definitions.",
+    "provider-run-codec.js exists with bytes exactly `export * from \"./provider-run-codec.ts\";` plus LF, and apps/daemon/src/index.ts is unchanged so index-surface.test.ts stays green.",
+    "provider-run-codec.ts is under 250 physical lines measured with `grep -c ''`, and fresh `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test` each exit 0 with exit codes read separately."
+  ],
+  "taskRails": [
+    "Scope is apps/daemon/src/telemetry/provider-run-codec.* only. The record contract and its closed vocabularies belong to task-8e3076177f87458f934a776eca68ba16; importing them is required, re-declaring them is a silent duplicate.",
+    "Two verification guards are mandatory: digest recomputation AND byte re-encode comparison. Shipping one is the defect this slice exists to prevent, and it is invisible to a green suite.",
+    "Assert the specific reason code and its layer on every failure path, never merely that the operation did not succeed.",
+    "Target <=250 physical lines, split before 400. Measure with `grep -c ''`; PowerShell Measure-Object -Line undercounts."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4.6041,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T17:56:06.596Z",
+  "updatedAt": "2026-08-15T17:56:06.596Z"
+}

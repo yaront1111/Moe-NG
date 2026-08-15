@@ -96,12 +96,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-797c65f6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Its approved step 1 explicitly requires task-0c21ba2 and task-bcea7056 DONE, but both are BACKLOG and absent on disk. Keep the daemon selection parent blocked rather than letting an unassigned WORKING shell be claimed against missing contract/codec authority.",
+  "reopenReason": "Block condition met, re-run literally by governor-74ff6cb3 and approved by the human at 2026-08-15T16:00Z. The block read: \"Its approved step 1 explicitly requires task-0c21ba2 and task-bcea7056 DONE, but both are BACKLOG and absent on disk.\" Both are now DONE: task-0c21ba2 (Project configuration manifest contract) and task-bcea7056 (Project configuration digest codec). The stated premise — \"missing contract/codec authority\" — no longer holds. ARCHITECT: this task already has an APPROVED plan whose step 1 named those two deps, so re-read the existing plan before re-planning from scratch, and re-measure the contract and codec at their PUBLIC roots rather than trusting the DONE statuses. Confirm the manifest contract and digest codec are exported and reachable from the path this task owns; if step 1's premise still fails on reachability, re-block with the failing import rather than working around it.",
   "createdBy": "WORKER",
   "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
   "priority": "HIGH",
@@ -116,14 +116,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:23.828Z",
-  "updatedAt": "2026-08-13T22:58:03.702Z",
+  "updatedAt": "2026-08-15T17:57:21.612Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:29:14.156Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5
   },
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-797c65f6"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -144,10 +145,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T17:57:18.041Z",
+    "escalatedAt": "2026-08-15T17:57:18.041Z"
   },
   "planApprovedAt": "2026-08-13T22:51:45.037Z",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-13T22:58:03.702Z",
-  "blockedReason": "Its approved step 1 explicitly requires task-0c21ba2 and task-bcea7056 DONE, but both are BACKLOG and absent on disk. Keep the daemon selection parent blocked rather than letting an unassigned WORKING shell be claimed against missing contract/codec authority."
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
+  "blockedResourceId": null
 }

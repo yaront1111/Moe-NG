@@ -114,8 +114,8 @@
       "completedAt": "2026-08-15T16:11:47.044Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f6ca780e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,12 +127,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T14:11:42.812Z",
-  "updatedAt": "2026-08-15T16:13:30.874Z",
+  "updatedAt": "2026-08-15T16:17:19.747Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T15:57:29.791Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-15T16:17:19.747Z",
+    "wallClockMs": 1189956
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
@@ -179,5 +181,8 @@
     "apps/daemon/src/mcp-http/mcp-http-host.ts",
     "apps/daemon/src/mcp-http/mcp-http-session-port.test.ts",
     "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T16:17:19.747Z",
+  "reviewCompletedAt": "2026-08-15T16:17:19.747Z",
+  "reviewSummary": "APPROVED at HEAD 5c5afb1. Diff 181e0e9..HEAD owned = 2 files +12/-24 (session-port.ts + its test); host files untouched.\n\nDoD1 re-measured: `git grep boundSessionIds 181e0e9` = the 4 hits; at HEAD grep = 0 (exit 1) with POSITIVE CONTROL `bindSession`, same grep shape, 17 hits. Repo-wide all-filetype grep hits only .serena history, no live doc claim. Host doStop still awaits adapter.close() (:210, :214).\n\nDoD2 outcome (a) REMOVE, deciding case recorded: host holds no port reference (sole construction inline mcp-http-host.ts:137), so wiring would first create the coupling the docstring asserts. Interface member, impl, 4-line docstring, both test assertions removed together. DoD3 N/A. RAIL 2: grep closeSession|sessionPort in mcp-http-host.ts = one hit (:137), no second release path.\n\nDoD4 pure deletion, no refusal path added; validateBearer/isForwardable byte-identical to base.\n\nDoD5 my own drills, restores sha256-verified (PRE=0370ed55 == POST twice):\nD1 isForwardable -> `return true;` (MUT sha differed = applied): named test \"fails CLOSED to AUTHENTICATION_FAILED on a REFUSED code outside the MCP vocabulary\" RED on the code assertion, `expected { code: 'PROJECT_QUARANTINED' } to deeply equal { code: 'AUTHENTICATION_FAILED' }` — not a crash.\nD2 (mine): made the new no-op bindSession throw -> 4 named host tests RED incl \"mints a session on initialize and answers tools/call from the PRODUCTION pipeline\". Proves the no-op hook is on the real production path.\n\nDoD6 legs separate and unpiped by me: TYPECHECK_EXIT=0; TEST_EXIT=0, Test Files 77 passed (77) / Tests 1661 passed (1661). `it(` count 12 at base and HEAD. Committed bytes == gated bytes (sha match both files). Commit 5ee89be explicit-pathspec 2 files; 5c5afb1 swept only .moe. Lines: port 105, host 222."
 }
