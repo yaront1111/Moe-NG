@@ -141,7 +141,24 @@ function answerReplayed(
   } catch (error) {
     return refuseThrown(error);
   }
-  const durable = readActivationLedgerRecord(aggregateId, events);
+  // NARROWED, not relaxed. `readActivationLedgerRecord` refuses more than one
+  // event as AMBIGUOUS, and that guard has to keep meaning "exactly one
+  // activation record per aggregate". But this aggregate is also where the
+  // Foundation launch tail lands, so handing over EVERY event would read an
+  // ordinary launched effect as ambiguous and break idempotent re-commit the
+  // moment a second event of ANY type exists.
+  //
+  // The discriminator is the reader's own, applied one step earlier for this
+  // caller rather than weakened: zero activation events still refuse ABSENT and
+  // two still refuse AMBIGUOUS. The filter is deliberately HERE and not inside
+  // the reader, because the reader's contract is "these events are the whole
+  // evidence" — a lone wrong-typed event must still refuse EVENT_TYPE_UNEXPECTED
+  // for callers that pass a singleton, and filtering inside would silently turn
+  // that into ABSENT.
+  const activations = events.filter(
+    (event) => event.eventType === ACTIVATION_LEDGER_EVENT_TYPE,
+  );
+  const durable = readActivationLedgerRecord(aggregateId, activations);
   if (!durable.ok) return durable;
   const sealed = encodeActivationLedgerRecord(durable.record);
   if (!sealed.ok) return sealed;

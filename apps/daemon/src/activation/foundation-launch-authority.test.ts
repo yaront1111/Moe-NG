@@ -34,7 +34,9 @@ import {
   ACTIVATION_LEDGER_RECORD_VERSION, deriveActivationAggregateId,
 } from "./activation-ledger-contracts.js";
 import type { ActivationLedgerRecord } from "./activation-ledger-contracts.js";
-import { readCurrentEffectSessionBinding, readFoundationActivationHistory } from "./activation-ledger-reader.js";
+import {
+  readActivationLedgerRecord, readCurrentEffectSessionBinding, readFoundationActivationHistory,
+} from "./activation-ledger-reader.js";
 import {
   FOUNDATION_ACTIVATION_BINDING_LAYER, FOUNDATION_TRANSITION_EVENT_TYPES,
   decodeFoundationTransition, encodeFoundationTransition,
@@ -698,6 +700,89 @@ describe("current effect/session binding", () => {
     return result.status === "BOUND" ? "BOUND" : `${result.status}:${result.code}`;
   }
 
+  /**
+   * THE NUMBER IS WRITTEN OUT ON PURPOSE.
+   *
+   * The scan used to stop after MAX_SCAN_PAGES(64) * SCAN_PAGE_SIZE(100) = 6,400
+   * GLOBAL events and refuse SCAN_INCOMPLETE forever after. Deriving this count
+   * from those constants would make the proof move with the bound it exists to
+   * pin: halving the page size would silently halve the coverage while the test
+   * stayed green. A literal breaks instead, which is the point.
+   */
+  const OLD_SCAN_CEILING = 6_400;
+  const EVENTS_PAST_THE_OLD_SCAN_CEILING = 6_500;
+  const NOISE_EVENT_TYPE = "FoundationScanNoiseObserved";
+  /** Under MAX_EVENTS_PER_COMMIT (256) and under the 1,000-per-aggregate read cap. */
+  const NOISE_PER_BATCH = 250;
+  const SECOND_IDEMPOTENCY = "idem-key-2";
+  const SECOND_GRANT_ID = "grant-second-activation";
+
+  /**
+   * Drives the GLOBAL stream past `count` cheap events.
+   *
+   * BATCHED: one transaction per 250 events rather than one per event. 6,500
+   * individual commits under `PRAGMA synchronous = FULL` take long enough to
+   * read as a hang, and a drill that hangs reads as a passing guard. The noise
+   * type is deliberately NOT the ledger's event type, so the scan skips these
+   * without decoding them - what is being proved is reach, not parsing.
+   */
+  function floodGlobalStream(store: SqliteEventStore, count: number): number {
+    const payload = new TextEncoder().encode("noise");
+    let written = 0;
+    for (let batch = 0; written < count; batch += 1) {
+      const size = Math.min(NOISE_PER_BATCH, count - written);
+      store.commit({
+        aggregateId: `noise-aggregate-${batch}`,
+        commandBytes: new TextEncoder().encode(`noise-command-${batch}`),
+        commandId: `noise-command-${batch}`,
+        committedAt: "2026-08-15T00:00:04.000Z",
+        events: Array.from({ length: size }, (_unused, index) => ({
+          eventId: `noise-${batch}-${index}`, eventType: NOISE_EVENT_TYPE, payload,
+        })),
+        expectedVersion: 0,
+      });
+      written += size;
+    }
+    return written;
+  }
+
+  /** Walks the SAME public pager the scan walks, so the count is the one the
+   *  scan has to get through rather than a private idea of the store's size. */
+  function walkGlobalStream(store: SqliteEventStore): readonly StoredEvent[] {
+    const seen: StoredEvent[] = [];
+    let cursor = 0n;
+    for (;;) {
+      const page = store.readEventsAfter(cursor, 1_000);
+      seen.push(...page.items);
+      if (!page.hasMore) return seen;
+      const next = page.nextCursor;
+      if (next === null || next <= cursor) throw new Error("global cursor did not advance");
+      cursor = next;
+    }
+  }
+
+  /**
+   * A SECOND, independently well-formed activation for the SAME effect, on its
+   * own aggregate: a distinct idempotency key derives a distinct aggregate and a
+   * distinct grantId is a distinct durable event id. This is the genuine
+   * ambiguity the scan exists to detect, not a malformed record.
+   */
+  function seedSecondActivation(store: SqliteEventStore): void {
+    const committed = commitActivationLedgerRecord(store, {
+      correlationId: "second-activation-correlation",
+      decidedAt: "2026-08-15T00:00:05.000Z",
+      key: {
+        commandId: "second-activation-command", principalId: "principal-1", projectId: PROJECT_ID,
+      },
+      record: ledgerRecord({
+        effectIntent: { ...COMMIT.intent, idempotencyKey: SECOND_IDEMPOTENCY },
+        grant: { ...COMMIT.grant, grantId: SECOND_GRANT_ID },
+      }),
+      requestBytes: new TextEncoder().encode("second-activation-request"),
+    });
+    if (!committed.ok) throw new Error(`second seed refused: ${committed.code}`);
+  }
+
   it("answers BOUND from the committed intent and the lease owner session", () => {
     withDirectory("bound", (directory) => {
       const databasePath = join(directory, "store.sqlite");
@@ -810,6 +895,77 @@ describe("current effect/session binding", () => {
       });
     });
   });
+
+  /**
+   * DEFECT 2's reproduction, and the reason it is a time bomb rather than an
+   * edge case: the bound was on TOTAL PROJECT EVENTS, not on anything about this
+   * effect. Past it, `readCurrentEffectSessionBinding` stopped finding ANY
+   * activation, permanently, for every effect - and it failed closed into a
+   * refusal that reads exactly like a legitimate authority answer.
+   */
+  it("answers BOUND on a store holding more than 6,400 global events", () => {
+    withDirectory("scan-scale", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        expect(floodGlobalStream(store, EVENTS_PAST_THE_OLD_SCAN_CEILING))
+          .toBe(EVENTS_PAST_THE_OLD_SCAN_CEILING);
+        // THE CASE WAS ACTUALLY GENERATED. A store that quietly wrote fewer
+        // events would satisfy the BOUND assertion below while proving nothing,
+        // so the size is asserted against the literal ceiling first.
+        const stream = walkGlobalStream(store);
+        expect(stream.length).toBeGreaterThan(OLD_SCAN_CEILING);
+        expect(stream).toHaveLength(EVENTS_PAST_THE_OLD_SCAN_CEILING + 1);
+
+        expect(bindingOver(store)).toStrictEqual({
+          activationDigest: COMMIT.activationDigest, effectId: INTENT_ID, sessionId: SESSION,
+          status: "BOUND",
+        });
+      });
+    });
+  }, 180_000);
+
+  /**
+   * THE INVARIANT THAT MUST SURVIVE THE SCALE FIX.
+   *
+   * The scan cannot return on first match: it has to keep walking to prove the
+   * match UNIQUE. Buying reach by returning early would make the case above pass
+   * while turning this correct refusal into a confident wrong answer, so the
+   * second activation is placed AFTER the noise - unreachable under the old
+   * ceiling by construction, and asserted to be so.
+   */
+  it("still refuses a SECOND matching activation found past the old 6,400 ceiling", () => {
+    withDirectory("scan-scale-ambiguous", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        expect(floodGlobalStream(store, EVENTS_PAST_THE_OLD_SCAN_CEILING))
+          .toBe(EVENTS_PAST_THE_OLD_SCAN_CEILING);
+        seedSecondActivation(store);
+
+        const stream = walkGlobalStream(store);
+        expect(stream).toHaveLength(EVENTS_PAST_THE_OLD_SCAN_CEILING + 2);
+        const second = stream.find((event) => event.eventId === SECOND_GRANT_ID);
+        expect(second).toBeDefined();
+        // The second match really does sit past the old ceiling: without this
+        // the case could pass on a store where both activations were reachable
+        // all along, proving nothing about scale.
+        expect(Number(second?.globalPosition ?? 0n)).toBeGreaterThan(OLD_SCAN_CEILING);
+        // Both are INDIVIDUALLY well-formed, so this is genuine ambiguity rather
+        // than a malformed record the scan would have refused for another reason.
+        const activations = stream.filter((event) => event.eventType === "EffectActivationCommitted");
+        expect(activations).toHaveLength(2);
+        for (const event of activations) {
+          expect(readActivationLedgerRecord(event.aggregateId, [event]).ok).toBe(true);
+        }
+
+        const answer = bindingOver(store);
+        expect(codeOf(answer)).toBe("UNKNOWN:FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS");
+        expect(answer.status === "BOUND" ? null : answer.layer)
+          .toBe(FOUNDATION_ACTIVATION_BINDING_LAYER);
+      });
+    });
+  }, 180_000);
 
   it("sweeps hostile query shapes and mutated context, and every case refuses", () => {
     withDirectory("sweep", (directory) => {

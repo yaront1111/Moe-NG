@@ -104,7 +104,7 @@ export function readActivationLedgerRecord(
 const TRANSITION_ORDER = Object.freeze([
   "GRANT_CONSUMED", "PREFLIGHT_REGISTERED", "PROCESS_OBSERVED",
 ] as const);
-const MAX_SCAN_PAGES = 64, SCAN_PAGE_SIZE = 100, MAX_QUERY_CHARS = 400;
+const SCAN_PAGE_SIZE = 100, MAX_QUERY_CHARS = 400;
 const LEASE_FIELDS = Object.freeze([
   "leaseId", "kind", "ownerSessionRef", "leaseToken", "epoch", "state", "serverWallDeadline",
   "bootId", "monotonicObservation", "authorityHashRef", "version",
@@ -234,7 +234,13 @@ function scanForEffect(store: FoundationBindingStore, effectId: string): ScanOut
     ({ aggregateId: null, refusal: foundationBindingUnknown(code) });
   let cursor = 0n;
   let found: string | null = null;
-  for (let page = 0; page < MAX_SCAN_PAGES; page += 1) {
+  // UNBOUNDED BY PAGE COUNT, deliberately: a page cap is not a termination
+  // guarantee. The two guards below already end this loop on any store that
+  // stalls, lies or fails to advance, and on the FIRST bad page rather than
+  // after N good ones. A cap adds no safety a correct store needs; it only caps
+  // TOTAL PROJECT EVENTS, past which every lookup for every effect refuses
+  // SCAN_INCOMPLETE forever - indistinguishable from a real authority answer.
+  for (;;) {
     let read: CursorPage<StoredEvent, bigint>;
     try {
       read = store.readEventsAfter(cursor, SCAN_PAGE_SIZE);
@@ -252,12 +258,13 @@ function scanForEffect(store: FoundationBindingStore, effectId: string): ScanOut
       }
       found = event.aggregateId;
     }
+    // STILL NO EARLY RETURN ON A HIT: the only success exit is the end of the
+    // stream, because the answer is not "one matched" but "exactly one did".
     if (!read.hasMore) return { aggregateId: found, refusal: null };
     const next = read.nextCursor;
     if (next === null || next <= cursor) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
     cursor = next;
   }
-  return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
 }
 
 /**

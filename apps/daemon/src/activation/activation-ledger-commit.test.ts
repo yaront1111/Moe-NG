@@ -23,6 +23,7 @@ import { describe, expect, it } from "vitest";
 
 import { commitActivationLedgerRecord } from "./activation-ledger-commit.js";
 import {
+  ACTIVATION_LEDGER_EVENT_TYPE,
   ACTIVATION_LEDGER_LAYER,
   deriveActivationAggregateId,
 } from "./activation-ledger-contracts.js";
@@ -30,8 +31,9 @@ import type {
   ActivationLedgerCommitInput,
   ActivationLedgerStore,
 } from "./activation-ledger-contracts.js";
-import { DERIVED, EFFECT_AGGREGATE, GRANT_ID, record } from "./activation-ledger-fixtures.js";
+import { DERIVED, EFFECT_AGGREGATE, GRANT_ID, encodedBytes, record } from "./activation-ledger-fixtures.js";
 import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
+import { FOUNDATION_TRANSITION_EVENT_TYPES } from "./foundation-activation-transition.js";
 
 const PROJECT_ID = "activation-project";
 
@@ -88,6 +90,35 @@ function spyOn(store: SqliteEventStore, throwOnCommit?: Error): StoreSpy {
       return store.readEvents(aggregateId);
     },
   };
+}
+
+/**
+ * Appends ONE further event onto an aggregate that already carries its
+ * activation, through the store's own command path at the aggregate's real
+ * current version.
+ *
+ * This is how the multi-event aggregate is CONSTRUCTED rather than waited for.
+ * The Foundation launch tail is the obvious real producer, but its only
+ * composition point (`createFoundationClaudeLauncher`) has no caller yet, so a
+ * test that waited for a live launch to append the tail would exercise nothing
+ * and pass vacuously. The event TYPE below is the real Foundation transition
+ * type, not an invented one.
+ */
+function appendToAggregate(
+  store: SqliteEventStore,
+  eventType: string,
+  eventId: string,
+  payload: Uint8Array,
+): void {
+  const currentVersion = store.getAggregateVersion(DERIVED);
+  store.commit({
+    aggregateId: DERIVED,
+    commandBytes: new TextEncoder().encode(`tail-command-${eventId}`),
+    commandId: `tail-command-${eventId}`,
+    committedAt: "2026-08-15T00:00:01.000Z",
+    events: [{ eventId, eventType, payload }],
+    expectedVersion: currentVersion,
+  });
 }
 
 describe("activation ledger commit adapter", () => {
@@ -192,6 +223,135 @@ describe("activation ledger commit adapter", () => {
         expect(events).toHaveLength(1);
         expect(events[0]?.eventId).toBe(GRANT_ID);
         expect(reopened.getAggregateVersion(DERIVED)).toBe(1);
+      });
+    });
+  });
+
+  /**
+   * DEFECT 1's reproduction: idempotency must survive a GROWING aggregate.
+   *
+   * `answerReplayed` reads the derived aggregate back and hands the result to
+   * `readActivationLedgerRecord`, whose first job is to refuse anything but
+   * exactly one activation. Handing it EVERY event on the aggregate conflates
+   * "this aggregate carries two activations" — real ambiguity — with "this
+   * aggregate carries its activation plus a Foundation launch tail", which is
+   * the ordinary shape of a launched effect. Idempotency is precisely the
+   * property that has to keep holding as the tail accumulates.
+   */
+  it("replays the DURABLE record on an aggregate that also carries its Foundation tail", () => {
+    withDirectory("replay-tail", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        const first = commitActivationLedgerRecord(store, input());
+        expect(first.ok).toBe(true);
+        if (!first.ok) return;
+
+        appendToAggregate(
+          store,
+          FOUNDATION_TRANSITION_EVENT_TYPES.GRANT_CONSUMED,
+          "foundation-tail-1",
+          new TextEncoder().encode("foundation-tail-payload"),
+        );
+        // The aggregate really does hold more than one event now: without this
+        // the whole case is vacuous, because the defect needs a tail to exist.
+        expect(store.readEvents(DERIVED)).toHaveLength(2);
+
+        const replayed = commitActivationLedgerRecord(store, input());
+        expect(replayed.ok).toBe(true);
+        if (!replayed.ok) {
+          // Named explicitly so the drill's failure output says WHICH refusal
+          // won rather than merely that the call did not succeed.
+          expect(replayed.code).not.toBe("ACTIVATION_LEDGER_EVIDENCE_AMBIGUOUS");
+          return;
+        }
+        expect(replayed.disposition).toBe("REPLAYED");
+        expect(replayed.record).toEqual(first.record);
+        expect(replayed.digest).toBe(first.digest);
+        expect(replayed.aggregateId).toBe(DERIVED);
+      });
+    });
+  });
+
+  /**
+   * The other half of DoD 1: the tailed replay above is the STORED record, not
+   * an echo of whatever the caller handed in. Same key, same request bytes —
+   * so the store still replays — but a drifted grantId, which lives OUTSIDE the
+   * store's replay identity. The stored bytes must win.
+   */
+  it("refuses a drifted candidate on a tailed aggregate, so the stored bytes win", () => {
+    withDirectory("replay-tail-drift", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        expect(commitActivationLedgerRecord(store, input()).ok).toBe(true);
+        appendToAggregate(
+          store,
+          FOUNDATION_TRANSITION_EVENT_TYPES.GRANT_CONSUMED,
+          "foundation-tail-1",
+          new TextEncoder().encode("foundation-tail-payload"),
+        );
+        expect(store.readEvents(DERIVED)).toHaveLength(2);
+
+        const drifted = commitActivationLedgerRecord(
+          store,
+          input({
+            record: record({ grant: { ...record().grant, grantId: "grant-NEVER-COMMITTED" } }),
+          }),
+        );
+        expect(drifted.ok).toBe(false);
+        if (drifted.ok) return;
+        // THIS ledger's own cross-check refused, after reading the durable bytes
+        // back — not the store, and not the exactly-one guard. `storeCode` null
+        // is what says which layer answered.
+        expect(drifted.code).toBe("ACTIVATION_LEDGER_REPLAY_DIVERGED");
+        expect(drifted.layer).toBe(ACTIVATION_LEDGER_LAYER);
+        expect(drifted.outcome).toBe("REFUSED");
+        expect(drifted.storeCode).toBeNull();
+      });
+    });
+  });
+
+  /**
+   * THE GUARD THAT MUST NOT WEAKEN.
+   *
+   * Narrowing the replay reader's input to the activation events is the fix;
+   * relaxing the exactly-one check to "take the first" is not. Both make the
+   * tailed replay above pass, and only one of them keeps the ledger's core
+   * guarantee. TWO genuinely valid activation records on one aggregate is real
+   * ambiguity and must still refuse with its exact code, layer and outcome.
+   */
+  it("still refuses an aggregate carrying TWO activation events as AMBIGUOUS", () => {
+    withDirectory("two-activations", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        expect(commitActivationLedgerRecord(store, input()).ok).toBe(true);
+        const second = record({ grant: { ...record().grant, grantId: "grant-0002" } });
+        appendToAggregate(
+          store,
+          ACTIVATION_LEDGER_EVENT_TYPE,
+          "grant-0002",
+          encodedBytes(second),
+        );
+        const events = store.readEvents(DERIVED);
+        // Both events are INDIVIDUALLY well-formed activation records, so this
+        // is genuine ambiguity rather than a malformed tail the reader would
+        // have refused for some other reason.
+        expect(events).toHaveLength(2);
+        expect(events.map((event) => event.eventType)).toEqual([
+          ACTIVATION_LEDGER_EVENT_TYPE,
+          ACTIVATION_LEDGER_EVENT_TYPE,
+        ]);
+        for (const event of events) {
+          expect(readActivationLedgerRecord(DERIVED, [event]).ok).toBe(true);
+        }
+
+        const replayed = commitActivationLedgerRecord(store, input());
+        expect(replayed.ok).toBe(false);
+        if (replayed.ok) return;
+        expect(replayed.code).toBe("ACTIVATION_LEDGER_EVIDENCE_AMBIGUOUS");
+        expect(replayed.layer).toBe(ACTIVATION_LEDGER_LAYER);
+        expect(replayed.outcome).toBe("UNKNOWN");
+        // The reader refused, not the store: no store call raised anything.
+        expect(replayed.storeCode).toBeNull();
       });
     });
   });
