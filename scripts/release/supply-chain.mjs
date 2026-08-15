@@ -53,16 +53,23 @@ async function command(/** @type {string} */ file, /** @type {string[]} */ args,
     return { exitCode: typeof failure.code === "number" ? failure.code : 1, stderr: failure.stderr ?? "", stdout: failure.stdout ?? "" };
   }
 }
-async function archiveSource(/** @type {Record<string, unknown>} */ request) {
+export async function archiveSource(
+  /** @type {Record<string, unknown>} */ request,
+  /** @type {{rmSync?: typeof rmSync}} */ dependencies = {},
+) {
   const repositoryRoot = String(request.repositoryRoot); const destination = String(request.destination);
-  const sourceSha = String(request.sourceSha); const archive = `${destination}.tar`;
+  const sourceSha = String(request.sourceSha); const archive = `${destination}.tar`; const removeArchive = dependencies.rmSync ?? rmSync;
   mkdirSync(destination, { recursive: true });
   try {
     const packed = await command("git", ["archive", "--format=tar", `--output=${archive}`, sourceSha], repositoryRoot);
     if (packed.exitCode !== 0) return releaseRefusal("SOURCE_ARCHIVE_FAILED");
     const extracted = await command("tar", ["-xf", archive, "-C", destination], repositoryRoot);
     return extracted.exitCode === 0 ? { destination, ok: true } : releaseRefusal("SOURCE_ARCHIVE_FAILED");
-  } finally { rmSync(archive, { force: true }); }
+  } finally {
+    // Subordinate cleanup must report without replacing the computed archive result.
+    try { removeArchive(archive, { force: true }); }
+    catch (error) { console.error(`release temporary cleanup failed: ${archive}: ${String(error)}`); }
+  }
 }
 async function pnpmCommand(/** @type {string[]} */ args, /** @type {string} */ cwd) {
   try { const entry = realpathSync(PNPM_ENTRY); const nodeRoot = realpathSync(dirname(process.execPath));
