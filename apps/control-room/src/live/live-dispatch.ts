@@ -1,6 +1,8 @@
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 import type { JsonObject } from "@moe/contracts";
 
+import { recordDispatchEffort } from "./live-effort-edge.js";
+
 /**
  * Dispatch = the daemon's affordance handed back through the generated builder.
  *
@@ -241,6 +243,12 @@ export interface DispatchInput {
 }
 
 export async function dispatchAffordance(input: DispatchInput): Promise<DispatchReport> {
+  // A side record of what the surface demanded of the operator, taken before anything
+  // can refuse: the human already decided by handing the card back, whatever the daemon
+  // then answers. It returns void and cannot throw, so every line below is unchanged.
+  recordDispatchEffort({
+    affordance: input.affordance, aggregateId: input.aggregateId, commandKind: input.kind,
+  });
   const payload = payloadFor(input.kind, input.aggregateId);
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
