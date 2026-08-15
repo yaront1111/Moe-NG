@@ -90,7 +90,6 @@ function refuse(code: TransportRefusalCode): TransportRefused {
 function headersFor(options: TransportOptions): Readonly<Record<string, string>> {
   return {
     "content-type": "application/json",
-    origin: options.origin,
     "x-moe-csrf": options.csrfToken,
     "x-moe-protocol-version": options.wireProtocolVersion,
     "x-moe-session-credential": options.sessionCredential,

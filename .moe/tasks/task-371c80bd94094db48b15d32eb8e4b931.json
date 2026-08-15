@@ -111,21 +111,27 @@
     {
       "stepId": "step-6",
       "description": "Satisfy the generated-case half of DoD-5 with an EXACT NONZERO cardinality. Build the phase/outcome case table covering every timing split (server, stream, render, human) crossed with every outcome (measured, plus each UNKNOWN code from step 1), assert its exact length with a hand-written literal before iterating, and assert every phase name appears at least once so a future edit that drops a phase fails the count instead of quietly shrinking coverage. A sweep that silently generates zero cases passes while testing nothing, and a count computed from the generator cannot police the generator - write the literal by hand. Keep the existing timing.test.ts assertion at :124 that TIMING_PHASE_NAMES is exactly ['server','stream','render','human'] green; this task adds no phase.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.test.ts"
       ],
-      "startedAt": "2026-08-14T12:12:14.895Z"
+      "modifiedFiles": [
+        "apps/control-room/src/performance/wire-timing-cases.test.ts"
+      ],
+      "note": "Phase/outcome sweep landed at apps/control-room/src/performance/wire-timing-cases.test.ts. 30 tests, all green.\n\nRESUMED SESSION. Prior session died after start_step with ZERO bytes written - `git status --porcelain -- apps/control-room` was EMPTY at claim, and steps 1-5 were already committed (swept into foreign commit 139f11c by a whole-tree hook, not mislabelled by me). Baseline gate run BEFORE writing anything, so attribution is by construction: 67 files / 814 tests, exit 0, empty diff.\n\nNAME DEVIATION: the plan names apps/control-room/src/performance/live-timing.test.ts. That module was renamed to wire-timing.ts in step 2 (recorded in its note), so the sweep sits beside its subject as wire-timing-cases.test.ts. Verified safe: timing.test.ts's PRODUCTION_MODULES directory scan filters `.test.` out, so a new test file cannot break it, and no other scan in this package reaches src/performance.\n\nCARDINALITY IS HAND-WRITTEN AND THE CROSS PRODUCT IS FULLY ACCOUNTED. 4 phases x 7 outcomes (measured + all 6 TIMING_UNKNOWN_CODES) = 28. 23 pairs are DRIVEN through buildLiveTimingReceipt; 5 are EXCLUSIONS. 23, 5 and 28 are all hand-written literals asserted before a single case is driven - a count derived from the table would agree with any size including zero. A third guard asserts the union of driven keys and excluded keys equals the generated cross product exactly, with no duplicate key, so a dropped pair fails the set equality instead of quietly shrinking coverage.\n\nTHE 5 EXCLUSIONS ARE UNREACHABLE, NOT SKIPPED, and each premise is pinned by its own assertion rather than left as prose:\n- server x TIMING_CLOCK_UNAVAILABLE: server pairs two WIRE readings; asserted that NO readWireObservation arm (null, known, unparseable, refused) ever answers that code.\n- render/human x TIMING_CLOCK_MISMATCH: both ends come from readClientClock; asserted it stamps CONTROL_ROOM_CLOCK on every known reading, so two client readings cannot differ.\n- render/human x TIMING_UPSTREAM_UNKNOWN: asserted no readClientClock refusal carries an upstream carrier.\nDriving those pairs would have meant handing the builder a reading no producer in this module can mint - a transcript, not a proof.\n\nEVERY DRIVEN CASE PINS CODE **AND** OBSERVER AND CARRIER (project rail 1): exact reasonCode, TIMING_PHASE_OBSERVERS[phase], and upstream deep-equal to the expected carrier - so the seam-refusal cases assert {EVENT_STREAM_READING_NOT_PROVIDED, SEAM} while every other refusal asserts the carrier is ABSENT, keeping \"the seam refused\" distinct from \"we never got it\". Refusals additionally assert Object.hasOwn(durationMs) === false and measured arms assert Object.hasOwn(reasonCode) === false, so DoD-4's never-a-zero holds structurally.\n\nMEASURED ARMS ARE PRODUCTION ARITHMETIC, not literals: server 250ms, stream 150ms, render 30ms, human 470ms, each subtracted by production from two readings the fixture supplied separately. The cross-clock cases use FORWARD skew (seam 250ms AFTER ledger) so `end < start` is false and the negative-interval guard provably cannot be what refused. A twin-pin test asserts Date.parse(LEDGER_ISO)/Date.parse(SEAM_ISO) equal the epoch constants the client arms use, so the wire and client readings are demonstrably on ONE timeline - otherwise an edit to either constant would silently change what every measured arm measures.\n\nNON-VACUITY DRILLED, since a sweep green on first write is exactly the failure mode this step guards. Deleted the stream/TIMING_SOURCE_ABSENT case; confirmed applied (grep for the removed line returned 0), suite went red on precisely the two intended assertions - \"expected [...] to have a length of 23 but got 22\" and the set-equality \"expected [27 keys] to deeply equal [28 keys]\" - 2 failed | 27 passed, no over-reddening. Restored with Edit, not git checkout; sha256 back to 8d7129e31f076e23adefc29df5f8a6e8ab5f8ce2091e56f79988eb62d2580589, byte-identical to pre-drill.\n\ntiming.test.ts:124's exact-4 TIMING_PHASE_NAMES assertion still green; no phase added.\n\nVerify: npx vitest run src/performance/wire-timing-cases.test.ts -> 30 passed. npx vitest run src/performance/ -> 10 files, 165 passed. npx tsc --project tsconfig.json exit 0.",
+      "startedAt": "2026-08-14T12:12:14.895Z",
+      "completedAt": "2026-08-15T13:34:00.209Z"
     },
     {
       "stepId": "step-7",
       "description": "Run the mutation drills DoD-6 requires, against the PRODUCTION surface. [1] BYPASS THE PRODUCTION RENDER TIMESTAMP - make recovery-actions.tsx pass a fixed literal instead of the clock-derived render observation; the named live integration test from step 5 must go red on the render phase, proving the test reads production's value and not its own. [2] Weaken the cross-clock guard in the step-2 bridge so mismatched clocks subtract anyway; the cross-clock case must go red - and note it must go red on the UNKNOWN assertion, not merely on some duration differing, or the drill proved nothing about the guard. [3] Make a WireUnknownValue fall through to TIMING_SOURCE_ABSENT instead of TIMING_UPSTREAM_UNKNOWN; the layer-attribution assertion must go red. For each drill: confirm it actually applied (print the replaced line range and chain with &&, since a drill that applied nothing reads as green), read the failure MESSAGE rather than the count (over-reddening means a broken environment), restore with Edit rather than git checkout (checkout reverts to HEAD and destroys uncommitted work), and hash-check back to the pre-drill bytes before the next drill.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.ts",
         "apps/control-room/src/recovery/recovery-actions.tsx",
         "apps/control-room/src/recovery/recovery-actions.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:34:02.641Z"
     },
     {
       "stepId": "step-8",
@@ -161,12 +167,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:21.413Z",
-  "updatedAt": "2026-08-15T12:45:00.793Z",
+  "updatedAt": "2026-08-15T13:34:02.641Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T11:52:51.938Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -177,7 +183,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T11:56:26.853Z",
@@ -196,7 +203,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 8100000
+    "wallClockMs": 8100000,
+    "warnedAt": "2026-08-15T13:34:00.252Z",
+    "escalatedAt": "2026-08-15T13:34:00.252Z"
   },
   "planApprovedAt": "2026-08-14T11:56:28.899Z",
   "contextFetchedBy": [

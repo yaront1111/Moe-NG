@@ -150,10 +150,30 @@ it("carries the credential in a HEADER and never in the URL", async () => {
   expect(call?.url).not.toContain(CREDENTIAL);
   expect(call?.headers["x-moe-session-credential"]).toBe(CREDENTIAL);
   expect(call?.headers["x-moe-csrf"]).toBe(CSRF);
-  expect(call?.headers["origin"]).toBe(ORIGIN);
   // Taken from the GATED surface, never restated, so a client whose pins failed
   // cannot announce a protocol version it does not implement.
   expect(call?.headers["x-moe-protocol-version"]).toBe(gatedSurface().wireProtocolVersion);
+});
+
+it("sets the EXACT header set it intends, and no forbidden header among them", async () => {
+  const stub = stubFetch(jsonReply(200, { ok: true }));
+  await transportWith(stub).sendCommand(builtEnvelope());
+
+  // The WHOLE set, not a subset. `Origin` is a forbidden header name in the
+  // fetch spec: a browser silently drops it and substitutes its own, so setting
+  // it here is inert in the only environment that ships, while a non-browser
+  // fetch sends it and satisfies the daemon's Origin guard artificially.
+  // Asserting the exact set is what makes re-adding it fail loudly.
+  expect(Object.keys(stub.calls[0]?.headers ?? {}).sort()).toEqual([
+    "content-type",
+    "x-moe-csrf",
+    "x-moe-protocol-version",
+    "x-moe-session-credential",
+  ]);
+  expect(stub.calls[0]?.headers).not.toHaveProperty("origin");
+  // The URL prefix is a SEPARATE use of options.origin and stays: only the
+  // header was ever the defect.
+  expect(stub.calls[0]?.url).toBe(`${ORIGIN}/command`);
 });
 
 it("returns a daemon refusal with the daemon's OWN code and layer, re-coding nothing", async () => {
