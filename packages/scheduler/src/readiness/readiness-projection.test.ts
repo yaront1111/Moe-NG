@@ -11,6 +11,7 @@
  */
 import { describe, expect, it } from "vitest";
 
+import { validateGraphSnapshot } from "../validate-graph.js";
 import { projectReadiness } from "./readiness-projection.js";
 import {
   DEV_ADVISORY,
@@ -18,10 +19,12 @@ import {
   DEV_DONE,
   DEV_READY,
   DEV_RESOURCE,
+  devAllTrueFacts,
   devBundle,
   devBundles,
   devBundlesWith,
   devEdgeFacts,
+  devFact,
   devFactsWith,
   devGraph,
   devInput,
@@ -267,5 +270,184 @@ describe("immutability", () => {
       sourceFactVersion: 3,
       sourceFactDigest: "a".repeat(64),
     });
+  });
+});
+
+/**
+ * REGISTER ITEM 9 — the edgeKey tie-break must be code-point ordered.
+ *
+ * `localeCompare` is not a stable total order: its result depends on the host's
+ * ICU data and default collation, so two machines can order the same readiness
+ * set differently. canonical-bytes.ts:57-64 states the same thing about paths
+ * and adds the part that makes it dangerous — "that failure never reproduces
+ * locally". A green suite on one host is exactly what this defect looks like.
+ *
+ * THE FIXTURE MUST PROVE ITSELF. A pair whose collation order and code-unit
+ * order AGREE passes before and after the fix, and whether they agree is itself
+ * host-dependent — the very property under test. So the divergence is asserted
+ * on the host actually running this, and the assertion fails loudly rather than
+ * quietly certifying nothing.
+ */
+const TIE_CONSUMER = "dev-tie-done";
+
+/** Code units: "B" 0x42 sorts before "a" 0x61. Most collations order "a" first. */
+const TIE_EDGE_UPPER = "dev-edge-Beta";
+const TIE_EDGE_LOWER = "dev-edge-alpha";
+
+function byCodeUnit(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+function tieGraph(edgeKeys: readonly string[]) {
+  const producers = edgeKeys.map((_, index) => `dev-tie-producer-${String(index)}`);
+  const validated = validateGraphSnapshot({
+    completionNodeKey: TIE_CONSUMER,
+    nodes: [
+      ...producers.map((nodeKey) => ({ nodeKey, executionBearing: true })),
+      { nodeKey: TIE_CONSUMER, executionBearing: true },
+    ],
+    edges: edgeKeys.map((edgeKey, index) => ({
+      edgeKey,
+      kind: "HARD" as const,
+      producerNodeKey: producers[index]!,
+      consumerNodeKey: TIE_CONSUMER,
+    })),
+  });
+  expect(validated.ok, "tie-break fixture graph must validate").toBe(true);
+  if (!validated.ok) {
+    throw new Error("unreachable");
+  }
+  return { graph: validated.graph, producers };
+}
+
+/** Every hard edge UNSATISFIED, so the consumer collects one reason per edge. */
+function tieReasons(edgeKeys: readonly string[]) {
+  const { graph, producers } = tieGraph(edgeKeys);
+  const result = projectReadiness(graph, {
+    hardEdgeFacts: edgeKeys.map((edgeKey) => ({ edgeKey, state: "UNSATISFIED" })),
+    nodeFacts: [...producers, TIE_CONSUMER].map((nodeKey) => devBundle(nodeKey)),
+  });
+  expect(result.ok, JSON.stringify("issues" in result ? result.issues : [])).toBe(true);
+  if (!result.ok) {
+    throw new Error("unreachable");
+  }
+  const node = result.projection.nodes.find((entry) => entry.nodeKey === TIE_CONSUMER);
+  expect(node, `${TIE_CONSUMER} must be projected`).toBeDefined();
+  return node!.reasons;
+}
+
+describe("edgeKey tie-break is code-point ordered, not locale ordered", () => {
+  it("uses a fixture whose collation order and code-unit order genuinely disagree", () => {
+    // Guard, not decoration: without it a host whose ICU matches code units
+    // makes every assertion below pass against the UNFIXED comparator.
+    expect(Math.sign(TIE_EDGE_LOWER.localeCompare(TIE_EDGE_UPPER))).not.toBe(
+      byCodeUnit(TIE_EDGE_LOWER, TIE_EDGE_UPPER),
+    );
+    expect(byCodeUnit(TIE_EDGE_UPPER, TIE_EDGE_LOWER)).toBe(-1);
+  });
+
+  it("orders two reasons equal in layer and code by edgeKey code units", () => {
+    const reasons = tieReasons([TIE_EDGE_LOWER, TIE_EDGE_UPPER]);
+    // The pair collides at every level ABOVE the tie-break, so nothing but the
+    // edgeKey comparison can decide this order.
+    expect(reasons.map((entry) => entry.layer)).toEqual(["LOGICAL", "LOGICAL"]);
+    expect(reasons.map((entry) => entry.code)).toEqual([
+      "HARD_DEPENDENCY_UNSATISFIED",
+      "HARD_DEPENDENCY_UNSATISFIED",
+    ]);
+    expect(reasons.map((entry) => entry.edgeKey)).toEqual([TIE_EDGE_UPPER, TIE_EDGE_LOWER]);
+  });
+});
+
+/**
+ * TOTALITY, not one lucky pair. A comparator can order one example correctly
+ * and still be a partial order: if any two distinct reasons compare EQUAL,
+ * Array.prototype.sort's stability lets the INPUT order leak into the output.
+ * So the property is witnessed rather than restated — the same reason set is
+ * projected from every permutation of its inputs and must come back identical.
+ * That is a direct consequence of totality and needs no second copy of the
+ * comparator living in this file to check it.
+ */
+const TIE_EDGE_UPPER_A = "dev-edge-Alpha";
+const TIE_UNKNOWN_EDGE = "dev-edge-Unknown";
+
+/** Code units at index 9: "A" 0x41 < "B" 0x42 < "a" 0x61. Collation disagrees. */
+const TIE_SORTED_EDGES = [TIE_EDGE_UPPER_A, TIE_EDGE_UPPER, TIE_EDGE_LOWER] as const;
+
+function permutations<T>(items: readonly T[]): T[][] {
+  if (items.length <= 1) {
+    return [[...items]];
+  }
+  return items.flatMap((item, index) =>
+    permutations([...items.slice(0, index), ...items.slice(index + 1)]).map((rest) => [
+      item,
+      ...rest,
+    ]));
+}
+
+/** One node carrying reasons at all three layers, plus a layer+code collision. */
+function mixedReasons(edgeOrder: readonly string[], factsReversed = false) {
+  const { graph, producers } = tieGraph(edgeOrder);
+  // Both codes must be REMOVED before being re-added as CONFIRMED_FALSE: a
+  // bundle carrying the same code twice is refused as malformed, never sorted.
+  const refused = ["READINESS_CAPABILITY", "READINESS_NO_PAUSE"];
+  const facts = [
+    ...devAllTrueFacts().filter((entry) => !refused.includes(String(entry["code"]))),
+    devFact("READINESS_CAPABILITY", "CONFIRMED_FALSE"),
+    devFact("READINESS_NO_PAUSE", "CONFIRMED_FALSE"),
+  ];
+  const result = projectReadiness(graph, {
+    hardEdgeFacts: edgeOrder.map((edgeKey) => ({
+      edgeKey,
+      state: edgeKey === TIE_UNKNOWN_EDGE ? "UNKNOWN" : "UNSATISFIED",
+    })),
+    nodeFacts: [
+      ...producers.map((nodeKey) => devBundle(nodeKey)),
+      devBundle(TIE_CONSUMER, factsReversed ? [...facts].reverse() : facts),
+    ],
+  });
+  expect(result.ok, JSON.stringify("issues" in result ? result.issues : [])).toBe(true);
+  if (!result.ok) {
+    throw new Error("unreachable");
+  }
+  const node = result.projection.nodes.find((entry) => entry.nodeKey === TIE_CONSUMER);
+  expect(node, `${TIE_CONSUMER} must be projected`).toBeDefined();
+  return node!.reasons.map((entry) => `${entry.layer}|${entry.code}|${String(entry.edgeKey)}`);
+}
+
+describe("readiness reason ordering is a total order", () => {
+  const ALL_EDGES = [TIE_UNKNOWN_EDGE, ...TIE_SORTED_EDGES] as const;
+
+  it("orders across layer, then code, then edgeKey, in exactly that sequence", () => {
+    const ordered = mixedReasons(ALL_EDGES);
+    expect(ordered).toEqual([
+      // LOGICAL first; UNKNOWN before UNSATISFIED by code units ("K" < "S").
+      `LOGICAL|HARD_DEPENDENCY_UNKNOWN|${TIE_UNKNOWN_EDGE}`,
+      // Layer AND code collide here, so only the edgeKey tie-break can order them.
+      `LOGICAL|HARD_DEPENDENCY_UNSATISFIED|${TIE_EDGE_UPPER_A}`,
+      `LOGICAL|HARD_DEPENDENCY_UNSATISFIED|${TIE_EDGE_UPPER}`,
+      `LOGICAL|HARD_DEPENDENCY_UNSATISFIED|${TIE_EDGE_LOWER}`,
+      "ADMISSION|READINESS_CAPABILITY|null",
+      "DISPATCH|READINESS_NO_PAUSE|null",
+    ]);
+  });
+
+  it("returns the identical sequence from every permutation of its inputs", () => {
+    const orders = permutations(ALL_EDGES);
+    // Hand-written, not derived from `orders`: a sweep that silently produced
+    // zero or one case would otherwise pass while testing nothing. 4! = 24.
+    expect(orders.length).toBe(24);
+    const expected = mixedReasons(ALL_EDGES);
+    expect(expected.length).toBe(6);
+    for (const order of orders) {
+      expect(mixedReasons(order), `edge order ${order.join(",")}`).toEqual(expected);
+    }
+    // Fact order is an input too: reversing it must not move a reason either.
+    expect(mixedReasons(ALL_EDGES, true)).toEqual(expected);
+  });
+
+  it("leaves no two reasons comparing equal, so stability cannot leak input order", () => {
+    const ordered = mixedReasons(ALL_EDGES);
+    expect(new Set(ordered).size).toBe(ordered.length);
   });
 });

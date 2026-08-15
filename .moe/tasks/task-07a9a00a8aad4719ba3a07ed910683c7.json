@@ -1,0 +1,127 @@
+{
+  "id": "task-07a9a00a8aad4719ba3a07ed910683c7",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Scheduler readiness ordering must be code-point deterministic",
+  "description": "Objective: remove a locale-dependent comparison from an ordering the determinism contract requires to be total and host-independent. Register item 9 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real). Epic rail 4 applies: this is a determinism defect, so its fix must be pinned by exact codes, not by a passing sort. RE-MEASURED STILL OPEN at HEAD 192360e: packages/scheduler/src/readiness/readiness-projection.ts:152 tie-breaks with `String(a.edgeKey).localeCompare(String(b.edgeKey))`. localeCompare's result depends on the host ICU data and collation locale, so two hosts can order the same readiness set differently. THE REPO ALREADY AGREES THIS IS WRONG and provides the fix pattern in three other places: packages/import/src/canonical-bytes.ts:60 states 'localeCompare is not a stable total order - its result depends on the host's ICU'; packages/runner/src/recovery-inventory/artifact-object-inventory.ts:168 and git-integration-inventory.ts:224 both say 'Code points, never localeCompare'; and recovery-inventory-shape.ts:41 documents the same. This is the one remaining production call site. Deliverable: replace it with a code-point comparison matching the landed convention. NOT in scope: changing the primary sort key, the readiness projection contract, or the other three modules that already comply. Verification: pnpm --filter @moe/scheduler typecheck &amp;&amp; pnpm --filter @moe/scheduler test.",
+  "definitionOfDone": [
+    "readiness-projection.ts:152 no longer calls localeCompare; the tie-break is a code-point comparison matching the convention already documented in packages/import/src/canonical-bytes.ts and the three runner recovery-inventory modules.",
+    "A repo-wide grep for localeCompare over production sources returns zero hits in packages/scheduler, and the grep is run with a positive control so a zero result is proven rather than assumed.",
+    "A test pins the exact resulting order for a set whose localeCompare order and code-point order DIFFER - a case where the two agree would pass before and after the fix and proves nothing.",
+    "The ordering is asserted to be a total order on the production surface: equal primary keys tie-break deterministically, and no two distinct entries compare equal.",
+    "Fresh pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test exits 0."
+  ],
+  "taskRails": [
+    "The test MUST use inputs whose locale order and code-point order genuinely differ; otherwise it is green before the fix and the drill proves nothing.",
+    "Do not change the primary sort key or the projection's public ordering contract - this is a tie-break correctness fix only.",
+    "Follow the landed convention rather than inventing a fourth comparison helper; three modules already document the exact pattern.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED FIRST, and make the fixture prove itself. Add a test over the production reason-ordering path in packages/scheduler/src/readiness/ that pins the exact resulting order for reasons whose layer and code are EQUAL and whose edgeKey differs, using edgeKey values where locale collation and UTF-16 code-unit order genuinely DISAGREE - e.g. an uppercase/lowercase pair such as \"B\" and \"a\" (code units: \"B\" 0x42 sorts before \"a\" 0x61; most locale collations order \"a\" before \"B\"). CRITICAL, and this is the difference between a real test and a vacuous one: assert IN THE TEST that the two orders actually disagree on the host running it - compare `\"a\".localeCompare(\"B\")` against the code-unit comparison and fail loudly if they agree. Without that guard, a host whose ICU collation happens to match code units makes the test pass BEFORE the fix and it certifies nothing. Confirm this test is RED against current bytes before touching production, and record that red.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "note": "TDD RED recorded, and red for the RIGHT reason rather than merely red.\n\nRE-MEASURED BEFORE EDITING (the register's :152 is a snapshot). At HEAD 192360e, grep -rn localeCompare over packages/scheduler/src/ returns exactly ONE hit, still at readiness-projection.ts:152, inside the reasons comparator at :146-153. File is 240 physical lines by grep -c ''. The line above it at :151 already uses the locale-independent form, so the file disagrees with itself — evidence this was an oversight, not a choice.\n\nTHE RED:\n  AssertionError: expected [ 'dev-edge-alpha', 'dev-edge-Beta' ] to deeply equal [ 'dev-edge-Beta', 'dev-edge-alpha' ]\nProduction returns COLLATION order (alpha before Beta); the test demands CODE-UNIT order (\"B\" 0x42 before \"a\" 0x61). That is the defect itself, not a fixture or wiring error.\n\nTHE DIVERGENCE GUARD PASSED IN THE SAME RUN — 1 failed | 1 passed. This is the part that decides whether the test is worth anything. localeCompare depends on host ICU data and default collation, so a fixture that diverges on my machine may not diverge in CI, and a non-divergent fixture passes BEFORE and after the fix. The guard asserts on the host actually running it that Math.sign(\"dev-edge-alpha\".localeCompare(\"dev-edge-Beta\")) differs from the code-unit comparison, and separately pins byCodeUnit(upper, lower) === -1 so the expected direction is stated rather than inferred. It went green, so the second test's red is a real measurement of divergent inputs. This is epic rail 4's \"a generated or swept case must assert that the case was actually generated\", applied to a hand-written fixture. Host resolved locale is en-US (Intl.Collator().resolvedOptions().locale).\n\nDRIVEN THROUGH THE PRODUCTION SURFACE, not a re-implemented comparator. The comparator lives in collectReasons, which is NOT exported, so the test calls the exported projectReadiness and reads node.reasons. Global rail: a property must be asserted against the production surface, never a test helper that reimplements it. The local byCodeUnit helper in the test exists ONLY inside the divergence guard to characterise the fixture; no assertion about ordering is made against it.\n\nTHE FIXTURE COLLIDES ABOVE THE TIE-BREAK, which is what makes it a tie-break test. A self-contained graph (built inline in the test file, NOT added to the shared test-fixtures.ts, which other tasks may be editing) gives the completion node two UNSATISFIED incoming HARD edges. Both reasons are therefore layer LOGICAL and code HARD_DEPENDENCY_UNSATISFIED — asserted explicitly, so if a future change made them differ at a higher level the test would fail rather than silently stop testing the tie-break. Only edgeKey can decide the order.\n\nFIXTURE LEGALITY CHECKED, not assumed: graph-key.ts:9 SAFE_GRAPH_KEY is /^[A-Za-z0-9_][A-Za-z0-9._:@/+~-]*$/u, so mixed-case edge keys are valid and the graph validates (asserted in tieGraph). A fixture rejected at an earlier layer would never reach the comparator.\n\nTest file now 357 lines; production untouched this step (sha256 7de1363306dd54db47b636686b22880ed62b4256c5feea2576260fc5717ab070, unchanged).",
+      "startedAt": "2026-08-15T12:59:45.502Z",
+      "completedAt": "2026-08-15T13:01:48.514Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Fix the one line. packages/scheduler/src/readiness/readiness-projection.ts:152 currently ends the comparator with `return byCode !== 0 ? byCode : String(a.edgeKey).localeCompare(String(b.edgeKey));`. Replace the localeCompare tie-break with the same code-unit form the SAME comparator already uses one line above at :151 (`const byCode = a.code < b.code ? -1 : a.code > b.code ? 1 : 0;`) - so the two tie-break levels become consistent. Use the scheduler's OWN landed idiom, which already appears inline twice in this package: admission/admission-model.ts:165 and readiness/readiness-cursor.ts:60 both use `a < b ? -1 : a > b ? 1 : 0`. Do NOT import byCodeUnit from @moe/import: its own doc comment declares it 'The ONLY string comparator this package may use', and pulling a three-line comparator across a package boundary would require a dependency edge for no benefit. Leave the READINESS_LAYERS primary ordering and the code-level tie-break untouched; this is a tie-break correctness fix only.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts"
+      ],
+      "note": "Tie-break replaced. Step-1 red went green with no other test touched: 23 passed (23), exit 0.\n\nWAS:\n  const byCode = a.code < b.code ? -1 : a.code > b.code ? 1 : 0;\n  return byCode !== 0 ? byCode : String(a.edgeKey).localeCompare(String(b.edgeKey));\nNOW:\n  const byCode = a.code < b.code ? -1 : a.code > b.code ? 1 : 0;\n  if (byCode !== 0) {\n    return byCode;\n  }\n  // Code units, never localeCompare: collation depends on the host's ICU data,\n  // so two machines would order the same reasons differently - and that failure\n  // never reproduces locally. Same form as the code tie-break directly above.\n  const edgeA = String(a.edgeKey);\n  const edgeB = String(b.edgeKey);\n  return edgeA < edgeB ? -1 : edgeA > edgeB ? 1 : 0;\n\nCONVENTION FOLLOWED, NOT INVENTED (task rail 3). This is the scheduler's own inline idiom, already at admission/admission-model.ts:165 and readiness/readiness-cursor.ts:60, and identical in form to :151 immediately above — the comparator is now internally consistent instead of using two different comparison disciplines two lines apart. No fourth helper introduced, and byCodeUnit was NOT imported from @moe/import: its doc comment scopes it as \"The ONLY string comparator this package may use\", and crossing a package boundary for a three-line comparator would require a real dependency edge (manifest, lockfile importer, compiled probe) under the global dependency-edge rail.\n\nTWO DELIBERATE CHOICES INSIDE THE FIX:\n1. Early return for byCode instead of extending the nested ternary. The nested form would have been `byCode !== 0 ? byCode : edgeA < edgeB ? -1 : ...`, a three-level ternary; the early return matches the `if (byLayer !== 0) { return byLayer; }` shape already used at :148-150 in this same comparator.\n2. Named locals rather than destructuring. I first wrote `const [x, y] = [String(a.edgeKey), String(b.edgeKey)]`, then changed it: that allocates an array on EVERY comparison inside a sort, and x/y read poorly beside the comparator's own a/b. edgeA/edgeB allocate nothing and say what they are. One line more; still inside budget.\n\nSCOPE HELD (task rail 2). READINESS_LAYERS primary ordering at :147 and the code tie-break at :151 are byte-identical to before. Only the edgeKey level changed. The public ordering contract is unchanged — this makes the ORDER host-independent, it does not redefine it.\n\nLINE BUDGET: 248 physical lines by grep -c '' (was 240), under the 250 target with 2 lines of headroom. PowerShell Measure-Object -Line undercounts and was not used. The plan flagged this file as tight; the fix stayed a replacement plus a three-line comment rather than adding a helper function, which is what kept it under.\n\nThe comment is not decoration — it is the fourth site in the repo carrying this convention, and canonical-bytes.ts:57-64 explains why it matters: a green suite on one host is exactly what this defect looks like.",
+      "startedAt": "2026-08-15T13:01:50.773Z",
+      "completedAt": "2026-08-15T13:02:37.524Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Prove the removal is complete rather than local. Run a grep for localeCompare across packages/scheduler production sources and require zero hits - and run it WITH A POSITIVE CONTROL, per the standing rule that an empty grep proves nothing until the same query shape is shown to hit somewhere it must: run the identical grep over packages/import/src/canonical-bytes.ts and packages/runner/src/recovery-inventory/, where the string appears in the doc comments that document this exact convention. Record both results. If any further localeCompare call site turns up in scheduler production code, fix it in this task and note it - the register recorded one site, but the register is a snapshot.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts"
+      ],
+      "note": "Removal proven complete, and the grep was made PRECISE before it was made empty.\n\nTHE NAIVE CHECK WOULD HAVE BEEN WRONG. DoD 2 asks for zero localeCompare hits in packages/scheduler production. A bare word grep returns ONE hit: readiness-projection.ts:155, inside the comment I added documenting the convention. Chasing that to literal zero would mean deleting the convention comment — and the three landed modules this task was told to imitate all carry the word the same way (canonical-bytes.ts:60, artifact-object-inventory.ts:168, git-integration-inventory.ts:224, recovery-inventory-shape.ts:41). Deleting it would make this file the only one of the four that no longer says why. So the check is on CALL SITES, pattern `\\.localeCompare\\(`, which is the thing the DoD actually cares about.\n\nRESULT: 0 call sites in packages/scheduler production (--include=*.ts, excluding *.test.ts and test-fixtures).\n\nPOSITIVE CONTROL, and I used the strongest form available rather than a different file. The identical pattern over the PRE-FIX bytes of the SAME file:\n  git show HEAD:packages/scheduler/src/readiness/readiness-projection.ts | grep -n \"\\.localeCompare(\"\n  152:    return byCode !== 0 ? byCode : String(a.edgeKey).localeCompare(String(b.edgeKey));\nSame pattern, same file, same command shape: hits exactly the line I removed at HEAD, returns 0 in the working tree. That rules out a mistyped pattern reading as a clean sweep — the zero is a measurement, not an assumption. Plan-named control also run: the identical pattern over packages/import/src/canonical-bytes.ts and packages/runner/src/recovery-inventory/ returns the four documented convention sites listed above.\n\nREPO-WIDE FINDING WORTH RECORDING: `\\.localeCompare\\(` across packages/, apps/ and tools/ (*.ts, excluding node_modules) now returns exactly ONE hit in the entire repo — readiness-projection.test.ts:341, my own divergence guard. That call is deliberate and must NOT be removed: it is the assertion that the fixture's collation order and code-unit order genuinely disagree on the host running the suite, and without it the tie-break test can go vacuous. The register called this \"the last production call site\" and that is now measured true, not inherited.\n\n.js BRIDGES CHECKED, NOT ASSUMED. packages/scheduler/src/**/*.js contains 0 hits for localeCompare. Confirmed why by reading one: readiness-projection.js is `export * from \"./readiness-projection.ts\";` — a re-export bridge, not compiled output, so there is no second copy of the comparator to fix. Worth checking because a stale compiled artifact would have kept the old comparator alive behind a passing source grep.\n\nNO FURTHER CALL SITES TURNED UP, so nothing extra was fixed under this step's \"the register is a snapshot\" clause. The register's one-site claim held.",
+      "startedAt": "2026-08-15T13:02:40.645Z",
+      "completedAt": "2026-08-15T13:03:28.165Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Assert the ordering is a TOTAL order on the production surface, not merely that one pair now sorts correctly. Add a test that runs the production comparator over a set containing entries that collide on layer, entries that collide on layer AND code, and entries distinct at every level, and assert: the resulting order is exactly the expected sequence; sorting the same set from a different initial permutation yields the identical result (so the order does not depend on input order); and no two distinct entries compare equal. Assert an exact non-zero case count with a hand-written literal. This is what makes the fix a determinism guarantee rather than a single passing example.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ],
+      "startedAt": "2026-08-15T13:03:30.401Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/scheduler typecheck && pnpm --filter @moe/scheduler test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Re-run the step-1 divergence guard and confirm it would FAIL if someone swapped the fixture for a pair whose orders agree - the guard is the only thing standing between this test and vacuity. (2) Confirm the fix changed ONLY the tie-break and that READINESS_LAYERS ordering and the code comparison are byte-identical. (3) Confirm no other comparator in the touched file depends on host collation. (4) Confirm readiness-projection.ts is still at or under 250 physical lines using `grep -c ''` (it is 240 today; PowerShell Measure-Object -Line undercounts). Then git status --porcelain, confirm nothing foreign is staged, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/readiness/readiness-projection.ts",
+        "packages/scheduler/src/readiness/readiness-projection.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-40286572",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 9), created from task-963cf1d1 with no dependency on any other task and no unmet precondition - the defect is a single call site at readiness-projection.ts:152 and the fix pattern is already landed in three other modules. HIGH because task rail 2 places it under epic rail 4 as a determinism defect. BACKLOG is not agent-claimable, so without this promotion the slice is parked exactly as the register was.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "HIGH",
+  "order": 99.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:47:42.602Z",
+  "updatedAt": "2026-08-15T13:03:30.401Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T12:52:02.312Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:53:27.108Z",
+  "planningNotes": {
+    "approachesConsidered": "WHICH COMPARATOR TO USE. Importing byCodeUnit from @moe/import was rejected on two grounds: its own doc comment declares it 'The ONLY string comparator this package may use' (scoping it to @moe/import), and crossing a package boundary for a three-line comparator would require a real workspace dependency edge - manifest entry, lockfile importer, compiled probe - under the global dependency-edge rail, which is absurd overhead for `a < b ? -1 : a > b ? 1 : 0`. Extracting a new shared comparator package was rejected for the same reason. CHOSEN: match the scheduler's own inline idiom, already present at admission-model.ts:165 and readiness-cursor.ts:60, which also makes the comparator internally consistent with its own :151.\n\nTHE TEST FIXTURE IS THE REAL RISK, NOT THE FIX. The fix is trivially correct; a test that fails to prove anything is the likely failure mode. A pair whose locale order and code-unit order happen to AGREE passes both before and after the change. Worse, whether they agree is host-dependent - which is the very property under test - so a fixture that is divergent on the author's machine can be non-divergent in CI and silently turn the test vacuous. CHOSEN: assert the divergence itself inside the test, so the fixture proves it is a real test case on the host actually running it. This is the epic rail's 'a generated or swept case must assert that the case was actually generated', applied to a hand-written fixture.\n\nSCOPE HELD DELIBERATELY NARROW. The primary READINESS_LAYERS ordering and the code-level tie-break are untouched; widening to 'audit all scheduler ordering' would turn a one-line determinism fix into an open-ended sweep. Step 3 does run a scheduler-wide grep, but as a completeness CHECK with a positive control, not as licence to refactor.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e (I also raised this slice from the audit register at the same HEAD, so the evidence below is first-hand, not inherited).\n\nTHE DEFECT IS ONE LINE, AND THE FILE ALREADY DISAGREES WITH ITSELF. packages/scheduler/src/readiness/readiness-projection.ts, comparator at :146-153:\n  const byLayer = READINESS_LAYERS.indexOf(a.layer) - READINESS_LAYERS.indexOf(b.layer);\n  if (byLayer !== 0) return byLayer;\n  const byCode = a.code < b.code ? -1 : a.code > b.code ? 1 : 0;              // :151 CORRECT\n  return byCode !== 0 ? byCode : String(a.edgeKey).localeCompare(String(b.edgeKey)); // :152 WRONG\nThe code-level tie-break one line above already uses the locale-independent form. Only the edgeKey tie-break reaches for localeCompare, which is strong evidence this is an oversight rather than a considered choice.\n\nTHE FIX PATTERN IS ALREADY LANDED IN THIS PACKAGE, TWICE, INLINE: packages/scheduler/src/admission/admission-model.ts:165 and packages/scheduler/src/readiness/readiness-cursor.ts:60 both use `a < b ? -1 : a > b ? 1 : 0`. So the fix is to match the scheduler's own idiom, not to introduce anything new.\n\nTHE REPO-WIDE CONVENTION IS DOCUMENTED IN FOUR PLACES, which is why this is HIGH rather than cosmetic: packages/import/src/canonical-bytes.ts:57-64 defines byCodeUnit with the comment 'localeCompare is not a stable total order - its result depends on the host's ICU data, so two machines can order the same two paths differently and produce different canonical digests from identical bytes. That failure never reproduces locally.' packages/runner/src/recovery-inventory/artifact-object-inventory.ts:168 and git-integration-inventory.ts:224 both carry 'Code points, never localeCompare'. recovery-inventory-shape.ts:41 documents the same.\n\nreadiness-projection.ts is 240 physical lines - under the 250 target with little headroom, so the fix must stay a replacement rather than an addition.",
+    "risks": "A VACUOUS TEST IS THE MAIN HAZARD. localeCompare's behavior depends on host ICU data and the default collation locale. A fixture pair that diverges under en-US may not diverge under the C locale or a minimal-ICU Node build, and then the test passes before the fix and certifies nothing. The step-1 divergence guard is not optional garnish - it is the only thing that makes this test meaningful, and QA should check it exists.\n\nCONFIRM RED BEFORE GREEN. Because the fix is one line, it is very easy to write the test and the fix together and never observe the red. Record the failing run explicitly; a test that was never red against current bytes has not been shown to test anything.\n\nAN EMPTY GREP PROVES NOTHING ALONE. Step 3's zero-hit result must be paired with a positive control over files where localeCompare demonstrably appears (the import and runner doc comments), or a mistyped pattern reads as a clean sweep.\n\nHOST-DEPENDENT BUGS DO NOT REPRODUCE LOCALLY. canonical-bytes.ts says this outright: 'That failure never reproduces locally.' Nobody should conclude the ordering was fine because the suite was green on one machine - greenness on a single host is exactly what this class of defect looks like.\n\nLINE BUDGET: readiness-projection.ts is 240 of a 250 target. Replace the expression; do not add a local helper function to the file.\n\nSHARED WORKTREE. Peers commit continuously and HEAD has moved repeatedly this session. Re-measure the line number before editing - :152 is a snapshot - and commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/scheduler/src/readiness/readiness-projection.ts",
+      "packages/scheduler/src/readiness/readiness-cursor.ts",
+      "packages/scheduler/src/admission/admission-model.ts",
+      "packages/import/src/canonical-bytes.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T12:53:29.163Z",
+  "contextFetchedBy": [
+    "worker-40286572"
+  ],
+  "workStartedAt": "2026-08-15T12:59:45.502Z"
+}

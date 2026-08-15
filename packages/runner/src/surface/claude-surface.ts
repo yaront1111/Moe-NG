@@ -139,3 +139,74 @@ export {
   type ClaudeStreamRecord,
   type MoeEffectIdentity,
 } from "../providers/claude/claude-stream.js";
+/**
+ * The provider-run telemetry seam. `launchClaudeWithTelemetry` is the entry
+ * point: it runs the SAME `launchClaude` published above and returns the raw
+ * provider-run handoff that launch supports, so a consumer never has to choose
+ * between launching and observing. `parseClaudeResultTelemetry` travels with it
+ * because a consumer holding a stored `ClaudeStreamEvidence` capture must be
+ * able to re-derive the same facts from the bytes alone, without relaunching.
+ *
+ * The frozen vocabularies come for the reason every closed union does here: a
+ * `terminal` or `infrastructure` field whose members cannot be read is a field
+ * nobody can branch on. `CLAUDE_RESULT_SUBTYPES`, `CLAUDE_TOKEN_FIELDS`,
+ * `CLAUDE_STEP_FIELD`, `CLAUDE_TELEMETRY_RECORDS` and
+ * `CLAUDE_MODEL_EVIDENCE_PATTERNS` are the SUPPORTED-fact tables — publishing
+ * them is what lets a consumer see exactly which provider fields this parser
+ * version claims to read, rather than inferring it from an absent value.
+ *
+ * WITHHELD, and the asymmetry is the point: `knownCount`, `readCount`,
+ * `readText`, `countCoverage`, `unknownFact`, `telemetryRefusal`,
+ * `snapshotRunRef` and `PROVIDER_TELEMETRY_MESSAGES` stay internal. Every one of
+ * them MINTS a fact — a known quantity, an UNKNOWN carrying a reason code, a
+ * coverage class, a refusal record. A consumer able to call them could hand a
+ * downstream normalizer a hand-built "provider-observed" measurement that no
+ * provider ever emitted, which is precisely the invention this seam exists to
+ * make impossible. Consumers READ handoffs; only this package mints them.
+ */
+export {
+  CLAUDE_MODEL_EVIDENCE_PATTERNS,
+  CLAUDE_RESULT_SUBTYPES,
+  CLAUDE_RESULT_TELEMETRY_VERSION,
+  CLAUDE_STEP_FIELD,
+  CLAUDE_TELEMETRY_ANOMALY_REFUSALS,
+  CLAUDE_TELEMETRY_RECORDS,
+  CLAUDE_TOKEN_FIELDS,
+  parseClaudeResultTelemetry,
+  type ClaudeObservedModel,
+  type ClaudeResultTelemetry,
+  type ClaudeResultTelemetryVerdict,
+  type ClaudeStepObservations,
+  type ClaudeTokenObservations,
+  type ParseClaudeResultTelemetryInput,
+} from "../providers/telemetry/claude-result-telemetry.js";
+export {
+  CLAUDE_TELEMETRY_HANDOFF_VERSION,
+  launchClaudeWithTelemetry,
+  type ClaudeDeclaredSelection,
+  type ClaudeTelemetryConcurrency,
+  type ClaudeTelemetryHandoff,
+  type ClaudeTelemetryLaunchFacts,
+  type ClaudeTelemetryLaunchInput,
+  type ClaudeTelemetryLaunchResult,
+} from "../providers/telemetry/claude-telemetry-launch.js";
+export {
+  PROVIDER_CONCURRENCY_FACTS,
+  PROVIDER_COUNT_COVERAGE_CLASSES,
+  PROVIDER_INFRASTRUCTURE_OUTCOMES,
+  PROVIDER_TELEMETRY_CODES,
+  PROVIDER_TELEMETRY_CONTRACT_VERSION,
+  PROVIDER_TELEMETRY_LAYERS,
+  PROVIDER_TERMINAL_OUTCOMES,
+  type ProviderConcurrencyFact,
+  type ProviderCountCoverage,
+  type ProviderFactUnknown,
+  type ProviderInfrastructureOutcome,
+  type ProviderQuantity,
+  type ProviderRunRef,
+  type ProviderTelemetryCode,
+  type ProviderTelemetryLayer,
+  type ProviderTelemetryRefusal,
+  type ProviderTerminalOutcome,
+  type ProviderText,
+} from "../providers/telemetry/provider-telemetry-contracts.js";

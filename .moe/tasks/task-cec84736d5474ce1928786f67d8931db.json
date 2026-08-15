@@ -1,0 +1,34 @@
+{
+  "id": "task-cec84736d5474ce1928786f67d8931db",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Exercise the daemon Origin guard from the real client path",
+  "description": "Objective: stop the control-room client from setting a header the browser will never send, and prove the daemon Origin guard against the real client path. Register item 8 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: packages/control-room-client/src/client-transport.ts:90 `headersFor` returns an object including `origin: options.origin` (:93), which is then passed as `headers` to fetch at :108-111. `Origin` is a FORBIDDEN header name in the fetch spec - a browser silently drops it and sets its own - so this header is inert in the only environment that matters, while a non-browser fetch (tests, Node) sends it and satisfies the daemon guard artificially. The result is that the daemon Origin guard is exercised only by the vite proxy, and the real client path is never tested against it. Deliverable: stop setting the forbidden header, and cover the daemon guard with a test that drives the real client transport rather than a proxy-shaped fixture. NOT in scope: changing the daemon's Origin policy itself, the CSRF token scheme, the session credential header, or the wire protocol version header - only the forbidden header and the coverage gap. Verification: pnpm --filter @moe/control-room-client typecheck &amp;&amp; pnpm --filter @moe/control-room-client test &amp;&amp; pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The client transport no longer sets the forbidden `origin` request header; a test asserts the exact header name set is what the client intends, so re-adding it fails rather than passing silently.",
+    "The daemon Origin guard is exercised by a test that drives the REAL client transport path, not the vite proxy and not a hand-built request that happens to carry an Origin - the coverage gap is the defect, so closing it is the deliverable.",
+    "A request that the daemon's Origin guard rejects is asserted by its exact stable reason code and refusing layer, not merely as a non-200.",
+    "The request URL still uses options.origin as its prefix (client-transport.ts:108) - only the HEADER is removed, and existing CSRF, session-credential and protocol-version headers are unchanged.",
+    "Fresh pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/daemon test exits 0."
+  ],
+  "taskRails": [
+    "Do not relax the daemon Origin guard to make a test pass; the guard is correct and the client is what is wrong.",
+    "Do not hand-set an Origin header in the test to satisfy the guard - that reproduces the exact illusion this task exists to remove.",
+    "packages/control-room-client/src/generated/generated-client.ts is marked GENERATED - DO NOT EDIT BY HAND, source of truth @moe/contracts. If the change reaches generated output, report blocked and name a contracts/codegen task.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 8, forbidden Origin header plus the daemon-guard coverage gap), created from task-963cf1d1 with no dependency on any other task. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:47:28.441Z",
+  "updatedAt": "2026-08-15T12:51:43.031Z"
+}

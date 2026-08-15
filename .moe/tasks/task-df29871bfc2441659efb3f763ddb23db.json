@@ -150,7 +150,7 @@
       "completedAt": "2026-08-15T11:46:05.614Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -176,18 +176,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:11.801Z",
-  "updatedAt": "2026-08-15T11:48:03.384Z",
+  "updatedAt": "2026-08-15T12:44:49.104Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:00:46.726Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-15T11:54:07.859Z",
+    "wallClockMs": 140001133
   },
   "contextFetchedBy": [
     "worker-06df66bb",
-    "qa-50f0d628"
+    "qa-50f0d628",
+    "architect-4eca9b79"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -263,7 +266,7 @@
     "apps/daemon/src/activation/activation-ledger-commit.test.ts",
     "apps/daemon/src/activation/activation-ledger-commit.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T11:32:43.010Z",
+  "reviewCompletedAt": "2026-08-15T11:54:07.859Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Same-command replay returns the original durable record without rerunning apply; a distinct command for the same aggregate/idempotency pair or the same grantId accepts exactly once and otherwise pins the exact EXPECTED_VERSION_CONFLICT or store uniqueness refusal with zero duplicate events."
@@ -318,5 +321,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-15T11:54:07.859Z",
+  "reviewSummary": "APPROVED after reopen #1. Reviewed by base-ref diff `git diff 139f11c..HEAD -- apps/daemon/src/activation/` (+174/-8); tree == HEAD on owned paths.\n\nGATES re-run by me, foreground, &&-chained, redirected to files (not piped, so no tail exit-code masking): daemon typecheck EXIT 0; daemon test EXIT 0, 75 files/1600 tests; store test EXIT 0, 41/469. The restore-controller red I disclosed last round is gone, fixed by its owner.\n\nBLOCKING 1 CLOSED (DoD 3). answerReplayed() runs only on REPLAYED: readEvents on the derived aggregate -> readActivationLedgerRecord -> re-encode -> canonical-digest compare -> returns the DECODED record. Reader refusal propagates as UNKNOWN; disagreement raises ACTIVATION_LEDGER_REPLAY_DIVERGED (REFUSED, storeCode null as the layer discriminator).\n\nBLOCKING 2 CLOSED. Replay test no longer a transcript: asserts spy.calls === [commitExpectedVersionDecision, readEvents] and record !== input.record; new drift case commits grantId \"grant-NEVER-COMMITTED\" under identical requestBytes, pins code/layer/outcome/storeCode plus 1 durable event carrying the ORIGINAL grantId.\n\nMY DRILLS (sha256 -> Edit -> focused run -> Edit back -> sha256 -c byte-exact; positive control first):\nA. REPLAYED branch back to the echo -> both replay tests red, the drift one on \"expected true to be false\" = my original repro.\nB. Disable ONLY the digest cross-check -> exactly 1 red (drift); positive replay stays green, so the comparison carries the test, not the read.\nC. Separator-only join, prefixes dropped -> \"expected 11 to be 12\". That mutant survived green last round; my COLLIDING_PAIRS note is closed.\n\nOTHER DoD: 12 record keys cover all 10 enumerated facts, counted noun by noun; every reader refusal has a positive control; race asserts length 2, 1 accept/1 refuse, storeCode EXPECTED_VERSION_CONFLICT; injected throw leaves 0 events, version 0, EVIDENCE_ABSENT. No DDL. Lines 244/236/210/71/149. Bridge guard green."
 }

@@ -30,8 +30,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-13T22:13:22.559Z",
+  "updatedAt": "2026-08-15T12:44:29.927Z",
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-13T22:13:22.559Z",
-  "blockedReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved."
+  "blockedReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved.",
+  "contextFetchedBy": [
+    "architect-4eca9b79"
+  ]
 }

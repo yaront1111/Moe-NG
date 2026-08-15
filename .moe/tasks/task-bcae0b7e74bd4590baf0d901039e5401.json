@@ -18,9 +18,146 @@
     "Follow the existing timing.ts UNKNOWN vocabulary and observer-binding discipline rather than inventing a parallel reason-code family.",
     "Target <=250 physical lines per production source and split before 400; the cap is per file. Prefer two focused modules (record vocabulary, collector) over one large one."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD. Create the record-vocabulary module. Declare frozen closed sets for the demanded-decision kinds, the observation sources/provenance, the interval kinds and the interval states, each with its derived union type, in the Object.freeze([...] as const) + (typeof X)[number] style this package already uses. Declare an EFFORT layer constant and an EFFORT_UNKNOWN_CODES set covering at minimum: an unterminated interval, overlapping intervals of the same kind, a contradictory observation, an absent observation, and an unparseable one. MIRROR the shape landed in timing.ts by the sibling slice - a refusal is {code, layer}, frozen, with NO translation table, because mapping another layer's code onto one of ours puts our guess where their answer belongs. Do NOT reuse the TIMING_* codes themselves: an unterminated focus interval is not a timing fact, and borrowing TIMING_SOURCE_ABSENT for it would make two different facts indistinguishable. Do NOT edit timing.ts or wire-timing.ts - the sibling slice owns them and they are already committed. Every record type is frozen and carries an explicit `source` provenance field plus the command identity it is attributable to.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "note": "Record vocabulary landed in effort-records.ts. Frozen closed sets: EFFORT_UNKNOWN_CODES (7 own codes, no TIMING_* reuse), EFFORT_SOURCES (4), BASELINE_DECISION_KINDS (3, ADDITIONAL deliberately excluded so a caller cannot declare it), DECISION_KINDS (4 incl. derived ADDITIONAL), INTERVAL_KINDS (AWAY/FOCUS), INTERVAL_STATES (5), RECOVERY_BURDENS (4), EFFORT_RECORD_TYPES (7), UNATTRIBUTED sentinel. TWO layers named separately — EFFORT_ADMISSION_LAYER and EFFORT_COLLECTOR_LAYER — because both can refuse and a test asserting only \"refused\" could not tell them apart. effortRefusal(code, layer) returns frozen {code, known:false, layer}, no translation table, mirroring timing.ts:88 shape without borrowing its identifiers. TDD: test written first, ran RED on module resolve failure, then GREEN. Focused run: vitest run src/performance/effort-records.test.ts -> 13 passed (13).",
+      "startedAt": "2026-08-15T12:46:07.822Z",
+      "completedAt": "2026-08-15T12:47:55.701Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD. Add the shaping/admission functions to the record module, following the discipline wire-timing.ts:100-125 just established: take `unknown`, return a frozen record or null, read each field once, and refuse rather than default. THE RULE, stated there and binding here: an observation missing its source or its command identity is NOT a weaker observation, it is a refusal - so a record with no provenance is rejected with the exact EFFORT code and layer, never stored with a default source. Order the checks absent-before-unparseable, matching fromInterval's ordering in timing.ts, so a missing observation is never reported as a malformed one. Reject extra keys rather than ignoring them: a caller-supplied `durationMs`, `count` or `burden` is precisely what this domain must never accept from outside, and silently dropping one would look like it had been honoured.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-admission.ts",
+        "apps/control-room/src/performance/effort-records.test.ts",
+        "apps/control-room/src/performance/effort-admission.test.ts"
+      ],
+      "note": "shapeEffortObservation(unknown) -> frozen EffortRecord | EffortRefusal. TDD: 15 admission tests written first, ran RED (shapeEffortObservation undefined), then GREEN. 28 passed (28) across effort-records.test.ts + effort-admission.test.ts; tsc --project apps/control-room/tsconfig.json exit 0.\n\nTWO deliberate deviations, both justified:\n(1) THIRD PRODUCTION FILE. The plan said add admission to the record module; vocabulary + record types + admission in one file measured ~356 physical lines, over the per-file cap. Split into effort-admission.ts (182 lines) with effort-records.ts at 228. Both under 250. The plan itself instructs splitting rather than trimming cases when a module outgrows the cap; the cap is the binding rail. Test file split to match: effort-admission.test.ts.\n(2) RETURNS A REFUSAL, NOT null. wire-timing's shapers return null; DoD-4/DoD-5 require the exact code AND the refusing layer, which null cannot carry. Admission returns EffortRefusal{code, known:false, layer:CONTROL_ROOM_EFFORT_ADMISSION}.\n\nRefusal codes pinned by test, each with its layer: missing source -> EFFORT_SOURCE_ABSENT (never defaulted); missing commandId -> EFFORT_COMMAND_IDENTITY_ABSENT (an explicit UNATTRIBUTED is admitted, silence is not); absent payload/type/observedAt/type-field -> EFFORT_OBSERVATION_ABSENT; malformed value -> EFFORT_OBSERVATION_UNPARSEABLE; caller-supplied durationMs/count/burden extra key -> EFFORT_OBSERVATION_UNPARSEABLE (refused, not dropped); caller declaring demandedKind ADDITIONAL -> EFFORT_OBSERVATION_CONTRADICTORY; attention switch from===to -> EFFORT_OBSERVATION_CONTRADICTORY. Ordering test proves absent beats unparseable (missing source + malformed observedAt yields EFFORT_SOURCE_ABSENT). Admitted records carry no durationMs property.",
+      "startedAt": "2026-08-15T12:47:58.247Z",
+      "completedAt": "2026-08-15T12:52:52.573Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD. Add the collector module and its focus/away interval state machine - the sharpest part of this task. Focus intervals and away intervals are recorded SEPARATELY and neither is ever derived from the other: per the task rail, an away interval is NOT the absence of a focus interval, and nothing may synthesise one from a gap between two others. An interval opened and never closed resolves to UNKNOWN with the exact unterminated code and layer - NOT a zero-length interval, not an interval closed at read time, and not one silently closed by the next open of the same kind, which would be inference wearing the costume of bookkeeping. Two overlapping intervals of the same kind are a contradiction and resolve to UNKNOWN, not to a merged span. Keep the collector free of any clock of its own: it takes observed timestamps, exactly as timing.ts takes caller-observed pairs and reads no clock. Keep this module at or under 250 physical lines; wire-timing.ts landed at 224 for comparable work, so if it grows past that, split the interval machine from the record accumulation rather than trimming cases.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts",
+        "apps/control-room/src/performance/effort-admission.ts",
+        "apps/control-room/src/performance/effort-admission.test.ts"
+      ],
+      "note": "effort-collector.ts (215 lines) with the focus/away state machine. TDD: 16 collector tests written first, ran RED on module resolve, then GREEN. 44 passed (44) across the three effort suites; tsc exit 0.\n\nINTERVAL MACHINE. Focus and away are separate map slots; neither closes or derives the other (test: open FOCUS, open+close AWAY -> FOCUS still OPEN). NO DURATION IS EVER COMPUTED — a CLOSED outcome carries openedAt and closedAt and nothing else, so \"opened and closed\" can never be confused with \"measured\"; duration stays a timing.ts fact. Collector reads no clock: every stamp came from the observer, proven by a determinism test that seals two identically-fed collectors and compares.\n\nSTATES, each pinned with code AND layer CONTROL_ROOM_EFFORT_COLLECTOR: live-unclosed -> OPEN carrying no closedAt; sealed-unclosed -> UNTERMINATED + EFFORT_INTERVAL_UNTERMINATED, never closed at read time (test feeds a later unrelated observation and asserts no closedAt appears); second open of the same kind -> the first becomes OVERLAPPING + EFFORT_INTERVAL_OVERLAPPING and the second is refused, never merged and never auto-closed; close with no open -> CONTRADICTORY + EFFORT_OBSERVATION_CONTRADICTORY, not back-dated into an invented interval; close observed before its own open -> CONTRADICTORY, not a negative and not a zero. After a contradiction the kind holds nothing open, so a later close is contradictory too — this module will not guess which of two overlapping intervals a close belonged to. A genuine zero-length interval (open and close at the same observed stamp) is admitted as CLOSED: that is a real observation, not an absence.\n\nAdmission fix folded in: a key explicitly set to undefined now reads as ABSENT rather than unparseable, matching fromInterval in timing.ts, so `source: undefined` yields EFFORT_SOURCE_ABSENT and `commandId: undefined` yields EFFORT_COMMAND_IDENTITY_ABSENT. Both pinned.\n\nSealing: seal() resolves pendings and freezes; a later record() is refused with EFFORT_OBSERVATION_CONTRADICTORY at the collector layer rather than silently dropped.",
+      "startedAt": "2026-08-15T12:52:54.576Z",
+      "completedAt": "2026-08-15T12:55:41.101Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD. Add decision-command attribution to the collector, including the distinction DoD-2 exists for. Record demanded decision commands against the command identity that carried them, and distinguish the baseline create/approve/accept demands from ANY ADDITIONAL demanded decision, so a surface that demands a second decision is recorded as an additional demand rather than folded into the first. The additional-ness must be derived from the OBSERVED sequence of demands, never from a counter or flag the caller supplies - a caller able to declare 'this is the first decision' could hide every subsequent one. Record free interactions, attention switches, recovery actions with their burden, and scroll/focus evidence as their own record kinds, each attributable to a command identity where one exists and explicitly UNATTRIBUTED where none does - an observation with no command identity is recorded as unattributed, never assigned to the most recent command, because that guess is exactly what makes effort numbers untrustworthy.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-intervals.ts",
+        "apps/control-room/src/performance/effort-attribution.test.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts"
+      ],
+      "note": "Attribution + the one derivation. TDD: 13 tests in effort-attribution.test.ts written first, ran RED (collector.decisions is not a function, 9 failures), then GREEN. 57 passed (57) across four effort suites; tsc exit 0.\n\nADDITIONAL-NESS IS DERIVED FROM THE OBSERVED SEQUENCE. deriveDecision reads only the record and the set of command identities already seen demanding: the first demand on a command keeps its baseline kind, every later demand on that same command is ADDITIONAL, and demandedKind is preserved verbatim on the additional arm so nothing is folded away. Per-command, so a second command starts at its own baseline (test: CREATE/ADDITIONAL/APPROVE across cmd-a, cmd-a, cmd-b). A third demand is ADDITIONAL too, not collapsed. The caller cannot supply the derivation: admission already refuses demandedKind ADDITIONAL with EFFORT_OBSERVATION_CONTRADICTORY, and the payload shape carries no flag, counter or ordinal.\n\nATTRIBUTION IS NEVER DERIVED. An UNATTRIBUTED observation stays UNATTRIBUTED even with an attributed command recorded immediately before it — never assigned to the most recent command. Corollary pinned by its own test: additional-ness is NOT derived across unattributed demands (two UNATTRIBUTED demands record CREATE then APPROVE, not CREATE then ADDITIONAL), because two demands nobody can attribute cannot be shown to have been demanded of the same command.\n\nFree interactions, attention switches, recovery actions with their observed burden, and scroll/focus evidence each record under their own kind carrying their own attribution; a free interaction never enters decisions().\n\nFILE SPLIT (plan-sanctioned): the interval machine moved to effort-intervals.ts (180 lines) as step 3 anticipated, keeping effort-collector.ts at 129. Four production files, all under 250: effort-records 228, effort-admission 191, effort-intervals 180, effort-collector 129. effort-collector.test.ts now imports IntervalOutcome from effort-intervals.js.",
+      "startedAt": "2026-08-15T12:57:56.051Z",
+      "completedAt": "2026-08-15T12:58:05.458Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD. Pin the NON-INFERENCE rule directly, since it is the task rail most easily violated by helpful-looking code. One test per forbidden derivation, each asserting the derived record is NOT produced: a free interaction must not become a demanded decision; an away interval must not be produced from the absence of a focus interval; an attention switch must not be synthesised from two adjacent focus intervals; a recovery burden must not be computed from a count of recovery actions; and a demanded decision must not be inferred from a rendered affordance that was never acted on. Each of these is individually plausible as a feature and individually destroys the domain's claim that it records what a human ACTUALLY did. Also assert the observational-only rail: no record carries or produces a verdict, a score, a threshold, or an acceptability judgement, and nothing in this module reads a benchmark constant.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-collector.test.ts",
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-non-inference.test.ts",
+        "apps/control-room/src/performance/timing.test.ts"
+      ],
+      "note": "effort-non-inference.test.ts: one test per forbidden derivation, each asserting the derived record is NOT produced. 67 passed (67) across five effort suites.\n\nFORBIDDEN DERIVATIONS PINNED: a free interaction never becomes a demanded decision (decisions() empty, live and sealed); an away interval is never produced from the absence of a focus interval (a 60-tick gap between two closed FOCUS intervals yields kinds [FOCUS, FOCUS] and no AWAY), nor from a focus interval merely left unclosed (yields one FOCUS UNTERMINATED, not an AWAY); an attention switch is never synthesised from two adjacent focus intervals (observation types are exactly the four interval records); a recovery burden is never computed from a count of recovery actions (three RETRY_SAME_COMMAND observations each keep the burden observed on them, none escalated, and the sealed set exposes exactly decisions/intervals/observations with no aggregate); a demanded decision is never inferred from an affordance that was only rendered (SCROLL_FOCUS_EVIDENCE describing an unpressed approve button leaves decisions() empty); and neither a decision nor an interval is derived from the other.\n\nOBSERVATIONAL-ONLY: no record, interval outcome or decision carries a field whose name matches score/verdict/threshold/acceptab/benchmark/budget/grade/rating; and a source scan over all four effort modules finds no such word in CODE. Prose is stripped first, because these headers name the forbidden words in order to forbid them — and the stripper is itself policed: each module must leave >30 code lines and still contain its anchor, so a stripper that removed everything cannot report a clean scan of nothing. Bite proof asserts the regex catches score/THRESHOLD/BENCHMARK_BUDGET, ignores ordinary code, and that stripping keeps code while dropping comments.\n\nFORCED EDIT DISCLOSED: timing.test.ts holds a closed directory scan (\"scans exactly the production modules present, so a new one cannot escape\") whose hardcoded list is compared for exact equality; four new modules broke it. The forced positive fix is four one-line entries with anchors — narrowing or excluding the scan would have hidden the new modules from the sibling's no-real-clock ban, which my modules also pass. timing.ts and wire-timing.ts themselves are untouched.",
+      "startedAt": "2026-08-15T12:58:42.113Z",
+      "completedAt": "2026-08-15T12:59:57.221Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Satisfy DoD-5's generated-case half with EXACT NON-ZERO cardinality. Build two case tables: one covering EVERY demanded-decision kind (including the additional-demand arm) and one covering EVERY interval state (open, closed, unterminated, overlapping, contradictory). Assert each table's exact length with a hand-written literal before iterating - a sweep that silently generates zero cases passes while testing nothing, and a count computed from the generator cannot police the generator. Assert the tables visit every member of the frozen vocabularies from step 1 BY NAME, so a member added later without a case fails the count rather than being skipped in silence. Every refusal assertion pins the exact stable code AND the refusing layer, not merely that a record was rejected.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-records.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-sweeps.test.ts",
+        "apps/control-room/src/performance/effort-admission.ts",
+        "apps/control-room/src/performance/effort-admission.test.ts"
+      ],
+      "note": "effort-sweeps.test.ts: four case tables, each with a hand-written exact length asserted BEFORE iteration, each compared member-by-name against its frozen vocabulary. 79 passed (79); tsc exit 0.\n\nTABLES: DECISION_CASES length 4, expected kinds sorted === DECISION_KINDS (covers the derived ADDITIONAL arm, asserted at decisions()[1] after two demands on one command). INTERVAL_CASES length 5, states sorted === INTERVAL_STATES (CLOSED, CONTRADICTORY, OPEN, OVERLAPPING, UNTERMINATED), each refusing state pinning reasonCode AND layer CONTROL_ROOM_EFFORT_COLLECTOR. REFUSAL_CASES length 7, codes sorted === EFFORT_UNKNOWN_CODES, so a code that can never fire from the production surface fails the comparison; a separate assertion pins the layer set === EFFORT_LAYERS, so both refusing layers are visited by name. RECORD_TYPE_CASES length 7, admitted types sorted === EFFORT_RECORD_TYPES. Plus EFFORT_SOURCES (4) and RECOVERY_BURDENS (4) admitted member by member, and INTERVAL_KINDS (2) tracked separately. Every loop also increments a counter asserted against the literal, so a table that iterated zero times cannot pass.\n\nONE PRODUCTION CHANGE, for consistency: hasUnknownKey now ignores a key whose value is undefined, matching the isAbsent rule every other field already follows — a key stating undefined supplies nothing to honour. A key carrying a VALUE (durationMs: 900, count: 3, burden on a free interaction) is still refused with EFFORT_OBSERVATION_UNPARSEABLE, and both directions are pinned by test.\n\nOrdering fact found while building the tables and left as designed: the unknown-key sweep runs before the type-specific contradiction check, so a DEMANDED_DECISION payload that also carries a foreign key is UNPARSEABLE rather than CONTRADICTORY. The contradictory-demand case now sends a clean payload, so it exercises the guard DoD-2 depends on rather than the key sweep in front of it.",
+      "startedAt": "2026-08-15T13:00:20.958Z",
+      "completedAt": "2026-08-15T13:02:06.989Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the mutation drills against the PRODUCTION surface. [1] DECISION-COMMAND ATTRIBUTION, which DoD-5 names explicitly: weaken the guard so an observation with no command identity is attached to the most recent command instead of being recorded unattributed; the attribution test must go red on the unattributed assertion. [2] Make an unterminated interval close at read time instead of resolving UNKNOWN; the interval-state test must go red on its exact code, not merely on a differing duration. [3] Make the collector treat the absence of a focus interval as an away interval; the non-inference test must go red. For each drill: confirm it actually applied by printing the replaced line range and chaining with && - a drill that applied nothing reads as green; read the failure MESSAGE rather than the count, because over-reddening indicates a broken environment rather than a strong test; restore with Edit and NOT git checkout, which reverts to HEAD and destroys uncommitted work; and hash-check back to the pre-drill bytes before the next drill.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-intervals.ts"
+      ],
+      "note": "Three mutation drills against the PRODUCTION surface. Pre-drill sha256 recorded for both mutated files; each drill confirmed applied by grepping the inserted line and printing its line number; each restored with Edit (never git checkout) and hash-checked back to pre-drill bytes before the next drill. Post-drill: 79 passed (79), sha256 -c OK on both files, no drill artefact on disk.\n\n[1] ATTRIBUTION (DoD-5's named drill). effort-collector.ts:85-87 — deriveDecision weakened so an UNATTRIBUTED demand takes the most recent command identity instead. RED, exactly 1 failure, on the named test \"leaves an unattributed demand unattributed, never on the most recent command\": \"AssertionError: expected 'cmd-a' to be 'UNATTRIBUTED'\". Reddened on the unattributed assertion itself, not on a neighbouring count.\n\n[2] UNTERMINATED CLOSES AT READ TIME. effort-intervals.ts:175 — sealOpen closes the pending interval at its own openedAt instead of resolving UNRESOLVED. RED on 6 tests, each on the STATE or CODE assertion rather than on a differing duration: sweeps \"case UNTERMINATED: expected 'CLOSED' to be 'UNTERMINATED'\"; REFUSAL_CASES \"Error: expected an unresolved interval outcome\" (the EFFORT_INTERVAL_UNTERMINATED case); non-inference \"expected 'CLOSED' to be 'UNTERMINATED'\"; collector \"never closes an unterminated interval at read time\". 73 unrelated tests stayed green, so this is a strong drill and not a broken environment.\n\n[3] AWAY FROM THE ABSENCE OF FOCUS. effort-intervals.ts:189 — sealOpen synthesises a CLOSED AWAY interval spanning the gap between two closed FOCUS intervals when no AWAY was observed. RED, exactly 1 failure, on \"does not produce an away interval from the absence of a focus interval\": \"expected [ 'FOCUS', 'FOCUS', 'AWAY' ] to deeply equal [ 'FOCUS', 'FOCUS' ]\".\n\nAll three guards are live: each mutation is individually plausible as a feature and each is caught by a named test on the assertion that names the rule.",
+      "startedAt": "2026-08-15T13:02:09.407Z",
+      "completedAt": "2026-08-15T13:03:33.430Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification gate then adversarial self-review; load the adversarial-self-review skill. Run on FRESH output pasted into complete_task: pnpm --filter @moe/control-room test && pnpm typecheck. Read every summary line, not the final exit code. Note that root `pnpm test` SKIPS apps/**, so the filtered control-room leg is the only one that actually gates this work. Then review as an attacker: (1) Is there ANY path where one observation is derived from another - re-read every construction site, since this is the rail most likely to be violated by a convenience helper added late? (2) Can a record exist without provenance or reach storage with a defaulted source? (3) Does the collector read any clock, Date, or random source of its own? (4) Does an unterminated or overlapping interval ever resolve to a number rather than UNKNOWN? (5) Does anything here produce a score, threshold or verdict - the rail says observational only, granting no authority? (6) Confirm both new production sources are at or under 250 physical lines with `grep -c ''` (PowerShell Measure-Object -Line undercounts). Record parent task-1eeb2dccce204671b442704cd60b38ad as the named consumer for the global consumer-edge rail. Then git status --porcelain, confirm no drill file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-collector.ts"
+      ],
+      "startedAt": "2026-08-15T13:03:38.259Z"
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-86bbe9fd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,5 +169,42 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:44.795Z",
-  "updatedAt": "2026-08-14T10:43:55.833Z"
+  "updatedAt": "2026-08-15T13:03:38.259Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T12:40:23.627Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 7
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:42:48.961Z",
+  "planningNotes": {
+    "approachesConsidered": "OWN CODE FAMILY vs REUSING TIMING_*. The task rail says to follow the existing timing.ts UNKNOWN vocabulary 'rather than inventing a parallel one', which can be read as literally reusing TIMING_* codes. REJECTED on that literal reading: an unterminated focus interval is not a timing fact, and borrowing TIMING_SOURCE_ABSENT for it would make two genuinely different facts indistinguishable at every consumer - the precise defect the epic's reason-code rail exists to prevent. CHOSEN: mirror the SHAPE and discipline exactly ({code, layer}, frozen, no translation table, absent-checked-before-unparseable) under an EFFORT layer with EFFORT-specific codes. Flagged for QA as the one place this plan reads a rail as being about form rather than about the literal identifiers.\n\nINTERVAL CLOSURE. Auto-closing an open focus interval when the next one opens is the obvious implementation and is REJECTED: it is inference dressed as bookkeeping, it silently manufactures a duration that was never observed, and it makes the unterminated state unreachable so DoD-3's UNKNOWN requirement could never fire. Unterminated resolves to UNKNOWN and stays there.\n\nATTRIBUTION FALLBACK. Attaching an observation with no command identity to the most recent command is the natural convenience and is REJECTED for the same reason - it is a guess that becomes indistinguishable from a measurement one layer later. Unattributed is recorded as unattributed. This is exactly what the DoD-5 mutation drill targets.\n\nADDITIONAL-DEMAND DERIVATION. Taking an 'isAdditional' flag or an ordinal from the caller was rejected: a caller able to declare 'this is the first decision' can hide every later one, which defeats DoD-2. It is derived from the observed sequence of demands.\n\nTWO MODULES, NOT ONE OR THREE. The task rail asks for a record vocabulary plus a collector, and that split is real: the vocabulary is pure data admission (mirroring wire-timing's shaping functions) while the collector holds the interval state machine. Four owned paths leaves genuine slack under the caps - the first task today with room to spare - so if the collector approaches 250 lines the interval machine can be split out without pressure.\n\nNO SURFACE WIRING. This slice deliberately lands no live call site: slice 2 owns the live consumer edge and the parent owns integration. Clause 1 is satisfied by NAMING the consumer (parent task-1eeb2dcc), which the rail permits.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e. I authored this task when splitting parent task-1eeb2dcc, so its description is MY earlier snapshot and not independent evidence - everything below is a fresh reading.\n\nTHE DOMAIN IS STILL ABSENT. grep -rl for attentionSwitch|focusInterval|decisionEffort|DecisionEffort|recoveryBurden|awayInterval across apps and packages returns ZERO files, against a positive control of identical shape (TimingUnknownCode -> timing.ts, wire-timing.ts). So nothing is being duplicated and the absence is real rather than a mistyped query.\n\nTHE SIBLING SLICE HAS ALREADY LANDED - this materially changes the plan I would have written yesterday. task-371c80bd (slice 2) is committed and `git status --porcelain -- apps/control-room packages/control-room-client` is CLEAN, so there is NO in-flight collision in this package and no need to plan around a peer's uncommitted edits.\n\nWHAT SLICE 2 LEFT BEHIND, and what this task must mirror rather than re-invent:\n- timing.ts now carries a SIX-member TIMING_UNKNOWN_CODES: TIMING_CLOCK_MISMATCH, TIMING_CLOCK_UNAVAILABLE, TIMING_NEGATIVE_INTERVAL, TIMING_SOURCE_ABSENT, TIMING_SOURCE_UNPARSEABLE, TIMING_UPSTREAM_UNKNOWN.\n- timing.ts:87 TimingUpstreamRefusal {code, layer} with an explicit comment that there is deliberately NO translation table, because mapping another layer's code onto ours puts our guess where their answer belongs.\n- NEW module wire-timing.ts (224 lines) establishes the shaping convention this task should copy: WireRefusedReading {code, known:false, layer}; shapeWireValue / shapeWireObservation take `unknown`, read each field once, return a FROZEN value or null; and the header states that an observation missing its clock or observer is not a weaker observation but a refusal.\n\nCONSEQUENCE: timing.ts and wire-timing.ts are OWNED BY THE SIBLING AND COMMITTED. This task must not edit either. Its own rail says to follow the timing.ts UNKNOWN and observer-binding discipline rather than invent a parallel one, and following it means copying the SHAPE, not the file.\n\nPACKAGE FACTS: apps/control-room package.json `test` is a bare `vitest run` and `typecheck` is `tsc --project tsconfig.json`. The performance directory now holds command-latency, timing, wire-timing and their tests - this task adds two production modules beside them.",
+    "risks": "NON-INFERENCE IS THE RAIL MOST LIKELY TO BE VIOLATED, and every violation looks like a feature. Deriving an away interval from a gap, an attention switch from two adjacent focus intervals, or a burden from a count of recovery actions each reads as a sensible convenience and each destroys the domain's only claim - that it records what a human ACTUALLY did rather than what probably happened. Step 5 pins one test per forbidden derivation because a single prose rail will not survive a later refactor.\n\nAN UNTERMINATED INTERVAL IS THE EASIEST THING TO 'FIX'. Closing it at read time makes tests tidy and durations non-null, and it makes the UNKNOWN state unreachable so DoD-3 can never fire. The step-7 drill exists for this specifically.\n\nDO NOT EDIT timing.ts OR wire-timing.ts. They are committed and owned by the sibling slice. Importing their types is fine; extending their code families is not, and doing so would also put this task into a file another task is accountable for.\n\nA REFUSAL TEST CAN BE ANSWERED BY THE WRONG LAYER. Record admission, interval resolution and attribution can each refuse. An assertion that only checks 'rejected' stays green once a different guard starts answering first, so every refusal assertion pins the code AND the layer.\n\nROOT `pnpm test` SKIPS apps/**. The filtered control-room leg is the only one that gates this work; a green root run means nothing here.\n\nOBSERVATIONAL-ONLY IS A STANDING TEMPTATION IN A BENCHMARK EPIC. This module sits in an epic about benchmark evidence, and the pull toward a score, a threshold or an 'acceptable effort' judgement will be constant. The rail forbids all three; the module emits records and nothing else.\n\nSHARED WORKTREE. Peers commit continuously; HEAD moved repeatedly across this session. Re-measure before starting and commit by explicit pathspec only.",
+    "keyFiles": [
+      "apps/control-room/src/performance/timing.ts",
+      "apps/control-room/src/performance/wire-timing.ts",
+      "apps/control-room/src/performance/command-latency.tsx",
+      "apps/control-room/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-15T12:42:51.016Z",
+  "contextFetchedBy": [
+    "worker-86bbe9fd",
+    "architect-4eca9b79"
+  ],
+  "workStartedAt": "2026-08-15T12:46:07.822Z"
 }

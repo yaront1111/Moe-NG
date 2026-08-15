@@ -17,9 +17,162 @@
     "Do not grow the 249/250-line launcher lifecycle/result modules; compose through a focused wrapper and exact LF .js bridges.",
     "Tests assert exact stable reason code and refusing layer, generated case counts are non-zero, and mutation drills exercise production comparisons."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-2aea4111",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD. Create the telemetry contracts module - frozen closed vocabularies plus the UNKNOWN discipline everything else depends on. Export closed frozen arrays for terminal outcomes, infrastructure outcomes, count-coverage classes, concurrency facts, and the telemetry reason-code and layer sets, each with its derived union type, in the style the runner already uses (Object.freeze([...] as const) + (typeof X)[number]). THE LOAD-BEARING SHAPE: model a quantity as an explicit discriminated union, e.g. {known:true, value:number} | {known:false, code, layer}, so an unreadable token or step count is STRUCTURALLY incapable of being zero. DoD-1 requires unsupported or unreadable model/token/step/stop facts to remain explicit UNKNOWN with NULL quantities and never zero - a plain `number | null` invites `?? 0` at the first consumer, while a union forces the caller to branch. Model coverage as its own closed class (e.g. COMPLETE / PARTIAL / UNKNOWN) rather than inferring completeness from whether a number happens to be present. Keep this file at or under 250 physical lines; it is vocabulary, so if it grows, split the quantity/coverage types out rather than trimming the vocabularies.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/telemetry-contracts.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/telemetry/telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/telemetry-contracts.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/provider-telemetry-contracts.js",
+        "packages/runner/src/providers/telemetry/provider-telemetry.test.ts"
+      ],
+      "note": "Landed provider-telemetry-contracts.ts (208 lines) + LF .js bridge. Frozen closed vocabularies: PROVIDER_TERMINAL_OUTCOMES(6), PROVIDER_INFRASTRUCTURE_OUTCOMES(10), PROVIDER_COUNT_COVERAGE_CLASSES(3), PROVIDER_CONCURRENCY_FACTS(2), PROVIDER_TELEMETRY_CODES(15), PROVIDER_TELEMETRY_LAYERS(5). Quantity modelled as discriminated union {known:true,value}|{known:false,code,layer} so an unreadable count is structurally incapable of being zero; readCount is the single choke point where a `?? 0` would have lived. Coverage is its own closed class, never inferred from number presence. 11 focused tests pass.",
+      "startedAt": "2026-08-15T12:40:29.958Z",
+      "completedAt": "2026-08-15T12:47:38.081Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD. Add the version-pinned Claude structured-result parser. ITS INPUT IS ClaudeStreamEvidence {capturedBase64, tailBase64, byteLength, sha256, truncated, complete} carried on ClaudeLaunchObservation.stdout (claude-launcher-contract.ts:130). REUSE the landed stream discipline - do NOT write a second stream parser: claude-stream.ts already pins CLAUDE_ACCEPTED_SCHEMA_VERSIONS = ['claude-stream-json/1'], ClaudeStreamEvent carries `schemaVersion: string | null`, and claude-stream-anomalies.ts exports frameStream, analyzeStream, ParsedStreamLine, FramedStream, StreamAnalysis, MAX_FRAMED_LINES, CLAUDE_STREAM_ANOMALIES and CLAUDE_STREAM_DISPOSITIONS. Frame and admit through those, so an unknown schema version fails closed via the EXISTING admission rather than a second one that could disagree with it. On top of that, extract observed model/snapshot/build evidence, token and step observations, and the stop/infra outcome, and bind providerRunRef, a parser version constant, a sequence, and the raw receipt digest (reuse evidence.sha256 rather than re-hashing). THE DECISIVE RULE: if evidence.truncated is true or evidence.complete is false, every count is UNKNOWN - never a partial sum, because a partial sum is indistinguishable from a real total at every later layer. Malformed, duplicate, reordered, truncated or unknown-schema bytes fail closed with the exact code AND layer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/claude-result-parser.ts",
+        "packages/runner/src/providers/telemetry/claude-result-parser.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/telemetry/claude-result-parser.ts",
+        "packages/runner/src/providers/telemetry/claude-result-parser.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/claude-result-telemetry.ts",
+        "packages/runner/src/providers/telemetry/claude-result-telemetry.js",
+        "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/provider-telemetry.test.ts"
+      ],
+      "note": "Landed claude-result-telemetry.ts (248 lines) + LF bridge. Frames/admits through the LANDED discipline only (frameStream, analyzeStream, CLAUDE_ACCEPTED_SCHEMA_VERSIONS) - no second admission path. Binds providerRunRef, parserVersion, terminal-record sequence, observed model + snapshot/build evidence read out of the provider's own init record, exact token/step observations, and rawReceiptDigest reused verbatim from evidence.sha256. Decisive rule enforced in decodeCapture: complete!==true -> TELEMETRY_CAPTURE_INCOMPLETE, truncated!==false -> TELEMETRY_CAPTURE_TRUNCATED, both at layer TELEMETRY_CAPTURE, before any framing - a partial sum is unreachable. CLAUDE_TELEMETRY_ANOMALY_REFUSALS maps all 8 landed anomalies to exact code+layer in landed precedence. Moved PROVIDER_TELEMETRY_MESSAGES/telemetryRefusal into contracts (now 248 lines) to keep both files at/under 250. 17 tests pass; typecheck exit 0.",
+      "startedAt": "2026-08-15T12:47:40.406Z",
+      "completedAt": "2026-08-15T12:51:34.914Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD. Add the launchClaudeWithTelemetry wrapper. It calls the REAL launchClaude (claude-launcher.ts:117, `launchClaude(value: unknown, options: ClaudeLaunchOptions): Promise<ClaudeLaunchResult>`) - not a re-implementation and not a stub - and returns a frozen raw handoff. ClaudeLaunchResult is a three-arm union (ClaudeLaunchFailure | ClaudeLaunchDuplicate | ClaudeLaunchObserved); only the OBSERVED arm carries an observation, so the REFUSED and ADOPTED/EXIT_BEFORE_LAUNCH arms must produce a handoff whose facts are UNKNOWN with their exact code/layer forwarded verbatim, never a zero-filled record. From ClaudeLaunchObserved.observation bind: effectDigest, activationDigest, runtimeBindingDigest, pinnedClosureDigest, quotedRuntimeDigest, freshRuntimeDigest, startedAt, completedAt, exit, truthClass, reasonCode, reasonLayer and observationDigest - every one of these already exists on that interface, so bind them, do not recompute them. THE RULE DoD-3 EXISTS FOR: carry the DECLARED ClaudeLaunchSelection and the parser's OBSERVED evidence as SEPARATE fields that are never merged, never defaulted from one another, and never unified into one 'model' field. The same applies to concurrency: ClaudeLaunchSelection.concurrencyCeiling is DECLARED, and an achieved figure may only come from observation. Do not grow claude-launcher-lifecycle.ts (249 lines) or claude-launcher-port-results.ts (250) - compose from outside, per task rail 3.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.js"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.js",
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts"
+      ],
+      "note": "Landed claude-telemetry-launch.ts (248 lines) + LF bridge. Calls the REAL launchClaude; the OBSERVED arm's launch facts are proven BOUND (not recomputed) by a control that runs the same production launcher with fresh ports and compares the whole launch record field-by-field against ClaudeLaunchObserved.observation. Declared vs observed are separate fields: `declared` reads launchSelection through the launcher's own snapshotLaunchSelection behind isHostileObject and a data-descriptor-only read; `observedModel` comes only from the parser. concurrency = {fact, declaredCeiling (from the SELECTION), achieved (always TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED/TELEMETRY_SCHEMA)} - no branch exists that turns one into the other. REFUSED and ADOPTED/EXIT_BEFORE_LAUNCH arms produce all-UNKNOWN facts with the launcher's own code/layer forwarded verbatim (REFUSED arm asserted at CLAUDE_LAUNCH_MODEL_MISMATCH/TELEMETRY_CONFIGURATION; duplicate arm's null code/layer forwarded as null, not invented). Malformed run ref refuses BEFORE the launch - proven by an empty port log. claude-launcher-lifecycle.ts still 249 and claude-launcher-port-results.ts still 250; git status over providers/claude is clean. 23 tests pass; typecheck exit 0.",
+      "startedAt": "2026-08-15T12:51:37.731Z",
+      "completedAt": "2026-08-15T12:56:45.399Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Publish the curated telemetry seam. Add a grouped, doc-commented export block to packages/runner/src/surface/claude-surface.ts (141 lines, ample headroom) rather than creating a fifth surface module - the task's owned paths call for 'minimal Claude telemetry wrapper/surface wiring', and index.ts already star-exports that surface, so no index.ts edit is needed. Publish launchClaudeWithTelemetry, the parser entry point, the frozen vocabularies and the directly named type closure; WITHHOLD internal helpers, and say in the comment what is withheld and why, matching the file's existing discipline. COLLISION CHECK IS MANDATORY BEFORE WRITING: this package composes its root from several `export *` surfaces, and a name exported by two star paths is silently EXCLUDED by ESM rather than erroring - it does not fail the typecheck, it just vanishes from the namespace. Intersect every name you are about to publish against the names the four existing surface modules already publish, and alias anything that collides. Watch specifically for generic words like a bare `TelemetryLayer` or `ParserVersion`. Then update the hand-written EXPECTED_EXPORTS list and its exact count literal in index-surface.test.ts, counting the entries you added by hand rather than computing them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/surface/claude-surface.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/claude-surface.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "Published the telemetry seam as a grouped doc-commented block in surface/claude-surface.ts (141 -> 212 lines); no fifth surface module, no index.ts edit needed. COLLISION CHECK RAN BEFORE WRITING: intersected all 40 names (17 values + 23 types) against the 298 names the five surface modules already export and against the 199 root values - zero collisions, with a positive control proving the check works (launchClaude IS found in the surface-name set). EXPECTED_EXPORTS extended by 17 hand-counted entries and its literal moved 199 -> 216; the namespace equality test passes, so nothing vanished to an ambiguous star export. The 23 type-only names are imported through the bare @moe/runner specifier and each is load-bearing in two new root tests (a real parseClaudeResultTelemetry call and a real launchClaudeWithTelemetry call on the REFUSED arm) - noUnusedLocals is on, so an unreachable type fails the typecheck. WITHHELD, documented in the block comment: knownCount, readCount, readText, countCoverage, unknownFact, telemetryRefusal, snapshotRunRef, PROVIDER_TELEMETRY_MESSAGES - every one MINTS a fact, so a consumer holding them could hand a normalizer a provider-observed measurement no provider emitted. runtime-entrypoint.test.ts needed NO edit: its readdir-driven bridge sweep already enforced the three new .js bridges and passes. 266 tests pass; typecheck exit 0.",
+      "startedAt": "2026-08-15T12:56:47.608Z",
+      "completedAt": "2026-08-15T12:59:57.727Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD. Sweep every declared arm with EXACT NON-ZERO cardinality, per DoD-4. Build case tables covering every terminal outcome, every infrastructure outcome, and every count-coverage class from step 1, and assert each table's exact length with a hand-written literal before iterating - a sweep that silently generates zero cases passes while testing nothing, and a count derived from the generator cannot police the generator. Assert that the sweep visits every member of each frozen vocabulary by name, so a future member added without a case fails the count rather than being silently skipped. Every refusal case pins the exact stable reason code AND the refusing layer: the parser, the launcher and the stream admission can each refuse here, so an assertion that only checks 'not ok' stays green once a different layer starts answering first.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/telemetry.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/telemetry/telemetry.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts",
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts"
+      ],
+      "note": "DoD-4 sweeps landed, all driven END TO END through the real launchClaude. TERMINAL_CASES 6, INFRASTRUCTURE_CASES 10, COVERAGE_CASES 3, REFUSAL_CASES 6 - each table asserts its own hand-written length AND toEqual against the frozen vocabulary by name and in order, so a member added later without a case fails the membership assertion rather than being skipped. Verbose run confirms 25 distinct arm tests actually executed (named per member). Arms use only production machinery: the observeProcess PORT is scripted with the production intakeProcessObservation to reach PROCESS_SIGNALLED/EXIT_UNOBSERVED, the launcher's own stdoutBytes bound produces CAPTURE_TRUNCATED, a scripted stream failure produces CAPTURE_INCOMPLETE. STRENGTHENED PRODUCTION: infrastructureOf now takes the launcher's truthClass and only reports NONE when the launcher PROVED the run - a failed stderr capture with a perfectly parsing stdout now reports UNKNOWN instead of NONE, which is also what makes the 10th member reachable honestly rather than by a dead default. Refusal cases pin exact code AND layer across all three refusing layers (TELEMETRY_CAPTURE, TELEMETRY_SCHEMA, TELEMETRY_LAUNCH) and assert every count carries the SAME refusal. Wrapper still 249 lines. 52 tests pass; typecheck exit 0.",
+      "startedAt": "2026-08-15T13:00:00.057Z",
+      "completedAt": "2026-08-15T13:03:27.635Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "TDD. Pin the two zero-invention rules explicitly, because they are the ones a plausible implementation gets wrong. (a) NEVER-ZERO: for a truncated capture, an incomplete capture, a result carrying no usage block, and an unknown schema version, assert the token and step quantities come back UNKNOWN with their exact code and layer - and assert they are NOT the number 0, directly, so a future `?? 0` fails here rather than in a consumer. (b) DECLARED IS NOT OBSERVED: construct a run whose declared ClaudeLaunchSelection names one model and whose stream bytes report a DIFFERENT model, and assert the handoff reports both separately and does not overwrite, reconcile or silently prefer either. Then construct a run whose stream reports NO model and assert the observed model is UNKNOWN while the declared selection is still present and unchanged - the failure this guards is echoing the declared model back as if the provider had observed it. Do the same for concurrencyCeiling (declared) versus any achieved figure (observed). Per task rail 1, also assert that an alias, a settings default, a missing result usage block and a placeholder assistant count never yield a provider-observed COMPLETE fact.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/telemetry.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts"
+      ],
+      "note": "Both zero-invention rules pinned on the production wrapper. (a) NEVER-ZERO: a 4-case table (truncated capture, incomplete capture, unknown schema, no terminal result) asserts every token AND step quantity is UNKNOWN with its exact code/layer, asserts `not.toBe(0)` and `not.toEqual({known:true,value:0})` directly, and asserts JSON.stringify of tokens+steps contains no `\"value\"` at all - so a future `?? 0` fails here rather than in a consumer. Additional cases: a truncated capture whose visible prefix WOULD sum to 11 asserts the string 11 never appears; a result with num_turns but no usage keeps tokens UNKNOWN while steps stay observed (the two axes are independent); a placeholder assistant record carrying usage 999 is never borrowed as the run total. (b) DECLARED IS NOT OBSERVED: declared claude-opus-5-20260514 vs stream-reported claude-sonnet-5-20260101 are reported side by side with snapshot evidence 20260101 taken from the OBSERVED id; a stream naming no model leaves observed UNKNOWN and explicitly asserts it is NOT {known:true,value:SELECTED_MODEL}; an alias claude-opus-latest yields snapshotKind UNKNOWN while the declared side stays DATED_SNAPSHOT; declared ceiling 4 pairs with an achieved figure asserted NOT to equal 4 and never known. Final leak check: observedModel has EXACTLY [modelId, snapshotEvidence, snapshotKind], and the serialized observed side contains none of the declared model, effort, profile revision, snapshot evidence or configuration digest. Two initial failures were fixture defects (duplicate seq tripping the real DUPLICATE_EVENT admission) - production was correct and refused; fixtures fixed. 65 tests pass; typecheck exit 0.",
+      "startedAt": "2026-08-15T13:03:30.189Z",
+      "completedAt": "2026-08-15T13:05:48.097Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the mutation drills DoD-4 requires, against the PRODUCTION surface rather than a test helper. [1] MODEL/EFFORT IDENTITY: make the wrapper fall back to the declared selection's selectedModelId when the observed model is absent; the declared-is-not-observed test must go red on the observed-model assertion. [2] TOKEN/STEP COVERAGE: make the parser emit a partial sum for a truncated capture instead of UNKNOWN; the never-zero/coverage test must go red on the coverage class, not merely on a differing number. [3] Make an unknown schemaVersion pass admission; the schema refusal case must go red on its exact code. For each drill: confirm it actually applied (print the replaced line range and chain with &&, because a drill that applied nothing reads as green); read the failure MESSAGE rather than the count, since over-reddening means a broken environment rather than a strong test; restore with Edit and NOT git checkout, which reverts to HEAD and destroys uncommitted work; and hash-check back to the pre-drill bytes before starting the next drill.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/claude-result-parser.ts",
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
+        "packages/runner/src/providers/telemetry/telemetry.test.ts"
+      ],
+      "startedAt": "2026-08-15T13:05:50.460Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Satisfy DoD-5's root-load and leakage half. FIRST CHECK whether runtime-entrypoint.test.ts already covers the new modules without being edited: its bridge sweep is readdir-driven and asserts {missing, unexpected, wrongContent} are all empty for every runtime module, so the three new .js bridges are enforced automatically the moment the .ts files land - if that sweep passes, do NOT edit the file and this task stays at nine owned paths. Each bridge must be EXACTLY `export * from \"./<name>.ts\";` with a single trailing LF: the sweep compares bridge bytes via utf8, so a CRLF bridge fails as `wrongContent` while `git diff --stat` shows nothing at all. Extend the plain-Node child-process probe to import the bare @moe/runner specifier and read launchClaudeWithTelemetry only if the existing probe does not already reach it, and make any failure branch report `code` and `specifier` - a bare `typeof x === \"function\"` check reddens with `undefined` and never names the missing bridge. Add the no-leakage assertion in index-surface.test.ts: a withheld-names list with a hand-written exact count, PLUS a positive control running the identical membership check over names the seam does publish, so the negative assertion cannot pass because the check itself is broken.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/runtime-entrypoint.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Verification gate on FRESH output pasted into complete_task, never a remembered or paraphrased result: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test. Read EVERY summary line rather than the final exit code, since a multi-leg run can exit 0 while one leg is red. Record task-159f4c21ef9149e8a65f24735c9c1475 and task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the named consumers - DoD-5 requires it, and it is also how this task satisfies the global consumer-edge rail by naming rather than by landing an edge, which task rail 2 would otherwise forbid. Apply the path-attributed baseline rail for any repo-wide red: record failures at the merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines and paths. Peers are committing to this package concurrently, so expect foreign movement.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/telemetry.test.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "Adversarial self-review before complete_task; load the adversarial-self-review skill. (1) Grep the new modules for `?? 0`, `|| 0`, `Number(`, and any default that could turn an absent measurement into a quantity - DoD-1's never-zero rule is the single most likely thing to be violated by an innocuous-looking fallback. (2) Is there ANY path where a declared selection field reaches a provider-observed field? Trace selectedModelId, reasoningEffort and concurrencyCeiling forward and confirm each lands only in a declared-side field. (3) Does the REFUSED arm and the ADOPTED/EXIT_BEFORE_LAUNCH arm of ClaudeLaunchResult produce UNKNOWN facts with the launcher's own code/layer forwarded verbatim, rather than a zero-filled or partially-populated record? (4) Did anything import @moe/scheduler or copy its coverage authority - task rail 2 forbids it; grep the diff. (5) Did claude-launcher-lifecycle.ts (249) or claude-launcher-port-results.ts (250) grow by even one line? (6) Confirm every new production source is at or under 250 physical lines using `grep -c ''` - PowerShell Measure-Object -Line undercounts. (7) Re-run the step-4 name-collision intersection against the FINAL root and confirm it is empty. Then git status --porcelain, confirm no drill or scratch file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/telemetry/telemetry-contracts.ts",
+        "packages/runner/src/providers/telemetry/claude-result-parser.ts",
+        "packages/runner/src/providers/telemetry/launch-with-telemetry.ts",
+        "packages/runner/src/surface/claude-surface.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-06df66bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -38,11 +191,50 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:09.437Z",
-  "updatedAt": "2026-08-15T11:08:28.392Z",
+  "updatedAt": "2026-08-15T13:05:50.460Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T11:08:23.604Z"
+    "firstClaimAt": "2026-08-15T11:08:23.604Z",
+    "plannedStepCount": 10,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
-    "architect-2aea4111"
-  ]
+    "architect-2aea4111",
+    "worker-06df66bb",
+    "architect-4eca9b79"
+  ],
+  "planSizeWarnings": [
+    "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:39:51.650Z",
+  "planningNotes": {
+    "approachesConsidered": "QUANTITY SHAPE - the decision that makes DoD-1 enforceable instead of aspirational. `number | null` was rejected: it satisfies the letter of 'null quantities, never zero' while inviting `?? 0` at the first consumer, and nothing in the type system objects. CHOSEN: a discriminated union, {known:true,value} | {known:false,code,layer}, so an unreadable count is STRUCTURALLY incapable of being read as zero and the caller is forced to branch. Coverage is a separate closed class rather than something inferred from whether a number happens to be present - inferring it would recreate the same ambiguity one layer up.\n\nWHERE THE TELEMETRY SEAM IS PUBLISHED. A fifth surface module (surface/telemetry-surface.ts + bridge) was rejected on file budget: with three new modules each needing a .js bridge, the plan is already at nine owned paths, and a new surface module plus bridge would push it to eleven and hard-reject. CHOSEN: a grouped block inside the existing claude-surface.ts, which is 141 lines and already star-exported from index.ts, so no index.ts edit is needed either. This also matches the owned-paths phrase 'minimal Claude telemetry wrapper/surface wiring'.\n\nPARSER REUSE vs A SECOND PARSER. Writing standalone stream-json parsing inside the telemetry module would have been simpler to read in isolation, but it would create a SECOND schema-admission path that can disagree with claude-stream.ts's CLAUDE_ACCEPTED_SCHEMA_VERSIONS. Two admission paths that disagree is strictly worse than one, because the losing path becomes a silent bypass. CHOSEN: frame and admit through the landed frameStream/analyzeStream/schemaVersion discipline and layer only the token/step/model extraction on top.\n\nruntime-entrypoint.test.ts IS CONDITIONAL, not assumed. Its bridge sweep is readdir-driven and asserts {missing, unexpected, wrongContent} empty across runtime modules, so three new bridges are enforced without editing it. Step 8 checks first and only edits if the existing probe does not reach the new surface - which is also what keeps the plan at nine paths with one slot of slack.\n\nNOT SPLIT. 10 steps and 10 owned paths sit inside the hard thresholds (>12 steps / >10 files reject). Splitting contracts from parser from wrapper was considered and rejected: the wrapper is the only consumer of the parser and the parser is the only consumer of the contracts, so a split would land two modules with nothing calling them and force the consumer-edge rail to be satisfied three times over.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e, as the governor's promotion reason demanded.\n\nABSENCE CONFIRMED AND CORRECTLY SCOPED: packages/runner/src/providers/telemetry/ does not exist (`ls` -> No such file or directory), against a positive control of identical shape - packages/runner/src/providers/ returns `claude` and `codex`. So the absence is real, not a mistyped path, and it is this task's deliverable rather than a missing precondition.\n\nTHE PARSER'S INPUT ALREADY EXISTS AND IS RICH. ClaudeLaunchObservation (claude-launcher-contract.ts:116-139) carries stdout and stderr as ClaudeStreamEvidence {capturedBase64, tailBase64, byteLength, sha256, truncated, complete} (:104), plus exit (ClaudeLaunchExit: EXITED|SIGNALLED|UNOBSERVED, :112), startedAt, completedAt, truthClass, reasonCode, reasonLayer, observationDigest, and the full digest set - effectDigest, activationDigest, runtimeBindingDigest, quotedRuntimeDigest, freshRuntimeDigest, pinnedClosureDigest. The wrapper BINDS these; it must not recompute any of them. `sha256` on the evidence is the raw receipt digest DoD-2 asks for - do not re-hash.\n\nlaunchClaude is at claude-launcher.ts:117 with signature `(value: unknown, options: ClaudeLaunchOptions = {}) => Promise<ClaudeLaunchResult>`. ClaudeLaunchResult is a THREE-arm union (:167): ClaudeLaunchFailure {kind:'REFUSED', code, layer, message}, ClaudeLaunchDuplicate {kind:'ADOPTED'|'EXIT_BEFORE_LAUNCH', launched:false}, and ClaudeLaunchObserved {kind:'OBSERVED', observation}. Only the OBSERVED arm has an observation, so the other two arms are the ones most likely to be filled with zeros by accident.\n\nSTREAM ADMISSION IS ALREADY SOLVED - DO NOT DUPLICATE IT. claude-stream.ts pins CLAUDE_ACCEPTED_SCHEMA_VERSIONS = ['claude-stream-json/1'], CLAUDE_STREAM_RECORD_VERSION, CLAUDE_STREAM_ERROR_CODES, ClaudeStreamEvent {schemaVersion: string|null} and recordClaudeStream. claude-stream-anomalies.ts exports frameStream, analyzeStream, ParsedStreamLine, FramedStream, StreamAnalysis, MAX_FRAMED_LINES, CLAUDE_STREAM_ANOMALIES, CLAUDE_STREAM_DISPOSITIONS. A second schema-admission path could disagree with this one, which is worse than none.\n\nTOKEN/USAGE PARSING GENUINELY DOES NOT EXIST: grep -rl 'input_tokens|output_tokens|usage' over packages/runner/src excluding tests returned ZERO files. That is the real new work. Re-verify with a positive control before relying on it, since a zero result on a word as common as 'usage' deserves one.\n\nDECLARED SELECTION SURFACE (the dependency): ClaudeLaunchSelection is at claude-launch-selection.ts:93 with provider, selectedModelId, modelSnapshotKind, modelSnapshotEvidence, reasoningEffort, profileRevisionId, configurationDigest, policyDigest, orchestrationDigest and concurrencyCeiling. It is PUBLISHED as a type at surface/claude-surface.ts:122. NOTE concurrencyCeiling lives on the SELECTION - it is a DECLARED figure, and DoD-3's 'achieved/ceiling concurrency' therefore pairs a declared ceiling with an observed achieved value.\n\nSIZES: claude-launcher-port-results.ts 250 and claude-launcher-lifecycle.ts 249 - these are exactly the modules task rail 3 forbids growing. claude-launcher.ts 223, claude-launcher-contract.ts 237, surface/claude-surface.ts 141 (ample headroom for the telemetry export block).",
+    "risks": "THE NEVER-ZERO RULE DIES TO AN INNOCUOUS FALLBACK. A single `?? 0`, `|| 0` or `Number(x)` on an absent usage field satisfies the typechecker, passes a green suite, and silently converts 'we could not measure' into 'we measured nothing happened'. That is the exact defect DoD-1 exists to prevent, the union shape in step 1 is the structural defence, and step 10 greps for it explicitly. The highest-risk trigger is a TRUNCATED capture: summing the lines that did arrive produces a plausible total that is wrong and unfalsifiable downstream.\n\nDECLARED-AS-OBSERVED IS THE OTHER HALF, AND IT LOOKS LIKE A KINDNESS. Falling back to the declared selectedModelId when the stream reports no model reads as helpful defaulting and is precisely what DoD-3 forbids: it manufactures provider-observed evidence out of a caller's request. The same trap applies to concurrencyCeiling, which sits on the SELECTION and is therefore declared, never achieved.\n\nTHE NON-OBSERVED RESULT ARMS. ClaudeLaunchResult's REFUSED and ADOPTED/EXIT_BEFORE_LAUNCH arms carry no observation at all. A wrapper written against the happy path will zero-fill them. They must forward the launcher's own code and layer verbatim and mark every fact UNKNOWN.\n\nSILENT STAR-EXPORT COLLISION. @moe/runner composes its root from several `export *` surfaces. A name published by two of them is EXCLUDED by ESM rather than erroring - no compile failure, the name simply disappears from the namespace, and only the Object.keys equality guard in index-surface.test.ts catches it for VALUES. Type-only collisions have no runtime signal at all. Intersect before publishing; generic names like TelemetryLayer are the likely offenders.\n\nCRLF BRIDGE IS INVISIBLE IN A DIFF. runtime-entrypoint.test.ts compares bridge bytes via utf8, so a CRLF bridge fails as `wrongContent` while `git diff --stat` shows nothing. Easy to produce accidentally on Windows.\n\nZERO SLACK AT TEN PATHS. If a fourth production module proves necessary, its .js bridge takes the plan to eleven and it hard-rejects. Fold extra vocabulary into telemetry-contracts.ts instead, and keep step 8's runtime-entrypoint edit conditional.\n\nSHARED WORKTREE. HEAD has moved repeatedly across this session and peers are committing into packages/runner concurrently. Re-measure before starting, commit by explicit pathspec only, and expect foreign red that is not attributable to this diff.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-launcher-contract.ts",
+      "packages/runner/src/providers/claude/claude-launcher.ts",
+      "packages/runner/src/providers/claude/claude-launch-selection.ts",
+      "packages/runner/src/providers/claude/claude-stream.ts",
+      "packages/runner/src/providers/claude/claude-stream-anomalies.ts",
+      "packages/runner/src/surface/claude-surface.ts",
+      "packages/runner/src/index-surface.test.ts",
+      "packages/runner/src/runtime-entrypoint.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9000000
+  },
+  "planApprovedAt": "2026-08-15T12:39:53.704Z",
+  "workStartedAt": "2026-08-15T12:40:29.958Z"
 }

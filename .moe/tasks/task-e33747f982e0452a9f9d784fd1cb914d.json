@@ -45,12 +45,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-13T16:48:04.525Z",
+  "updatedAt": "2026-08-15T12:44:29.878Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z"
   },
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-4eca9b79"
   ],
   "blockedReason": "Fresh current-byte probes show the task is not implementable from its claimed dependencies without inventing authority. `claimWork` is the pure @moe/daemon function in apps/daemon/src/work/work-claim.ts (no durable caller), and its success currently drops reserveForAdmission's post-reservation BudgetAvailableView, drops slot dimension, accepts a caller-selected effect command, and returns providerSlot state RESERVED. The public chain `claimWork -> @moe/runner.applyEffectCommand({kind:'arm'}) -> activateEffect -> @moe/scheduler.activateReservation` reaches ACTIVE effect/RUNNING attempt/ACTIVATED budget, but repository-wide grep and a public-root probe confirm there is no production RESERVED->ACTIVE provider-slot transition; manufacturing `{...slot,state:'ACTIVE'}` in daemon would violate compose-don't-invent. Existing @moe/store can persist one aggregate atomically, but no production activation ledger maps `(aggregateId,idempotencyKey)` and grantId to its existing uniqueness/CAS surfaces. Finally daemon-store-dependencies.ts is 397 lines, so task rail requires extraction before registry growth. Created prerequisite production tasks: task-c956fd56f0d24e84a33644934982828f (slot activation authority), task-311adb23a3964146a25fa8bddf7123e9 (complete claim successor closure), task-df29871bfc2441659efb3f763ddb23db (durable activation ledger), and task-9cba79a1d75141cf8e78764f4db44fad (registry extraction). Resume only after all four are DONE and re-measure their public roots.",
   "blockedResourceId": null,

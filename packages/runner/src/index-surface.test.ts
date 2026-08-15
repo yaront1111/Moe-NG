@@ -11,6 +11,7 @@
  * derived from the namespace under test, so a removed export AND an unreviewed
  * addition both go red.
  */
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,6 +80,22 @@ import type {
   CodexStreamEvent, CodexStreamRecord, CodexTokenizerPort, ProbeCodexRuntimeOk,
   ProbeCodexRuntimeResult, ReconcileCodexRunInput, RecordCodexStreamInput,
   RecordCodexStreamResult, RenderCodexContextInput, RenderCodexContextResult,
+} from "@moe/runner";
+/**
+ * The provider-telemetry seam's type closure, through the same root. A type-only
+ * export is INVISIBLE to the namespace count above — `Object.keys` cannot see
+ * it — so naming each one here through the bare specifier is the only thing that
+ * proves it reached the root rather than being dropped as an ambiguous star
+ * export, which produces no compile error of its own.
+ */
+import type {
+  ClaudeDeclaredSelection, ClaudeObservedModel, ClaudeResultTelemetry,
+  ClaudeResultTelemetryVerdict, ClaudeStepObservations, ClaudeTelemetryConcurrency,
+  ClaudeTelemetryHandoff, ClaudeTelemetryLaunchFacts, ClaudeTelemetryLaunchInput,
+  ClaudeTelemetryLaunchResult, ClaudeTokenObservations, ParseClaudeResultTelemetryInput,
+  ProviderConcurrencyFact, ProviderCountCoverage, ProviderFactUnknown,
+  ProviderInfrastructureOutcome, ProviderQuantity, ProviderRunRef, ProviderTelemetryCode,
+  ProviderTelemetryLayer, ProviderTelemetryRefusal, ProviderTerminalOutcome, ProviderText,
 } from "@moe/runner";
 /** The recovery, evidence and Claude observation seams, through the same root. */
 import type {
@@ -282,11 +299,24 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["codexRuntimePinningIsAuthoritative", "function"], ["probeCodexRuntime", "function"],
   ["reconcileCodexRun", "function"], ["recordCodexStream", "function"],
   ["renderCodexAdvisorySkills", "function"], ["renderCodexContext", "function"],
+  // The 17 values the provider-telemetry seam publishes: 5 supported-fact
+  // tables, 1 anomaly-refusal table, 6 closed vocabularies, 3 pinned versions
+  // and the 2 entry points. Counted by hand from claude-surface.ts, never from
+  // the namespace under test.
+  ["CLAUDE_MODEL_EVIDENCE_PATTERNS", "object"], ["CLAUDE_RESULT_SUBTYPES", "object"],
+  ["CLAUDE_RESULT_TELEMETRY_VERSION", "string"], ["CLAUDE_STEP_FIELD", "string"],
+  ["CLAUDE_TELEMETRY_ANOMALY_REFUSALS", "array"], ["CLAUDE_TELEMETRY_HANDOFF_VERSION", "string"],
+  ["CLAUDE_TELEMETRY_RECORDS", "object"], ["CLAUDE_TOKEN_FIELDS", "object"],
+  ["PROVIDER_CONCURRENCY_FACTS", "array"], ["PROVIDER_COUNT_COVERAGE_CLASSES", "array"],
+  ["PROVIDER_INFRASTRUCTURE_OUTCOMES", "array"], ["PROVIDER_TELEMETRY_CODES", "array"],
+  ["PROVIDER_TELEMETRY_CONTRACT_VERSION", "string"], ["PROVIDER_TELEMETRY_LAYERS", "array"],
+  ["PROVIDER_TERMINAL_OUTCOMES", "array"], ["launchClaudeWithTelemetry", "function"],
+  ["parseClaudeResultTelemetry", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(199);
+  expect(EXPECTED_EXPORTS.length).toBe(216);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -2049,4 +2079,99 @@ it("leaves the ten Family B Codex types owned by exactly one surface module", ()
   expect(familyAUnaliased.map((name) => owningSurfaces(name))).toEqual(
     familyAUnaliased.map(() => ["claude-surface.ts", "codex-surface.ts"]),
   );
+});
+
+/**
+ * The provider-telemetry seam, exercised THROUGH THE PACKAGE ROOT. Every name
+ * below is either read off `runner` or annotated with a type imported from
+ * `@moe/runner`, so a type dropped by an ambiguous star export fails to compile
+ * here — the namespace-count test above cannot see a type-only export at all.
+ */
+const TELEMETRY_RUN_REF: ProviderRunRef = {
+  provider: "claude", runRef: "run:surface:1", effectIntentId: "intent:1",
+  attemptRef: "attempt:1", epoch: 2,
+};
+
+function telemetryEvidence(text: string): ParseClaudeResultTelemetryInput["stdout"] {
+  const bytes = Buffer.from(text, "utf8");
+  return {
+    capturedBase64: bytes.toString("base64"), tailBase64: bytes.toString("base64"),
+    byteLength: bytes.byteLength, sha256: createHash("sha256").update(bytes).digest("hex"),
+    truncated: false, complete: true,
+  };
+}
+
+it("parses a Claude structured result through the root and names its type closure", () => {
+  const input: ParseClaudeResultTelemetryInput = {
+    providerRunRef: TELEMETRY_RUN_REF,
+    stdout: telemetryEvidence(
+      `${JSON.stringify({ schemaVersion: "claude-stream-json/1", seq: 1, type: "system",
+        subtype: "init", model: "claude-opus-5-20260514" })}\n` +
+      `${JSON.stringify({ schemaVersion: "claude-stream-json/1", seq: 2, type: "result",
+        subtype: "success", num_turns: 4,
+        usage: { input_tokens: 9, output_tokens: 3, cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0 } })}\n`,
+    ),
+  };
+  const verdict: ClaudeResultTelemetryVerdict = runner.parseClaudeResultTelemetry(input);
+  if (!verdict.ok) throw new Error(`root parse refused: ${verdict.code}/${verdict.layer}`);
+  const telemetry: ClaudeResultTelemetry = verdict.telemetry;
+  const model: ClaudeObservedModel = telemetry.observedModel;
+  const tokens: ClaudeTokenObservations = telemetry.tokens;
+  const steps: ClaudeStepObservations = telemetry.steps;
+  const coverage: ProviderCountCoverage = tokens.coverage;
+  const terminal: ProviderTerminalOutcome = telemetry.terminal;
+  const infrastructure: ProviderInfrastructureOutcome = telemetry.infrastructure;
+  const sequence: ProviderQuantity = telemetry.sequence;
+  const modelId: ProviderText = model.modelId;
+
+  expect(telemetry.parserVersion).toBe(runner.CLAUDE_RESULT_TELEMETRY_VERSION);
+  expect(runner.PROVIDER_COUNT_COVERAGE_CLASSES).toContain(coverage);
+  expect(runner.PROVIDER_TERMINAL_OUTCOMES).toContain(terminal);
+  expect(runner.PROVIDER_INFRASTRUCTURE_OUTCOMES).toContain(infrastructure);
+  expect([coverage, terminal, infrastructure]).toEqual(["COMPLETE", "COMPLETED", "NONE"]);
+  expect(sequence).toEqual({ known: true, value: 2 });
+  expect(modelId).toEqual({ known: true, value: "claude-opus-5-20260514" });
+  expect(steps.turns).toEqual({ known: true, value: 4 });
+  expect(model.snapshotKind).toBe("DATED_SNAPSHOT");
+  expect(Object.keys(runner.CLAUDE_TOKEN_FIELDS).length).toBe(4);
+  expect(runner.CLAUDE_STEP_FIELD).toBe("num_turns");
+  expect(Object.keys(runner.CLAUDE_TELEMETRY_RECORDS).sort())
+    .toEqual(["initSubtype", "initType", "result"]);
+  expect(runner.CLAUDE_TELEMETRY_ANOMALY_REFUSALS.length).toBe(8);
+  expect(Object.keys(runner.CLAUDE_RESULT_SUBTYPES).length).toBe(4);
+});
+
+it("launches with telemetry through the root and names the handoff type closure", async () => {
+  // `request: null` is refused by the launcher itself, so this reaches the real
+  // production path without any injected port — and it lands on the arm whose
+  // facts must be UNKNOWN rather than zero-filled.
+  const input: ClaudeTelemetryLaunchInput =
+    { providerRunRef: TELEMETRY_RUN_REF, request: null };
+  const result: ClaudeTelemetryLaunchResult = await runner.launchClaudeWithTelemetry(input);
+  if (!result.ok) throw new Error(`root telemetry launch refused: ${result.code}/${result.layer}`);
+  const handoff: ClaudeTelemetryHandoff = result.handoff;
+  const launch: ClaudeTelemetryLaunchFacts = handoff.launch;
+  const declared: ClaudeDeclaredSelection = handoff.declared;
+  const concurrency: ClaudeTelemetryConcurrency = handoff.concurrency;
+  const refusal: ProviderTelemetryRefusal | null = handoff.telemetryRefusal;
+  const blind: ProviderFactUnknown | ProviderQuantity = handoff.tokens.inputTokens;
+
+  expect(handoff.handoffVersion).toBe(runner.CLAUDE_TELEMETRY_HANDOFF_VERSION);
+  expect(handoff.providerRunRef).toEqual(TELEMETRY_RUN_REF);
+  expect(launch.kind).toBe("REFUSED");
+  expect(launch.observationDigest).toBeNull();
+  expect(declared.known).toBe(false);
+  const concurrencyFact: ProviderConcurrencyFact = concurrency.fact;
+  expect(concurrencyFact).toBe("NO_CONCURRENCY_FACTS");
+  expect(runner.PROVIDER_CONCURRENCY_FACTS).toContain(concurrencyFact);
+  expect(blind).toEqual(
+    { known: false, code: "TELEMETRY_LAUNCH_REFUSED", layer: "TELEMETRY_LAUNCH" },
+  );
+  const code: ProviderTelemetryCode = refusal?.code ?? "TELEMETRY_RESULT_ABSENT";
+  const layer: ProviderTelemetryLayer = refusal?.layer ?? "TELEMETRY_RESULT";
+  expect([code, layer]).toEqual(["TELEMETRY_LAUNCH_REFUSED", "TELEMETRY_LAUNCH"]);
+  expect(runner.PROVIDER_TELEMETRY_CODES).toContain(code);
+  expect(runner.PROVIDER_TELEMETRY_LAYERS).toContain(layer);
+  expect(runner.PROVIDER_TELEMETRY_CONTRACT_VERSION).toBe("moe-provider-telemetry/1");
 });

@@ -24,26 +24,31 @@
       "description": "Explore and baseline before editing: record `git rev-parse HEAD`, the merge/base ref, `git status --porcelain`, and the pre-diff failing-path output of the task's full verification chain without claiming it as the final gate. Confirm the five owned paths are still absent/clean and leave all foreign `.moe`/activation work untouched. Reconfirm the daemon manifest declares `@moe/scheduler` and `@moe/store`, the lock importer contains both, then create a uniquely named temporary TypeScript probe under `apps/daemon/src/recovery` that imports `ResourceRow` from bare `@moe/scheduler` and `SqliteEventStore` from bare `@moe/store`; run daemon typecheck and delete the probe in the same Node `finally`, asserting it no longer exists.",
       "status": "COMPLETED",
       "affectedFiles": [],
-      "note": "Baseline recorded at HEAD 0a53ac067c4fbdbc197881bb256bdcea1ea63a62, branch moe/work-2026-08-08, merge-base vs main 1e3057ab938236a98105177fb060021ff992b529.\n\nOWNED PATHS ABSENT: `ls apps/daemon/src/recovery/ | grep -i durable` exit 1 — none of the five planned paths exist.\n\nFOREIGN WIP (untouched, disclosed): .moe/messages/*.jsonl, .moe/tasks/*.json (daemon state); apps/daemon/src/activation/activation-ledger-codec.ts and .test.ts (peer, uncommitted).\n\nDEPENDENCY EDGE, all three legs verified:\n(a) apps/daemon/package.json dependencies declare \"@moe/scheduler\": \"workspace:*\" and \"@moe/store\": \"workspace:*\".\n(b) pnpm-lock.yaml importer `apps/daemon:` carries both, link:../../packages/scheduler and link:../../packages/store.\n(c) Compiled probe apps/daemon/src/recovery/zz-probe-w40286572-tmp.ts imported ResourceRow from bare \"@moe/scheduler\" and SqliteEventStore from bare \"@moe/store\"; `pnpm --filter @moe/daemon typecheck` exit 0; probe deleted in the same command and re-asserted absent (PROBE_DELETED=yes).\n\nPRE-DIFF GATE BASELINE (per-leg exit codes captured separately, not `&&`-masked) — ALL GREEN:\n  pnpm --filter @moe/scheduler test  -> SCHED_EXIT=0\n  pnpm --filter @moe/store test      -> STORE_EXIT=0\n  pnpm --filter @moe/daemon test     -> DAEMON_EXIT=0 (75 files, 1600 tests passed)\n  pnpm typecheck                     -> TYPECHECK_EXIT=0 (repo-wide, all packages Done)\nZero foreign red at merge-base state, so any later failing path intersecting owned paths is attributable to this diff.\n\nRE-MEASURED SURFACES (not taken from the description):\n- apps/daemon/src/recovery/recovery-inventory-contract.ts freezes RECOVERY_PROOF_CLASSES with RESOURCE at index 1 and INTEGRATION_TARGET at index 3, RECOVERY_INVENTORY_UPSTREAM_LAYERS includes \"INVENTORY_ADAPTER\", and publishes exactDataRecord/isPlainArray/isReflectableObject/recoveryInventoryRefusal plus the closed RECOVERY_INVENTORY_UPSTREAM_CODES vocabulary I must reuse.\n- packages/runner RECOVERY_INVENTORY_CLASSES is still exactly four and cannot represent RESOURCE or INTEGRATION_TARGET, so the daemon-side typed bridge (not a runner widening) is the correct deliverable.\n- @moe/scheduler root exports reserveAll/adapterConfirm/adapterFail, which generate all four ACQUISITION_STATES (PENDING_ACQUIRE, ACTIVE, RELEASED, QUARANTINED) from real production transitions — no hand-built ResourceRow authority needed.\n- SqliteEventStore public surface confirmed: commitExpectedVersionDecision, readAggregateEvents(aggregateId, afterSeq, limit), getCommandDecision, getHealth, readRecoveryBinding, close. No schema/raw-SQLite access required.",
-      "startedAt": "2026-08-15T11:42:07.538Z",
-      "completedAt": "2026-08-15T11:45:10.837Z"
+      "note": "Reopen #1 baseline. HEAD fc35d14d95c7ccc40938ceef5c68450fa70a09de. `git status --porcelain` dirty only in foreign `.moe/**` (2 message logs, 2 task json) — all nine owned paths clean, and sha256 of all nine recorded to /tmp/pre-edit-sha.txt so every later drill restore is byte-checked, never `git checkout` (untracked-vs-committed hazard does not apply here but a checkout would still revert to HEAD, not to pre-drill bytes). Focused baseline `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/durable-recovery-inventory.test.ts` = 1 file / 25 tests passed, 1.89s. Gate baseline is not re-derived from scratch: QA independently re-ran the full four-leg gate at this exact HEAD at 12:13 and recorded scheduler 43/1319, store 41/469, daemon 76/1625, typecheck 0 errors, all green — the tree is byte-identical to that measurement, so that is the pre-diff attribution baseline for this session. Step 1's dependency-edge probe is not re-run: no import surface changes in this reopen (the fix is test-side plus, if forced, a guard in an already-imported module), and the daemon manifest/lock edges it proved are unchanged at this HEAD.",
+      "startedAt": "2026-08-15T12:24:21.129Z",
+      "completedAt": "2026-08-15T12:24:45.412Z"
     },
     {
       "stepId": "step-2",
       "description": "Write the failing acceptance suite first. Using real public scheduler transitions (not hand-built row authority), a file-backed `SqliteEventStore`, the production recovery-incarnation/anchor APIs, and bare workspace imports, cover: all generated resource states including QUARANTINED and `fenceable:false`; multiple integration targets/attempts; exact effect-intent/source-proof binding; seal/reopen equality; exact project/start-excluded/end-included cursor, backup-generation, and current-incarnation filtering; immutable exact two-class fragments; and COMPLETE-empty only with a verified negative proof. Add hostile/missing/unmatched/malformed/duplicate/truncated/unreadable cases asserting the exact existing upstream code and `INVENTORY_ADAPTER` layer, including zero accessor/proxy trap hits. Each class/state/refusal sweep must assert its generated count is nonzero. Name focused tests for the later completeness and fenceability mutation drills, and demonstrate the focused file is red before production implementation.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
       ],
-      "startedAt": "2026-08-15T11:45:13.652Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ],
+      "note": "Reopen #1: six tests added, 25 -> 31, closing exactly the three drill-dead guards QA pinned. Red-first here is the drill, not a missing feature: the guards exist and are correct, so the only honest demonstration is that each new test goes red when its guard dies. Every drill = sha256 baseline, Edit, unique-anchor check (grep -c = 1), full focused file run, Edit back, sha256 -c. D1 reader.ts:170 drop `storeProjectId !== projectId` -> 1 failed | 30 passed, \"refuses a caller project the store's own health does not name\", 'RECOVERY_ANCHOR_UNAVAILABLE' to be 'RECOVERY_INVENTORY_INPUT_INVALID'. D2 contract.ts:247 `projectId: \"\"` -> 1 failed, the field-sweep test, message names projectId. D3 `projectTag: \"\"` -> 2 failed: the sweep (names projectTag) AND \"hides a sealed window from the same basis under a different project tag\" (expected true to be false — the foreign tag READ the sealed window). D4, QA's exact drill, seal digest + re-encode both replaced by `if (false) return R.UNREADABLE;` -> 2 failed: altered class table gives 'RECORD_CONFLICT' instead of UNREADABLE, respelled bytes read ok:true. D5 same pair inside decodeRow -> 1 failed: 'RECOVERY_INVENTORY_SUBJECT_DUPLICATE' instead of UNREADABLE. DISCLOSED SURVIVOR: drilling the seal digest compare ALONE leaves 31/31 green. That is an equivalent mutant, not a coverage hole — the payload carries sealDigest, so any stored digest differing from the computed one also makes the re-encoded bytes differ; bytes-equal implies digest-equal, and the re-encode check strictly subsumes the digest check. Measured, not argued: 31 passed with only that line disabled. Each forgery test pairs its tamper with an honest forgery through the same store call that MUST be accepted (seal: ok true; row: refused as DUPLICATE, i.e. it decoded), so no refusal is attributable to a fixture the reader would have rejected anyway. All eight production files verified byte-identical to HEAD fc35d14 by sha256 -c after every drill; `git status --porcelain -- apps/daemon/src/recovery/` shows only the test file modified.",
+      "startedAt": "2026-08-15T12:24:52.275Z",
+      "completedAt": "2026-08-15T12:29:40.572Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement the exact durable contract and canonical codec. Define the closed `RESOURCE | INTEGRATION_TARGET` vocabulary, caller basis (project tag plus backup cursor/generation only), internal selected scope (store project plus anchored incarnation/key epoch/binding digest), resource and integration observation unions, window seal, immutable class fragment, and typed registration shapes. Caller inputs must have exact own enumerable data keys and cannot contain current refs, counters, item arrays, or authority fields. Canonical bytes use one field order, bounded sizes/counts, deterministic code-point ordering, a body digest, semantic revalidation before digest acceptance, and byte-for-byte re-encode checks. Reuse the daemon's already-admitted stable upstream tuples: invalid input, missing record/seal, unreadable/noncanonical bytes, duplicate/conflict/count mismatch, truncated coverage, and binding mismatch remain UNKNOWN at `INVENTORY_ADAPTER`; add no new authority or disposition. Keep the TS source <=250 lines and add the exact one-line LF runtime bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
@@ -51,12 +56,19 @@
       "newFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-shape.ts"
+      ],
+      "note": "No production bytes changed in this reopen. The contract/codec landed at fc35d14 (contract.ts 257 lines, shape.ts 261 lines, both with one-line LF .js bridges) and QA's own re-run confirmed DoD 1/3/5/6 hold against it. QA's finding on contract.ts:247 was NOT that the digest body is wrong — `durableInventoryScopeDigest` already binds projectId and projectTag — but that nothing asserted it, so both fields were silently droppable. That is closed test-side by the field sweep asserting the digest moves for each of 9 scope fields plus the end-to-end tag-isolation read. sha256 -c confirms contract.ts and shape.ts are byte-identical to HEAD fc35d14 after all five drills.",
+      "startedAt": "2026-08-15T12:29:58.352Z",
+      "completedAt": "2026-08-15T12:30:05.557Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the durable provider over the public store surface, with no SQLite/schema access. On every append, seal, and read, derive project identity from `getHealth`, read the ACTIVE recovery binding, read the matching daemon anchor, and require exact incarnation/key epoch/binding/generation agreement; never accept those refs from the caller. Persist one canonical observation per call through deterministic `commitExpectedVersionDecision` identities into a dedicated aggregate addressed by project, backup cursor/generation, and current incarnation. Snapshot `ResourceRow` exhaustively (including state, capacity, epoch, external, and a closed FENCEABLE/NON_FENCEABLE projection) without reimplementing scheduler transitions; bind resource identity as `(resourceId,effectIntentRef)`. Bind integration identity as `(attemptRef,targetRef,effectIntentRef)` plus intent digest and source proof. Replay identical writes, refuse divergent duplicates, and serialize append versus seal by expected aggregate version so no post-seal row can succeed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory.js"
@@ -64,50 +76,74 @@
       "newFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts"
+      ],
+      "note": "No production bytes changed in this reopen; durable-recovery-inventory.ts (315 lines) stands as landed at fc35d14, sha256-verified identical after all five drills. QA's reopen did not fault the writer: appends/seals still derive project identity from getHealth, bind the ACTIVE binding and anchor, and serialize by expected version. The reopen work touches the writer only as the surface the new forgery tests must NOT be allowed to bypass silently — each forged payload is committed through the same public `commitExpectedVersionDecision` shape the writer uses, into the aggregate `resolveDurableWindow` names, and the honest-forgery control in each test is accepted, so the tamper is the only variable.",
+      "startedAt": "2026-08-15T12:30:07.877Z",
+      "completedAt": "2026-08-15T12:30:37.294Z"
     },
     {
       "stepId": "step-5",
       "description": "Complete the same provider with the sealed reader and daemon composition seam. Seal only after reading and validating all typed aggregate rows; require exactly one source coverage proof for each of the two classes, compute per-class nonzero cardinality/ordered row-digest commitments, require a bound negative proof for a zero-row class, and commit one terminal seal whose stored global position is the inclusive window end. Read only the dedicated aggregate with bounded pagination, require exact sequence/decision trace/event types, canonical bytes, unique identities, one final seal, exact counts/digests, and positions `(backupCursor,endInclusive]`; missing/partial/unreadable evidence returns the precise UNKNOWN tuple and never a partial list. Export a frozen literal two-registration tuple/factory whose enumerators accept only basis/window, recheck the selected binding, return frozen raw observations plus proof fragments, and never decide adoption, quarantine, signing authority, or `recovery.complete`; no mutable global registry or caller item list. Keep the production source <=250 lines and the `.js` bridge exactly one LF-terminated export line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory.js",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts"
+      ],
+      "note": "No production bytes changed in this reopen; durable-recovery-inventory-reader.ts (355 lines) stands as landed, sha256-verified identical after all five drills. Both reader guards QA pinned already existed and are correct — the caller-vs-store project equality at reader.ts:170 and the seal digest + byte re-encode pair at reader.ts:305 — they were simply unasserted. Now pinned: D1 and D4 both redden named tests (see step-2 note). One honest limit recorded here rather than papered over: the seal digest compare ALONE is an equivalent mutant, because the payload carries sealDigest, so a stored digest that differs from the computed one necessarily makes the re-encoded bytes differ — bytes-equal implies digest-equal. Measured: with only that line disabled the focused file is 31/31 green. The pair is killed together and the re-encode line is killed on its own by the respelled-bytes test. The same subsumption holds for the row pair in decodeRow, which D5 kills as a pair.",
+      "startedAt": "2026-08-15T12:30:41.633Z",
+      "completedAt": "2026-08-15T12:30:48.981Z"
     },
     {
       "stepId": "step-6",
       "description": "Run the single concentrated verification gate. First run the focused daemon test, then perform two reversible mutation drills against the production surface: weaken the seal completeness/count comparison and alter the ResourceRow fenceability projection; in each case assert the specifically named focused test exits nonzero, count both drills (nonzero), reverse only that owned patch without `git restore/reset`, and confirm the original bytes return. Check no probe/debug/generated evidence remains. Then run exactly `pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck` fresh in the foreground and record exit status/output. Compare failures with the pre-diff baseline and disclose foreign red verbatim; completion requires no new failing path intersecting these five owned paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.js",
         "apps/daemon/src/recovery/durable-recovery-inventory.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory.js",
         "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ],
+      "note": "Gate re-run on the final bytes, launched after the last write and polled to completion, each leg redirected to its own file so no exit code is masked by a pipe or a `;` chain: SCHED=0 STORE=0 DAEMON=0 TYPECHECK=0. scheduler 43 files / 1319 tests, store 41 / 469, daemon 76 files / 1631 tests, `grep -c 'error TS'` = 0 with final line \"apps/daemon typecheck: Done\". Delta versus the fc35d14 baseline QA independently measured: scheduler and store byte-for-byte unchanged, daemon 1625 -> 1631 = exactly the six new tests, file count unchanged at 76 because no new test file was added. NO foreign red anywhere, so the owned-path baseline subtraction is trivially empty — nothing to disclose and nothing to attribute. Five drills run, five outcomes recorded, none skipped: D1, D2, D3, D4 (QA's exact one) and D5 each reddened only their named tests (1, 1, 2, 2, 1 failures respectively, never the whole file); the seal-digest-alone probe survived at 31/31 and is disclosed as an equivalent mutant with its reason, not counted as a kill. Every production file restored by reverse Edit and verified with `sha256sum -c`, never `git checkout`. Hygiene: no `.only`/`.skip`/`.todo` anywhere in the suite, no probe/debug/scratch file left behind — `git status --porcelain -- apps/daemon/src/recovery/` shows exactly one modified path, the test file. Per-file line counts unchanged and inside the cap: contract 257, shape 261, writer 315, reader 355; the test file is 1175 lines and is not a production source.",
+      "startedAt": "2026-08-15T12:30:59.243Z",
+      "completedAt": "2026-08-15T12:31:13.811Z"
     },
     {
       "stepId": "step-7",
       "description": "Load `adversarial-self-review` and inspect the complete owned-path diff as an attacker: concurrent/replayed append versus seal, empty/huge/duplicate arrays, wrong cursor/project/generation, stale or absent ACTIVE binding/anchor, hostile descriptors/proxies, digest/order ambiguity, partial pagination, post-seal writes, non-fenceable and QUARANTINED omission, integration identity collisions, accidental mutable/global state, and any path that could emit authority from UNKNOWN. Verify Windows handles close before cleanup and both production files remain <=250 lines (split before 400 only via replan). If review changes bytes, rerun the exact gate above. Finally run `git status --porcelain`, unstage any foreign staged path, commit only with the explicit five-path pathspec, verify `git show --stat` contains only owned paths, record downstream consumer `task-cf7fb147bd1c47698cbd65c9535370aa`, and call `moe.complete_task`; if QA rejects, address only the pinned rejection and rerun the same gate.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory-contract.js",
         "apps/daemon/src/recovery/durable-recovery-inventory.ts",
         "apps/daemon/src/recovery/durable-recovery-inventory.js",
         "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ],
+      "note": "Adversarial review of the reopen diff (test file only) found three things and all three were fixed before commit, then the whole gate was re-run. (1) `honestSeal` picked the source proof by ARRAY INDEX, so a reordered class list would have handed the resource population the integration proof and the control would still have passed; now keyed on the class name itself. (2) `resolveFor` carried an unused third parameter — dead surface in a helper whose whole job is to be trusted; removed. (3) The honest-seal control asserted only ok:true, which an empty or partial answer also satisfies; it now pins observations to rows + INTEGRATIONS, so the control cannot pass on a shortened population. Checklist items considered and cleared: every test registers its stores through `open()` and its temp dirs through `newDirectory()`, so the afterEach drain still closes them when `forgeEvent`/`resolveFor` THROW, not only on success — no Windows handle can outlive a failing forgery; tests using two stores register both; no test hand-builds a ResourceRow or reimplements a transition; `pos(99)` is inside (042,100] and collides with no generated position (rows use 043..051, integrations 070..072), and the assertion pins that it actually moved; the sweep asserts BOTH that 9 perturbations were generated and that all 10 digests are distinct, so it cannot pass by generating nothing; `resourceClass.itemCount > 1` is asserted before `slice(1)`, so the tamper is never vacuous; no `.only`/`.skip`/`.todo`. Known coupling, disclosed rather than hidden: `honestSeal` mirrors what the production sealer commits, so if the seal contract moves the fixture goes stale — but it fails LOUD, because the honest-forgery control demands production still accept it. Gate re-run after the review edits: the exact chain `pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck` fresh in the foreground, GATE_EXIT=0, scheduler 43/1319, store 41/469, daemon 76/1631, typecheck 0 errors. Committed 192360e by explicit single-path pathspec on branch moe/work-2026-08-08; `git show --stat` = 1 file, +307/-1, and `git diff HEAD -- apps/daemon/src/recovery/` is empty, so committed bytes are the gated bytes. Downstream consumer remains task-cf7fb147bd1c47698cbd65c9535370aa.",
+      "startedAt": "2026-08-15T12:31:16.654Z",
+      "completedAt": "2026-08-15T12:33:47.375Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40286572",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "UNBLOCKED by governor-18a42000 on the human's instruction to unblock tasks. The block's literal resume condition is met and I verified the decisive claim on committed bytes myself.\n\nThe literal blockedReason: \"Resume only after task-f6cf8d16 is DONE and re-measure its exact public frozen mapping/registration identity; then select non-overlapping focused schema/readers/adapters against those landed bytes.\"\n\ntask-f6cf8d16c2654641a92b0ee36924de0c is now DONE (QA-approved 09:39Z by qa-50f0d628, after two rejections, with an independently re-run gate).\n\nTHE DECISIVE FACT, re-measured by me at HEAD rather than taken from the audit. The block refused planning because only runner's four adapter classes existed, so this task's readers would have had to INVENT registration identity and cardinality. That is no longer true:\n- apps/daemon/src/recovery/recovery-inventory-contract.ts, committed blob 6ed4a8a473297d6e502b1c2a9266cf4f9f9cd25c (verified with git rev-parse HEAD:<path>, so this is committed bytes, not an untracked working-tree illusion).\n- It freezes SIX proof classes — PROVIDER_PROCESS_LAUNCH_LOCK, RESOURCE, WORKSPACE, INTEGRATION_TARGET, GIT_INTEGRATION_ON_DISK, ARTIFACT_OBJECT_STAGING — over SEVEN populations.\n- packages/runner still holds exactly its original four. 6 = runner's 4 + RESOURCE + INTEGRATION_TARGET, and those two added classes ARE the registration identity this task's resource and integration readers must bind to. The contract now exists to measure instead of invent.\n\nThe frozen mapping has real production callers across recovery-inventory-invariants/-proofs/-reader/-record, and the ledger imports the record builder — composition among production modules, not an orphan export, so Clause 1 is satisfied.\n\nThe \"would overlap live WIP\" clause is also dead: it named short id task-2d969616 (a 32-hex-only regex misses that form), which resolves to task-2d9696160e674f26a8d422c45829d80e, now DONE, and packages/scheduler is clean.\n\nDIRECTION TRAP, recorded so the next reader does not re-park this: task-cf7fb147bd1c47698cbd65c9535370aa appears in the text and is BLOCKED, but it is this task's parentTaskId and declared consumer — it depends on THIS task. Counting it unmet would keep this parked forever.\n\nWHAT IS STILL ABSENT IS THE WORK, NOT A BLOCKER: the scheduler resource inventory reader and the integration-attempt record/reader do not exist. Those are this task's own DoD items 1 and 2, verbatim in its MEASURED GAP. Their absence was confirmed against a positive control in the same scope.\n\nDISCLOSED RESIDUAL: the reconciliation ledger has no production caller outside apps/daemon/src/recovery/ yet. That external wiring belongs to consumer task-cf7fb147, which is blocked behind THIS task and therefore cannot be a precondition — but expect to compose against the recovery folder's modules directly, since no daemon-wide seam exists yet.\n\nFOR THE ARCHITECT: re-measure the frozen mapping and registration identity yourself before planning, then select NON-OVERLAPPING focused schema/readers/adapters against those landed bytes, as the block requires. Scope selection is the judgment the block deliberately deferred to planning time.",
+  "reopenCount": 1,
+  "reopenReason": "I re-ran the full gate myself at HEAD fc35d14 and it is green exactly as reported: scheduler 43 files/1319 tests, store 41/469, daemon 76/1625, pnpm typecheck 0 errors, all four legs captured to separate files (SCHED=0 STORE=0 DAEMON=0 TYPECHECK=0). Commit fc35d14 touches only the nine owned paths, the four .js bridges are one-line LF, per-file counts are 257/261/315/355 (all under the 400 hard cap), and the focused file runs 25 tests. I also re-ran three of your drills independently and they are real: hardcoding fenceability to FENCEABLE reddens \"projects every ResourceRow onto its exact fenceability\" (\"expected 'FENCEABLE' to be 'NON_FENCEABLE'\"), disabling the PROOF_MISSING guard reddens \"calls an empty class COMPLETE only when a negative proof is bound\", and `>` to `>=` on the window start reddens \"excludes the start cursor and includes the end cursor\". DoD 1, 3, 5 and 6 hold.\n\nDoD 2 and DoD 4 do not. Three production guards are drill-dead — I mutated each and the entire 25-test file stayed green:\n\n1. reader.ts:170 — dropped the `storeProjectId !== projectId` clause: 25/25 pass.\n2. contract.ts:247 — set projectId and projectTag to \"\" inside durableInventoryScopeDigest: 25/25 pass.\n3. reader.ts:305 — replaced the seal digest comparison AND the sameDurableBytes re-encode check with `if (false) return R.UNREADABLE;`: 25/25 pass.\n\nSo \"filtered by exact project\" (DoD 4) has zero coverage in either mechanism, and the tamper-detection surface DoD 2 names is unasserted: RECOVERY_INVENTORY_RECORD_UNREADABLE appears 0 times in the test file while the other nine refusal codes all appear. Every test opens with PROJECT_ID and passes PROJECT_ID, so the mismatch branch is never taken.\n\nAll my drill edits were reversed with Edit; sha256 and `git status --porcelain apps/daemon/src/recovery/` confirm the tree is back to committed bytes. Fix only these three; the rest of the diff is sound.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
@@ -115,17 +151,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:41.056Z",
-  "updatedAt": "2026-08-15T11:45:13.653Z",
+  "updatedAt": "2026-08-15T12:40:28.590Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:21:56.007Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 1
+    "executedStepCount": 14,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-15T12:40:28.590Z",
+    "wallClockMs": 159512583
   },
   "contextFetchedBy": [
-    "architect-a9210e34",
-    "architect-4eca9b79",
-    "worker-40286572"
+    "worker-40286572",
+    "qa-50f0d628"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -142,9 +181,26 @@
     }
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "DoD 2: a production durable integration-attempt record and reader ... unmatched, malformed, duplicate, truncated, or unreadable records stay UNKNOWN with stable code and originating layer",
+      "rejectedAt": "2026-08-15T12:19:27.647Z",
+      "rejectedBy": "qa-50f0d628"
+    },
+    {
+      "item": "DoD 4: persistence/reopen tests prove resource and integration rows survive process/store reopen and are filtered by exact project/cursor/incarnation; refusal tests assert exact stable code and layer",
+      "rejectedAt": "2026-08-15T12:19:27.647Z",
+      "rejectedBy": "qa-50f0d628"
+    }
+  ],
   "planSubmittedAt": "2026-08-15T11:41:50.742Z",
   "planningNotes": {
     "approachesConsidered": "Use the task's explicit 'equally explicit typed bridge' option, implemented inside the daemon over the existing public SqliteEventStore decision/event API. Rejected widening @moe/runner: its RecoveryInventoryRegistration class union is intentionally frozen to four node-side classes and cannot represent RESOURCE or INTEGRATION_TARGET. Rejected dedicated SQLite tables/schema v5: it would add migration/schema ownership without improving the required post-restore inventory proof and would exceed this task's focused file budget. Rejected a global readEventsAfter scan or caller item array: neither proves complete population. The selected design uses one dedicated, incarnation-addressed aggregate with typed row events and a terminal two-class seal; reads use readAggregateEvents for that aggregate only. Rejected adding scheduler persistence: ResourceRow already is the scheduler authority, so the daemon snapshots that public type without duplicating its transitions.",
@@ -165,5 +221,79 @@
     "escalatedAt": "2026-08-15T11:41:54.517Z"
   },
   "planApprovedAt": "2026-08-15T11:41:52.799Z",
-  "workStartedAt": "2026-08-15T11:42:07.538Z"
+  "workStartedAt": "2026-08-15T11:42:07.538Z",
+  "reviewStartedAt": "2026-08-15T12:34:55.107Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "scheduler: Test Files 43 passed (43) / Tests 1319 passed (1319)\nstore: Test Files 41 passed (41) / Tests 469 passed (469)\ndaemon: Test Files 76 passed (76) / Tests 1631 passed (1631)\ntypecheck: grep -c 'error TS' = 0; final line 'apps/daemon typecheck: Done'\nGATE_EXIT=0\nRun fresh in the foreground as the exact chain at HEAD 192360e, after the adversarial-review edits (test file mtime 15:32:09, daemon leg Start at 15:33:19). Daemon delta vs the fc35d14 baseline QA re-measured is 1625 -> 1631, exactly the six new tests, file count unchanged at 76. Scheduler and store unchanged. No foreign red in this run or the two full runs before it, so the owned-path baseline subtraction is empty.",
+    "reportedAt": "2026-08-15T12:34:55.107Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/durable-recovery-inventory.test.ts",
+    "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+    "apps/daemon/src/recovery/durable-recovery-inventory-shape.ts",
+    "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+    "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts"
+  ],
+  "reviewCompletedAt": "2026-08-15T12:40:28.590Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 2: a production durable integration-attempt record and reader ... unmatched, malformed, duplicate, truncated, or unreadable records stay UNKNOWN with stable code and originating layer",
+      "DoD 4: persistence/reopen tests prove resource and integration rows survive process/store reopen and are filtered by exact project/cursor/incarnation; refusal tests assert exact stable code and layer"
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts",
+        "line": 170,
+        "description": "Caller-vs-store project equality guard has ZERO coverage. I replaced `storeProjectId === null || storeProjectId !== projectId` with `storeProjectId === null` and all 25 tests stayed green. Every test opens with openForProject(path, PROJECT_ID) and passes PROJECT_ID, so the mismatch branch is never taken. Add a case that appends or reads with a projectId different from the store's and asserts upstream.code RECOVERY_INVENTORY_INPUT_INVALID and upstream.layer INVENTORY_ADAPTER."
+      },
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "line": 247,
+        "description": "Project identity inside durableInventoryScopeDigest is unasserted. I set `projectId: \"\"` and `projectTag: \"\"` in the digest body and all 25 tests stayed green, so nothing proves a window is addressed by project at all. Add a case that seals under one projectTag and shows the same basis/window under a different projectTag reads RECORD_NOT_FOUND, mirroring the existing incarnation-rotation test at test line 452."
+      },
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts",
+        "line": 305,
+        "description": "DoD 2's unreadable path is never asserted: RECOVERY_INVENTORY_RECORD_UNREADABLE appears 0 times in the test file while the other 9 refusal codes all appear. I replaced the seal digest check and the sameDurableBytes re-encode check with `if (false) return R.UNREADABLE;` and all 25 tests stayed green. Commit a tampered or non-canonical row/seal payload into the same aggregate and assert RECOVERY_INVENTORY_RECORD_UNREADABLE at INVENTORY_ADAPTER."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "I re-ran the full gate myself at HEAD fc35d14 and it is green exactly as reported: scheduler 43 files/1319 tests, store 41/469, daemon 76/1625, pnpm typecheck 0 errors, all four legs captured to separate files (SCHED=0 STORE=0 DAEMON=0 TYPECHECK=0). Commit fc35d14 touches only the nine owned paths, the four .js bridges are one-line LF, per-file counts are 257/261/315/355 (all under the 400 hard cap), and the focused file runs 25 tests. I also re-ran three of your drills independently and they are real: hardcoding fenceability to FENCEABLE reddens \"projects every ResourceRow onto its exact fenceability\" (\"expected 'FENCEABLE' to be 'NON_FENCEABLE'\"), disabling the PROOF_MISSING guard reddens \"calls an empty class COMPLETE only when a negative proof is bound\", and `>` to `>=` on the window start reddens \"excludes the start cursor and includes the end cursor\". DoD 1, 3, 5 and 6 hold.\n\nDoD 2 and DoD 4 do not. Three production guards are drill-dead — I mutated each and the entire 25-test file stayed green:\n\n1. reader.ts:170 — dropped the `storeProjectId !== projectId` clause: 25/25 pass.\n2. contract.ts:247 — set projectId and projectTag to \"\" inside durableInventoryScopeDigest: 25/25 pass.\n3. reader.ts:305 — replaced the seal digest comparison AND the sameDurableBytes re-encode check with `if (false) return R.UNREADABLE;`: 25/25 pass.\n\nSo \"filtered by exact project\" (DoD 4) has zero coverage in either mechanism, and the tamper-detection surface DoD 2 names is unasserted: RECOVERY_INVENTORY_RECORD_UNREADABLE appears 0 times in the test file while the other nine refusal codes all appear. Every test opens with PROJECT_ID and passes PROJECT_ID, so the mismatch branch is never taken.\n\nAll my drill edits were reversed with Edit; sha256 and `git status --porcelain apps/daemon/src/recovery/` confirm the tree is back to committed bytes. Fix only these three; the rest of the diff is sound.",
+      "rejectedAt": "2026-08-15T12:19:27.647Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 2: a production durable integration-attempt record and reader ... unmatched, malformed, duplicate, truncated, or unreadable records stay UNKNOWN with stable code and originating layer",
+        "DoD 4: persistence/reopen tests prove resource and integration rows survive process/store reopen and are filtered by exact project/cursor/incarnation; refusal tests assert exact stable code and layer"
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts",
+          "line": 170,
+          "description": "Caller-vs-store project equality guard has ZERO coverage. I replaced `storeProjectId === null || storeProjectId !== projectId` with `storeProjectId === null` and all 25 tests stayed green. Every test opens with openForProject(path, PROJECT_ID) and passes PROJECT_ID, so the mismatch branch is never taken. Add a case that appends or reads with a projectId different from the store's and asserts upstream.code RECOVERY_INVENTORY_INPUT_INVALID and upstream.layer INVENTORY_ADAPTER."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+          "line": 247,
+          "description": "Project identity inside durableInventoryScopeDigest is unasserted. I set `projectId: \"\"` and `projectTag: \"\"` in the digest body and all 25 tests stayed green, so nothing proves a window is addressed by project at all. Add a case that seals under one projectTag and shows the same basis/window under a different projectTag reads RECORD_NOT_FOUND, mirroring the existing incarnation-rotation test at test line 452."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/recovery/durable-recovery-inventory-reader.ts",
+          "line": 305,
+          "description": "DoD 2's unreadable path is never asserted: RECOVERY_INVENTORY_RECORD_UNREADABLE appears 0 times in the test file while the other 9 refusal codes all appear. I replaced the seal digest check and the sameDurableBytes re-encode check with `if (false) return R.UNREADABLE;` and all 25 tests stayed green. Commit a tampered or non-canonical row/seal payload into the same aggregate and assert RECOVERY_INVENTORY_RECORD_UNREADABLE at INVENTORY_ADAPTER."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-15T12:40:28.590Z",
+  "reviewSummary": "APPROVED at HEAD 192360e. All three pinned reopen-#1 issues fixed and independently drill-verified by me; zero production bytes changed (sha256 of contract/shape/writer/reader identical across fc35d14, 192360e, disk), reopen commit is test-only (+307/-1, one owned path).\n\nGate re-run fresh, foreground, each leg to its own file: SCHED=0 STORE=0 DAEMON=0 TYPECHECK=0. scheduler 43/1319, store 41/469, daemon 76 files/1631 tests (baseline 1625, delta = exactly the 6 new tests), typecheck 0 errors, 0 FAIL/TS-error lines in any log. No foreign red. Focused file 31/31.\n\nMy own drills (Edit mutate, focused run, reverse Edit, sha256sum -c after each; all 5 files OK at the end, git status on apps/daemon/src/recovery/ empty, no untracked probe files):\nA. reader.ts:170 drop `storeProjectId !== projectId` -> 1/31 red, \"refuses a caller project the store's own health does not name\", expected 'RECOVERY_ANCHOR_UNAVAILABLE' to be 'RECOVERY_INVENTORY_INPUT_INVALID'. Proves the code assertion, not just refusal.\nB. contract.ts:247 projectId+projectTag -> \"\" -> 2/31 red, the 9-field injectivity sweep (asserted against the production digest fn, toHaveLength(9), Set size 10) and the projectTag shadow/RECORD_NOT_FOUND test.\nC. reader.ts:305 kill seal digest + sameDurableBytes pair -> 2/31 red, expected 'RECORD_CONFLICT' to be 'RECOVERY_INVENTORY_RECORD_UNREADABLE' and a respelled seal reading ok. RECORD_UNREADABLE now appears in 3 tests, each with an honest-forgery control that must be accepted.\nD. reader.ts:150 row digest recompute -> 1/31 red, expected 'SUBJECT_DUPLICATE' to be 'RECORD_UNREADABLE'.\n\nDoD 1-6 all hold. Per-file 257/261/315/355, four one-line LF .js bridges.\n\nDisclosed survivor (not a reject): decodeRow's `sameDurableBytes` clause alone survives (31/31 green) - the seal's per-class rowDigests+count commitment already refuses every reachable respelled row, so killing it only swaps one UNKNOWN code for another; no authority leak. The pair reddens (drill D)."
 }

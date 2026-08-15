@@ -1,0 +1,59 @@
+{
+  "id": "task-2f746bde37884220bd28cf79a545d5be",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Bring domain_schema_version under integrity",
+  "description": "Objective: make a drifted domain_schema_version detectable instead of silently trusted. Register item 4 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: the column is declared at packages/store/src/sqlite-schema-manifest.ts:200 as `domain_schema_version TEXT NOT NULL DEFAULT 'moe-domain-schema/0'`, written at event-ledger-append.ts:100/:177, and read back at event-read-decode.ts:90 into `domainSchemaVersion`. It then drives real decisions - projections/projection-upcast.ts:124 refuses SCHEMA_VERSION_UNSUPPORTED and :127 uses it as the upcast starting version - yet nothing binds the stored value to any digest or integrity check, so an altered column changes upcast behavior with no detection. FIRST STEP MUST CONFIRM THE GAP: grep the event digest/canonical input construction and record whether domainSchemaVersion participates; if it already does, this item is closed and the task should be closed rather than implemented. Deliverable: bind the stored schema version to the row's existing integrity mechanism so drift is detected and refused with an exact code and layer. NOT in scope: adding a new schema version, changing the upcast registry, or altering the projection fold contract. Verification: pnpm --filter @moe/store typecheck &amp;&amp; pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "The gap is confirmed or refuted on current bytes FIRST, with the command and result recorded: if domainSchemaVersion already participates in the event digest or an equivalent integrity check, the task is closed as already-fixed rather than implemented.",
+    "If open: a stored domain_schema_version that no longer matches the value covered by the row's integrity mechanism is detected on read and refused with an exact stable reason code and layer - never silently upcast from the altered value.",
+    "The detection test mutates the stored column directly in the database and asserts the exact refusal code, proving detection rather than asserting that the happy path still works.",
+    "Existing SCHEMA_VERSION_UNSUPPORTED behavior and the upcast path for legitimately-versioned rows are unchanged; digests for unchanged rows are identical to before.",
+    "Fresh pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "If binding the column changes any existing event digest, that is a durable-format change and must be raised rather than landed silently - a digest change invalidates existing evidence.",
+    "A drifted value must fail closed. Never fall back to the DEFAULT 'moe-domain-schema/0' when the stored value fails its check; that would convert tampering into a supported version.",
+    "The test must alter the stored bytes, not the in-memory object, or it proves nothing about durable drift.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 4, domain_schema_version outside integrity), created from task-963cf1d1 with no dependency on any other task. NOTE for whoever plans it: its first DoD item is to CONFIRM the gap on current bytes - I could not prove from grep whether domainSchemaVersion participates in the event digest, so closing it as already-fixed is a legitimate outcome. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.4,
+  "comments": [
+    {
+      "id": "comment-6ceebe833621426884c9f21be7b4aa17",
+      "author": "architect-2aea4111",
+      "content": "FULL MEASUREMENT behind the block (the block reason is capped at 2000 chars). Measured at HEAD 192360e.\n\nI raised this slice myself from the audit register and explicitly flagged that I had not confirmed whether domainSchemaVersion participates in any integrity mechanism. Confirming it changed the answer, so this is a correction to my own slice rather than a defence of it.\n\nFINDING 1 — domain_events has NO row-level integrity mechanism at all.\nColumns per sqlite-schema-manifest.ts: event_id, aggregate_id, aggregate_sequence, command_id, command_event_index, record_version, payload_codec_version, request_sha256, event_type, payload, metadata, committed_at, domain_schema_version. There is no row digest, checksum, or HMAC column. `request_sha256` covers the REQUEST bytes, not the row. A grep for row_digest|event_digest|checksum|hmac|integrity across packages/store/src surfaces only PRAGMA integrity_check in a test helper and sqlite-schema-integrity.ts.\n\nFINDING 2 — the one integrity mechanism that exists is about the SCHEMA, not rows.\nvalidateSchema (sqlite-schema-integrity.ts:20) calls validateSchemaManifestMetadata against SQLITE_SCHEMA_MANIFEST_VERSION. That validates the DDL shape. It says nothing about the VALUES in any row.\n\nCONSEQUENCE: the register's phrasing — \"domain_schema_version sits outside every integrity mechanism\" — is literally true but misleading, because so is every other column of the table. The wording implies this column escaped a mechanism the others are under. There is no such mechanism, so \"bring it under integrity\" has nothing to bind to, and the DoD I wrote for this slice cannot be satisfied as phrased.\n\nFINDING 3 — the residual risk is real but much narrower than the item claims.\nprojection-upcast.ts:124 refuses SCHEMA_VERSION_UNSUPPORTED when the eventType has no registered definition, and :127-133 walks `routes` from the stored version to currentVersion, refusing again when a hop is missing. So a column drifted to an UNKNOWN value ALREADY fails closed. The only undetected case is drift to a DIFFERENT VALID registered version, which silently selects a different upcast route.\n\nFINDING 4 — that case is not special to this column.\nAn actor able to UPDATE domain_schema_version can equally alter payload, metadata or event_type in the same row, none of which is protected either. So fixing this one column would buy no real integrity while creating the appearance of it — which under epic rail 4 is worse than the current honest absence.\n\nRECOMMENDED DISPOSITION, for a human:\n(a) DECLINE register item 4 as written. It states a one-column fix for a whole-table property. If declined, task-963cf1d1's reconciliation moves to 8 created + 1 declined + 2 already-closed = 11, still balanced.\n(b) OR replace it with a correctly scoped task: row-level integrity for domain_events. That is a durable-format change touching every row and every existing digest, needing a migration decision and explicit human sizing.\n\nI deliberately did NOT create (b) unilaterally. Every other slice I created today was a bounded defect fix; this would be a durable-format change to the event ledger, and my own task rail on this slice already says a digest change must be raised rather than landed silently.\n\nNo production code was written against this task.",
+      "timestamp": "2026-08-15T13:01:49.140Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:46:34.402Z",
+  "updatedAt": "2026-08-15T13:02:32.588Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T13:00:21.471Z"
+  },
+  "blockedReason": "PREMISE DOES NOT HOLD — blocking for a human scoping decision rather than planning work that cannot be done as written. Full measurement in comment-6ceebe833621426884c9f21be7b4aa17. Measured at HEAD 192360e. I raised this slice myself and flagged the gap as unconfirmed; confirming it changed the answer.\n\n1. domain_events has NO row-level integrity mechanism AT ALL — no row digest, checksum or HMAC on any column. request_sha256 covers the REQUEST, not the row. So the register's \"domain_schema_version sits outside every integrity mechanism\" is literally true but misleading: so is every other column. There is no mechanism it escaped and nothing to bind it to, so this slice's DoD cannot be satisfied as phrased.\n\n2. validateSchema (sqlite-schema-integrity.ts:20) validates the schema MANIFEST/DDL shape, not row values.\n\n3. The residual risk is narrower than claimed. projection-upcast.ts:124/:127 already fails closed with SCHEMA_VERSION_UNSUPPORTED on an unregistered eventType or unreachable version hop, so drift to an UNKNOWN value is ALREADY detected. Only drift to a different VALID registered version goes unnoticed.\n\n4. That case is not special to this column: anyone able to UPDATE domain_schema_version can equally alter payload, metadata or event_type, none protected. Fixing one column buys no real integrity while creating the appearance of it — under epic rail 4 that is worse than the honest absence.\n\nRECOMMENDED, for a human:\n(a) DECLINE item 4 as written. task-963cf1d1 arithmetic becomes 8 created + 1 declined + 2 already-closed = 11, still balanced; or\n(b) Replace with a scoped task: row-level integrity for domain_events — a durable-format change touching every row and every existing digest, needing a migration decision and human sizing.\n\nI did NOT create (b) unilaterally: it changes durable format, and this slice's own rail says a digest change must be raised, not landed silently.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T13:02:21.036Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Full re-measurement at HEAD 192360e establishing that the item's premise does not hold. Recorded in comment-6ceebe833621426884c9f21be7b4aa17 and the block reason. No plan submitted, no production code written.",
+      "whatRemains": "A human decision between (a) declining register item 4 as written, which keeps task-963cf1d1's reconciliation balanced at 8 created + 1 declined + 2 already-closed = 11, and (b) replacing it with a properly scoped row-level integrity task for domain_events.",
+      "pitfalls": "Do NOT implement this as written. There is no row-level integrity mechanism on domain_events for any column, so 'bring domain_schema_version under integrity' has nothing to bind to. Binding only this one column would buy no real integrity while creating the appearance of it, which under epic rail 4 is worse than the current honest absence. Note also that drift to an UNKNOWN version is ALREADY detected - projection-upcast.ts:124/:127 refuses SCHEMA_VERSION_UNSUPPORTED - so only drift to a different VALID registered version is undetected, and that is equally true of payload, metadata and event_type.",
+      "openQuestions": "Should domain_events gain row-level integrity at all? That is a durable-format change touching every row and every existing digest, and it needs a migration decision. I did not create that task unilaterally because every other slice from this register was a bounded defect fix.",
+      "releasedAt": "2026-08-15T13:02:32.586Z",
+      "releasedBy": "architect-2aea4111",
+      "reason": "Blocked pending a human scoping decision; releasing the assignment so the claim gate lets me continue with the remaining register slices. Task stays BLOCKED with its recorded reason and comment."
+    }
+  ]
+}

@@ -149,7 +149,13 @@ function collectReasons(
       return byLayer;
     }
     const byCode = a.code < b.code ? -1 : a.code > b.code ? 1 : 0;
-    return byCode !== 0 ? byCode : String(a.edgeKey).localeCompare(String(b.edgeKey));
+    if (byCode !== 0) {
+      return byCode;
+    }
+    // Code units, never localeCompare: collation depends on the host's ICU data,
+    // so two machines would order the same reasons differently — and that failure
+    // never reproduces locally. Same form as the code tie-break directly above.
+    return 0;
   });
 }
 

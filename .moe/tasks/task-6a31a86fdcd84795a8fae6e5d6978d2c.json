@@ -1,0 +1,102 @@
+{
+  "id": "task-6a31a86fdcd84795a8fae6e5d6978d2c",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "persistFileDurably must prove the full write",
+  "description": "Objective: stop a short write from reporting durable success. Register item 3 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: packages/store/src/recovery-anchor-fs.ts:23 `export async function persistFileDurably(path, payload): Promise&lt;void&gt;` calls `await handle.write(payload)` at :27 and never inspects the returned bytesWritten. Node's FileHandle.write resolves with a bytesWritten count and is permitted to write fewer bytes than requested; the function returns void, so a partial write is indistinguishable from a complete one and the caller records a durable anchor over truncated bytes. Deliverable: verify the write actually persisted every byte - check bytesWritten against payload.byteLength (looping or refusing on a short write), keep the existing fsync/close discipline, and fail closed with an exact stable code and layer when the full payload cannot be proven written. NOT in scope: changing the anchor file format, the install/switch sequencing (register item 2 owns that), or the backup publish ordering (register item 1). Verification: pnpm --filter @moe/store typecheck &amp;&amp; pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "persistFileDurably proves every byte of the payload reached the file before returning success; a short write either completes the remaining bytes or fails closed, and never returns as if complete.",
+    "A short-write failure returns an exact stable reason code and layer - a test injects a write port that reports fewer bytesWritten than requested and asserts that exact code, not merely that it threw.",
+    "The existing durability discipline is preserved: the handle is still fsynced and closed on every exit path including the new failure path, with no leaked descriptor.",
+    "A zero-length payload and a payload written in multiple chunks are both covered by generated cases asserting a nonzero exact cardinality, and removing the bytesWritten comparison turns a named test red.",
+    "Fresh pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "Do not swallow a short write by retrying forever; a bounded completion or an explicit refusal, never an unbounded loop.",
+    "The handle must be closed on the new failure path too - a guard that returns early before close would trade a silent truncation for a descriptor leak.",
+    "The short-write test must drive the production function through an injected write, not assert against a reimplementation of it.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED FIRST. Add a focused test for persistFileDurably that injects a write which reports FEWER bytesWritten than the payload length, and assert the call does not report success. Today packages/store/src/recovery-anchor-fs.ts:23-31 is `await handle.write(payload); await handle.sync();` inside a try/finally, and the function's return type is `Promise<void>` - so the resolved {bytesWritten} is discarded and a partial write is indistinguishable from a complete one. Inject by substituting the open/write seam rather than by writing to a real device that happens to short-write, which is not reproducible. Record the red. NOTE FOR THE TEST'S SHAPE: this module throws rather than returning refusal objects - every function here is `Promise<void>` or `Promise<T|null>` and callers map exceptions (recovery-anchor-install.ts:79 and :110 are the catch sites). So the assertion is on the thrown failure and, at the caller level, on the exact stable code that catch maps to; do not change these primitives to return refusal objects, which would ripple through five call sites for no gain.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ],
+      "newFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Prove the full write in persistFileDurably. Compare the resolved bytesWritten against payload.byteLength and either continue writing the remainder from the correct offset until the payload is fully written, or fail. Prefer completing the remainder in a BOUNDED loop - a short write is a legitimate POSIX outcome rather than an error - but bound the iterations so a write port that repeatedly reports zero progress terminates instead of spinning forever. If the payload cannot be fully written, throw so the existing caller catch maps it to the existing durability refusal. Keep the existing shape otherwise: mkdir first, open with \"w\", sync AFTER the write completes (a sync of a partial write is exactly the false evidence this fixes), and close in the `finally` on every path including the new failure. The module's own header already states the principle this extends - 'A write that was never flushed is not evidence' - and a write that was never finished is not evidence either.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-fs.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Cover the boundary cases and the descriptor discipline. Assert: a zero-length payload succeeds without a spurious failure; a payload delivered in several short writes is fully written and the final file content matches the payload byte for byte; a write port reporting zero progress terminates with a failure rather than looping; and the handle is CLOSED on the new failure path, so the fix does not trade a silent truncation for a descriptor leak. Verify closure by observing the seam, not by inference. Assert an exact non-zero case count with a hand-written literal so a case removed later fails the count rather than shrinking coverage silently.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Prove the fix reaches the surfaces that depend on it. persistFileDurably is the base primitive of this module: publishFileAtomically calls it to write the staging file and then RENAMES that file into place, so a short write today produces a truncated staging file that is subsequently published atomically as though complete - the atomic publish faithfully publishes truncated bytes. Add a test that drives publishFileAtomically with a short-writing seam and asserts the published path does NOT end up holding truncated content. Also confirm readBackMatches still behaves as before - it is a separate opt-in check the caller must invoke, not an automatic guard, so it does not cover this defect and must not be treated as if it did.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Is sync() still called only AFTER the payload is fully written - a sync between partial writes would flush a truncated file and is the subtlest way to reintroduce the bug. (2) Is the completion loop genuinely bounded, and does it advance the offset correctly so a retry cannot rewrite from zero and duplicate bytes? (3) Is the handle closed on every exit path? (4) Does any OTHER function in this file discard a result it should check - re-read publishFileAtomically, persistDirectoryDurably and clearDirectory with the same eye. (5) Confirm recovery-anchor-fs.ts is at or under 250 physical lines with `grep -c '' ` (it is 128 today, so there is ample headroom; PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-fs.ts",
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 3, persistFileDurably short write), created from task-963cf1d1 with no dependency on any other task. Single-function defect at recovery-anchor-fs.ts:23/:27. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:46:20.342Z",
+  "updatedAt": "2026-08-15T13:00:01.080Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T12:58:27.180Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:59:59.029Z",
+  "planningNotes": {
+    "approachesConsidered": "COMPLETE THE WRITE vs REFUSE OUTRIGHT. Refusing on any short write is simpler and was considered, but a short write is a legitimate POSIX outcome rather than an error condition, so refusing would turn ordinary behavior into a durability fault. CHOSEN: complete the remainder in a BOUNDED loop, and fail only when the payload cannot be fully written. The bound matters - a port reporting zero progress must terminate rather than spin, which is the failure mode an unbounded 'write until done' loop introduces while fixing the original one.\n\nTHROW vs RETURN A REFUSAL OBJECT. Changing persistFileDurably to return a refusal would give this task a local code/layer, but it would ripple through five call sites in two modules and change a primitive's contract for a defect that is one comparison deep. CHOSEN: keep throwing and let the existing caller catches map it, asserting the exact stable code at the caller level where that vocabulary actually lives.\n\nSCOPE OF THE SECOND SITE. Widening to fix backup-generation.ts:41 in this task was rejected on collision grounds (see codebaseInsights). Leaving it entirely unrecorded was also rejected - that would let a known truncation hole survive because the audit happened to name only one of its two copies. Routing it to the task that already owns the file is the only option that neither collides nor drops it.\n\nA NEW FOCUSED TEST FILE. recovery-anchor-fs.ts currently has no direct test, and adding these cases to recovery-anchor.test.ts would bury a primitive's contract inside an integration-shaped suite. A dedicated file keeps the durability primitive's guarantees legible.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e; I raised this slice from the audit register at the same HEAD.\n\nTHE DEFECT, CONFIRMED VERBATIM. packages/store/src/recovery-anchor-fs.ts:23-31:\n  export async function persistFileDurably(path: string, payload: Uint8Array): Promise<void> {\n    await mkdir(dirname(path), { recursive: true });\n    const handle = await open(path, \"w\");\n    try {\n      await handle.write(payload);\n      await handle.sync();\n    } finally {\n      await handle.close();\n    }\n  }\nFileHandle.write resolves with {bytesWritten, buffer} and is permitted to write fewer bytes than requested. The return type is Promise<void>, so that count is discarded and a partial write is indistinguishable from a complete one.\n\nWHY IT MATTERS MORE THAN IT LOOKS: this is the BASE primitive of the module. publishFileAtomically (:59-73) calls persistFileDurably to write `${path}.staging`, then renames it into place and re-syncs the published name. So a short write produces a truncated staging file that the atomic publish then faithfully publishes as complete - the atomicity guarantee is intact and the content is wrong, which is the worst combination.\n\nTHIS MODULE THROWS, IT DOES NOT RETURN REFUSAL CODES. Every export here is Promise<void> or Promise<T|null>; there is no local code/layer vocabulary. Callers map exceptions - recovery-anchor-install.ts:79 and :110 are the catch sites. So 'fail closed with an exact code and layer' is satisfied at the CALLER, not by changing these primitives' return types.\n\nSECOND SITE FOUND, NOT IN THE REGISTER, AND DELIBERATELY NOT FIXED HERE. packages/store/src/backup-generation.ts:37-46 has a module-private `persistFile` with the IDENTICAL body and the identical missing bytesWritten check. The audit recorded only the recovery-anchor-fs occurrence. I am not widening this task to cover it because backup-generation.ts is an owned path of sibling task-1fb6e87110744bbea21aafc3ea891e8d (crash-safe backup generation publish), and two tasks editing one file in a shared worktree is a collision. The finding is routed to that task as a comment instead.\n\nThe module header explains the duplication is deliberate: 'backup-generation.ts already follows this shape, but its persistFile is module-private and that module is not one of this task's owned paths, so this is a deliberate second implementation.' The duplication was reviewed; the shared defect in both copies was not.\n\nSIZES: recovery-anchor-fs.ts is 128 physical lines - ample headroom. There is no recovery-anchor-fs.test.ts today; the module's behavior is currently covered only indirectly through recovery-anchor.test.ts and recovery-anchor-refusals.test.ts, which is part of why this went unnoticed.",
+    "risks": "SYNC PLACEMENT IS THE SUBTLEST WAY TO REINTRODUCE THE BUG. handle.sync() must run only AFTER the payload is fully written. A sync inside or before the completion loop flushes a truncated file to the device - producing exactly the false durable evidence this task exists to remove, while looking more careful than the original code.\n\nAN UNBOUNDED COMPLETION LOOP TRADES ONE BUG FOR A HANG. A write port that repeatedly reports zero bytesWritten must terminate with a failure. A hang is worse than a truncation because it produces no evidence at all and reads as a stuck build.\n\nOFFSET CORRECTNESS. A retry that rewrites from offset zero duplicates bytes rather than completing the payload, and the resulting file can be longer than the payload while every naive length check passes.\n\nDESCRIPTOR LEAK ON THE NEW FAILURE PATH. The existing `finally { await handle.close(); }` covers it, but an early return or a throw placed outside that try would trade a silent truncation for a leaked handle - on Windows a leaked handle then causes EBUSY on the very rm/rename operations this module performs elsewhere.\n\nTHE SECOND SITE IS NOT FIXED BY THIS TASK. Anyone reading 'persistFileDurably now proves the full write' should not conclude the store can no longer truncate a durable file: backup-generation.ts:41 has the same hole until task-1fb6e871 closes it. That must be stated plainly in the completion note.\n\nSHARED WORKTREE. Line numbers are a snapshot at 192360e; re-measure before editing and commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/store/src/recovery-anchor-fs.ts",
+      "packages/store/src/recovery-anchor-install.ts",
+      "packages/store/src/backup-generation.ts",
+      "packages/store/src/recovery-anchor.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T13:00:01.080Z"
+}

@@ -1,0 +1,101 @@
+{
+  "id": "task-f2f65df32b494b22be4326e58f0e9b75",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Recovery anchor resume must not re-enter runInstall",
+  "description": "Objective: make a resume after a crash in the anchor install window idempotent instead of re-running the install. Register item 2 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: packages/store/src/recovery-anchor-install.ts:224 `runInstall`, with fault points `fault?.(\"SWITCH\")` at :255 and `fault?.(\"INSTALLED_MARKER\")` at :259. A crash between the SWITCH publish and the INSTALLED marker leaves the anchor having SELECTED a database with no marker recorded, and resume re-enters runInstall rather than recognising the completed switch. recovery-anchor-contracts.ts:36 defines RECOVERY_ANCHOR_STATES as PREPARED|INSTALLED and :253 documents that INSTALLED means the anchor SELECTED a database, not that recovery finished - so the state needed to recognise the window exists. Deliverable: resume detects that the switch already landed and completes the install by recording the marker, rather than re-running the switch. NOT in scope: the backup generation publish ordering (register item 1 owns that), restore controller policy, or the two-slot binding mechanics. Verification: pnpm --filter @moe/store typecheck &amp;&amp; pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "A resume after a crash between the SWITCH publish and the INSTALLED marker completes the install by recording the marker, and does NOT re-execute the switch - proven by driving the existing SWITCH/INSTALLED_MARKER fault points, not by a test-local reimplementation.",
+    "Re-running the install on an already-INSTALLED anchor is idempotent and returns the existing exact outcome, never a second switch or a duplicate marker.",
+    "A resume that cannot prove the switch landed refuses with the exact stable store reason code and layer rather than guessing in either direction - an ambiguous window stays UNKNOWN and does not install.",
+    "Generated resume cases assert a nonzero exact cardinality covering each fault point, and mutating the already-switched detection turns a named test red.",
+    "Fresh pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "Detection must rest on durable evidence that the switch landed, never on a wall-clock, a retry counter, or the absence of an error.",
+    "Do not weaken the single-shot guarantee: recognising a completed switch must not make a genuine second switch possible.",
+    "Every refusal test pins the exact stable reason code and the refusing layer, not merely that resume failed.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED FIRST. In packages/store/src/recovery-anchor.test.ts, drive installRecoveryAnchor to the SWITCH point using the existing injectFault seam - fault?.(\"INSTALLED_MARKER\") in recovery-anchor-install.ts is the point to abort at, since it fires AFTER the switch has been published and BEFORE the marker is written. Then call installRecoveryAnchor again with the same request and assert two things: the result is INSTALLED, and the protocol was NOT re-entered - assert that writeInactiveSlot and the stampIncarnation transaction did not run on the second call, by observing the seam rather than by inspecting bytes, since re-running them is the actual harm. This is RED today: settledInstall (recovery-anchor.ts:108-115) returns null unless `stored.state === \"INSTALLED\"`, so the post-switch/pre-marker record falls through to prepareRecoveryAnchor + runInstall and re-enters the protocol. Record that red before touching production.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Extend the completion guard to cover the post-switch window. recovery-anchor.ts:108-115 `settledInstall` currently recognises only a fully completed install: it reads the stored anchor, returns null unless `state === \"INSTALLED\"`, and otherwise matches on preparedIdentity. Add recognition of the OTHER settled state - `state === \"PREPARED\"` together with `currentSlot === targetSlot` - which is reachable ONLY after the switch has been published, because before the switch currentSlot names the other slot. Keep the preparedIdentity check on both arms: an anchor belonging to a different command must still refuse rather than be adopted. This needs no new durable field; the record already carries currentSlot (contracts :107), targetSlot (:121) and state (:120), and runInstall's own post-switch record is exactly `resealAnchorRecord(prepared, { currentSlot: prepared.targetSlot })` with state still PREPARED.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Complete the install by writing the MARKER ONLY, never by re-running. For the post-switch state recognised in step 2, finish exactly as runInstall's final two lines do - `resealAnchorRecord(switched, { state: \"INSTALLED\" })` published through publishFileAtomically to anchorPath - and return the same {anchor, ok, outcome: \"INSTALLED\"} shape. Do NOT call writeInactiveSlot, stampIncarnation, persistFileDurably, persistSlotDurably or verifySlot on this path: after the switch, `currentSlot === targetSlot`, so those writes would land in the slot that readers are NOW resolving. That is not a theoretical concern - recovery-anchor.ts's own doc comment above settledInstall already states it: 're-entering the protocol would write the restored payload into the slot that is now LIVE - the one thing this module exists to never do.' The guard was simply one condition short of covering the window its comment describes. Prefer putting the marker-only completion beside runInstall in recovery-anchor-install.ts so both writers of the marker share one implementation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor-install.ts",
+        "packages/store/src/recovery-anchor.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Keep the ambiguous cases refusing, and prove idempotence. Assert that a stored anchor whose preparedIdentity does NOT match the request still refuses on BOTH arms with the existing exact stable code and layer - the new arm must not become a way to adopt another command's anchor. Assert that a PREPARED record whose currentSlot does NOT equal targetSlot (the genuine pre-switch state) still proceeds to a normal install rather than being mistaken for a completed switch, since that is the case the new condition must not swallow. Assert that calling installRecoveryAnchor a third time is idempotent and returns the same record without writing again. Cover each fault point with generated cases asserting an exact non-zero cardinality, so a fault point added later without a case fails the count instead of being skipped silently.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line, not the final exit code. Then review as an attacker: (1) Is `state === \"PREPARED\" && currentSlot === targetSlot` genuinely unreachable before the switch - trace every writer of currentSlot and confirm no other path can produce that pair, because the whole fix rests on that pair being an unambiguous signature. (2) Can the new arm be reached with a record from a DIFFERENT command, and does preparedIdentity still stop it? (3) Does the marker-only path leave the single-shot guarantee intact - can it be used to install twice? (4) If the marker write itself fails, does the caller get an exact refusal rather than a partially-completed claim? (5) Confirm recovery-anchor.ts (198 lines) and recovery-anchor-install.ts (263 lines) - the latter is ALREADY above the 250 target, so the marker-only helper must not grow it further; if it would, split rather than exceed. Measure with `grep -c ''`, since PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/recovery-anchor.ts",
+        "packages/store/src/recovery-anchor-install.ts",
+        "packages/store/src/recovery-anchor.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 2, resume re-enters runInstall), created from task-963cf1d1 with no dependency on any other task. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:46:01.896Z",
+  "updatedAt": "2026-08-15T12:58:23.628Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T12:56:49.280Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:58:21.569Z",
+  "planningNotes": {
+    "approachesConsidered": "WHERE TO PUT THE RECOGNITION. Adding a third RECOVERY_ANCHOR_STATE (e.g. SWITCHED) written between the two publishes was considered and REJECTED: it adds a durable write inside the very window being closed, enlarging the window rather than removing it, and it changes a frozen state vocabulary that anchorDigest covers. CHOSEN: derive the state from fields already on the record. The signature is exact, needs no extra write, and cannot itself be interrupted.\n\nWHERE TO PUT THE COMPLETION. Extending settledInstall in recovery-anchor.ts keeps the recognition next to its existing sibling, but the marker WRITE belongs beside runInstall's own final two lines so both writers share one implementation - otherwise the marker is published from two places that can drift. That is why step 3 splits recognition (recovery-anchor.ts) from completion (recovery-anchor-install.ts). recovery-anchor-install.ts is already 13 lines over the 250 target, so if the helper cannot fit, splitting that file is the correct move rather than growing it toward 400.\n\nWHY NOT JUST RE-RUN IDEMPOTENTLY. Making runInstall safe to re-run from the top was considered and rejected outright: it would require writeInactiveSlot and stampIncarnation to be safe against the LIVE slot, which is the exact invariant the module is built to protect. Recognising the settled state is strictly safer than making the dangerous path survivable.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e; I raised this slice from the audit register at the same HEAD.\n\nTHE WINDOW, EXACTLY. recovery-anchor-install.ts:224 runInstall ends with two publishes:\n  fault?.(\"SWITCH\");\n  const switched = resealAnchorRecord(prepared, { currentSlot: prepared.targetSlot });\n  await publishFileAtomically(anchorPath(request.anchorRoot), encodeAnchorRecord(switched));\n  fault?.(\"INSTALLED_MARKER\");\n  const installed = resealAnchorRecord(switched, { state: \"INSTALLED\" });\n  await publishFileAtomically(anchorPath(request.anchorRoot), encodeAnchorRecord(installed));\nA crash between them leaves a durable record with currentSlot === targetSlot and state still \"PREPARED\".\n\nTHE MOST IMPORTANT FINDING: THE CODE ALREADY DESCRIBES THIS HAZARD AND THE GUARD IS ONE CONDITION SHORT. recovery-anchor.ts:100-106, the doc comment above settledInstall, reads: 'An install that already completed is NOT re-run. After the switch `currentSlot === targetSlot`, so re-entering the protocol would write the restored payload into the slot that is now LIVE - the one thing this module exists to never do.' But the guard itself (:108-115) is `if (stored.state !== \"INSTALLED\") return null;`. It covers only the fully-marked case. The post-switch/pre-marker record therefore falls through installRecoveryAnchor (:117-125) to prepareRecoveryAnchor + runInstall and re-enters the protocol - doing precisely what the comment forbids.\n\nTHE FIX NEEDS NO NEW DURABLE STATE. The record already carries everything required: currentSlot (recovery-anchor-contracts.ts:107), targetSlot (:121) and state (:120), and RECOVERY_ANCHOR_STATES is just PREPARED|INSTALLED. `currentSlot === targetSlot && state === \"PREPARED\"` is an unambiguous signature of a landed switch, because before the switch currentSlot names the OTHER slot.\n\nWHAT RE-ENTRY ACTUALLY DOES, and why this is worth fixing despite being classified low: runInstall's first two steps are writeInactiveSlot and stampIncarnation, which reopen and WRITE the database in slotRoot. After the switch that slot is the live one, so re-entry writes the restored payload into the slot readers are currently resolving.\n\nSIZES: recovery-anchor.ts 198 lines; recovery-anchor-install.ts 263 lines - ALREADY ABOVE the 250 target, which constrains where the marker-only helper can go. Tests: recovery-anchor.test.ts and recovery-anchor-refusals.test.ts.",
+    "risks": "THE WHOLE FIX RESTS ON ONE CLAIM - that `state === \"PREPARED\" && currentSlot === targetSlot` is unreachable before the switch. I verified it from runInstall's own sequence, but adversarial review must trace EVERY writer of currentSlot to confirm no other path produces that pair. If some preparation step ever sets currentSlot to targetSlot early, the new arm would skip a real install and report INSTALLED over an unwritten slot - a far worse defect than the one being fixed.\n\nDO NOT LET THE NEW ARM WEAKEN IDENTITY CHECKING. settledInstall's preparedIdentity comparison is what stops one command adopting another's anchor. The new arm must carry the same check; dropping it in the name of 'the switch already landed' would let a different command claim a completed install.\n\nTHE PRE-SWITCH PREPARED CASE MUST STILL INSTALL. A PREPARED record whose currentSlot differs from targetSlot is the ordinary pre-switch state and must proceed normally. A condition written slightly too broadly would swallow it and silently skip real installs - which is why step 4 pins that case explicitly.\n\nTHE TEST MUST OBSERVE THE SEAM, NOT THE BYTES. The harm is that writeInactiveSlot and stampIncarnation RUN, not that the resulting bytes differ - after a successful completion the bytes may well look correct either way. Asserting on disk content could pass while the protocol was re-entered.\n\nrecovery-anchor-install.ts IS ALREADY OVER THE PER-FILE TARGET at 263 lines. Do not grow it; split if the helper does not fit.\n\nSHARED WORKTREE. Line numbers are a snapshot at 192360e; peers commit continuously. Re-measure before editing and commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/store/src/recovery-anchor.ts",
+      "packages/store/src/recovery-anchor-install.ts",
+      "packages/store/src/recovery-anchor-contracts.ts",
+      "packages/store/src/recovery-anchor.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T12:58:23.628Z"
+}

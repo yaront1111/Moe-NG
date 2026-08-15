@@ -1,0 +1,114 @@
+{
+  "id": "task-bdb80e99d4a646beabae2d6de400f0d9",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Bound the import dependsOn graph walk",
+  "description": "Objective: stop a deep legacy dependency graph from crashing the importer with a stack overflow. Register item 6 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (2026-08-14 product audit; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: packages/import/src/import-reconcile.ts:159 defines `const visit = (legacyId: string): void =&gt; {` inside graphFindings, a recursive depth-first walk over `dependsOn` (helper at :47, iterated at :162) using an OPEN/DONE state map for cycle detection. Cycles are handled; DEPTH is not. A legacy project with a long dependency chain recurses once per link and overflows the stack, and the importer is fed untrusted frozen legacy bytes by definition, so the depth is attacker-influenced rather than merely unlucky. Deliverable: make the walk depth-independent - convert it to an explicit stack/iterative traversal, or bound the depth and refuse past the bound with an exact stable import code and layer. An overflow must never surface as an unhandled RangeError. NOT in scope: changing the DANGLING_REF or cycle finding vocabulary, the reconciliation report shape, or the canonical ordering. Verification: pnpm --filter @moe/import typecheck &amp;&amp; pnpm --filter @moe/import test.",
+  "definitionOfDone": [
+    "A dependency chain deep enough to overflow the current recursive walk is reconciled without a RangeError - the test constructs that chain and asserts a normal result or an exact refusal, and it FAILS on the current implementation before the fix.",
+    "If a depth bound is chosen instead of an iterative walk, exceeding it returns an exact stable import reason code and layer, never an unhandled throw and never a silently truncated finding set.",
+    "Existing behavior is byte-identical for graphs within the current depth: the same DANGLING_REF and cycle findings, in the same canonical order, for the same input.",
+    "Generated depth cases assert a nonzero exact cardinality including the boundary depth, and reverting the walk to unbounded recursion turns a named test red.",
+    "Fresh pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test exits 0."
+  ],
+  "taskRails": [
+    "Ordering must stay deterministic. The existing sort by code unit before visiting is load-bearing for @moe/import's identical-bytes-identical-hashes property; an iterative rewrite must preserve visit order exactly.",
+    "Do not catch RangeError as the fix. Catching a stack overflow leaves the walk's partial state unknowable and converts a crash into a silently incomplete finding set.",
+    "Do not introduce a clock, a random source, or any host-dependent value into the walk.",
+    "Target <=250 physical lines per production source; import-reconcile.ts is at 250 today, so an iterative rewrite must not push it over - split if needed."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CAPTURE GOLDEN OUTPUT FIRST, before changing anything. The risk in this task is not the overflow fix, it is silently changing the finding ORDER. In packages/import/src/import-reconcile.test.ts, add cases over a corpus of graphs - a plain chain, a diamond, a self-cycle, a mutual cycle, a longer cycle, several dangling refs, a node with multiple refs where some recurse and some dangle, and disconnected components - and assert the EXACT finding sequence the CURRENT recursive implementation produces, kind and message, in order. These are golden fixtures: they must pass against current bytes before any production edit. Assert an exact non-zero case count with a hand-written literal. Without this, an iterative rewrite that reorders findings passes every existing test and silently changes what the importer reports.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED for the actual defect. Add a case that builds a dependsOn chain deep enough to overflow the current recursive walk - construct it programmatically rather than by hand - and assert the reconciliation completes and returns its findings. Against current bytes this must fail with a RangeError, because graphFindings' `visit` (import-reconcile.ts:159-188) recurses once per link with no depth bound. Record that red. Note the importer consumes frozen LEGACY bytes, so the depth is data-determined and effectively attacker-influenced rather than merely unlucky - which is why an unhandled RangeError is the wrong failure mode even though the input is 'just data'.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Extract the graph walk into its own module before rewriting it. import-reconcile.ts is EXACTLY 250 physical lines - at the per-file target - and an explicit-stack walk is longer than the recursive one, so rewriting in place would push the file over. Move graphFindings and its local helper dependsOn into a new packages/import/src/import-reconcile-graph.ts, export the walk, and import it back into import-reconcile.ts. Add the matching LF `.js` bridge: this package uses them throughout (canonical-bytes.js, import-reconcile.js, import-apply.js and siblings all exist), so a new runtime module without one is inconsistent and may fail a bridge sweep. Keep byCodeUnit imported from ./canonical-bytes.js - it is the package's declared only-permitted string comparator and the sorted iteration is load-bearing for determinism. This step is a pure move: the golden fixtures from step 1 must still pass unchanged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile-graph.ts",
+        "packages/import/src/import-reconcile-graph.js",
+        "packages/import/src/import-reconcile.ts"
+      ],
+      "newFiles": [
+        "packages/import/src/import-reconcile-graph.ts",
+        "packages/import/src/import-reconcile-graph.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Replace recursion with an explicit stack, preserving order exactly. THE CRITICAL DETAIL, and the thing a naive rewrite gets wrong: findings are pushed DURING the child loop, interleaved with recursion. For a node A the current walk iterates A's refs in sorted order, and each ref either pushes a finding immediately or recurses - emitting that whole subtree's findings - before A's NEXT ref is considered. A stack of plain node ids cannot reproduce that interleaving. Use frames of (legacyId, refs, nextIndex): push a frame, advance one ref at a time, suspend the parent by leaving its frame with the incremented index when descending, and resume exactly there on return. Preserve the post-order `state.set(legacyId, \"DONE\")` - it must run only after ALL of a node's refs are processed, because DONE marks a completed subtree and OPEN is what distinguishes a back-edge (CYCLE) from a cross-edge (silently skipped). Preserve the `reported` dedupe keys verbatim: `${legacyId}->${ref}` for DANGLING_REF and `cycle:${ref}` for CYCLE - note the cycle key is keyed on the TARGET alone, so exactly one cycle finding is emitted per target however many nodes close back to it. Keep the outer loop over `[...byId.keys()].sort(byCodeUnit)`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile-graph.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Prove equivalence and depth-independence together. Re-run the step-1 golden fixtures unchanged - they are now the equivalence proof between the old recursive walk and the new iterative one, which is why they had to be captured first. Confirm the step-2 deep-chain case now passes rather than throwing. Add a depth case an order of magnitude deeper again, so the walk is shown to be depth-INDEPENDENT rather than merely tolerant of the one depth that was tested. Assert determinism explicitly: the same input reconciled twice yields byte-identical findings, and a graph whose adjacency is supplied in a different insertion order still yields the identical sequence - the sorted iteration is what guarantees that and an iterative rewrite is exactly where it could be lost.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Walk a diamond by hand against the new frame logic and confirm the DONE marking still happens post-order - marking DONE early turns a genuine back-edge into a cross-edge and silently loses a CYCLE finding. (2) Confirm a node reachable by two paths is visited once, as `seen === undefined` guarantees today. (3) Confirm no clock, random source or host-dependent value entered the walk - the package's whole determinism claim forbids it. (4) Confirm the new module carries an exact LF `.js` bridge matching its siblings; a CRLF bridge fails a byte comparison while `git diff --stat` shows nothing. (5) Confirm import-reconcile.ts is now UNDER 250 physical lines and the new module is too, using `grep -c ''` (PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-reconcile-graph.ts",
+        "packages/import/src/import-reconcile.ts",
+        "packages/import/src/import-reconcile.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 6, unbounded recursive dependsOn walk), created from task-963cf1d1 with no dependency on any other task. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:46:54.548Z",
+  "updatedAt": "2026-08-15T13:04:19.029Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T13:02:36.943Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T13:04:16.973Z",
+  "planningNotes": {
+    "approachesConsidered": "ITERATIVE WALK vs DEPTH BOUND. A depth bound with an explicit refusal is far simpler and preserves ordering trivially, since the recursion stays. REJECTED as the primary approach: the importer reads frozen legacy projects whose depth is data-determined, so a bound turns a legitimately deep import into a refusal - a functional regression traded for a crash fix. CHOSEN: an explicit-stack walk with no artificial limit. If the ordering equivalence cannot be proven against the golden fixtures, falling back to a bounded recursion with an exact stable import refusal is an acceptable second choice, and the DoD permits it - but it should be a deliberate retreat, not the first attempt.\n\nGOLDEN FIXTURES CAPTURED BEFORE THE CHANGE. The obvious alternative - write the iterative walk and check the existing tests still pass - was rejected because the existing tests do not pin finding ORDER across interleaved recursion, which is exactly what a rewrite perturbs. Capturing the current sequence first turns the fixtures into a genuine equivalence proof rather than a regression net with a hole in it.\n\nEXTRACTION IS FORCED, NOT PREFERRED. import-reconcile.ts sits at exactly 250 lines and an explicit-stack walk is longer than the recursive form, so an in-place rewrite breaches the per-file target immediately. Extracting graphFindings and dependsOn into import-reconcile-graph.ts also isolates the riskiest logic behind a testable boundary.\n\nCATCHING RangeError WAS REJECTED OUTRIGHT and is called out in the task rails. It converts a crash into a silently incomplete finding set, leaving the walk's partial state unknowable - strictly worse than the crash, because the importer would then report fewer findings than the graph contains and look successful.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e; I raised this slice from the audit register at the same HEAD.\n\nTHE WALK, IN FULL. packages/import/src/import-reconcile.ts:150-195, graphFindings:\n- builds byId from entries, first occurrence wins;\n- `state` is a Map of OPEN|DONE, `reported` a dedupe Set;\n- `visit(legacyId)` sets OPEN, iterates `[...dependsOn(entry.record)].sort(byCodeUnit)`, and for each ref: pushes DANGLING_REF when the target is absent; pushes CYCLE when `state.get(ref) === \"OPEN\"`; recurses when `state.get(ref) === undefined`; then sets DONE after the loop;\n- the outer driver iterates `[...byId.keys()].sort(byCodeUnit)`.\nCycles ARE handled. DEPTH is not: one stack frame per link, no bound.\n\nTHE REAL HAZARD IS ORDERING, NOT THE OVERFLOW. Findings are pushed DURING the child loop, interleaved with recursion - a node's second ref is only considered after the entire subtree under its first ref has emitted its findings. A rewrite using a stack of plain node ids produces a different sequence, passes every existing test, and silently changes what the importer reports. That is why the plan captures golden fixtures BEFORE touching production and uses (legacyId, refs, nextIndex) frames rather than a node stack.\n\nTWO DEDUPE KEYS THAT MUST SURVIVE VERBATIM: `${legacyId}->${ref}` for DANGLING_REF, and `cycle:${ref}` for CYCLE. The cycle key is keyed on the TARGET alone, so exactly one CYCLE finding is emitted per target no matter how many nodes close back to it. A rewrite that keys on the pair would multiply findings on a shared cycle target.\n\nPOST-ORDER DONE IS LOAD-BEARING. `state.set(legacyId, \"DONE\")` runs after the whole ref loop. OPEN vs DONE is precisely what separates a back-edge (CYCLE, reported) from a cross-edge (already finished, silently skipped). Marking DONE early loses cycle findings; marking it late costs nothing.\n\nDETERMINISM IS THIS PACKAGE'S CENTRAL CLAIM. byCodeUnit is imported at import-reconcile.ts:1 from ./canonical-bytes.js, whose own comment calls it 'The ONLY string comparator this package may use' and explains that localeCompare would let two machines produce different canonical digests from identical bytes. Both sorts in the walk are load-bearing.\n\nSIZES AND CONVENTIONS: import-reconcile.ts is EXACTLY 250 physical lines - at the target, with zero headroom, which forces the extraction in step 3. @moe/import DOES use .js bridges throughout (canonical-bytes.js, import-reconcile.js, import-apply.js, index.js and siblings all present), so a new runtime module needs one.",
+    "risks": "SILENT REORDERING IS THE REAL FAILURE MODE. The overflow fix is mechanical; the ordering is where a competent rewrite goes wrong. A stack of node ids feels equivalent and is not, because it loses the parent-suspended-mid-loop interleaving. The (legacyId, refs, nextIndex) frame shape is the thing to get right, and the golden fixtures are the only way to know it was.\n\nEARLY DONE MARKING LOSES CYCLES QUIETLY. If DONE is set when a node is first popped rather than after its refs are exhausted, back-edges look like cross-edges and CYCLE findings vanish. The suite would go green with fewer findings, which reads as an improvement.\n\nTHE CYCLE DEDUPE KEY IS TARGET-ONLY. `cycle:${ref}` means one finding per cycle target. Rewriting it as a pair key multiplies findings on shared targets and changes output for every graph with a converging cycle.\n\nA DEPTH TEST THAT IS TOO SHALLOW PROVES NOTHING. Node's default stack absorbs several thousand frames, so a 100-link chain passes before and after the fix. The step-2 chain must actually overflow current bytes - confirm the RED - and step 5 adds a much deeper case to show depth-independence rather than tolerance of one tested depth.\n\nDETERMINISM CAN BE LOST WITHOUT ANY TEST NOTICING on a single host. Both sorts must survive the rewrite; the package's canonical-bytes.ts warns that this class of failure 'never reproduces locally'.\n\nBRIDGE BYTES: the new module's .js bridge must be exact LF. A CRLF bridge fails a byte comparison while `git diff --stat` shows nothing at all.\n\nSHARED WORKTREE. Line numbers are a snapshot at 192360e and peers commit continuously - note legacy-decoder.ts/.js have already landed in this package from a different task since this session began. Re-measure before editing and commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/import/src/import-reconcile.ts",
+      "packages/import/src/canonical-bytes.ts",
+      "packages/import/src/import-reconcile.test.ts",
+      "packages/import/src/import-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-15T13:04:19.029Z"
+}

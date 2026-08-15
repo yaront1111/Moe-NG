@@ -1,0 +1,106 @@
+{
+  "id": "task-1fb6e87110744bbea21aafc3ea891e8d",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Crash-safe backup generation publish",
+  "description": "Objective: remove the window in which a crash leaves NO recoverable backup generation. Register item 1 of 11 from task-963cf1d125134c6193b7af0e53deeac3 (Yaron's 2026-08-14 product audit, 30-agent adversarial sweep; verified real, classified low). RE-MEASURED STILL OPEN at HEAD 192360e: packages/store/src/backup-generation.ts:172-173 publishes with `await rm(finalPath, { force: true, recursive: true });` immediately followed by `await rename(stagingRoot, finalPath);`. Between those two awaits the OLD generation is already destroyed and the new one is not yet published, so a crash in that window leaves no recoverable state at all. Deliverable: publish so that at every instant at least one complete generation is resolvable - e.g. rename the existing final aside before publishing and remove it only after the new generation is in place, or publish under a fresh name and swap a pointer, whichever fits the surrounding capture/verify contract. The failure path must leave a resolvable generation, never a half-published directory presented as complete. NOT in scope: changing the backup capture format, the generation digest/manifest contract, restore controller policy, or the recovery anchor install path (register item 2 owns that). Verification: pnpm --filter @moe/store typecheck &amp;&amp; pnpm --filter @moe/store test.",
+  "definitionOfDone": [
+    "Publishing a new generation never leaves zero resolvable generations: at every instant before, during and after the swap, a reader can resolve at least one complete generation, and this is asserted by a test that interrupts between the publish steps rather than by reasoning about the code.",
+    "An interrupted publish leaves either the previous generation intact or the new one complete - never a partially-populated directory that presents as a complete generation.",
+    "A publish failure returns the existing exact stable store reason code and layer; no failure path silently leaves the destination removed.",
+    "Existing backup-generation capture, verification and digest behavior is unchanged - the generation digest for identical input bytes is identical to before this change.",
+    "Fresh pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test exits 0."
+  ],
+  "taskRails": [
+    "Do not change the backup generation digest or manifest contract; this is a publish-ordering fix, and a digest change would silently invalidate existing evidence.",
+    "The interruption test must interrupt the PRODUCTION publish path, not a test-local reimplementation of it.",
+    "Windows: a rename over an existing directory and an open-handle EBUSY both behave differently than on POSIX - handle them explicitly rather than assuming POSIX rename semantics.",
+    "Target <=250 physical lines per production source; split before 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD RED FIRST. In packages/store/src/backup-generation.test.ts, add a test that publishes over an EXISTING complete generation and interrupts between the destroy and the publish, then asserts that a complete generation is still resolvable on disk. The window is real and measurable today: backup-generation.ts:172-173 is `await rm(finalPath, { force: true, recursive: true });` immediately followed by `await rename(stagingRoot, finalPath);`. Interrupt by injecting a rename that throws (or a seam that aborts) after the rm has run, then assert on the DISK STATE, not on the returned value - the point is what survives a process that never returns at all. This must be RED against current bytes: today the previous generation is gone and the new one was never renamed in, so nothing is resolvable. Record that red before touching production.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/backup-generation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Replace destroy-then-publish with rename-aside. In backup-generation.ts, instead of removing finalPath and then renaming staging over it, rename the existing finalPath ASIDE to a sibling reserved name, rename stagingRoot into finalPath, and only then remove the aside copy. Two consequences make this the right shape rather than merely a smaller window. FIRST, the current window spans a RECURSIVE DELETE of a whole generation directory, which is long in wall-clock terms; after the change the exposed interval is two adjacent metadata renames. SECOND, at every instant a COMPLETE generation exists under a known name - the aside, or finalPath - so an interrupted publish is recoverable rather than lost. Note the Windows constraint that forces this ordering anyway: rename onto an EXISTING directory fails on Windows, which is precisely why the original code removed finalPath first, so the aside rename is required, not optional. Keep the existing post-rename manifest reopen-and-fsync (:175-183) exactly as it is - its comment records that a directory rename is not itself durable on Windows - and keep the final verifyBackupGeneration re-read.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/backup-generation.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Make an interrupted publish recoverable rather than merely survivable. On entry, before staging, detect a leftover aside and/or a leftover `${finalPath}.staging` from a previous interrupted run and resolve the state deterministically: if finalPath is absent and an aside exists, restore the aside; if finalPath is present and an aside exists, the publish completed and the aside is removable. Do NOT guess from timestamps or directory mtimes - decide from which paths exist and from whether the manifest at finalPath verifies, which is evidence the code already knows how to produce via verifyBackupGeneration. An ambiguous combination that cannot be resolved from those facts must refuse with the existing exact store code rather than picking a side; silently choosing wrong here publishes an unverified generation as complete.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/backup-generation.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Pin the failure paths and the unchanged contract. Assert that a publish failure returns the existing exact stable refusal - refuseBackupGeneration(\"DURABILITY_FAULT\") is the current catch-all at the end of the function - and that no failure path leaves the destination REMOVED, which is the specific harm this task exists to end. Assert that the existing `finally { await rm(stagingRoot, ...).catch(() => undefined) }` still cleans staging on every exit and still cannot itself replace the result. CONTRACT INVARIANT, and it is the thing most likely to be broken by accident: the generation digest for identical input bytes must be IDENTICAL to before this change - assert it against a known fixture, because a digest change silently invalidates every piece of existing backup evidence and would not otherwise show up as a test failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/backup-generation.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Is there ANY remaining instant at which neither finalPath nor the aside holds a complete generation - walk the sequence step by step rather than reasoning from the happy path. (2) On Windows, can an open handle produce EBUSY on the aside removal, and does that failure replace the successful result? `force: true` suppresses ENOENT, NOT EBUSY - this is the same trap the release supply-chain code has. (3) Can two concurrent publishes to the same destination interleave their asides and destroy each other? (4) Does the recovery path ever restore an aside whose manifest does not verify? (5) Confirm backup-generation.ts is at or under 250 physical lines using `grep -c ''` - it is 208 today, so there is headroom, and PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/store/src/backup-generation.ts",
+        "packages/store/src/backup-generation.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Promoted by architect-2aea4111. Audit-register slice (item 1, backup publish rm-then-rename crash window), created from task-963cf1d1 with no dependency on any other task. BACKLOG is not agent-claimable.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-963cf1d125134c6193b7af0e53deeac3",
+  "priority": "MEDIUM",
+  "order": 99.1,
+  "comments": [
+    {
+      "id": "comment-d6120626b6cb45fc989537095685c73a",
+      "author": "architect-2aea4111",
+      "content": "ROUTED FINDING — a second defect in a file you already own, not in the audit register.\n\nWhile planning sibling task-6a31a86fdcd84795a8fae6e5d6978d2c (persistFileDurably short write) I found the IDENTICAL defect in this task's file. Measured at HEAD 192360e:\n\npackages/store/src/backup-generation.ts:37-46\n```\nasync function persistFile(path: string, payload: Uint8Array): Promise<void> {\n  await mkdir(dirname(path), { recursive: true });\n  const handle = await open(path, \"w\");\n  try {\n    await handle.write(payload);     // <-- bytesWritten never checked\n    await handle.sync();\n  } finally {\n    await handle.close();\n  }\n}\n```\n\nFileHandle.write resolves with {bytesWritten, buffer} and may write fewer bytes than requested. The return type is Promise<void>, so a partial write is indistinguishable from a complete one. This is byte-for-byte the same body as recovery-anchor-fs.ts:23-31, which the audit DID record as item 3 — the register named only one of the two copies.\n\nWhy it lands on you rather than on the sibling task: backup-generation.ts is YOUR owned path. Two tasks editing one file in this shared worktree is exactly the collision the epic rails warn about, so I did not widen the sibling task to reach in here.\n\nWhy it matters for your task specifically: persistFile is what writes the staged manifest at backup-generation.ts:168-171, immediately before the publish you are making crash-safe. A truncated manifest written there would be renamed into finalPath by your new publish path and then pass the post-rename fsync — your atomicity work would faithfully publish truncated bytes. Fixing the publish window without this leaves a hole in the same sequence.\n\nSuggested handling: fix it inside your task and note it in your completion, or decline it in writing so it is not silently dropped. The sibling task's plan carries the matching fix for recovery-anchor-fs.ts, including the sharp part — sync() must run only AFTER the payload is fully written, since a sync between partial writes flushes a truncated file and produces false durable evidence while looking more careful than the original.\n\nNot blocking your plan; the approved plan stands. This is one extra line to fix in a function you are already reading.",
+      "timestamp": "2026-08-15T13:00:15.278Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T12:45:50.059Z",
+  "updatedAt": "2026-08-15T13:00:15.278Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T12:55:16.606Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T12:56:43.626Z",
+  "planningNotes": {
+    "approachesConsidered": "RENAME-ASIDE vs POINTER INDIRECTION. The theoretically cleanest fix is to publish each generation under a fresh immutable name and swap a pointer, which makes publication genuinely atomic. REJECTED: `destinationPath` is caller-supplied and readers resolve that exact directory (backup-generation.ts:195 returns `generationPath: finalPath`), so introducing an indirection would change the published contract and every reader with it - far beyond a crash-window fix, and it would need its own task. CHOSEN: rename-aside, which keeps the published path contract identical while guaranteeing a complete generation always exists under one of two known names.\n\nHONEST LIMIT OF THE CHOSEN FIX, stated rather than glossed. Rename-aside does not make publication atomic - there remains an instant between the two renames when finalPath itself does not exist. What it does guarantee is that a COMPLETE generation is always present on disk and recoverable, and it collapses the exposure from a recursive directory delete down to a single metadata operation. Step 3 is what converts that guarantee into an actual recovery rather than a theoretical one. If QA reads DoD 1's 'a reader can resolve at least one complete generation' as requiring finalPath itself to be continuously present, that is the pointer-indirection design and should be routed as a separate task rather than smuggled in here.\n\nRECOVERY DECIDES FROM PATHS AND VERIFICATION, NOT TIMESTAMPS. Using mtimes or a 'newest wins' rule was rejected: it makes correctness depend on clock and filesystem behavior, and this package already refuses to let host behavior decide truth. The existing verifyBackupGeneration is the evidence source, and an unresolvable combination refuses rather than picking a side.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 192360e; I raised this slice from the audit register at the same HEAD, so the evidence is first-hand.\n\nTHE WINDOW, EXACTLY. packages/store/src/backup-generation.ts:99-100 sets `const finalPath = resolve(request.destinationPath); const stagingRoot = `${finalPath}.staging`;`. The publish at :172-173 is:\n  await rm(finalPath, { force: true, recursive: true });\n  await rename(stagingRoot, finalPath);\nBetween those two awaits the previous generation is already destroyed and the new one is not yet published. The window is not instantaneous - it spans a RECURSIVE DELETE of an entire generation directory, so its duration scales with the size of the backup being replaced.\n\nWHAT ALREADY WORKS AND MUST NOT REGRESS. :175-183 reopens the published manifest and fsyncs it, with a comment recording that on Windows the directory rename is not itself durable. :186-191 re-reads and re-verifies the published manifest through verifyBackupGeneration before returning. The `catch` returns refuseBackupGeneration(\"DURABILITY_FAULT\") and the `finally` removes stagingRoot with `.catch(() => undefined)` - so staging cleanup already cannot replace the result, which is the correct shape and worth preserving.\n\nWHY RENAME-ASIDE IS FORCED RATHER THAN CHOSEN. On Windows, rename onto an EXISTING directory fails. That is almost certainly why the original code removes finalPath first. So any fix that avoids the destroy-first ordering must move the existing directory out of the way by renaming it aside - there is no atomic replace-directory primitive to reach for here.\n\nRECOVERY MATERIAL ALREADY EXISTS ON DISK. If the process dies between :172 and :173, the `finally` never runs, so `${finalPath}.staging` is still present - a complete staged generation with its manifest already written (:168-171). Nothing currently looks for it. That is what makes step 3 a small addition rather than a new subsystem.\n\nSIZES: backup-generation.ts is 208 physical lines, comfortably under the 250 target, so there is room for the aside and recovery logic. Test file is packages/store/src/backup-generation.test.ts.",
+    "risks": "THE DIGEST INVARIANT IS THE EASIEST THING TO BREAK SILENTLY. This is a publish-ORDERING fix. If the change perturbs anything that feeds the manifest or container digest, existing backup evidence is invalidated and no ordinary test failure announces it. Step 4 pins the digest against a fixture for exactly that reason.\n\nEBUSY IS NOT SUPPRESSED BY force: true. `rm(..., { force: true })` ignores ENOENT, not a Windows EBUSY from a held handle. The new aside removal is a fresh place for that to bite, and if it throws where the result has already been computed it can replace a successful publish - the identical failure mode found in scripts/release/supply-chain.mjs's cleanup and now being fixed there under task-5611791337894212a277600a0768f1f9.\n\nAN INTERRUPTION TEST MUST ASSERT DISK STATE. Asserting the returned value proves nothing about a process that never returns. The test has to inspect what is on disk after the interruption, or it is testing error handling rather than crash safety.\n\nCONCURRENCY IS UNEXAMINED. I did not establish whether two publishes to the same destinationPath can run concurrently. If they can, two asides can collide and destroy each other. Adversarial review asks the question explicitly rather than assuming a single writer.\n\nSHARED WORKTREE. Line numbers here are a snapshot at 192360e and peers commit continuously; re-measure :172-173 before editing. Commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/store/src/backup-generation.ts",
+      "packages/store/src/backup-generation.test.ts",
+      "packages/store/src/backup-generation-request.ts",
+      "packages/store/src/backup-generation-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T12:56:45.674Z"
+}
