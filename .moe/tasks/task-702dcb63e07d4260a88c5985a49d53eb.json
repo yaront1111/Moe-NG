@@ -79,26 +79,40 @@
     {
       "stepId": "step-5",
       "description": "Sweep the numeric shapes with an exact non-zero cardinality and run the drill. Build a case table of rejected numeric shapes - NaN, Infinity, -Infinity, a non-integer, a negative, a non-number, and a value beyond safe-integer range - assert its exact length with a hand-written literal, and assert each refuses with the new exact code. Then run the mutation drill: remove the integer admission and confirm the NaN case specifically goes RED. The drill must redden on the NaN case, not merely on some case: every other rejected shape is ALSO caught by the ordering comparison once admission is gone (Infinity <= lastRound is false but -Infinity, negatives and non-integers behave ordinarily under <=), so NaN is the only shape that proves the new guard is doing work the old one could not. Confirm the drill applied by printing the replaced line range and chaining with &&, restore with Edit rather than git checkout, and hash-check back to the pre-drill bytes.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-findings.ts",
         "packages/review/src/review-findings.test.ts"
       ],
-      "startedAt": "2026-08-15T13:27:42.894Z"
+      "modifiedFiles": [
+        "packages/review/src/review-findings.test.ts",
+        "packages/review/src/review-findings.ts"
+      ],
+      "note": "SWEEP: REJECTED_ROUND_SHAPES table of 10 labelled shapes (NaN, +Infinity, -Infinity, 1.5, -3, 2**53, \"2\", null, undefined, {valueOf:()=>2}). Cardinality pinned two ways with hand-written literals — toHaveLength(10) AND the full label array by toEqual — because a generated table cannot police its own generator; a sweep that produced zero cases would otherwise pass. Each shape asserts the exact code FINDING_ROUND_INVALID and layer FINDINGS. 118 tests green.\n\nDRILL (neutralised :153 to `if (false && !admissibleRound(...))`, printed the replaced line each time, restored with Edit, sha256 back to 098d229c430643a6b85381a420ef1aa12568f35514689a7dcda83ac1881abe96 both times, git status shows only my 3 owned paths). NaN reddens SPECIFICALLY and by name, on an outcome assertion: `expected [Function] to not throw an error but 'TypeError: canonical JSON supports safe integers only' was thrown`. 18 of 26 red; the 8 that stayed green are the append-only and routing tests, proving the drill hit only the new guard.\n\nCORRECTION — I measured every shape individually under the drill and my step-1 note was wrong on the NaN mechanism, as is the task description's claim that NaN \"flows into the stored record at :144\". It does not. Pre-fix behaviour, measured: NaN, +Infinity, 1.5 and 2**53 bypass the ordering guard and then CRASH in canonicalJson with an unstructured TypeError; undefined and the valueOf object crash there too (\"does not support undefined\"/\"does not support function\"); -Infinity, -3 and null are caught by `<=` and refuse FINDING_LINEAGE_APPEND_ONLY, i.e. the wrong code. The shape that ACTUALLY reached a stored ReviewFindingRecord with ok:true is the numeric STRING \"2\" — `\"2\" <= 0` is false and it canonicalises cleanly, so nothing downstream objected. The fix is unchanged and the defect is still real: bypassing the guard to die on an unstructured TypeError names no reason code, which is exactly what epic rail 4 forbids. I pinned both discovered facts in the suite rather than leaving them in prose: expectRoundInvalid now asserts not.toThrow (crash is not a refusal), and a named test asserts the non-number round never reaches a stored record.",
+      "startedAt": "2026-08-15T13:27:42.894Z",
+      "completedAt": "2026-08-15T13:30:42.395Z"
     },
     {
       "stepId": "step-6",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test. Also run pnpm --filter @moe/daemon test, because apps/daemon consumes @moe/review and asserts against REVIEW_REASON_CODES in two places. Read every summary line rather than the final exit code. Then review as an attacker: (1) Can any non-integer still reach a stored ReviewFindingRecord's `round` field by any path? (2) Is the admission genuinely BEFORE the ordering comparison in the final code? (3) Does any coercion remain anywhere on that path? (4) Is the new code in its correct alphabetical position in the frozen array? (5) Confirm review-findings.ts is at or under 250 physical lines using `grep -c ''` (it is 220 today; PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-findings.ts",
         "packages/review/src/review-contract.ts",
         "packages/review/src/review-findings.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/review/src/review-findings.ts",
+        "packages/review/src/review-contract.ts",
+        "packages/review/src/review-findings.test.ts"
+      ],
+      "note": "GATES (fresh, read per summary line not just exit code): `pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test` EXIT=0, Test Files 4 passed (4), Tests 118 passed (118). `pnpm --filter @moe/daemon test` EXIT=0, Test Files 76 passed (76), Tests 1631 passed (1631) — run because apps/daemon consumes @moe/review and asserts against REVIEW_REASON_CODES twice. No foreign red to attribute.\n\nADVERSARIAL REVIEW, all five plan questions plus the checklist:\n(1) Only ONE production site constructs a record's `round` — review-findings.ts:159 — and it is gated at :153. Residual path, disclosed not fixed: a caller hand-building a ReviewLineage whose record carries a string round AND a matching digest would attest, since a string canonicalises cleanly. That is the lineage digest contract, explicitly out of scope for this task.\n(2) Order confirmed on COMMITTED bytes, not intent: git show HEAD gives :152 lineageAttested, :153 admissibleRound, :154 ordering.\n(3) No coercion on the path; grep for Number(|parseInt|parseFloat|?? 0||| 0 hits only the doc comment forbidding it.\n(4) Alphabetical position verified mechanically (diff members vs LC_ALL=C sort — no diff), count 18.\n(5) review-findings.ts 235 lines by `grep -c ''`, under 250. contract 248. No drill residue: grep \"false &&\" over packages/review/src returns none.\n-0 is not a hole: isSafeInteger(-0) admits it, then `-0 <= lastRound` is always true so the ordering guard catches it, and it canonicalises as \"0\". Concurrency/side effects: pure function, deep-frozen returns, no IO or handles, nothing to clean up on the error path.\nNO REGRESSION for real callers: the sole production caller, apps/daemon/src/review/review-services.ts:137, already pre-validates with positiveInteger (:97 = isSafeInteger && >= 1), strictly STRICTER than my guard, so no live input newly refuses. refuseFromKernel (review-ledger.ts:125) takes `code: string`, an open passthrough, so FINDING_ROUND_INVALID needs no mapping-table update anywhere. This also confirms the fix's shape: the daemon ingress already did exactly this admission; the KERNEL surface was the one missing it.\n\nCOMMIT — foreign whole-tree hazard, per project rail 5. I did not commit. Commit de936fe \"feat(task-6a31a86f...): persistFileDurably must prove the full write\" is a foreign whole-tree commit that swept all three of my owned paths in, including the untracked test file. I did not amend, reset, or create an empty commit. Verified the committed bytes are the GATED bytes, not drilled: all three sha256 HEAD==working tree (review-findings.ts 098d229c4306, review-contract.ts d045a5b0b080, review-findings.test.ts fc5afbf4e0fd) and `git show HEAD:...review-findings.ts | grep \"false &&\"` returns nothing. QA should review by base-ref diff, not by a commit bearing this task id: `git diff 4aa29d5..HEAD -- packages/review/src/review-findings.ts packages/review/src/review-contract.ts packages/review/src/review-findings.test.ts` = 3 files, 248 insertions, 3 deletions.",
+      "startedAt": "2026-08-15T13:30:47.691Z",
+      "completedAt": "2026-08-15T13:32:29.293Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-86bbe9fd",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -110,18 +124,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:08.778Z",
-  "updatedAt": "2026-08-15T13:27:42.894Z",
+  "updatedAt": "2026-08-15T13:33:05.347Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:04:22.863Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:05:52.332Z",
@@ -143,5 +159,17 @@
   "contextFetchedBy": [
     "worker-86bbe9fd"
   ],
-  "workStartedAt": "2026-08-15T13:25:25.393Z"
+  "workStartedAt": "2026-08-15T13:25:25.393Z",
+  "reviewStartedAt": "2026-08-15T13:33:05.346Z",
+  "verification": {
+    "command": "pnpm --filter @moe/review typecheck && pnpm --filter @moe/review test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nEXIT=0\n$ vitest run --root ../.. packages/review/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  4 passed (4)\n      Tests  118 passed (118)\n   Start at  16:31:47\n   Duration  469ms (transform 626ms, setup 0ms, import 798ms, tests 150ms, environment 0ms)\n\n--- also run: pnpm --filter @moe/daemon test ---\nDAEMON_EXIT=0\n Test Files  76 passed (76)\n      Tests  1631 passed (1631)",
+    "reportedAt": "2026-08-15T13:33:05.346Z"
+  },
+  "filesModified": [
+    "packages/review/src/review-findings.test.ts",
+    "packages/review/src/review-contract.ts",
+    "packages/review/src/review-findings.ts"
+  ]
 }

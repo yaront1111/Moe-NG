@@ -8,7 +8,7 @@ import {
   startControlRoomListener,
 } from "./http-listener.js";
 import type { ControlRoomListener } from "./http-listener.js";
-import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
+import { HTTP_INPUT_BOUNDS, WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { CommandAdapterDeps } from "./http-contract.js";
 import { streamPort } from "./event-stream-fixtures.js";
 import {
@@ -70,6 +70,7 @@ async function send(
     readonly method?: string;
     readonly origin?: string | null;
     readonly path?: string;
+    readonly protocolVersion?: string | null;
   } = {},
 ): Promise<Reply> {
   const headers: Record<string, string> = {
@@ -78,6 +79,9 @@ async function send(
   };
   if (init.origin !== null) headers.origin = init.origin ?? listener.origin;
   if (init.csrf !== null) headers["x-moe-csrf"] = init.csrf ?? CSRF;
+  if (init.protocolVersion !== null) {
+    headers["x-moe-protocol-version"] = init.protocolVersion ?? WIRE_PROTOCOL_VERSION;
+  }
   // The credential travels per REQUEST in a header, so one listener can serve
   // many principals and none of them appears in a URL.
   if (init.credential !== null) {
@@ -206,6 +210,19 @@ it("refuses an absent Origin and a foreign Origin, each by its own code", async 
       await send(listener, { origin: "http://evil.example.com" }),
       "LISTENER_ORIGIN_INVALID",
     );
+  });
+});
+
+it("ADMITS the matching Origin, so the two refusals above are not a guard that refuses everything", async () => {
+  await withListener(async (listener) => {
+    const reply = await send(listener, { origin: listener.origin });
+    // Named positively: the ADAPTER answered, so the listener passed this
+    // request through rather than pre-empting it. Asserting only "not
+    // LISTENER_ORIGIN_INVALID" would still pass if some other listener guard
+    // had refused instead, which is the detached assertion the epic rail bans.
+    expect(reply.body).toMatchObject({ outcome: "ACCEPTED" });
+    expect(reply.body).not.toHaveProperty("layer", CONTROL_ROOM_LISTENER_LAYER);
+    expect(reply.status).toBe(200);
   });
 });
 

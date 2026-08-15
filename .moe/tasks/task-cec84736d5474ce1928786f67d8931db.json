@@ -20,19 +20,26 @@
     {
       "stepId": "step-1",
       "description": "Establish what the daemon actually requires, and pin it, before changing the client. apps/daemon/src/http/http-listener-guards.ts:127 is `if (request.headers.origin !== origin) return \"LISTENER_ORIGIN_INVALID\";`, where the expected value comes from originOf(host, port) at :66 and the code is a member of the frozen list at :28. So the guard demands an EXACT match and refuses when the header is ABSENT, since undefined !== origin. apps/daemon/src/http/http-listener.test.ts ALREADY references LISTENER_ORIGIN_INVALID, so EXTEND that existing coverage rather than starting fresh: confirm it pins all three arms by exact code - matching Origin admitted, mismatched Origin refused, and NO Origin header refused - and add whichever arm is missing. This step changes no production code; it makes the daemon's contract explicit so the client change can be judged against it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/http-listener.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/http-listener.test.ts"
+      ],
+      "note": "Pinned the daemon Origin contract before touching the client. Measured at HEAD: http-listener-guards.ts:127 `if (request.headers.origin !== origin) return \"LISTENER_ORIGIN_INVALID\"`, expected value from originOf(host,port):66, code in the frozen list :28 — exact match required, absence refused (undefined !== origin). Guard ORDER matters: host is checked FIRST (:126), so an Origin arm must carry a valid Host or an earlier guard answers.\n\nExisting coverage in http-listener.test.ts already pinned TWO of three arms (:204 absent, :205-208 foreign). The ADMITTED arm was missing, so the whole test would have passed against a guard that refuses everything. Added `it(\"ADMITS the matching Origin, ...\")` asserting the ADAPTER answered (outcome ACCEPTED, status 200, body carries no CONTROL_ROOM_LISTENER layer) — a positive naming of which layer replied, not a bare \"not refused\".\n\nForced consequence: send() never set x-moe-protocol-version, so a request that PASSES the listener refuses at the adapter's version stage. Added an optional protocolVersion to the send helper defaulting to WIRE_PROTOCOL_VERSION imported from http-contract.js (never restated). Without it the admitted arm could not be expressed at all.\n\nMutation drills on the production guard (restored, sha256 ae13a94d… matches backup, git diff empty):\n- `if (true) return \"LISTENER_ORIGIN_INVALID\"` → ADMITS arm RED.\n- `if (false) return \"LISTENER_ORIGIN_INVALID\"` → absent/foreign arm RED.\nBoth directions kill, so the three arms are live and not equivalent mutants.\n\napps/daemon test: 15 passed (15). No production code changed in this step.",
+      "startedAt": "2026-08-15T13:31:21.472Z",
+      "completedAt": "2026-08-15T13:33:41.137Z"
     },
     {
       "stepId": "step-2",
       "description": "Remove the forbidden header from the client. packages/control-room-client/src/client-transport.ts:90-96 headersFor returns an object containing `origin: options.origin`, passed as `headers` to fetch at :108-111. `Origin` is a FORBIDDEN header name in the fetch spec: a browser silently drops it and substitutes its own, so this entry is inert in the only environment that matters. Delete that one entry. Leave the other headers untouched - content-type, x-moe-csrf, x-moe-protocol-version, x-moe-session-credential - and leave the URL construction at :108 alone, since it uses options.origin as the request PREFIX and that use is correct and unrelated. In packages/control-room-client/src/client-transport.test.ts assert the EXACT set of header names headersFor produces, so re-adding `origin` fails loudly rather than passing silently.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/control-room-client/src/client-transport.ts",
         "packages/control-room-client/src/client-transport.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:33:43.077Z"
     },
     {
       "stepId": "step-3",
@@ -61,7 +68,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-06df66bb",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -73,13 +80,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:28.441Z",
-  "updatedAt": "2026-08-15T13:08:15.676Z",
+  "updatedAt": "2026-08-15T13:33:43.077Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:05:58.161Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:08:13.624Z",
   "planningNotes": {
@@ -96,5 +106,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-15T13:08:15.676Z"
+  "planApprovedAt": "2026-08-15T13:08:15.676Z",
+  "contextFetchedBy": [
+    "worker-06df66bb"
+  ],
+  "workStartedAt": "2026-08-15T13:31:21.472Z"
 }

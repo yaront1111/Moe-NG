@@ -99,16 +99,25 @@
     {
       "stepId": "step-6",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Walk a diamond by hand against the new frame logic and confirm the DONE marking still happens post-order - marking DONE early turns a genuine back-edge into a cross-edge and silently loses a CYCLE finding. (2) Confirm a node reachable by two paths is visited once, as `seen === undefined` guarantees today. (3) Confirm no clock, random source or host-dependent value entered the walk - the package's whole determinism claim forbids it. (4) Confirm the new module carries an exact LF `.js` bridge matching its siblings; a CRLF bridge fails a byte comparison while `git diff --stat` shows nothing. (5) Confirm import-reconcile.ts is now UNDER 250 physical lines and the new module is too, using `grep -c ''` (PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile-graph.ts",
         "packages/import/src/import-reconcile.ts",
         "packages/import/src/import-reconcile.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.ts",
+        "packages/import/src/import-reconcile-graph.js",
+        "packages/import/src/import-reconcile.ts",
+        "packages/import/src/import-reconcile-graph.test.ts"
+      ],
+      "note": "FRESH GATE: (pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test) redirected to a file, EXIT=0 read from $? rather than a pipe. tsc printed zero diagnostics; vitest \"Test Files 8 passed (8) / Tests 110 passed (110)\". Re-run at current HEAD after peers committed: EXIT=0, 110 passed again. Every summary line read, not just the exit code.\n\nADVERSARIAL REVIEW, all six items:\n(1) DIAMOND BY HAND against the frame logic: walk(a) -> push b -> push d -> d emits DANGLING d->ghost, d exhausted so DONE d, pop; b exhausted DONE b, pop; a resumes at nextIndex=1 -> ref c -> push c -> c's ref d reads state DONE, so it is neither OPEN (cycle) nor undefined (descend) and falls through silently; DONE c, DONE a. DONE is set only in the refs-exhausted branch, immediately before pop - post-order in every path. Matches golden case 3 exactly.\n(2) VISITED ONCE: a frame is pushed only when state.get(ref) === undefined, openFrame sets OPEN at push, and state is never reset, so each node gets at most one frame; the outer driver is guarded by !state.has(). Empirically the 60-level ladder (2^60 distinct paths) finishes in 0ms. Termination is also bounded: each loop turn either increments nextIndex on the top frame or pops it.\n(3) NO CLOCK/RANDOM/HOST VALUE: grep -nE \"Date|Math\\.random|process\\.|hrtime|performance|localeCompare|toLocale|crypto|env\" over the module -> NONE. Both byCodeUnit sorts intact.\n(4) BRIDGE: xxd shows the file ends 2e 74 73 22 3b 0a - exact LF, no CR; `file` reports no CRLF on any of the four owned files. Went further than the step asked and PROVED runtime loadability: node --experimental-strip-types importing ./import-reconcile-graph.js and calling graphFindings printed BRIDGE-OK [\"DANGLING_REF:record a depends on ghost, which was not imported\"].\n(5) SIZES via grep -c '': import-reconcile.ts 196 (was 250), import-reconcile-graph.ts 126. Both under 250.\n(6) Blast radius: no other workspace package declares \"@moe/import\", so the package-scoped gate covers every consumer.\n\nConcurrency/inputs/side effects: graphFindings is pure - byId, found, state, reported and the stack are all call-local, so concurrent calls cannot interfere; no IO, no handles, no partial writes. Empty entries returns []. Non-array or non-string dependsOn is filtered by the unchanged helper. legacyId keys go into a Map/Set, so \"__proto__\"/\"constructor\" ids cannot pollute anything.\n\nTWO PRE-EXISTING QUIRKS DELIBERATELY NOT TOUCHED, disclosed rather than silently changed (task says the DANGLING_REF/cycle vocabulary is out of scope, and changing either would break the equivalence I just proved): the dangling dedupe key `${legacyId}->${ref}` can collide for ids containing \"->\" (id \"a\" + ref \"b->c\" keys the same as id \"a->b\" + ref \"c\"), and `dependsOn` calls Array.isArray, which THROWS on a revoked Proxy - unreachable in practice because payloads come from decodeLegacySources parsing JSON bytes. Both are byte-identical to the code before this task.\n\nCOMMIT - KNOWN FOREIGN-COMMIT HAZARD, NOT REPAIRED: git status --porcelain packages/import is EMPTY because a foreign whole-tree commit swept all four of my files in. de936fe (task-6a31a86fdcd84795a8fae6e5d6978d2c \"persistFileDurably must prove the full write\") carries import-reconcile.ts, import-reconcile-graph.ts and the .js bridge; 4aa29d5 (task-1fb6e87110744bbea21aafc3ea891e8d) had earlier captured an in-progress copy of the test file. Per the project rail I did NOT amend, reset, or create an empty commit. VERIFIED the committed bytes are the gated bytes: sha256 of git show HEAD:<path> equals the working tree for all four files. QA should review by base-ref diff: git diff 6482e5f..HEAD -- packages/import/src/import-reconcile.ts packages/import/src/import-reconcile-graph.ts packages/import/src/import-reconcile-graph.js packages/import/src/import-reconcile-graph.test.ts -> 4 files, 457 insertions, 55 deletions, and that range contains NO other packages/import change, so the diff is exactly this task's work.",
+      "startedAt": "2026-08-15T13:30:34.013Z",
+      "completedAt": "2026-08-15T13:32:33.041Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5dfdc624",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -120,19 +129,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:54.548Z",
-  "updatedAt": "2026-08-15T13:30:29.211Z",
+  "updatedAt": "2026-08-15T13:33:38.764Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:02:36.943Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:04:16.973Z",
@@ -154,5 +164,18 @@
   "contextFetchedBy": [
     "worker-5dfdc624"
   ],
-  "workStartedAt": "2026-08-15T13:21:40.298Z"
+  "workStartedAt": "2026-08-15T13:21:40.298Z",
+  "reviewStartedAt": "2026-08-15T13:33:38.764Z",
+  "verification": {
+    "command": "pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/import/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  8 passed (8)\n      Tests  110 passed (110)\n   Start at  16:32:00\n   Duration  636ms (transform 382ms, setup 0ms, import 619ms, tests 655ms, environment 0ms)\n\nEXIT=0 (read from $? on a file-redirected run, not through a pipe)",
+    "reportedAt": "2026-08-15T13:33:38.764Z"
+  },
+  "filesModified": [
+    "packages/import/src/import-reconcile-graph.test.ts",
+    "packages/import/src/import-reconcile-graph.ts",
+    "packages/import/src/import-reconcile-graph.js",
+    "packages/import/src/import-reconcile.ts"
+  ]
 }
