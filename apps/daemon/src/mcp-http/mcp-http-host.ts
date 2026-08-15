@@ -8,6 +8,7 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
+import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
 import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 
@@ -168,10 +169,12 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         void (async (): Promise<void> => {
           const response = await handleRequest(await webRequestFrom(incoming, origin));
           await writeWebResponse(response, outgoing);
-        })().catch(() => {
+        })().catch((error: unknown) => {
           // A throw must still answer and must still leave the listener closable; it may never
-          // surface as a hung socket. Nothing from the error reaches the client.
-          if (!outgoing.headersSent) outgoing.statusCode = 500;
+          // surface as a hung socket. Nothing from the error reaches the client. An over-cap
+          // body is a client fault (413), every other throw is an internal one (500).
+          const tooLarge = error instanceof Error && error.message === MCP_HTTP_BODY_TOO_LARGE;
+          if (!outgoing.headersSent) outgoing.statusCode = tooLarge ? 413 : 500;
           outgoing.end();
         });
       });

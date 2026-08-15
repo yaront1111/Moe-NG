@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
+import { readBoundedNodeBody } from "./mcp-http-body-bound.js";
+
 /**
  * The node:http <-> Web bridge for the MCP host.
  *
@@ -31,19 +33,8 @@ export function webHeadersFrom(message: IncomingMessage): Headers {
   return headers;
 }
 
-function bodyOf(message: IncomingMessage): Promise<Uint8Array | undefined> {
-  // GET and DELETE carry no body and must not present an empty one: the SDK transport
-  // distinguishes "no body" from "empty body" when routing a resumption.
-  if (message.method === "GET" || message.method === "HEAD" || message.method === "DELETE") {
-    return Promise.resolve(undefined);
-  }
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    message.on("data", (chunk: Buffer) => chunks.push(chunk));
-    message.on("end", () => { resolve(new Uint8Array(Buffer.concat(chunks))); });
-    message.on("error", reject);
-  });
-}
+// The body is read under the committed cap: see mcp-http-body-bound. Buffering
+// the whole node stream first would spend the memory the bound is meant to deny.
 
 /**
  * Builds the Web Request the adapter screens. `origin` is the host's own bound origin, so the
@@ -54,7 +45,7 @@ export async function webRequestFrom(
   message: IncomingMessage,
   origin: string,
 ): Promise<Request> {
-  const body = await bodyOf(message);
+  const body = await readBoundedNodeBody(message);
   const url = new URL(message.url ?? "/", origin);
   return new Request(url, {
     ...(body === undefined || body.byteLength === 0 ? {} : { body }),
