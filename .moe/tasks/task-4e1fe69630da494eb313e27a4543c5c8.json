@@ -180,8 +180,8 @@
       "completedAt": "2026-08-15T19:38:23.748Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f6ca780e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -212,11 +212,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.811Z",
-  "updatedAt": "2026-08-15T19:40:13.851Z",
+  "updatedAt": "2026-08-15T19:43:13.402Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-797c65f6",
-    "worker-fd8f822b"
+    "worker-fd8f822b",
+    "qa-f6ca780e"
   ],
   "blockedFromStatus": null,
   "blockedAt": null,
@@ -226,7 +227,9 @@
     "firstClaimAt": "2026-08-15T18:22:26.391Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-15T19:43:13.402Z",
+    "wallClockMs": 4847011
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -282,5 +285,8 @@
     "tests/migration/cutover/cutover-drill.test.ts",
     "tests/migration/cutover/cutover-compare.ts",
     "tests/migration/cutover/cutover-refusals.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T19:43:13.402Z",
+  "reviewCompletedAt": "2026-08-15T19:43:13.402Z",
+  "reviewSummary": "APPROVED AT HARNESS SCOPE ONLY at HEAD b8c85f3. This is NOT a quiesce. Read the limits before treating any downstream task as unblocked.\n\nSAFETY CLAIM VERIFIED MYSELF, not taken from the disclosure: zero taskkill/process.kill/child_process/execSync/spawn/exec(/net/http/fetch anywhere in tests/migration/cutover/**. The only \"kill\"/\"spawn\" hits are comments stating it does NOT do those. No absolute path outside tmpdir; every byte is under mkdtempSync(join(tmpdir(),\"moe-cutover-\")). Nothing real was stopped, denied, signalled or killed — confirmed by inspection.\n\nGATE: pnpm test:migration -> 3 files / 25 tests, EXIT=0, re-run by me. It now includes `tsc -p tests/migration/tsconfig.json`; neither that tsconfig nor the script existed at merge-base, so this lane (including the already-landed importer determinism test) was typechecked by NOTHING until this commit.\n\nDoD 2 is real, not a mocked clock: sleep(10_200) with a monotonic `elapsedMs >= 10_000` assertion on the ACHIEVED gap — matches the 10.32s I measured. Drill: I broke the content comparison in cutover-compare.ts (sha256 equality -> always undefined) and \"POSITIVE CONTROL: the same comparison fails on a single changed byte\" went red by name. Restored byte-exact (570c354b).\n\nWHAT IS NOT DELIVERED — THE GATE STAYS OPEN:\n- DoD 1 and DoD 3 are met against a SIMULATED fixture population, not real daemon/IDE/launcher/watcher/scheduled-start paths. The live half is outstanding.\n- Explicit human GO_QUIESCE is ABSENT. I searched independently: 5 messages mention it, ALL sender=system, ZERO human-authored.\n- 2 of 4 hard dependencies unmet: task-22cfca91 is PLANNING (not DONE, different epic), task-0c89476b BLOCKED.\n\nApproving because the narrowing was an EXPLICIT HUMAN INSTRUCTION recorded by two agents, and a live drill would have killed the daemon serving this board mid-flight. A green pnpm test:migration is NOT evidence the legacy system was quiesced. task-09008b4c still needs a live run plus its own GO_ACTIVATE."
 }
