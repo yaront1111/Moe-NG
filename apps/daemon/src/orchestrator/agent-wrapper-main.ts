@@ -104,7 +104,18 @@ async function main(): Promise<void> {
       };
       child.stdout.on("data", collect);
       child.stderr.on("data", collect);
-      const timer = setTimeout(() => child.kill(), 120_000);
+      // A hung test must not leave an orphan holding the workspace: with
+      // `shell: true` the child IS the shell, and on Windows `kill()` stops
+      // only cmd.exe while the grandchild (`node test.mjs`) lives on. taskkill
+      // /T takes the tree; elsewhere the signal reaches the process group.
+      const killTree = (): void => {
+        if (process.platform === "win32" && child.pid !== undefined) {
+          spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+        } else {
+          child.kill();
+        }
+      };
+      const timer = setTimeout(killTree, 120_000);
       const finish = (exitCode: number | null): void => {
         clearTimeout(timer);
         const output = Buffer.concat(chunks).toString("utf8");
