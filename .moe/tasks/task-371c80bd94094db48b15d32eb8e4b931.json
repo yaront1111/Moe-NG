@@ -19,9 +19,137 @@
     "Instrumentation is observational and grants no authority or evidence strength.",
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD. Extend the timing vocabulary so a cross-layer UNKNOWN stays attributable. Today TimingUnknown is {known:false, observedBy, reasonCode} with TimingUnknownCode a 4-member union (TIMING_CLOCK_UNAVAILABLE, TIMING_NEGATIVE_INTERVAL, TIMING_SOURCE_ABSENT, TIMING_SOURCE_UNPARSEABLE) - there is nowhere to record that the DAEMON SEAM itself reported UNKNOWN, so a seam refusal would be indistinguishable from the control room failing to parse. Add one code (e.g. TIMING_UPSTREAM_UNKNOWN) to both the union and TIMING_UNKNOWN_CODES, and add an OPTIONAL upstream carrier to TimingUnknown holding the seam's own exact code and layer verbatim - no translation table, matching how the event-stream seam already forwards store codes. I MEASURED that nothing pins the length of TIMING_UNKNOWN_CODES; only TIMING_PHASE_NAMES is pinned, as an exact 4-element array at timing.test.ts:124, and this step adds NO phase, so that assertion must stay green. Leave evaluateTiming, measureElapsed and fromInterval's ordering (absent, then unparseable, then skew) untouched.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/timing.ts",
+        "apps/control-room/src/performance/timing.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/timing.ts",
+        "apps/control-room/src/performance/timing.test.ts"
+      ],
+      "note": "Timing vocabulary extended. TDD: tests appended to timing.test.ts first, then timing.ts.\n\nAdded TWO codes, not one. Step 1 said \"add one code (e.g. TIMING_UPSTREAM_UNKNOWN)\"; DoD-5 forces a second. DoD-5 enumerates \"a cross-clock pair as its explicit UNKNOWN\" and \"no clock as TIMING_CLOCK_UNAVAILABLE\" as SEPARATE assertion arms, so they must be separately pinnable, so they cannot share a code. Reusing TIMING_CLOCK_UNAVAILABLE for cross-clock would also be false (a clock was available — two were) and reusing TIMING_NEGATIVE_INTERVAL misattributes. So: TIMING_CLOCK_MISMATCH + TIMING_UPSTREAM_UNKNOWN. TIMING_UNKNOWN_CODES is now 6, pinned by a hand-written literal.\n\nAlso added, all required by later steps:\n- TimingUpstreamRefusal {code, layer}; optional `upstream` carrier on TimingUnknown, forwarded verbatim with no translation table (matches how the seam forwards store codes).\n- TimingLine gains upstreamCode/upstreamLayer so the refusing layer survives all the way to the DOM. Without it a rendered line would say \"another layer refused\" and never say which.\n- timingUnknown() exported (was the private `unknown()`): the bridge must build refusals with the same freeze shape and the same observer attribution rather than a second copy.\n- OBSERVER renamed to exported TIMING_PHASE_OBSERVERS so the bridge attributes refusals from the SAME map the evaluator uses, not a drifting duplicate.\n\nevaluateTiming, measureElapsed and fromInterval's ordering (absent, unparseable, skew) untouched. timing.test.ts:124 TIMING_PHASE_NAMES exact-4 assertion still green; no phase added.\n\nVerify: npx vitest run src/performance/timing.test.ts -> 1 file, 26 tests passed, exit 0. timing.ts 231 lines (target 250).",
+      "startedAt": "2026-08-14T11:59:48.448Z",
+      "completedAt": "2026-08-14T12:01:47.603Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD. Create the wire-to-timing bridge in a new focused module. It converts the daemon's WireObservation {clock, observer, reading: WireKnownValue|WireUnknownValue} into something evaluateTiming can consume, and it is the ONLY place that conversion happens. Three rules, each a test: (1) a WireUnknownValue never becomes a number - it yields TIMING_UPSTREAM_UNKNOWN carrying the seam's exact code and layer, never TIMING_SOURCE_ABSENT, because 'the daemon said it does not know' and 'we never received it' are different facts; (2) a WireKnownValue.value is a STRING and TimingInterval takes NUMBERS, so parse explicitly and refuse an unparseable reading with TIMING_SOURCE_UNPARSEABLE rather than letting NaN flow onward; (3) THE LOAD-BEARING RULE - before subtracting two readings, compare their declared `clock` identities and refuse a cross-clock pair outright with an explicit UNKNOWN. Do NOT rely on fromInterval's `end < start` skew guard for this: that catches only the half of cross-clock skew that happens to go negative, while skew in the other direction produces a plausible, confidently WRONG duration. The wire now carries an explicit `clock` field precisely so this check is possible; use it.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/performance/live-timing.ts",
+        "apps/control-room/src/performance/live-timing.test.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/performance/live-timing.ts",
+        "apps/control-room/src/performance/live-timing.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/performance/wire-timing.ts",
+        "apps/control-room/src/performance/wire-timing.test.ts",
+        "apps/control-room/src/performance/timing.test.ts",
+        "apps/control-room/src/performance/timing.ts"
+      ],
+      "note": "Bridge landed at apps/control-room/src/performance/wire-timing.ts. TDD: wire-timing.test.ts written first.\n\nAll three rules implemented and each pinned by a test:\n1. readWireObservation on a refused wire reading yields TIMING_UPSTREAM_UNKNOWN carrying the seam's exact {code, layer} verbatim. A test asserts it is NOT the same code as an absent observation, so the two facts cannot silently merge.\n2. Known readings are strings; parsed with Date.parse and refused with TIMING_SOURCE_UNPARSEABLE when non-finite. No NaN flows onward. Swept over \"\", \"not-a-timestamp\", \"2026-13-45T99:99:99Z\".\n3. pairing() compares declared clock identities BEFORE the pair is handed to evaluateTiming, which is the only place a subtraction happens. The load-bearing test uses FORWARD skew (seam 5s AFTER ledger, so end > start): the negative-interval guard cannot fire there, and the pair still refuses TIMING_CLOCK_MISMATCH. Backward direction asserted too.\n\nNO cross-package import. apps/control-room declares no dependency on apps/daemon and readEventPage is an untyped passthrough, so the wire arrives as `unknown`. shapeWireObservation parses it structurally (same discipline as live-event-feed.ts rowOf): every field required, a malformed observation returns null rather than defaulting a clock or observer into something that looks attributable. This sidesteps the dependency-edge rail entirely - there is no edge to verify because none is used.\n\nAttribution detail worth flagging: pairing() re-stamps each refusal with the PHASE's observer from TIMING_PHASE_OBSERVERS, not the reading's. A seam refusal that makes `stream` unmeasurable keeps stream=CONTROL_ROOM (the control room is who was watching for that interval) while the upstream carrier names SEAM. Without this the stream phase would have inherited DAEMON from the seam reading and misattributed the observer. Test pins both halves.\n\nPhysical consequence measured, not assumed: `server` (STORE_COMMIT_CLOCK vs DAEMON_WALL_CLOCK) and `stream` (DAEMON_WALL_CLOCK vs the browser clock) are BOTH necessarily cross-clock in production, so both refuse TIMING_CLOCK_MISMATCH. `render` (received -> rendered, both on the one injected clock) is the genuinely measurable phase. That matches the daemon's own event-stream-observation.ts header, which states the two daemon readings' difference \"is not a duration\".\n\nFORCED EDIT: timing.test.ts PRODUCTION_MODULES is a CLOSED list asserted equal to readdirSync of src/performance. Adding a module there forces its one-line entry or the directory scan fails. Entry added with anchor \"export function buildLiveTimingReceipt(\". The new module also inherits that scan's no-real-clock ban for free, which is the right home for it.\n\nVerify: npx vitest run src/performance/ -> 3 files, 56 tests passed. npx tsc --project tsconfig.json exit 0. wire-timing.ts 206 lines, timing.ts 245 (target 250).",
+      "startedAt": "2026-08-14T12:01:52.415Z",
+      "completedAt": "2026-08-14T12:05:05.633Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD. Carry command identity and the client-received observation through the live feed. LiveEventRow is today exactly {aggregateId, committedAt, eventId, eventType, position} and the module header states rows 'copy the wire fields and add nothing'. Extend it with the wire's identity (WireEventIdentity carries commandId plus principal/run/session as WireValue unions) and the two daemon observations, copied VERBATIM - the feed shapes, it never infers, and that header rule still holds: no truth class is invented and an absent field stays absent rather than becoming a default. Then record the CLIENT-RECEIVED observation at the moment the frame arrives, using an injected clock, and stamp it on the frame. Reuse the existing LiveFeedOptions.schedule injection precedent for testability - take the clock as an option rather than reading a host time API, so a feed with no clock records TIMING_CLOCK_UNAVAILABLE instead of quietly reporting that no time passed. Preserve every existing connection/outcome behavior: DISCONNECTED with the transport code, CONNECTED carrying a daemon refusal verbatim, LIVE_FRAME_UNREADABLE for a malformed body.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-event-feed.ts",
+        "apps/control-room/src/live/live-event-feed.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-event-feed.ts",
+        "apps/control-room/src/live/live-event-feed.test.ts",
+        "apps/control-room/src/performance/wire-timing.ts"
+      ],
+      "note": "Live feed now carries command identity, both daemon observations, and its own arrival reading. TDD: tests appended to live-event-feed.test.ts first.\n\nLiveEventRow gains identity | null, ledgerObservation | null, seamObservation | null. All three COPIED via the step-2 shapers - the feed still shapes and never infers. Pinned by tests: an unstated identity/observation is null, NOT a defaulted empty value; an identity whose commandId is \"\" is dropped rather than minted, because an identity that names nothing cannot attribute a receipt; and the two daemon readings stay separate fields with nothing subtracting them.\n\nLiveFrame gains receivedAt: TimingReading, taken by readClientClock(options.clock) the INSTANT the transport answer arrives - before shaping, before the running/generation guard's early return, so the reading is of arrival rather than of work done afterwards. LiveFeedOptions.clock follows the existing `schedule` injection precedent; no host time API is read.\n\nNo clock -> receivedAt is TIMING_CLOCK_UNAVAILABLE, asserted directly. The arrival reading is stamped on EVERY arm including DISCONNECTED, so an undelivered round trip still says when it was observed to fail.\n\nPreserved and still green: DISCONNECTED + transport code, CONNECTED carrying a daemon refusal verbatim, LIVE_FRAME_UNREADABLE for a malformed body, and the generation-guard test for the StrictMode double-invoke.\n\nStructural note: frame()/frameOf() now return ShapedFrame = Omit<LiveFrame,\"receivedAt\"> and the arrival reading is spread on once at delivery. That avoids threading a sixth parameter through both helpers and guarantees no arm can be built that forgot to stamp it.\n\nVerify: npx vitest run src/live/live-event-feed.test.ts -> 13 tests passed. npx tsc --project tsconfig.json exit 0. live-event-feed.ts 194 lines (target 250).",
+      "startedAt": "2026-08-14T12:05:23.960Z",
+      "completedAt": "2026-08-14T12:07:11.780Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD. Land the REAL production consumer edge - DoD-1, and the whole point of this task. recovery-actions.tsx:241 renders `<CommandLatency clock={clock} feedback={entry} .../>` with NO receipt prop, and command-latency.tsx:146 reads `{receipt === undefined ? null : <PhaseLines .../>}`, so production today renders a receipt it never computes and the phase lines never appear at all. Compute a receipt in recovery-actions.tsx from OBSERVED values - the daemon observations carried on the live row, the client-received observation from step 3, and a render observation taken from the existing Clock (prop or ClockContext) - pass them through the step-2 bridge into evaluateTiming, and hand the result to CommandLatency as `receipt`. Match the receipt to the feedback entry by commandId, which entry already carries. The four phases stay separate: nothing may sum, average or collapse them, because a single total makes the four indistinguishable. If no clock is available the surface must still render, with the receipt showing TIMING_CLOCK_UNAVAILABLE - a missing clock is a measurable fact, never a zero.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-command-timing.tsx",
+        "apps/control-room/src/live/live-command-timing.test.tsx",
+        "apps/control-room/src/live/live-app.tsx",
+        "apps/control-room/src/performance/command-latency.tsx"
+      ],
+      "note": "REAL production consumer edge landed. DoD-1 satisfied.\n\nPLAN DEVIATION, forced by a re-measurement the plan's own premise got wrong. Step 4 named recovery-actions.tsx as \"the only production surface that already renders CommandLatency\". The first half is true; the reachability claim is not. I traced every consumer at HEAD ab45234:\n\n  recovery-actions.tsx\n    <- recovery-status.tsx, reconciliation-inventory.tsx   (non-test consumers)\n      <- a11y/ui-wide-ops-fixtures.tsx                      (ONLY non-test consumer)\n        <- colour-independence.test.tsx, ui-wide-acceptance.test.tsx, narrow-parity.test.tsx\n\nmain.tsx:40 mounts exactly two roots: LiveControlRoom (?live=1) and ControlRoomScaffold. NEITHER renders RecoveryActions. It is reachable from zero application roots - only from an a11y fixture module imported by three test files. Putting the receipt there would have produced precisely the fixture-shaped edge this task exists to eliminate, and would have failed DoD-1's explicit clause \"the call site is production code reachable from the live app\". Separately, no live row ever reaches RecoveryActions in production, so there would have been no observed values to compute from.\n\nCHOSEN INSTEAD: the live timeline, which IS the live app. New module apps/control-room/src/live/live-command-timing.tsx renders CommandLatency with a receipt built from OBSERVED values; live-app.tsx LiveTimeline renders <LiveCommandTiming frame={frame} /> and LiveControlRoom passes the composition root's clock into createLiveEventFeed. Chain now proven end to end: main.tsx -> LiveControlRoom -> LiveTimeline -> LiveCommandTiming -> buildLiveTimingReceipt -> evaluateTiming, and CommandLatency -> describeTimingReceipt. Put in a new module rather than inline so live-app.tsx stays at 230 lines (target 250).\n\nEvery input is observed, none is a prop a caller chose: the two daemon readings ride the row the daemon sent; the client-received reading was taken by the feed at arrival; the render reading is read from the injected clock during render (never stored in state - StrictMode-safe, same discipline command-latency.tsx documents).\n\nAttribution: a receipt is built from the row carrying that commandId and rendered under testIdPrefix cr.live.timing.<commandId>, so one receipt maps to exactly one command. A row with no identity gets NO receipt rather than one attached to a guess - pinned by a test.\n\nWHAT THE PRODUCTION RECEIPT HONESTLY REPORTS, measured not assumed: render measures (both readings on the one injected clock, asserted = 30ms). server refuses TIMING_CLOCK_MISMATCH (store commit clock vs daemon wall clock) and stream refuses TIMING_CLOCK_MISMATCH (daemon wall clock vs browser monotonic clock). That is not missing wiring - it is the daemon's own event-stream-observation.ts header enforced (\"their difference is not a duration\"), and main.tsx's own comment that the monotonic origin is never compared to a daemon timestamp. human stays TIMING_SOURCE_ABSENT until an operator acts. No sum, no average, no total anywhere.\n\nAlso: exported useClock() from command-latency.tsx (ClockContext was private, so a live surface had no way to take its own reading), and PhaseLines now renders data-upstream-code / data-upstream-layer so the refusing layer survives to the DOM.\n\nVerify: npx vitest run (whole package) -> 60 files, 726 tests passed. npx tsc --project tsconfig.json exit 0. live-command-timing.tsx 72 lines, live-app.tsx 230, command-latency.tsx 162.",
+      "startedAt": "2026-08-14T12:07:43.329Z",
+      "completedAt": "2026-08-14T12:09:20.734Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD. Prove the edge is REAL rather than fixture-shaped, which is the failure mode this task exists to correct. The test must drive the PRODUCTION call site - render the live surface, feed it a frame through the feed's own transport seam, and assert the rendered phase lines - not call evaluateTiming directly and assert its return value, which is exactly what the existing command-latency.test.tsx already does and what left the production gap invisible. Assert the rendered receipt distinguishes all four phases by name, and assert at least one phase shows a real measured duration derived from observed values rather than from a literal the test supplied. Then assert the refusal arms end to end, each pinning the EXACT code AND the observer/layer that produced it: a daemon-seam UNKNOWN surfaces as TIMING_UPSTREAM_UNKNOWN carrying the seam's own code, an unparseable reading as TIMING_SOURCE_UNPARSEABLE, an absent observation as TIMING_SOURCE_ABSENT, a cross-clock pair as its explicit UNKNOWN, and no clock as TIMING_CLOCK_UNAVAILABLE. Because two layers can refuse here, asserting only 'UNKNOWN' would stay green after the wrong layer starts answering first.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/recovery/recovery-actions.test.tsx",
+        "apps/control-room/src/live/live-event-feed.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-timing-path.test.tsx"
+      ],
+      "note": "Live-path proof landed at apps/control-room/src/live/live-timing-path.test.tsx. 9 tests, all green.\n\nSHAPE, which is the point: it renders LiveControlRoom (the real ?live=1 root), answers ONE poll through the feed's own transport seam via LiveSetup.transport.readEventPage, and reads the painted phase lines. It never calls evaluateTiming and asserts a return value - that is what command-latency.test.tsx already did while production had zero callers, and it is why the gap survived a green suite. Nothing here hands the surface a receipt, a duration or a reason code.\n\nDeterministic without fake timers: the transport answers the first poll and leaves every later one pending, so the asserted surface is built from exactly one observed frame. The scripted clock returns 1_000 on its FIRST call and 1_030 on every later one. The first call is provably the feed's arrival reading, because LiveTimeline early-returns the waiting state while frame is null, so no render can read the clock before a frame lands.\n\nMEASURED ARM: render = 30ms, observedBy CONTROL_ROOM, no unknown code. That 30 was subtracted by production between two readings it took at two moments; no literal 30 exists in the fixture.\n\nREFUSAL ARMS, each pinning exact code AND producer:\n- seam UNKNOWN -> unknownCode TIMING_UPSTREAM_UNKNOWN, upstreamCode EVENT_STREAM_READING_NOT_PROVIDED, upstreamLayer SEAM, observedBy CONTROL_ROOM (the control room owns the stream interval even when the daemon is why it failed).\n- unparseable daemon reading -> TIMING_SOURCE_UNPARSEABLE, observedBy DAEMON, and upstreamCode/upstreamLayer asserted ABSENT so this cannot be confused with a seam refusal.\n- observation the frame never carried -> TIMING_SOURCE_ABSENT, observedBy DAEMON, upstreamCode asserted absent - this is the assertion that keeps \"we never got it\" distinct from \"the seam refused\".\n- forward-skewed cross-clock pair -> TIMING_CLOCK_MISMATCH on both server (DAEMON) and stream (CONTROL_ROOM). Both readings parse and the seam reading is 200ms AFTER the ledger reading, so end < start is false and the skew guard cannot be what refused.\n- no ClockProvider -> render TIMING_CLOCK_UNAVAILABLE, no durationMs, upstreamCode absent.\n- human -> TIMING_SOURCE_ABSENT, no zero span.\n\nEvery arm also asserts durationMs is UNDEFINED, so no refusal can quietly carry a number.\n\nVerify: npx vitest run src/live/live-timing-path.test.tsx -> 9 passed. npx tsc --project tsconfig.json exit 0.",
+      "startedAt": "2026-08-14T12:09:25.524Z",
+      "completedAt": "2026-08-14T12:11:20.608Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Satisfy the generated-case half of DoD-5 with an EXACT NONZERO cardinality. Build the phase/outcome case table covering every timing split (server, stream, render, human) crossed with every outcome (measured, plus each UNKNOWN code from step 1), assert its exact length with a hand-written literal before iterating, and assert every phase name appears at least once so a future edit that drops a phase fails the count instead of quietly shrinking coverage. A sweep that silently generates zero cases passes while testing nothing, and a count computed from the generator cannot police the generator - write the literal by hand. Keep the existing timing.test.ts assertion at :124 that TIMING_PHASE_NAMES is exactly ['server','stream','render','human'] green; this task adds no phase.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/src/performance/live-timing.test.ts"
+      ],
+      "startedAt": "2026-08-14T12:12:14.895Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Run the mutation drills DoD-6 requires, against the PRODUCTION surface. [1] BYPASS THE PRODUCTION RENDER TIMESTAMP - make recovery-actions.tsx pass a fixed literal instead of the clock-derived render observation; the named live integration test from step 5 must go red on the render phase, proving the test reads production's value and not its own. [2] Weaken the cross-clock guard in the step-2 bridge so mismatched clocks subtract anyway; the cross-clock case must go red - and note it must go red on the UNKNOWN assertion, not merely on some duration differing, or the drill proved nothing about the guard. [3] Make a WireUnknownValue fall through to TIMING_SOURCE_ABSENT instead of TIMING_UPSTREAM_UNKNOWN; the layer-attribution assertion must go red. For each drill: confirm it actually applied (print the replaced line range and chain with &&, since a drill that applied nothing reads as green), read the failure MESSAGE rather than the count (over-reddening means a broken environment), restore with Edit rather than git checkout (checkout reverts to HEAD and destroys uncommitted work), and hash-check back to the pre-drill bytes before the next drill.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/performance/live-timing.ts",
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification gate, on FRESH output pasted into complete_task - never a remembered result. Run: pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm typecheck. Read EVERY summary line rather than the final exit code, because a multi-leg run can exit 0 while one leg is red. Note two things measured during planning so they are not rediscovered as surprises: the control-room-client leg should be unaffected - readEventPage is an untyped passthrough returning SendResult and does NOT type the event page shape, so NO generated-client change is needed and packages/control-room-client/src/generated/generated-client.ts must remain untouched; and `pnpm test` at the root SKIPS apps/**, so the owned-package legs above are the only ones that actually gate this work. Apply the path-attributed baseline rail for any repo-wide red: record failures at the merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines and paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/performance/live-timing.test.ts",
+        "apps/control-room/src/recovery/recovery-actions.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Adversarial self-review before complete_task; load the adversarial-self-review skill. (1) Is there ANY path that subtracts two readings whose declared clocks differ? Re-grep every subtraction in the new module and confirm each is guarded by the clock comparison, not merely by the negative-interval check. (2) Does any code path turn an UNKNOWN into a zero, an absolute value, or an interpolated duration? (3) Does the render observation come from the injected Clock on every branch, including the no-clock and refused-command branches? (4) Are the four phases still separate everywhere - no sum, no average, no single 'total latency' number anywhere in the rendered output? (5) Does the live feed still shape rather than infer: no invented truth class, no defaulted identity field, an absent principal/run/session still absent? (6) Confirm the client package and the generated client are untouched by the diff. (7) Confirm every production source touched is at or under 250 physical lines using `grep -c ''` (PowerShell Measure-Object -Line undercounts) - live-event-feed.ts is 136, recovery-actions.tsx 246 and command-latency.tsx 149 today, so recovery-actions.tsx is the one with the least headroom; if it would exceed, move the receipt assembly into the step-2 module rather than growing the component. Then git status --porcelain, confirm no drill file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/performance/live-timing.ts",
+        "apps/control-room/src/live/live-event-feed.ts",
+        "apps/control-room/src/recovery/recovery-actions.tsx",
+        "apps/control-room/src/performance/timing.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4e189bb5",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -33,5 +161,46 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:21.413Z",
-  "updatedAt": "2026-08-14T10:43:48.947Z"
+  "updatedAt": "2026-08-14T12:12:14.895Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-14T11:52:51.938Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 5
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-14T11:56:26.853Z",
+  "planningNotes": {
+    "approachesConsidered": "CROSS-CLOCK HANDLING - the sharpest decision in this plan, and the one most likely to be got wrong. The obvious approach is to lean on the landed skew guard: fromInterval already returns TIMING_NEGATIVE_INTERVAL when end < start, with a comment explaining that an absolute value would publish a confident number built from a contradiction. REJECTED AS SUFFICIENT: that guard catches only the half of cross-clock skew that happens to run negative. Skew in the other direction produces a positive, plausible, confidently WRONG duration and every test stays green. CHOSEN: compare the declared `clock` identities BEFORE subtracting and refuse a mismatched pair with an explicit UNKNOWN. The sibling put a `clock` field on WireObservation precisely so this is checkable; not using it would waste the field and leave the task's own rail ('do not compare cross-machine timestamps without an explicit shared observer or clock-offset uncertainty') satisfied only by luck. The negative-interval guard stays as a second line of defence.\n\nUPSTREAM UNKNOWN - new code plus a carrier, rather than reuse. Mapping a WireUnknownValue onto the existing TIMING_SOURCE_ABSENT was considered and rejected: 'the daemon says it does not know' and 'we never received it' are different facts with different owners, and collapsing them destroys exactly the layer attribution the epic rail requires. Adding one code plus an optional upstream {code, layer} carrier keeps the seam's own code verbatim, matching how the event-stream seam already forwards store codes with no translation table.\n\nWHERE THE REAL CALL SITE GOES. Candidates were live-board.tsx, live-app.tsx and recovery-actions.tsx. CHOSEN recovery-actions.tsx: it is the only production surface that already renders CommandLatency (with a Clock, at :241) and its feedback entries already carry commandId, so the receipt has something to attach to. This is the smallest change that produces a genuinely live edge rather than a demo one.\n\nBRIDGE AS ITS OWN MODULE. Folding the wire-to-timing conversion into timing.ts was rejected: timing.ts is deliberately pure, reads no clock, and knows nothing of the wire; teaching it the seam vocabulary would couple the pure evaluator to the daemon's wire format. A separate bridge keeps evaluateTiming exactly as pure as it is now, and gives recovery-actions.tsx somewhere to move receipt assembly if it approaches the 250-line target.\n\nNOT SPLIT. 8 files and 9 steps, inside both hard thresholds. The parent already SPIDR-split this work; splitting again would separate the bridge from its only consumer and leave a converter with nothing calling it.",
+    "codebaseInsights": "RE-MEASURED AT HEAD ab45234, as both the governor's promotion reason and my own handoff note demanded. I authored this task's description when splitting parent task-1eeb2dcc, so treat the description as MY earlier snapshot, not as independent evidence.\n\nDEPENDENCY task-1430dfae HAS LANDED, and landed richer than I assumed when I wrote this task. apps/daemon/src/http/event-stream-contract.ts:44 StreamEvent now carries `commandId: string` plus an optional `decisionTrace` block. More importantly WireEvent (:145) now carries THREE new members: `identity: WireEventIdentity`, `ledgerObservation: WireObservation`, `seamObservation: WireObservation`.\n\nTHE OBSERVATION VOCABULARY ALREADY EXISTS - do not invent a parallel one. apps/daemon/src/http/event-stream-observation.ts (139 lines) publishes EVENT_STREAM_OBSERVERS, EVENT_STREAM_CLOCKS, EVENT_STREAM_UNKNOWN_CODES, WireValue = WireKnownValue{known:true, value:string} | WireUnknownValue{known:false, code, layer:'SEAM'}, WireObservation = {clock, observer, reading: WireValue}, and WireEventIdentity = {commandId, principal: WireValue, run: WireValue, session: WireValue}. Note the sibling deliberately put NO daemon reading on StreamEvent - its header explains a StoredEvent must stay assignable, so the reading is produced during encode and lives on WireEvent alone. Two distinct daemon readings (ledger vs seam) is exactly the server-emitted/server-committed split this slice needs.\n\nTHE GAP THIS TASK OWNS IS UNCHANGED AND CONFIRMED. `grep evaluateTiming` across apps+packages excluding tests returns ONLY its own definition at timing.ts:162 - still ZERO production callers. recovery-actions.tsx:241 renders `<CommandLatency clock={clock} feedback={entry} .../>` with no receipt prop, and command-latency.tsx:146 is `{receipt === undefined ? null : <PhaseLines .../>}`, so the phase lines never render in production at all. LiveEventRow (live-event-feed.ts:14) is still exactly {aggregateId, committedAt, eventId, eventType, position}.\n\nTHE CODEGEN HAZARD DOES NOT BITE - good news that changes the plan. I flagged generated-client.ts as a blocker risk when creating this task. Measured: ControlRoomTransport.readEventPage (client-transport.ts:78) returns `SendResult = DaemonAnswer | TransportRefused` and is a thin POST to /events/read; it does NOT type the event page shape. All shaping happens control-room side in live-event-feed.ts. So NO contracts/codegen change is needed and generated-client.ts stays untouched. The task rail against hand-editing it still stands, but there is nothing to edit.\n\nTIMING VOCABULARY: TimingUnknownCode is a 4-member union (timing.ts:51-55) with a matching frozen TIMING_UNKNOWN_CODES. TimingObserver is already 'CONTROL_ROOM' | 'DAEMON'. I MEASURED that nothing pins TIMING_UNKNOWN_CODES' length; only TIMING_PHASE_NAMES is pinned, as an exact 4-element array at timing.test.ts:124. So adding an UNKNOWN code is safe; adding a PHASE would redden that line, and this plan adds none.\n\nSIZES: live-event-feed.ts 136, command-latency.tsx 149, live-board.tsx 210, live-app.tsx 222, recovery-actions.tsx 246, timing.ts 190. recovery-actions.tsx has the least headroom under the 250 target.",
+    "risks": "THE PRODUCTION EDGE IS EASY TO FAKE. The existing command-latency.test.tsx already calls evaluateTiming directly and asserts the result - and that is precisely why the production gap survived a green suite for so long. A new test in that shape would prove nothing new. The step-5 test MUST drive the rendered surface through the feed, and the step-7 drill (bypass the production render timestamp) is what proves it did.\n\nPOSITIVE CROSS-CLOCK SKEW IS SILENT. See approachesConsidered. If the worker implements only the negative-interval guard, every test passes and the surface publishes wrong durations whenever the daemon clock runs behind the client's. This is the single most likely way to ship a green, wrong result here.\n\nA REFUSAL TEST CAN BE ANSWERED BY THE WRONG LAYER. There are now at least three places that can produce an UNKNOWN: the daemon seam, the bridge's parse, and the control room's missing clock. Asserting only 'known === false' stays green after the wrong one starts answering first. Every refusal assertion pins the exact code AND observer/layer.\n\nrecovery-actions.tsx IS AT 246 LINES against a 250 target. Adding receipt assembly inline will breach it. The escape valve is the step-2 bridge module - move assembly there rather than growing the component or splitting a React file mid-task.\n\nROOT `pnpm test` SKIPS apps/**. The owned-package legs (pnpm --filter @moe/control-room test) are the ONLY ones that gate this work, so a green root run means nothing here.\n\nDO NOT WIDEN THE FEED INTO AN INFERENCE LAYER. live-event-feed.ts's header commits it to shaping only - a transport failure is DISCONNECTED with the transport's own code, a daemon refusal stays CONNECTED carrying the daemon's code verbatim, and no truth class is invented. Copying identity and observations is shaping; defaulting an absent principal/run/session, or deriving a truth class from a reading, is not.\n\nSHARED WORKTREE. HEAD moved six times during this session (d7a71cb, 6ffb4fe, 2f4281f, 9aa4711, and past 4c39f3a to ab45234). Peers commit constantly. Re-measure before starting, commit by explicit pathspec, and expect foreign red that is not yours.\n\nSIBLING IN FLIGHT. task-bcae0b7e (slice 3, decision-effort/attention records) was promoted in the same sweep and is independently plannable - it depends on task-1430dfae, NOT on this task. Expect a peer working in apps/control-room at the same time; parent task-1eeb2dcc stays BLOCKED until all three slices are DONE and must not be re-drawn.",
+    "keyFiles": [
+      "apps/daemon/src/http/event-stream-observation.ts",
+      "apps/daemon/src/http/event-stream-contract.ts",
+      "apps/control-room/src/performance/timing.ts",
+      "apps/control-room/src/performance/command-latency.tsx",
+      "apps/control-room/src/recovery/recovery-actions.tsx",
+      "apps/control-room/src/live/live-event-feed.ts",
+      "packages/control-room-client/src/client-transport.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 8100000
+  },
+  "planApprovedAt": "2026-08-14T11:56:28.899Z",
+  "contextFetchedBy": [
+    "worker-4e189bb5"
+  ],
+  "workStartedAt": "2026-08-14T11:59:48.448Z"
 }

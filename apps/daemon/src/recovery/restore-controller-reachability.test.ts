@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -38,6 +42,23 @@ afterEach(() => {
   }
   cleanupRestoreHarnesses();
 });
+
+/**
+ * A store directory that has never served a workload.
+ *
+ * `restoreHarness` seeds four project commands, which is authoritative history —
+ * and the store's genesis installer refuses to mint a FIRST binding over a store
+ * that has already served one, because a deleted or corrupted binding row must
+ * not let such a store silently re-fence itself. The two cases below never wanted
+ * that history; they want the first-boot path, so they get a genuinely new
+ * directory. Registered on `closers` BEFORE the provider so teardown pops the
+ * SQLite handle first: on Windows an open handle makes rmSync throw EPERM.
+ */
+function pristineStorePath(label: string): string {
+  const root = mkdtempSync(join(tmpdir(), `moe-reach-${label}-`));
+  closers.push(() => rmSync(root, { force: true, recursive: true }));
+  return join(root, "project.db");
+}
 
 function dependenciesFor(storePath: string): ReturnType<typeof createStoreDependencies> {
   const provider = createStoreDependencies({

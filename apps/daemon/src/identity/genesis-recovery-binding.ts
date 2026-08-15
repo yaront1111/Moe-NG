@@ -1,5 +1,5 @@
 import { RECOVERY_BINDING_CODEC_VERSION, RECOVERY_BINDING_SLOTS } from "@moe/store";
-import type { RecoveryBindingReadResult, RecoveryInstallResult } from "@moe/store";
+import type { RecoveryBindingReadResult, RecoveryInitialInstallResult } from "@moe/store";
 import type { RecoveryAuthenticationBinding } from "@moe/core";
 
 import type { RecoveryDurableWriteRequest } from "../recovery/recovery-succession-contract.js";
@@ -46,9 +46,18 @@ export const GENESIS_RECOVERY_ERROR_CODES = Object.freeze([
 
 export type GenesisRecoveryErrorCode = (typeof GENESIS_RECOVERY_ERROR_CODES)[number];
 
-/** The four store capabilities genesis needs, so refusal paths stay testable. */
+/**
+ * The four store capabilities genesis needs, so refusal paths stay testable.
+ *
+ * The INITIAL installer, never the replacing one: replacement DELETEs the slot
+ * before it INSERTs, so two handles that both observed an absent slot would both
+ * commit and the second would destroy the fence the first already reported as
+ * INSTALLED, orphaning every credential bound to it. This one proves the store
+ * pristine and INSERTs under ONE write lock, so the loser is told it lost by the
+ * transaction rather than by a read-back that arrives too late.
+ */
 export interface GenesisBindingStore extends AnchorDecisionWriter {
-  installRecoveryBinding(input: unknown): RecoveryInstallResult;
+  installInitialRecoveryBinding(input: unknown): RecoveryInitialInstallResult;
   readRecoveryBinding(slot: unknown): RecoveryBindingReadResult;
 }
 
@@ -163,6 +172,31 @@ function settle(
     : refuse("GENESIS_ANCHOR_REFUSED", "ANCHOR_BYTES_DIVERGED");
 }
 
+/**
+ * A refusal is final only while the slot is still unbound.
+ *
+ * A losing handle can be refused for a reason the WINNER created: the winner
+ * anchors its incarnation immediately after installing, that anchor IS
+ * authoritative history, and the pristine guard reads history before it reads
+ * the slot. Refusing there would fail daemon startup over a store that is
+ * perfectly well fenced. Nothing is minted on this path — it reports the fence
+ * already on disk, exactly as an entry-time FOUND slot does — so it is not a
+ * second way to satisfy the fence, only a second door onto the same one.
+ *
+ * A slot that is still unbound carries the store's own code through untouched:
+ * a store holding real history with no binding must NOT re-fence itself.
+ */
+function refuseOrAdopt(
+  store: GenesisBindingStore,
+  config: GenesisRecoveryConfig,
+  storeCode: string,
+): GenesisRecoveryResult {
+  const back = store.readRecoveryBinding(ACTIVE_SLOT);
+  const current = bindingFrom(back);
+  if (current === null) return refuse("GENESIS_INSTALL_REFUSED", storeCode);
+  return settle(store, config, back, "PRESENT", current);
+}
+
 export function ensureGenesisRecoveryBinding(
   store: GenesisBindingStore,
   config: GenesisRecoveryConfig,
@@ -192,7 +226,7 @@ export function ensureGenesisRecoveryBinding(
   // only take the row's word that a genesis fence holds the slot. The encoded
   // binding is checkable evidence instead, written through the SAME codec the
   // anchor uses, so the row and its anchor agree byte-for-byte.
-  const installed = store.installRecoveryBinding({
+  const installed = store.installInitialRecoveryBinding({
     bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
     incarnationRef: binding.incarnationRef,
     installedAt: config.clock(),
@@ -200,14 +234,15 @@ export function ensureGenesisRecoveryBinding(
     payload: encodeBinding(binding),
     slot: ACTIVE_SLOT,
   });
-  if (!installed.ok) return refuse("GENESIS_INSTALL_REFUSED", installed.code);
+  if (!installed.ok) return refuseOrAdopt(store, config, installed.code);
 
-  // Judged on the read-back, not the install result: if a concurrent installer
-  // raced this one, the slot's CURRENT content is the authority, not ours.
+  // WHO MINTED is the transaction's answer, not a ref comparison: CURRENT means
+  // a rival committed first and this handle must adopt that winner, never report
+  // itself as the minter. The read-back below is now a SECOND, independent check
+  // rather than the only defence, and it still supplies the binding to settle on.
   const back = store.readRecoveryBinding(ACTIVE_SLOT);
   const current = bindingFrom(back);
   if (current === null) return refuse("GENESIS_INSTALL_UNVERIFIED", "READ_BACK_FAILED");
-  const ours = current.recoveryIncarnationRef === binding.incarnationRef
-    && current.keyEpochRef === binding.keyEpochRef;
-  return settle(store, config, back, ours ? "INSTALLED" : "PRESENT", current);
+  return settle(store, config, back, installed.outcome === "INSTALLED" ? "INSTALLED" : "PRESENT",
+    current);
 }

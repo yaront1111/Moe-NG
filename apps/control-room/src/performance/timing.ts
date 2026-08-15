@@ -48,18 +48,47 @@ export type TimingPhaseName = (typeof TIMING_PHASE_NAMES)[number];
  */
 export type TimingObserver = "CONTROL_ROOM" | "DAEMON";
 
+/**
+ * TIMING_CLOCK_MISMATCH and TIMING_UPSTREAM_UNKNOWN name two facts the original four
+ * could not express, and both had to be their own code rather than a reuse.
+ *
+ * MISMATCH is two real readings taken on two DIFFERENT clocks. It is not
+ * TIMING_CLOCK_UNAVAILABLE — a clock was available, two of them were — and it is not
+ * TIMING_NEGATIVE_INTERVAL, because that guard only fires on the half of the skew that
+ * happens to run backwards; skew the other way subtracts to a plausible, confidently
+ * wrong number. Declared clock identity is compared BEFORE any subtraction.
+ *
+ * UPSTREAM_UNKNOWN is another layer stating that IT does not know. "The daemon says it
+ * has no reading" and "we never received a reading" are different facts owned by
+ * different layers, so they never share a code.
+ */
 export type TimingUnknownCode =
+  | "TIMING_CLOCK_MISMATCH"
   | "TIMING_CLOCK_UNAVAILABLE"
   | "TIMING_NEGATIVE_INTERVAL"
   | "TIMING_SOURCE_ABSENT"
-  | "TIMING_SOURCE_UNPARSEABLE";
+  | "TIMING_SOURCE_UNPARSEABLE"
+  | "TIMING_UPSTREAM_UNKNOWN";
 
 export const TIMING_UNKNOWN_CODES = Object.freeze([
+  "TIMING_CLOCK_MISMATCH",
   "TIMING_CLOCK_UNAVAILABLE",
   "TIMING_NEGATIVE_INTERVAL",
   "TIMING_SOURCE_ABSENT",
   "TIMING_SOURCE_UNPARSEABLE",
+  "TIMING_UPSTREAM_UNKNOWN",
 ] as const);
+
+/**
+ * The refusing layer's OWN code, forwarded verbatim. There is deliberately no
+ * translation table: mapping a seam code onto a control-room code would put this
+ * module's guess where the other layer's answer belongs, and the operator would lose
+ * the one string that identifies which layer actually refused.
+ */
+export interface TimingUpstreamRefusal {
+  readonly code: string;
+  readonly layer: string;
+}
 
 /** A pair the caller already observed. Both ends must come from the same clock. */
 export interface TimingInterval {
@@ -81,6 +110,8 @@ export interface TimingUnknown {
   readonly known: false;
   readonly observedBy: TimingObserver;
   readonly reasonCode: TimingUnknownCode;
+  /** Present only when another layer refused; absent when this one did. */
+  readonly upstream?: TimingUpstreamRefusal | undefined;
 }
 
 export type TimingPhase = TimingMeasured | TimingUnknown;
@@ -89,12 +120,20 @@ export type SurfaceTimingReceipt = {
   readonly [Name in TimingPhaseName]: TimingPhase;
 };
 
-/** One presentable line per phase. `durationMs` and `reasonCode` are never both set. */
+/**
+ * One presentable line per phase. `durationMs` and `reasonCode` are never both set.
+ *
+ * The two upstream fields are how a refusal stays attributable all the way to what the
+ * operator sees: a line that showed only TIMING_UPSTREAM_UNKNOWN would say another layer
+ * refused without ever saying which one, or why.
+ */
 export interface TimingLine {
   readonly durationMs: number | null;
   readonly observedBy: TimingObserver;
   readonly phase: TimingPhaseName;
   readonly reasonCode: TimingUnknownCode | null;
+  readonly upstreamCode: string | null;
+  readonly upstreamLayer: string | null;
 }
 
 /**
@@ -102,15 +141,28 @@ export interface TimingLine {
  * `stream` ends when this client received the event, `render` when it painted, `human`
  * when the operator acted — all three end on a control-room observation.
  */
-const OBSERVER: Readonly<Record<TimingPhaseName, TimingObserver>> = Object.freeze({
-  human: "CONTROL_ROOM",
-  render: "CONTROL_ROOM",
-  server: "DAEMON",
-  stream: "CONTROL_ROOM",
-});
+export const TIMING_PHASE_OBSERVERS: Readonly<Record<TimingPhaseName, TimingObserver>> =
+  Object.freeze({
+    human: "CONTROL_ROOM",
+    render: "CONTROL_ROOM",
+    server: "DAEMON",
+    stream: "CONTROL_ROOM",
+  });
 
-function unknown(observedBy: TimingObserver, reasonCode: TimingUnknownCode): TimingUnknown {
-  return Object.freeze({ known: false, observedBy, reasonCode });
+/**
+ * The one constructor for an unmeasurable phase, exported so a caller assembling a
+ * receipt from readings this module never saw still produces the same frozen shape and
+ * attributes its refusal to the same observer. `upstream` is omitted entirely rather
+ * than set to a null, so an absent carrier is absent rather than a stated nothing.
+ */
+export function timingUnknown(
+  observedBy: TimingObserver,
+  reasonCode: TimingUnknownCode,
+  upstream?: TimingUpstreamRefusal | undefined,
+): TimingUnknown {
+  return Object.freeze(upstream === undefined
+    ? { known: false as const, observedBy, reasonCode }
+    : { known: false as const, observedBy, reasonCode, upstream: Object.freeze(upstream) });
 }
 
 function measured(observedBy: TimingObserver, durationMs: number): TimingMeasured {
@@ -128,15 +180,15 @@ function fromInterval(
   end: number | undefined,
 ): TimingPhase {
   if (start === undefined || end === undefined) {
-    return unknown(observedBy, "TIMING_SOURCE_ABSENT");
+    return timingUnknown(observedBy, "TIMING_SOURCE_ABSENT");
   }
   if (!Number.isFinite(start) || !Number.isFinite(end)) {
-    return unknown(observedBy, "TIMING_SOURCE_UNPARSEABLE");
+    return timingUnknown(observedBy, "TIMING_SOURCE_UNPARSEABLE");
   }
   if (end < start) {
     // Two machines, two clocks. An absolute value here would publish a confident number
     // built from a contradiction, so the skew is surfaced instead of smoothed.
-    return unknown(observedBy, "TIMING_NEGATIVE_INTERVAL");
+    return timingUnknown(observedBy, "TIMING_NEGATIVE_INTERVAL");
   }
   return measured(observedBy, end - start);
 }
@@ -153,7 +205,7 @@ export function measureElapsed(
   clock: Clock | null | undefined,
 ): TimingPhase {
   if (clock === null || clock === undefined) {
-    return unknown("CONTROL_ROOM", "TIMING_CLOCK_UNAVAILABLE");
+    return timingUnknown("CONTROL_ROOM", "TIMING_CLOCK_UNAVAILABLE");
   }
   return fromInterval("CONTROL_ROOM", startedAt, clock.now());
 }
@@ -161,10 +213,10 @@ export function measureElapsed(
 /** Maps caller-supplied pairs onto the four named phases. Pure; reads no clock. */
 export function evaluateTiming(input: TimingInput): SurfaceTimingReceipt {
   return Object.freeze({
-    human: fromInterval(OBSERVER.human, input.human?.start, input.human?.end),
-    render: fromInterval(OBSERVER.render, input.render?.start, input.render?.end),
-    server: fromInterval(OBSERVER.server, input.server?.start, input.server?.end),
-    stream: fromInterval(OBSERVER.stream, input.stream?.start, input.stream?.end),
+    human: fromInterval(TIMING_PHASE_OBSERVERS.human, input.human?.start, input.human?.end),
+    render: fromInterval(TIMING_PHASE_OBSERVERS.render, input.render?.start, input.render?.end),
+    server: fromInterval(TIMING_PHASE_OBSERVERS.server, input.server?.start, input.server?.end),
+    stream: fromInterval(TIMING_PHASE_OBSERVERS.stream, input.stream?.start, input.stream?.end),
   });
 }
 
@@ -179,11 +231,14 @@ export function describeTimingReceipt(
   return Object.freeze(
     TIMING_PHASE_NAMES.map((phase) => {
       const resolved = receipt[phase];
+      const upstream = resolved.known ? undefined : resolved.upstream;
       return Object.freeze({
         durationMs: resolved.known ? resolved.durationMs : null,
         observedBy: resolved.observedBy,
         phase,
         reasonCode: resolved.known ? null : resolved.reasonCode,
+        upstreamCode: upstream?.code ?? null,
+        upstreamLayer: upstream?.layer ?? null,
       });
     }),
   );

@@ -18,12 +18,12 @@
     "Keep the new production source <=250 physical lines and keep packages/core/src/index.ts at or below its pre-task physical line count by consolidating only equivalent export statements."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-18a42000 on the human's instruction to unblock tasks. Sole dependency satisfied and verified on disk.\n\nIts description states exactly one gate: \"Dependency: task-0c21ba2f07cc4f4a829e475bbd7f0562 must be DONE unchanged.\"\n\ntask-0c21ba2f (Project configuration manifest contract) is now DONE — QA-approved 09:45Z by qa-50f0d628.\n\nDISK VERIFICATION, because a DONE flag does not prove a usable surface:\n- packages/contracts/src/configuration/ EXISTS and carries project-configuration-contract.ts with its LF .js bridge, project-configuration-parser.ts with its bridge, plus hostile and fixture test files.\n- The vocabulary is published at the BARE ROOT, which is what this task must compose against: packages/contracts/src/index.ts:167 exports PROJECT_CONFIGURATION_SCHEMA_VERSION and :195 exports parseProjectConfigurationManifest. This task's deliverable is required to \"compose only the bare @moe/contracts root\", so a root export rather than a deep path is exactly the edge it needs.\n\nABSENCE-IS-THE-WORK, recorded so nobody re-parks this: packages/core/src/configuration/ does NOT exist. That is this task's own owned path and deliverable (project-configuration-manifest.ts plus its LF .js bridge), not a missing precondition. Verified against a positive control — packages/core/src/identity/ returns files with the identical query shape, so the absence is real and correctly scoped rather than a mis-typed path.\n\nDIRECTION TRAP: the description names task-5dfc98fc3e7f4035a8012bd9ba032de3 as \"Consumer\". That task DEPENDS ON THIS ONE; it is not a blocker. task-5dfc98fc is currently BLOCKED precisely because this task's @moe/core create/encode/decode exports do not exist yet, and an audit confirmed its unmet leg is \"createProjectConfigurationManifest / encodeProjectConfigurationManifest / decodeProjectConfigurationManifestBytes = ABSENT\". Landing this task is what clears it.\n\nCHAIN VALUE: this is the head of a three-deep chain that is otherwise fully stalled — task-bcea7056 unblocks task-5dfc98fc (Path-neutral project configuration manifest), which is one of three BLOCKED prerequisites of task-b937811e (Benchmark telemetry harness). It is currently the only entry point into that chain.\n\nFOR THE ARCHITECT: re-measure the contract's exact published surface before planning; the board moves and this reason is minutes old. Note the hard requirements already fixed by the description — compose ONLY the bare @moe/contracts root (a deep relative import fails with TS6059 and there is no tsconfig paths escape hatch, so verify the dependency edge in packages/core/package.json and pnpm-lock.yaml first), domain-separate the SHA-256 over canonical bytes, and mechanically exclude settingsDigest from its own preimage. Do not change the contract vocabulary — that is explicitly out of scope and belongs to the now-DONE task-0c21ba2f.",
   "createdBy": "WORKER",
   "parentTaskId": "task-5dfc98fc3e7f4035a8012bd9ba032de3",
   "priority": "HIGH",
@@ -38,5 +38,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:25.526Z",
-  "updatedAt": "2026-08-13T22:58:03.971Z"
+  "updatedAt": "2026-08-14T12:00:10.440Z"
 }

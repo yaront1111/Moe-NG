@@ -18,12 +18,12 @@
     "Tests assert exact stable reason code and refusing layer, generated case counts are non-zero, and mutation drills exercise production comparisons."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-2aea4111",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Promoted BACKLOG -> PLANNING by governor-18a42000 on the human's instruction to unblock tasks. Its single hard dependency is satisfied and verified on disk.\n\nIts description names exactly one gate: \"Hard dependencies: task-d23a913f0586431d9dccc0cfd1f66fd5.\"\n\ntask-d23a913f (Bind Claude model and effort launch selection) is now DONE — QA-approved at commit a7932ae after two rejections, with the reopen #2 proxy and resume/continue defects closed and proven by bisection.\n\nDISK VERIFICATION, because a DONE flag does not prove a usable surface:\n- git rev-parse HEAD:packages/runner/src/providers/claude/claude-launch-selection.ts -> c61de8da51eb41bb6ba6c4ddaca90518c9546f63. COMMITTED bytes, not a shared-worktree illusion.\n- The type is PUBLISHED, not merely defined: packages/runner/src/surface/claude-surface.ts:122 exports `type ClaudeLaunchSelection`, with :84 documenting that ClaudeLaunchRequest names it so a consumer can declare a selection. This task must bind \"landed launch selection\", so a published nameable type is exactly the edge it needs — a published interface whose field type is unnameable would be a broken publication.\n\nDIRECTION TRAP, explicitly resolved: the description also names task-159f4c21 and task-6cbff010, and BOTH are BLOCKED. They are labelled \"Consumers:\" verbatim — they depend on THIS task, not the reverse. DoD 5 confirms it from the other side: it requires that \"task-159f4c21 plus task-6cbff010 are recorded consumers\". Counting either as an unmet dependency would park this task behind the very tasks it exists to feed. This is the same trap that nearly kept task-47eecd22 and task-69fdb231 parked today.\n\nThat consumer naming is also how this task satisfies Clause 1 without landing a consumer edge itself: the rail permits (a) naming the consumer task and recording its id, which DoD 5 mandates.\n\nABSENCE-IS-THE-WORK: packages/runner/src/providers/telemetry/ does not exist. That is this task's own declared owned path and deliverable, not a missing precondition. Verified against a positive control of identical query shape — packages/runner/src/providers/claude/ returns files — so the absence is real and correctly scoped rather than a mistyped path.\n\nCHAIN VALUE: this is a chain head. task-8e307617 (Normalize and persist provider run telemetry) needs task-5fa25bb3 (already DONE) AND this task; landing this is the only remaining thing between that task and PLANNING. Both were parked while their prerequisites landed today.\n\nFOR THE ARCHITECT: re-measure the published selection surface before planning; this reason is minutes old and the tree moves. Two DoD constraints are unusually sharp and should shape the plan rather than be discovered late — DoD 1 requires unsupported or unreadable model/token/step/stop facts to remain explicit UNKNOWN with NULL quantities and never zero, and DoD 3 forbids promoting a DECLARED selection to provider-OBSERVED evidence. Those are the zero-invention rules; a parser that defaults a missing count to 0, or that echoes the declared model back as if observed, fails both.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -38,5 +38,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:09.437Z",
-  "updatedAt": "2026-08-13T22:30:29.779Z"
+  "updatedAt": "2026-08-15T11:08:28.392Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T11:08:23.604Z"
+  },
+  "contextFetchedBy": [
+    "architect-2aea4111"
+  ]
 }

@@ -20,7 +20,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-4eca9b79",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,12 +32,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:41.056Z",
-  "updatedAt": "2026-08-14T10:59:14.284Z",
+  "updatedAt": "2026-08-15T11:07:53.819Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:21:56.007Z"
   },
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-4eca9b79"
   ],
   "blockedReason": null,
   "blockedResourceId": null,

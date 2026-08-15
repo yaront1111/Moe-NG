@@ -1,5 +1,11 @@
 import type { ControlRoomTransport } from "@moe/control-room-client";
 
+import { readClientClock, shapeWireObservation, shapeWireValue }
+  from "../performance/wire-timing.js";
+import type { TimingReading, WireObservationRow, WireReading }
+  from "../performance/wire-timing.js";
+import type { Clock } from "../performance/timing.js";
+
 /**
  * Polls the daemon's committed event-page seam and reports what it actually said.
  *
@@ -9,14 +15,34 @@ import type { ControlRoomTransport } from "@moe/control-room-client";
  * body is LIVE_FRAME_UNREADABLE. Event rows copy the wire fields and add nothing;
  * in particular no truth class is invented — the wire frame does not carry one,
  * so the presentation kernel renders these rows UNKNOWN with an ABSENT note.
+ *
+ * That rule still holds for the identity and the two daemon observations added here.
+ * They are COPIED: the two readings stay separate fields and are never subtracted, an
+ * identity field the frame did not state stays null rather than becoming an empty
+ * string, and nothing is derived from any of them.
+ *
+ * The ONE thing this module now adds is its own observation — when THIS client received
+ * the frame — taken against an injected clock and labelled as the control room's own.
+ * With no clock it records TIMING_CLOCK_UNAVAILABLE, because a feed that cannot measure
+ * must say so rather than imply that no time passed.
  */
+
+export interface LiveEventIdentity {
+  readonly commandId: string;
+  readonly principal: WireReading | null;
+  readonly run: WireReading | null;
+  readonly session: WireReading | null;
+}
 
 export interface LiveEventRow {
   readonly aggregateId: string;
   readonly committedAt: string;
   readonly eventId: string;
   readonly eventType: string;
+  readonly identity: LiveEventIdentity | null;
+  readonly ledgerObservation: WireObservationRow | null;
   readonly position: string;
+  readonly seamObservation: WireObservationRow | null;
 }
 
 export interface LiveFrame {
@@ -25,9 +51,16 @@ export interface LiveFrame {
   readonly detail: string;
   readonly events: readonly LiveEventRow[];
   readonly outcome: string;
+  /** When this client received the answer, on its own injected clock. */
+  readonly receivedAt: TimingReading;
 }
 
+/** Everything a frame is except the arrival reading, which is stamped once on delivery. */
+type ShapedFrame = Omit<LiveFrame, "receivedAt">;
+
 export interface LiveFeedOptions {
+  /** Injectable; absent means this feed cannot measure, not that no time passed. */
+  readonly clock?: Clock | null | undefined;
   readonly intervalMs: number;
   readonly onFrame: (frame: LiveFrame) => void;
   readonly projection: string;
@@ -53,6 +86,22 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * A command identity with no command id is not a weaker identity — it names nothing, so
+ * no receipt could be attributed through it. It stays null rather than being minted.
+ */
+function identityOf(value: unknown): LiveEventIdentity | null {
+  if (!isRecord(value)) return null;
+  const commandId = text(value["commandId"]);
+  if (commandId === "") return null;
+  return Object.freeze({
+    commandId,
+    principal: shapeWireValue(value["principal"]),
+    run: shapeWireValue(value["run"]),
+    session: shapeWireValue(value["session"]),
+  });
+}
+
 function rowOf(value: unknown): LiveEventRow | null {
   if (!isRecord(value)) return null;
   const eventId = text(value["eventId"]);
@@ -62,7 +111,10 @@ function rowOf(value: unknown): LiveEventRow | null {
     committedAt: text(value["committedAt"]),
     eventId,
     eventType: text(value["eventType"]),
+    identity: identityOf(value["identity"]),
+    ledgerObservation: shapeWireObservation(value["ledgerObservation"]),
     position: text(value["globalPosition"]),
+    seamObservation: shapeWireObservation(value["seamObservation"]),
   });
 }
 
@@ -72,11 +124,11 @@ function frame(
   detail: string,
   events: readonly LiveEventRow[] = [],
   checkpoint: string | null = null,
-): LiveFrame {
+): ShapedFrame {
   return Object.freeze({ checkpoint, connection, detail, events, outcome });
 }
 
-function frameOf(response: unknown): LiveFrame {
+function frameOf(response: unknown): ShapedFrame {
   if (!isRecord(response)) return frame("CONNECTED", "UNREADABLE", "LIVE_FRAME_UNREADABLE");
   const outcome = text(response["outcome"]);
   if (outcome === "PAGE") {
@@ -112,10 +164,16 @@ export function createLiveEventFeed(options: LiveFeedOptions): LiveFeed {
       projection: options.projection,
       subscriberId: options.subscriberId,
     });
+    // Taken the instant the answer arrives, before any shaping work: this is the
+    // control room's own observation of receipt, not a reading of the daemon's.
+    const receivedAt = readClientClock(options.clock);
     if (!running || run !== generation) return;
-    options.onFrame(result.delivered
-      ? frameOf(result.response)
-      : frame("DISCONNECTED", "UNDELIVERED", result.code));
+    options.onFrame(Object.freeze({
+      ...(result.delivered
+        ? frameOf(result.response)
+        : frame("DISCONNECTED", "UNDELIVERED", result.code)),
+      receivedAt,
+    }));
     if (run === generation) cancel = schedule(() => { void poll(run); }, options.intervalMs);
   };
 

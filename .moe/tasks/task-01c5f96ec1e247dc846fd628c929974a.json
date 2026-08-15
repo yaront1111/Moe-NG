@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-8b21d0bb",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-14T10:48:39.951Z",
+  "updatedAt": "2026-08-14T11:52:17.122Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z"
   },
@@ -39,5 +39,16 @@
   "blockedReason": "Two measured causes. Full evidence in msg-60dd25ea3eb64357b31f0b86a0401a40 (general channel); this field caps at 2000.\n\nCAUSE 1 — HARD DEPENDENCY UNMET. task-45d12ecfa6ae4938b23af28fe7876a44 \"macOS platform observation boundary\" is PLANNING, not DONE; the other three deps are COMPLETED. On disk at HEAD 7dbf9ba, packages/runner/src/platform/ has linux-boundary/linux-facts/linux-observation/platform-contract/platform-instant and windows/ — NO macos-* module. platform-contract.ts:38 freezes PLATFORM_LAYERS as [\"PLATFORM_CONTRACT\",\"PLATFORM_LINUX\"]; no PLATFORM_MACOS. The production surface refuses darwin deliberately: platform-observation.test.ts:292 \"refuses every boundary as PLATFORM_HOST_MISMATCH at PLATFORM_LINUX on a darwin host\", :316 \"macOS inherits no Linux verdict\". On a real Mac all 7 PLATFORM_BOUNDARIES members return PLATFORM_HOST_MISMATCH by design, so DoD 1's \"PROVEN/UNKNOWN against the production classifier\" has nothing to prove against. Unsatisfiable, not merely hard.\n\nCAUSE 2 — NO EXECUTION ENVIRONMENT. Session is win32; the repo has no CI config (.github/, .gitlab-ci.yml, azure-pipelines.yml, .circleci all absent), so no Linux or macOS runner exists to delegate to. Task rail 1 forbids win32-only completion; both archived predecessors (e87a7353, e94b2055) died on this wall with no landing commits.\n\nTO UNBLOCK, in order:\n1. Land task-45d12ecf — a macos observation module plus a PLATFORM_MACOS member in the frozen PLATFORM_LAYERS set.\n2. Provide real hosts: attach Linux and macOS machines, or approve a CI config with linux+macos runners. Owned paths already say \"CI/host runner configuration only where approved\" — that approval is the human decision I cannot make.\n\nI did not split the task. The authorable half (manifest schema, aggregation, UNKNOWN-on-missing-row) could land on win32, but carving it out unasked retires this id against a proof of shapes only. Say the word and I will file it. Windows untouched.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-14T10:48:39.951Z"
+  "blockedAt": "2026-08-14T10:48:39.951Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Full pre-planning measurement, recorded in msg-60dd25ea3eb64357b31f0b86a0401a40 and in the block reason. No plan submitted, deliberately. Measured at HEAD 7dbf9ba: packages/runner/src/platform/ has linux-boundary/linux-facts/linux-observation/platform-contract/platform-instant and windows/, and NO macos-* module; platform-contract.ts:38 freezes PLATFORM_LAYERS as [PLATFORM_CONTRACT, PLATFORM_LINUX] with no PLATFORM_MACOS; platform-observation.test.ts:292/:316 prove the production surface refuses darwin by design so macOS inherits no Linux verdict. Repo has no CI configuration of any kind (.github/, .gitlab-ci.yml, azure-pipelines.yml, .circleci all absent).",
+      "whatRemains": "Two unblocks, in order. (1) A macOS platform observation boundary must land: a macos observation module plus a PLATFORM_MACOS member in the frozen PLATFORM_LAYERS set. Until it exists, all 7 PLATFORM_BOUNDARIES members return PLATFORM_HOST_MISMATCH on a real Mac by design, so DoD 1 has nothing to prove against. (2) Real Linux and macOS execution environments, or human approval of a CI configuration with linux+macos runners — the owned paths already permit CI config 'only where approved'.",
+      "pitfalls": "Do not accept a win32 run, an emulation label, or an off-host fixture as host proof; DoD 4 and task rail 1 forbid it and two archived predecessors (e87a7353, e94b2055) already died here with no landing commits. Do not narrow the DoD to the authorable half. NOTE FOR THE NEXT CLAIMER: my block reason states the macOS boundary task-45d12ecfa6ae4938b23af28fe7876a44 is 'status PLANNING' — that was read from .moe/tasks/*.json on disk, which was modified/uncommitted at session start; the live board does not list it among the 4 PLANNING tasks, so re-read its status from the daemon rather than from disk. The on-disk PLATFORM_LAYERS and missing-macos-module evidence is independent of that and stands either way.",
+      "openQuestions": "Does the human have a Linux and a macOS host the agent stack can run on, or should a CI configuration with linux+macos runners be approved and added? Separately: does the governor want the authorable half (cross-host evidence manifest schema, aggregation protocol, UNKNOWN-on-missing-row semantics) split out as an explicit prerequisite task that can land on win32? I declined to carve it out unasked because it would retire this task id against a proof of shapes only.",
+      "releasedAt": "2026-08-14T11:52:17.120Z",
+      "releasedBy": "architect-8b21d0bb",
+      "reason": "Architect finished with it: it is BLOCKED on a human decision (real hosts / CI approval) plus an unlanded macOS classifier. Releasing so I can take the next claimable PLANNING task; the block reason and its evidence stay recorded."
+    }
+  ]
 }

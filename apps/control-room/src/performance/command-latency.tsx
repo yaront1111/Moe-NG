@@ -80,6 +80,15 @@ export function ClockProvider(props: {
   return <ClockContext.Provider value={clock}>{children}</ClockContext.Provider>;
 }
 
+/**
+ * The composition root's clock, for a live surface that must take its OWN reading rather
+ * than render one it was handed. Returns null when no provider is mounted, which is the
+ * honest answer: that surface cannot measure, and says so with a code.
+ */
+export function useClock(): Clock | null {
+  return useContext(ClockContext);
+}
+
 function stated(value: string | undefined): string {
   return value !== undefined && value.trim() !== "" ? value : UNKNOWN_FACT_VALUE;
 }
@@ -101,6 +110,10 @@ function PhaseLines(props: {
           data-observed-by={line.observedBy}
           data-testid={`${prefix}.phase.${line.phase}`}
           data-unknown-code={line.reasonCode ?? undefined}
+          // Which layer refused, in the refusing layer's own words. A line showing only
+          // TIMING_UPSTREAM_UNKNOWN would say another layer refused and never say which.
+          data-upstream-code={line.upstreamCode ?? undefined}
+          data-upstream-layer={line.upstreamLayer ?? undefined}
           key={line.phase}
         >
           {line.phase}

@@ -7,7 +7,9 @@ import { Fact } from "../kernel.js";
 import { DocumentDossier } from "../preview/document-dossier.js";
 import type { DocumentDossierState } from "../preview/document-dossier-state.js";
 import { ShellFrame } from "../shell/frame.js";
+import { useClock } from "../performance/command-latency.js";
 import { LiveBoard } from "./live-board.js";
+import { LiveCommandTiming } from "./live-command-timing.js";
 import { createBoardFeed } from "./live-board-feed.js";
 import type { SurfaceFrame } from "./live-board-feed.js";
 import { createLiveEventFeed } from "./live-event-feed.js";
@@ -78,6 +80,7 @@ export function LiveTimeline({ frame }: { readonly frame: LiveFrame | null }): J
           />
         ) : null}
       </div>
+      <LiveCommandTiming frame={frame} />
       {frame.events.length > 0 ? (
         <ol className="cr-timeline-preview" data-testid="cr.live.events">
           {frame.events.map((event) => (
@@ -130,15 +133,20 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
     ? documentView.state : LIVE_DOCUMENT_DOSSIER_LOADING;
   const [frame, setFrame] = useState<LiveFrame | null>(null);
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
+  // The composition root's clock, handed to the feed so the arrival reading is taken on
+  // the same scale the render reading is. With no provider the feed records
+  // TIMING_CLOCK_UNAVAILABLE rather than implying that no time passed.
+  const clock = useClock();
   const feed = useMemo(() => (setup.ok
     ? createLiveEventFeed({
+      clock,
       intervalMs: POLL_INTERVAL_MS,
       onFrame: setFrame,
       projection: setup.projection,
       subscriberId: setup.subscriberId,
       transport: setup.transport,
     })
-    : null), [setup]);
+    : null), [clock, setup]);
   const boardFeed = useMemo(() => (setup.ok
     ? createBoardFeed({
       headers: setup.headers,

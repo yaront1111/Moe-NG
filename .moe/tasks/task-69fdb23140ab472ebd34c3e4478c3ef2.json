@@ -182,8 +182,8 @@
       "completedAt": "2026-08-14T11:47:08.511Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -195,12 +195,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:50:34.193Z",
-  "updatedAt": "2026-08-14T11:48:15.638Z",
+  "updatedAt": "2026-08-14T11:53:14.369Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T08:43:40.180Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-14T11:53:14.368Z",
+    "wallClockMs": 11374188
   },
   "contextFetchedBy": [
     "architect-2aea4111",
@@ -280,5 +282,8 @@
     "apps/daemon/src/recovery/restore-controller.ts",
     "apps/daemon/src/recovery/restore-controller-commands.ts",
     "apps/daemon/src/recovery/restore-controller-reachability.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-14T11:53:14.368Z",
+  "reviewCompletedAt": "2026-08-14T11:53:14.368Z",
+  "reviewSummary": "APPROVED (CRITICAL). Bytes at HEAD ab45234; all 11 deliverables resolve via git rev-parse HEAD:<path>, owned paths clean. Full evidence in chan-ced99359.\n\nATTRIBUTION: git log -1 on the classifier names 3b928c2, labelled for the macOS task - the whole-tree hook, not misappropriation. HEAD's own commit carries only .moe/ bookkeeping. Rail 3 says neither is a rejection reason, so I judged bytes at HEAD. I also re-checked the macOS deliverable I approved earlier is intact (blob ba9f0305 unchanged).\n\nGATES: DoD chain (daemon typecheck + two restore-controller suites) EXIT=0, 53 tests. I ALSO ran the full daemon suite, which the DoD does not require, because DoD 4 claims an installed ACTIVE row keeps byte-identical behavior and two files cannot evidence that: 71 files / 1553 tests, EXIT=0.\n\nFOUR DRILLS, restored byte-exact (sha256 -c OK after each):\nD1 discriminator widened to accept RESTORE -> FAIL \"refuses a real RESTORE binding in the slot a genesis is expected in\".\nD2 signature check disabled -> FAIL \"refuses a forged signature over a genuine challenge\".\nD3 decode failure downgraded to ABSENT -> 4 FAILED: malformed, truncated, alternate schema version, plus an installed-record case.\nD4 the ANCHOR made optional -> FAIL \"refuses a payload the daemon never anchored, however well it proves itself\" plus its controller twin. D4 matters most: every other conjunct is computable by anyone holding the project id, so only a durable command-decision row separates a fence from a forgery.\n\nCARDINALITY (DoD 5): FENCE_CASES 12, GENESIS_CONJUNCTS 7 named individually, 12 distinct case names, and the reason set asserted EQUAL to the production GENESIS_FENCE_REJECTIONS (8). A ninth reason with no case fails immediately.\n\nDoD 2 upstream arm separated. DoD 3 covered by \"replaces a verified fence and retires its refs\". DoD 1 proved against a real producer.\n\nNOTE: restore-controller.ts 294 and its contract 287 are over the 250 target, under 400, already 284/273 before this task."
 }

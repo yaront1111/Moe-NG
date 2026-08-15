@@ -5,9 +5,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   TIMING_PHASE_NAMES,
+  TIMING_PHASE_OBSERVERS,
+  TIMING_UNKNOWN_CODES,
   describeTimingReceipt,
   evaluateTiming,
   measureElapsed,
+  timingUnknown,
 } from "./timing.js";
 import type { Clock, TimingInput, TimingPhaseName } from "./timing.js";
 
@@ -31,6 +34,7 @@ const REAL_TIME_API = /Date\.now|performance\.now|new Date\(/u;
 const PRODUCTION_MODULES = Object.freeze([
   ["timing.ts", "export function evaluateTiming("],
   ["command-latency.tsx", "export function CommandLatency("],
+  ["wire-timing.ts", "export function buildLiveTimingReceipt("],
 ] as const);
 
 /**
@@ -215,5 +219,83 @@ describe("collapsing any two phases changes the rendered output", () => {
   it("describes every phase by name, so the description cannot be a bare total", () => {
     const described = describeTimingReceipt(evaluateTiming(FOUR_PHASES));
     expect(described.map((line) => line.phase)).toEqual([...TIMING_PHASE_NAMES]);
+  });
+});
+
+/**
+ * A cross-layer UNKNOWN must stay attributable. The control room is not the only layer
+ * that can refuse a reading — the daemon seam refuses on its own side too — so the
+ * vocabulary carries a code for "upstream said it does not know" and a carrier holding
+ * that layer's OWN code verbatim. Collapsing a seam refusal onto TIMING_SOURCE_ABSENT
+ * would report "we never received it" for a fact the daemon explicitly stated it lacked.
+ */
+describe("the unknown vocabulary names every refusing layer", () => {
+  it("publishes exactly the six codes, hand-written so a silent addition fails", () => {
+    expect([...TIMING_UNKNOWN_CODES]).toEqual([
+      "TIMING_CLOCK_MISMATCH",
+      "TIMING_CLOCK_UNAVAILABLE",
+      "TIMING_NEGATIVE_INTERVAL",
+      "TIMING_SOURCE_ABSENT",
+      "TIMING_SOURCE_UNPARSEABLE",
+      "TIMING_UPSTREAM_UNKNOWN",
+    ]);
+    expect(TIMING_UNKNOWN_CODES).toHaveLength(6);
+  });
+
+  it("carries the upstream layer's own code and layer verbatim, with no translation", () => {
+    const phase = timingUnknown("CONTROL_ROOM", "TIMING_UPSTREAM_UNKNOWN", {
+      code: "EVENT_STREAM_READING_NOT_PROVIDED",
+      layer: "SEAM",
+    });
+    expect(phase.reasonCode).toBe("TIMING_UPSTREAM_UNKNOWN");
+    expect(phase.upstream).toEqual({
+      code: "EVENT_STREAM_READING_NOT_PROVIDED", layer: "SEAM",
+    });
+  });
+
+  it("leaves the carrier absent for a refusal this layer made itself", () => {
+    expect(timingUnknown("CONTROL_ROOM", "TIMING_CLOCK_UNAVAILABLE").upstream).toBeUndefined();
+  });
+
+  /**
+   * The bridge that builds a live receipt must attribute its own refusals to the same
+   * observer the evaluator would. Publishing the map keeps that one fact in one place
+   * instead of letting a second copy drift out of agreement with this one.
+   */
+  it("publishes the phase-to-observer map the evaluator itself uses", () => {
+    expect(TIMING_PHASE_OBSERVERS).toEqual({
+      human: "CONTROL_ROOM", render: "CONTROL_ROOM", server: "DAEMON", stream: "CONTROL_ROOM",
+    });
+    const receipt = evaluateTiming(FOUR_PHASES);
+    for (const name of TIMING_PHASE_NAMES) {
+      expect(receipt[name].observedBy).toBe(TIMING_PHASE_OBSERVERS[name]);
+    }
+  });
+});
+
+describe("the described line exposes the upstream refusal it is carrying", () => {
+  it("projects the seam's own code and layer onto the phase line", () => {
+    const described = describeTimingReceipt(Object.freeze({
+      human: timingUnknown("CONTROL_ROOM", "TIMING_SOURCE_ABSENT"),
+      render: timingUnknown("CONTROL_ROOM", "TIMING_CLOCK_MISMATCH"),
+      server: timingUnknown("DAEMON", "TIMING_UPSTREAM_UNKNOWN", {
+        code: "EVENT_STREAM_READING_NOT_PROVIDED", layer: "SEAM",
+      }),
+      stream: timingUnknown("CONTROL_ROOM", "TIMING_CLOCK_UNAVAILABLE"),
+    }));
+    const server = described.find((line) => line.phase === "server");
+    expect(server?.reasonCode).toBe("TIMING_UPSTREAM_UNKNOWN");
+    expect(server?.upstreamCode).toBe("EVENT_STREAM_READING_NOT_PROVIDED");
+    expect(server?.upstreamLayer).toBe("SEAM");
+    expect(server?.durationMs).toBeNull();
+  });
+
+  it("leaves both carrier fields null when this layer refused on its own", () => {
+    const described = describeTimingReceipt(evaluateTiming({}));
+    for (const line of described) {
+      expect(line.upstreamCode).toBeNull();
+      expect(line.upstreamLayer).toBeNull();
+    }
+    expect(described).toHaveLength(4);
   });
 });

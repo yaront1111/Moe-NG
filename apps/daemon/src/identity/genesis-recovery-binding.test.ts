@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Worker } from "node:worker_threads";
+
 import { describe, expect, it, afterEach } from "vitest";
 
 import { SqliteEventStore } from "@moe/store";
@@ -5,6 +10,7 @@ import type {
   CommandDecisionRecord,
   CursorPage,
   RecoveryBindingReadResult,
+  RecoveryInitialInstallResult,
   RecoveryInstallResult,
 } from "@moe/store";
 
@@ -61,13 +67,17 @@ function anchorRowCount(store: SqliteEventStore): number {
  */
 function capturedGenesisPayload(): Uint8Array | null {
   let payload: Uint8Array | null = null;
+  const capture = (input: unknown): { code: string; layer: string; ok: false } => {
+    payload = (input as { payload: Uint8Array }).payload;
+    return Object.freeze({
+      code: "RECOVERY_INSTALL_SCOPE_REQUIRED", layer: "STORE", ok: false as const,
+    });
+  };
   const store = {
-    installRecoveryBinding: (input: unknown): RecoveryInstallResult => {
-      payload = (input as { payload: Uint8Array }).payload;
-      return Object.freeze({
-        ok: false as const, code: "RECOVERY_INSTALL_SCOPE_REQUIRED", layer: "STORE",
-      }) as unknown as RecoveryInstallResult;
-    },
+    installInitialRecoveryBinding: (input: unknown): RecoveryInitialInstallResult =>
+      capture(input) as unknown as RecoveryInitialInstallResult,
+    installRecoveryBinding: (input: unknown): RecoveryInstallResult =>
+      capture(input) as unknown as RecoveryInstallResult,
     commitExpectedVersionDecision: (): never => {
       throw new Error("must not anchor");
     },
@@ -241,6 +251,10 @@ describe("genesis recovery binding — first boot", () => {
       commitExpectedVersionDecision: (): never => {
         throw new Error("must not anchor while deferring");
       },
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        throw new Error("must not re-mint over recovery history");
+      },
       installRecoveryBinding: (): RecoveryInstallResult => {
         installs += 1;
         throw new Error("must not re-mint over recovery history");
@@ -278,6 +292,9 @@ describe("genesis recovery binding — fail closed", () => {
     // A slot that refuses to decode is corruption, not absence: minting a fresh
     // incarnation on top of it would convert an integrity fault into authority.
     const store = {
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        throw new Error("must not install over a corrupt slot");
+      },
       installRecoveryBinding: (): RecoveryInstallResult => {
         throw new Error("must not install over a corrupt slot");
       },
@@ -303,6 +320,10 @@ describe("genesis recovery binding — fail closed", () => {
     }) as unknown as RecoveryInstallResult;
     let installs = 0;
     const store = {
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        return refused as unknown as RecoveryInitialInstallResult;
+      },
       installRecoveryBinding: (): RecoveryInstallResult => {
         installs += 1;
         return refused;
@@ -332,6 +353,8 @@ describe("genesis recovery binding — fail closed", () => {
       // NO_BUSINESS_EFFECT decision rather than throwing.
       commitExpectedVersionDecision: (): unknown =>
         Object.freeze({ decision: Object.freeze({ effectDisposition: "NO_BUSINESS_EFFECT" }) }),
+      installInitialRecoveryBinding: (input: unknown): RecoveryInitialInstallResult =>
+        store.installInitialRecoveryBinding(input),
       installRecoveryBinding: (input: unknown): RecoveryInstallResult =>
         store.installRecoveryBinding(input),
       readCommandDecisionsAfter: (cursor: bigint, limit: number): DecisionPage =>
@@ -363,6 +386,8 @@ describe("genesis recovery binding — fail closed", () => {
         }
         return Object.freeze({ decision: Object.freeze({ effectDisposition: "NO_BUSINESS_EFFECT" }) });
       },
+      installInitialRecoveryBinding: (input: unknown): RecoveryInitialInstallResult =>
+        store.installInitialRecoveryBinding(input),
       installRecoveryBinding: (input: unknown): RecoveryInstallResult =>
         store.installRecoveryBinding(input),
       readCommandDecisionsAfter: (cursor: bigint, limit: number): DecisionPage =>
@@ -395,6 +420,10 @@ describe("genesis recovery binding — fail closed", () => {
     }) as unknown as DecisionPage;
     let installs = 0;
     const store = {
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        throw new Error("must not install while a restore is pending");
+      },
       installRecoveryBinding: (): RecoveryInstallResult => {
         installs += 1;
         throw new Error("must not install while a restore is pending");
@@ -412,4 +441,373 @@ describe("genesis recovery binding — fail closed", () => {
     if (!result.ok) throw new Error("unreachable");
     expect(result.outcome).toBe("DEFERRED");
   });
+});
+
+/**
+ * The store publishes TWO installers. `installRecoveryBinding` replaces — its
+ * transaction DELETEs the slot and then INSERTs — which is correct for a restore
+ * succeeding a known incumbent and wrong for genesis, where two handles that both
+ * observed an absent slot would both commit and the second would destroy the
+ * first. `installInitialRecoveryBinding` proves the store pristine and INSERTs
+ * under one write lock, answering INSTALLED, CURRENT (the exact valid winner) or
+ * REFUSED, and never deleting. Genesis must route through the second one.
+ */
+describe("genesis recovery binding — atomic first install", () => {
+  const CURRENT_WINNER_INCARNATION = "8a".repeat(32);
+  const CURRENT_WINNER_KEY_EPOCH = "8b".repeat(32);
+
+  const foundWinner: RecoveryBindingReadResult = Object.freeze({
+    binding: Object.freeze({
+      bindingCodecVersion: 1,
+      incarnationRef: CURRENT_WINNER_INCARNATION,
+      installedAt: "2026-08-15T00:00:00.000Z",
+      keyEpochRef: CURRENT_WINNER_KEY_EPOCH,
+      payload: new TextEncoder().encode("installed-by-a-rival-handle"),
+      slot: "ACTIVE",
+    }),
+    bindingDigest: "8c".repeat(32),
+    ok: true as const,
+    outcome: "FOUND" as const,
+  }) as unknown as RecoveryBindingReadResult;
+
+  /**
+   * Real durable history through the store's OWN decision seam, and deliberately
+   * NOT a `recovery.incarnate` anchor: an anchored incarnation would make genesis
+   * DEFER before it ever reached the installer, so the guard under test would go
+   * silently unexercised. The commit is asserted, because a seed that quietly
+   * committed nothing makes the refusal below unreachable and the test vacuous.
+   */
+  function seedAuthoritativeHistory(store: SqliteEventStore): void {
+    const bytes = new TextEncoder().encode(JSON.stringify({ owner: "operator-local" }));
+    const response = store.commitExpectedVersionDecision({
+      commandKind: "project.register",
+      committedResultBytes: bytes,
+      correlationId: "corr-genesis-history",
+      decidedAt: "2026-08-15T00:00:00.000Z",
+      events: [
+        { eventId: "evt-genesis-history", eventType: "ProjectRegistered", payload: bytes },
+      ],
+      expectedVersion: 0,
+      key: {
+        commandId: "cmd-genesis-history",
+        principalId: "operator-local",
+        projectId: PROJECT_ID,
+      },
+      requestBytes: bytes,
+      targetAggregateId: "agg-genesis-history",
+    });
+    expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+  }
+
+  interface InstallerCounts {
+    initial: number;
+    replacing: number;
+  }
+
+  /** The REAL store, with only a call counter interposed on the two installers. */
+  function countingStore(store: SqliteEventStore, counts: InstallerCounts) {
+    return {
+      commitExpectedVersionDecision: (input: unknown): unknown =>
+        store.commitExpectedVersionDecision(input as never),
+      installInitialRecoveryBinding: (input: unknown): RecoveryInitialInstallResult => {
+        counts.initial += 1;
+        return store.installInitialRecoveryBinding(input);
+      },
+      installRecoveryBinding: (input: unknown): RecoveryInstallResult => {
+        counts.replacing += 1;
+        return store.installRecoveryBinding(input);
+      },
+      readCommandDecisionsAfter: (cursor: bigint, limit: number): DecisionPage =>
+        store.readCommandDecisionsAfter(cursor, limit),
+      readRecoveryBinding: (slot: unknown): RecoveryBindingReadResult =>
+        store.readRecoveryBinding(slot),
+    } as unknown as Parameters<typeof ensureGenesisRecoveryBinding>[0];
+  }
+
+  it("installs a pristine store through the ATOMIC installer, never the replacing one", () => {
+    const store = openUnboundStore();
+    const counts: InstallerCounts = { initial: 0, replacing: 0 };
+
+    const result = requireBinding(
+      ensureGenesisRecoveryBinding(countingStore(store, counts), {
+        clock: CLOCK, projectId: PROJECT_ID,
+      }),
+    );
+
+    expect(result.outcome).toBe("INSTALLED");
+    // Which installer, not merely that one ran: the replacing installer would
+    // produce exactly this outcome while leaving the clobber window open.
+    expect(counts).toEqual({ initial: 1, replacing: 0 });
+    expect(readCurrentRecoveryAuthenticationBinding(store)?.recoveryIncarnationRef)
+      .toBe(result.binding.recoveryIncarnationRef);
+  });
+
+  it("settles a FOUND slot as PRESENT without reaching either installer", () => {
+    const store = openUnboundStore();
+    installTestRecoveryBinding(store);
+    const counts: InstallerCounts = { initial: 0, replacing: 0 };
+
+    const result = requireBinding(
+      ensureGenesisRecoveryBinding(countingStore(store, counts), {
+        clock: CLOCK, projectId: PROJECT_ID,
+      }),
+    );
+
+    expect(result.outcome).toBe("PRESENT");
+    expect(counts).toEqual({ initial: 0, replacing: 0 });
+    expect(result.binding.recoveryIncarnationRef).toBe("71".repeat(32));
+  });
+
+  it("maps the store's CURRENT answer onto PRESENT carrying the WINNER's binding", () => {
+    // The loser's arm. `ok` is true because nothing went wrong, but `outcome` is
+    // CURRENT and `authority` is NONE: a handle that lost the install must never
+    // report itself as the minter, and must adopt the winner rather than its own
+    // discarded mint.
+    let installs = 0;
+    let reads = 0;
+    const store = {
+      commitExpectedVersionDecision: (): never => {
+        throw new Error("must not anchor a slot this handle did not write");
+      },
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        return Object.freeze({
+          authority: "NONE" as const,
+          binding: (foundWinner as unknown as { binding: unknown }).binding,
+          bindingDigest: "8c".repeat(32),
+          code: "RECOVERY_INITIAL_INSTALL_ALREADY_BOUND" as const,
+          layer: "RECOVERY_INSTALL_TRANSACTION",
+          ok: true as const,
+          outcome: "CURRENT" as const,
+        }) as unknown as RecoveryInitialInstallResult;
+      },
+      installRecoveryBinding: (): RecoveryInstallResult => {
+        throw new Error("the replacing installer must never be reached");
+      },
+      readCommandDecisionsAfter: (): DecisionPage => NO_DECISIONS,
+      readRecoveryBinding: (): RecoveryBindingReadResult => {
+        reads += 1;
+        return reads === 1 ? ABSENT_SLOT : foundWinner;
+      },
+    } as unknown as Parameters<typeof ensureGenesisRecoveryBinding>[0];
+
+    const result = requireBinding(
+      ensureGenesisRecoveryBinding(store, { clock: CLOCK, projectId: PROJECT_ID }),
+    );
+
+    expect(installs).toBe(1);
+    expect(result.outcome).toBe("PRESENT");
+    expect(result.binding.recoveryIncarnationRef).toBe(CURRENT_WINNER_INCARNATION);
+    expect(result.binding.keyEpochRef).toBe(CURRENT_WINNER_KEY_EPOCH);
+  });
+
+  it("adopts the winner when a refusal coincides with an already-bound slot", () => {
+    // The loser's SECOND door. The winner anchors its incarnation right after
+    // installing, that anchor is authoritative history, and the pristine guard
+    // reads history before it reads the slot — so a handle that installs a moment
+    // later is refused for a condition the winner created, over a store that is
+    // perfectly well fenced. Refusing there would fail daemon startup outright.
+    let installs = 0;
+    let reads = 0;
+    const store = {
+      commitExpectedVersionDecision: (): never => {
+        throw new Error("must not anchor a slot this handle did not write");
+      },
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        return Object.freeze({
+          authority: "NONE" as const,
+          code: "RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT" as const,
+          layer: "RECOVERY_INSTALL_TRANSACTION",
+          ok: false as const,
+          outcome: "REFUSED" as const,
+          reason: "The store already carries authoritative history.",
+          truth: "UNKNOWN" as const,
+        }) as unknown as RecoveryInitialInstallResult;
+      },
+      installRecoveryBinding: (): RecoveryInstallResult => {
+        throw new Error("the replacing installer must never be reached");
+      },
+      readCommandDecisionsAfter: (): DecisionPage => NO_DECISIONS,
+      readRecoveryBinding: (): RecoveryBindingReadResult => {
+        reads += 1;
+        return reads === 1 ? ABSENT_SLOT : foundWinner;
+      },
+    } as unknown as Parameters<typeof ensureGenesisRecoveryBinding>[0];
+
+    const result = requireBinding(
+      ensureGenesisRecoveryBinding(store, { clock: CLOCK, projectId: PROJECT_ID }),
+    );
+
+    expect(installs).toBe(1);
+    expect(result.outcome).toBe("PRESENT");
+    expect(result.binding.recoveryIncarnationRef).toBe(CURRENT_WINNER_INCARNATION);
+  });
+
+  it("refuses a store carrying authoritative history with the store's OWN code", () => {
+    // Hardening, and deliberate: a deleted or corrupted binding row must not let
+    // a store that has already served a workload silently re-genesis itself,
+    // which would revoke every outstanding session and mint a fresh fence over
+    // real history. The store answers; genesis carries that answer verbatim.
+    const store = openUnboundStore();
+    seedAuthoritativeHistory(store);
+    expect(store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
+
+    const result = ensureGenesisRecoveryBinding(store, { clock: CLOCK, projectId: PROJECT_ID });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("GENESIS_INSTALL_REFUSED");
+    // Never flattened into a generic code: the store's own reason survives.
+    expect(result.storeCode).toBe("RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT");
+    expect(GENESIS_RECOVERY_ERROR_CODES).toContain(result.code);
+    // And nothing was written: a refusal that still bound the store would be the
+    // exact failure this guard exists to prevent.
+    expect(store.readRecoveryBinding("ACTIVE")).toMatchObject({ outcome: "ABSENT" });
+  });
+});
+
+const RACE_DEADLINE_MILLISECONDS = 30_000;
+
+/** Bounded: a worker that never reports fails BY NAME instead of stalling the suite. */
+function withDeadline<Value>(promise: Promise<Value>, label: string): Promise<Value> {
+  return new Promise<Value>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`genesis race worker never reported: ${label}`));
+    }, RACE_DEADLINE_MILLISECONDS);
+    promise.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error instanceof Error ? error : new Error(String(error)));
+      },
+    );
+  });
+}
+
+interface RaceReport {
+  readonly incarnationRef?: string | null;
+  readonly installDigest?: string | null;
+  readonly installOutcome?: string | null;
+  readonly keyEpochRef?: string | null;
+  readonly label: string;
+  readonly outcome: string;
+  readonly reason?: string;
+  readonly storeCode?: string;
+}
+
+interface RaceHandle {
+  readonly observed: Promise<string>;
+  readonly preOpenReady: Promise<void>;
+  readonly result: Promise<RaceReport>;
+}
+
+function startGenesisWorker(
+  databasePath: string,
+  gate: SharedArrayBuffer,
+  label: string,
+): RaceHandle {
+  const worker = new Worker(new URL("./genesis-first-boot-worker.mjs", import.meta.url), {
+    execArgv: ["--experimental-strip-types"],
+    workerData: { databasePath, gate, label, projectId: PROJECT_ID },
+  });
+  let resolvePreOpen!: () => void;
+  let resolveObserved!: (value: string) => void;
+  let resolveResult!: (value: RaceReport) => void;
+  const rejecters: ((error: Error) => void)[] = [];
+  const promised = <Value>(assign: (resolve: (value: Value) => void) => void): Promise<Value> =>
+    new Promise<Value>((resolve, reject) => { assign(resolve); rejecters.push(reject); });
+
+  const preOpenReady = promised<void>((resolve) => { resolvePreOpen = resolve; });
+  const observed = promised<string>((resolve) => { resolveObserved = resolve; });
+  const result = promised<RaceReport>((resolve) => { resolveResult = resolve; });
+  const rejectAll = (error: Error): void => { for (const reject of rejecters) reject(error); };
+
+  worker.on("message", (message: { kind: string; observed?: string } & RaceReport) => {
+    if (message.kind === "PREOPEN_READY") resolvePreOpen();
+    else if (message.kind === "OBSERVED") resolveObserved(message.observed ?? "MISSING");
+    else if (message.kind === "RESULT") resolveResult(message);
+  });
+  worker.on("error", (error) => rejectAll(error));
+  worker.on("exit", (code) => {
+    if (code !== 0) rejectAll(new Error(`${label} worker exited with ${code}`));
+  });
+  return {
+    observed: withDeadline(observed, `${label} OBSERVED`),
+    preOpenReady: withDeadline(preOpenReady, `${label} PREOPEN_READY`),
+    result: withDeadline(result, `${label} RESULT`),
+  };
+}
+
+function release(gate: SharedArrayBuffer, index: number, waiters: number): void {
+  const view = new Int32Array(gate);
+  Atomics.store(view, index, 1);
+  Atomics.notify(view, index, waiters);
+}
+
+describe("genesis recovery binding — concurrent first boot", () => {
+  it("lets two racing handles commit exactly ONE binding, with no clobber", async () => {
+    // Two real file-backed handles on one genuinely new store directory, held at
+    // a shared gate until BOTH have observed the same absent slot. Without that
+    // hold the collision is probabilistic; with it, this is the exact interleaving
+    // a replacing installer cannot survive — both handles mint, both commit, and
+    // the second destroys the binding the first already reported as INSTALLED,
+    // orphaning every session credential bound to it.
+    const directory = mkdtempSync(join(tmpdir(), "moe-genesis-race-"));
+    const databasePath = join(directory, "store.db");
+    const gate = new SharedArrayBuffer(8);
+    const workers = [
+      startGenesisWorker(databasePath, gate, "alpha"),
+      startGenesisWorker(databasePath, gate, "beta"),
+    ];
+    try {
+      await Promise.all(workers.map((worker) => worker.preOpenReady));
+      release(gate, 0, workers.length);
+
+      // The collision is PROVEN, not assumed. A sweep that silently produced a
+      // sequential run would pass while testing nothing at all.
+      expect(await Promise.all(workers.map((worker) => worker.observed)))
+        .toEqual(["ABSENT", "ABSENT"]);
+      release(gate, 1, workers.length);
+      const reports = await Promise.all(workers.map((worker) => worker.result));
+
+      expect(reports.map((report) => report.label).sort()).toEqual(["alpha", "beta"]);
+      const reopened = SqliteEventStore.openForProject(databasePath, PROJECT_ID);
+      try {
+        const row = reopened.readRecoveryBinding("ACTIVE");
+        if (!row.ok || row.outcome !== "FOUND") throw new Error("the ACTIVE slot must be FOUND");
+
+        // THE CLOBBER DETECTOR, and the assertion the swap exists to satisfy:
+        // every binding this store ever committed is STILL the binding on disk.
+        // A replacing installer commits twice with two different digests here, so
+        // this fails on the committed bytes rather than on a downstream symptom.
+        expect(
+          reports.filter((report) => report.installOutcome === "INSTALLED")
+            .map((report) => report.installDigest),
+        ).toEqual([row.bindingDigest]);
+
+        // Exactly one minter, and the loser was told so by the store's own
+        // transaction rather than by a post-hoc read-back heuristic.
+        // Mapped rather than counted, so a failure NAMES what each handle
+        // actually reported instead of printing a count that could mean anything.
+        // The loser's outcome is deterministic even though its internal path is
+        // not: it is told CURRENT if it installs before the winner anchors, and
+        // refused for the winner's own anchor history if it installs after. Both
+        // doors must settle PRESENT on the winner's fence.
+        expect(reports.map((report) => report.outcome).sort())
+          .toEqual(["INSTALLED", "PRESENT"]);
+
+        // Both handles adopt the SAME fence, so no credential is orphaned.
+        expect(reports[0]?.incarnationRef).toBe(reports[1]?.incarnationRef);
+        expect(reports[0]?.keyEpochRef).toBe(reports[1]?.keyEpochRef);
+        expect(row.binding.incarnationRef).toBe(reports[0]?.incarnationRef);
+      } finally {
+        reopened.close();
+      }
+    } finally {
+      // Every store handle is closed before this runs — on Windows a live SQLite
+      // handle makes rmSync throw EPERM and kills the vitest worker outright.
+      rmSync(directory, { force: true, recursive: true });
+    }
+  }, RACE_DEADLINE_MILLISECONDS + 15_000);
 });
