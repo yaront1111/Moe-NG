@@ -22,58 +22,83 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE THE FOUR GAP CLAIMS AT THE THEN-CURRENT HEAD AND RECORD EACH VERDICT. The description's gaps were confirmed at HEAD 2b15b8f/6ffb4fe and all three children have landed since, so every claim is STALE BY DEFAULT and must be re-run. This binds in BOTH directions: do not build something the description calls missing until a grep confirms it is missing. No production bytes written in this step.\n\nRun and record:\n1. `git rev-parse --short HEAD`.\n2. `grep -rn evaluateTiming --include=*.ts --include=*.tsx apps/ packages/ | grep -v '\\.test\\.'` — EXPECTED CLOSED: wire-timing.ts:212 calls it, command-latency.tsx:107 calls describeTimingReceipt. If zero non-test hits reappear, the edge regressed and the plan changes.\n3. `sed -n '43,58p' apps/daemon/src/http/event-stream-contract.ts` — EXPECTED CLOSED: StreamEvent carries commandId and decisionTrace.\n4. `grep -rln 'effort\\|Effort' apps/control-room/src/live/` — EXPECTED STILL EMPTY. This is THE finding: the effort-records/admission/collector/intervals family has no live consumer. If it now returns files, a peer has wired it; STOP and re-plan rather than landing a second edge.\n5. Verify the reachability chain the new edge will join: main.tsx:8 -> live-app.tsx:10 -> live-event-feed.ts:4-6 -> wire-timing.ts.\n6. `grep -c ''` on live-dispatch.ts (expect ~271, already over the 250 target), live-app.tsx, live-event-feed.ts, effort-collector.ts.\n7. READ `apps/control-room/src/live/live-timing-path.test.tsx` end to end, especially its header at :10-19. Its shape is the specification for the test you will write in step 2, and its stated reason is the reason.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/event-stream-contract.ts",
         "apps/control-room/src/live/live-timing-path.test.tsx",
         "apps/control-room/src/live/live-dispatch.ts",
         "apps/control-room/src/performance/effort-collector.ts"
-      ]
+      ],
+      "note": "RE-MEASURED AT HEAD 8ad396a (reopen pass; prior pass measured at a967199). Zero production bytes written.\n\nQA'S NAMED DEFECT IS NOW CLOSED ON DISK — AND REMOVING THE FILE WOULD NOW BE THE DEFECT. QA's fix instruction was \"get apps/daemon/src/recovery/effect-inventory.test.ts out of HEAD\", correct when measured at 98d6e72. Re-measured per the stale-description rail (binds in BOTH directions — do not build/remove something a description calls missing until a probe confirms it is still missing):\n  git cat-file -e HEAD:apps/daemon/src/recovery/effect-inventory.test.ts -> TRACKED_AT_HEAD=YES\n  git cat-file -e HEAD:apps/daemon/src/recovery/effect-inventory.ts     -> MODULE_TS_AT_HEAD=YES\n  git cat-file -e HEAD:apps/daemon/src/recovery/effect-inventory.js     -> MODULE_JS_AT_HEAD=YES  (content: export * from \"./effect-inventory.ts\";)\nThe module landed in cdd53e4 \"feat(task-e33747f982e0452a9f9d784fd1cb914d): Durable effect activation ingress with recovery embargo\". The test is no longer an orphan. Deleting it now would delete a landed peer/sibling test that has its module. NOT REMOVED — and the red it caused is gone: `pnpm --filter @moe/daemon test` is exit 0, 89 files / 1818 tests.\n\nDELIVERABLE INTACT AT HEAD (checked for the foreign-revert hazard):\n  live-effort-edge.ts 234 lines, live-effort-path.test.tsx 247 lines, live-dispatch.ts 279 lines — all present at HEAD; `git diff HEAD -- apps/control-room/src/live/` EMPTY.\n  My deliverable commit is ac29c55 (3 files, +489/-0, all apps/control-room/src/live/**). 98d6e72 is the whole-tree completion-hook commit bearing this task id — it is the mechanism that swept the peer's then-orphan test in, exactly the hook hazard project rail 5 names.\n  grep -rln 'effort|Effort' apps/control-room/src/live/ now returns edge + call site + test (was EMPTY pre-task). Durable call site confirmed: live-dispatch.ts:4 import, :249 recordDispatchEffort({ inside dispatchAffordance.\n\nSTILL-CLOSED GAPS re-confirmed: evaluateTiming has non-test callers (wire-timing.ts), StreamEvent carries commandId + decisionTrace. No re-implementation planned.\n\nSHARED WORKTREE IS HOT — two peer writes raced my own commands inside 90 seconds, so every red gets attributed before it is believed:\n1. Daemon leg first run: 1 failure, daemon-store-dependencies.test.ts \"registrySize: expected 21, received 22\". Peer was editing that exact line while my run read it (git diff showed their in-flight 21->22). Re-run: exit 0.\n2. Typecheck run 1: project-configuration-selection.test.ts(501,34) — git blame said \"Not Committed Yet\" on line 501. Gone by run 2; peer fixed it mid-session.",
+      "startedAt": "2026-08-15T18:51:48.110Z",
+      "completedAt": "2026-08-15T18:55:30.092Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD — WRITE THE FAILING LIVE INTEGRATION TEST FIRST. Create `apps/control-room/src/live/live-effort-path.test.tsx`, modelled on live-timing-path.test.tsx.\n\nITS SHAPE IS THE POINT, and getting it wrong makes the whole task vacuous. DO NOT import `createEffortCollector`, feed it a decision and assert the returned record — the effort-records/admission unit specs already do exactly that, and they have passed for the entire time production had ZERO callers. That is precisely why this gap stayed invisible. Instead:\n- Render the live application (LiveControlRoom with its ClockProvider, as live-timing-path.test.tsx does).\n- Drive a REAL demanded decision command through the live dispatch seam — one of the kinds live-dispatch.ts already handles: `planning.create_draft`, `plan.approve`, `integration.accept_output`.\n- Assert the effort observation production computed: its decision kind, its source/provenance, and its layer. Every asserted value must be one production produced; nothing in the test may hand the surface a record, a decision kind, or a reason code.\n\nCover what DoD 3 names: the live path distinguishes create/approve/accept from an ADDITIONAL demanded decision. Assert the DECISION KIND that came back, not merely that some record exists.\n\nAssert a refusal case with its EXACT code and layer — EFFORT_OBSERVATION_UNPARSEABLE and its EffortLayer — never merely that the operation did not succeed, and name which layer refused since more than one can.\n\nThis test MUST FAIL at this point: nothing under live/ imports effort today. A test that passes before step 3 lands is testing something other than the edge, and that is the defect to fix before continuing.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/control-room/src/live/live-effort-path.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-effort-path.test.tsx"
+      ],
+      "note": "DELIVERED IN THE PRE-REJECT PASS AND STILL AT HEAD 8ad396a — re-verified rather than re-authored, because re-writing a landed file would be the silent duplicate the stale-description rail forbids.\n\napps/control-room/src/live/live-effort-path.test.tsx, 247 lines, 7 cases, byte-identical to HEAD (`git diff HEAD -- apps/control-room/src/live/` empty).\n\nSHAPE VERIFIED AGAINST THE TRAP THIS STEP EXISTS TO AVOID. `grep -n 'createEffortCollector|shapeEffortObservation'` over the test returns ONE hit and it is inside the header prose explaining why the test does NOT do that — zero call sites. The test imports only `LiveControlRoom` from ./live-app.js, `ClockProvider`, and the three read-side accessors from the edge (liveEffortDecisions / liveEffortObservations / liveEffortRefusals). It renders the live app and clicks the board's own Dispatch button; nothing hands the surface a record, a decision kind, a source or a reason code.\n\nCases, by name:\n:139 attributes the demanded CREATE to the daemon's own command identity\n:158 produces every decision kind the vocabulary names, and exactly four cases   <- DoD 5 non-zero exact cardinality\n:170 derives ADDITIONAL for a second demand while keeping the kind demanded      <- DoD 3 create/approve/accept vs ADDITIONAL\n:180 records a dispatch that demands no decision as a free interaction, never a decision\n:198 records the attention switch between the two card surfaces it observed\n:224 refuses a demanded decision this vocabulary cannot name as UNPARSEABLE      <- exact code + layer\n:236 refuses a demand nobody observed as ABSENT, never as UNPARSEABLE            <- zero-vs-absent precedence\n\nThe TDD red-before-green ordering was established in the pre-reject pass (the test could not resolve ./live-effort-edge.js before step 3 existed). QA independently re-confirmed the assertion is load-bearing rather than taking that on trust: it mutated the production guard in performance/effort-admission.ts (asMember(...) -> raw demanded) and recorded live-effort-path.test.tsx going red BY NAME on \":224 refuses a demanded decision this vocabulary cannot name as UNPARSEABLE\", then restored byte-exact, sha ae3f4faa. The reject did not touch this step.",
+      "startedAt": "2026-08-15T18:55:34.011Z",
+      "completedAt": "2026-08-15T18:56:10.170Z"
     },
     {
       "stepId": "step-3",
       "description": "LAND THE MISSING LIVE CONSUMER EDGE. Create `apps/control-room/src/live/live-effort-edge.ts`, mirroring how live-event-feed.ts wired wire-timing.ts into the live poll path — this is the symmetric seam on the dispatch side, and mirroring it is deliberate rather than incidental.\n\nThe module owns the collector wiring and nothing else: create the collector via `createEffortCollector()`, observe a demanded decision command as the live path issues it, and record the free interactions, focus/away intervals, attention switches and recovery burden the existing vocabulary already names (INTERVAL_KINDS is [\"AWAY\",\"FOCUS\"], RECOVERY_BURDENS and DECISION_KINDS are frozen in effort-records.ts).\n\nSHAPING ONLY, NEVER INFERENCE — the discipline live-event-feed.ts states in its own header and this module must inherit: an identity the dispatch seam did not state stays null rather than becoming an empty string; nothing is derived by subtraction; an unobtainable observation records its stable UNKNOWN code from EFFORT_UNKNOWN_CODES rather than implying that nothing happened. Instrumentation is observational and grants no authority (task rail 3).\n\nRE-DECLARE NOTHING. Every code, layer, decision kind and interval kind is imported from effort-records.ts. If you find yourself typing a string literal that already exists in that file's frozen arrays, you are duplicating the authority child task-bcae0b7e landed.\n\nDo NOT create a physical `.js` bridge: apps/control-room does not use them (only .ts/.tsx/.css under live/), unlike apps/daemon and packages/**. Keep the file under 250 lines, measured with `grep -c ''`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/control-room/src/live/live-effort-edge.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-effort-edge.ts"
+      ],
+      "note": "DELIVERED IN THE PRE-REJECT PASS AND STILL AT HEAD 8ad396a, byte-identical. Re-verified, not re-authored.\n\napps/control-room/src/live/live-effort-edge.ts — 234 lines by `grep -c ''` (under the 250 target; PowerShell Measure-Object -Line undercounts, so grep is the counter used).\n\nRE-DECLARES NOTHING. Every code, layer and decision kind is imported from ../performance/effort-records.js — EFFORT_COLLECTOR_LAYER, UNATTRIBUTED, effortRefusal, and the types BaselineDecisionKind / EffortRecord / EffortRefusal; the collector itself from ../performance/effort-collector.js. No frozen-array literal is retyped, so nothing child task-bcae0b7e landed is duplicated.\n\nTHE DESIGN DECISION THE WHOLE TASK TURNS ON — ONE ADMISSION DOOR. The edge hands the observed demand word to shapeEffortObservation VERBATIM and never pre-filters. Membership stays owned by effort-admission.ts:134. An edge-side filter would look correct and would move the refusal OUT of the guard, leaving the DoD 6 attribution drill green while proving nothing — QA's independent re-run of that drill (guard weakened -> live test red by name) is the evidence this stayed honest.\n\nSHAPING ONLY, NEVER INFERENCE: an identity the dispatch seam did not state is recorded as UNATTRIBUTED, never as \"\" and never carried over from the previous dispatch. A kind in neither NAMEABLE_DEMANDS nor UNNAMEABLE_DEMANDS leaves demandedKind absent so admission answers EFFORT_OBSERVATION_ABSENT — the zero-vs-absent precedence is produced by production, not asserted into it.\n\nNO STRAY .js BRIDGE: `ls apps/control-room/src/live/*.js` -> NONE. Correct for this app; the bridge convention is real in apps/daemon and packages/** and absent here.\n\nDELIBERATELY NOT RECORDED, and flagged so QA does not read it as an omission: focus/away intervals and recovery burdens. This step's text names them, but the dispatch seam observes ONE instant — it cannot see an operator's attention open and close, and the daemon's answer is evidence about the daemon, not about what a human then had to do. Synthesising either is the inference task rail 3 forbids, and an unclosed FOCUS interval would emit EFFORT_INTERVAL_OVERLAPPING on every later dispatch. Stated in the module header and left to the consumer surface that can actually watch them (task-b937811e8b72459ea169e5fff1238ce1). What the seam CAN honestly see is recorded: demanded decisions, free interactions, and attention switches between card surfaces.",
+      "startedAt": "2026-08-15T18:56:13.043Z",
+      "completedAt": "2026-08-15T18:56:29.564Z"
     },
     {
       "stepId": "step-4",
       "description": "WIRE THE ONE DURABLE CALL SITE (Clause 1: 'exports the symbols' is not composition; a real call site is).\n\nAdd the import plus ONE call into `apps/control-room/src/live/live-dispatch.ts` at `dispatchAffordance` (:243), which is where the live path actually issues commands and already handles exactly the kinds DoD 3 names — `planning.create_draft` (:30), `plan.approve` (:104), `integration.accept_output` (:156,:161), `goal.create` (:94), `review.submit` (:196).\n\nKEEP THE EDIT SMALL AND DELIBERATE. live-dispatch.ts is ALREADY 271 lines — over the 250 target and under the 400 split point. The observation logic belongs in live-effort-edge.ts; this file receives an import and a call, nothing more. Re-measure with `grep -c ''` after the edit and confirm it has not grown materially.\n\nDo not change dispatch behaviour. The observation is a side record: a command that dispatched before this change must dispatch identically after it, and a failure to record an observation must never fail a dispatch. If recording can throw, contain it and record the stable UNKNOWN code instead — instrumentation may not acquire the power to break the thing it observes.\n\nRun the step-2 test. It must now PASS. If it still fails, the edge is not reachable from the rendered path and the wiring is wrong — fix the wiring, never the assertion.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-dispatch.ts",
         "apps/control-room/src/live/live-effort-edge.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-dispatch.ts"
+      ],
+      "note": "DELIVERED IN THE PRE-REJECT PASS AND STILL AT HEAD 8ad396a. Re-verified this session by running the test, not by reading the file.\n\nFOCUSED RUN, FRESH: `pnpm exec vitest run src/live/live-effort-path.test.tsx` in apps/control-room -> Test Files 1 passed (1), Tests 7 passed (7), EFFORT_TEST_EXIT=0.\n\nTHE DURABLE CALL SITE IS REAL COMPOSITION, not an export. live-dispatch.ts:4 `import { recordDispatchEffort } from \"./live-effort-edge.js\";` and :249 the call, as the FIRST statement of `dispatchAffordance` — before payloadFor, before the builder lookup, before any refusal — because the human already decided by handing the card back whatever the daemon then answers. QA proved this edge carries real authority rather than fixture shape: it mutated the production attribution guard and the LIVE test went red by name.\n\nTHE WHOLE EDIT IS 8 LINES (git show ac29c55 -- live-dispatch.ts): +2 for the import and blank, +6 for the comment and call. File is 279 lines by `grep -c ''`, up from the pre-existing 271 — not grown materially, still under the 400 split point. All observation logic stayed in live-effort-edge.ts.\n\nDISPATCH BEHAVIOUR UNCHANGED, and structurally so rather than by assertion: `recordDispatchEffort(input): void` wraps its whole body in try/catch and returns void, so it has no return value a caller could branch on and no throw that could escape. Every line below the call is byte-identical to the pre-task file. A recording failure cannot fail a dispatch — instrumentation never acquires power over the thing it observes (task rail 3). Inside the catch, commandId falls back to UNATTRIBUTED rather than to a guess.\n\nThe apps/control-room suite as a whole is unchanged in shape by this: 70 files / 860 tests green (baseline before any byte was 69 files / 850 tests — exactly this file's 1 file / 7 cases plus the pre-existing 3 that landed with the children).",
+      "startedAt": "2026-08-15T18:56:32.661Z",
+      "completedAt": "2026-08-15T18:57:00.464Z"
     },
     {
       "stepId": "step-5",
       "description": "DRILL A — BYPASS A PRODUCTION RENDER TIMESTAMP (DoD 6, first drill). Capture `sha256sum` of the target BEFORE mutating.\n\nTarget: `apps/control-room/src/performance/wire-timing.ts`. The render phase is computed at :208 as `render: pairing(TIMING_PHASE_OBSERVERS.render, input.received, input.rendered)`, with `rendered` declared at :189 and readings taken through `readClientClock` at :149. Bypass the production render observation — for example make the render pairing use `input.received` at both ends, so the span production observed collapses to a number no clock produced.\n\nNAMED TEST THAT MUST REDDEN: `apps/control-room/src/live/live-timing-path.test.tsx`. Its own header states the 30 ms gap 'is a span production observed between two moments, not a number this test handed it', so this drill is exactly what it was written to catch.\n\nConfirm it reddens ON THE TIMING ASSERTION, not on a crash, an unhandled rejection, or a render error — a crash is not a refusal and proves the module was reached, not that the assertion is load-bearing.\n\nRestore by Edit, then verify the restore by `sha256sum` against the captured hash. NEVER restore with `git checkout` (reverts to HEAD, destroying this task's uncommitted work) and never accept an empty `git diff` as proof (blind to untracked paths — the two new files in this task are untracked).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/wire-timing.ts",
         "apps/control-room/src/live/live-timing-path.test.tsx"
-      ]
+      ],
+      "note": "DRILL A — RUN FRESH THIS SESSION, RED, RESTORED BYTE-EXACT.\n\nPRE-DRILL HASH: sha256 ebb4a7b385fdcfb5d3f99ede42936b4492f34818d5ff017801f1651bf37702bf on apps/control-room/src/performance/wire-timing.ts.\n\nMUTATION (Edit, single line, :208 in buildLiveTimingReceipt):\n  -   render: pairing(TIMING_PHASE_OBSERVERS.render, input.received, input.rendered),\n  +   render: pairing(TIMING_PHASE_OBSERVERS.render, input.received, input.received),\nThe production render observation is bypassed: the span collapses to a number no clock produced, while every other phase and the whole surface keep working.\n\nNAMED LIVE INTEGRATION TEST THAT REDDENED:\n  apps/control-room/src/live/live-timing-path.test.tsx:147\n  it(\"measures the render phase from readings production took, not from a literal\")\n  AssertionError: expected '0' to be '30' // Object.is equality  at :149:51\n  Test Files 1 failed (1) | Tests 1 failed | 8 passed (9) | DRILL_A_EXIT=1\n\nIT REDDENED ON THE TIMING ASSERTION, NOT ON A CRASH — the distinction the step insists on, because a crash proves only that the module was reached. The run reports an AssertionError at an exact line with an exact expected/received pair; the other 8 cases in the file passed, so the surface rendered normally and only the observed span changed. And the failure is on the phase's OWN line, not on a total: the 30 ms is a span production observed between two moments, which is why collapsing one endpoint turns it into 0.\n\nRESTORE VERIFIED TWO WAYS. Restored by Edit (never `git checkout` — it reverts to HEAD, not to pre-drill bytes, and would destroy uncommitted work in a shared tree). Post-restore sha256 ebb4a7b385fdcfb5d3f99ede42936b4492f34818d5ff017801f1651bf37702bf — identical to the captured hash, so byte-exact. Secondary check: `git diff --stat` on the file is empty, valid here only because this file is tracked and was clean; the hash is the load-bearing proof.",
+      "startedAt": "2026-08-15T18:57:06.602Z",
+      "completedAt": "2026-08-15T18:57:36.983Z"
     },
     {
       "stepId": "step-6",
       "description": "DRILL B — WEAKEN THE DECISION-COMMAND ATTRIBUTION GUARD (DoD 6, second drill). This is the drill that had NO valid target before this task: weakening the guard today reddens only a unit test in performance/, because no live integration test for effort existed. Steps 2-4 gave it one.\n\nCapture `sha256sum` first. Target: `apps/control-room/src/performance/effort-admission.ts:127-136`, where `demandedKind` is read (:127), `ADDITIONAL_DECISION_KIND` is separated (:131), membership is gated by `asMember(demanded, BASELINE_DECISION_KINDS)` (:134) and the refusal `EFFORT_OBSERVATION_UNPARSEABLE` is raised (:135). Weaken it — for example accept any string as a demanded kind instead of requiring membership, or let an ADDITIONAL decision be attributed as a baseline kind.\n\nNAMED TEST THAT MUST REDDEN: the new `apps/control-room/src/live/live-effort-path.test.tsx`, on the decision-kind or reason-code assertion.\n\nA GREEN DRILL HERE IS A DEFECT IN THE TEST, NOT A PASS. If the live test stays green, the edge is not really carrying the attribution — the test is passing for some other reason. Fix the test or the wiring and re-run; do not record a green drill as satisfying DoD 6, and do not fall back to reddening the performance/ unit test, which is precisely the fixture-only proof this task exists to replace.\n\nAlso confirm WHICH LAYER answered. More than one layer can refuse here (EFFORT_ADMISSION_LAYER vs EFFORT_COLLECTOR_LAYER); a drill that reddens because a different layer started answering first has not proven the guard you targeted.\n\nRestore by Edit and verify by `sha256sum`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/performance/effort-admission.ts",
         "apps/control-room/src/live/live-effort-path.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-15T18:57:40.096Z"
     },
     {
       "stepId": "step-7",
@@ -95,7 +120,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-fd8f822b",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -114,16 +139,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-15T18:37:15.314Z",
+  "updatedAt": "2026-08-15T18:57:40.096Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:36.184Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8,
+    "executedStepCount": 13,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "contextFetchedBy": [],
+  "contextFetchedBy": [
+    "worker-fd8f822b"
+  ],
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -142,7 +169,13 @@
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 6: fresh pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room test && pnpm typecheck exits 0",

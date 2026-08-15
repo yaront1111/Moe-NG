@@ -154,12 +154,13 @@
     {
       "stepId": "step-9",
       "description": "Mutation drills and the verification gate. Drill TWO production guards, one at a time, each restored from your own saved bytes before the next — NEVER `git checkout`, which reverts to HEAD and destroys uncommitted work in this shared worktree. Drill A, the digest comparison: remove or invert the production `digest === approval.exactRevisionHash` check and confirm the NAMED digest-mismatch test goes red on its exact code/layer assertion, not on a crash and not on a hang — bound the run, because a hang reads as a held guard. Drill B, the quarantine gate: make the QUARANTINED-item check a no-op and confirm the named quarantine test goes red; a guard whose body is a plain no-op has no operator to flip, so if the drill stays green make the body THROW instead to prove the hook is still on the production path. Confirm each drill reddens for the RIGHT reason — over-reddening across many unrelated tests means a broken environment, not a held guard. Restore and prove green. Then run the fresh gate `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`, `&&`-chained (a `;`-chained run masks a red leg) and never piped through tail (a piped run reports tail's exit code). A focused rerun needs `--root .` or it resolves the root config and finds zero tests, which exits 0 and reads as green. Compare against the step-1 merge-base baseline; the HEAD-minus-baseline failing-path set intersected with this task's owned paths must be EMPTY, and any foreign red — especially in the two registry files task-e33747f9 also edits — is reported verbatim with its exact failing lines, never hidden and never fabricated green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-completion.ts",
         "apps/daemon/src/recovery/recovery-completion-digest.ts",
         "apps/daemon/src/recovery/recovery-completion.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T18:50:20.735Z"
     },
     {
       "stepId": "step-10",
@@ -187,7 +188,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T18:50:17.344Z",
+  "updatedAt": "2026-08-15T18:50:20.735Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-8b21d0bb",

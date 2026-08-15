@@ -1,0 +1,33 @@
+{
+  "id": "task-c690a7a0c5a14daaa088acbc32e26815",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Cross-host evidence bare-root dependency edge",
+  "description": "Objective: give the repository fault-evidence consumer a real, lockfile-backed bare-specifier edge to the public @moe/runner platform surface and @moe/daemon doctor collector before cross-host acceptance code imports either. Deliverable: root manifest/lock importer entries plus one durable fault-lane public-surface call site. NOT in scope: host schedules, receipt aggregation, workflow execution, or adding deep-relative fallbacks. Hard dependency: task-f6ef0a45f52c45c7bb54f250170aa223 must be DONE so the call site can import collectDoctorVersionReport from the public daemon root. Current gap at HEAD 26ac640/8d9afb8: root package.json declares neither workspace package, the root pnpm importer carries neither, and `node --input-type=module -e \"import('@moe/runner')\"` from the repository root fails ERR_MODULE_NOT_FOUND. Consumer: task-01c5f96ec1e247dc846fd628c929974a. Owned paths: package.json, pnpm-lock.yaml, tests/fault/cross-host/production-surfaces.fault.ts. pnpm-lock.yaml currently has foreign WIP; do not begin until its owner commits and the path is clean. Verification: pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts.",
+  "definitionOfDone": [
+    "Root package.json declares @moe/runner and @moe/daemon in dependencies at workspace:* and pnpm-lock.yaml carries matching root-importer links.",
+    "A durable fault-lane call site imports PLATFORM_BOUNDARIES, both OS observation entrypoints, and collectDoctorVersionReport from the two bare package specifiers; it contains no deep-relative package import.",
+    "A compiled in-root probe and a plain-Node root probe both exit 0, observe the exact seven nonempty boundary names, both OS callables, and the callable doctor collector, and are deleted/no scratch bytes remain.",
+    "The public-surface fault test asserts the hand-written symbol set/cardinality so a missing import or zero-case catalogue cannot pass, and names task-01c5f96ec1e247dc846fd628c929974a as its consumer.",
+    "Fresh frozen install, fault-lane typecheck, and the focused public-surface test exit 0."
+  ],
+  "taskRails": [
+    "Do not start before task-f6ef0a45f52c45c7bb54f250170aa223 is DONE and package.json/pnpm-lock.yaml are free of foreign WIP.",
+    "No deep imports, tsconfig paths, project-reference workaround, or subprocess cwd trick may replace the manifest+lock+compiled bare-specifier proof.",
+    "Preserve the root test script set, use TDD, and stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
+  "priority": "HIGH",
+  "order": 19.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T18:51:02.604Z",
+  "updatedAt": "2026-08-15T18:51:02.604Z"
+}

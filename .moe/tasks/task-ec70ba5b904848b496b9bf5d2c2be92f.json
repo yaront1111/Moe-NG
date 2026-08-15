@@ -1,0 +1,33 @@
+{
+  "id": "task-ec70ba5b904848b496b9bf5d2c2be92f",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Canonical shipped distribution subject inventory",
+  "description": "Objective: establish one production-owned canonical distribution inventory for the exact shipped subject and make the release subject consume it, closing the current five-vs-six component split before cross-host receipts bind a distribution digest. Deliverable: a focused tools/packaging inventory module shared by scripts/release/release-subject.mjs and the distribution integration suite; it includes the landed JetBrains IDE adapter and every exact asset without duplicating a second hand-written inventory. NOT in scope: cross-host receipt generation, publishing evidence, changing distribution signature/manifest semantics, or adding components that are not shipped. Current gap at HEAD 26ac640/8d9afb8: RELEASE_COMPONENTS in scripts/release/release-subject.mjs has five entries and omits the JetBrains adapter, while tests/integration/distribution/distribution-packaging.test.ts independently asserts six. Consumer: task-01c5f96ec1e247dc846fd628c929974a. Owned paths: tools/packaging/distribution-inventory.ts, scripts/release/release-subject.mjs, tests/integration/distribution/distribution-packaging.test.ts. Verification: pnpm typecheck:packaging && pnpm test:integration.",
+  "definitionOfDone": [
+    "One frozen production inventory names exactly the six shipped components, including ide-adapter-jetbrains and its exact real asset set, with no duplicate inventory authority in the release script or integration test.",
+    "buildReleaseSubject consumes that inventory and its accepted subject binds all six component manifests/container digests to the same exact source SHA and distribution contract.",
+    "Omission, duplication, asset drift, or a caller-supplied alternative inventory fails closed through the existing stable release/distribution refusal code and owning layer; tests assert the exact reason and layer.",
+    "The canonical inventory and release subject load under plain Node 24, and task-01c5f96ec1e247dc846fd628c929974a is recorded as the real evidence consumer.",
+    "Fresh pnpm typecheck:packaging && pnpm test:integration exits 0."
+  ],
+  "taskRails": [
+    "Do not copy the six-entry list into another test helper; both production release and tests consume the one canonical inventory.",
+    "Preserve distribution signature, parser, verifier, compatibility, and source-binding authority; this task changes only subject inventory composition.",
+    "Use TDD, keep the new production module below 250 lines, and stage only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
+  "priority": "HIGH",
+  "order": 19.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T18:50:43.478Z",
+  "updatedAt": "2026-08-15T18:50:43.478Z"
+}

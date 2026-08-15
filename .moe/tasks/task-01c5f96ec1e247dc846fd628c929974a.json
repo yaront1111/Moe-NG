@@ -16,8 +16,8 @@
     "Every refusal/unknown asserts stable code plus layer/boundary and every generated schedule asserts positive cardinality."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-94dd1835",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -44,11 +44,17 @@
       "author": "governor-74ff6cb3",
       "content": "GOVERNOR — CI RUNNER IS NOW LIVE. PUSHED AND RUNNING. Human authorized the push at 2026-08-15T18:17Z. Task still BLOCKED; one of the three remaining gaps just closed, the other two did not.\n\nWHAT LANDED. Commit 5c40d38 \"ci: add a cross-host Linux and macOS gate\", one file, 56 insertions, pushed to origin/moe/work-2026-08-08 (b34b7ad..5c40d38). Only that file was committed — the working tree had 51 other dirty entries from peers and board state, and none of them were staged. No commit hooks are active in this repo, so nothing swept the tree.\n\nFIRST GAP CLOSED: A REAL RUN EXISTS. GitHub Actions run 31900708118 (workflow `cross-host`, event push) queued at 18:17:12Z over matrix.os [ubuntu-latest, macos-latest]. CAUSE 2 of the original block read \"no Linux or macOS runner exists to delegate to\" — that is now false in the strongest available sense: not a file on disk, an accepted and scheduled run.\n\nSIDE EFFECT WORTH RECORDING: THE YAML IS VALIDATED. My earlier comment (comment-99c25425cd88) disclosed that I could not re-parse the file after fixing a scanner error, and asked that \"valid YAML\" be treated as unconfirmed. GitHub accepting the workflow and QUEUEING it settles that — an unparseable workflow is rejected at ingest, not queued. That caveat is retired; do not carry it forward.\n\nWHAT IS STILL MISSING — the task stays BLOCKED on these two:\n1. `tests/fault/linux` and `tests/fault/macos` DO NOT EXIST. The run executes `pnpm typecheck` and `pnpm test`, so a green result proves today's suites pass on Linux and macOS. It does NOT produce the per-boundary PROVEN/UNKNOWN evidence against the production classifier that DoD 1 names. Someone must author those tests. That is now the ONLY authoring work between this task and PLANNING.\n2. The run's outcome is unknown at the time of writing. A red leg is information, not failure — `fail-fast: false` means Linux and macOS each report independently, so a red on one host still yields a usable verdict for the other. Read both legs before concluding anything.\n\nRESUME SEQUENCE, now two steps instead of three: author the per-boundary host tests under tests/fault/{linux,macos} -> re-measure against a completed run -> flip to PLANNING. CAUSE 1 died earlier today (task-45d12ecf DONE, packages/runner/src/platform/macos/ present, PLATFORM_MACOS in the contract).\n\nDOWNSTREAM: task-22cfca91 (Portability shadow gate) has five of seven prerequisites DONE and is gated on this task plus task-6cbff010. This push moved that too.",
       "timestamp": "2026-08-15T18:17:45.832Z"
+    },
+    {
+      "id": "comment-2e0cce9ec867456ba65cc454ee2eeb03",
+      "author": "architect-94dd1835",
+      "content": "Clause-2/current-byte audit at HEAD 26ac640..8d9afb8: real CI exists and macOS classifier landed, but an honest evidence plan is still blocked by three production/edge gaps. (1) scripts/release/release-subject.mjs RELEASE_COMPONENTS has 5 components and omits the shipped JetBrains adapter while the integration inventory separately asserts 6; no receipt may bind that stale subject. Created task-ec70ba5b904848b496b9bf5d2c2be92f for one canonical six-component inventory. (2) collectDoctorVersionReport exists at apps/daemon/src/recovery/doctor-version.node.ts:164, but plain bare-root probe sees @moe/daemon.collectDoctorVersionReport === undefined. Created task-f6ef0a45f52c45c7bb54f250170aa223 to publish it without a second collector. (3) root package.json and its pnpm-lock importer declare neither @moe/runner nor @moe/daemon; a root bare import fails ERR_MODULE_NOT_FOUND, so tests/fault cannot legally consume the public roots. Created ordered task-c690a7a0c5a14daaa088acbc32e26815 for manifest+lock+durable bare call site after doctor publication. Current workflow runs only typecheck+pnpm test, no fault lane/artifacts/aggregate; that is parent work after prerequisites. Latest run 31901640846 is red at foreign effect-inventory typecheck before tests; earlier run proves both hosts execute but reports platform-incompatible suites. Do not replace these gaps with deep imports, copied inventory, caller-selected host claims, or UNKNOWN rows.",
+      "timestamp": "2026-08-15T18:51:19.617Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-15T18:36:48.283Z",
+  "updatedAt": "2026-08-15T18:51:48.923Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z"
   },
@@ -56,11 +62,20 @@
     "architect-8b21d0bb",
     "architect-94dd1835"
   ],
-  "blockedReason": null,
+  "blockedReason": "Fresh Clause-2 audit found that the real-host environment now exists, but the evidence subject is not yet certifiable. The production release subject binds only five components and omits the shipped JetBrains adapter; collectDoctorVersionReport is not reachable from the @moe/daemon root; and the repository fault consumer has no manifest/lock edge to @moe/runner or @moe/daemon (root bare import fails ERR_MODULE_NOT_FOUND). Created ordered prerequisites task-ec70ba5b904848b496b9bf5d2c2be92f, task-f6ef0a45f52c45c7bb54f250170aa223, and task-c690a7a0c5a14daaa088acbc32e26815. Resume only after all three are DONE and re-probed; then plan the Linux/macOS schedules, canonical receipt verifier/aggregator, artifact workflow, and real-host rerun. Deep imports, copied inventories, caller-selected host claims, or UNKNOWN rows cannot substitute.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:51:19.686Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Remeasured the live workflow, two real GitHub runs, runner/platform roots, release subject, doctor root, and root dependency edge. Created prerequisite tasks ec70ba5b (canonical six-component subject), f6ef0a45 (doctor root publication), and c690a7a0 (manifest/lock bare consumer), commented the parent, and reported it BLOCKED.",
+      "whatRemains": "Plan and land the three prerequisites in order (c690 after f6ef), then re-probe committed bytes and submit the six-file cross-host schedule/receipt/workflow plan; execute it on actual ubuntu and macOS and record consumer task-22cfca91.",
+      "pitfalls": "Do not bind five-component release subject, deep-import doctor, copy inventory into tests, use caller-selected host claims, treat classifier PROVEN alone as host proof, or hide foreign repo-wide red. Current daemon root and pnpm-lock have foreign WIP.",
+      "openQuestions": "No architectural ambiguity remains after prerequisites; the parent must decide exact CI artifact layout only after their public shapes land.",
+      "releasedAt": "2026-08-15T18:51:48.922Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Explicit architect handoff after creating the three measured production/consumer-edge prerequisites and blocking the acceptance task."
+    },
     {
       "whatIsDone": "Full pre-planning measurement, recorded in msg-60dd25ea3eb64357b31f0b86a0401a40 and in the block reason. No plan submitted, deliberately. Measured at HEAD 7dbf9ba: packages/runner/src/platform/ has linux-boundary/linux-facts/linux-observation/platform-contract/platform-instant and windows/, and NO macos-* module; platform-contract.ts:38 freezes PLATFORM_LAYERS as [PLATFORM_CONTRACT, PLATFORM_LINUX] with no PLATFORM_MACOS; platform-observation.test.ts:292/:316 prove the production surface refuses darwin by design so macOS inherits no Linux verdict. Repo has no CI configuration of any kind (.github/, .gitlab-ci.yml, azure-pipelines.yml, .circleci all absent).",
       "whatRemains": "Two unblocks, in order. (1) A macOS platform observation boundary must land: a macos observation module plus a PLATFORM_MACOS member in the frozen PLATFORM_LAYERS set. Until it exists, all 7 PLATFORM_BOUNDARIES members return PLATFORM_HOST_MISMATCH on a real Mac by design, so DoD 1 has nothing to prove against. (2) Real Linux and macOS execution environments, or human approval of a CI configuration with linux+macos runners — the owned paths already permit CI config 'only where approved'.",

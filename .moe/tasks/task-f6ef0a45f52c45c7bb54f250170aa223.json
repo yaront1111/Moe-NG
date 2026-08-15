@@ -1,0 +1,33 @@
+{
+  "id": "task-f6ef0a45f52c45c7bb54f250170aa223",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Publish doctor host-version observation from @moe/daemon",
+  "description": "Objective: make the landed Node-native doctor version observation callable through the public @moe/daemon package root so cross-host evidence can corroborate the real executing host and toolchain without a deep import or caller-selected host claim. Deliverable: curated root export and root-surface/type/loadability coverage for collectDoctorVersionReport plus its exact DoctorVersionReport type. NOT in scope: changing doctor report semantics, adding kernel/provider/evidence fields, or implementing the cross-host manifest. Current gap at HEAD 26ac640/8d9afb8: collectDoctorVersionReport exists at apps/daemon/src/recovery/doctor-version.node.ts:164 but @moe/daemon.collectDoctorVersionReport is undefined; scripts/release/supply-chain.mjs records this as doctor UNKNOWN. Consumer: task-01c5f96ec1e247dc846fd628c929974a. Owned paths: apps/daemon/src/index.ts and apps/daemon/src/index-surface.test.ts. These paths currently contain foreign WIP; do not begin until they are clean/committed and remeasure to avoid duplicate exports. Verification: pnpm --filter @moe/daemon test && pnpm --filter @moe/daemon typecheck.",
+  "definitionOfDone": [
+    "The bare @moe/daemon root exports collectDoctorVersionReport and DoctorVersionReport from the existing Node-native implementation without a deep import or duplicate collector.",
+    "Calling the root export derives platform, architecture, Node, pnpm, declared pins, and workspace component inventory from the running process/repository; no caller can select host identity.",
+    "The hand-written root runtime/type catalogue names the new surface exactly and its cardinality/list assertions cannot pass from a count-only change.",
+    "A plain-Node probe from apps/daemon loads the bare root and observes a callable collector; focused tests pin fail-closed behavior of the existing collector rather than reimplementing it.",
+    "task-01c5f96ec1e247dc846fd628c929974a is recorded as the cross-host evidence consumer and fresh daemon test/typecheck gates exit 0."
+  ],
+  "taskRails": [
+    "Do not start while apps/daemon/src/index.ts or index-surface.test.ts contains foreign WIP; remeasure committed HEAD first.",
+    "Publish the existing collector only; do not create a second doctor authority or accept caller-supplied platform/tool versions.",
+    "Keep the root below the 400-line split threshold, preserve exact curated exports, use TDD, and stage only the two owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
+  "priority": "HIGH",
+  "order": 19.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T18:50:43.546Z",
+  "updatedAt": "2026-08-15T18:50:43.546Z"
+}

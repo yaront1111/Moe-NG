@@ -364,7 +364,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
-      registrySize: 21,
+      registrySize: 22,
       sameEffect: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",
