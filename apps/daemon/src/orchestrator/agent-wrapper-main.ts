@@ -206,6 +206,12 @@ async function main(): Promise<void> {
     for (const entry of report.spawned) {
       process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}\n`);
     }
+    if (report.spawned.length === 0) {
+      // Say so: a silent pass reads as a hung wrapper to an operator watching it.
+      process.stdout.write(
+        `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`,
+      );
+    }
     if (once) {
       await wrapper.settle();
       for (const verdict of await verifier.verifyOnce()) {
