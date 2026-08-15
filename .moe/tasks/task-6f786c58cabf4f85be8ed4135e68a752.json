@@ -179,7 +179,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-5d4e2d6f",
   "branch": null,
   "prLink": null,
@@ -199,7 +199,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T21:37:47.246Z",
+  "updatedAt": "2026-08-15T21:55:29.734Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-5d4e2d6f"
@@ -212,9 +212,9 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:55:29.734Z",
+  "blockedReason": "QA fixes and four mutation drills are complete; focused recovery is freshly 28/28 green. The mandatory exact command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` cannot exit 0 because foreign pre-existing orchestrator WIP fails typecheck at agent-spawner.test.ts:237,273,274,315 (`killProcessGroup`/`killGraceMs` absent and implicit-any params). Producer task-d4329e8 measured this WIP as predating its claim and governor is identifying the owner. Shared-tree rails forbid editing, resetting, stashing, or committing those foreign paths; I will not fabricate verification.",
   "blockedResourceId": null,
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",

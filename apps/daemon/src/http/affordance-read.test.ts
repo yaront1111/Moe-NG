@@ -10,6 +10,8 @@ import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
+import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
 
@@ -46,6 +48,24 @@ function commitBootstrap(
     projectId: PROJECT,
     schemaVersion: "moe-bootstrap-command/1",
   })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+  if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
+}
+
+function commitWorkClaim(
+  kind: "work.claim" | "work.release", principalId: string, workItemId: string,
+  expectedVersion: number, decidedAt: string, expiresAt?: string,
+): void {
+  const outcome = runWorkClaimCommand(store, encoder.encode(JSON.stringify({
+    commandId: `cmd-${kind}-${String(minted += 1)}`,
+    correlationId: "corr-work-claim",
+    decidedAt,
+    expectedVersion,
+    kind,
+    payload: kind === "work.release" ? { workItemId } : { expiresAt, workItemId },
+    principalId,
+    projectId: PROJECT,
+    schemaVersion: WORK_CLAIM_SCHEMA_VERSION,
+  })));
   if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
 }
 
@@ -108,6 +128,29 @@ describe("createAffordancePort", () => {
     const kinds = surface().nextAllowedCommands.map((command) => command.commandKind);
     expect(kinds).toContain("session.close");
     expect(kinds).toContain("session.renew");
+  });
+
+  it("exposes the current claim aggregate version when a claim is expired or released", () => {
+    const workItemId = `policy.install@${PROJECT}-policy`;
+    commitWorkClaim(
+      "work.claim", "agent-expired", workItemId, 0,
+      "2026-08-09T12:00:00.000Z", "2026-08-09T12:30:00.000Z",
+    );
+    expect(step("policy.install")).toMatchObject({
+      claim: null, claimAggregateVersion: 1, status: "READY",
+    });
+
+    commitWorkClaim(
+      "work.claim", "agent-release", workItemId, 1,
+      "2026-08-09T12:31:00.000Z", "2027-08-09T12:31:00.000Z",
+    );
+    commitWorkClaim(
+      "work.release", "agent-release", workItemId, 2,
+      "2026-08-09T12:32:00.000Z",
+    );
+    expect(step("policy.install")).toMatchObject({
+      claim: null, claimAggregateVersion: 3, status: "READY",
+    });
   });
 });
 

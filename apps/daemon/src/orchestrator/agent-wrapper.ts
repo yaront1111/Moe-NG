@@ -84,6 +84,17 @@ export interface RunOnceReport {
 
 const encoder = new TextEncoder();
 const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set(["approval.decide", "goal.close"]);
+const CLEANUP_ATTEMPTS = 3;
+
+function cleanupError(action: string, outcome: string): Error {
+  return new Error(`AGENT_CLEANUP_FAILED:${action}:${outcome}`);
+}
+
+function errorOf(value: unknown): Error {
+  return value instanceof Error && value.message.startsWith("AGENT_CLEANUP_FAILED:")
+    ? value
+    : cleanupError("unknown", "UNEXPECTED_ERROR");
+}
 
 function digestOf(payload: JsonObject): string {
   return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
@@ -142,6 +153,7 @@ function mission(
 
 export function createAgentWrapper(config: AgentWrapperConfig) {
   const active = new Map<string, Promise<void>>();
+  const cleanupFailures: Error[] = [];
 
   const dispatch = (
     credential: string, kind: string, payload: JsonObject,
@@ -199,7 +211,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { kind: step.kind, outcome: opened.code, sessionId: null, workItemId };
     }
 
-    const closeSession = (version: number): void => {
+    const closeSession = (version: number): { code: string; ok: boolean } =>
       dispatch(
         config.operatorCredential,
         "session.close",
@@ -207,16 +219,50 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         `session/${sessionId}`,
         version,
       );
+
+    const closeScopedSession = (): void => {
+      let outcome = "SESSION_NOT_VISIBLE";
+      for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
+        let surface: ReturnType<AffordancePort["readSurface"]>;
+        try {
+          surface = config.affordances.readSurface();
+        } catch {
+          outcome = "SURFACE_READ_FAILED";
+          continue;
+        }
+        if (surface.outcome !== "SURFACE") {
+          outcome = surface.code;
+          continue;
+        }
+        const aggregateId = `session/${sessionId}`;
+        const close = surface.steps.find((candidate) =>
+          candidate.kind === "session.close" && candidate.aggregateId === aggregateId);
+        // Absence from a readable surface proves the session is no longer OPEN.
+        if (close === undefined) return;
+        if (close.version === null) {
+          outcome = "SESSION_VERSION_NOT_VISIBLE";
+          continue;
+        }
+        let closed: { code: string; ok: boolean };
+        try {
+          closed = closeSession(close.version);
+        } catch {
+          outcome = "COMMAND_DISPATCH_FAILED";
+          continue;
+        }
+        if (closed.ok && closed.code === "EFFECTS_COMMITTED") return;
+        outcome = closed.code;
+      }
+      throw cleanupError("session.close", outcome);
     };
 
     // The AGENT claims, so the fence names the agent: expiry doubles as the
     // reap horizon when a spawned process dies without releasing.
     const claimed = dispatch(secret, "work.claim", { expiresAt, workItemId },
-      `work/${workItemId}`, 0);
+      `work/${workItemId}`, step.claimAggregateVersion);
     if (!claimed.ok) {
       // Nothing was spawned, so no child can clean this identity up later.
-      // The open decision left the session at version 1.
-      try { closeSession(1); } catch { /* expiry is the fail-closed backstop */ }
+      try { closeScopedSession(); } catch (error) { cleanupFailures.push(errorOf(error)); }
       return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
     }
 
@@ -233,46 +279,79 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       missionText = mission(workItemId, step.kind, expiresAt, hint);
     }
     const revokeSession = (): void => {
-      // Resolve the current version from the daemon's own surface: an agent
-      // may have renewed while it ran, so assuming the version opened above
-      // would turn cleanup into a stale no-op. Revocation is best-effort here;
-      // the session's short expiry remains the fail-closed backstop if the
-      // surface itself is temporarily unavailable.
-      try {
-        const surface = config.affordances.readSurface();
-        if (surface.outcome !== "SURFACE") return;
+      let outcome = "WORK_ITEM_NOT_VISIBLE";
+      for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
+        let surface: ReturnType<AffordancePort["readSurface"]>;
+        try {
+          surface = config.affordances.readSurface();
+        } catch {
+          outcome = "SURFACE_READ_FAILED";
+          continue;
+        }
+        if (surface.outcome !== "SURFACE") {
+          outcome = surface.code;
+          continue;
+        }
         const staffed = surface.steps.find((candidate) =>
           workItemIdFor(candidate.kind, candidate.aggregateId) === workItemId);
-        if (staffed?.claim?.claimedBy === sessionId) {
-          // Release before closing the bearer. A crashed/failed child must not
-          // fence the work item for the rest of the 30-minute claim TTL.
-          dispatch(
+        if (staffed === undefined) continue;
+        // A readable current surface with no claim by this session proves our
+        // durable fence is gone; retrying a release would not be idempotent.
+        if (staffed.claim === null || staffed.claim.claimedBy !== sessionId) {
+          outcome = "RELEASED";
+          break;
+        }
+        let released: { code: string; ok: boolean };
+        try {
+          released = dispatch(
             secret,
             "work.release",
             { workItemId },
             `work/${workItemId}`,
             staffed.claim.version,
           );
+        } catch {
+          outcome = "COMMAND_DISPATCH_FAILED";
+          continue;
         }
-        const aggregateId = `session/${sessionId}`;
-        const close = surface.steps.find((candidate) =>
-          candidate.kind === "session.close" && candidate.aggregateId === aggregateId);
-        if (close?.version === null || close?.version === undefined) return;
-        closeSession(close.version);
-      } catch { /* expiry still revokes the bearer if cleanup cannot run */ }
+        if (released.ok && released.code === "EFFECTS_COMMITTED") {
+          outcome = "RELEASED";
+          break;
+        }
+        outcome = released.code;
+      }
+      if (outcome !== "RELEASED") throw cleanupError("work.release", outcome);
+      // Release before closing the bearer. A crashed/failed child must not
+      // fence the work item for the rest of the claim TTL.
+      closeScopedSession();
     };
-    const exit = config.spawnAgent({
+    const request = {
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
-    }).catch(() => undefined).then(() => {
-      revokeSession();
-      active.delete(workItemId);
-    });
+    };
+    // Preserve synchronous process launch while converting an injected throw
+    // into the same rejected-promise path as a normal spawner failure.
+    let spawned: Promise<void>;
+    try {
+      spawned = config.spawnAgent(request);
+    } catch (error) {
+      spawned = Promise.reject(error);
+    }
+    const exit = spawned
+      .catch(() => undefined)
+      .then(revokeSession)
+      .catch((error: unknown) => { cleanupFailures.push(errorOf(error)); })
+      .finally(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
   };
 
   const runOnce = (): RunOnceReport => {
+    const failedCleanup = [...cleanupFailures].sort((a, b) =>
+      a.message < b.message ? -1 : a.message > b.message ? 1 : 0)[0];
+    if (failedCleanup !== undefined) {
+      return { active: active.size, spawned: [], surfaceOutcome: failedCleanup.message };
+    }
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {
       return { active: active.size, spawned: [], surfaceOutcome: surface.code };
@@ -302,7 +381,14 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     activeCount: (): number => active.size,
     runOnce,
     /** Resolves when every currently spawned agent has exited. */
-    settle: (): Promise<void> =>
-      Promise.all([...active.values()]).then(() => undefined),
+    settle: async (): Promise<void> => {
+      await Promise.all([...active.values()]);
+      const failures = [...cleanupFailures].sort((a, b) =>
+        a.message < b.message ? -1 : a.message > b.message ? 1 : 0);
+      if (failures.length === 1) throw failures[0];
+      if (failures.length > 1) {
+        throw new AggregateError(failures, "AGENT_CLEANUP_FAILED");
+      }
+    },
   });
 }

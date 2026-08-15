@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { claudeSpawner } from "./agent-spawner.js";
 import type { AgentSpawnerOptions } from "./agent-spawner.js";
@@ -19,17 +19,20 @@ interface FakeChild {
   readonly emitter: EventEmitter;
   readonly file: string;
   readonly options: { readonly cwd?: unknown; readonly env?: NodeJS.ProcessEnv | undefined;
-    readonly shell?: unknown };
+    readonly detached?: unknown; readonly shell?: unknown };
   readonly stdin: PassThrough;
 }
 
-function fakeSpawn(): { calls: FakeChild[]; spawn: NonNullable<AgentSpawnerOptions["spawn"]> } {
+function fakeSpawn(pid?: number): {
+  calls: FakeChild[];
+  spawn: NonNullable<AgentSpawnerOptions["spawn"]>;
+} {
   const calls: FakeChild[] = [];
   const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
     const emitter = new EventEmitter();
     const stdin = new PassThrough();
     calls.push({ args, emitter, file, options, stdin });
-    return Object.assign(emitter, { stdin }) as unknown as ReturnType<
+    return Object.assign(emitter, { pid, stdin }) as unknown as ReturnType<
       NonNullable<AgentSpawnerOptions["spawn"]>
     >;
   };
@@ -174,7 +177,7 @@ describe("claudeSpawner", () => {
     expect(`${child.file} ${child.args.join(" ")}`).toContain("--allowedTools mcp__moe-next,mcp__moe-next__*");
     expect(`${child.file} ${child.args.join(" ")}`).not.toContain("Bash");
 
-    child.emitter.emit("exit", 0);
+    child.emitter.emit("close", 0, null);
     await done;
     // The config file — the only place the credential is written — is gone.
     expect(existsSync(configPath)).toBe(false);
@@ -195,7 +198,7 @@ describe("claudeSpawner", () => {
     );
     expect(child.args.slice(child.args.indexOf("--tools"), child.args.indexOf("--tools") + 2))
       .toEqual(["--tools", "Edit,Write,Read,Glob,Grep,Bash"]);
-    child.emitter.emit("exit", 0);
+    child.emitter.emit("close", 0, null);
     await done;
   });
 
@@ -220,29 +223,123 @@ describe("claudeSpawner", () => {
       NO_PROXY: "internal.example.test,legacy.example.test,localhost,127.0.0.1,::1",
       no_proxy: "internal.example.test,legacy.example.test,localhost,127.0.0.1,::1",
     });
-    child.emitter.emit("exit", 0);
+    child.emitter.emit("close", 0, null);
     await done;
   });
 
-  it("kills a hung agent after its lifetime bound and resolves, freeing the slot", async () => {
-    const { calls, spawn } = fakeSpawn();
+  it("kills a timed-out POSIX process group and waits for close before freeing the slot", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
     const killed: string[] = [];
+    const groupKills: { pid: number; signal: NodeJS.Signals }[] = [];
     const spawner = claudeSpawner(MCP_ORIGIN, {
-      command: "claude", log: (l) => killed.push(l), spawn,
+      command: "claude",
+      killProcessGroup: (pid, signal) => { groupKills.push({ pid, signal }); },
+      killGraceMs: 30,
+      log: (l) => killed.push(l),
+      spawn,
       platform: "linux", timeoutMs: 20,
     });
-    // The agent process never emits exit or error: only the timeout frees it.
-    const done = spawner(request());
-    const child = calls[0];
-    if (child === undefined) throw new Error("nothing spawned");
-    const originalKill = (child.emitter as unknown as { kill?: () => void });
-    let killCalls = 0;
-    originalKill.kill = () => { killCalls += 1; };
-    await done; // resolves via the timeout, not an exit event
-    expect(killCalls).toBe(1);
-    expect(killed.some((l) => /exceeded 20ms; killing/u.test(l))).toBe(true);
-    // The credentialed config file is gone even though the agent never exited.
-    expect(existsSync(configPathOf(child))).toBe(false);
+    try {
+      const done = spawner(request());
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+      const configPath = configPathOf(child);
+      let resolved = false;
+      void done.then(() => { resolved = true; });
+
+      expect(child.options.detached).toBe(true);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(groupKills).toEqual([{ pid: -4321, signal: "SIGKILL" }]);
+      expect(killed.some((l) => /exceeded 20ms; killing/u.test(l))).toBe(true);
+      expect(resolved).toBe(false);
+      expect(existsSync(configPath)).toBe(true);
+
+      child.emitter.emit("close", null, "SIGKILL");
+      await done;
+      expect(resolved).toBe(true);
+      expect(existsSync(configPath)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds settlement after an accepted POSIX group kill when close never arrives", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
+    const groupKills: number[] = [];
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude",
+      killGraceMs: 30,
+      killProcessGroup: (pid) => { groupKills.push(pid); },
+      log: () => undefined,
+      platform: "linux",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+      let resolved = false;
+      void done.then(() => { resolved = true; });
+
+      await vi.advanceTimersByTimeAsync(49);
+      expect(groupKills).toEqual([-4321]);
+      expect(resolved).toBe(false);
+      expect(existsSync(configPathOf(child))).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await done;
+      expect(resolved).toBe(true);
+      expect(existsSync(configPathOf(child))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("contains a Windows taskkill error and waits for the agent to close", async () => {
+    vi.useFakeTimers();
+    const agent = fakeSpawn(8765);
+    const killer = fakeSpawn(9876);
+    const calls: FakeChild[] = [];
+    const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
+      const selected = calls.length === 0 ? agent : killer;
+      const child = selected.spawn(file, args, options);
+      const call = selected.calls[0];
+      if (call === undefined) throw new Error("spawn was not recorded");
+      calls.push(call);
+      return child;
+    };
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude", killGraceMs: 30, log: () => undefined,
+      platform: "win32", spawn, timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      const configPath = configPathOf(agent.calls[0] as FakeChild);
+      let resolved = false;
+      void done.then(() => { resolved = true; });
+      await vi.advanceTimersByTimeAsync(20);
+
+      expect(calls[0]?.options.detached).toBe(false);
+      expect(calls[1]).toMatchObject({
+        args: ["/pid", "8765", "/T", "/F"],
+        file: "taskkill",
+      });
+      expect(() => killer.calls[0]?.emitter.emit("error", new Error("taskkill unavailable")))
+        .not.toThrow();
+      expect(() => agent.calls[0]?.emitter.emit("error", new Error("direct kill failed")))
+        .not.toThrow();
+      expect(resolved).toBe(false);
+      expect(existsSync(configPath)).toBe(true);
+
+      agent.calls[0]?.emitter.emit("close", 1, null);
+      await done;
+      expect(resolved).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not kill an agent that exits before its lifetime bound", async () => {
@@ -255,7 +352,7 @@ describe("claudeSpawner", () => {
     if (child === undefined) throw new Error("nothing spawned");
     let killCalls = 0;
     (child.emitter as unknown as { kill?: () => void }).kill = () => { killCalls += 1; };
-    child.emitter.emit("exit", 0);
+    child.emitter.emit("close", 0, null);
     await done;
     expect(killCalls).toBe(0);
   });
@@ -286,24 +383,39 @@ describe("claudeSpawner", () => {
   });
 
   it("contains a fast-exiting agent's EPIPE instead of crashing the wrapper", async () => {
-    const { calls, spawn } = fakeSpawn();
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
+    const groupKills: number[] = [];
     const spawner = claudeSpawner(MCP_ORIGIN, {
-      command: "claude", log: () => undefined, spawn,
+      command: "claude",
+      killGraceMs: 30,
+      killProcessGroup: (pid) => { groupKills.push(pid); },
+      log: () => undefined,
+      spawn,
     });
-    const done = spawner(request());
-    const child = calls[0];
-    if (child === undefined) throw new Error("nothing spawned");
-    const configPath = configPathOf(child);
-    let killed = 0;
-    (child.emitter as unknown as { kill: () => void }).kill = () => { killed += 1; };
+    try {
+      const done = spawner(request());
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+      const configPath = configPathOf(child);
+      let resolved = false;
+      void done.then(() => { resolved = true; });
 
-    expect(() => child.stdin.emit("error", Object.assign(new Error("write EPIPE"), {
-      code: "EPIPE",
-    }))).not.toThrow();
-    await done;
+      expect(() => child.stdin.emit("error", Object.assign(new Error("write EPIPE"), {
+        code: "EPIPE",
+      }))).not.toThrow();
+      await vi.advanceTimersByTimeAsync(0);
 
-    expect(killed).toBe(1);
-    expect(existsSync(configPath)).toBe(false);
+      expect(groupKills).toEqual([-4321]);
+      expect(resolved).toBe(false);
+      expect(existsSync(configPath)).toBe(true);
+
+      child.emitter.emit("close", 1, null);
+      await done;
+      expect(existsSync(configPath)).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("refuses an unquotable command line without ever writing the credential to disk", async () => {
@@ -335,5 +447,30 @@ describe("claudeSpawner", () => {
     // not merely the one named path removed.
     expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
     expect(readdirSync(configDir)).toEqual([]);
+  });
+
+  it("converts the daemon module URL to a filesystem path for the default cwd", async () => {
+    const decodedDaemonDirectory = "/tmp/moe daemon/שלום";
+    vi.resetModules();
+    vi.doMock("node:url", () => ({
+      fileURLToPath: () => decodedDaemonDirectory,
+    }));
+    try {
+      const dynamicallyLoaded = await import("./agent-spawner.js");
+      const { calls, spawn } = fakeSpawn();
+      const spawner = dynamicallyLoaded.claudeSpawner(MCP_ORIGIN, {
+        command: "claude", log: () => undefined, spawn,
+      });
+      const done = spawner(request());
+      const child = calls[0];
+      if (child === undefined) throw new Error("nothing spawned");
+
+      expect(child.options.cwd).toBe(decodedDaemonDirectory);
+      child.emitter.emit("close", 0, null);
+      await done;
+    } finally {
+      vi.doUnmock("node:url");
+      vi.resetModules();
+    }
   });
 });

@@ -1,32 +1,8 @@
-/**
- * Durable Claude attempt dispatch: the single-node work path that turns one
- * server-assembled activation into one physical Claude launch and one immutable
- * advisory record.
- *
- * THE ORDER IS THE CONTRACT. Request shape, graph, sealed input tree and the
- * durable binding are decided BEFORE the activation commits; the activation
- * commits BEFORE the dispatch reservation; the reservation commits BEFORE the
- * first physical launch. A caller whose activation commit fails caused no
- * launch, because there was nothing yet to launch from.
- *
- * WHY A SEPARATE RESERVATION. Activation and the launch-authority transitions
- * are both idempotent: two concurrent identical deliveries can BOTH be answered
- * REPLAYED with the same durable bytes, so neither is a single-invocation fence.
- * The expected-version-0 reservation on this service's own aggregate is. Only a
- * FRESH commit may launch; a replayed caller adopts the stored final record or
- * reports the dispatch in progress. A reservation with no final record after a
- * restart is evidence a launch MAY have begun — never permission to start one.
- *
- * NOTHING HERE MANUFACTURES AUTHORITY. Effect, attempt and one-use grant are
- * read back out of the committed activation; the claim is the one the activation
- * admitted; the runtime is observed freshly by the runner; `priorRegistration`
- * is always null, because a persisted PREFLIGHT is a reservation and only a
- * PROCESS_OBSERVED registration is process authority.
- */
+/** Durable single-node dispatch. Binding -> activation -> reservation -> launch -> advisory. */
 
 import { buildInputManifest, buildResultManifest } from "@moe/runner";
 import type { ClaudeLaunchOptions, ClaudeLaunchResult } from "@moe/runner";
-import type { CommandDecisionResponse, SqliteEventStore, StoredEvent } from "@moe/store";
+import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { decodeActivationRequestBytes } from "../activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
@@ -34,22 +10,25 @@ import type { ActivationLedgerRecord } from "../activation/activation-ledger-con
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { createFoundationClaudeLauncher } from "../activation/foundation-launch-authority.js";
 import {
-  CAPTURE_KEYS, CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_COMMAND_KIND,
-  FOUNDATION_DISPATCH_EVENT_TYPES, FOUNDATION_RESERVATION_VERSION, RUNNER_WORKSPACE_LAYER,
+  CAPTURE_KEYS, CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT,
+  FOUNDATION_RESERVATION_VERSION, RUNNER_WORKSPACE_LAYER,
   admitSingleExecutionNode, attemptRecordBody, decodeFoundationAttemptRequest,
-  decodeFoundationPayload, deriveDispatchAggregateId, encodeFoundationPayload,
-  exactKeys, foundationAttemptRefusal, isRecord, launchRequestBody, refuseLocal, sameBytes,
-  sha256Hex, textOf,
+  deriveDispatchAggregateId, encodeFoundationPayload,
+  exactKeys, foundationAttemptRefusal, identifyFoundationDispatch, isRecord,
+  launchRequestBody, preActivationBindingMatches, refuseLocal, textOf,
 } from "./foundation-attempt-contracts.js";
 import type {
   FoundationAttemptBound, FoundationAttemptRecordParts, FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
-
-export interface FoundationAttemptRecordAnswer {
-  readonly advisoryOnly: true; readonly authority: "ADVISORY_RECORD"; readonly digest: string;
-  readonly ok: true; readonly record: Record<string, unknown>;
-}
-export type FoundationAttemptOutcome = FoundationAttemptRecordAnswer | FoundationAttemptRefused;
+import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
+import {
+  commitFoundationPhase, readFoundationReservationDigest, readStoredFoundationAttempt,
+} from "./foundation-attempt-store.js";
+import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
+export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
+export type {
+  FoundationAttemptOutcome, FoundationAttemptRecordAnswer,
+} from "./foundation-attempt-store.js";
 
 /** The two boundaries a test may replace — the physical launch and the physical
  *  post-launch workspace observation. Every decision above them stays production. */
@@ -87,61 +66,6 @@ function durableActivation(
     ? record : refuseLocal("FOUNDATION_ATTEMPT_BINDING_MISMATCH");
 }
 
-function commitPhase(
-  store: SqliteEventStore, bound: FoundationAttemptBound, tag: "RECORDED" | "RESERVED",
-  bytes: Uint8Array, expectedVersion: number, eventId: string,
-): CommandDecisionResponse | null {
-  const { commandId, principalId, projectId } = bound;
-  try {
-    return store.commitExpectedVersionDecision({
-      commandKind: FOUNDATION_DISPATCH_COMMAND_KIND, committedResultBytes: bytes,
-      correlationId: `${bound.correlationId}:${tag}`, decidedAt: new Date().toISOString(),
-      events: [{ eventId, eventType: FOUNDATION_DISPATCH_EVENT_TYPES[tag], payload: bytes }],
-      expectedVersion, key: { commandId: `${commandId}:${tag}`, principalId, projectId },
-      requestBytes: bytes, targetAggregateId: bound.target,
-    });
-  } catch {
-    return null;
-  }
-}
-
-/** The stored final record, re-decoded and byte-checked. A caller's candidate is
- *  never echoed back as though the store had confirmed it. */
-function storedRecord(
-  store: SqliteEventStore, target: string,
-): FoundationAttemptRecordAnswer | FoundationAttemptRefused {
-  let events: readonly StoredEvent[];
-  try {
-    events = store.readEvents(target);
-  } catch {
-    return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
-  }
-  const found = events.filter((e) => e.eventType === FOUNDATION_DISPATCH_EVENT_TYPES.RECORDED);
-  if (found.length > 1) return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
-  const event = found[0];
-  if (event === undefined) return refuseLocal("FOUNDATION_ATTEMPT_RECORD_ABSENT");
-  const decoded = decodeFoundationPayload(event.payload);
-  if (!decoded.ok) return decoded;
-  const again = encodeFoundationPayload(decoded.value);
-  if (!again.ok || !sameBytes(again.bytes, event.payload)) {
-    return refuseLocal("FOUNDATION_ATTEMPT_RECORD_DRIFT");
-  }
-  return Object.freeze({
-    advisoryOnly: true as const, authority: "ADVISORY_RECORD" as const, digest: again.digest,
-    ok: true as const, record: Object.freeze(decoded.value),
-  });
-}
-
-/** Callers name the ACTIVATION aggregate; the dispatch aggregate it derives is
- *  this module's own and is never accepted from outside. */
-export function readFoundationAttemptRecord(
-  store: SqliteEventStore, attemptAggregateId: string,
-): FoundationAttemptRecordAnswer | FoundationAttemptRefused {
-  return typeof attemptAggregateId === "string" && attemptAggregateId.length > 0
-    ? storedRecord(store, deriveDispatchAggregateId(attemptAggregateId))
-    : refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
-}
-
 /**
  * Invocation AND interpretation share one containment. A thenable that is not a
  * NATIVE promise is never awaited — awaiting it would hand control to whoever
@@ -151,11 +75,19 @@ export function readFoundationAttemptRecord(
 async function contained(call: () => unknown, requirePromise: boolean): Promise<unknown> {
   try {
     const pending = call();
-    if (pending instanceof Promise) return await pending;
-    return requirePromise || !isRecord(pending) ? null : pending;
-  } catch {
-    return null;
-  }
+    if (pending instanceof Promise) return snapshotFoundationValue(await pending);
+    return requirePromise ? null : snapshotFoundationValue(pending);
+  } catch { return null; }
+}
+
+function observedParts(value: unknown): readonly [unknown, unknown] | null {
+  if (!isRecord(value) || value["kind"] !== "OBSERVED" || value["ok"] !== true
+    || value["truthClass"] !== "PROVEN") return null;
+  const observation = value["observation"], registration = value["registration"];
+  return isRecord(observation) && isRecord(registration)
+    && textOf(observation, "observationDigest") !== null
+    && textOf(registration, "processIdentity") !== null
+    ? [observation, registration] : null;
 }
 
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
@@ -170,12 +102,12 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   ): FoundationAttemptOutcome {
     const encoded = encodeFoundationPayload(attemptRecordBody(bound, record, input, parts));
     if (!encoded.ok) return encoded;
-    const written = commitPhase(
+    const written = commitFoundationPhase(
       store, bound, "RECORDED", encoded.bytes, 1, `${record.grant.grantId}:RECORDED`);
     if (written === null || written.decision.effectDisposition !== "EFFECTS_COMMITTED") {
       return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
     }
-    const stored = storedRecord(store, bound.target);
+    const stored = readStoredFoundationAttempt(store, bound.target);
     return !stored.ok ? stored : refusal ?? stored;
   }
 
@@ -244,6 +176,9 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     const section = envelope.request.payload["activation"];
     const claim = exactKeys(isRecord(section) ? section["claim"] : null, CLAIM_KEYS);
     if (claim === null) return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
+    if (preActivationBindingMatches(request, envelope.request.payload) === false) {
+      return refuseLocal("FOUNDATION_ATTEMPT_BINDING_MISMATCH");
+    }
     const activation = runEffectActivateCommand(store, request.activationRequestBytes);
     if (!activation.ok) return foundationAttemptRefusal(activation.code, activation.refusedBy);
     const { commandId, correlationId, principalId, projectId } = envelope.request;
@@ -254,23 +189,33 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     });
     const record = durableActivation(store, bound);
     if (isRefusal(record)) return record;
+    const identity = identifyFoundationDispatch(request, sealed.manifest as unknown as Record<string, unknown>);
+    if (!identity.ok) return identity;
+    const priorDigest = readFoundationReservationDigest(store, bound.target);
+    if (priorDigest !== null && priorDigest !== identity.digest) {
+      return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
+    }
     const reservation = encodeFoundationPayload({
       activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
       attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey,
       recordVersion: FOUNDATION_RESERVATION_VERSION,
-      requestDigest: sha256Hex(request.activationRequestBytes), sessionId: bound.sessionId,
+      requestDigest: identity.digest, sessionId: bound.sessionId,
     });
     if (!reservation.ok) return reservation;
-    const reserved = commitPhase(
+    const reserved = commitFoundationPhase(
       store, bound, "RESERVED", reservation.bytes, 0, `${record.grant.grantId}:RESERVED`);
     if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+      const committedDigest = readFoundationReservationDigest(store, bound.target);
+      if (committedDigest !== null && committedDigest !== identity.digest) {
+        return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
+      }
       return refuseLocal("FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE");
     }
     // A REPLAYED reservation NEVER launches. It adopts the durable final record
     // or says the dispatch is still in flight; a missing record is not an
     // invitation to start a second process.
     if (reserved.disposition === "REPLAYED") {
-      const adopted = storedRecord(store, bound.target);
+      const adopted = readStoredFoundationAttempt(store, bound.target);
       return adopted.ok || adopted.code !== "FOUNDATION_ATTEMPT_RECORD_ABSENT" ? adopted
         : refuseLocal("FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS");
     }
@@ -283,11 +228,9 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       true);
     const manifest = sealed.manifest as unknown as Record<string, unknown>;
     if (!isRecord(result)) return unproven(bound, record, manifest, null);
-    if (result["kind"] !== "OBSERVED" || result["truthClass"] !== "PROVEN") {
-      return unproven(bound, record, manifest, result);
-    }
-    return await capture(
-      bound, record, manifest, result["observation"] ?? null, result["registration"] ?? null);
+    const observed = observedParts(result);
+    if (observed === null) return unproven(bound, record, manifest, result);
+    return await capture(bound, record, manifest, observed[0], observed[1]);
   }
 
   return Object.freeze({ dispatch });

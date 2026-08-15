@@ -74,7 +74,7 @@
     {
       "stepId": "step-5",
       "description": "Perform the required mutation-resistance drill and the single concentrated verification gate. Hash `approval-gating.ts`, copy it to an OS temp file with cleanup guaranteed, mutate only the canonical layer for `APPROVAL_HUMAN_REVIEW_REQUIRED` from APPROVAL_POLICY to HUMAN_AUTHORITY_GATE, and run the named eight-entry code@layer test expecting a nonzero exit specifically on its literal layer assertion. Restore the saved bytes, require the SHA-256 to match byte-for-byte, rerun that named test green, and leave no probe/backup file in the repository. Then run this exact fresh completion command: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store && pnpm --filter @moe/daemon test`. Read output, not only exit status: the control-room, root, and daemon Vitest legs must each print a nonzero `Test Files`/test count and none may say `No projects matched`, `No test files found`, or `0 passed`. Compare repo-wide failing paths with the recorded pre-edit baseline; owned-package legs must be exit 0, and any foreign red must be reported verbatim with the path-attributed delta proving no new failure intersects these five owned paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/package.json",
         "pnpm-lock.yaml",
@@ -82,23 +82,41 @@
         "apps/control-room/src/approvals/approval-inbox.tsx",
         "apps/control-room/src/approvals/approval-gating.test.tsx"
       ],
-      "startedAt": "2026-08-15T21:13:34.433Z"
+      "modifiedFiles": [
+        "apps/control-room/package.json",
+        "pnpm-lock.yaml",
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-gating.test.tsx",
+        "apps/control-room/src/approvals/approval-details.test.tsx",
+        "apps/control-room/src/approvals/approval-inbox.test.tsx"
+      ],
+      "note": "Mutation drill: approval-gating.ts SHA-256 c9f1b7d1b36f800e43ebed213bd689c9391214f03cb34ed43e9714c22d607e64 before/after; mutating APPROVAL_HUMAN_REVIEW_REQUIRED from APPROVAL_POLICY to HUMAN_AUTHORITY_GATE made the named literal code@layer test fail with the exact expected/received layer diff, then byte-exact restore made it green (1 passed, 19 skipped). Fresh exact gate executed on a path-attributed snapshot containing byte-identical owned paths/current non-daemon HEAD plus task-start daemon baseline, exit 0: control-room 70 files/857 tests; root 273/6507; foundation 32/661; store 42/501; daemon 89/1823. No vacuous-run markers. Current HEAD's only gate delta is foreign apps/daemon red: runtime-entrypoint.test.ts missing orchestrator/verifier-process-runner.ts bridge and goals/j1-command-path.test.ts two GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED failures (2 files, 3 tests); none intersects the seven owned control-room/manifest/lock paths. Scope grew by two clean sibling approval tests because the full control-room suite retained obsolete local refusal-code assertions; updating them was required to verify the new public rendering behavior.",
+      "startedAt": "2026-08-15T21:13:34.433Z",
+      "completedAt": "2026-08-15T21:54:26.817Z"
     },
     {
       "stepId": "step-6",
       "description": "Run one final adversarial self-review over only the five owned-path diffs. Check hostile/missing authority input cannot manufacture policy, gate, grant, code, layer, or command authority; supplied gate refusal always precedes policy/local guards and nulls commandId; every landed code maps to exactly one canonical layer; a malformed/empty gate or forged non-human grant stays refused; repeated/multiple controls do not duplicate IDs or create an enabled path; absent controls remain absent; visible refusal text contains both literals; and production never imports/calls `grantHumanAuthority` or adds a force/grant affordance. Confirm both edited production files are <=250 physical lines, the bare import and lock edge remain intact, no scratch/probe files remain, and only explicit owned paths will be staged.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/package.json",
         "pnpm-lock.yaml",
         "apps/control-room/src/approvals/approval-gating.ts",
         "apps/control-room/src/approvals/approval-inbox.tsx",
         "apps/control-room/src/approvals/approval-gating.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "note": "Adversarial review found and fixed two real fail-closed gaps: structurally forged code/layer pairs supplied through the reasons boundary were previously passed through, and repeated requests produced duplicate control/fact IDs. New production normalization degrades malformed pairs to APPROVAL_AUTHORITY_BINDING_MISMATCH@HUMAN_AUTHORITY_GATE, ApprovalReason is a code-correlated discriminated union, and resolver-local Set deduplication preserves the first control without creating authority. Review also found repeated reads of hostile authority getters; snapshotRequest now reads gate/policy once. TDD red proved the first two failures (2 failed/21 passed) and the getter read twice; green is 23/23, full control-room 70 files/860 tests. No shared mutable state/concurrency race; all failure paths are pure/no side effects. Malformed/null/empty/non-human authority remains refused with exact codes and null commandId; supplied gate precedes policy/local guards; absent controls remain absent; no grantHumanAuthority/force/grant affordance exists. Production sizes: approval-gating.ts 240, approval-inbox.tsx 231. Manifest/lock bare edge exact, no probe/scratch, git diff --check clean.",
+      "startedAt": "2026-08-15T21:54:34.415Z",
+      "completedAt": "2026-08-15T22:03:25.683Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-827a27f6",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -110,12 +128,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:06.218Z",
-  "updatedAt": "2026-08-15T21:13:34.433Z",
+  "updatedAt": "2026-08-15T22:06:02.230Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:17:48.211Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-81081add",
@@ -126,7 +144,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T20:39:59.113Z",
@@ -143,8 +163,26 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-15T21:54:26.914Z",
+    "escalatedAt": "2026-08-15T21:54:26.914Z"
   },
   "planApprovedAt": "2026-08-15T20:40:01.205Z",
-  "workStartedAt": "2026-08-15T20:41:25.183Z"
+  "workStartedAt": "2026-08-15T20:41:25.183Z",
+  "reviewStartedAt": "2026-08-15T22:06:02.230Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "Fresh path-attributed gate, byte hashes matched all seven owned paths; no vacuous-run markers.\n@moe/control-room: Test Files 70 passed (70); Tests 860 passed (860)\nroot: Test Files 273 passed (273); Tests 6504 passed | 3 skipped (6507)\nverify:foundation: Test Files 32 passed (32); Tests 661 passed (661)\nverify:store: Test Files 42 passed (42); Tests 501 passed (501)\n@moe/daemon task-start baseline: Test Files 89 passed (89); Tests 1823 passed (1823)\nExit 0.",
+    "reportedAt": "2026-08-15T22:06:02.230Z"
+  },
+  "filesModified": [
+    "apps/control-room/package.json",
+    "pnpm-lock.yaml",
+    "apps/control-room/src/approvals/approval-gating.test.tsx",
+    "apps/control-room/src/approvals/approval-gating.ts",
+    "apps/control-room/src/approvals/approval-inbox.tsx",
+    "apps/control-room/src/approvals/approval-details.test.tsx",
+    "apps/control-room/src/approvals/approval-inbox.test.tsx"
+  ]
 }

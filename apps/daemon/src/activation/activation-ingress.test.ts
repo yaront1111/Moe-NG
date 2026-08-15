@@ -216,12 +216,12 @@ function domainBrokenPayload(): Record<string, unknown> {
   return payload;
 }
 
-function workClaimBytes(kind: string, commandId: string): Uint8Array {
+function workClaimBytes(kind: string, commandId: string, expectedVersion = 0): Uint8Array {
   return encoder.encode(JSON.stringify({
     commandId,
     correlationId: "corr-work",
     decidedAt: DECIDED_AT,
-    expectedVersion: 0,
+    expectedVersion,
     kind,
     payload: kind === "work.release"
       ? { workItemId: "item-1" }
@@ -368,7 +368,7 @@ describe("effect.activate ingress — the recovery embargo fences allocation", (
 
     const released = runWorkClaimCommand(
       harness.store,
-      workClaimBytes("work.release", "cmd-release"),
+      workClaimBytes("work.release", "cmd-release", 1),
     );
 
     // Allocation is fenced; drain is not. The same store refuses the activation.

@@ -21,10 +21,11 @@
     {
       "stepId": "step-1",
       "description": "PRE-FLIGHT / RE-MEASURE WITHOUT WRITING BYTES. Record the task-start commit and `git status --short` for `scripts/release/supply-chain.mjs`, `tests/integration/release-supply-chain.test.mjs`, and the proposed new test. The canonical-inventory owner finished at 2e34a5f and current status is clean; if any required path is dirty at worker start, stop and report the collision rather than reset, stash, or edit over foreign work. Re-read archiveSource and cleanRoots: confirm the former still has an unguarded cleanup and the latter still catches and reports each cleanup failure; confirm no one has already created the focused test. Record a byte hash for the existing `tests/integration/release-supply-chain.test.mjs` because DoD requires it to remain unmodified. Confirm `typecheck:release`, `test:integration`, and Vitest's `tests/**/*.test.ts` include on current bytes. Capture the repo-wide baseline failure paths and exit codes before the diff by running each required leg separately (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`); the daemon filter must show a nonzero executed-test count, never `No projects matched`. Do not commit logs or generated evidence.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "startedAt": "2026-08-15T21:55:55.884Z"
     },
     {
       "stepId": "step-2",
@@ -70,7 +71,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -83,14 +84,15 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:21:38.693Z",
-  "updatedAt": "2026-08-15T20:56:41.818Z",
+  "updatedAt": "2026-08-15T21:57:50.914Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:44:33.224Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2
   },
   "contextFetchedBy": [
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "worker-83e6139a"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -108,7 +110,25 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3000000
+    "wallClockMs": 3000000,
+    "warnedAt": "2026-08-15T21:54:35.405Z",
+    "escalatedAt": "2026-08-15T21:54:35.405Z"
   },
-  "planApprovedAt": "2026-08-15T20:56:41.818Z"
+  "planApprovedAt": "2026-08-15T20:56:41.818Z",
+  "workStartedAt": "2026-08-15T21:55:55.884Z",
+  "blockedReason": "Step 1 preflight found a required path already foreign-dirty before this task wrote any bytes, so the approved collision rail forbids proceeding. HEAD=f4966b534ee5e9f9671668795d5dd1e844f0521b. `git status --short -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs tests/integration/release-archive-cleanup.test.ts` reports only ` M tests/integration/release-supply-chain.test.mjs`. The foreign diff changes the release package-command test from execFileSync to spawnSync and adds a non-Windows SUPPORTED_OS_EVIDENCE_MISSING refusal branch (lines ~745-765). The task explicitly requires that existing test stay green and UNMODIFIED and step 1 says to report a collision if any required path is dirty. New cleanup test is absent; supply-chain.mjs is clean at 257 lines. No baseline gates or edits were attempted after detecting the collision, and this worker changed zero files.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:57:04.530Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 preflight only: measured HEAD/status/symbols/scripts; detected required existing integration test foreign-dirty before any task edits; reported BLOCKED and wrote Serena handoff. No repository bytes changed.",
+      "whatRemains": "After the foreign release-supply-chain.test.mjs edit is committed/removed/coordinated, remeasure all three paths and hashes, run baseline gates, then execute steps 2-6 TDD.",
+      "pitfalls": "Do not overwrite the foreign spawnSync/SUPPORTED_OS_EVIDENCE_MISSING edit. Existing test must remain unmodified by this cleanup task. The defect in supply-chain.mjs is still unguarded archive rmSync in finally.",
+      "openQuestions": "Which active task owns the foreign edit to tests/integration/release-supply-chain.test.mjs?",
+      "releasedAt": "2026-08-15T21:57:50.912Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff after plan-mandated shared-tree collision block; freeing worker for another claimable task."
+    }
+  ]
 }

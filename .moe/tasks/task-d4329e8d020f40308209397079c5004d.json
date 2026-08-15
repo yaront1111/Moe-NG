@@ -22,10 +22,11 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE, THEN WRITE THE RED TESTS FIRST in `apps/daemon/src/orchestrator/agent-spawner.test.ts`. Confirm both owned files are clean relative to committed HEAD and that `agent-spawner.js` still wildcard-re-exports the TypeScript module; do not edit the bridge or wrapper files. Generalize the existing TMPDIR/TMP/TEMP sandbox helper so it can construct either spawner factory while still asserting exactly one captured config directory. Add a controlled fake child whose `spawn`, `error`, and `exit` events are emitted explicitly. Through the not-yet-landed `claudeSpawnStarter`, add: (a) a literal nine-token Windows table for `\"`, `%`, `&`, `|`, `<`, `>`, `^`, CR, and LF; pin the table length to 9, assert a positive executed-case count of 9, and for every case assert the production result equals `{ ok:false, code:\"SPAWN_ARGUMENT_UNQUOTABLE\", layer:\"agent-spawn-invocation\" }`, spawn calls remain zero, and the captured config directory is exactly empty; (b) a held-open child case proving the start promise is unsettled before `spawn`, resolves after `spawn`, returns an independently pending `exit` promise while the credential file exists, and only exit settles it/removes the file; (c) a pre-admission child `error` and an injected synchronous spawn throw that each reject with the original Error object (including a code/layer-shaped spoof), never return the coded refusal union, and leave no credential file; and (d) a post-admission error that preserves the accepted result, settles its lifetime, and removes the file. Update existing accepted legacy cases only as needed to emit `spawn` before exit/error/timeout, retaining every current success, mission, timeout, kill, logging, and cleanup assertion. Run the focused file and require red failures attributable to the missing starter/result surface, not fixture setup.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-spawner.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T21:51:46.236Z"
     },
     {
       "stepId": "step-2",
@@ -72,7 +73,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -85,7 +86,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:46:20.297Z",
-  "updatedAt": "2026-08-15T21:03:44.748Z",
+  "updatedAt": "2026-08-15T21:52:49.929Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:51:43.356Z",
     "plannedStepCount": 6,
@@ -93,7 +94,8 @@
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
-    "governor-a627169a"
+    "governor-a627169a",
+    "worker-83e6139a"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -110,7 +112,24 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T21:51:18.724Z",
+    "escalatedAt": "2026-08-15T21:51:46.305Z"
   },
-  "planApprovedAt": "2026-08-15T21:03:44.748Z"
+  "planApprovedAt": "2026-08-15T21:03:44.748Z",
+  "workStartedAt": "2026-08-15T21:51:46.236Z",
+  "blockedReason": "Step-1's first mandatory premise fails on fresh measurement: both owned files are already foreign-dirty before this task wrote any bytes (`agent-spawner.ts` +56/-? and agent-spawner.test.ts +164/-36), and `agent-spawn-invocation.ts` is also foreign-dirty despite being explicitly out of scope. The WIP changes timeout semantics from exit to close, adds detached process-group termination, killProcessGroup/killGraceMs options, Windows taskkill behavior, CONFIG_DIRS cleanup, fileURLToPath cwd handling, and changes the UNQUOTABLE set to add !() — unrelated to this admission-start task and directly overlapping both owned paths. No `claudeSpawnStarter`/AgentSpawnStart symbol exists and task workStartedAt was null/0 steps on claim, proving this is not prior task progress. Current exact typecheck fails in that partial WIP at agent-spawner.test.ts:237/273/274/315 because options tests moved ahead of the committed option type during races. Global shared-tree rail forbids resetting, stashing, deleting or building over it. Unblock when the foreign owner commits/clears the two files and `git status --short -- agent-spawner.ts agent-spawner.test.ts agent-spawn-invocation.ts` is clean, or when governance explicitly transfers that WIP with a scoped plan amendment. No production/test bytes were written by this task.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:52:33.535Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measurement only, zero task bytes. Confirmed planned admission symbols absent and loaded predecessor/decision memories. Reported exact foreign overlap and typecheck failures.",
+      "whatRemains": "After agent-spawner.ts/test and agent-spawn-invocation.ts foreign WIP is clean/committed or explicitly transferred, execute all six approved steps starting with the red starter tests.",
+      "pitfalls": "Do not reset/stash/delete the existing lifecycle WIP. This task must not change UNQUOTABLE set or wrapper files. Separate Node spawn admission event from exit lifetime.",
+      "releasedAt": "2026-08-15T21:52:49.927Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff after mandatory clean-tree premise failed; user requested continuing with safe work rather than overwriting foreign lifecycle WIP."
+    }
+  ]
 }

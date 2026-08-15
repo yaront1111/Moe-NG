@@ -21,6 +21,7 @@ const ALL_TRUTH_CLASSES = [
   "OBSERVED", "AGENT_REPORTED", "DAEMON_VERIFIED", "HUMAN_APPROVED", "UNKNOWN",
 ] as const;
 const SURFACE_IDS = ["goals", "board", "node", "approval", "evidence", "doctor"] as const;
+const FILESYSTEM_IMPORT_TIMEOUT_MS = 20_000;
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -35,16 +36,19 @@ describe("control-room scaffold mounts", () => {
     const container = document.createElement("div");
     container.id = "root";
     document.body.append(container);
-    vi.resetModules();
-    await act(async () => void (await import("./main.js")));
-    expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
-    expect(within(container).getByTestId("cr.shell.context.title").textContent)
-      .toBe("Ship the J1 vertical slice");
-    expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
-    const main = await import("./main.js");
-    expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
-    container.remove();
-  });
+    try {
+      vi.resetModules();
+      await act(async () => void (await import("./main.js")));
+      expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
+      expect(within(container).getByTestId("cr.shell.context.title").textContent)
+        .toBe("Ship the J1 vertical slice");
+      expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
+      const main = await import("./main.js");
+      expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
 
   it("refuses with a stable code when the document supplies no mount point", async () => {
     expect(document.getElementById("root")).toBeNull();

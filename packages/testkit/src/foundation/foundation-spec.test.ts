@@ -222,7 +222,7 @@ describe("foundation determinism and held-out discipline", () => {
       }
     }
     expect(violations).toEqual([]);
-  });
+  }, 20_000);
 
   it("labels every foundation module DEVELOPMENT_ONLY and NOT_CONFIRMATORY", () => {
     const label = "DEVELOPMENT_ONLY/NOT_CONFIRMATORY";

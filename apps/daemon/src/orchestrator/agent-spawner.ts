@@ -3,6 +3,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
@@ -14,13 +15,17 @@ import type { SpawnRequest } from "./agent-wrapper.js";
  * operator credential, store path, argv, or mission text — and is removed the
  * moment the agent exits.
  */
-const DAEMON_DIR = new URL("../..", import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/u, "");
+const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
 /** Everything the spawner touches outside its own arguments, injectable for tests. */
 export interface AgentSpawnerOptions {
   readonly command?: string;
   /** Injectable parent environment; every MOE_* authority variable is stripped from the child. */
   readonly environment?: NodeJS.ProcessEnv;
+  /** Injectable POSIX negative-pid signal boundary. */
+  readonly killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
+  /** Maximum wait for process close after requesting tree termination. */
+  readonly killGraceMs?: number;
   readonly log?: (line: string) => void;
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
@@ -32,6 +37,11 @@ export interface AgentSpawnerOptions {
 /** Default agent lifetime: the claim TTL, so a hung agent frees its slot no later
  *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
+const DEFAULT_KILL_GRACE_MS = 5_000;
+const CONFIG_DIRS = new Set<string>();
+process.once("exit", () => {
+  for (const path of CONFIG_DIRS) rmSync(path, { force: true, recursive: true });
+});
 
 const CHAIN_TOOLS = "mcp__moe-next,mcp__moe-next__*";
 const CODING_TOOLS = `${CHAIN_TOOLS},Edit,Write,Read,Glob,Grep,Bash`;
@@ -99,9 +109,7 @@ export function claudeSpawner(
 ): (request: SpawnRequest) => Promise<void> {
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
-  // Per-agent files are removed as each agent exits; the directory itself goes
-  // with the wrapper process, whichever way it ends.
-  process.once("exit", () => { rmSync(configDir, { force: true, recursive: true }); });
+  CONFIG_DIRS.add(configDir);
   const command = options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude";
   const spawn = options.spawn ?? nodeSpawn;
   const log = options.log ?? ((line: string): void => { process.stdout.write(`${line}\n`); });
@@ -109,6 +117,8 @@ export function claudeSpawner(
   const timeoutMs = options.timeoutMs
     ?? (Number.isSafeInteger(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_AGENT_TIMEOUT_MS);
   const platform = options.platform ?? process.platform;
+  const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+  const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   // `async` is load-bearing, not decoration: building the invocation below can
   // REFUSE, and the wrapper calls this as `spawnAgent(...).catch(...)` without
   // awaiting. Outside a promise a refusal would escape synchronously and take
@@ -150,6 +160,7 @@ export function claudeSpawner(
       try {
         child = spawn(invocation.file, [...invocation.args], {
           cwd: request.workspace ?? DAEMON_DIR,
+          detached: platform !== "win32",
           env: agentEnvironment(options.environment ?? process.env),
           shell: invocation.shell,
           stdio: ["pipe", "inherit", "inherit"],
@@ -163,44 +174,68 @@ export function claudeSpawner(
       // tree after the lifetime bound (on win32 the child is cmd.exe, so a plain
       // kill would orphan the real agent). The claim's own reap horizon frees the
       // work item; this frees the wrapper slot and the credentialed config file.
+      const killDirect = (): void => {
+        try { child.kill("SIGKILL"); } catch { /* already gone */ }
+      };
       const killTree = (): void => {
         if (platform === "win32" && child.pid !== undefined) {
-          try { spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" }); }
-          catch { child.kill(); }
-        } else {
-          child.kill();
+          try {
+            const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
+              stdio: "ignore",
+            });
+            killer.on("error", killDirect);
+          } catch { killDirect(); }
+          return;
         }
+        if (platform === "win32" || child.pid === undefined) {
+          killDirect();
+          return;
+        }
+        try {
+          // detached:true makes the shell the group leader. An accepted
+          // negative-pid SIGKILL reaches it and every ordinary descendant.
+          // This is lifecycle containment, not hermetic isolation: a hostile
+          // same-UID process can still escape into a new session/process group.
+          killProcessGroup(-child.pid, "SIGKILL");
+        } catch { killDirect(); }
       };
       // The config file carries the agent's credential; it must not outlive the
       // agent it was minted for. Both exit paths remove it; a missing file is fine.
       let settled = false;
+      let terminating = false;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (): void => {
         if (settled) return;
         settled = true;
         if (timer !== undefined) clearTimeout(timer);
+        if (killTimer !== undefined) clearTimeout(killTimer);
         rmSync(mcpConfigPath, { force: true });
         resolve();
       };
-      const failInput = (): void => {
-        if (settled) return;
+      const beginTermination = (): void => {
+        if (settled || terminating) return;
+        terminating = true;
+        // Arm the hard bound before signalling: an injected/test boundary can
+        // report `close` synchronously from killTree(), and finish() must be
+        // able to cancel this timer in that race.
+        killTimer = setTimeout(finish, killGraceMs);
+        if (typeof killTimer.unref === "function") killTimer.unref();
         killTree();
-        finish();
       };
+      const failInput = (): void => { beginTermination(); };
       timer = setTimeout(() => {
-        // Free the slot on the deadline whether or not the kill lands: waiting
-        // for the process to actually exit is the very hang this bound exists
-        // to break. Kill is best-effort cleanup; a later exit is a no-op finish.
         log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
-        killTree();
-        finish();
+        // Prefer observed close, while retaining a hard post-kill bound for a
+        // broken/missing close event after the process tree was signalled.
+        beginTermination();
       }, timeoutMs);
       if (typeof timer.unref === "function") timer.unref();
-      child.on("exit", (code) => {
+      child.on("close", (code) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         finish();
       });
-      child.on("error", finish);
+      child.on("error", () => { if (!terminating) finish(); });
       // A child can exit after spawn() succeeds but before stdin is written.
       // Writable streams surface that race as an asynchronous EPIPE; without
       // a listener it escapes the promise and crashes the whole wrapper.

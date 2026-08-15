@@ -307,6 +307,25 @@ describe("foundation attempt dispatch — request fencing", () => {
     expect(read).toBe(0);
   });
 
+  it("contains revoked and throwing reflection proxies with the exact local refusal", () => {
+    const revoked = Proxy.revocable(dispatchRequest(), {});
+    revoked.revoke();
+    const throwing = new Proxy(dispatchRequest(), {
+      ownKeys: () => { throw new Error("hostile ownKeys"); },
+    });
+    const cases = [revoked.proxy, throwing];
+    expect(cases).toHaveLength(2);
+    expect(cases.length).toBeGreaterThan(0);
+    for (const value of cases) {
+      let decoded: unknown;
+      try { decoded = decodeFoundationAttemptRequest(value); } catch { decoded = { threw: true }; }
+      expect(decoded).toMatchObject({
+        advisoryOnly: true, authority: "NONE", code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED",
+        ok: false, refusedBy: DAEMON_FOUNDATION_ATTEMPT,
+      });
+    }
+  });
+
   it("freezes the admitted request and round-trips the durable codec by digest", () => {
     const decoded = decodeFoundationAttemptRequest(dispatchRequest());
     expect(decoded.ok).toBe(true);
@@ -409,7 +428,26 @@ describe("foundation attempt dispatch — the accepted single-node path", () => 
     }));
     expectRefusal(wrongSession, "FOUNDATION_ATTEMPT_BINDING_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
     expect(run.launchCalls).toHaveLength(0);
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
+  it("never upgrades a malformed PROVEN-shaped launcher answer", async () => {
+    const store = readyStore("malformed-proven");
+    const run = harness(store, {
+      launch: async () => ({ kind: "OBSERVED", truthClass: "PROVEN" }),
+    });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.launchCalls).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(0);
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", reasonLayer: DAEMON_FOUNDATION_ATTEMPT,
+      resultManifest: null, truthClass: "SUSPECT",
+    });
   });
 });
 
@@ -516,6 +554,24 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     expect(second.ok && second.record).toStrictEqual(first.ok ? first.record : null);
     expect(eventTypes(store, DISPATCH_AGGREGATE))
       .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+  });
+
+  it("refuses replay when launch-template bytes drift without overwriting", async () => {
+    const store = readyStore("replay-template-drift");
+    const run = harness(store);
+    const first = await run.service.dispatch(dispatchRequest());
+    expect(first.ok).toBe(true);
+    const changed = { ...structuredClone(LAUNCH_TEMPLATE), cwd: "D:/other-worktree" };
+
+    const replay = await run.service.dispatch(dispatchRequest({ launchTemplate: changed }));
+
+    expectRefusal(replay, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.launchCalls).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(1);
+    expect(eventTypes(store, DISPATCH_AGGREGATE))
+      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && first.ok && stored.digest).toBe(first.ok ? first.digest : "");
   });
 
   it("persists an honest UNKNOWN with no result manifest when capture cannot answer", async () => {

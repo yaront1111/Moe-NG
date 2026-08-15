@@ -1,54 +1,89 @@
-# task-d92b1b15 — Activation ledger: replay and effect scan fail closed at scale (PLAN)
+# task-d92b1b15 — Activation ledger: replay and effect scan fail closed at scale (DONE)
 
-Planned by architect-7f301fa7 at HEAD 9d60091. 7 steps, 5 files, no size warning. Both defects
-confirmed on current bytes.
+Implemented by worker-247da23f. Commit **2e688c9**, branch `moe/work-2026-08-08`, 4 files, +346/-6.
+Both defects fixed, 5 mutation drills passed, owned-scope gate exit 0.
 
-## Defect 1 — replay feeds a whole aggregate to an exactly-one reader (LATENT)
+## The two fixes, both one-liners in production
 
-`answerReplayed` (activation-ledger-commit.ts:133-157) does `store.readEvents(aggregateId)` at :140
-— EVERY event on the aggregate — then hands it to `readActivationLedgerRecord` at :144, whose guard
-at reader.ts:61 is `if (events.length > 1) return ...EVIDENCE_AMBIGUOUS`. Any second event on the
-aggregate breaks idempotent re-commit.
+**Defect 1** — `answerReplayed` (activation-ledger-commit.ts) fed `store.readEvents(aggregateId)`
+— every event on the aggregate — to `readActivationLedgerRecord`, whose count guard refuses >1.
+Fixed by filtering to `event.eventType === ACTIVATION_LEDGER_EVENT_TYPE` **at the call site**.
 
-**The fix is to narrow the input, not weaken the guard.** The reader already checks the
-discriminator `ACTIVATION_LEDGER_EVENT_TYPE` at :65 — one line *after* the count guard. Filter by it
-first: zero activation events → ABSENT, two → AMBIGUOUS (unchanged), one + any foreign events → the
-record. Relaxing `length > 1` to "take the first" passes the repro test and destroys the guarantee.
+> **The filter must NOT go inside the reader.** I tried reasoning it through and the reader's own
+> test table forbids it: `activation-ledger-reader.test.ts` pins a lone wrong-typed singleton to
+> `ACTIVATION_LEDGER_EVENT_TYPE_UNEXPECTED`. Filtering inside narrows that singleton to zero events
+> and silently answers ABSENT instead — reddening an existing test and destroying discrimination for
+> the reader's two other callers (`readFoundationActivationHistory`, `scanForEffect`), both of which
+> already pass a correct singleton. Only `answerReplayed` was over-supplying.
 
-**LATENT, not live** (author's correction, comment-76869409): `createFoundationClaudeLauncher`
-(foundation-launch-authority.ts:290) has ZERO callers anywhere including tests, and the authority is
-not exported from the daemon root. So the test must CONSTRUCT the multi-event aggregate directly —
-one that waits for a live Foundation path passes vacuously.
-
-## Defect 2 — effect scan dies permanently past 6,400 events (LIVE)
-
-`scanForEffect` (reader.ts:232-262), bounded by `MAX_SCAN_PAGES = 64, SCAN_PAGE_SIZE = 100` (:107).
-It reads the GLOBAL stream from cursor `0n` and **cannot exit early on a hit** because it must prove
-uniqueness — its only success exit is `if (!read.hasMore)` at :255. Past 6,400 global events the
-loop finishes with `hasMore` still true, falls through to `return no("FOUNDATION_BINDING_SCAN_INCOMPLETE")`
-at :261, and `readCurrentEffectSessionBinding` stops finding ANY activation, permanently.
-
-**THE KEY FINDING: the page cap is not a safety device.** The loop already terminates without it —
-an empty page with `hasMore` returns SCAN_INCOMPLETE (:242), and a cursor that does not strictly
-advance returns SCAN_INCOMPLETE (:258-259). A stalled or lying store is caught by those guards. So
-`MAX_SCAN_PAGES` adds no protection a correct store needs; it only imposes a false ceiling. Remove
-the page bound, keep `SCAN_PAGE_SIZE`, and let the cursor-advance guard own termination.
+**Defect 2** — `scanForEffect` (activation-ledger-reader.ts) was bounded by `MAX_SCAN_PAGES = 64`
+× `SCAN_PAGE_SIZE = 100`, a ceiling on TOTAL project events past which every effect lookup refused
+SCAN_INCOMPLETE forever. Removed the constant entirely and made the loop `for (;;)`.
 See `mem:gotcha-a-page-cap-is-not-a-termination-guarantee`.
 
-**Raise, do not solve, the design question** (task rail 4): even fixed, the scan is O(total project
-events) per lookup. File a follow-up for a per-effect index or per-aggregate query and record its id.
-Landing an index unannounced is forbidden.
+## Two things this task deliberately did NOT do
 
-## Test traps
+1. **Defect 1 is LATENT, not live.** `createFoundationClaudeLauncher`
+   (foundation-launch-authority.ts:290) still has ZERO callers anywhere including tests, and the
+   authority is not exported from the daemon root. Confirmed again on current bytes. The fix is
+   **preventive**, not incident-driven, and the test had to CONSTRUCT the aggregate tail directly —
+   one that waited for a live Foundation path would have passed vacuously.
+2. **The performance cliff is filed, not solved** (task rail 4). Even fixed, `scanForEffect` is
+   O(total project events) *per lookup*: it reads the global stream from cursor 0n and cannot exit
+   early because it owes "exactly one matched", not "one matched".
+   **Follow-up task id: `task-16d5bc3a10864351adf5be10dfa7df00`** — names the three candidate
+   answers (carry the idempotency key on `CoordinationEffectQuery`; a durable per-effect index;
+   an indexed store query) and notes the index option collides with this task's rail-1 ban on
+   ledger-owned side tables, so ownership must be decided first.
 
-- DoD 3's count must be a **literal**, never `MAX_SCAN_PAGES * SCAN_PAGE_SIZE` — a count derived
-  from the constants it pins moves with them (equivalent-mutant trap).
-- Real **file-backed** SqliteEventStore, opened in the test and closed in a `finally`; a held handle
-  kills the vitest worker. Insert the 6,400+ events in ONE transaction or the test reads as a hang.
-- DoD 4: a second matching activation past the old bound must still refuse
-  FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS — that is what stops the fix buying scale by returning on
-  first match.
-- Preserve the digest cross-check at commit.ts:150 (ACTIVATION_LEDGER_REPLAY_DIVERGED); it is what
-  stops a replay echoing the caller.
-- `activation-ledger-reader.ts` is already 328 lines (over the 250 target, under 400, pre-existing).
-  Do not push it toward 400 — extract a helper module instead.
+## Test placement deviation (deliberate, QA please read)
+
+The plan put Tests C and D in `activation-ledger-reader.test.ts`. I put them in
+`foundation-launch-authority.test.ts`'s existing `describe("current effect/session binding")`.
+Forcing reason: `readCurrentEffectSessionBinding` calls `validateActivationCommit` and demands
+COHERENT, so a BOUND assertion needs a record produced by `activateEffect`. The hand-written
+`activation-ledger-fixtures.ts` `record()` cannot be COHERENT (its grantId does not derive from its
+digest), so reader.test.ts would have needed a ~90-line copy of the coherent fixture — exactly the
+drift the fixtures file's own header warns against. That describe block already owns every other
+`readCurrentEffectSessionBinding` case.
+
+## What pins what (each drill reddens a DIFFERENT named test)
+
+| Drill | Mutation | Reddens |
+|---|---|---|
+| D1 | whole-aggregate read restored | "replays the DURABLE record on an aggregate that also carries its Foundation tail" + "refuses a drifted candidate on a tailed aggregate" |
+| D2 | `events.length > 1` guard removed | "still refuses an aggregate carrying TWO activation events as AMBIGUOUS" |
+| D3 | 64-page bound reinstated | "answers BOUND on a store holding more than 6,400 global events" (AssertionError in 318ms — a refusal, **not** a timeout) |
+| D4 | early return on first match | "still refuses a SECOND matching activation found past the old 6,400 ceiling" (`expected 'BOUND'`) |
+| D5 | `SCAN_PAGE_SIZE` 100→50 | nothing — coverage did not shrink, which is the point |
+
+D1 and D2 redden **disjoint** sets, so the fix and the exactly-one invariant are separately pinned.
+
+## Gate state at completion — foreign red, disclosed
+
+Owned-scope gate exit 0: typecheck 0, `Test Files 6 passed (6), Tests 87 passed (87)`.
+
+Repo-wide legs are RED for foreign reasons, all measured not assumed:
+- `typecheck` exit 1 — exactly 3 × `TS2339 Property 'toHaveSize' does not exist` in
+  `src/activation/activation-ledger-aggregate-id.test.ts`, an **untracked file another agent created
+  at 01:14 mid-session** (`git cat-file -e HEAD:...` → "exists on disk, but not in HEAD"). Excluding
+  only that file, tsc exits 0.
+- `test` exit 1 — 9 failed / 1930 passed. Path-attributed baseline: reverted my 4 files to pre-diff
+  content, ran the 6 failing files (BASELINE = 5 files), restored byte-exact, re-ran the identical
+  subset (HEAD = 3 files). **HEAD ⊂ BASELINE, so the new-failure delta is empty.** Two files failed
+  *without* my diff and passed *with* it — causally impossible, confirming the flake class.
+  4 of the 9 are literal `Test timed out in 5000ms`. `runtime-entrypoint`'s bridge guard reports
+  `missing: orchestrator/verifier-process-runner.ts`, another agent's module added at 00:36 without
+  its `.js` bridge.
+
+Also foreign and deliberately NOT staged: `activation-ingress.test.ts` (foreign 3+/3− edit).
+
+## Residual I disclosed rather than hid
+
+Removing the page cap means a store that reports `hasMore: true` forever *with strictly-advancing
+cursors* would spin rather than refuse after 64 pages. Every realistic fault is still caught on the
+FIRST bad page by the empty-page and non-advancing-cursor guards (both pinned by the pre-existing
+`stuck`/`stalled` fakes, still green). For any finite table with a monotonic cursor — i.e. SQLite,
+the only implementation — termination is guaranteed, since each iteration consumes a distinct global
+position. A store that could lie that way could equally forge bytes, so the cap was never that
+defence.

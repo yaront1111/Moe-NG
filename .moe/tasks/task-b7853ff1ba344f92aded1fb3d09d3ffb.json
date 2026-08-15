@@ -19,7 +19,7 @@
   ],
   "implementationPlan": [],
   "status": "BLOCKED",
-  "assignedWorkerId": "architect-09b5f32a",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,7 +31,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:11:50.144Z",
-  "updatedAt": "2026-08-15T21:27:55.475Z",
+  "updatedAt": "2026-08-15T21:46:00.773Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:25:32.793Z"
   },
@@ -41,5 +41,16 @@
   "blockedReason": "Prerequisite and explicit task rail are unsatisfied at committed HEAD ee284416bfd8d6f4672afb039f455b150d363dbb. task-f6ef0a45f52c45c7bb54f250170aa223 is DONE, but task-c690a7a0c5a14daaa088acbc32e26815 remains BLOCKED and the required root consumer edge is genuinely absent: `git show HEAD:package.json` has no dependencies object and no @moe/daemon; the root importer in `git show HEAD:pnpm-lock.yaml` contains no @moe/daemon; an in-root `.mts` probe importing `{ collectDoctorVersionReport }` from the bare `@moe/daemon` specifier fails TS2307 with `./node_modules/.bin/tsc` exit 1 and is deleted; plain Node import exits 1 with ERR_MODULE_NOT_FOUND. The public daemon root export itself exists at apps/daemon/src/index.ts:174-175, so the missing piece is exactly the manifest/lock resolution edge owned by c690, not this task. Current working tree also has foreign pnpm-lock.yaml WIP, while b785's two owned paths are clean. Per the global cross-package rail and this task's 'do not start until c690 DONE' rail, submitting a two-file plan now would either invent a deep-relative escape hatch or consume an unresolvable dependency. Re-promote b785 only after c690 is DONE and committed package.json + root lock importer + both bare-root probes pass.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T21:27:55.475Z"
+  "blockedAt": "2026-08-15T21:27:55.475Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning/exploration/systematic-debugging guidance; remeasured committed daemon export, root manifest/lock edge and compiled/plain-Node probes; reported the valid block; recorded Serena handoff memory with exact evidence and future plan shape.",
+      "whatRemains": "After task-c690a7a0c5a14daaa088acbc32e26815 is DONE, recheck committed package.json, root pnpm importer and both bare @moe/daemon probes, then plan the two owned release paths.",
+      "pitfalls": "Do not deep-import @moe/daemon, edit package.json/pnpm-lock in b785, or treat the existing placeholder as authority. pnpm-lock currently had foreign WIP at block time.",
+      "openQuestions": "None until c690 lands.",
+      "releasedAt": "2026-08-15T21:46:00.771Z",
+      "releasedBy": "architect-09b5f32a",
+      "reason": "Explicit architect handoff after prerequisite-block measurement; user requested planning the newly promoted activation aggregate-id task."
+    }
+  ]
 }

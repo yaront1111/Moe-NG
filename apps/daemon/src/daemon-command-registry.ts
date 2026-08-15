@@ -144,6 +144,7 @@ const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   "approval.decide",
   "goal.close",
   "integration.accept_output",
+  "session.open",
 ]);
 
 function decisionOf(

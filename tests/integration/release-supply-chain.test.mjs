@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { generateKeyPairSync } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -745,12 +745,19 @@ describe("release package command", () => {
   test("records truthful evidence through the actual package script", { timeout: 900_000 }, () => {
     const root = packageJson();
     assert.equal(typeof root.scripts["release:evidence"], "string");
-    const stdout = execFileSync(process.platform === "win32" ? "pnpm.exe" : "pnpm",
+    const run = spawnSync(process.platform === "win32" ? "pnpm.exe" : "pnpm",
       ["--silent", "release:evidence"], {
         cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
         timeout: 840_000, windowsHide: true,
       });
-    const record = JSON.parse(stdout.trim().split(/\r?\n/u).at(-1));
+    assert.equal(run.error, undefined);
+    const record = JSON.parse(run.stdout.trim().split(/\r?\n/u).at(-1));
+    if (process.platform !== "win32") {
+      assert.equal(run.status, 1);
+      expectReleaseRefusal(record, "SUPPORTED_OS_EVIDENCE_MISSING");
+      return;
+    }
+    assert.equal(run.status, 0);
     assert.equal(record.componentCount, 6);
     assert.equal(record.reportCount, 3);
     assert.equal(record.sourceSha, SOURCE_SHA);

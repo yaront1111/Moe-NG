@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
+const RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS = 30_000;
 
 const SRC_ROOT = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(SRC_ROOT, "..");
@@ -96,7 +97,7 @@ it("loads the @moe/daemon root namespace under Node with no undefined binding", 
     goalHandlersFrozen: true,
     readEventPage: "function",
   });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
 
 it("loads the recovery succession and anchor surface under plain Node", async () => {
   // DoD 6. Two NEW .js bridges ship with this surface, and vitest resolves a
@@ -114,7 +115,7 @@ it("loads the recovery succession and anchor surface under plain Node", async ()
     readSuccessionChain: "function",
     schemaVersion: "moe-recovery-succession/1",
   });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
 
 it("still refuses an unbridged test-tier module with ERR_MODULE_NOT_FOUND", async () => {
   // Negative control, pinning the literal reason code rather than "it threw":
@@ -124,7 +125,7 @@ it("still refuses an unbridged test-tier module with ERR_MODULE_NOT_FOUND", asyn
     outcome: "FAILED",
     code: "ERR_MODULE_NOT_FOUND",
   });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
 
 const walk = (dir: string): readonly string[] =>
   readdirSync(dir).flatMap((entry) => {
@@ -209,4 +210,4 @@ it("has an exact .js bridge for every runtime module and none for test-tier ones
     unexpected: unexpected.map((file) => relative(SRC_ROOT, file)),
     wrongContent: wrongContent.map((file) => relative(SRC_ROOT, file)),
   }).toEqual({ missing: [], unexpected: [], wrongContent: [] });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);

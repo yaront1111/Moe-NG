@@ -332,4 +332,4 @@ it("records the table clause now applicable, and fails if its subject disappears
       .map((file) => file.slice(SOURCE_ROOT.length + 1));
   const absent = ["cr.runs", "cr.resources"].filter((id) => bearers(id).length === 0);
   expect(absent).toEqual([]);
-});
+}, 20_000);

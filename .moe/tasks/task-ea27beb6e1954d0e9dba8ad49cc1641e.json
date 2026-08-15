@@ -23,12 +23,13 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE AND RESOLVE THE DEPENDENCY QUESTION THE GOVERNOR FLAGGED. No production bytes written.\n\n1. Confirm slice 1 landed: `ls apps/daemon/src/telemetry/` must show provider-run-contracts.ts and provider-run-refusals.ts with their `.js` bridges, and `git log --oneline -1 -- apps/daemon/src/telemetry/provider-run-contracts.ts` should name commit 9d60091 or later.\n2. RESOLVE THE IMPORT DIRECTION, which the park note asks be verified rather than inherited. Read `ProviderRunRecord` in provider-run-contracts.ts and confirm the only field the CODEC owns is `recordDigest` (:145). Everything else this slice produces — usage, usageRefusals, upstreamRefusal and the launch-derived facts — needs no bytes and no digest. Conclusion to record: this slice depends on the CONTRACT ONLY; the codec is consumed by the ledger. If the record has changed such that this no longer holds, stop and report blocked.\n3. Read `ProviderRunUsageRefusal` (:74-77) and its rationale comment (:62-72), which is the reason refused envelopes are retained rather than dropped.\n4. Read the composition vocabulary in provider-run-refusals.ts: layer PROVIDER_RUN_COMPOSITION, codes PROVIDER_RUN_HANDOFF_MALFORMED, PROVIDER_RUN_USAGE_SEQUENCE_INVALID, PROVIDER_RUN_MEASUREMENT_REFUSED, plus the two constructors.\n5. Read `normalizeUsageMeasurement` (budget-measurement.ts:210) AND `checkAgainstPrior` (:180-203), so the `prior` threading is understood as the thing that makes four codes reachable rather than as bookkeeping.\n6. Confirm provider-run-normalize.* does NOT exist.\n7. NOTE THE FALSE-NEGATIVE TRAP: `grep telemetry packages/runner/src/index.ts` returns ZERO hits but the surface IS published, via `export * from \"./surface/claude-surface.js\"` at index.ts:162. The dependency edge was verified by compiled probe with positive and negative controls. Do not report blocked on that grep.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-contracts.ts",
         "apps/daemon/src/telemetry/provider-run-refusals.ts",
         "packages/scheduler/src/budget/budget-measurement.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T21:53:07.292Z"
     },
     {
       "stepId": "step-2",
@@ -76,7 +77,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -89,17 +90,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:31.168Z",
-  "updatedAt": "2026-08-15T18:30:06.305Z",
+  "updatedAt": "2026-08-15T21:54:32.248Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:07:21.024Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6
   },
-  "blockedReason": null,
+  "blockedReason": "Step-1 fresh measurement finds the task's claimed gap already closed by DONE task-159f4c21ef9149e8a65f24735c9c1475, so implementing the approved plan would duplicate a landed production authority (global stale-gap rail). Committed `packages/runner/src/providers/telemetry/provider-usage-normalization.ts` already exports `normalizeProviderUsage`, calls production bare-root `@moe/scheduler.normalizeUsageMeasurement` for every token meter, threads per-meter prior accepted `NormalizedMeasurement`, preserves UNKNOWN quantity null/PARTIAL lower bounds, and forwards scheduler issues with code/layer. It is published from the bare `@moe/runner` root through `surface/provider-record-surface.ts`; index-surface.test.ts pins the symbol and a real root call. `packages/runner/package.json` already declares `@moe/scheduler`. The landed `buildProviderRunRecord` is a real consumer. Conversely, current public `ClaudeTelemetryHandoff` has no raw `usage envelopes` field at all; it carries token facts and telemetryRefusal. A new daemon module cannot perform the plan's raw-envelope loop without recreating runner's `sourceOf`, `rowFor`, meter mapping and source/coverage decisions, explicitly forbidden by task rails. Wrapping `normalizeProviderUsage` would require a different plan/DoD (and would not directly call scheduler as current DoD requires). No provider-run-normalize.* exists and this task wrote zero bytes. Required resolution: verify whether daemon only needs a thin draft-record adapter over the existing root surface, create/amend that task if so, or archive this duplicate; never land a second normalizer.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:54:14.276Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Measurement only, zero bytes. Proved DONE task-159f4c21 already landed/published the production runner+scheduler usage composition and a real consumer. Reported blocker with symbol-level evidence.",
+      "whatRemains": "Governance must archive or replan around any truly absent daemon draft-record adapter. Current plan/DoD cannot be executed without duplicating source/coverage/meter mapping authority.",
+      "pitfalls": "ClaudeTelemetryHandoff has token facts, not a raw envelope array. Never reimplement sourceOf/rowFor or inject a fake normalizer. Check task-task-ea27... Serena handoff.",
+      "releasedAt": "2026-08-15T21:54:32.245Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff after stale-gap measurement; user requested continuing with safe work rather than duplicating DONE production authority."
+    },
     {
       "whatIsDone": "Measurement only; no plan submitted, no production code written. Re-measured the premise at HEAD f0f62c0: apps/daemon/src/telemetry/ contains provider-run-contracts.test.ts (8654 bytes, 21:05) and NOT provider-run-contracts.ts, so slice 1 is mid-TDD and this task's imports do not exist. Reported BLOCKED on that measurement instead of a speculative plan.",
       "whatRemains": "Plan the composition once slice 1 lands: consume one ClaudeTelemetryHandoff, delegate every usage envelope to production normalizeUsageMeasurement in original provider sequence with `prior` threaded, and keep the two provenances in separate record fields. Three files: provider-run-normalize.ts, its .js bridge, provider-run-normalize.test.ts.",
@@ -128,7 +137,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-15T21:52:53.221Z",
+    "escalatedAt": "2026-08-15T21:52:53.221Z"
   },
-  "planApprovedAt": "2026-08-15T18:30:06.305Z"
+  "planApprovedAt": "2026-08-15T18:30:06.305Z",
+  "contextFetchedBy": [
+    "worker-83e6139a"
+  ],
+  "workStartedAt": "2026-08-15T21:53:07.292Z"
 }

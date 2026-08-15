@@ -52,6 +52,11 @@ describe("agentSpawnInvocation", () => {
     expect(() => agentSpawnInvocation("claude", ["a&b"], "win32")).toThrow(
       /SPAWN_ARGUMENT_UNQUOTABLE/u,
     );
+    for (const argument of ["a(b", "a)b", "a!b"]) {
+      expect(() => agentSpawnInvocation("claude", [argument], "win32")).toThrow(
+        /SPAWN_ARGUMENT_UNQUOTABLE/u,
+      );
+    }
   });
 
   it("refuses with a stable code and names the layer that refused, as properties", () => {

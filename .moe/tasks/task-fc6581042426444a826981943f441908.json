@@ -111,8 +111,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-83e6139a",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -124,18 +124,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-15T21:37:41.252Z",
+  "updatedAt": "2026-08-15T21:51:15.321Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 5
   },
-  "blockedReason": null,
+  "blockedReason": "Codec implementation is complete and committed (foreign whole-tree commit f4966b5 swept the three owned provider-run-codec.* paths; per global rail 5 I did not amend/reset/recommit). Focused production evidence is green under exact Node 24.16.0: provider-run-codec.test.ts 1 file/27 tests, exit 0; source 248 lines; bridge byte-exact; all six mutation drills reddened named assertions and restored. Step 6 cannot truthfully complete because the required OWNED-PACKAGE legs are moving foreign-red. Latest exact typecheck reports only orchestrator/agent-spawner.test.ts:237,273,274,315 foreign options (`killProcessGroup`/`killGraceMs`) and implicit-any errors. Latest exact daemon test (92 files, 1922 tests discovered) reports 9 foreign failures: daemon-command-registry.test.ts session.open accepted instead of OPERATOR_PRINCIPAL_REQUIRED; runtime-entrypoint.test.ts missing orchestrator/verifier-process-runner.js plus package-root timeouts; goals/j1-command-path.test.ts GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED fixture drift; graph-preview/index-surface package-root timeouts; doctor NODE_RUNTIME mismatch when run under Node 24.18 (resolved locally by installing official SHA-verified Node 24.16.0 for the next run). The red moved between runs and no failure is under provider-run-codec.*. Do not delete/reset/stash foreign files. Unblock when `git status --short apps/daemon` shows peer WIP settled and both `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` exit 0 under Node 24.16.0 with a nonzero test count.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:50:41.657Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 complete. Full codec/bridge/27-test implementation committed in foreign whole-tree commit f4966b5; owned paths clean. Focused suite 27/27 under exact Node 24.16.0. Six mutation drills passed. Source 248 lines, exact bridge, imported codes/layer only. Serena memory task-task-fc6581042426444a826981943f441908-handoff has full details.",
+      "whatRemains": "Step 6 exact @moe/daemon typecheck and test must both exit 0 after peer WIP settles; then step 7 adversarial review/handoff/complete. Latest moving reds are recorded in blockedReason. Use /tmp/moe-node-24.16.0/bin first in PATH to satisfy exact .node-version.",
+      "pitfalls": "Do not amend/reset/recommit f4966b5 merely for attribution. Guard B compares canonical BODY bytes, not sealed tail; otherwise Guard A drill is vacuous. Do not touch contracts/refusals/index. Report foreign red verbatim.",
+      "releasedAt": "2026-08-15T21:51:15.318Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff after code completion; exact owned-package gate remains moving foreign-red. User asked to continue, so I am releasing this blocked final-gate task and will take the specific orchestrator producer whose WIP is now one of its gate blockers."
+    },
     {
       "whatIsDone": "Measurement only; no plan submitted and no production code written. Re-measured the dependency premise at HEAD 5c5afb1: `ls -la apps/daemon/src/telemetry/` shows provider-run-contracts.test.ts (8654 bytes, 21:05) present and provider-run-contracts.ts ABSENT, i.e. slice 1 (task-8e3076177f87458f934a776eca68ba16) is mid-TDD between its step 2 and step 3, not DONE. Reported BLOCKED on that measurement rather than submitting a speculative plan.",
       "whatRemains": "Plan the canonical codec once slice 1 lands: encodeProviderRunRecord returning {ok, bytes, digest, record}, and a decoder that verifies with BOTH guards - digest recomputation AND byte re-encode comparison - returning the slice-1 unreadable-record code with its layer on malformed, truncated and digest-mismatched input. Mirror apps/daemon/src/activation/activation-ledger-codec.ts. Three files: provider-run-codec.ts, its .js bridge, provider-run-codec.test.ts.",

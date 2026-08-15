@@ -124,8 +124,8 @@ function replayOf(store: SqliteEventStore, request: WorkClaimRequest): WorkClaim
 /**
  * An OPEN claim still fencing others: unexpired at the daemon's decide time.
  * Both instants are canonical fixed-width ISO, so lexicographic order is time
- * order. Version racing is left to the store: two concurrent claims both read
- * the same ledger version and the second commit refuses on the CAS.
+ * order. Version racing is left to the store: two concurrent claims carrying
+ * the same observed expectedVersion race there and the second commit refuses.
  */
 export function activeClaim(
   record: WorkClaimRecord | undefined, decidedAt: string,
@@ -165,7 +165,7 @@ function decide(
     };
     return commitAccepted(
       store, request, "WorkClaimed",
-      existing?.version ?? 0, result, aggregateIdFor(workItemId),
+      request.expectedVersion, result, aggregateIdFor(workItemId),
     );
   }
 
@@ -180,7 +180,7 @@ function decide(
     : { claimedBy: held.claimedBy, expiresAt: expiresAt as string, status: "OPEN", workItemId };
   return commitAccepted(
     store, request, request.kind === "work.release" ? "WorkReleased" : "WorkClaimRenewed",
-    existing.version, result, aggregateIdFor(workItemId),
+    request.expectedVersion, result, aggregateIdFor(workItemId),
   );
 }
 

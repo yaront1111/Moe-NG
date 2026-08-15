@@ -7,9 +7,7 @@ import type {
   ApprovalAuthorityRequest, ApprovalAuthorityResult, ApprovalPolicy,
   HumanAuthorityGate, HumanAuthorityGrant,
 } from "@moe/core";
-
 import type { ApprovalDecisionKind, ApprovalDecisionRecord } from "./approval-fixtures.js";
-
 const CODE_LAYERS = Object.freeze({
   APPROVAL_HUMAN_AUTHORITY_REQUIRED: "HUMAN_AUTHORITY_GATE",
   APPROVAL_AUTHORITY_BINDING_MISMATCH: "HUMAN_AUTHORITY_GATE",
@@ -20,7 +18,6 @@ const CODE_LAYERS = Object.freeze({
   APPROVAL_POLICY_DELAY_INVALID: "APPROVAL_POLICY",
   APPROVAL_HUMAN_REVIEW_REQUIRED: "APPROVAL_POLICY",
 } satisfies Record<ApprovalAuthorityCode, ApprovalAuthorityLayer>);
-
 const AUTHORITY_PHRASES = Object.freeze({
   APPROVAL_HUMAN_AUTHORITY_REQUIRED: "a named human has not satisfied this authority gate",
   APPROVAL_AUTHORITY_BINDING_MISMATCH: "the authority is not bound to this unit of work",
@@ -31,13 +28,12 @@ const AUTHORITY_PHRASES = Object.freeze({
   APPROVAL_POLICY_DELAY_INVALID: "the approval policy delay is invalid",
   APPROVAL_HUMAN_REVIEW_REQUIRED: "the approval policy requires human review",
 } satisfies Record<ApprovalAuthorityCode, string>);
-
-export interface ApprovalReason {
-  readonly code: ApprovalAuthorityCode;
-  readonly phrase: string;
-  readonly refusingLayer: ApprovalAuthorityLayer;
-}
-
+type ApprovalReasonFor<Code extends ApprovalAuthorityCode> = Readonly<{
+  code: Code; phrase: string; refusingLayer: (typeof CODE_LAYERS)[Code];
+}>;
+export type ApprovalReason = {
+  [Code in ApprovalAuthorityCode]: ApprovalReasonFor<Code>;
+}[ApprovalAuthorityCode];
 /** Builds only canonical code/layer pairs from the landed runtime registries. */
 export function approvalReason(code: ApprovalAuthorityCode, phrase: string): ApprovalReason {
   if (!APPROVAL_AUTHORITY_CODES.includes(code)) {
@@ -47,12 +43,10 @@ export function approvalReason(code: ApprovalAuthorityCode, phrase: string): App
   if (!APPROVAL_AUTHORITY_LAYERS.includes(refusingLayer)) {
     throw new Error(`approval reason ${code} has no landed refusal layer`);
   }
-  return Object.freeze({ code, phrase, refusingLayer });
+  return Object.freeze({ code, phrase, refusingLayer }) as unknown as ApprovalReason;
 }
-
 const bindingReason = (phrase: string): ApprovalReason =>
   approvalReason("APPROVAL_AUTHORITY_BINDING_MISMATCH", phrase);
-
 export const APPROVAL_REASONS = Object.freeze({
   HASH_MISMATCH: bindingReason(
     "this record's exact revision hash is not the identity the command would act on",
@@ -66,13 +60,11 @@ export const APPROVAL_REASONS = Object.freeze({
   MALFORMED_AUTHORITY: bindingReason("the supplied authority context is missing or unverifiable"),
   SUPERSEDED: bindingReason("a successor approval superseded this record"),
 });
-
 export type ApprovalControlState = "ENABLED" | "DISABLED" | "ABSENT";
 export type ApprovalGuardId =
   | "AFFORDANCE_ABSENT" | "AUTHORITY_CONTEXT" | "RECORD_LIFECYCLE"
   | "RECORD_VALIDITY" | "REVISION_HASH";
 export type ApprovalAuthorityContext = ApprovalAuthorityRequest;
-
 export interface ApprovalAuthorityPresentation {
   readonly gate: HumanAuthorityGate | null;
   readonly grant: HumanAuthorityGrant | null;
@@ -80,14 +72,12 @@ export interface ApprovalAuthorityPresentation {
   readonly result: ApprovalAuthorityResult;
   readonly truthClass: ApprovalDecisionRecord["truthClass"];
 }
-
 export interface ApprovalControlRequest {
   readonly commandKind: RuntimeCommandKind;
   readonly destructive?: boolean;
   readonly label: string;
   readonly qualifier?: string;
 }
-
 export interface ApprovalControl {
   readonly authority?: ApprovalAuthorityPresentation | null;
   readonly commandId: string | null;
@@ -102,7 +92,6 @@ export interface ApprovalControl {
   readonly state: ApprovalControlState;
   readonly testId: string;
 }
-
 export interface ApprovalGatingInput {
   readonly affordances: readonly NextAllowedCommand[];
   readonly authority?: ApprovalAuthorityContext | undefined;
@@ -111,20 +100,16 @@ export interface ApprovalGatingInput {
   readonly requests: readonly ApprovalControlRequest[];
   readonly targetAggregateId: string;
 }
-
 export function controlTestId(commandKind: RuntimeCommandKind, qualifier?: string): string {
   const base = `cr.action.${commandKind.replaceAll(".", "-")}`;
   return qualifier === undefined ? base : `${base}.${qualifier}`;
 }
-
 export function unavailableText(reason: ApprovalReason): string {
   return `Unavailable: ${reason.phrase} (${reason.code} @ ${reason.refusingLayer}).`;
 }
-
 export function decisionCommandKind(kind: ApprovalDecisionKind): RuntimeCommandKind {
   return kind === "EXPANSION" ? "graph.approve" : "approval.decide";
 }
-
 function control(
   request: ApprovalControlRequest,
   state: ApprovalControlState,
@@ -142,7 +127,6 @@ function control(
     testId: controlTestId(request.commandKind, request.qualifier),
   });
 }
-
 function refusal(
   record: ApprovalDecisionRecord,
   affordance: NextAllowedCommand,
@@ -164,31 +148,40 @@ function refusal(
   }
   return null;
 }
-
 interface AuthorityEvaluation {
   readonly presentation: ApprovalAuthorityPresentation | null;
   readonly reason: ApprovalReason | null;
 }
-
 function snapshotRequest(context: ApprovalAuthorityContext): ApprovalAuthorityRequest {
-  if (context.gate === undefined || context.policy === undefined || context.policy === null) {
+  const rawGate = context.gate;
+  const rawPolicy = context.policy;
+  if (rawGate === undefined || rawPolicy === undefined || rawPolicy === null) {
     throw new Error("authority context omitted a required field");
   }
-  const policy = Object.freeze({ ...context.policy }) as ApprovalPolicy;
-  if (context.gate === null) return Object.freeze({ gate: null, policy });
-  const supplied = context.gate.grant;
+  const policy = Object.freeze({ ...rawPolicy }) as ApprovalPolicy;
+  if (rawGate === null) return Object.freeze({ gate: null, policy });
+  const supplied = rawGate.grant;
   const grant = supplied === null || supplied === undefined
     ? supplied
     : Object.freeze({ ...supplied });
-  const gate = Object.freeze({ ...context.gate, grant }) as HumanAuthorityGate;
+  const gate = Object.freeze({ ...rawGate, grant }) as HumanAuthorityGate;
   return Object.freeze({ gate, policy });
 }
-
 function authorityReason(refusal: ApprovalAuthorityRefusal): ApprovalReason {
   const canonical = approvalReason(refusal.code, AUTHORITY_PHRASES[refusal.code]);
   return refusal.layer === canonical.refusingLayer ? canonical : APPROVAL_REASONS.MALFORMED_AUTHORITY;
 }
-
+function normalizeReason(value: unknown): ApprovalReason {
+  try {
+    const supplied = value as ApprovalReason;
+    if (typeof supplied.phrase !== "string") throw new Error("invalid phrase");
+    const canonical = approvalReason(supplied.code, supplied.phrase);
+    return supplied.refusingLayer === canonical.refusingLayer
+      ? canonical : APPROVAL_REASONS.MALFORMED_AUTHORITY;
+  } catch {
+    return APPROVAL_REASONS.MALFORMED_AUTHORITY;
+  }
+}
 function evaluateAuthority(
   context: ApprovalAuthorityContext | undefined,
   truthClass: ApprovalDecisionRecord["truthClass"],
@@ -207,7 +200,6 @@ function evaluateAuthority(
     return Object.freeze({ presentation: null, reason: APPROVAL_REASONS.MALFORMED_AUTHORITY });
   }
 }
-
 function resolveOne(
   input: ApprovalGatingInput,
   request: ApprovalControlRequest,
@@ -220,7 +212,8 @@ function resolveOne(
     const supplied = input.reasons?.[testId];
     return supplied === undefined
       ? control(request, "ABSENT", "AFFORDANCE_ABSENT", null, null, authority?.presentation ?? null)
-      : control(request, "DISABLED", "AFFORDANCE_ABSENT", supplied, null, authority?.presentation ?? null);
+      : control(request, "DISABLED", "AFFORDANCE_ABSENT", normalizeReason(supplied), null,
+        authority?.presentation ?? null);
   }
   if (authority?.reason !== null && authority?.reason !== undefined) {
     return control(request, "DISABLED", "AUTHORITY_CONTEXT", authority.reason, null, authority.presentation);
@@ -230,12 +223,18 @@ function resolveOne(
     ? control(request, "ENABLED", null, null, affordance.commandId, authority?.presentation ?? null)
     : control(request, "DISABLED", refused[0], refused[1], null, authority?.presentation ?? null);
 }
-
 export function resolveApprovalControls(input: ApprovalGatingInput): readonly ApprovalControl[] {
   const authority = evaluateAuthority(input.authority, input.record.truthClass);
-  return Object.freeze(input.requests.map((request) => resolveOne(input, request, authority)));
+  const controls: ApprovalControl[] = [];
+  const seen = new Set<string>();
+  for (const request of input.requests) {
+    const id = controlTestId(request.commandKind, request.qualifier);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    controls.push(resolveOne(input, request, authority));
+  }
+  return Object.freeze(controls);
 }
-
 export function isSubmittable(control: ApprovalControl): boolean {
   return control.state === "ENABLED" && control.commandId !== null;
 }

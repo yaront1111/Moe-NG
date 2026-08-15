@@ -1,55 +1,60 @@
-# A page cap on a cursor scan is usually a false ceiling, not a safety net
+# Gotcha: a page cap is not a termination guarantee — it is a silent correctness ceiling
 
-## The shape (found in activation-ledger-reader.ts, task-d92b1b15)
+Found in `apps/daemon/src/activation/activation-ledger-reader.ts` `scanForEffect`, fixed in
+task-d92b1b15 (commit 2e688c9). The shape generalises to every paged scan in this repo.
 
-    const MAX_SCAN_PAGES = 64, SCAN_PAGE_SIZE = 100;   // -> a 6,400-event ceiling
-    for (let page = 0; page < MAX_SCAN_PAGES; page += 1) {
-      read = store.readEventsAfter(cursor, SCAN_PAGE_SIZE);
-      if (read.hasMore && read.items.length === 0) return no("SCAN_INCOMPLETE");
-      ...
-      if (!read.hasMore) return { aggregateId: found, refusal: null };   // ONLY success exit
-      const next = read.nextCursor;
-      if (next === null || next <= cursor) return no("SCAN_INCOMPLETE");
-      cursor = next;
-    }
-    return no("SCAN_INCOMPLETE");                       // silent time bomb
+## The anti-pattern
 
-The scan cannot exit early on a hit — it must walk the whole stream to prove the match UNIQUE. So
-once the store exceeds pages × pageSize, `hasMore` is still true when the loop ends, control falls
-through, and **every call refuses forever**. It fails closed into a refusal that is
-indistinguishable from a legitimate authority answer, and no test store is ever big enough to see it.
+```ts
+const MAX_SCAN_PAGES = 64, SCAN_PAGE_SIZE = 100;
+for (let page = 0; page < MAX_SCAN_PAGES; page += 1) { ... }
+return no("SCAN_INCOMPLETE");   // <- reached once the store outgrows 6,400 events
+```
 
-## Why the cap looks necessary and is not
+The cap reads like a safety device against a runaway loop. It is not. It is a hard ceiling on
+**total events in the store**, and past it the scan fails closed *forever*, for *every* caller, into
+a refusal indistinguishable from a real authority answer. Nothing signals it; the global event count
+only ever grows; and no test store is big enough to see it, so a green suite proves nothing.
 
-The instinct is "an unbounded loop over a remote cursor could spin forever, so cap it." But look at
-the two guards already inside the loop:
+## Why removing it is safe here
 
-- an empty page while `hasMore` is true → return
-- a `nextCursor` that is null or does not strictly ADVANCE → return
+Termination was already owned by two guards that fire on the FIRST bad page rather than after N
+good ones:
 
-Those cover every way a stalled, broken, or lying store fails to make progress. **Termination is
-already guaranteed by cursor monotonicity**, not by the page count. The cap therefore protects
-against nothing a correct store does — it only imposes an arbitrary ceiling on how large the data
-may get before the feature silently dies.
+```ts
+if (read.hasMore && read.items.length === 0) return no("SCAN_INCOMPLETE");  // stalled store
+const next = read.nextCursor;
+if (next === null || next <= cursor) return no("SCAN_INCOMPLETE");          // cursor must ADVANCE
+```
 
-## Rule
+Strictly-advancing cursor + finite table ⇒ termination. The cap added no protection a correct store
+needed. Residual, worth stating rather than glossing: a store that lies `hasMore: true` forever
+*while advancing* would now spin — but such a store could equally forge payload bytes, so a page cap
+was never the defence against it.
 
-When you find a `for (page = 0; page < MAX_PAGES; ...)` over a cursor, ask two questions:
+## The check to run before deleting one
 
-1. **Does the loop already require the cursor to strictly advance?** If yes, the page cap is not the
-   termination guarantee and can go. If no, fix THAT — a monotonicity check is the correct guard, and
-   it bounds the loop by the data rather than by a guess.
-2. **What happens on fallthrough?** If it returns a refusal rather than throwing, the failure is
-   invisible: it looks like a considered answer. Prefer a distinct code that says "I ran out of
-   budget" versus "I looked and the answer is no" — collapsing them is what makes it undebuggable.
+1. Does the loop have a **progress** guard (cursor strictly advances) and a **liveness** guard
+   (non-empty page when `hasMore`)? If both, the cap is decorative.
+2. Can the scan **exit early on a hit**? Here it cannot — it owes "exactly one matched", not "one
+   matched", so it must exhaust the stream to prove uniqueness. That means removing the cap makes it
+   *correct*, not *fast*: it stays O(total events) per lookup. Raise that separately
+   (task-16d5bc3a10864351adf5be10dfa7df00) rather than landing an index unannounced.
+3. Delete the constant, don't orphan it — an unread bound reads to the next maintainer as an
+   enforced limit.
 
-A cap sized in absolute records (6,400) against a quantity that only grows (total project events) is
-a time bomb by construction. If a bound is genuinely wanted for cost reasons, bound the WORK
-(per-aggregate query, per-effect index) rather than truncating a correctness-critical scan.
+## Testing it without the test becoming the bug
 
-## Test consequence
-
-Proving the fix needs a store driven PAST the old ceiling, and the count must be pinned as a
-**literal**. Deriving it from `MAX_PAGES * PAGE_SIZE` makes the test move with the constants it
-exists to pin — the coverage silently shrinks when someone lowers the page size.
-See `mem:qa-equivalent-mutant-in-a-two-clause-guard`.
+- **Pin the boundary as a LITERAL** (`6_400` / `6_500`), never `MAX_SCAN_PAGES * SCAN_PAGE_SIZE`.
+  A count derived from the bound it exists to pin moves with the bound, so halving the page size
+  silently halves the proof while the test stays green. Here the constants are module-private
+  (`const`, not `export const`), so the test *cannot* derive them — worth preserving.
+- **Assert the case was actually generated**: walk the same public pager and assert the stream length
+  exceeds the literal ceiling BEFORE asserting the outcome. A store that quietly wrote fewer events
+  satisfies the outcome assertion vacuously.
+- **Batch the inserts.** `MAX_EVENTS_PER_COMMIT = 256` and `readEvents` caps one aggregate at
+  `MAX_PAGE_SIZE = 1_000`, so 6,500 events = 26 commits of 250 spread over 26 aggregates. That runs
+  in well under a second; 6,500 individual commits under `PRAGMA synchronous = FULL` read as a hang,
+  and a drill that hangs reads as a passing guard.
+- **Drill the early return.** Making the scan return on first match must redden a *named* test, or
+  scale was bought with the uniqueness proof.

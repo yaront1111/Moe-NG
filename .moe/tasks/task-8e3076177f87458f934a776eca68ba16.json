@@ -120,7 +120,7 @@
       "startedAt": "2026-08-15T18:14:59.886Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-618633fa",
   "branch": null,
   "prLink": null,
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T21:41:51.716Z",
+  "updatedAt": "2026-08-15T21:50:36.177Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
@@ -201,8 +201,8 @@
   },
   "planApprovedAt": "2026-08-15T17:59:25.756Z",
   "workStartedAt": "2026-08-15T17:59:58.379Z",
-  "blockedReason": null,
+  "blockedReason": "Governor-a627169a ruled to re-block: the required owned-package leg `pnpm --filter @moe/daemon test` is not exit 0 at committed HEAD f4966b5, despite the owned telemetry delta being green. Fresh merge-base daemon: exit 0, 80 files/1675 tests. Fresh HEAD committed-byte daemon: exit 1, 2 failed | 90 passed files and 3 failed | 1918 passed tests. Exact foreign failures: `src/runtime-entrypoint.test.ts` reports missing bridge `orchestrator/verifier-process-runner.ts`; `src/goals/j1-command-path.test.ts` has two `goal.close` cases refused with stable code `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`. No failing path intersects apps/daemon/src/telemetry/**. Focused telemetry tests pass 2 files/28 tests; daemon typecheck exit 0; scheduler passes 43 files/1326 tests. Runner Linux red is baseline-only with empty owned delta. The bounded aggregate-id fix and strengthened reason-layer test are committed byte-for-byte inside foreign whole-tree commit f4966b5 (the completion-hook hazard); per rail I did not amend/reset/recommit. QA review base-ref diff is recorded in Serena task handoff. Raw daemon gate must quiesce before completion; I will not fabricate exit 0 or edit foreign paths.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:50:36.177Z"
 }

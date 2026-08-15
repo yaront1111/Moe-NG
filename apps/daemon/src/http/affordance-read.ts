@@ -67,17 +67,19 @@ export function workItemIdFor(kind: string, aggregateId: string | null): string 
   return `${kind}@${aggregateId ?? "-"}`;
 }
 
-function claimOf(
+function claimFields(
   claims: WorkClaimLedger, kind: string, aggregateId: string | null, now: string,
-): ChainStepClaim | null {
-  const active = activeClaim(claims.claims.get(workItemIdFor(kind, aggregateId)), now);
-  return active === null
-    ? null
-    : Object.freeze({
+): Pick<ChainStep, "claim" | "claimAggregateVersion"> {
+  const record = claims.claims.get(workItemIdFor(kind, aggregateId));
+  const active = activeClaim(record, now);
+  return Object.freeze({
+    claim: active === null ? null : Object.freeze({
       claimedBy: active.claimedBy,
       expiresAt: active.expiresAt,
       version: active.version,
-    });
+    } satisfies ChainStepClaim),
+    claimAggregateVersion: record?.version ?? 0,
+  });
 }
 
 function bootstrapAggregateId(
@@ -108,7 +110,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const aggregateId = bootstrapAggregateId(kind, config.projectId);
     if (ledger.kinds.has(kind)) {
       return Object.freeze({
-        aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+        aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
         missing: [], status: "COMMITTED" as const,
         version: versionOf(ledger, aggregateId),
       });
@@ -116,14 +118,14 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const missing = missingPrerequisites(ledger, kind);
     if (missing.length > 0) {
       return Object.freeze({
-        aggregateId: null, claim: claimOf(claims, kind, null, now), kind,
+        aggregateId: null, ...claimFields(claims, kind, null, now), kind,
         missing, status: "BLOCKED" as const, version: null,
       });
     }
     const version = versionOf(ledger, aggregateId);
     offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
     return Object.freeze({
-      aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+      aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
       missing: [], status: "READY" as const, version,
     });
   });
@@ -153,13 +155,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       offers.push(offer("session.open", openAggregate, 0, SESSION_SCHEMA_VERSION));
       steps.push(Object.freeze({
         aggregateId: openAggregate,
-        claim: claimOf(claims, "session.open", openAggregate, now),
+        ...claimFields(claims, "session.open", openAggregate, now),
         kind: "session.open", missing: [], status: "READY" as const, version: 0,
       }));
     } else {
       steps.push(Object.freeze({
         aggregateId: openAggregate,
-        claim: claimOf(claims, "session.open", openAggregate, now),
+        ...claimFields(claims, "session.open", openAggregate, now),
         kind: "session.open", missing: [],
         status: "COMMITTED" as const, version: openExisting.version,
       }));
@@ -170,7 +172,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       for (const kind of ["session.close", "session.renew"] as const) {
         offers.push(offer(kind, aggregateId, record.version, SESSION_SCHEMA_VERSION));
         steps.push(Object.freeze({
-          aggregateId, claim: claimOf(claims, kind, aggregateId, now), kind,
+          aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
           missing: [], status: "READY" as const, version: record.version,
         }));
       }
@@ -184,10 +186,10 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     if (config.nodes !== undefined && ledger.kinds.has("approval.decide")) {
       for (const spec of config.nodes()) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
-        const claim = claimOf(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
+        const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
         if (review.accepted !== undefined) {
           steps.push(Object.freeze({
-            aggregateId: spec.nodeRef, claim, kind: NODE_DELIVER_KIND,
+            aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
             missing: [], status: "COMMITTED" as const, version: review.version,
           }));
           continue;
@@ -201,7 +203,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           "integration.accept_output", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION,
         ));
         steps.push(Object.freeze({
-          aggregateId: spec.nodeRef, claim, kind: NODE_DELIVER_KIND,
+          aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
           missing: awaitingVerify ? ["verification"] : [],
           status: awaitingVerify ? ("BLOCKED" as const) : ("READY" as const),
           version: review.version,

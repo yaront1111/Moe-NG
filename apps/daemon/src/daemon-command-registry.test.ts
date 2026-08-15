@@ -12,6 +12,7 @@ import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-comman
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { readSessionLedger } from "./identity/session-read-model.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 
 /**
@@ -269,6 +270,45 @@ describe("authorization ordering under a real session", () => {
     });
     expect(reader.readCommandDecisionsAfter(0n, 1_000).items).toHaveLength(before);
     reader.close();
+  });
+
+  it("keeps session.open behind the operator principal even for an admin session", () => {
+    const attacker = openSession(
+      "cmd-open-admin-attacker",
+      "sess-admin-attacker",
+      "secret-admin-attacker",
+      [ADMIN, WORK],
+    );
+    const descendantSecret = "secret-admin-descendant";
+    const descendantSessionId = "sess-admin-descendant";
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const before = reader.readCommandDecisionsAfter(0n, 1_000).items.length;
+
+      const refused = send("cmd-forbidden-session-open", "session.open", {
+        capabilities: [...OPERATOR_CAPABILITIES],
+        credentialSha256: createHash("sha256")
+          .update(descendantSecret, "utf8")
+          .digest("hex"),
+        expiresAt: "2027-01-01T00:00:00.000Z",
+        sessionId: descendantSessionId,
+      }, attacker);
+
+      expect(refused).toMatchObject({
+        httpStatus: 403,
+        ok: false,
+        outcome: "PORT_REFUSED",
+        refusal: {
+          code: "OPERATOR_PRINCIPAL_REQUIRED",
+          layer: "DAEMON_AUTHORIZATION",
+        },
+        stage: "DISPATCH",
+      });
+      expect(reader.readCommandDecisionsAfter(0n, 1_000).items).toHaveLength(before);
+      expect(readSessionLedger(reader, PROJECT).sessions.has(descendantSessionId)).toBe(false);
+    } finally {
+      reader.close();
+    }
   });
 });
 

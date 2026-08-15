@@ -39,7 +39,7 @@ export class SpawnInvocationRefusal extends Error {
 }
 
 /** Characters cmd.exe treats specially even inside a quoted argument. */
-const UNQUOTABLE = /["%&|<>^\r\n]/u;
+const UNQUOTABLE = /["%!&()|<>^\r\n]/u;
 
 function quoteForCmd(argument: string): string {
   if (UNQUOTABLE.test(argument)) {

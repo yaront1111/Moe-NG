@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { expect, it } from "vitest";
 
 const execFileAsync = promisify(execFile);
+const RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS = 20_000;
 
 const SRC_ROOT = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(SRC_ROOT, "..");
@@ -140,7 +141,7 @@ it("loads @moe/runner in Node's strip-types runtime with its named exports defin
     telemetryHelperLeaks: 0,
     telemetryPublished: 10,
   });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
 
 it("still refuses an unbridged test-only module with ERR_MODULE_NOT_FOUND", async () => {
   // Negative control. Pins the literal reason code, not merely "it threw":
@@ -219,4 +220,4 @@ it("has an exact .js bridge for every runtime module and none for test-tier modu
     unexpected: unexpected.map((file) => relative(SRC_ROOT, file)),
     wrongContent: wrongContent.map((file) => relative(SRC_ROOT, file)),
   }).toEqual({ missing: [], unexpected: [], wrongContent: [] });
-});
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);

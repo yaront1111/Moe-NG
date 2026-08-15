@@ -19,6 +19,8 @@
  * `storeCode` rather than flattened into ours.
  */
 
+import { createHash } from "node:crypto";
+
 import { SUPERVISOR_ACTIVATION_VERSION } from "@moe/runner";
 import type { ActivationGrant, AttemptSlice, EffectIntent } from "@moe/runner";
 import type {
@@ -220,25 +222,20 @@ export function activationLedgerUnknown(code: ActivationLedgerCode): ActivationL
 }
 
 const AGGREGATE_NAMESPACE = `${ACTIVATION_LEDGER_RECORD_VERSION}|aggregate|`;
+const MAX_STORE_IDENTIFIER_UTF8_BYTES = 512;
 
 /**
  * Derives this ledger's target aggregate id from the effect aggregate and the
  * idempotency key.
  *
- * INJECTIVE BY CONSTRUCTION. Each component is preceded by its own code-unit
- * length, so distinct input pairs cannot produce one string. A bare
- * concatenation would map ('a','bc') and ('ab','c') onto the SAME aggregate,
- * and because every activation commits from expected version 0, that single bug
- * would both accept a second activation that should have conflicted and refuse
- * a first activation that should have been accepted. A separator alone is not
- * enough either: a component containing the separator re-splits.
- *
- * THE SEPARATOR MUST ALSO BE A LEGAL IDENTIFIER CHARACTER. A NUL reads like the
- * obvious delimiter and is what this first shipped with, but the store's
- * `requireIdentifier` rejects any identifier containing one — so every commit
- * refused with STORE_INPUT_INVALID while the length framing, the codec and the
- * injectivity table all stayed green. Only a real store catches it.
+ * LEGACY ROWS ARE NEVER REKEYED: code-unit framing remains byte-for-byte when
+ * its UTF-8 form fits the store. Only overflow rows use collision-resistant
+ * SHA-256 over that complete versioned, length-framed legacy preimage. Framing
+ * is injective; hashing is deliberately described only as collision-resistant.
  */
 export function deriveActivationAggregateId(aggregateId: string, idempotencyKey: string): string {
-  return `${AGGREGATE_NAMESPACE}${aggregateId.length}:${aggregateId}|${idempotencyKey.length}:${idempotencyKey}`;
+  const legacy = `${AGGREGATE_NAMESPACE}${aggregateId.length}:${aggregateId}|${idempotencyKey.length}:${idempotencyKey}`;
+  if (Buffer.byteLength(legacy, "utf8") <= MAX_STORE_IDENTIFIER_UTF8_BYTES) return legacy;
+  const digest = createHash("sha256").update(legacy, "utf8").digest("hex");
+  return `${AGGREGATE_NAMESPACE}sha256:${digest}`;
 }

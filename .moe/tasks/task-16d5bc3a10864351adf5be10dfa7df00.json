@@ -1,0 +1,39 @@
+{
+  "id": "task-16d5bc3a10864351adf5be10dfa7df00",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Effect-binding lookup is O(total project events) per call",
+  "description": "RAISED BY worker-247da23f while fixing task-d92b1b15a5b048e49671ed34990fa4a1 (defect 2). Filed rather than solved, per that task's rail 4: \"If the correct fix is an index or a per-aggregate query instead of a global scan, raise that as a design decision rather than landing it unannounced.\"\n\nWHAT LANDED, AND WHAT DID NOT. task-d92b1b15 removed `MAX_SCAN_PAGES = 64` from `scanForEffect` in apps/daemon/src/activation/activation-ledger-reader.ts. That constant imposed a hard ceiling of 64 x 100 = 6,400 TOTAL PROJECT EVENTS, past which `readCurrentEffectSessionBinding` refused FOUNDATION_BINDING_SCAN_INCOMPLETE permanently, for every effect. That correctness bug is fixed and is now pinned by two tests at a literal 6,500-event store in foundation-launch-authority.test.ts.\n\nTHE REMAINING PROBLEM IS PERFORMANCE, NOT CORRECTNESS. `scanForEffect` still reads the GLOBAL event stream from cursor 0n via `store.readEventsAfter(cursor, SCAN_PAGE_SIZE)`, and it CANNOT exit early on a hit: its only success exit is `if (!read.hasMore)`, because the answer it owes is not \"an activation matched\" but \"EXACTLY ONE did\". It must therefore exhaust the entire stream on every call, decoding every event whose type is EffectActivationCommitted along the way. So each effect-binding lookup is O(total project events), and that cost grows monotonically for the life of the project.\n\nWHY IT IS A DESIGN DECISION AND NOT A PATCH. The scan exists because `CoordinationEffectQuery` carries an effectId but NOT the idempotency key that the activation aggregate id derives from (`deriveActivationAggregateId(effectIntent.aggregateId, effectIntent.idempotencyKey)`). Given the key, the lookup would be a single `readEvents(aggregateId)`. So the candidate answers are:\n  (a) carry the idempotency key (or the derived aggregate id) on the query - a schema change, which was explicitly out of scope for task-d92b1b15;\n  (b) a durable per-effect index mapping intentId -> aggregate id, maintained in the same transaction as the activation commit - note task-d92b1b15's rail 1 forbade this ledger from owning a side table, so ownership needs deciding;\n  (c) a per-aggregate or indexed query on the store surface, so uniqueness can be proven without a full walk.\nEach has a different owner and a different blast radius, which is why this is a task rather than a follow-up commit.\n\nCONSTRAINT THAT ANY ANSWER MUST PRESERVE: the uniqueness proof. Whatever replaces the walk must still detect a SECOND matching activation on a different aggregate and refuse FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS. The test \"still refuses a SECOND matching activation found past the old 6,400 ceiling\" (foundation-launch-authority.test.ts) exists precisely to stop scale being bought with that invariant, and must stay green.\n\nNOT URGENT: the scan is correct at every size now, and the cost is a full sequential page walk of a local SQLite table. This is filed so the cliff is owned rather than rediscovered.",
+  "definitionOfDone": [
+    "A decision is recorded naming which of (a) carry the idempotency key on CoordinationEffectQuery, (b) a durable per-effect index, or (c) an indexed store query is taken, and which component owns the chosen surface.",
+    "The chosen surface answers readCurrentEffectSessionBinding without walking the whole global stream, proven by a test that drives the store past the existing literal 6,500-event mark and asserts the lookup does not read every event.",
+    "The uniqueness proof survives: a second matching activation on a different aggregate is still detected and still refuses FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS with its exact code and layer. The existing test 'still refuses a SECOND matching activation found past the old 6,400 ceiling' stays green and unmodified.",
+    "No page-count ceiling is reintroduced. Any bound on the work done must be a bound the store enforces, not a constant that turns a large project into a permanent SCAN_INCOMPLETE refusal.",
+    "Fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0 with each leg's exit code read separately."
+  ],
+  "taskRails": [
+    "Do not reintroduce a page-count cap on scanForEffect. A cap is not a termination guarantee - the empty-page-with-hasMore and cursor-must-advance guards already own termination - and a cap fails closed into a refusal indistinguishable from a real authority answer.",
+    "The uniqueness proof is the invariant, not the walk. Any faster lookup must still refuse FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS on a second matching activation. Buying speed by returning on first match is a wrong answer.",
+    "If the answer needs a side table, decide its OWNER first. task-d92b1b15's rail 1 forbade the activation ledger from writing daemon-owned tables inside its commit transaction, so an index maintained transactionally with the activation commit needs that constraint revisited explicitly rather than quietly."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-09b5f32a",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T21:58:07.943Z",
+  "updatedAt": "2026-08-15T22:02:28.270Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T22:02:24.368Z"
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a"
+  ]
+}

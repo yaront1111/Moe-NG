@@ -1,74 +1,38 @@
-# task-8e3076177f87458f934a776eca68ba16 — slice 1 of 4, CODE COMPLETE, blocked on a foreign gate red
+# Task task-8e3076177f87458f934a776eca68ba16 handoff
 
-Committed as **9d60091**, 6 files, 568 insertions, all under `apps/daemon/src/telemetry/`.
-Steps 1-6 completed and noted. Step 7 (gate/review/commit) is done EXCEPT its exit-0 clause.
+## Scope of record
+This is SPIDR slice 1 only: frozen provider-run record/refusal contract (DoD 2) plus the four-leg gate (DoD 6). Moved work:
+- codec -> task-fc6581042426444a826981943f441908
+- normalize composition -> task-ea27beb6e1954d0e9dba8ad49cc1641e
+- durable ledger -> task-1a7ff170ee544a3a8a10962c25e2ca5b
+- live dispatch consumer -> task-6cbff01023b14b26a78fc5e3eb1dd8a9
 
-## What landed
+Original six-file contract commit is 9d60091561e7f8c5946d89849500d65a7f117fb3 (parent d01a512a984e22c34f3b45c2529a1e6cea0f2934).
 
-| file | lines | what |
-|---|---|---|
-| `provider-run-contracts.ts` | 196 | `ProviderRunRecord` (18 readonly fields), `ProviderRunStore` port, `deriveProviderRunAggregateId`, `PROVIDER_RUN_RECORD_VERSION`, `PROVIDER_RUN_EVENT_TYPE` |
-| `provider-run-refusals.ts` | 104 | `PROVIDER_RUN_LEDGER_CODES` (17), `PROVIDER_RUN_LEDGER_LAYERS` (4), `ProviderRunRefusal`, `providerRunRefusal`, `providerRunUnknown` |
-| + `.test.ts` and `.js` bridge for each | | 27 tests, all green |
+## Final adversarial fix
+Final review found the original length-framed aggregate id could be 679 bytes for a producer-admitted ProviderRunRef (three 200-byte refs), while @moe/store caps ids at 512 and refused with stable code STORE_INPUT_INVALID. TDD red: provider-run-contracts.test.ts max-ref real SqliteEventStore.readEvents case failed exactly with STORE_INPUT_INVALID. Production now derives a 107-byte namespace + domain-separated SHA-256 of UTF-8 byte-length-framed identity components, pins the exact digest format, calls the real store for the max admitted case, and documents that record readers—not hash uniqueness—remain authority. Refusal store-case assertions now pin family code, store code, layer and outcome.
 
-## Decisions a sibling slice must NOT renegotiate
+Mutation drills on the new production surface:
+- raw framed output: exact-format test and max-ref store-admission test red; store refusal was STORE_INPUT_INVALID
+- omitted attemptRef: exact-format test and named attemptRef separation row red
+- unframed digest preimage: exact-format plus four named naive-join collision rows red
+Restored SHA exactly; focused result 2 files / 28 tests green; daemon typecheck exit 0; production LOC contracts.ts=204, refusals.ts=104.
 
-- **Narrow store port.** `commitExpectedVersionDecision` / `getCommandDecision` / `readEvents` only.
-  `commitWithApply` and `commitExpectedVersionDecisionWithApply` are unnameable by construction —
-  they hand out a raw `DatabaseSync` and the no-new-schema rail forbids it. Do not widen it.
-- **Two provenance fields, never merged.** `upstreamRefusal: ProviderTelemetryRefusal | null` (the
-  runner's) vs `usageRefusals[].issues: LayeredIssue[]` (the scheduler's, which already says
-  CONTRACT or MEASUREMENT). Task rail 2 depends on this shape.
-- **Usage rows are `readonly NormalizedMeasurement[]`**, not `UsageMeasurementRecord[]`. The
-  scheduler root publishes `NormalizedMeasurement` = `{measurement, pricebookBinding, truncated,
-  identity}`, so one binding carries the normalized row AND its cost basis with no parallel array
-  whose length could diverge. `UsageMeasurementRecord` + `ObservedIntervalRefs` are RE-EXPORTED from
-  `provider-run-contracts.ts` so a consumer can construct a row from one import.
-- **`ProviderRunUsageRefusal {providerSequence, issues}`** exists because the scheduler's failure arm
-  cannot carry its own sequence. Without it, a silently dropped 4th envelope is byte-identical to a
-  run that only emitted 3.
-- **Clock:** `observedStart` / `observedEnd` are `ClockObservation | null` from `@moe/scheduler`
-  (`{serverWallSeconds, bootId, monotonicObservation}`), NOT a hand-rolled monotonic pair — see
-  `mem:gotcha-hand-rolled-timestamp-duplicates-clockobservation`. `launch.startedAt`/`completedAt`
-  stay the LAUNCHER's own wall stamps and are deliberately not reconciled with them.
-- **NOT shipped: `PROVIDER_RUN_RECORD_KEYS`.** An interface's keys are not enumerable at runtime, so
-  this slice had no fixture to police such a list and an unpoliced frozen key list drifts silently.
-  **Slice 2 (codec) should declare it beside its codec, where a fixture exists.**
-- `apps/daemon/src/index.ts` is untouched; `index-surface.test.ts` pins `EXPECTED_EXPORTS.length` to
-  61 and this family stays unpublished, exactly like the activation ledger family.
+## Shared-tree commit hazard
+While waiting for the git index lock, the task-6cbff completion hook created foreign whole-tree commit f4966b534ee5e9f9671668795d5dd1e844f0521b and swept the three in-progress fix paths:
+- apps/daemon/src/telemetry/provider-run-contracts.ts SHA e151af9295d791fe387bffd830c33bdb46c489d7353bb37a78e82db90dc3cfa9
+- provider-run-contracts.test.ts SHA 48cd28ff0c6840641d60ce21ced8db5959a4fe3f08e2cc0ead979ef0807a0075
+- provider-run-refusals.test.ts SHA 2ed289482006adf8b4b8762f3b8aad77791db29473ef9d84344002d1452dd106
+Committed/live/tested hashes match. Per global rail, do not amend/reset/recommit/empty-commit. QA review command:
+`git diff d01a512a984e22c34f3b45c2529a1e6cea0f2934..HEAD -- apps/daemon/src/telemetry/provider-run-contracts.ts apps/daemon/src/telemetry/provider-run-contracts.js apps/daemon/src/telemetry/provider-run-contracts.test.ts apps/daemon/src/telemetry/provider-run-refusals.ts apps/daemon/src/telemetry/provider-run-refusals.js apps/daemon/src/telemetry/provider-run-refusals.test.ts`
 
-## CONSUMERS (Clause 1 — this slice has no runtime consumer yet)
+## Gate evidence / current blocker
+Fresh base daemon: 80 files / 1675 tests, exit 0. Fresh HEAD f496 committed snapshot:
+- runner: exit 1, 1 failed / 61 passed files, 1 failed / 2104 passed / 3 skipped tests; only packages/runner/src/platform/windows/windows-boundary.test.ts. Baseline had 7 failed files / 45 failed tests; new failing-path set empty, owned intersection empty.
+- scheduler: 43 files / 1326 tests, exit 0
+- daemon typecheck: exit 0
+- daemon test: exit 1, 2 failed / 90 passed files, 3 failed / 1918 passed tests. Foreign failures: runtime-entrypoint.test.ts missing orchestrator/verifier-process-runner.js; goals/j1-command-path.test.ts two stale goal.close cases refusing GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED. No failing path under owned telemetry.
+The reopen note required the raw daemon gate to quiesce, so completion awaits governor ruling or foreign fixes; do not invent green and do not repair those paths.
 
-- `task-fc6581042426444a826981943f441908` — canonical codec (bytes, digest, unreadable read path).
-  Imports `PROVIDER_RUN_RECORD_UNREADABLE`, which is forward-declared here so it need not mint one.
-- `task-1a7ff170ee544a3a8a10962c25e2ca5b` — durable ledger; uses `ProviderRunStore` and
-  `deriveProviderRunAggregateId` so conflict detection is the store's expected-version check.
-- `task-ea27beb6e1954d0e9dba8ad49cc1641e` — normalize composition against production
-  `normalizeUsageMeasurement`.
-- `task-6cbff01023b14b26a78fc5e3eb1dd8a9` — the real live dispatch consumer (task rail 4).
-
-## DoD RE-SCOPE STILL OUTSTANDING
-
-The architect disclosed this in planningNotes and it was never actioned. Only DoD 2 and DoD 6 belong
-to this task. DoD 1 and 3 -> slice 3 (ea27beb6). DoD 4 and the real-store half of DoD 5 -> slice 4
-(1a7ff170). Grading this task against DoD 4's "durably commit" clause grades it against work that
-now has its own task id.
-
-## WHY BLOCKED
-
-`pnpm --filter @moe/daemon typecheck` and `... test` are red from CONCURRENT PEER EDITS inside the
-owned package. Measured ~9 times over ~10 minutes; the red MOVED each time
-(`configuration/project-configuration-selection.test.ts` -> `mcp-dispatch-port` -> `mcp-http-host` /
-`mcp-http-main` -> `index-surface.test.ts`), and all four legs were briefly green at 21:22 before
-going red again. Final measurement: only `src/index-surface.test.ts` (peer-modified, ` M`, adding
-project-configuration imports before the exports exist). Owned-path intersection is EMPTY — no
-failure under `apps/daemon/src/telemetry/**` in any measurement. runner and scheduler legs exit 0
-throughout.
-
-Per `mem:owned-package-gate-red-is-a-block-not-a-disclosure` a foreign red inside your OWN package's
-gate is a block, not a disclosure: `complete_task` hard-requires exit 0, and both escapes (faking it,
-narrowing the command) violate standing rails.
-
-**To finish:** re-run the four-leg chain once the daemon package settles. Nothing in this task needs
-re-doing — verify by `git show --stat 9d60091` and `pnpm exec vitest run --root . --config
-package.json src/telemetry` from `apps/daemon` (27 tests).
+## Follow-up
+The same store-bound defect exists in deriveActivationAggregateId. Architect created focused task task-8f84c56d88504f80aa2fefdf69f093bd to fix it without rekeying already-valid durable rows.

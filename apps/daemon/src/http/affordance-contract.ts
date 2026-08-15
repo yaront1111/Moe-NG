@@ -47,6 +47,8 @@ export interface ChainStepClaim {
 export interface ChainStep {
   readonly aggregateId: string | null;
   readonly claim: ChainStepClaim | null;
+  /** Current durable version of `work/${kind}@${aggregateId ?? "-"}`, active or not. */
+  readonly claimAggregateVersion: number;
   readonly kind: string;
   readonly missing: readonly string[];
   readonly status: ChainStepStatus;

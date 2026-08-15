@@ -1,0 +1,149 @@
+{
+  "id": "task-8f84c56d88504f80aa2fefdf69f093bd",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Bound activation ledger aggregate identifiers without rekeying durable rows",
+  "description": "Objective: close the activation ledger/store contract mismatch discovered while task-8e3076177f87458f934a776eca68ba16 was hardening a sibling aggregate derivation. Fresh committed measurement at HEAD 5e724768: `@moe/runner.parseEffectIntent` accepts both `aggregateId` and `idempotencyKey` through `isRef`, whose public maximum is 400 normalized characters; `deriveActivationAggregateId` in `apps/daemon/src/activation/activation-ledger-contracts.ts:242-243` length-frames both values verbatim. Two 400-character ASCII refs therefore derive an 843-byte identifier, and normalized multibyte refs derive 2,043 bytes, while the real `@moe/store` `requireIdentifier` ceiling is 512 UTF-8 bytes and rejects with STORE_INPUT_INVALID. The current fixture pair derives 69 bytes and may already name durable rows.\n\nDeliverable: keep the exact legacy length-framed identifier for every pair whose existing derived bytes already fit the store contract, but use a versioned `sha256:` fallback over the full domain-separated, length-framed legacy preimage when it would exceed the 512-byte ceiling. This makes runner-admitted maximum refs commit through the production activation ledger without silently rekeying already-storable rows. Prove it through a new focused test that uses public `parseEffectIntent`, production `deriveActivationAggregateId` / `commitActivationLedgerRecord`, and a real file-backed `SqliteEventStore`, including ASCII and multibyte maximums.\n\nNOT in scope: changing runner ref limits, store identifier limits/schema, activation record bytes/digests, replay/scan behavior, or the active task-d92b1b15a5b048e49671ed34990fa4a1 files (`activation-ledger-commit.ts`, reader, or their existing tests). Owned paths: `apps/daemon/src/activation/activation-ledger-contracts.ts` and new `apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts`. The existing `.js` bridge and all public symbol names remain unchanged. Verification: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`, with a nonzero Vitest test count.",
+  "definitionOfDone": [
+    "Short/store-valid inputs retain their exact pre-change legacy identifiers, including a literal pin for the current fixture pair, so already-addressable activation rows are not rekeyed.",
+    "Every overflow input derives a deterministic `moe-activation-ledger/1|aggregate|sha256:<64 lowercase hex>` identifier no longer than 512 UTF-8 bytes; the digest preimage includes the versioned namespace and length framing for both identity components, and one-field changes remain distinguishable.",
+    "A literal two-case sweep proves public `@moe/runner.parseEffectIntent` accepts maximum 400-character ASCII and normalized multibyte aggregate/idempotency refs, then production `commitActivationLedgerRecord` commits each through a real file-backed `SqliteEventStore`; reopening finds exactly one activation event at the returned derived identifier.",
+    "Focused tests pin the overflow/legacy case cardinalities and independently distinguish length-framed hashing from bare concatenation, so a generated sweep cannot pass with zero cases and a boundary-shift collision cannot pass.",
+    "Independent production mutations that restore the unbounded overflow identifier and that remove an identity component or its framing each turn a named production-surface test red; every mutation is confirmed applied and restored byte-exact by SHA-256.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exits 0 with a nonzero test count, all existing activation-ledger tests remain green, and `activation-ledger-contracts.ts` remains at or below 250 physical lines."
+  ],
+  "taskRails": [
+    "Preserve exact legacy output whenever the existing derived identifier is already within the real store's 512-byte contract; hash only the overflow branch. A global algorithm replacement that orphans existing addressable rows is forbidden.",
+    "Hash the complete versioned, length-framed preimage with a fixed `sha256:` marker. Do not hash a bare concatenation, truncate caller text, accept a caller-supplied digest, weaken runner validation, or raise the store limit.",
+    "Use public package roots and a real file-backed SqliteEventStore for the load-bearing acceptance; no fake store, reimplemented validator, new schema, or deep import proves this boundary.",
+    "TDD every behavior; generated cases assert literal positive counts, any refusal assertion pins exact code and layer, and mutation drills alter production rather than a test helper.",
+    "Touch and commit only the two owned paths. Do not edit task-d92b1b15a5b048e49671ed34990fa4a1's live commit/reader/test paths, preserve all foreign WIP, and keep the production file at or below 250 physical lines."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight and collision guard: immediately re-run `git status --short`, `git diff -- apps/daemon/src/activation/activation-ledger-contracts.ts apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts`, the production-file line count, the package-name/workspace check, both manifest/lockfile dependency checks, and the disposable in-package bare-specifier TypeScript probe for @moe/runner and @moe/store (create and delete it in one trapped command). Record merge-base output and failing paths separately for the repo-wide legs `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`; confirm each filter run emits a nonzero test-count line rather than `No projects matched`/zero tests. Stop and report a collision instead of overwriting if either owned path has unexpected edits; explicitly classify the sibling task's activation-ledger-commit.ts and existing-test changes as foreign and never touch them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "note": "Preflight completed at task base HEAD f4966b534ee5e9f9671668795d5dd1e844f0521b (origin/main merge-base cf272f67c3e34fe1d8c4dd00675512c67f165c05). Both owned paths were clean; new focused test absent; production file 244 lines. Sibling activation-ledger-commit.ts/.test.ts and foundation-launch-authority.test.ts are foreign-dirty and untouched. @moe/daemon resolves from apps/*; manifest and lock importer both link bare @moe/runner and @moe/store. A trapped in-package probe imported parseEffectIntent and SqliteEventStore from those bare specifiers and isolated tsc exited 0; probe deleted. Full daemon typecheck during the first probe was foreign-red in orchestrator agent-wrapper.test.ts, then the repo baseline typecheck was foreign-red at apps/daemon/src/activation/activation-ledger-commit.ts:158 TS6133 (the sibling file changed during the baseline and the later verify:store-internal typecheck passed). Baseline legs: pnpm typecheck exit 1 (foreign activation-ledger-commit.ts); pnpm test exit 1, 264/273 files and 6486/6507 tests passed with 18 foreign failures/timeouts (runtime loadability, control-room journey coverage, foundation/testkit, MCP/review/scheduler); verify:foundation exit 1, 30/32 files and 658/661 tests passed with 3 timeout failures in foundation incident/spec tests; verify:store exit 0, 42 files/501 tests; daemon test exit 1, 86/92 files and 1930/1939 tests passed with 9 foreign failures in graph-preview/index/runtime-entrypoint, activation-ingress, J1 goal, and foundation-attempt tests. All filter/test legs printed positive nonzero counts; no No-project/zero-test result. Baseline logs are outside repo under /tmp/task-8f84c56d88504f80aa2fefdf69f093bd-baseline-*.log. Owned status remained clean and probe absent after all commands.",
+      "startedAt": "2026-08-15T21:58:06.953Z",
+      "completedAt": "2026-08-15T22:09:39.895Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED: create only `activation-ledger-aggregate-id.test.ts` with four named, nonvacuous tests against public production surfaces. (1) Pin exactly two legacy-valid cases, including the literal current 69-byte fixture ID and an exact 512-byte ASCII legacy ID, and assert neither is rewritten. (2) For exactly two public `parseEffectIntent`-admitted maximum pairs (400 ASCII code units and 400 normalized multibyte code units), assert deterministic exact IDs `moe-activation-ledger/1|aggregate|sha256:<known 64-lowercase-hex vector>`, output UTF-8 size <=512, the exact prefix/hex grammar, and three one-field variants with Set cardinality 3. (3) Prove two swapped-length overflow pairs have identical bare concatenations (cardinality 1) yet exact distinct production framed hashes (cardinality 2). (4) Route both maximum pairs through public `parseEffectIntent` with an explicit non-null assertion, commit each via `commitActivationLedgerRecord` into a real file-backed `SqliteEventStore`, close/reopen the same database, and assert exactly one activation-ledger event under each returned aggregate ID. Use unique attempt/grant/command/request identities and close all handles before temp-directory cleanup. Run `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/activation-ledger-aggregate-id.test.ts`; require output showing exactly one discovered file and four executed tests, with the overflow/hash and real-store maximum cases failing for the current production behavior.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "note": "TDD RED created only the focused test file with exactly four named tests. The legacy test pins exactly two cases (literal 69-byte fixture plus exact 512-byte boundary) and passes current code. The max-vector test precomputes both literal parser-admitted 400-code-unit cases, pins NFC/length, exact known SHA vectors/grammar/determinism/<=512 bytes, and three one-field variants. The framing adversary pins two cases, confirms bare-concatenation cardinality 1 and production framed-vector cardinality 2. The file-store test invokes both maximum commits before asserting, uses unique command/request/attempt/grant/provider identities, closes both handles, reopens, and expects one activation event per returned aggregate. Fresh focused run discovered exactly 1 file/4 tests and exited 1 with exactly 3 feature failures: both overflow vector tests received unbounded legacy IDs, and the real-store test observed exact result.ok values [false,false]; legacy preservation passed. No matcher/config errors remained.",
+      "startedAt": "2026-08-15T22:09:45.415Z",
+      "completedAt": "2026-08-15T22:17:27.589Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Minimum implementation and focused GREEN: in `activation-ledger-contracts.ts`, import Node crypto `createHash`, define a private 512 UTF-8-byte identifier limit, build the current namespaced length-framed legacy string exactly once, return it byte-for-byte when `Buffer.byteLength(legacy, `utf8`) <= 512`, and only otherwise return `moe-activation-ledger/1|aggregate|sha256:` plus the lowercase SHA-256 hex digest of that complete framed legacy string. Correct the nearby comment in place so it distinguishes injective legacy framing from collision-resistant overflow hashing and explicitly states only overflow rows change. Do not change exports, the .js bridge, runner/store contracts, or sibling files. Keep the production source <=250 physical lines. Re-run the focused command and require exactly one test file/four tests passing with nonzero counts.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "note": "Minimal production change imports node:crypto createHash, builds the exact legacy namespace/code-unit-length-framed identifier once, returns it unchanged at <=512 UTF-8 bytes, and only for overflow returns the same namespace plus sha256:<lowercase digest> of the complete legacy preimage. The comment now distinguishes injective legacy framing from collision-resistant hashing and states overflow-only rekeying. No export/.js bridge/package/store/runner/sibling edits. Production file is 241 physical lines. Fresh focused command exited 0 with exactly 1 test file and 4/4 tests passed, including both real file-store commits and reopen checks.",
+      "startedAt": "2026-08-15T22:17:31.927Z",
+      "completedAt": "2026-08-15T22:19:05.545Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Perform both required production-surface mutation drills using an out-of-repository byte-for-byte backup, recorded SHA-256, an EXIT restore trap, and exactly-one-replacement guards. First replace only the overflow branch with the unbounded legacy return; run the named maximum/file-store test and require a nonzero executed-test count plus a red failure caused by the 512-byte contract/store rejection. Restore and verify the original hash, then replace only the digest input with bare `aggregateId + idempotencyKey`; run the named framing-collision/hash-vector test and require a nonzero executed-test count plus a red code/hash distinction assertion. Restore again, prove the production file hash is byte-identical to the pre-drill hash, and confirm no backup, probe, transcript, or generated evidence remains.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "startedAt": "2026-08-15T22:19:46.359Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Single final verification gate: first run the same repo-wide baseline legs against HEAD and compute the HEAD-minus-merge-base failing-path delta, intersected with this task's two owned paths; disclose all foreign red verbatim and stop if this diff introduced any owned-path failure. Then run the exact completion command fresh in the foreground: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Require exit 0 from both chained legs and inspect daemon test output for a positive, nonzero test-file and test count (including the four focused tests); `No projects matched`, `No test files found`, `0 passed`, piped/tail exit status, or sibling-WIP-caused red is not a pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Final adversarial self-review scoped to the base-ref diff for only the two owned paths: verify byte-for-byte legacy preservation at 512 and below, no global rekey, UTF-8-byte rather than character cutoff, complete namespaced framed preimage hashing, exact lowercase versioned output, normalized multibyte coverage through public parser, real reopened-store cardinality, collision-adversary cardinalities, file-handle cleanup, <=250 production lines, and absence of edits/staging in sibling-owned files. Confirm failure-prone assertions bind to the production surface and every generated case count is exact/nonzero. If review changes either owned file, rerun the exact final verification command before completion. Stage/commit only the two explicit owned pathspecs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-83e6139a",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-df29871bfc2441659efb3f763ddb23db",
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T21:45:32.402Z",
+  "updatedAt": "2026-08-15T22:19:46.359Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T21:45:59.442Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-d9dccf21",
+    "worker-83e6139a"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T21:55:31.933Z",
+  "planningNotes": {
+    "approachesConsidered": "Retain the current length-framed identifier verbatim whenever its UTF-8 encoding is at most the store's 512-byte identifier ceiling; hash only overflow. This is the selected compatibility-preserving approach.\nRejected hashing every identifier because it would rekey existing durable activation-ledger rows.\nRejected truncating either caller field, accepting a caller-supplied digest, or changing runner/store validation because those weaken identity or expand this task beyond the control point.\nRejected importing the store's private MAX_IDENTIFIER_UTF8_BYTES or deep-relative importing workspace sources; the store does not export that constant and this repository has no paths/project-reference escape hatch.\nRejected a test-side hash oracle that reimplements production behavior. Exact known SHA-256 vectors pin the production surface instead.",
+    "codebaseInsights": "Fresh measurement at HEAD f4966b5: apps/daemon/src/activation/activation-ledger-contracts.ts is clean, 244 physical lines, and derives `moe-activation-ledger/1|aggregate|${aggregateId.length}:${aggregateId}|${idempotencyKey.length}:${idempotencyKey}` verbatim. The focused aggregate-id test file does not yet exist.\nThe current fixture is aggregateId `effect-aggregate-1` plus idempotencyKey `idem-key-1`; its exact legacy ID is `moe-activation-ledger/1|aggregate|18:effect-aggregate-1|10:idem-key-1` (69 UTF-8 bytes). An exact 512-byte legacy boundary is aggregateId `a` repeated 200 and idempotencyKey `b` repeated 269; increasing the second repeat to 270 yields 513 bytes.\n`parseEffectIntent` is publicly exported by @moe/runner and admits nonempty, well-formed NFC refs of at most 400 JavaScript code units. The store validates targetAggregateId at a private 512 UTF-8-byte ceiling and exposes SqliteEventStore from @moe/store.\nDependency edge was re-measured three ways: apps/daemon/package.json declares @moe/runner and @moe/store in dependencies; pnpm-lock.yaml's apps/daemon importer links both; a disposable probe under apps/daemon/src imported `parseEffectIntent` and `SqliteEventStore` from the bare package specifiers, typechecked exit 0 with the daemon compiler, and was deleted in the same command.\nKnown overflow vectors, hashing the complete framed legacy preimage including namespace: 400 `a` plus 400 `b` -> bdd4da6783d902fb5f8b32dd80ab9d6eb2ce872584cac2b7c03baa7bff881dc4; 400 `界` plus 400 `é` -> c2c6dfeaf460969855dc3f31ef92ee3169ad2e3a04c38caa79f630cd4a9ffe42.\nFraming-adversary vectors: (`x`*399, `x`*400) and (`x`*400, `x`*399) have identical bare concatenations but framed-preimage digests 2f8707d26da0515f83b21cacee2e29ee339ed1c13a2f3bb3ac78e7bbabaee6a0 and f5d4c1cb9d030deb779e5cfb34d55febee5c6193809c756a25116e9eea3fbcb5.\nThe real-store test convention is mkdtempSync, SqliteEventStore.openForProject, close in finally, reopen the same file/project, and close every handle before rmSync so Windows cleanup is reliable.\nThe workspace filter resolves by package name: apps/daemon/package.json is @moe/daemon and pnpm-workspace.yaml includes apps/*. Planning-shell pnpm was unavailable (command 127), so the worker must run and inspect every gate output rather than inheriting a claimed pass.",
+    "risks": "The production file begins at 244 lines against the <=250 target. Keep the crypto import, private 512-byte constant, implementation, and corrected compatibility/collision-resistance comment compact; split rather than crossing 400 and target <=250.\nUse Buffer.byteLength(legacy, `utf8`), not string length. The framing lengths intentionally remain JavaScript string lengths for legacy compatibility while the cutoff is UTF-8 bytes.\nHash the complete namespaced, length-framed legacy preimage, not bare concatenation or input fields independently. SHA-256 is collision-resistant, so do not retain the current claim that every overflow output is injective by construction.\nThe active sibling task owns activation-ledger-commit.ts and its existing test. Treat any modifications there as foreign: do not edit, stage, restore, or include them in this task's commit.\nThe store ceiling is private, so the local 512-byte compatibility constant must be backed by the real file-store journey; do not deep import store internals.\nTests must prove nonzero exact cardinalities and must not silently return when parseEffectIntent rejects input.\nMutation drills must use an out-of-repository backup plus an EXIT trap, verify exactly one intended replacement, restore byte-exact by SHA-256, and leave no probe/evidence/scratch file.",
+    "keyFiles": [
+      "apps/daemon/src/activation/activation-ledger-contracts.ts",
+      "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts",
+      "apps/daemon/src/activation/activation-ledger-fixtures.test.ts",
+      "apps/daemon/src/activation/activation-ledger-commit.ts",
+      "packages/runner/src/supervisor/effect-parse.ts",
+      "packages/runner/src/supervisor/effect-shape.ts",
+      "packages/store/src/store-internals.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-15T21:55:33.995Z",
+  "workStartedAt": "2026-08-15T21:58:06.953Z"
+}

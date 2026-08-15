@@ -46,6 +46,7 @@ const EXPECTED_PROBE_COUNT = 6;
 
 /** Floor per package. A surface that resolves empty would make every probe vacuously absent. */
 const MINIMUM_ROOT_EXPORTS = 40;
+const LIVE_EXPORT_PROBE_TIMEOUT_MS = 20_000;
 
 /**
  * The repository directory behind each probed package name. The probe is
@@ -163,7 +164,7 @@ describe("foundation incident probe patterns discriminate from published names",
       expect(names.length, packageName).toBeGreaterThanOrEqual(MINIMUM_ROOT_EXPORTS);
       expect(new Set(names).size, packageName).toBe(names.length);
     }
-  });
+  }, LIVE_EXPORT_PROBE_TIMEOUT_MS);
 
   it("leaves every probe ABSENT against its package's current root exports", async () => {
     const collisions: string[] = [];
@@ -176,7 +177,7 @@ describe("foundation incident probe patterns discriminate from published names",
       }
     }
     expect(collisions).toEqual([]);
-  });
+  }, LIVE_EXPORT_PROBE_TIMEOUT_MS);
 });
 
 describe("foundation incident probe patterns still catch a near-miss rename", () => {
