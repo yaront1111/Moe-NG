@@ -45,8 +45,18 @@ const PUBLISHED_STDIO_VALUES: readonly string[] = [
   "toolLabelForKind",
 ];
 
-/** Published by this change. `createHttpMcpAdapter` is the only new runtime value. */
-const PUBLISHED_HTTP_VALUES: readonly string[] = ["createHttpMcpAdapter"];
+/**
+ * The HTTP runtime values the root publishes. `createHttpMcpAdapter` is the adapter factory;
+ * the other three are the shutdown-failure vocabulary a host needs to tell a PARTIAL shutdown
+ * from a clean one — the code list, the layer that raised it, and the error carrying both.
+ * Transcribed by reading `index.ts`, and pinned by count below like every other list here.
+ */
+const PUBLISHED_HTTP_VALUES: readonly string[] = [
+  "HTTP_SHUTDOWN_LAYER",
+  "HTTP_SHUTDOWN_REFUSAL_CODES",
+  "HttpShutdownError",
+  "createHttpMcpAdapter",
+];
 
 /**
  * Runtime values that `http-server.ts` exports and the root deliberately does NOT. They are the
@@ -70,7 +80,7 @@ it("publishes exactly the hand-written stdio and HTTP runtime names", () => {
   // Pinned counts first: an accidentally emptied expectation would otherwise make the
   // set comparison below trivially satisfiable from the other side.
   expect(PUBLISHED_STDIO_VALUES).toHaveLength(13);
-  expect(PUBLISHED_HTTP_VALUES).toHaveLength(1);
+  expect(PUBLISHED_HTTP_VALUES).toHaveLength(4);
 
   // Set equality, so this fails on a DROPPED name and on an ADDED one alike. Both surfaces
   // are asserted in this single expectation: an HTTP re-export that shadowed or displaced a

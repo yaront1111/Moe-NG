@@ -33,3 +33,14 @@ export type {
   HttpMcpAdapter,
 } from "./http/http-server.js";
 export type { HttpSessionPort } from "./http/http-session.js";
+/**
+ * Published so a host can tell a PARTIAL adapter shutdown from a clean one: `close()` rejects
+ * with `HttpShutdownError` naming the sessions whose daemon-side binding was not released. A
+ * code nobody outside this package can import would leave that fact undiscriminable.
+ */
+export {
+  HTTP_SHUTDOWN_LAYER,
+  HTTP_SHUTDOWN_REFUSAL_CODES,
+  HttpShutdownError,
+} from "./http/http-shutdown.js";
+export type { HttpShutdownRefusalCode } from "./http/http-shutdown.js";

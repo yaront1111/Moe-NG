@@ -31,6 +31,33 @@ import {
   toolCallBody,
 } from "./http-server-test-helpers.js";
 
+/**
+ * Records every daemon-side lifecycle call in one ordered trace, so a test can assert WHICH
+ * sessions were bound and released and in what order — not merely that close() did not throw.
+ */
+function recordingSessionPort(observed: string[]): HttpSessionPort {
+  return {
+    bindSession(id: string): void {
+      observed.push(`bind:${id}`);
+    },
+    closeSession(id: string): void {
+      observed.push(`close:${id}`);
+    },
+    validateBearer(): HttpAuthVerdict {
+      return { ok: true, principalRef: "principal-http", sessionRef: "session-http" };
+    },
+  };
+}
+
+/** Opens one more session on an EXISTING adapter, so a single registry holds several. */
+async function openSessionOn(adapter: { handleRequest(request: Request): Promise<Response> }): Promise<string> {
+  const response = await adapter.handleRequest(build({ body: INITIALIZE_BODY }));
+  const sessionId = response.headers.get(MCP_SESSION_ID_HEADER);
+  await response.text();
+  if (sessionId === null) throw new Error(`initialize did not mint a session: ${response.status}`);
+  return sessionId;
+}
+
 describe("http adapter — session lifecycle", () => {
   it("binds the daemon session inside initialize and reaps it on DELETE", async () => {
     const bound: string[] = [];
@@ -118,6 +145,63 @@ describe("http adapter — session lifecycle", () => {
     expect(crossed.status).toBe(404);
     await first.adapter.close();
     await second.adapter.close();
+  });
+
+  /**
+   * The DELETE case at the top of this file is the ONLY one that asserts a release, and it
+   * issues a DELETE first — by the time close() runs there is nothing left to release, so the
+   * shutdown path is never exercised by it. Every other `await adapter.close()` in this file is
+   * pure teardown and asserts nothing. The two cases below drive close() with a session still
+   * OPEN, which is the path that was missing its daemon-side release.
+   */
+  it("releases the daemon binding of a session still open when the adapter closes", async () => {
+    const observed: string[] = [];
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      sessionPort: recordingSessionPort(observed),
+    });
+    const initialized = await adapter.handleRequest(build({ body: INITIALIZE_BODY }));
+    const sessionId = initialized.headers.get(MCP_SESSION_ID_HEADER) ?? "";
+    await initialized.text();
+    expect(observed).toEqual([`bind:${sessionId}`]);
+
+    // NO DELETE. The adapter's own shutdown is the only thing that may release this binding.
+    await adapter.close();
+
+    // Order matters as much as presence: `bind` then `close`, the same discipline the DELETE
+    // path asserts. Asserting the whole trace also catches a release for a session never bound.
+    expect(observed).toEqual([`bind:${sessionId}`, `close:${sessionId}`]);
+  });
+
+  it("releases each session exactly once across a DELETE and a shutdown", async () => {
+    const observed: string[] = [];
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      sessionPort: recordingSessionPort(observed),
+    });
+    const firstId = await openSessionOn(adapter);
+    const secondId = await openSessionOn(adapter);
+    expect(firstId).not.toBe(secondId);
+
+    const deleted = await adapter.handleRequest(build({ method: "DELETE", sessionId: firstId }));
+    expect(deleted.status).toBe(200);
+    expect(observed).toEqual([`bind:${firstId}`, `bind:${secondId}`, `close:${firstId}`]);
+
+    await adapter.close();
+
+    // Exactly-once, asserted as the whole ordered trace rather than as a membership check: a
+    // shutdown that re-released the already-reaped first session is a DIFFERENT defect, not a
+    // stricter fix, and a `toContain` pair would pass for it.
+    expect(observed).toEqual([
+      `bind:${firstId}`,
+      `bind:${secondId}`,
+      `close:${firstId}`,
+      `close:${secondId}`,
+    ]);
+    expect(observed.filter((event) => event === `close:${firstId}`)).toHaveLength(1);
+    expect(observed.filter((event) => event === `close:${secondId}`)).toHaveLength(1);
   });
 });
 

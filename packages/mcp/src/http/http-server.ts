@@ -13,6 +13,7 @@ import {
 } from "./http-session.js";
 import type { HttpAuthAccepted, HttpSessionPort, HttpSessionRegistry } from "./http-session.js";
 import { refuseResumption } from "./http-resume.js";
+import { closeAllDaemonSessions } from "./http-shutdown.js";
 import { createHttpMcpServer } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
 
@@ -300,12 +301,10 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
   }
 
   return {
+    // Delegated to http-shutdown.ts: a registry delete is this adapter's own bookkeeping and
+    // tells the daemon nothing, and one failing session must not abandon the rest.
     async close(): Promise<void> {
-      for (const entry of registry.entries()) {
-        registry.delete(entry.sessionId);
-        await entry.attachment.transport.close();
-        await entry.attachment.server.close();
-      }
+      await closeAllDaemonSessions(registry, options.sessionPort, registry.entries());
     },
     handleRequest,
   };
