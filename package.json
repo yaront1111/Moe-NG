@@ -21,6 +21,7 @@
     "test:store": "vitest run packages/store/src",
     "test:fault": "tsc -p tests/fault/tsconfig.json && vitest run --config tests/fault/vitest.config.ts",
     "test:security": "tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts",
+    "test:migration": "tsc -p tests/migration/tsconfig.json && vitest run --config tests/migration/vitest.config.ts",
     "release:evidence": "node scripts/release/supply-chain.mjs --head",
     "typecheck:release": "tsc --noEmit --strict --allowJs --checkJs --allowImportingTsExtensions --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames scripts/release/release-subject.mjs scripts/release/supply-chain.mjs",
     "typecheck:packaging": "tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames tools/packaging/distribution-build.ts tools/packaging/distribution-startup.ts",
