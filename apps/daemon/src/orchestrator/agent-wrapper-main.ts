@@ -13,6 +13,7 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
+import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import type { NodeMission, SpawnRequest } from "./agent-wrapper.js";
 import { createNodeVerifier } from "./node-verifier.js";
@@ -58,16 +59,18 @@ function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
       : "mcp__moe-next,mcp__moe-next__*";
     return new Promise((resolve) => {
       // The mission travels over STDIN: on Windows the CLI is a .cmd requiring
-      // shell resolution, and shell spawns concatenate argv unescaped — a
-      // space-bearing prompt argument arrives shredded. Every remaining argv
-      // element is space-free by construction.
-      const child = spawn(command, [
+      // shell resolution, and a shell line would shred a space-bearing prompt
+      // argument. `agentSpawnInvocation` builds that line itself (argv plus
+      // `shell: true` is deprecated, DEP0190) and quotes the one argument —
+      // the config path — that may legitimately carry whitespace.
+      const invocation = agentSpawnInvocation(command, [
         "-p",
         "--mcp-config", mcpConfigPath,
         "--allowedTools", allowed,
-      ], {
+      ]);
+      const child = spawn(invocation.file, [...invocation.args], {
         cwd: request.workspace ?? DAEMON_DIR,
-        shell: process.platform === "win32",
+        shell: invocation.shell,
         stdio: ["pipe", "inherit", "inherit"],
       });
       child.stdin?.write(request.mission);
