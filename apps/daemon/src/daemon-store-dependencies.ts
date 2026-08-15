@@ -47,10 +47,14 @@ export function readStoreDependencyEnv(
   if (missing.length > 0) {
     throw new Error(`${STORE_DEPENDENCIES_ENV_MISSING}: ${missing.join(", ")}`);
   }
+  // Optionals follow the SAME empty-means-absent rule as the required trio:
+  // MOE_PRINCIPAL_ID="" must not mint an empty operator principal.
+  const principalId = env.MOE_PRINCIPAL_ID;
+  const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
-    nodeSpecsDir: env.MOE_NODE_SPECS_DIR,
-    principalId: env.MOE_PRINCIPAL_ID ?? "operator-local",
+    nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
+    principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
   });

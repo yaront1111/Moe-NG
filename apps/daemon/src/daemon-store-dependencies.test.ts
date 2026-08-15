@@ -69,6 +69,21 @@ describe("readStoreDependencyEnv", () => {
       `${STORE_DEPENDENCIES_ENV_MISSING}: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL`,
     );
   });
+
+  it("treats an EMPTY optional as absent, exactly as the required trio does", () => {
+    // MOE_PRINCIPAL_ID="" must not mint a daemon whose operator principal is
+    // the empty string; the trio already reads empty as missing, and the
+    // optionals follow the same rule rather than a second, weaker one.
+    const config = readStoreDependencyEnv({
+      MOE_DAEMON_CREDENTIAL: "secret",
+      MOE_NODE_SPECS_DIR: "",
+      MOE_PRINCIPAL_ID: "",
+      MOE_PROJECT_ID: "proj",
+      MOE_STORE_PATH: "D:/tmp/store.db",
+    });
+    expect(config.principalId).toBe("operator-local");
+    expect(config.nodeSpecsDir).toBeUndefined();
+  });
 });
 
 describe("createStoreDependencies", () => {
@@ -349,7 +364,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
-      registrySize: 20,
+      registrySize: 21,
       sameEffect: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",
