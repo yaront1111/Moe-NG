@@ -189,8 +189,8 @@
       "completedAt": "2026-08-15T19:05:32.888Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-682e25b5",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -202,7 +202,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T19:05:32.888Z",
+  "updatedAt": "2026-08-15T19:09:22.880Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-8b21d0bb",
@@ -215,9 +215,9 @@
     "plannedDistinctFileCount": 9,
     "executedStepCount": 10
   },
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T19:08:07.674Z",
+  "blockedReason": "ALL 10 STEPS DONE, COMMITTED, GREEN. Blocked only because complete_task needs exitCode 0 and the daemon typecheck is held red by two FOREIGN committed files. Will not fabricate a pass (epic rail 4).\n\nGATE at HEAD a72596c:\n- `pnpm --filter @moe/daemon test` EXIT 0 — 89 files / 1821 tests.\n- `pnpm --filter @moe/daemon typecheck` EXIT 1, verbatim:\n  src/daemon-entry.ts(176,5): TS2322 Type 'string | undefined' is not assignable to type 'string'.\n  src/daemon-entry.ts(191,3): TS2322 Readonly<{ csrfToken: string | undefined; ... }> not assignable to 'DaemonStartResult'.\n  src/identity/session-services.test.ts(173,15): TS2339 Property 'outcome' does not exist on type 'SessionOutcome'.\n\nPATH-ATTRIBUTED BASELINE:\n(1) merge-base d01a512, captured at step 1 before I wrote a byte: EXIT 0, 85 files / 1738 tests, ZERO failures.\n(2) HEAD: the three errors above.\n(3) delta INTERSECT owned paths = EMPTY; grep confirms zero typecheck errors in any owned path.\nBoth files are byte-identical to committed HEAD, neither references a symbol I added, and git log -1 blames them to peer commits landed AFTER my baseline (8d9afb8, 7eb2997). Polled 6x over ~9 min across 7 HEADs; peers fixed a third foreign file meanwhile, these two did not. Not repaired: active peer, epic rail 3 confines me to owned paths.\n\nNEEDED: that peer lands the fix, or a governor accepts completion on the path-attributed baseline — \"owned-package legs exit 0\" is unsatisfiable while another agent's in-flight red sits inside @moe/daemon.\n\nDELIVERED: recovery-completion-digest.ts (257), -evidence.ts (342), recovery-completion.ts (339), 22 tests, root exports ending the recovery-inventory island, recovery.complete wired (ROWS 21->22), three mutation drills held.\n\nTWO FOREIGN WHOLE-TREE COMMITS swept 8 of my 12 owned files (98d6e72, cdd53e4); a72596c carries the other 4. QA MUST REVIEW BY BASE-REF DIFF `git diff d01a512..HEAD -- <owned paths>`, not by commit.\n\nDetail: Serena memory task-...-6f786c58...-handoff.",
   "blockedResourceId": null,
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",

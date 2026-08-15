@@ -133,27 +133,40 @@
     {
       "stepId": "step-7",
       "description": "Mutation drill + verification. Drill the production embargo COMPARISON, not a sibling guard: in activation-ingress.ts replace the `if (!embargo.ok) return ...` early return with a no-op that falls through (or in activation-embargo.ts force the PROJECT_RECOVERY_REQUIRED branch to return {ok:true}), then run ONLY the named embargo test with `pnpm --filter @moe/daemon test -- --root . -t \"<embargo zero-authority test name>\"` and confirm it goes RED for the RIGHT reason — the assertion that must fail is the zero-event/zero-decision count and the code assertion, not a crash in a serialiser (a crash is not a refusal, mem:a-crash-is-not-a-refusal). Bound the run so a hang cannot read as a hold. Restore the exact pre-drill bytes from your own saved copy — NEVER `git checkout` the file, which reverts to HEAD and destroys uncommitted work in this shared worktree. Then run the full gate fresh and paste real output: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test` (`&&`-chained, never `;`, and never piped through tail — a piped run reports tail's exit code). Note that a focused daemon vitest run needs `--root .` or it resolves the root config and finds zero tests. If a repo-wide leg is red, attribute it by the merge-base vs HEAD failing-path delta intersected with this task's owned paths before completing, and disclose any foreign red verbatim.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-embargo.ts"
       ],
-      "startedAt": "2026-08-15T19:04:08.054Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "DRILL (this pass, on the kind-set assertion): dropping \"effect.activate\" from the expected list reddens the named plain-Node smoke with `+ \"effect.activate\"` in the diff; restored byte-exact by cp from a saved copy (sha1 0cbfc727), never git checkout. The embargo-comparison drill from the prior pass was re-verified independently by QA, who confirmed 3 named tests go red and restored the file byte-exact.\n\nGATE — THREE LEGS RUN SEPARATELY AND VERBATIM, no narrowing, no pipe-to-tail on the exit code (HEAD 63bc470):\n  pnpm --filter @moe/daemon typecheck  EXIT=1\n  pnpm --filter @moe/daemon test       EXIT=0   89 files / 1820 tests\n  pnpm --filter @moe/runner test       EXIT=0   62 files / 2107 tests\n\nFOREIGN RED, disclosed verbatim, the ONLY failures:\n  src/daemon-entry.ts(176,5) TS2322: Type 'string | undefined' is not assignable to type 'string'.\n  src/daemon-entry.ts(191,3) TS2322: ... property 'csrfToken' incompatible ...\n  src/identity/session-services.test.ts(173,15) TS2339: Property 'outcome' does not exist on type 'SessionOutcome'.\n\nATTRIBUTION: daemon-entry.ts last touched by 8d9afb8 (foreign, \"an empty CSRF token ... minted when unsupplied\" — the commit that made csrfToken string|undefined); session-services.test.ts:173 authored by 7eb2997 (foreign, git blame). Neither path is in either of my commits: e72fd19 = exactly my 10 owned paths; cdd53e4 touched neither. HEAD failing-path set INTERSECTED WITH OWNED PATHS = EMPTY. Polled 5x at HEAD 63bc470 (~4 min, no sleep, bounded): EXIT=1 every time, HEAD never moved, no owner picked it up. Three other workers (cf1f58d0, 83b3c121, and task-1eeb2dcc) are blocked on the identical two files and have all refused to touch foreign paths.",
+      "startedAt": "2026-08-15T19:04:08.054Z",
+      "completedAt": "2026-08-15T19:07:19.731Z"
     },
     {
       "stepId": "step-8",
       "description": "Adversarial self-review before complete_task. Load the `adversarial-self-review` skill and read your own diff as an attacker. Specifically check: (1) can any path reach claimWork/activateEffect/activateProviderSlot/activateReservation/commitActivationLedgerRecord without passing readActivationEmbargo — including a thrown-and-caught store error that lands in a `catch` above the embargo; (2) does any refusal assertion in the two new suites pass with only `!ok`, and is every asserted code actually present in the test file (a code absent from the file means that whole branch is unguarded); (3) is the embargo refusal answered by an EARLIER guard than the one you think — trace which branch answers for each of the six causes and confirm the drill in step 7 reddens the embargo comparison rather than a sibling; (4) does `activateEffect` ever receive a caller-supplied `intent`, or `activateProviderSlot`/`activateReservation` a caller-supplied attemptRef/expectedVersion — all four must be server-derived; (5) do the two new .js bridges exist and re-export the .ts siblings; (6) count physical lines with `grep -c ''` (PowerShell Measure-Object -Line undercounts) on every touched production file and confirm none exceeds 400 and each new module is at or near its <=250 target; (7) confirm no debug/probe/scratch file remains and that you stage and commit ONLY this task's owned paths by explicit pathspec — never git add -A.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-embargo.ts",
         "apps/daemon/src/activation/activation-ingress.test.ts",
         "apps/daemon/src/activation/activation-embargo.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ingress.ts",
+        "apps/daemon/src/activation/activation-embargo.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Adversarial self-review, all 7 checks:\n(1) ORDER HOLDS. Stage FUNCTIONS are defined at lines 110-264 but the orchestrator (286-321) calls them in order: decode 290 -> embargo 299 -> claim 303 -> arm 305 -> activate 307 -> slot 310 -> budget 312 -> commit 314. Every authority allocation is strictly below the `if (!embargo.ok)` early return at 300. runEffectActivateCommand contains NO try/catch, so no caught store error can land above the embargo and read as clear; readActivationEmbargo does its own catching and maps a thrown DurableStoreError to a refusal.\n(2) NO BARE !ok. grep for `.ok).toBe(false)` / toBeFalsy / not.toBeTruthy across both suites returns ZERO hits. Every code the plan names occurs in the ingress suite: RECOVERY_RECONCILIATION_REQUIRED x4, RECOVERY_INVENTORY x5, ACTIVATION_INGRESS_REQUEST_MALFORMED x1, DAEMON_INGRESS x2, ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT x1, ACTIVATION_LEDGER x2, AUTHORITY x1.\n(3) DRILL HITS THE RIGHT GUARD. QA independently bypassed the production embargo comparison and got 3 named tests red, including the zero-authority one. Only decode sits above the embargo, and its refusal carries a different code/layer, so no sibling can answer for it.\n(4) SERVER-DERIVED. `activateEffect({ ...section, intent: armed })` spreads the caller section FIRST and sets intent LAST, so a caller-supplied `intent` is overwritten, not honoured. attemptRef comes from activation.value.commit.attempt.attemptId (line 309); expectedVersion from successors.budgetReservation.version (196). None is caller-reachable.\n(5) BRIDGES PRESENT and correct: activation-embargo.js and activation-ingress.js each contain exactly `export * from \"./<name>.ts\";`; activation-ingress-contracts.js likewise.\n(6) LINES (grep -c ''): activation-embargo.ts 167, activation-ingress-contracts.ts 233, activation-ingress.ts 321, daemon-command-registry.ts 284. None exceeds 400.\n(7) NO SCRATCH. The drill backup was deleted (ls confirms absent); git status shows nothing untracked outside .moe/.\nNEW-DELTA CHECK on the kind-set assertion: Map keys are insertion-ordered so `.sort()` is what makes it deterministic; an empty or short registry cannot pass a 22-name array; buildCommandRegistry already throws on a duplicate kind, so the set cannot silently collapse.\nRESIDUAL, unchanged and still disclosed: TOCTOU — a quiesce committing between the embargo read and the ledger commit lets ONE activation through. Closing it needs a re-check inside the commit transaction via commitExpectedVersionDecisionWithApply, which ActivationLedgerStore deliberately does not expose (task rail 1). Degrades to one extra activation for reconciliation to find.",
+      "startedAt": "2026-08-15T19:07:25.295Z",
+      "completedAt": "2026-08-15T19:08:15.189Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4d8438c5",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -178,12 +191,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T19:04:08.054Z",
+  "updatedAt": "2026-08-15T19:13:20.702Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 14,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -191,10 +204,10 @@
     "worker-cf1f58d0",
     "worker-4d8438c5"
   ],
-  "blockedReason": null,
+  "blockedReason": "All 8 steps COMPLETE, QA's reject addressed. Blocked only by two ownerless committed foreign type errors. Full evidence in the step-7 and step-8 notes.\n\nQA ISSUE 1 (mine) FIXED as asked: daemon-store-dependencies.test.ts asserted the registry as a bare `registrySize` number; it now asserts the exact kind SET — the child reports `[...deps.registry.keys()].sort()` and the test pins all 22 kinds by name, so the next registration names itself rather than reading as an off-by-one. Drilled: dropping \"effect.activate\" reddens the named plain-Node smoke with `+ \"effect.activate\"`; restored byte-exact from a saved copy, not git checkout.\n\nQA ISSUE 2 (narrowed evidence) NOT REPEATED. Three legs separate and verbatim at HEAD 63bc470:\n  daemon typecheck EXIT=1\n  daemon test      EXIT=0  89 files / 1820 tests\n  runner test      EXIT=0  62 files / 2107 tests\n\nTHE BLOCK, the only red:\n  daemon-entry.ts(176,5) TS2322 'string | undefined' not assignable to 'string'\n  daemon-entry.ts(191,3) TS2322 property 'csrfToken' incompatible\n  identity/session-services.test.ts(173,15) TS2339 'outcome' not on 'SessionOutcome'\n\nATTRIBUTION: daemon-entry.ts last touched by 8d9afb8; session-services.test.ts:173 authored by 7eb2997 (blame). Both foreign, committed, ownerless. Neither is in my commits (e72fd19 = my 10 owned paths exactly; cdd53e4 touched neither). HEAD failing-path set INTERSECTED WITH OWNED PATHS = EMPTY. Polled 5x over ~4 min: EXIT=1 each, HEAD never moved.\n\nNEED: assign both files to ONE owner. Three other tasks (cf1f58d0, 83b3c121, task-1eeb2dcc) are stuck on the same two files. I did not take the fix: committing an unowned path violates epic rail 3.\n\nFIX: daemon-entry.ts:174's ternary re-reads optional `options.csrfToken`; compare `=== undefined || === \"\"` to narrow the false branch to string. session-services.test.ts:173 must assert the real `ok` discriminant.\n\nON RESUME: no code work left — run the gate, then complete_task.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T19:10:36.950Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured claimWork, runner activation, scheduler budget/slot transitions, recovery readers, store transaction/uniqueness seams, and daemon registry size. Identified exact missing authority and created four prerequisite production tasks, then reported this task BLOCKED and wrote Serena handoff memory.",
@@ -215,7 +228,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {

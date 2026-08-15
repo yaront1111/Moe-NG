@@ -140,15 +140,27 @@
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL SELF-REVIEW, COMMIT, HANDOFF. Invoke the adversarial-self-review skill, then work the checklist aimed at how THIS task fails while looking finished:\n\n1. SEVEN VS SIX. Is there any invented seventh proof class, or a combined proof duplicated to reach seven? The frozen answer is six classes and seven populations joined by RECOVERY_CLASS_POPULATION_ROWS. The prior architect blocked this task once over exactly this; do not reintroduce it.\n2. Does any cardinality assertion derive its expected NAMES from the array it is testing? That compares the array with itself and survives every rename and addition.\n3. Can the coordinator ever report clear from an absence of evidence? Missing inventory, an empty enumerator, an unreadable store and adapter uncertainty must ALL hold and answer UNKNOWN_TRUTH. Epic rail 4: unverifiable evidence never gains authority.\n4. Is any upstream code restamped rather than retained? Task rail 3, and recovery-inventory-contract.ts:106 says so in production.\n5. Can an unmatched item reach restored history, or be automatically repeated? Both are forbidden by DoD 2.\n6. Was any authority re-implemented that recovery-inventory-record/-ledger/-proofs/-invariants already owns? A second class-set validator or a second record builder is a silent duplicate.\n7. Was apps/daemon/src/activation/** touched? It must not be — DoD 4 is already satisfied there and the directory belongs to a live task.\n8. Any probe, scratch or generated evidence file left behind? Epic rail 5 — the step-1 dependency probe must be long gone.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the `apps/daemon/src/recovery/effect-inventory*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit already swept your bytes in, do NOT amend, reset or re-commit to claim it — hand QA the base-ref diff over the owned paths.\n\nHANDOFF must record: that DoD 4 was verified as already satisfied by task-e33747f9 at activation-ingress.ts:299 rather than implemented here; that DoD 6's 'seven configured classes' is six classes plus seven populations under the frozen mapping; and that this task is the durable consumer of task-0325dcf7ee744123b40cf583230c7b6a's node-side inventory surface (task rail 4), naming the call site that imports it from the @moe/runner root.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/effect-inventory.ts",
         "apps/daemon/src/recovery/effect-inventory-join.ts"
       ],
-      "startedAt": "2026-08-15T18:47:29.629Z"
+      "modifiedFiles": [
+        "apps/daemon/src/recovery/effect-inventory.test.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.test.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.ts",
+        "apps/daemon/src/recovery/effect-inventory-join.js",
+        "apps/daemon/src/recovery/effect-inventory-collection.ts",
+        "apps/daemon/src/recovery/effect-inventory-collection.js",
+        "apps/daemon/src/recovery/effect-inventory.ts",
+        "apps/daemon/src/recovery/effect-inventory.js"
+      ],
+      "note": "Adversarial review complete. Six proof classes/seven populations are pinned literally and mapped once; configuration failures exercise coordinator precedence. Missing/empty/uncertain evidence persists UNKNOWN_TRUTH at RECOVERY_INVENTORY while retained upstream remains exact. Node class proof digests now bind the runner report inventoryDigest (items/facts/source proofs), and durable class names are imported from DURABLE_RECOVERY_INVENTORY_CLASSES rather than redeclared. Unmatched items expose no history insertion or repeat; adoption checks exact current incarnation/key epoch. Entry persistence was split so functions are 25/39 lines; production files 241/244/113. Activation untouched; no probes/artifacts. Foreign commit cdd53e4 swept the primary bytes; per rail it was not amended/reset/reclaimed. QA base diff: git diff 9d60091..HEAD -- apps/daemon/src/recovery/effect-inventory*. Post-sweep hardening commits 8ad396a and cfe24c0 use explicit owned pathspecs. Focused 16/16 and owned compile green; full daemon test 89 files/1820 tests green. Exact daemon gate remains prevented only by committed foreign type errors daemon-entry.ts:176/191 and identity/session-services.test.ts:173; path intersection with owned files is empty and governance was paged.",
+      "startedAt": "2026-08-15T18:47:29.629Z",
+      "completedAt": "2026-08-15T19:06:23.012Z"
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-cf1f58d0",
   "branch": null,
   "prLink": null,
@@ -168,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:49.319Z",
-  "updatedAt": "2026-08-15T18:47:29.629Z",
+  "updatedAt": "2026-08-15T19:08:03.036Z",
   "contextFetchedBy": [
     "governor-7c5e6be6",
     "architect-a42f4965",
@@ -180,12 +192,12 @@
     "firstClaimAt": "2026-08-13T15:42:43.029Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
-  "blockedReason": null,
+  "blockedReason": "Implementation, adversarial review, commits, handoff, owned-path compile, focused 16/16 tests, and full daemon 89 files/1820 tests are complete. The exact mandatory final command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` cannot honestly exit 0 because daemon typecheck has only two committed FOREIGN regressions outside this task's owned paths: apps/daemon/src/daemon-entry.ts:176 and :191 TS2322 (commit 8d9afb8), and apps/daemon/src/identity/session-services.test.ts:173 TS2339 (commit 7eb2997). Fresh re-runs at HEAD 63bc470 reproduce them; failing-path delta intersected with apps/daemon/src/recovery/effect-inventory* is EMPTY. Full daemon tests exit 0. Four workers independently confirmed the same ownerless red; governor was paged at msg-4ae85a30d3334ec2a6d871886ec7ba5b. Rails forbid repairing foreign paths or fabricating exit 0, while moe.complete_task hard-requires exitCode 0. Resume after one explicitly assigned owner lands those two fixes, then rerun the exact gate and call complete_task.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T19:08:03.036Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured current production, identified the non-vacuous capability gaps and cardinality contradiction, created four prerequisite production tasks, commented the parent, reported it BLOCKED, and wrote Serena handoff memory.",
@@ -207,7 +219,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:16:35.815Z",

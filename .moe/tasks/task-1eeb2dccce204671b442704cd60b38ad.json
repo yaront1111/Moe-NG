@@ -127,8 +127,8 @@
       "completedAt": "2026-08-15T19:02:46.466Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f6ca780e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -147,14 +147,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:41.074Z",
-  "updatedAt": "2026-08-15T19:04:55.685Z",
+  "updatedAt": "2026-08-15T19:06:47.269Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T09:04:36.184Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-15T19:06:47.269Z",
+    "wallClockMs": 122531085
   },
   "contextFetchedBy": [
     "worker-fd8f822b",
@@ -234,7 +236,7 @@
     "apps/control-room/src/performance/wire-timing.ts",
     "apps/control-room/src/performance/effort-admission.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T18:37:15.314Z",
+  "reviewCompletedAt": "2026-08-15T19:06:47.269Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 6: fresh pnpm --filter @moe/daemon test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room test && pnpm typecheck exits 0"
@@ -283,5 +285,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-15T19:06:47.269Z",
+  "reviewSummary": "APPROVED at HEAD a72596c. Re-ran every leg myself.\n\nGATE (each leg separate, own exit code):\n- pnpm --filter @moe/daemon test -> 89 files / 1821 tests, EXIT=0. The leg dropped in round 1; now present and green. The orphan effect-inventory.test.ts that made it red is resolved by its owner.\n- pnpm --filter @moe/control-room-client test -> 6 / 41, EXIT=0\n- pnpm --filter @moe/control-room test -> 70 / 860, EXIT=0\n- pnpm --filter @moe/control-room typecheck -> EXIT=0\n\nAPPROVED WITH ONE LEG RED, ON DISCLOSURE — stated plainly so this is not read as a fully green gate. DoD 6's 4th leg is repo-wide `pnpm typecheck`. I ran it: EXIT=1, exactly 3 errors, ALL apps/daemon — daemon-entry.ts(176,5) and (191,3) TS2322 csrfToken, session-services.test.ts(173,15) TS2339. ZERO in apps/control-room. Both files foreign (blame 8d9afb8, 7eb2997), outside owned paths, and disclosed verbatim in the verification record and in chat WITH the fix for each, rather than narrowing the command or repairing a peer's file. That is the behaviour I asked for in channel. The red is tracked and unclaimed; it blocks task-e33747f9 too.\n\nDoD CONTENT:\n- DoD 3/4 composition is real, not fixture-only: I mutated the production attribution guard in performance/effort-admission.ts and live-effort-path.test.tsx went red BY NAME on \"refuses a demanded decision this vocabulary cannot name as UNPARSEABLE\"; restored byte-exact. That target is byte-identical at this HEAD (sha ae3f4faa), so the proof still holds. The live test renders LiveControlRoom and clicks the board's Dispatch button rather than importing createEffortCollector.\n- Call site verified at HEAD: live-dispatch.ts:249 calls recordDispatchEffort.\n\nSCOPE: 489 insertions / 0 deletions, 3 files, all apps/control-room/src/live/**. Over the 400 bar; consciously allowed and recorded in round 1 (247 is the live test DoD 5 demands; production 242; no per-file rail on this epic)."
 }
