@@ -297,6 +297,43 @@ it("refuses a malformed event page body with its own code, naming this layer", a
   );
 });
 
+const affordancePort = (boundProjectId: string) => ({
+  boundProjectId,
+  readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE" as const, steps: [] }),
+});
+
+it("answers the affordance surface for an absent or matching projectId", async () => {
+  await withListener(
+    async (listener) => {
+      const empty = await send(listener, { body: "{}", path: "/affordances/read" });
+      expect(empty.status).toBe(200);
+      expect(empty.body).toMatchObject({ outcome: "SURFACE" });
+      const matching = await send(listener, {
+        body: JSON.stringify({ projectId: "proj-A" }), path: "/affordances/read",
+      });
+      expect(matching.status).toBe(200);
+      expect(matching.body).toMatchObject({ outcome: "SURFACE" });
+    },
+    { affordances: affordancePort("proj-A") },
+  );
+});
+
+it("refuses an affordance request naming a project this daemon does not serve", async () => {
+  await withListener(
+    async (listener) => {
+      // The daemon must not silently answer for proj-A a request that asked
+      // for proj-B: the surface names no project, so that would read as proj-B.
+      expectListenerRefusal(
+        await send(listener, {
+          body: JSON.stringify({ projectId: "proj-B" }), path: "/affordances/read",
+        }),
+        "LISTENER_AFFORDANCE_REQUEST_INVALID",
+      );
+    },
+    { affordances: affordancePort("proj-A") },
+  );
+});
+
 it("closes the listener even when a request handler throws", async () => {
   const started = await startControlRoomListener({
     csrfToken: CSRF,

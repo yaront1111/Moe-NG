@@ -212,5 +212,5 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     } as const);
   };
 
-  return Object.freeze({ readSurface });
+  return Object.freeze({ boundProjectId: config.projectId, readSurface });
 }

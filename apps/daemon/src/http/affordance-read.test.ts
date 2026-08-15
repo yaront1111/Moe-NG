@@ -10,7 +10,7 @@ import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
-import { readAffordanceRequest } from "./affordance-contract.js";
+import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
 
 const PROJECT = "proj-affordance";
@@ -234,6 +234,18 @@ describe("code node steps", () => {
       .map((entry) => entry.commandKind);
     expect(kinds).toContain("review.submit");
     expect(kinds).toContain("integration.accept_output");
+  });
+});
+
+describe("affordanceProjectMismatch", () => {
+  it("passes an absent or matching projectId and refuses a foreign one", () => {
+    expect(affordanceProjectMismatch({}, "proj-A")).toBe(false);
+    expect(affordanceProjectMismatch({ projectId: "proj-A" }, "proj-A")).toBe(false);
+    expect(affordanceProjectMismatch({ projectId: "proj-B" }, "proj-A")).toBe(true);
+  });
+
+  it("the port names the project it answers for", () => {
+    expect(port.boundProjectId).toBe(PROJECT);
   });
 });
 

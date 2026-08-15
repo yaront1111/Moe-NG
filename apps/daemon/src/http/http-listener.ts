@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
-import { readAffordanceRequest } from "./affordance-contract.js";
+import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
@@ -125,7 +125,10 @@ function serveAffordances(
     refuseRequest(response, "LISTENER_AFFORDANCES_UNAVAILABLE");
     return;
   }
-  if (readAffordanceRequest(body) === null) {
+  const request = readAffordanceRequest(body);
+  if (request === null || affordanceProjectMismatch(request, options.affordances.boundProjectId)) {
+    // A malformed body OR a request naming a project this daemon does not
+    // serve: both are invalid requests for this route, not a surface refusal.
     refuseRequest(response, "LISTENER_AFFORDANCE_REQUEST_INVALID");
     return;
   }

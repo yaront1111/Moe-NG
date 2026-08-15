@@ -68,7 +68,24 @@ export type AffordanceSurfaceResult = AffordanceRefused | AffordanceSurface;
 
 /** Synchronous, like SubscriptionPort: the listener stays free of await chains. */
 export interface AffordancePort {
+  /** The single project this port answers for. The surface names no project of
+   *  its own, so a request that names a DIFFERENT one must be refused rather
+   *  than silently answered for this one. */
+  readonly boundProjectId: string;
   readSurface(): AffordanceSurfaceResult;
+}
+
+/**
+ * A present `projectId` that is not the bound one is a request for a project
+ * this daemon does not serve. Answering it with this daemon's surface would be
+ * a truth defect — the answer names no project, so the caller would read it as
+ * being about the project they asked for. Absent or matching is fine.
+ */
+export function affordanceProjectMismatch(
+  request: { readonly projectId?: string },
+  boundProjectId: string,
+): boolean {
+  return request.projectId !== undefined && request.projectId !== boundProjectId;
 }
 
 /**
