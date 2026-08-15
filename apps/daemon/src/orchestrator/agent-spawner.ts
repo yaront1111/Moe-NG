@@ -50,8 +50,29 @@ export function claudeSpawner(
   const timeoutMs = options.timeoutMs
     ?? (Number.isSafeInteger(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_AGENT_TIMEOUT_MS);
   const platform = options.platform ?? process.platform;
-  return (request: SpawnRequest): Promise<void> => {
+  // `async` is load-bearing, not decoration: building the invocation below can
+  // REFUSE, and the wrapper calls this as `spawnAgent(...).catch(...)` without
+  // awaiting. Outside a promise a refusal would escape synchronously and take
+  // the poll tick with it, so every throw here must surface as a rejection.
+  return async (request: SpawnRequest): Promise<void> => {
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
+    // Code-node agents work IN their workspace and get the file/exec tools a
+    // worker needs; chain-step agents keep the MCP-only surface.
+    const coding = request.workspace !== null;
+    // BEFORE the credential is minted to disk. The mission travels over STDIN:
+    // on Windows the CLI is a .cmd requiring shell resolution, and a shell line
+    // would shred a space-bearing prompt argument. `agentSpawnInvocation` builds
+    // that line itself (argv plus `shell: true` is deprecated, DEP0190) and
+    // quotes the one argument — the config path — that may legitimately carry
+    // whitespace. It REFUSES anything cmd.exe could reinterpret, and a request
+    // that cannot be spawned must never cause a credential to be written at
+    // all: deleting one afterwards would still leave a window, and the refusal
+    // predates every cleanup path below.
+    const invocation = agentSpawnInvocation(command, [
+      "-p",
+      "--mcp-config", mcpConfigPath,
+      "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
+    ], platform);
     // Absolute entry path: MCP server configs carry no working directory, and
     // node resolves the module's own relative imports from its file URL anyway.
     writeFileSync(mcpConfigPath, JSON.stringify({
@@ -63,20 +84,7 @@ export function claudeSpawner(
         },
       },
     }), "utf8");
-    // Code-node agents work IN their workspace and get the file/exec tools a
-    // worker needs; chain-step agents keep the MCP-only surface.
-    const coding = request.workspace !== null;
-    return new Promise((resolve) => {
-      // The mission travels over STDIN: on Windows the CLI is a .cmd requiring
-      // shell resolution, and a shell line would shred a space-bearing prompt
-      // argument. `agentSpawnInvocation` builds that line itself (argv plus
-      // `shell: true` is deprecated, DEP0190) and quotes the one argument —
-      // the config path — that may legitimately carry whitespace.
-      const invocation = agentSpawnInvocation(command, [
-        "-p",
-        "--mcp-config", mcpConfigPath,
-        "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
-      ]);
+    return new Promise<void>((resolve) => {
       const child = spawn(invocation.file, [...invocation.args], {
         cwd: request.workspace ?? DAEMON_DIR,
         shell: invocation.shell,

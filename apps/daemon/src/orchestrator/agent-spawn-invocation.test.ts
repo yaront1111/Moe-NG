@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
+import { SpawnInvocationRefusal, agentSpawnInvocation } from "./agent-spawn-invocation.js";
 
 const ARGS = ["-p", "--mcp-config", "C:/tmp/moe-wrapper-1/sess.json", "--allowedTools", "mcp__moe-next"];
 
@@ -43,5 +43,27 @@ describe("agentSpawnInvocation", () => {
     expect(() => agentSpawnInvocation("claude", ["a&b"], "win32")).toThrow(
       /SPAWN_ARGUMENT_UNQUOTABLE/u,
     );
+  });
+
+  it("refuses with a stable code and names the layer that refused, as properties", () => {
+    // A regex over an Error message proves nothing about WHICH layer answered
+    // and passes silently if the message is reworded; the code and the layer
+    // are read off the thrown value instead.
+    let thrown: unknown;
+    try {
+      agentSpawnInvocation("claude", ['a"b'], "win32");
+    } catch (error) {
+      thrown = error;
+    }
+    // Without this the guard could have not fired at all and every property
+    // assertion below would be checking `undefined?.code` against nothing.
+    expect(thrown).toBeInstanceOf(SpawnInvocationRefusal);
+    const refusal = thrown as SpawnInvocationRefusal;
+    expect(refusal.code).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
+    expect(refusal.layer).toBe("agent-spawn-invocation");
+    // The refusal does not echo its input: the argument it guards is the
+    // per-agent MCP config path.
+    expect(refusal.message).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
+    expect(refusal.message).not.toContain('a"b');
   });
 });

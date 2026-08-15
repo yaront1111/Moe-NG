@@ -1,8 +1,10 @@
 import { EventEmitter } from "node:events";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import { claudeSpawner } from "./agent-spawner.js";
 import type { AgentSpawnerOptions } from "./agent-spawner.js";
@@ -59,6 +61,46 @@ const configPathOf = (child: FakeChild): string => {
   if (match?.[1] === undefined) throw new Error(`no --mcp-config in ${line}`);
   return match[1];
 };
+
+const sandboxes: string[] = [];
+afterAll(() => {
+  for (const sandbox of sandboxes) rmSync(sandbox, { force: true, recursive: true });
+});
+
+/**
+ * Builds a spawner whose config directory can be READ BACK exactly rather than
+ * guessed: `claudeSpawner` mints it with `mkdtempSync(join(tmpdir(), ...))` at
+ * construction time and never exposes it, so tmpdir() is pointed at a private
+ * sandbox for the duration of the construction call. Node resolves tmpdir()
+ * from TMPDIR/TMP/TEMP, so all three move together and are restored after.
+ */
+function spawnerInSandbox(options: AgentSpawnerOptions): {
+  configDir: string;
+  spawner: (request: SpawnRequest) => Promise<void>;
+} {
+  const sandbox = mkdtempSync(join(tmpdir(), "moe-spawner-case-"));
+  sandboxes.push(sandbox);
+  const keys = ["TMPDIR", "TMP", "TEMP"] as const;
+  const saved = keys.map((key) => [key, process.env[key]] as const);
+  for (const key of keys) process.env[key] = sandbox;
+  let spawner: (request: SpawnRequest) => Promise<void>;
+  try {
+    spawner = claudeSpawner(STORE_ENV, options);
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+  const entries = readdirSync(sandbox);
+  const only = entries[0];
+  // A wrong count means the construction did not mint its directory here, so
+  // every later filesystem assertion would be looking at the wrong place.
+  if (entries.length !== 1 || only === undefined) {
+    throw new Error(`expected one config dir in ${sandbox}, got [${entries.join(", ")}]`);
+  }
+  return { configDir: join(sandbox, only), spawner };
+}
 
 describe("claudeSpawner", () => {
   it("hands the agent's credential to the MCP server via the config file, never argv or mission", async () => {
@@ -162,5 +204,36 @@ describe("claudeSpawner", () => {
     child.emitter.emit("error", new Error("ENOENT"));
     await done;
     expect(existsSync(configPath)).toBe(false);
+  });
+
+  it("refuses an unquotable command line without ever writing the credential to disk", async () => {
+    const { calls, spawn } = fakeSpawn();
+    // `"` cannot be quoted for cmd.exe, and the command is the FIRST piece of
+    // the line, so building the invocation refuses before anything else. The
+    // real-world trigger needs no hostile input: an ordinary Windows account
+    // name carrying & ^ % < > | or " puts tmpdir() itself beyond quoting.
+    // `platform` is explicit because agentSpawnInvocation returns early for
+    // every non-win32 platform — without it this case would reach no guard at
+    // all on a Linux or macOS runner and pass while testing nothing.
+    const { configDir, spawner } = spawnerInSandbox({
+      command: 'claude"evil', log: () => undefined, platform: "win32", spawn,
+    });
+    const req = request();
+
+    // The refusal must arrive as a REJECTION. The wrapper calls
+    // `spawnAgent(...).catch(...)` WITHOUT await (agent-wrapper.ts:226), so a
+    // synchronous throw would escape the poll tick entirely.
+    let returned: Promise<void> | undefined;
+    expect(() => { returned = spawner(req); }).not.toThrow();
+    await expect(returned).rejects.toMatchObject({
+      code: "SPAWN_ARGUMENT_UNQUOTABLE",
+      layer: "agent-spawn-invocation",
+    });
+
+    expect(calls).toEqual([]);
+    // The credential never reached disk: the whole config directory is empty,
+    // not merely the one named path removed.
+    expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
+    expect(readdirSync(configDir)).toEqual([]);
   });
 });
