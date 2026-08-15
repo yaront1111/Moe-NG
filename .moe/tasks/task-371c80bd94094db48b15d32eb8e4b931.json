@@ -142,27 +142,37 @@
     {
       "stepId": "step-8",
       "description": "Verification gate, on FRESH output pasted into complete_task - never a remembered result. Run: pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm typecheck. Read EVERY summary line rather than the final exit code, because a multi-leg run can exit 0 while one leg is red. Note two things measured during planning so they are not rediscovered as surprises: the control-room-client leg should be unaffected - readEventPage is an untyped passthrough returning SendResult and does NOT type the event page shape, so NO generated-client change is needed and packages/control-room-client/src/generated/generated-client.ts must remain untouched; and `pnpm test` at the root SKIPS apps/**, so the owned-package legs above are the only ones that actually gate this work. Apply the path-attributed baseline rail for any repo-wide red: record failures at the merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines and paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.test.ts",
         "apps/control-room/src/recovery/recovery-actions.test.tsx"
       ],
-      "startedAt": "2026-08-15T13:36:44.733Z"
+      "note": "Verification gate run on FRESH output, every leg SEPARATELY with its own exit code. A `;`-chained or piped run reports only the last command's status and would show 0 over a red suite, so each leg was redirected to its own file and its exit code read directly.\n\n  pnpm --filter @moe/control-room test         EXIT 0   68 files / 845 tests\n  pnpm --filter @moe/control-room-client test  EXIT 0    6 files /  41 tests\n  pnpm --filter @moe/control-room typecheck        EXIT 0\n  pnpm --filter @moe/control-room-client typecheck EXIT 0\n  pnpm typecheck (repo-wide, from ROOT)        EXIT 1   Scope: 18 of 19 workspace projects\n\nCONTROL-ROOM-CLIENT LEG UNAFFECTED, exactly as the plan predicted. No generated-client change was needed; packages/control-room-client/src/generated/generated-client.ts is BYTE-IDENTICAL to plan base ab45234 (`git diff ab45234..HEAD -- packages/control-room-client/src/generated/` is empty, working tree clean for it). The codegen hazard the architect flagged when creating this task never bit.\n\nTHE REPO-WIDE TYPECHECK IS RED AND IT IS NOT MINE. Verbatim, and it is a single foreign file:\n  apps/daemon typecheck: src/activation/foundation-launch-authority.test.ts(42,83): error TS2307: Cannot find module './foundation-launch-authority.js' or its corresponding type declarations.\n(It was 5 errors when I first measured, then 4, now 1 - worker-40286572 is actively converging on task-996e5318 and landed foundation-activation-transition.ts between two of my runs.)\n\nPATH-ATTRIBUTED BASELINE RAIL APPLIED, measured rather than asserted:\n- My baseline BEFORE writing a single byte: control-room 67 files / 814 tests, EXIT 0, with `git status --porcelain -- apps/control-room` EMPTY. Attribution is by construction, not by argument.\n- The failing file is UNTRACKED - absent from HEAD entirely - with mtime 16:34:13, AFTER my baseline at 16:29 and AFTER my first written byte at 16:33:28.\n- `grep control-room apps/daemon/package.json` returns nothing: @moe/daemon has NO dependency edge to @moe/control-room, so my bytes cannot reach that error even in principle.\n- Delta intersected with this task's owned paths: EMPTY. Both owned packages typecheck EXIT 0 on their own.\n- The owning worker announced these exact paths as theirs in the team channel; I posted the verbatim errors to them rather than working around them, and I did not touch apps/daemon.\n\nCONSEQUENCE FOR complete_task, stated plainly rather than papered over: the plan's named chain ends in repo-wide `pnpm typecheck` and therefore exits 1 for a reason that is entirely a live peer's mid-TDD state. I am NOT submitting that as green. The verification evidence I submit is the same chain with the repo-wide leg replaced by the two OWNED-package typechecks - the substitution is disclosed, the repo-wide red is quoted verbatim above, and QA can re-run `pnpm typecheck` themselves to see whether the peer has since landed their module. I re-measured three times over ~12 minutes rather than disclosing on a single reading.\n\nAlso recorded from the plan: root `pnpm test` SKIPS apps/**, so the owned-package legs above are the only ones that actually gate this work.",
+      "startedAt": "2026-08-15T13:36:44.733Z",
+      "completedAt": "2026-08-15T13:45:33.501Z"
     },
     {
       "stepId": "step-9",
       "description": "Adversarial self-review before complete_task; load the adversarial-self-review skill. (1) Is there ANY path that subtracts two readings whose declared clocks differ? Re-grep every subtraction in the new module and confirm each is guarded by the clock comparison, not merely by the negative-interval check. (2) Does any code path turn an UNKNOWN into a zero, an absolute value, or an interpolated duration? (3) Does the render observation come from the injected Clock on every branch, including the no-clock and refused-command branches? (4) Are the four phases still separate everywhere - no sum, no average, no single 'total latency' number anywhere in the rendered output? (5) Does the live feed still shape rather than infer: no invented truth class, no defaulted identity field, an absent principal/run/session still absent? (6) Confirm the client package and the generated client are untouched by the diff. (7) Confirm every production source touched is at or under 250 physical lines using `grep -c ''` (PowerShell Measure-Object -Line undercounts) - live-event-feed.ts is 136, recovery-actions.tsx 246 and command-latency.tsx 149 today, so recovery-actions.tsx is the one with the least headroom; if it would exceed, move the receipt assembly into the step-2 module rather than growing the component. Then git status --porcelain, confirm no drill file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.ts",
         "apps/control-room/src/live/live-event-feed.ts",
         "apps/control-room/src/recovery/recovery-actions.tsx",
         "apps/control-room/src/performance/timing.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-command-timing.tsx",
+        "apps/control-room/src/live/live-command-timing.test.tsx",
+        "apps/control-room/src/live/live-timing-path.test.tsx"
+      ],
+      "note": "Adversarial self-review. Skill loaded. All 7 plan checks answered by measurement, and the review FOUND A REAL DEFECT that I reproduced and fixed - see the deviation at the end.\n\n(1) NO PATH SUBTRACTS ACROSS CLOCKS. There is exactly ONE subtraction in the entire path: timing.ts:193 `measured(observedBy, end - start)` inside fromInterval. The bridge never subtracts. fromInterval is reachable only through evaluateTiming, and `grep -rn \"evaluateTiming(\" apps packages --include=*.ts --include=*.tsx | grep -v \"\\.test\\.\"` returns exactly TWO lines - its own definition and wire-timing.ts:212 - so buildLiveTimingReceipt is its only production caller. That call is fed only `sources.*.interval`, and pairing() returns an interval ONLY after `from.clock === to.clock`. The guard is structural, not merely tested: no cross-clock pair can reach the one subtraction. Drill 2 in step 7 confirms the negative-interval check is NOT a substitute.\n\n(2) NO UNKNOWN BECOMES A NUMBER. No Math.abs, no Math.round, no reduce, no interpolation anywhere in timing.ts / wire-timing.ts / live-command-timing.tsx. TimingUnknown has no durationMs PROPERTY at all rather than a null one, and the step-6 sweep asserts `Object.hasOwn(resolved, \"durationMs\") === false` on all 22 refusal cases, so a refusal cannot carry a number even by accident.\n\n(3) RENDER OBSERVATION IS FROM THE INJECTED CLOCK ON EVERY BRANCH. `const rendered = readClientClock(useClock())` sits at the top of the component, BEFORE the `rows.length === 0` early return - so it is unconditional (also correct React hook order; after the return it would have been a conditional hook call). Read during render, never stored in state, StrictMode-safe. No clock -> TIMING_CLOCK_UNAVAILABLE, asserted end to end.\n\n(4) FOUR PHASES STAY SEPARATE. No sum, average or total in the rendered output. describeTimingReceipt returns one line per phase and deliberately no aggregate. The only comparison against a number is command-latency.tsx:138's pre-existing STILL_WORKING_THRESHOLD_MS on a SINGLE elapsed phase - not a collapse of the four.\n\n(5) THE FEED SHAPES, IT DOES NOT INFER. identityOf refuses an empty commandId (`return null`) rather than minting an identity that names nothing; principal/run/session are shapeWireValue(...) so an absent one is null, not a stated empty; shapeWireObservation requires clock, observer AND reading and returns null otherwise. No invented truth class, no defaulted field.\n\n(6) CLIENT PACKAGE AND GENERATED CLIENT UNTOUCHED BY MY DIFF. `git diff --stat ab45234..HEAD -- packages/control-room-client/src/generated/` is EMPTY. packages/control-room-client/src/client-transport.ts IS dirty, but it is a PEER's: the change is about the `Origin` fetch header and commit 79d9651 (task-702dcb63), nothing timing-related, and my plan never names it.\n\n(7) EVERY PRODUCTION SOURCE UNDER 250, counted with `grep -c ''` (PowerShell Measure-Object -Line undercounts blank lines): timing.ts 245, wire-timing.ts 224, live-app.tsx 230, live-event-feed.ts 194, command-latency.tsx 162, live-command-timing.tsx 78. Max 245. NOTE the plan's numbers here were stale (it predicted live-event-feed.ts 136 and named recovery-actions.tsx 246 as the tightest); recovery-actions.tsx was never touched, and the tightest file is actually timing.ts at 245.\n\n=== PLAN DEVIATION: a real defect found by this review, reproduced, then fixed ===\n\n`testIdPrefix` was `cr.live.timing.<commandId>`. ONE COMMAND EMITS MANY EVENTS, so two rows of the same command painted two receipts - built from two DIFFERENT sets of readings - under one identical data-testid. Two distinct receipts nothing could tell apart, and getByTestId THROWS on the collision, so the next test to look would have broken rather than reported it. It also weakens DoD-2's \"a receipt can be attributed to one command\".\n\nI did not argue it, I reproduced it: a throwaway probe drove LiveControlRoom through the real transport seam with two events sharing one commandId and printed `PROBE_RESULT spans sharing one test id = 2`. Probe deleted immediately; `ls` confirms no probe file remains.\n\nFixed TDD: wrote the failing test first (5 red, \"Unable to find an element by [data-testid=cr.live.timing.cmd-open-1.evt-1.phase.server]\"), then changed production to `cr.live.timing.<commandId>.<eventId>`. Command id still ATTRIBUTES; event id DISAMBIGUATES. A permanent regression test asserts two events of one command render two separately addressable receipts. Cost: the phaseId/phase helpers in live-timing-path.test.tsx and live-command-timing.test.tsx gained an event segment.\n\nRE-DRILLED AFTER THE FIX, because the fix edited the very file drill 1 targets: replaced the clock-derived render reading with a literal again -> `× measures the render phase from readings production took, not from a literal`, \"expected '100' to be '30'\", 1 failed | 8 passed. Restored; sha256 back to bfdc90df6988012e7919463ccc87f4cf62d6b46c61364051f2421b44ee25f01b. The drill still bites.\n\nOther checklist items with",
+      "startedAt": "2026-08-15T13:45:36.114Z",
+      "completedAt": "2026-08-15T13:46:08.673Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4e189bb5",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -174,12 +184,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:21.413Z",
-  "updatedAt": "2026-08-15T13:36:44.733Z",
+  "updatedAt": "2026-08-15T13:54:23.556Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T11:52:51.938Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 9,
+    "doneAt": "2026-08-15T13:54:23.556Z",
+    "wallClockMs": 93691618
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -192,7 +204,9 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T11:56:26.853Z",
@@ -218,7 +232,34 @@
   "planApprovedAt": "2026-08-14T11:56:28.899Z",
   "contextFetchedBy": [
     "worker-4e189bb5",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "qa-4ec0a625"
   ],
-  "workStartedAt": "2026-08-14T11:59:48.448Z"
+  "workStartedAt": "2026-08-14T11:59:48.448Z",
+  "reviewStartedAt": "2026-08-15T13:47:17.384Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room-client typecheck",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n Test Files  68 passed (68)\n      Tests  845 passed (845)\n\n$ vitest run --root ../.. packages/control-room-client/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  6 passed (6)\n      Tests  41 passed (41)\n\n$ tsc --project tsconfig.json   [@moe/control-room]        exit 0\n$ tsc --project tsconfig.json   [@moe/control-room-client] exit 0\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-15T13:47:17.384Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/performance/timing.ts",
+    "apps/control-room/src/performance/timing.test.ts",
+    "apps/control-room/src/performance/wire-timing.ts",
+    "apps/control-room/src/performance/wire-timing.test.ts",
+    "apps/control-room/src/live/live-event-feed.ts",
+    "apps/control-room/src/live/live-event-feed.test.ts",
+    "apps/control-room/src/live/live-command-timing.tsx",
+    "apps/control-room/src/live/live-command-timing.test.tsx",
+    "apps/control-room/src/live/live-app.tsx",
+    "apps/control-room/src/performance/command-latency.tsx",
+    "apps/control-room/src/live/live-timing-path.test.tsx",
+    "apps/control-room/src/performance/wire-timing-cases.test.ts",
+    "apps/control-room/src/performance/live-timing.test.ts",
+    "apps/control-room/src/recovery/recovery-actions.test.tsx"
+  ],
+  "completedAt": "2026-08-15T13:54:23.556Z",
+  "reviewCompletedAt": "2026-08-15T13:54:23.556Z",
+  "reviewSummary": "APPROVED. Gate re-run by me, each leg with its OWN exit code: @moe/control-room 68 files/845 tests EXIT 0; @moe/control-room-client 6 files/41 tests EXIT 0; pnpm typecheck EXIT 0 (Scope 18 of 19, zero error TS). The foreign daemon red the worker disclosed had CLEARED (worker-40286572 landed foundation-launch-authority.ts), so the plan's named chain is green as written; no substitution needed.\n\nDoD-1 deviation UPHELD after my own walk: recovery-actions.tsx reaches ZERO application roots (its importers hang off src/a11y/ui-wide-ops-fixtures.tsx, imported by exactly 3 .test.tsx files). Real chain: main.tsx:40 -> LiveControlRoom -> live-app.tsx:211 LiveTimeline -> live-app.tsx:83 LiveCommandTiming -> buildLiveTimingReceipt -> evaluateTiming; describeTimingReceipt consumed at command-latency.tsx:107.\n\nFour drills run by me, each hash-checked back to pre-drill bytes: (1) render timestamp bypassed -> exactly 1 red, \"expected '1786276799999' to be '30'\"; (2) cross-clock guard disabled -> 3 red ON THE REFUSAL assertion (\"expected true to be false\", \"expected undefined to be 'TIMING_CLOCK_MISMATCH'\"), confirming forward skew publishes a confident wrong number without it; (3) upstream refusal collapsed -> 6 red, all exact-code; (4) eventId dropped from testIdPrefix -> the self-reported regression guard reddens.\n\nThe 5 sweep exclusions survived attack: no producer in the module can mint a driving reading, each premise has its own live assertion, driven-union-excluded set-equals the cross product, file executes 30 tests. server+stream both refusing TIMING_CLOCK_MISMATCH is correct per event-stream-observation.ts:20-26 (\"their difference is not a duration\").\n\nHygiene: 8/8 owned sources committed-bytes == gated-bytes; generated-client.ts byte-identical to ab45234; per-file lines under 250 (max timing.ts 245); no scratch artifacts. Foreign whole-tree commit 702b28a under a peer label not held against the worker."
 }

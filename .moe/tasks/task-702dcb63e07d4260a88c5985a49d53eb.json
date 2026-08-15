@@ -111,7 +111,7 @@
       "completedAt": "2026-08-15T13:32:29.293Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -124,12 +124,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:08.778Z",
-  "updatedAt": "2026-08-15T13:33:05.347Z",
+  "updatedAt": "2026-08-15T13:52:23.481Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:04:22.863Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-15T13:52:23.481Z",
+    "wallClockMs": 2880618
   },
   "stepsCompleted": [
     "step-1",
@@ -157,7 +159,8 @@
   },
   "planApprovedAt": "2026-08-15T13:05:54.378Z",
   "contextFetchedBy": [
-    "worker-86bbe9fd"
+    "worker-86bbe9fd",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T13:25:25.393Z",
   "reviewStartedAt": "2026-08-15T13:33:05.346Z",
@@ -171,5 +174,8 @@
     "packages/review/src/review-findings.test.ts",
     "packages/review/src/review-contract.ts",
     "packages/review/src/review-findings.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:52:23.481Z",
+  "reviewCompletedAt": "2026-08-15T13:52:23.481Z",
+  "reviewSummary": "APPROVED. HEAD 79dcf18; owned-path `git status --porcelain` EMPTY, so committed bytes == bytes I gated.\n\nGATES RE-RUN (exit via `> file 2>&1; echo $?`, never a pipe):\n- review typecheck EXIT 0\n- review test EXIT 0 — 4 files / 118 tests. Matches task.verification.\n- daemon test EXIT 0 — 77 files / 1659 tests. Worker reported 76/1631; count GREW from peer landings. Growth at exit 0 is not a discrepancy; a shrink would be.\n\nDoD 1 — order verified on COMMITTED bytes via `git show HEAD:`, not the plan note: :152 lineageAttested, :153 admissibleRound -> FINDING_ROUND_INVALID, :154 ordering. `grep -rn ReviewFindingRecord` over apps/ + packages/ finds ONE construction site, review-findings.ts:156, downstream of :153. No bypass.\nDoD 2 — own code, alphabetical, 17 -> 18 members.\nDoD 3 — repeated, out-of-order and round-0 cases still refuse FINDING_LINEAGE_APPEND_ONLY, layer FINDINGS. Admission is `>= 0` not `>= 1` deliberately: round 0 stays with the ordering guard, so which code answers is unchanged.\nDoD 4 — I ran the drill. `sed -i '153d'`, printed the removed line, confirmed 0 remaining call sites so it provably applied. 19 failed / 99 passed, three NaN-NAMED tests red, lead failure `expected [Function] to not throw an error but 'TypeError: canonical JSON supports safe integers only' was thrown`. That IS the defect signature: NaN got past :154 and died in canonicalDigest naming no reason code. Append-only and routing tests stayed GREEN under the drill — per-case redness, not an env break. Restored by cp from /tmp backup, not git checkout; sha256 back to 098d229c4306, guard present once, zero residue at HEAD.\nDoD 5 — met above.\n\nRAILS: no coercion on the path. review-findings.ts 235 lines, review-contract.ts 248 by `grep -c ''`. Production delta is one enum member + one guard + doc comments; no drift. No commit bears the task id (foreign whole-tree de936fe swept it in) — per rail 5 not a rejection reason; verified by base-ref diff: 3 files, +248/-3."
 }
