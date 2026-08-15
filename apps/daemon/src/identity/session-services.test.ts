@@ -170,7 +170,7 @@ describe("session.open", () => {
       envelope("session.open", 0, openPayload({ sessionId: "sess-agent-9" }), "cmd-ok"),
       "operator-local",
     );
-    expect(ok.outcome).not.toBe("REFUSED");
+    expect(ok.ok).toBe(true);
   });
 
   it("refuses a stale expected version with SESSION_EXPECTED_VERSION_STALE", () => {

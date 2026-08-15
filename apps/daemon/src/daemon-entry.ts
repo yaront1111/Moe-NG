@@ -171,7 +171,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   // sink and never placed on a query string.
   // Empty is treated as unsupplied: `--csrf-token=` reaches here as "", and an
   // empty token is a secret no header can safely match, so mint a real one.
-  const csrfToken = (options.csrfToken ?? "") === "" ? randomUUID() : options.csrfToken;
+  const suppliedCsrfToken = options.csrfToken ?? "";
+  const csrfToken = suppliedCsrfToken === "" ? randomUUID() : suppliedCsrfToken;
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
