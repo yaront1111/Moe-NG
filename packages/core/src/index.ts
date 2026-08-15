@@ -128,6 +128,32 @@ export type {
   GraphSubmissionWitness,
 } from "./planning/graph-revision-contract.js";
 
+/**
+ * WHEN a submitted plan may proceed without a human, and the per-unit-of-work
+ * gate that certain work cannot proceed without one regardless of that setting.
+ *
+ * CURATED, NOT COMPLETE. `checkHumanAuthority` and `refuseApprovalAuthority`
+ * stay unpublished on purpose. A consumer that could mint a refusal could forge
+ * the verdicts these modules exist to hold, and the gate check is reachable only
+ * through `decideApprovalAuthority`, which consults it FIRST by construction —
+ * publishing the check on its own would invite a consumer to call it and then
+ * decide for itself whether to honour the answer.
+ */
+export {
+  APPROVAL_AUTHORITY_CODES, APPROVAL_AUTHORITY_LAYERS, grantHumanAuthority,
+} from "./planning/approval-authority.js";
+export type {
+  ApprovalAuthorityCode, ApprovalAuthorityLayer, ApprovalAuthorityRefusal,
+  HumanAuthorityGate, HumanAuthorityGrant, HumanAuthorityGrantResult,
+} from "./planning/approval-authority.js";
+export {
+  APPROVAL_POLICY_KINDS, decideApprovalAuthority,
+} from "./planning/approval-policy.js";
+export type {
+  ApprovalAuthorityDecision, ApprovalAuthorityRequest, ApprovalAuthorityResult,
+  ApprovalPolicy, ApprovalPolicyKind,
+} from "./planning/approval-policy.js";
+
 export { evaluatePolicy } from "./policy/policy-evaluation.js";
 export {
   CORE_DECISION_REASON_OBLIGATION,

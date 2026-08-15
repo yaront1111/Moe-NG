@@ -40,6 +40,11 @@ import type {
 } from "@moe/core";
 import type { ApprovalDecisionRecord, PolicyEvaluationInput } from "@moe/core";
 import type {
+  ApprovalAuthorityCode, ApprovalAuthorityDecision, ApprovalAuthorityLayer,
+  ApprovalAuthorityRefusal, ApprovalAuthorityRequest, ApprovalAuthorityResult, ApprovalPolicy,
+  ApprovalPolicyKind, HumanAuthorityGate, HumanAuthorityGrant, HumanAuthorityGrantResult,
+} from "@moe/core";
+import type {
   ProjectConfigurationCodecCode, ProjectConfigurationCodecLayer,
   ProjectConfigurationCodecRefusal, ProjectConfigurationManifestCreateResult,
   ProjectConfigurationManifestDecodeResult, ProjectConfigurationManifestEncodeResult,
@@ -54,10 +59,14 @@ type ExportKind = "array" | "function" | "record" | "string";
  * Hand-transcribed: 20 pre-existing vocabulary values + 5 transition records +
  * 3 obligation/layer strings + 33 pre-existing functions + the 8 expansion
  * preparation and approval values + the 6 project-configuration codec values
- * (2 frozen vocabularies, 1 domain tag, 3 functions) published by task-bcea7056.
+ * (2 frozen vocabularies, 1 domain tag, 3 functions) published by task-bcea7056
+ * + the 5 approval policy and human-authority values (3 frozen vocabularies,
+ * 2 functions) published by task-5d8f11c8.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
-  ["APPROVAL_ACTOR_KINDS", "array"], ["APPROVAL_COMMAND_KINDS", "array"],
+  ["APPROVAL_ACTOR_KINDS", "array"],
+  ["APPROVAL_AUTHORITY_CODES", "array"], ["APPROVAL_AUTHORITY_LAYERS", "array"],
+  ["APPROVAL_COMMAND_KINDS", "array"], ["APPROVAL_POLICY_KINDS", "array"],
   ["CARRY_FORWARD_REASON_CODES", "array"], ["CORE_DECISION_REASON_OBLIGATION", "string"],
   ["CORE_STEP_UP_OBLIGATION", "string"],
   ["EXPANSION_APPROVAL_CODES", "array"], ["EXPANSION_APPROVAL_COMPONENTS", "array"],
@@ -87,10 +96,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["createCredential", "function"], ["createPrincipal", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
-  ["decideSupersession", "function"],
+  ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
   ["encodeProjectConfigurationManifest", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
+  ["grantHumanAuthority", "function"],
   ["inspectPlanningExpansionContract", "function"], ["isCurrentGeneration", "function"],
   ["isSessionUsableAt", "function"], ["matchCapability", "function"],
   ["prepareExpansion", "function"], ["reduceExpansionPlanningHold", "function"],
@@ -105,7 +115,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(75);
+  expect(EXPECTED_EXPORTS.length).toBe(80);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -372,6 +382,50 @@ it("refuses undecodable configuration bytes from the root, naming code and layer
     .toBe("moe-project-configuration-settings/1");
 });
 
+/**
+ * The approval closure, exercised through the bare specifier and naming every
+ * published type. The gate below is an OTHERWISE-ORDINARY unit of work whose
+ * only defect is that no human has granted its authority, so the refusal is
+ * attributable to the gate and to nothing upstream of it.
+ */
+const authorityGate = (): HumanAuthorityGate =>
+  ({ gateId: "GO_ACTIVATE", grant: null, workRef: "task-09008b4c" });
+
+it("refuses gated work from the root under every published policy member", () => {
+  const kinds: readonly ApprovalPolicyKind[] = core.APPROVAL_POLICY_KINDS;
+  const code: ApprovalAuthorityCode = "APPROVAL_HUMAN_AUTHORITY_REQUIRED";
+  const layer: ApprovalAuthorityLayer = "HUMAN_AUTHORITY_GATE";
+  const policies: readonly ApprovalPolicy[] = [
+    { delayMs: 2_000, kind: "PROCEED_WITHOUT_HUMAN" }, { kind: "REQUIRE_HUMAN" },
+  ];
+  expect(policies.length).toBe(kinds.length);
+  expect(policies.length).toBeGreaterThan(0);
+  expect(policies.map((policy) => {
+    const request: ApprovalAuthorityRequest = { gate: authorityGate(), policy };
+    const result: ApprovalAuthorityResult = core.decideApprovalAuthority(request);
+    if (result.ok) return `${policy.kind}:APPROVED`;
+    const refusal: ApprovalAuthorityRefusal = result;
+    return `${policy.kind}:${refusal.code}@${refusal.layer}`;
+  })).toEqual(kinds.map((kind) => `${kind}:${code}@${layer}`));
+  expect(core.APPROVAL_AUTHORITY_CODES).toContain(code);
+  expect(core.APPROVAL_AUTHORITY_LAYERS).toContain(layer);
+});
+
+it("grants and then honours human authority through the root", () => {
+  const granted: HumanAuthorityGrantResult = core.grantHumanAuthority(
+    authorityGate(), { kind: "HUMAN", principalId: "human:yaron" }, 1_755_216_000_000,
+  );
+  if (!granted.ok) throw new Error(`unexpected refusal ${granted.code}`);
+  const grant: HumanAuthorityGrant | null = granted.gate.grant;
+  const result = core.decideApprovalAuthority({
+    gate: granted.gate, policy: { kind: "REQUIRE_HUMAN" },
+  });
+  if (!result.ok) throw new Error(`unexpected refusal ${result.code}`);
+  const decision: ApprovalAuthorityDecision = result;
+  expect([grant?.principalId, grant?.principalKind]).toEqual(["human:yaron", "HUMAN"]);
+  expect([decision.delayMs, decision.grant?.grantedAtEpochMs]).toEqual([0, 1_755_216_000_000]);
+});
+
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CHILD_TIMEOUT_MS = 30_000;
@@ -412,6 +466,10 @@ try {
     encodeProjectConfigurationManifest: typeof ns.encodeProjectConfigurationManifest,
     decodeProjectConfigurationManifestBytes: typeof ns.decodeProjectConfigurationManifestBytes,
     codecCodes: [...(ns.PROJECT_CONFIGURATION_CODEC_CODES ?? [])],
+    decideApprovalAuthority: typeof ns.decideApprovalAuthority,
+    grantHumanAuthority: typeof ns.grantHumanAuthority,
+    approvalPolicyKinds: [...(ns.APPROVAL_POLICY_KINDS ?? [])],
+    approvalAuthorityLayers: [...(ns.APPROVAL_AUTHORITY_LAYERS ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -436,8 +494,12 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 75,
+    namedExportCount: 80,
     undefinedBindingCount: 0,
+    decideApprovalAuthority: "function",
+    grantHumanAuthority: "function",
+    approvalPolicyKinds: ["PROCEED_WITHOUT_HUMAN", "REQUIRE_HUMAN"],
+    approvalAuthorityLayers: ["HUMAN_AUTHORITY_GATE", "APPROVAL_POLICY"],
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",
