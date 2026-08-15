@@ -1,0 +1,58 @@
+{
+  "id": "task-912567934d54419683d1518d60059409",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Report agent spawn admission truth",
+  "description": "Objective: consume the start-admission contract from task-d4329e8d020f40308209397079c5004d so the orchestrator never reports SPAWNED when startup was refused and no child exists.\n\nDeliverable: agent-wrapper awaits only startup admission (never child exit), returns a report with a distinguishable refusal outcome plus exact code/layer, records active work only for admitted children, and the wrapper main awaits that report before printing it. This replaces blocked task-58fd2c3781254d839ee27867f8f9f4e6, whose synchronous/no-contract-change rails were impossible against an exit-lifetime Promise.\n\nNOT in scope: changing spawn validation/quoting or credential-write order, reimplementing agentSpawnInvocation, inventing codes for unknown exceptions, changing the wrapper verifier/poll interval, or waiting for an agent to exit before returning the staffing report.\n\nVerification: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`; both legs are read separately and the daemon test output must show a nonzero executed count.",
+  "definitionOfDone": [
+    "A real spawner preflight refusal driven through the wrapper returns a non-SPAWNED report that asserts `SPAWN_ARGUMENT_UNQUOTABLE` and `agent-spawn-invocation` literally; the test also proves the refusal came from the spawner layer, not an earlier wrapper guard.",
+    "An admitted start still reports the existing SPAWNED shape before its held-open exit promise settles, and existing success assertions remain intact after only the required async caller adaptation.",
+    "The wrapper/main wait only for startup admission and never for child exit; a held-open child test proves runOnce/reporting completes while the child remains active.",
+    "A refused start is never inserted into the active map and leaves activeCount at its exact prior value; an admitted start is inserted once and deleted in a finally path when its exit settles.",
+    "No rejection is blanket-swallowed: the typed refusal becomes a coded report, while any unclassified start failure rejects/fails closed rather than being logged or reported as SPAWNED.",
+    "Restoring the unconditional SPAWNED branch turns the named refusal code/layer test red; restore is byte-exact by SHA-256.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` passes under path-attributed baseline rules, and daemon Vitest output proves nonzero execution."
+  ],
+  "taskRails": [
+    "Depends on task-d4329e8d020f40308209397079c5004d; do not mock or locally reimplement its start-admission contract if it is absent on disk.",
+    "The wrapper report must name both the stable code and refusing layer. `outcome !== SPAWNED` alone is not acceptance evidence.",
+    "Make runOnce/callers asynchronous only to await startup admission. Awaiting the child-exit promise would serialize the wrapper and is forbidden.",
+    "Do not touch agent-spawner production or tests in this consumer task; producer and consumer must remain independently reviewable.",
+    "Preserve the verifier and polling loop except for awaiting the truthful runOnce result, and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-58fd2c3781254d839ee27867f8f9f4e6",
+  "priority": "HIGH",
+  "order": 107.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:46:38.518Z",
+  "updatedAt": "2026-08-15T20:59:14.560Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:57:06.886Z"
+  },
+  "contextFetchedBy": [
+    "architect-d9dccf21"
+  ],
+  "blockedReason": "Required producer surface is absent on current disk, so the task rail forbids a consumer plan. Fresh measurement at HEAD 2e34a5f: `rg -n \"Spawn(Start|Admission)|startAgent|exitPromise|admission\" apps/daemon/src/orchestrator/agent-spawner.ts apps/daemon/src/orchestrator/agent-spawner.test.ts` returns zero matches. `claudeSpawner` is still the sole public start surface and returns `(SpawnRequest) => Promise<void>`; that Promise is constructed around the child and resolves only in finish() on exit/error/timeout. The wrapper still types spawnAgent as `(request) => Promise<void>`, calls it without awaiting startup, immediately records active, and returns SPAWNED. Producer task-d4329e8d020f40308209397079c5004d is PLANNING and assigned to architect-09b5f32a. Consumer rails explicitly forbid mocking/reimplementing that contract or editing producer files, so no production-ready plan can name the result shape until it lands. A second transient collision also exists: agent-wrapper.ts and agent-wrapper.test.ts have unstaged foreign HUMAN_ONLY_STEPS edits; they must be committed/cleared by their owner before this consumer touches those paths. Unblock after the producer is DONE on disk and the wrapper paths are clean; then remeasure exact exported symbol/type and plan the async startup-only consumer.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T20:58:29.100Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning/exploration skills, re-measured producer and consumer surfaces at HEAD 2e34a5f, proved the start-admission contract is absent, identified active foreign wrapper WIP, notified the producer architect, reported the task BLOCKED with needsFrom task-d4329e8d020f40308209397079c5004d, and wrote a Serena handoff memory.",
+      "whatRemains": "After producer task-d4329e8d020f40308209397079c5004d is DONE and its symbols are on disk, clear/finish the foreign wrapper WIP, unblock this task, claim it, verify the exact exported admission/result types, then submit a consumer plan for wrapper/main/tests.",
+      "pitfalls": "Do not mock or locally recreate the producer contract. Do not await the child-exit promise. Preserve unstaged HUMAN_ONLY_STEPS changes in agent-wrapper.ts and agent-wrapper.test.ts; never reset/stash them.",
+      "openQuestions": "Exact producer symbol/type names intentionally remain unnamed until they land; stale-by-default rail requires grep/probe then.",
+      "releasedAt": "2026-08-15T20:59:14.558Z",
+      "releasedBy": "architect-d9dccf21",
+      "reason": "Explicit architect handoff after dependency-block measurement; continuing to plan independent tasks as requested."
+    }
+  ]
+}

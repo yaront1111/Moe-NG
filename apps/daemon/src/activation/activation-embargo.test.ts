@@ -126,6 +126,7 @@ interface RestoreRecordParts {
  */
 function installRestoreBinding(store: SqliteEventStore, parts: RestoreRecordParts): void {
   const record = {
+    backupCursor: "0",
     generationDigest: "3c".repeat(32),
     incarnationRef: parts.recordIncarnationRef,
     keyEpochRef: parts.recordKeyEpochRef,

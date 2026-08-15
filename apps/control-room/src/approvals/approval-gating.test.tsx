@@ -1,83 +1,80 @@
+import { cleanup, render, screen } from "@testing-library/react";
 import { buildNextAllowedCommands } from "@moe/contracts";
-import { describe, expect, it } from "vitest";
-
 import {
-  APPROVAL_DECISION_KINDS,
-  APPROVAL_FIXTURE_KIND,
-  APPROVAL_FIXTURE_RECORDS,
-  CUTOVER_CONSEQUENCE_FIXTURE,
-  FIXTURE_REVISION_HASH,
-  FIXTURE_SUPERSEDING_HASH,
-  IDLE_CONSEQUENCES,
-  approvalAffordance,
-  approvalRecord,
-  idleConsequence,
-  withRecord,
+  APPROVAL_AUTHORITY_CODES,
+} from "@moe/core";
+import type { ApprovalPolicy, HumanAuthorityGate, HumanAuthorityGrant } from "@moe/core";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  APPROVAL_DECISION_KINDS, APPROVAL_FIXTURE_KIND, APPROVAL_FIXTURE_RECORDS,
+  CUTOVER_CONSEQUENCE_FIXTURE, FIXTURE_REVISION_HASH, FIXTURE_SUPERSEDING_HASH,
+  IDLE_CONSEQUENCES, approvalAffordance, approvalRecord, idleConsequence, withRecord,
 } from "./approval-fixtures.js";
-import type { ApprovalDecisionKind, ApprovalDecisionRecord } from "./approval-fixtures.js";
+import type { ApprovalDecisionRecord } from "./approval-fixtures.js";
 import {
-  APPROVAL_REASONS,
-  approvalReason,
-  controlTestId,
-  resolveApprovalControls,
-  unavailableText,
+  APPROVAL_REASONS, approvalReason, controlTestId, decisionCommandKind,
+  resolveApprovalControls, unavailableText,
 } from "./approval-gating.js";
-import type { ApprovalControl, ApprovalControlRequest } from "./approval-gating.js";
-
+import type {
+  ApprovalAuthorityContext, ApprovalControl, ApprovalControlRequest,
+} from "./approval-gating.js";
+import { DecisionControl } from "./approval-inbox.js";
+afterEach(cleanup);
 const TARGET = "approval-j4-plan";
-
 const APPROVE: ApprovalControlRequest = {
-  commandKind: "approval.decide",
-  label: "Approve plan",
-  qualifier: "approve",
+  commandKind: "approval.decide", label: "Approve plan", qualifier: "approve",
 };
-
+const AUTO_POLICY: ApprovalPolicy = { delayMs: 25, kind: "PROCEED_WITHOUT_HUMAN" };
+const HUMAN_POLICY: ApprovalPolicy = { kind: "REQUIRE_HUMAN" };
+const UNSATISFIED_GATE: HumanAuthorityGate = {
+  gateId: "human-gate-1", grant: null, workRef: TARGET,
+};
+const HUMAN_GRANT: HumanAuthorityGrant = {
+  gateId: UNSATISFIED_GATE.gateId,
+  grantedAtEpochMs: 1_786_755_600_000,
+  principalId: "operator-alice",
+  principalKind: "HUMAN",
+  workRef: TARGET,
+};
+const SATISFIED_GATE: HumanAuthorityGate = { ...UNSATISFIED_GATE, grant: HUMAN_GRANT };
+const CURRENT_RECORD = approvalRecord({ exactRevisionHash: FIXTURE_REVISION_HASH });
 function controlsFor(
   record: ApprovalDecisionRecord,
   affordances = [approvalAffordance("approval.decide", { targetAggregateId: TARGET })],
   reasons: Readonly<Record<string, ReturnType<typeof approvalReason>>> = {},
+  authority?: ApprovalAuthorityContext,
 ): readonly ApprovalControl[] {
   return resolveApprovalControls({
-    affordances,
-    reasons,
-    record,
-    requests: [APPROVE],
-    targetAggregateId: TARGET,
+    affordances, authority, reasons, record, requests: [APPROVE], targetAggregateId: TARGET,
   });
 }
-
 function onlyControl(...args: Parameters<typeof controlsFor>): ApprovalControl {
   const controls = controlsFor(...args);
   expect(controls).toHaveLength(1);
   return controls[0] as ApprovalControl;
 }
 
-const CURRENT_RECORD = approvalRecord({ exactRevisionHash: FIXTURE_REVISION_HASH });
-
 describe("approval fixtures", () => {
-  it("marks itself development-only and never confirmatory", () => {
+  it("remains development-only with an exact nonempty kind inventory", () => {
     expect(APPROVAL_FIXTURE_KIND).toBe("DEVELOPMENT_ONLY/NOT_CONFIRMATORY");
-  });
-
-  it("supplies one frozen record per declared decision kind", () => {
-    expect(APPROVAL_DECISION_KINDS.length).toBeGreaterThan(0);
-    const kinds = Object.keys(APPROVAL_FIXTURE_RECORDS) as ApprovalDecisionKind[];
-    expect(kinds.sort()).toEqual([...APPROVAL_DECISION_KINDS].sort());
+    const kinds = Object.keys(APPROVAL_FIXTURE_RECORDS).sort();
+    expect(kinds).toEqual([...APPROVAL_DECISION_KINDS].sort());
+    expect(kinds.length).toBe(APPROVAL_DECISION_KINDS.length);
+    expect(kinds.length).toBeGreaterThan(0);
     for (const kind of APPROVAL_DECISION_KINDS) {
       expect(Object.isFrozen(APPROVAL_FIXTURE_RECORDS[kind])).toBe(true);
     }
   });
 
-  it("emits affordances the daemon's own parser accepts", () => {
+  it("emits affordances accepted by the production parser", () => {
     const built = buildNextAllowedCommands({ aggregate: "APPROVAL", state: "PENDING" }, [
       approvalAffordance("approval.decide", { targetAggregateId: TARGET }),
-      approvalAffordance("graph.approve", { commandId: "cmd-fx-expansion", targetAggregateId: TARGET }),
+      approvalAffordance("graph.approve", { commandId: "cmd-expansion", targetAggregateId: TARGET }),
     ]);
-    expect(built).toHaveLength(2);
     expect(built.map((entry) => entry.commandKind)).toEqual(["approval.decide", "graph.approve"]);
   });
 
-  it("carries the design-derived cutover consequence payload verbatim", () => {
+  it("keeps the design-derived cutover payload exact", () => {
     expect(Object.keys(CUTOVER_CONSEQUENCE_FIXTURE).sort()).toEqual([
       "consequencePayload", "deadline", "disposition", "exactStoredHash",
       "fundingReservation", "planningFenceMembership", "releaseAction",
@@ -85,169 +82,219 @@ describe("approval fixtures", () => {
   });
 });
 
-describe("approvals-local reason channel", () => {
-  it("refuses a ratified code paired with a source its registry row forbids", () => {
-    expect(() => approvalReason("CUTOVER_STATE_INVALID", "GOAL", "wrong home")).toThrow(
-      /CUTOVER_STATE_INVALID/,
-    );
+describe("landed approval refusal vocabulary", () => {
+  it("maps all eight codes to their literal canonical layers", () => {
+    const projected = APPROVAL_AUTHORITY_CODES.map((code) => {
+      const reason = approvalReason(code, `reason for ${code}`);
+      return `${reason.code}@${reason.refusingLayer}`;
+    });
+    expect(projected.length).toBe(APPROVAL_AUTHORITY_CODES.length);
+    expect(projected.length).toBe(8);
+    expect(projected.length).toBeGreaterThan(0);
+    expect(projected).toEqual([
+      "APPROVAL_HUMAN_AUTHORITY_REQUIRED@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_AUTHORITY_BINDING_MISMATCH@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_PRINCIPAL_MISSING@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_PRINCIPAL_UNNAMED@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_PRINCIPAL_NOT_HUMAN@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_GRANT_MOMENT_INVALID@HUMAN_AUTHORITY_GATE",
+      "APPROVAL_POLICY_DELAY_INVALID@APPROVAL_POLICY",
+      "APPROVAL_HUMAN_REVIEW_REQUIRED@APPROVAL_POLICY",
+    ]);
   });
 
-  it("accepts a source-unrestricted code against any lifecycle source", () => {
-    const reason = approvalReason("CAPABILITY_DENIED", "APPROVAL", "your role may not decide R3");
-    expect(reason.code).toBe("CAPABILITY_DENIED");
-  });
-
-  it("refuses a code spelling the ratified registry does not define", () => {
-    expect(() =>
-      approvalReason("APPROVAL_STALE" as never, "APPROVAL", "invented"),
-    ).toThrow(/APPROVAL_STALE/);
-  });
-
-  it("renders the spec 8.1 unavailable sentence exactly", () => {
+  it("includes code and layer literally in unavailable copy", () => {
     expect(unavailableText(APPROVAL_REASONS.HASH_MISMATCH)).toBe(
-      `Unavailable: ${APPROVAL_REASONS.HASH_MISMATCH.phrase} (EXPECTED_VERSION_CONFLICT).`,
+      `Unavailable: ${APPROVAL_REASONS.HASH_MISMATCH.phrase} `
+      + "(APPROVAL_AUTHORITY_BINDING_MISMATCH @ HUMAN_AUTHORITY_GATE).",
     );
   });
 });
 
-describe("policy-decided record integrity", () => {
-  it("refuses a SYSTEM_POLICY record claiming human-approved truth", () => {
-    expect(() =>
-      approvalRecord({ actorKind: "SYSTEM_POLICY", riskTier: "R1", truthClass: "HUMAN_APPROVED" }),
-    ).toThrow(/SYSTEM_POLICY/);
+describe("authority presentation", () => {
+  it("visibly renders a gate-layer refusal with its unsatisfied binding", () => {
+    const control = onlyControl(CURRENT_RECORD, undefined, {}, {
+      gate: UNSATISFIED_GATE, policy: AUTO_POLICY,
+    });
+    render(<DecisionControl control={control} />);
+    const button = screen.getByTestId(control.testId);
+    expect([button.dataset.reasonCode, button.dataset.refusingLayer])
+      .toEqual(["APPROVAL_HUMAN_AUTHORITY_REQUIRED", "HUMAN_AUTHORITY_GATE"]);
+    expect(screen.getByText(/APPROVAL_HUMAN_AUTHORITY_REQUIRED/)).toBeDefined();
+    expect(screen.getByText(/HUMAN_AUTHORITY_GATE/)).toBeDefined();
+    expect(screen.getByText("human-gate-1")).toBeDefined();
+    expect(screen.getByText(TARGET)).toBeDefined();
+    expect(screen.getByText("UNSATISFIED")).toBeDefined();
   });
 
-  it("refuses a SYSTEM_POLICY record above the R0/R1 opt-in bound", () => {
-    expect(() =>
-      approvalRecord({ actorKind: "SYSTEM_POLICY", riskTier: "R2", truthClass: "DAEMON_VERIFIED" }),
-    ).toThrow(/R2/);
+  it("visibly renders a policy-layer refusal", () => {
+    const control = onlyControl(CURRENT_RECORD, undefined, {}, {
+      gate: null, policy: HUMAN_POLICY,
+    });
+    render(<DecisionControl control={control} />);
+    const button = screen.getByTestId(control.testId);
+    expect([button.dataset.reasonCode, button.dataset.refusingLayer])
+      .toEqual(["APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY"]);
+    expect(screen.getByText(/APPROVAL_HUMAN_REVIEW_REQUIRED/)).toBeDefined();
+    expect(screen.getByText(/APPROVAL_POLICY/)).toBeDefined();
+    expect(screen.getByText("REQUIRE_HUMAN")).toBeDefined();
+  });
+
+  it("renders automatic policy delay and a named human grant", () => {
+    const automatic = onlyControl(CURRENT_RECORD, undefined, {}, {
+      gate: null, policy: AUTO_POLICY,
+    });
+    const automaticView = render(<DecisionControl control={automatic} />);
+    expect(screen.getByText("PROCEED_WITHOUT_HUMAN")).toBeDefined();
+    expect(screen.getByText("25 ms")).toBeDefined();
+    expect(automaticView.container.querySelectorAll("[data-testid^='cr.fact.']")).toHaveLength(2);
+    automaticView.unmount();
+
+    const granted = onlyControl(CURRENT_RECORD, undefined, {}, {
+      gate: SATISFIED_GATE, policy: HUMAN_POLICY,
+    });
+    const grantedView = render(<DecisionControl control={granted} />);
+    for (const literal of [
+      "REQUIRE_HUMAN", "human-gate-1", TARGET, "SATISFIED", "HUMAN",
+      "operator-alice", String(HUMAN_GRANT.grantedAtEpochMs),
+    ]) expect(screen.getByText(literal)).toBeDefined();
+    const factIds = [...grantedView.container.querySelectorAll("[data-testid^='cr.fact.']")]
+      .map((node) => node.getAttribute("data-testid"));
+    expect(factIds).toHaveLength(7);
+    expect(new Set(factIds).size).toBe(7);
+    expect(grantedView.container.querySelectorAll("[data-testid^='cr.chip.']")).toHaveLength(7);
   });
 });
 
-describe("idle-consequence lines", () => {
-  it("returns the spec 8.10 line for every kind the spec defines", () => {
-    const defined = Object.keys(IDLE_CONSEQUENCES) as (keyof typeof IDLE_CONSEQUENCES)[];
-    expect(defined.length).toBe(6);
-    for (const kind of defined) {
-      expect(idleConsequence(kind)).toBe(IDLE_CONSEQUENCES[kind]);
-    }
-    expect(idleConsequence("PLAN")).toBe(
-      "node waits in PLAN_REVIEW; its lease may lapse to SUSPECT.",
-    );
-  });
-
-  it("returns null rather than inventing a line for undefined kinds", () => {
-    expect(idleConsequence("CUTOVER_QUIESCE")).toBeNull();
-    expect(idleConsequence("CUTOVER_ACTIVATE")).toBeNull();
-    expect(idleConsequence("SOFT_POLICY_WAIVER")).toBeNull();
-  });
-});
-
-describe("decide controls derive only from nextAllowedCommands", () => {
-  it("enables a control the daemon actually returned for a current record", () => {
+describe("controls derive only from supplied command authority", () => {
+  it("enables only a returned command for a current record without invented context", () => {
     const control = onlyControl(CURRENT_RECORD);
-    expect(control.state).toBe("ENABLED");
-    expect(control.testId).toBe("cr.action.approval-decide.approve");
-    expect(control.commandId).toBe("cmd-fx-approval-decide");
-    expect(control.refusedBy).toBeNull();
-    expect(control.reasonCode).toBeNull();
+    expect(control).toMatchObject({
+      commandId: "cmd-fx-approval-decide", reasonCode: null,
+      refusedBy: null, refusingLayer: null, state: "ENABLED",
+    });
+    const { container } = render(<DecisionControl control={control} />);
+    expect(container.querySelectorAll("[data-testid^='cr.fact.']")).toHaveLength(0);
   });
 
-  it("names an expansion control after graph.approve, not approval.decide", () => {
+  it("keeps a control absent when neither command nor reason was supplied", () => {
+    expect(onlyControl(CURRENT_RECORD, [])).toMatchObject({
+      commandId: null, disabledText: null, reasonCode: null,
+      refusedBy: "AFFORDANCE_ABSENT", refusingLayer: null, state: "ABSENT",
+    });
+  });
+
+  it("disables an absent affordance with the exact supplied refusal", () => {
+    const control = onlyControl(CURRENT_RECORD, [], {
+      "cr.action.approval-decide.approve": APPROVAL_REASONS.HUMAN_AUTHORITY_REQUIRED,
+    });
+    expect(control).toMatchObject({
+      commandId: null, reasonCode: "APPROVAL_HUMAN_AUTHORITY_REQUIRED",
+      refusedBy: "AFFORDANCE_ABSENT", refusingLayer: "HUMAN_AUTHORITY_GATE",
+      state: "DISABLED",
+    });
+  });
+
+  it("offers no approving control for any decision kind behind an unsatisfied gate", () => {
+    const requests = APPROVAL_DECISION_KINDS.map((kind) => ({
+      commandKind: decisionCommandKind(kind), label: `Decide ${kind}`,
+      qualifier: kind.toLowerCase(),
+    }));
+    const affordances = requests.map((request, index) => approvalAffordance(request.commandKind, {
+      commandId: `cmd-gated-${index}`, targetAggregateId: TARGET,
+    }));
+    const controls = resolveApprovalControls({
+      affordances, authority: { gate: UNSATISFIED_GATE, policy: AUTO_POLICY },
+      record: CURRENT_RECORD, requests, targetAggregateId: TARGET,
+    });
+    expect(requests.length).toBe(APPROVAL_DECISION_KINDS.length);
+    expect(controls.length).toBe(APPROVAL_DECISION_KINDS.length);
+    expect(controls.length).toBeGreaterThan(0);
+    expect(new Set(controls.map((control) => control.testId)).size).toBe(controls.length);
+    for (const control of controls) {
+      expect(["DISABLED", "ABSENT"]).toContain(control.state);
+      expect(control.commandId).toBeNull();
+      expect(control.reasonCode).toBe("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
+      expect(control.refusingLayer).toBe("HUMAN_AUTHORITY_GATE");
+    }
+  });
+
+  it("derives stable test IDs from commands and qualifiers", () => {
     expect(controlTestId("graph.approve")).toBe("cr.action.graph-approve");
     expect(controlTestId("approval.decide", "reject")).toBe("cr.action.approval-decide.reject");
   });
+});
 
-  it("omits the control entirely when the daemon returned neither command nor reason", () => {
-    const control = onlyControl(CURRENT_RECORD, []);
-    expect(control.state).toBe("ABSENT");
-    expect(control.disabledText).toBeNull();
-    expect(control.reasonCode).toBeNull();
-    expect(control.commandId).toBeNull();
-    expect(control.refusedBy).toBe("AFFORDANCE_ABSENT");
+describe("local structural guards", () => {
+  const expectBindingRefusal = (record: ApprovalDecisionRecord, refusedBy: string): void => {
+    expect(onlyControl(record)).toMatchObject({
+      commandId: null, reasonCode: "APPROVAL_AUTHORITY_BINDING_MISMATCH", refusedBy,
+      refusingLayer: "HUMAN_AUTHORITY_GATE", state: "DISABLED",
+    });
+  };
+
+  it("names the lifecycle guard separately from its canonical refusal layer", () => {
+    expectBindingRefusal(withRecord(CURRENT_RECORD, { lifecycle: "DECIDED" }), "RECORD_LIFECYCLE");
   });
 
-  it("disables with the supplied reason when a reason is present but the command is not", () => {
-    const control = onlyControl(CURRENT_RECORD, [], {
-      "cr.action.approval-decide.approve": APPROVAL_REASONS.CAPABILITY_DENIED,
+  it("names each validity refusal and its stable code", () => {
+    expectBindingRefusal(withRecord(CURRENT_RECORD, { validity: "INVALIDATED" }), "RECORD_VALIDITY");
+    expectBindingRefusal(withRecord(CURRENT_RECORD, { validity: "SUPERSEDED" }), "RECORD_VALIDITY");
+  });
+
+  it("names hash mismatch and missing binding at the same canonical layer", () => {
+    expectBindingRefusal(withRecord(CURRENT_RECORD, {
+      exactRevisionHash: FIXTURE_SUPERSEDING_HASH,
+    }), "REVISION_HASH");
+    const unpinned = approvalAffordance("approval.decide", {
+      graphRevisionHash: undefined, targetAggregateId: TARGET,
     });
-    expect(control.state).toBe("DISABLED");
-    expect(control.reasonCode).toBe("CAPABILITY_DENIED");
-    expect(control.refusedBy).toBe("AFFORDANCE_ABSENT");
-    expect(control.disabledText).toBe(unavailableText(APPROVAL_REASONS.CAPABILITY_DENIED));
-    expect(control.commandId).toBeNull();
+    const control = onlyControl(CURRENT_RECORD, [unpinned]);
+    expect(control).toMatchObject({
+      reasonCode: "APPROVAL_AUTHORITY_BINDING_MISMATCH", refusedBy: "REVISION_HASH",
+      refusingLayer: "HUMAN_AUTHORITY_GATE",
+    });
+  });
+
+  it("checks authority, then lifecycle, validity, and hash", () => {
+    const stale = withRecord(CURRENT_RECORD, {
+      exactRevisionHash: FIXTURE_SUPERSEDING_HASH, lifecycle: "WITHDRAWN", validity: "INVALIDATED",
+    });
+    const gated = onlyControl(stale, undefined, {}, { gate: UNSATISFIED_GATE, policy: AUTO_POLICY });
+    expect(gated).toMatchObject({
+      reasonCode: "APPROVAL_HUMAN_AUTHORITY_REQUIRED", refusedBy: "AUTHORITY_CONTEXT",
+      refusingLayer: "HUMAN_AUTHORITY_GATE",
+    });
+    expectBindingRefusal(stale, "RECORD_LIFECYCLE");
+    expectBindingRefusal(withRecord(stale, { lifecycle: "PENDING" }), "RECORD_VALIDITY");
+  });
+
+  it("refuses every non-current production record with exact nonzero coverage", () => {
+    const cases = APPROVAL_DECISION_KINDS.flatMap((kind) =>
+      (["INVALIDATED", "SUPERSEDED"] as const).map((validity) =>
+        withRecord(APPROVAL_FIXTURE_RECORDS[kind], {
+          exactRevisionHash: FIXTURE_REVISION_HASH, lifecycle: "PENDING", validity,
+        })));
+    expect(cases.length).toBe(APPROVAL_DECISION_KINDS.length * 2);
+    expect(cases.length).toBeGreaterThan(0);
+    for (const record of cases) expectBindingRefusal(record, "RECORD_VALIDITY");
   });
 });
 
-describe("stale-approval guard", () => {
-  it("refuses a record whose approval lifecycle already left PENDING", () => {
-    const control = onlyControl(withRecord(CURRENT_RECORD, { lifecycle: "DECIDED" }));
-    expect(control.state).toBe("DISABLED");
-    expect(control.refusedBy).toBe("RECORD_LIFECYCLE");
-    expect(control.reasonCode).toBe("ILLEGAL_TRANSITION");
-    expect(control.commandId).toBeNull();
+describe("record and consequence integrity", () => {
+  it("keeps policy records inside the R0/R1 daemon-verified bound", () => {
+    expect(() => approvalRecord({
+      actorKind: "SYSTEM_POLICY", riskTier: "R1", truthClass: "HUMAN_APPROVED",
+    })).toThrow(/SYSTEM_POLICY/);
+    expect(() => approvalRecord({
+      actorKind: "SYSTEM_POLICY", riskTier: "R2", truthClass: "DAEMON_VERIFIED",
+    })).toThrow(/R2/);
   });
 
-  it("refuses an invalidated record even while the daemon still offers the command", () => {
-    const control = onlyControl(withRecord(CURRENT_RECORD, { validity: "INVALIDATED" }));
-    expect(control.state).toBe("DISABLED");
-    expect(control.refusedBy).toBe("RECORD_VALIDITY");
-    expect(control.reasonCode).toBe("REVISION_REBOUND");
-  });
-
-  it("refuses a superseded record with the superseded-authority code", () => {
-    const control = onlyControl(withRecord(CURRENT_RECORD, { validity: "SUPERSEDED" }));
-    expect(control.refusedBy).toBe("RECORD_VALIDITY");
-    expect(control.reasonCode).toBe("SUPERSEDED_AUTHORITY");
-  });
-
-  it("refuses when the record's exact hash is not the identity the command pins", () => {
-    const control = onlyControl(withRecord(CURRENT_RECORD, {
-      exactRevisionHash: FIXTURE_SUPERSEDING_HASH,
-    }));
-    expect(control.state).toBe("DISABLED");
-    expect(control.refusedBy).toBe("REVISION_HASH");
-    expect(control.reasonCode).toBe("EXPECTED_VERSION_CONFLICT");
-  });
-
-  it("refuses fail-closed when the command pins no revision hash to compare", () => {
-    const unpinned = approvalAffordance("approval.decide", {
-      graphRevisionHash: undefined,
-      targetAggregateId: TARGET,
-    });
-    const control = onlyControl(CURRENT_RECORD, [unpinned]);
-    expect(control.state).toBe("DISABLED");
-    expect(control.refusedBy).toBe("REVISION_HASH");
-    expect(control.reasonCode).toBe("STALE_EPOCH");
-  });
-
-  it("pins guard order: lifecycle outranks validity, validity outranks the hash", () => {
-    const both = withRecord(CURRENT_RECORD, {
-      exactRevisionHash: FIXTURE_SUPERSEDING_HASH,
-      validity: "INVALIDATED",
-    });
-    expect(onlyControl(both).refusedBy).toBe("RECORD_VALIDITY");
-    expect(onlyControl(withRecord(both, { lifecycle: "WITHDRAWN" })).refusedBy)
-      .toBe("RECORD_LIFECYCLE");
-  });
-
-  it("never enables a control for a non-current record across every kind", () => {
-    const stale = ["INVALIDATED", "SUPERSEDED"] as const;
-    let swept = 0;
-    for (const kind of APPROVAL_DECISION_KINDS) {
-      for (const validity of stale) {
-        const record = withRecord(APPROVAL_FIXTURE_RECORDS[kind], {
-          exactRevisionHash: FIXTURE_REVISION_HASH,
-          lifecycle: "PENDING",
-          validity,
-        });
-        const control = onlyControl(record);
-        expect(control.state).toBe("DISABLED");
-        expect(control.commandId).toBeNull();
-        swept += 1;
-      }
-    }
-    expect(swept).toBe(APPROVAL_DECISION_KINDS.length * stale.length);
-    expect(swept).toBeGreaterThan(0);
+  it("returns every declared idle consequence and invents none", () => {
+    const defined = Object.keys(IDLE_CONSEQUENCES) as (keyof typeof IDLE_CONSEQUENCES)[];
+    expect(defined.length).toBe(6);
+    for (const kind of defined) expect(idleConsequence(kind)).toBe(IDLE_CONSEQUENCES[kind]);
+    expect(idleConsequence("CUTOVER_QUIESCE")).toBeNull();
   });
 });

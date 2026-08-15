@@ -29,12 +29,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:51:02.604Z",
-  "updatedAt": "2026-08-15T20:13:58.822Z",
+  "updatedAt": "2026-08-15T21:26:27.231Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:13:10.854Z"
   },
   "contextFetchedBy": [
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "architect-09b5f32a"
   ],
   "blockedReason": "The task's literal hard dependency is still unmet: task-f6ef0a45f52c45c7bb54f250170aa223 is PLANNING and held by another architect, not DONE. Fresh HEAD 18f0964 shows package.json/pnpm-lock and daemon root paths clean, but repository-root bare probes for both @moe/runner and @moe/daemon still fail ERR_MODULE_NOT_FOUND, and the doctor collector therefore cannot yet be named from the public daemon root. Planning the durable call site before f6ef lands would either reference an absent root export or weaken the call site. Resume after f6ef is DONE, then remeasure its bare export and the clean shared manifest/lock paths.",
   "blockedResourceId": null,

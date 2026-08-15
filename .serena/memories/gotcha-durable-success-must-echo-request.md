@@ -1,0 +1,3 @@
+# Durable success must echo the request exactly
+
+A port decoder that accepts any structurally valid success arm is insufficient for a one-use CAS or registration authority. A buggy/hostile durable store can return another consumed grant or another lock/process registration; generic decoding then lets downstream physical open proceed under the wrong authority. After decoding, compare the durable success to the exact presented/validated request: immutable identity fields unchanged, version exactly +1 for CAS, and registration byte-equal to the pure validated registration. Tests must return well-formed wrong-identity successes and assert exact refusal code/layer plus zero physical opens.

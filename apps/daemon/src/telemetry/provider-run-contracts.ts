@@ -2,11 +2,10 @@
  * Frozen vocabulary for the durable provider-run telemetry ledger.
  *
  * This module declares names, shapes and one pure derivation. It launches no
- * provider, normalizes no usage and computes no digest — both halves arrive as
- * inputs produced by authorities that already exist (`@moe/runner` for the raw
- * launch telemetry, `@moe/scheduler` for the usage measurement) and are
- * persisted verbatim. The daemon is the only boundary that may depend on both,
- * which is why the composition lives here and not in either producer.
+ * provider, normalizes no usage and computes no RECORD digest. Its fields bind
+ * published producer shapes from `@moe/runner` and `@moe/scheduler`; later
+ * composition, codec and ledger slices own population and persistence. The
+ * daemon is the direction-safe boundary that may depend on both producers.
  *
  * EVERY RECORD FIELD IS TYPED FROM ITS PRODUCING PACKAGE'S PUBLIC ROOT. A
  * locally re-declared shape would let a producer change compile cleanly here and
@@ -20,6 +19,8 @@
  * layer answered. Flattening them would make "which authority refused this run"
  * unanswerable from the durable bytes, and the bytes are all a later reader has.
  */
+
+import { createHash } from "node:crypto";
 
 import type {
   ClaudeDeclaredSelection,
@@ -55,7 +56,7 @@ export type { ObservedIntervalRefs, UsageMeasurementRecord } from "@moe/schedule
 
 export const PROVIDER_RUN_RECORD_VERSION = "moe-provider-run-record/1" as const;
 
-/** The one event type this ledger writes and the only one its reader accepts. */
+/** Reserved as the event type for this family's future ledger writer and reader. */
 export const PROVIDER_RUN_EVENT_TYPE = "ProviderRunTelemetryCommitted" as const;
 
 /**
@@ -77,11 +78,11 @@ export interface ProviderRunUsageRefusal {
 }
 
 /**
- * The durable record: one provider run, whole.
+ * The durable record contract for one provider run.
  *
- * Every fact the launch telemetry and the usage measurement produced together,
- * so that a reader holding these bytes can answer without consulting any other
- * row or re-reading a provider receipt that may no longer exist.
+ * It binds the reviewed launch facts and normalized measurements needed by a
+ * later reader without pretending to be a byte-for-byte `ClaudeTelemetryHandoff`:
+ * handoff/parser envelope versions are not duplicated as run facts here.
  *
  * WHERE THE ENUMERATED DoD FACTS LIVE, so no later slice re-derives one that is
  * already bound: run/effect/attempt identity is `providerRunRef` whole; the
@@ -146,7 +147,7 @@ export interface ProviderRunRecord {
 }
 
 /**
- * The exact store surface this family uses — three methods, not the whole
+ * The exact store surface this family's future ledger may use — three methods, not the whole
  * `SqliteEventStore`. `commitExpectedVersionDecisionWithApply` and
  * `commitWithApply` are absent BY CONSTRUCTION: `CommitApply` hands out a raw
  * `DatabaseSync` for callers who write their own tables, which the no-new-schema
@@ -159,38 +160,45 @@ export interface ProviderRunStore {
   readEvents(aggregateId: string): readonly StoredEvent[];
 }
 
-const AGGREGATE_NAMESPACE = `${PROVIDER_RUN_RECORD_VERSION}|aggregate|`;
+const AGGREGATE_NAMESPACE = `${PROVIDER_RUN_RECORD_VERSION}|aggregate|sha256:`;
+const AGGREGATE_ID_DOMAIN = "moe.provider-run.aggregate-id.v1";
+const textEncoder = new TextEncoder();
 
-const framed = (component: string): string => `${component.length}:${component}`;
+function aggregateIdentityDigest(components: readonly string[]): string {
+  const hash = createHash("sha256").update(`${AGGREGATE_ID_DOMAIN}\u0000`, "utf8");
+  for (const component of components) {
+    const bytes = textEncoder.encode(component);
+    hash.update(`${String(bytes.byteLength)}:`, "ascii").update(bytes);
+  }
+  return hash.digest("hex");
+}
 
 /**
  * Derives this ledger's aggregate id from the run identity, so one provider run
  * is one aggregate head and the ledger can borrow conflict detection from the
  * store's expected-version check instead of hand-rolling one.
  *
- * INJECTIVE BY CONSTRUCTION. Each component is preceded by its own code-unit
- * length, so distinct identities cannot produce one string. A bare join would
- * map runRef 'a'/effect 'bc' onto the SAME aggregate as runRef 'ab'/effect 'c',
- * and because every run commits from expected version 0 that single bug would
- * both accept a second run that should have conflicted and refuse a first run
- * that should have been accepted. A separator alone is not enough either: a
- * component containing the separator re-splits.
+ * BOUNDED AND COLLISION-RESISTANT. Every component is UTF-8-length-framed before
+ * a domain-separated SHA-256 digest, so field boundaries and all five identity
+ * facts affect a fixed-size store identifier. A bare join would map runRef
+ * 'a'/effect 'bc' onto the same bytes as runRef 'ab'/effect 'c'; a separator
+ * alone is insufficient because a component may contain that separator.
  *
- * THE SEPARATOR MUST ALSO BE A LEGAL IDENTIFIER CHARACTER. The store's
- * `requireIdentifier` rejects any identifier containing a NUL — the obvious
- * delimiter — and it rejects it at commit time, after the framing table, the
- * codec and every injectivity row have gone green.
+ * THE FIXED SIZE IS LOAD-BEARING. A producer-admitted run ref may contain three
+ * 200-byte identity fields; preserving those frames in the aggregate id exceeds
+ * the store's 512-byte identifier ceiling and makes every later commit refuse
+ * with STORE_INPUT_INVALID. Only the digest is stored in the id; the complete
+ * identity remains inside the record and later readers must compare it rather
+ * than treating hash uniqueness as authority.
  *
  * WHAT THIS DOES NOT DO, stated so no caller reads more into it. It VALIDATES
- * NOTHING. The framing is injective over the components as strings, but the
- * runner's own `snapshotRunRef` and its bounded-ref alphabet are what make a
- * `ProviderRunRef` admissible in the first place, and the runner deliberately
- * withholds that minter from its package root. So a ref that never came from a
- * handoff can still carry an unbounded, unprintable or accessor-backed field
- * straight into this string. Callers must take the ref FROM the handoff; the
- * store's identifier check is the backstop, not this function.
+ * NOTHING. The runner's own `snapshotRunRef` and bounded-ref alphabet are what
+ * make a `ProviderRunRef` admissible, and the runner deliberately withholds that
+ * minter from its package root. Hashing a caller-forged ref into a bounded string
+ * does not make that ref trustworthy; callers must still take it from the
+ * validated handoff.
  */
 export function deriveProviderRunAggregateId(ref: ProviderRunRef): string {
   const identity = [ref.provider, ref.runRef, ref.effectIntentId, ref.attemptRef, String(ref.epoch)];
-  return `${AGGREGATE_NAMESPACE}${identity.map(framed).join("|")}`;
+  return `${AGGREGATE_NAMESPACE}${aggregateIdentityDigest(identity)}`;
 }

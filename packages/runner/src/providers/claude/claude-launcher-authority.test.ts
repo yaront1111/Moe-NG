@@ -182,16 +182,25 @@ describe("durable Claude launcher authority overlay", () => {
     const grants = durableGrants();
     const regs = durableRegistrations();
     const launch = createClaudeLauncher(authorityOf(grants, regs));
-    const exited = await launch(request({ duplicateDelivery: {
-      claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE" } }));
+    const exited = await launch(
+      request({ duplicateDelivery: {
+        claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE",
+      } }),
+      { platform: "win32" },
+    );
     expect(exited).toMatchObject({
       kind: "EXIT_BEFORE_LAUNCH", ok: true, launched: false, processIdentity: null,
     });
-    const adopted = await launch(request({ duplicateDelivery: {
-      claim: CLAIM, lockState: "HELD", effectState: "ACTIVE", registration: {
-        lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
-        processIdentity: STARTED_IDENTITY, bootstrapCredentialDigest: DIGEST,
-        registeredAt: AT } } }));
+    const adopted = await launch(
+      request({ duplicateDelivery: {
+        claim: CLAIM, lockState: "HELD", effectState: "ACTIVE", registration: {
+          lockIdentity: CLAIM.lockIdentity, wrapperIdentity: CLAIM.wrapperIdentity,
+          processIdentity: STARTED_IDENTITY, bootstrapCredentialDigest: DIGEST,
+          registeredAt: AT,
+        },
+      } }),
+      { platform: "win32" },
+    );
     expect(adopted).toMatchObject({
       kind: "ADOPTED", ok: true, launched: false, processIdentity: STARTED_IDENTITY,
     });
@@ -343,7 +352,7 @@ describe("durable authority construction", () => {
     // to typecheck rather than merely fail an expectation.
     const published: ClaudeLauncherAuthority = authority;
     const launch = composeDurableLauncher(dependencies(boundaryHarness(), []), published);
-    const result = await launch(request());
+    const result = await launch(request(), { platform: "win32" });
     expect(result.kind).toBe("OBSERVED");
     expect(authority.grants.calls.length).toBe(1);
     expect(authority.regs.commits.map((commit) => commit.phase))
@@ -358,7 +367,7 @@ describe("durable authority construction", () => {
     const swapped = (): never => { throw new Error("swapped after construction"); };
     authority["consumeGrantDurably"] = swapped;
     authority["commitProcessRegistration"] = swapped;
-    const result = await launch(request());
+    const result = await launch(request(), { platform: "win32" });
     expect(result.kind).toBe("OBSERVED");
     expect(grants.calls.length).toBe(1);
     expect(regs.commits.length).toBe(2);

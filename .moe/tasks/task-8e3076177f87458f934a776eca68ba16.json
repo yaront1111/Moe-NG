@@ -121,7 +121,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-618633fa",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T20:16:30.819Z",
+  "updatedAt": "2026-08-15T21:41:51.716Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
@@ -162,7 +162,10 @@
   "contextFetchedBy": [
     "architect-7f301fa7",
     "worker-d6220bc6",
-    "governor-8466bf0e"
+    "governor-8466bf0e",
+    "worker-cf1f58d0",
+    "worker-618633fa",
+    "architect-09b5f32a"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -192,7 +195,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-15T20:20:04.910Z",
+    "escalatedAt": "2026-08-15T20:20:04.910Z"
   },
   "planApprovedAt": "2026-08-15T17:59:25.756Z",
   "workStartedAt": "2026-08-15T17:59:58.379Z",

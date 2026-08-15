@@ -1,0 +1,3 @@
+# Gotcha: public launch snapshot must contain proxy exceptions
+
+A snapshot helper can return null for ordinary malformed objects yet still throw on hostile proxies because `Object.keys`, descriptor access, array checks, or nested cloning may trigger proxy traps. If a public async launcher calls that snapshot outside a catch, malformed input rejects the promise instead of returning its stable UNKNOWN refusal. Test the production entry with positive-count outer and nested hostile proxies through `Promise.allSettled`; require fulfillment, exact malformed code/layer, frozen UNKNOWN, and zero authority/process calls.

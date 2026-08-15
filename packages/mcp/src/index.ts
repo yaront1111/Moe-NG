@@ -29,6 +29,7 @@ export { createHttpMcpAdapter } from "./http/http-server.js";
 export type {
   HttpAdapterOptions,
   HttpAuthOutcome,
+  HttpDispatchContext,
   HttpDispatchPort,
   HttpMcpAdapter,
 } from "./http/http-server.js";

@@ -23,12 +23,12 @@ import type { StdioToolEntry } from "../stdio/stdio-tool-schemas.js";
  * bytes out. Split from `http-server.ts` purely to keep both modules small; nothing here knows
  * about HTTP requests, sessions, or responses.
  *
- * PORT WIDTH. `HttpDispatchPort` accepts an optional `AbortSignal` and tolerates an
- * asynchronous result. Both are supersets of the stdio port shape, so a narrower implementation
- * — including the shared conformance suite's fake — is assignable here by ordinary
- * parameter-arity and return-type assignability. Threading the signal is this adapter's
- * obligation; an implementation may ignore it, and nothing here reports a cancellation the
- * daemon did not actually perform.
+ * PORT WIDTH. `HttpDispatchPort` carries the authenticated request identity and optional
+ * `AbortSignal` in one required context, and tolerates an asynchronous result. A stdio port may
+ * still implement the narrower one-argument shape: JavaScript permits ignored trailing
+ * arguments and TypeScript permits that ordinary parameter-arity narrowing. Threading the
+ * context is this adapter's obligation; an implementation may ignore cancellation, and nothing
+ * here reports a cancellation the daemon did not actually perform.
  *
  * ENVELOPE CONSTRUCTION mirrors the stdio adapter byte for byte. It is duplicated rather than
  * shared because that module is owned by another task, and the duplication is guarded
@@ -43,10 +43,22 @@ export type HttpAuthOutcome =
   | { readonly error: RuntimeError; readonly ok: false }
   | { readonly ok: true };
 
+export interface HttpDispatchContext {
+  /** The bearer authenticated immediately before this dispatch. */
+  readonly credential: string;
+  readonly signal?: AbortSignal;
+}
+
 export interface HttpDispatchPort {
   authenticate(credential: string, toolKind: string): HttpAuthOutcome;
-  dispatchCommandBytes(bytes: Uint8Array, signal?: AbortSignal): Promise<Uint8Array> | Uint8Array;
-  dispatchQueryBytes(bytes: Uint8Array, signal?: AbortSignal): Promise<Uint8Array> | Uint8Array;
+  dispatchCommandBytes(
+    bytes: Uint8Array,
+    context: HttpDispatchContext,
+  ): Promise<Uint8Array> | Uint8Array;
+  dispatchQueryBytes(
+    bytes: Uint8Array,
+    context: HttpDispatchContext,
+  ): Promise<Uint8Array> | Uint8Array;
 }
 
 const encoder = new TextEncoder();
@@ -134,10 +146,14 @@ export async function decodeAndDispatch(
   if (!decoded.ok) refuse(decoded.error);
   const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
   if (!auth.ok) refuse(auth.error);
+  const context: HttpDispatchContext = {
+    credential: decoded.envelope.sessionCredential,
+    ...(signal === undefined ? {} : { signal }),
+  };
   try {
     return await (isCommand
-      ? port.dispatchCommandBytes(bytes, signal)
-      : port.dispatchQueryBytes(bytes, signal));
+      ? port.dispatchCommandBytes(bytes, context)
+      : port.dispatchQueryBytes(bytes, context));
   } catch (error) {
     if (error instanceof McpError) throw error;
     refuseUnknown();

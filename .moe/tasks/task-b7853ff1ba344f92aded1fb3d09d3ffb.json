@@ -1,0 +1,45 @@
+{
+  "id": "task-b7853ff1ba344f92aded1fb3d09d3ffb",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Consume the doctor observation in release evidence",
+  "description": "Objective: replace the release supply chain's obsolete hard-coded doctor UNKNOWN placeholder with the real host-derived `collectDoctorVersionReport` published from `@moe/daemon`, while retaining the canonical six-component subject count already landed by task-ec70ba5b904848b496b9bf5d2c2be92f.\n\nFresh measurement at committed HEAD e391175ed1f46d2e049a5e05f557302b96c447d2: task-ec70 is DONE and `scripts/release/supply-chain.mjs` now derives `RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length`; the former componentCount:5 production gap is CLOSED and must not be rebuilt. The remaining real gap is line 232, which still emits `{ missingSymbol: \"@moe/daemon.collectDoctorVersionReport\", reason: \"DOCTOR_COMPATIBILITY_UNAVAILABLE\", status: \"UNKNOWN\" }` even though commit e391175 now exports `collectDoctorVersionReport` and `DoctorVersionReport` from the bare daemon root.\n\nDependencies: task-f6ef0a45f52c45c7bb54f250170aa223 must reach DONE, and task-c690a7a0c5a14daaa088acbc32e26815 must reach DONE first because the repository-root consumer currently has no manifest/lock edge to `@moe/daemon`. Re-measure all three manifest/lock/bare-import legs before planning; do not use a deep relative import or edit package.json/pnpm-lock.yaml in this task.\n\nDeliverable: `scripts/release/supply-chain.mjs` calls the real zero-argument collector through its production port, freezes the returned report into recorded evidence, preserves every coded UNKNOWN field without upgrading it, and fails closed before publication if observation itself cannot complete. Focused assertions live in `tests/integration/release-supply-chain.test.mjs`.\n\nNOT in scope: changing doctor collection semantics, distribution inventory/signature/manifest rules, OS conformance evidence, release verdict/publication authority, or reworking the already-derived six-component count.\n\nOwned paths: scripts/release/supply-chain.mjs and tests/integration/release-supply-chain.test.mjs. Verification: `pnpm typecheck:release && pnpm test:integration`; the Node and Vitest legs must report nonzero test counts.",
+  "definitionOfDone": [
+    "After task-c690a7a0c5a14daaa088acbc32e26815 is DONE, the root manifest and lock importer declare/link @moe/daemon and both a compiled in-root probe and plain-Node probe import the bare root and observe callable collectDoctorVersionReport; no deep-relative fallback exists.",
+    "The production release supply chain invokes the zero-argument collectDoctorVersionReport through its real system port and records its DoctorVersionReport instead of the missingSymbol/DOCTOR_COMPATIBILITY_UNAVAILABLE placeholder.",
+    "Recorded doctor evidence preserves the exact report version, observed and declared values, pin verdicts, component entries/count, and every upstream code/layer-bearing UNKNOWN without upgrading truth; releaseVerdict stays UNKNOWN and publicationAuthorized stays false.",
+    "A doctor observation throw/refusal fails closed before evidence publication with exact `RELEASE_SUPPLY_CHAIN_REFUSED`, reason `TOOLCHAIN_OBSERVATION_FAILED`, and layer `RELEASE_SUPPLY_CHAIN`; tests assert all three literals and zero publication calls.",
+    "The release consumer still derives componentCount from the canonical RELEASE_COMPONENTS six-entry inventory, asserts literal nonzero cardinality 6, and refuses a stale five-component subject with exact reason and layer.",
+    "A mutation replacing the real doctor call with the former placeholder turns a named production-surface test red, is restored byte-exact by SHA-256, and fresh `pnpm typecheck:release && pnpm test:integration` exits 0 with nonzero executed-test counts."
+  ],
+  "taskRails": [
+    "Do not start until task-f6ef0a45f52c45c7bb54f250170aa223 and task-c690a7a0c5a14daaa088acbc32e26815 are DONE and both owned paths are free of foreign WIP.",
+    "Import only from the bare @moe/daemon root; do not duplicate doctor collection, accept caller-selected host identity, use tsconfig paths, or add a deep-relative escape hatch.",
+    "Preserve distribution signature/manifest authority, the canonical inventory, releaseVerdict UNKNOWN, and publicationAuthorized false; this task binds observation evidence only.",
+    "Use TDD; every failure test asserts exact code, reason, and refusing layer, generated cases pin a positive literal count, and stage/commit only the two explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": "architect-09b5f32a",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ec70ba5b904848b496b9bf5d2c2be92f",
+  "priority": "HIGH",
+  "order": 1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T21:11:50.144Z",
+  "updatedAt": "2026-08-15T21:27:55.475Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T21:25:32.793Z"
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a"
+  ],
+  "blockedReason": "Prerequisite and explicit task rail are unsatisfied at committed HEAD ee284416bfd8d6f4672afb039f455b150d363dbb. task-f6ef0a45f52c45c7bb54f250170aa223 is DONE, but task-c690a7a0c5a14daaa088acbc32e26815 remains BLOCKED and the required root consumer edge is genuinely absent: `git show HEAD:package.json` has no dependencies object and no @moe/daemon; the root importer in `git show HEAD:pnpm-lock.yaml` contains no @moe/daemon; an in-root `.mts` probe importing `{ collectDoctorVersionReport }` from the bare `@moe/daemon` specifier fails TS2307 with `./node_modules/.bin/tsc` exit 1 and is deleted; plain Node import exits 1 with ERR_MODULE_NOT_FOUND. The public daemon root export itself exists at apps/daemon/src/index.ts:174-175, so the missing piece is exactly the manifest/lock resolution edge owned by c690, not this task. Current working tree also has foreign pnpm-lock.yaml WIP, while b785's two owned paths are clean. Per the global cross-package rail and this task's 'do not start until c690 DONE' rail, submitting a two-file plan now would either invent a deep-relative escape hatch or consume an unresolvable dependency. Re-promote b785 only after c690 is DONE and committed package.json + root lock importer + both bare-root probes pass.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T21:27:55.475Z"
+}

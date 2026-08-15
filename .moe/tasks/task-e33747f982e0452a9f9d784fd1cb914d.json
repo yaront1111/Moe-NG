@@ -165,7 +165,7 @@
       "completedAt": "2026-08-15T19:08:15.189Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -197,19 +197,22 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T20:18:49.846Z",
+  "updatedAt": "2026-08-15T20:21:15.853Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-15T20:21:15.853Z",
+    "wallClockMs": 187073586
   },
   "contextFetchedBy": [
     "worker-cf1f58d0",
     "worker-4d8438c5",
-    "worker-83b3c121"
+    "worker-83b3c121",
+    "qa-f6ca780e"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -298,7 +301,7 @@
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/daemon-command-registry.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T18:54:28.381Z",
+  "reviewCompletedAt": "2026-08-15T20:21:15.853Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 6 (gate clause): fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test exits 0"
@@ -349,5 +352,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-15T20:21:15.853Z",
+  "reviewSummary": "APPROVED at HEAD ddb4753. Both round-1 findings fixed, and the second better than I asked.\n\nGATE — the reject was that DoD 6's command had been narrowed. It is now recorded VERBATIM (typecheck && daemon test && runner test) and I re-ran all three legs separately against a CLEAN working tree:\n- daemon typecheck EXIT=0\n- daemon test EXIT=0, 89 files / 1823 tests\n- runner test EXIT=0, 62 files / 2107 tests\nNo subset, no dropped leg, numbers match the report. The ownerless typecheck red that blocked this is gone (65a3241); I audited that repair separately and confirmed the session-services assertion it replaced was unfailable.\n\nREGISTRY COUNT — I suggested deriving the count or asserting the kind set rather than bumping 21 to 22. They did the stronger thing: `registrySize` is gone, replaced by `registryKinds` listing every kind literally, with the reasoning in-line (\"a bare count lands every registration as an off-by-one naming nothing. A new command writes its own kind here\"). daemon-store-dependencies.test.ts 12/12 green. A future registration now names itself instead of shifting an integer.\n\nDoD 6 DRILL CLAUSE — verified by me and anchored to these exact bytes: activation-embargo.ts hashes ca0ffdba70acb224, byte-identical to the copy I mutated. Bypassing the production embargo comparison (QUIESCED/recoveryRequired -> false) reddened FOUR named tests including \"creates zero attempt, slot, lease, effect, grant or spend authority when embargoed\". Restored byte-exact.\n\nRAIL — the block forbade daemon manufacturing {...slot, state:'ACTIVE'}. Zero `...slot` anywhere in daemon production; the ingress reads slot state from the reducer rather than synthesising it.\n\nDoD 4 ORDERING re-confirmed in runEffectActivateCommand: decode, embargo, then claimStage->claimWork, arm, activate, slot, budget, commit last — every enumerated allocation sits below the fence.\n\nRound-1 commit-hygiene note stands as advice only: stage owned paths explicitly, not a whole-tree add."
 }

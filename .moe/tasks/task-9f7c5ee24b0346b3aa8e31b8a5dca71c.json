@@ -1,0 +1,114 @@
+{
+  "id": "task-9f7c5ee24b0346b3aa8e31b8a5dca71c",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "archiveSource cleanup can replace a real release result",
+  "description": "Objective: stop a cleanup failure in archiveSource from destroying the release result it was supposed to leave untouched.\n\nMEASURED DEFECT, verified on current bytes at scripts/release/supply-chain.mjs:58-65. `archiveSource` ends:\n\n    } finally { rmSync(archive, { force: true }); }\n\nwith no try/catch around the rmSync. If that removal throws — Windows EBUSY on a held handle is the documented case — the throw escapes the `finally` and REPLACES whatever the try block was returning: a `{ destination, ok: true }` success, or an exact `SOURCE_ARCHIVE_FAILED` refusal. Either way the caller receives a raw filesystem exception instead of the release verdict that was actually computed.\n\nTHE FIX ALREADY EXISTS IN THIS FILE, 120 LINES BELOW. task-56117913 \"Supply-chain failures must report their own reason\" landed exactly this guard on `cleanRoots` (supply-chain.mjs:184-188), with a comment that states the rule verbatim:\n\n    // Subordinate: a throw here escapes the caller's finally and REPLACES the real refusal\n    // or success (Windows EBUSY on a held handle), so report each failure and keep removing\n    // the remaining roots.\n\n`cleanRoots` now wraps its `rmSync` calls in try/catch and logs each failure. `archiveSource` has the identical shape and did not get the identical treatment. This is the compound-finding half-fix pattern: one clause of a two-clause defect landed.\n\nWHY A GREEN SUITE CANNOT SEE IT: the failure needs a real held handle on the archive file at the moment of removal, which is a Windows filesystem race. No test creates that condition, and the happy path exercises the same line thousands of times without incident.\n\nWHY IT MATTERS ON THIS PROJECT SPECIFICALLY: this is the release supply-chain recorder, whose entire job is to report truthful release authority — its own header says \"Success records UNKNOWN release authority, never publication.\" A cleanup exception masquerading as the release outcome is precisely the wrong-reason-code failure epic rail 4 exists to prevent, in the one script where a wrong answer is least acceptable.\n\nPROVENANCE: raised by governor-18a42000's adversarial audit of today's diff, then re-verified line by line on current bytes by me before filing. One of two skeptics disputed it; I read the bytes myself and the shape is unambiguous.\n\nNOT IN SCOPE: cleanRoots (already fixed), the release evidence format, the refusal vocabulary, or any other script under scripts/release/.\n\nVerification: pnpm test:integration (tests/integration/release-supply-chain.test.mjs covers this script).",
+  "definitionOfDone": [
+    "A cleanup failure inside archiveSource can no longer replace the function's result: a test injects an rmSync that throws and asserts the ORIGINAL outcome still returns - both the success arm and the SOURCE_ARCHIVE_FAILED refusal arm, each asserted separately with its exact stable code.",
+    "The cleanup failure is reported rather than silently swallowed, following the pattern cleanRoots already established at supply-chain.mjs:184-188 - the archive removal still attempts, and its failure surfaces without becoming the return value.",
+    "The happy path is unchanged: the archive is still removed on both the success and refusal exits, asserted by checking the file is gone rather than by trusting the call was made.",
+    "A mutation drill proves the coverage is load-bearing: restoring the unguarded `finally { rmSync(...) }` turns a NAMED test red, and the drill is restored byte-exact and verified by hash.",
+    "Fresh pnpm test:integration exits 0 and the existing release-supply-chain tests stay green and unmodified."
+  ],
+  "taskRails": [
+    "Copy the discipline cleanRoots already uses at supply-chain.mjs:184-188 rather than inventing a second cleanup convention in the same file. Two different cleanup patterns in one script is how the next half-fix happens.",
+    "The point is that the computed result survives. A test asserting only that no exception escaped is insufficient - assert the exact success value or the exact SOURCE_ARCHIVE_FAILED refusal is what the caller receives.",
+    "Do not touch cleanRoots, the release evidence format, or the refusal vocabulary. task-56117913 owns that surface and re-editing it would be a silent duplicate.",
+    "This file is plain .mjs with no type checking. Rely on the integration test rather than the compiler, and run the gate rather than reasoning about it.",
+    "Re-measure scripts/release/supply-chain.mjs:58-65 on current bytes before editing; preserve foreign work and commit only explicit owned paths."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PRE-FLIGHT / RE-MEASURE WITHOUT WRITING BYTES. Record the task-start commit and `git status --short` for `scripts/release/supply-chain.mjs`, `tests/integration/release-supply-chain.test.mjs`, and the proposed new test. The canonical-inventory owner finished at 2e34a5f and current status is clean; if any required path is dirty at worker start, stop and report the collision rather than reset, stash, or edit over foreign work. Re-read archiveSource and cleanRoots: confirm the former still has an unguarded cleanup and the latter still catches and reports each cleanup failure; confirm no one has already created the focused test. Record a byte hash for the existing `tests/integration/release-supply-chain.test.mjs` because DoD requires it to remain unmodified. Confirm `typecheck:release`, `test:integration`, and Vitest's `tests/**/*.test.ts` include on current bytes. Capture the repo-wide baseline failure paths and exit codes before the diff by running each required leg separately (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`); the daemon filter must show a nonzero executed-test count, never `No projects matched`. Do not commit logs or generated evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, WITH THE MINIMUM PRODUCTION TEST SEAM. In `archiveSource`, make the function a named export and add one optional dependency object whose sole override is `rmSync`; default it to the imported real `rmSync`. Do not add the catch yet, do not inject command/tar/git, and leave SYSTEM_PORTS calling archiveSource with one argument. Create `tests/integration/release-archive-cleanup.test.ts`, importing and exercising this production export. Build a tiny temporary Git repository using Node child-process/path/fs APIs (no shell-concatenated paths), commit one file, and use its real HEAD for archive success. Add four explicit named cases: (1) a throwing injected rmSync was attempted exactly once, is reported through a console.error spy, and the caller still receives the exact `{ destination, ok: true }`; (2) with a nonexistent repository root plus a pre-created `<destination>.tar`, the throwing injected rmSync was attempted/reported and the caller still receives the full exact refusal `{ code: \"RELEASE_SUPPLY_CHAIN_REFUSED\", ok: false, reason: \"SOURCE_ARCHIVE_FAILED\", refusedBy: \"RELEASE_SUPPLY_CHAIN\" }`; (3) default cleanup removes the real archive after success; and (4) default cleanup removes the pre-created archive after that exact refusal. Assert filesystem absence, not merely mock calls, in cases 3-4. Restore the console spy and recursively remove temporary roots with the test's real rmSync in finally/afterEach. Run only `pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts`: all four tests must be discovered, and the two throwing-cleanup cases must fail because the current unguarded finally replaces their results.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ],
+      "newFiles": [
+        "tests/integration/release-archive-cleanup.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINIMUM FIX / GREEN. Change only archiveSource's finally block so the injected-or-default removal is attempted inside `try`, and on error calls `console.error(`release temporary cleanup failed: ${archive}: ${String(error)}`)` without rethrowing. Match cleanRoots' existing wording and subordinate-cleanup discipline; add at most a concise why-comment that cleanup reporting must not replace the already-computed archive result. Do not touch cleanRoots, SYSTEM_PORTS, release evidence, releaseRefusal, or any refusal vocabulary. The imported real rmSync remains the production default, including `{ force: true }`, so successful cleanup behavior is unchanged. Run the focused Vitest file once: require exactly four executed/passing tests, including literal code/reason/layer assertions for the refusal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "LOAD-BEARING MUTATION DRILL. Hash `scripts/release/supply-chain.mjs`, copy it to an out-of-repo temporary file, and install an EXIT trap that restores the bytes even if the drill command fails. Mutate exactly the new guarded finally back to the equivalent unguarded injected/default removal call (`finally { removeArchive(archive, { force: true }); }`), asserting exactly one replacement occurred. Run the two named `preserves ... when cleanup throws` tests and require a nonzero exit with both cases reported failed on the result-preservation assertions; a zero-test or zero-failure run is itself failure. Restore from the temporary copy, delete it, and compare the production file's SHA-256 to the pre-drill hash byte-for-byte before proceeding. Do not leave a probe, archive, transcript, or generated evidence file in the repository.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ONE FINAL VERIFICATION STEP. First re-run the five repo-wide legs from step 1 separately and compare their HEAD failing-path sets with the recorded baseline; the new failing-path delta intersected with this task's owned paths must be empty, and any foreign red must be quoted verbatim with exact paths. Confirm `git diff --name-only` is restricted to `scripts/release/supply-chain.mjs` plus the new focused test, the stored hash proves the existing release-supply-chain.test.mjs is unchanged, and the production source remains below 400 physical lines. Then run the exact completion-evidence command fresh in the foreground: `pnpm typecheck:release && pnpm test:integration`. It must exit 0; output must show the new focused file executed exactly four passing tests and the existing Node release suite executed a nonzero passing count. Preserve the command, exit code, and output tail for moe.complete_task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL ADVERSARIAL SELF-REVIEW, scoped only to this task's diff. Load `adversarial-self-review`; inspect `git diff -- scripts/release/supply-chain.mjs tests/integration/release-archive-cleanup.test.ts` as an attacker. Verify production callers cannot accidentally lose the real rmSync default, cleanup is attempted once on every success/refusal exit, an injected EBUSY cannot replace either exact result, reporter text follows cleanRoots, console spies and temporary Git/archive paths are always restored on test failure, refusal assertions pin code + reason + owning layer, and the happy refusal removal test starts with a real archive so absence is non-vacuous. Confirm no change to cleanRoots, evidence shape, refusal vocabulary, SYSTEM_PORTS, or the existing release test; no scratch files remain; and only explicit owned paths will be staged/committed. If any check fails, fix it and repeat the single final verification command before calling moe.complete_task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 106.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:21:38.693Z",
+  "updatedAt": "2026-08-15T20:56:41.818Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:44:33.224Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-d9dccf21"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T20:56:39.749Z",
+  "planningNotes": {
+    "approachesConsidered": "Kept the fix in supply-chain.mjs rather than extracting a new production module: the file is already 257 lines but remains well below the mandatory 400-line split cap, and this narrow change must mirror cleanRoots in the same script. Rejected editing tests/integration/release-supply-chain.test.mjs because DoD requires that existing suite to remain byte-unmodified; a new Vitest .test.ts file is already discovered by tests/**/*.test.ts. Rejected reproducing Windows EBUSY with a held handle because it is race- and platform-dependent. Instead, expose only an optional rmSync dependency on the production archiveSource, exercise real git/tar against a tiny temporary repository, and inject the subordinate cleanup failure deterministically. Rejected a general command/system-port seam because the defect needs only rmSync injection and broader ports would increase production surface without value.",
+    "codebaseInsights": "Fresh measurement after the foreign canonical-inventory task landed: `git status --short -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs` returned no entries; HEAD is 2e34a5f. `nl -ba scripts/release/supply-chain.mjs | sed -n '48,72p;178,194p'` shows archiveSource at 56-66 and the still-unguarded `finally { rmSync(archive, { force: true }); }` at 65, while cleanRoots at 185-188 catches each rmSync error and reports `release temporary cleanup failed: <root>: <error>`. `wc -l` reports 257 production lines and 761 lines in the existing release test. The proposed new test is absent. The task rail's claim that this .mjs has no type checking is stale: line 1 is `// @ts-check`, and package.json defines `typecheck:release` with `tsc --allowJs --checkJs` over supply-chain.mjs. vitest.config.ts includes `tests/**/*.test.ts`; package.json test:integration runs Vitest over tests/integration and then the existing release-supply-chain.test.mjs, so a new focused .test.ts executes without modifying the existing .mjs test.",
+    "risks": "Shared-tree safety is first: if supply-chain.mjs becomes dirty again, do not reset/stash or layer edits over it. Keep the optional dependency defaulted to the imported real rmSync so SYSTEM_PORTS and all production callers retain their one-argument behavior. Tests must use Node path APIs and a tiny temporary Git repository so Windows paths are not shell-quoted; restore console.error spies in finally and remove all temporary repositories/archives. For the refusal cleanup proof, pre-create destination.tar and use a nonexistent repository root so the original SOURCE_ARCHIVE_FAILED result is deterministic and default cleanup demonstrably removes a real file. The mutation drill must be guarded by an out-of-tree temporary backup/trap and a byte hash so no mutated or scratch evidence remains.",
+    "keyFiles": [
+      "scripts/release/supply-chain.mjs",
+      "tests/integration/release-archive-cleanup.test.ts",
+      "tests/integration/release-supply-chain.test.mjs",
+      "vitest.config.ts",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3000000
+  },
+  "planApprovedAt": "2026-08-15T20:56:41.818Z"
+}

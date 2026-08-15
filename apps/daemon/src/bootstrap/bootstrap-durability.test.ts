@@ -22,6 +22,12 @@ import {
   send,
 } from "./bootstrap-test-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
+import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
+import { runReviewCommand } from "../review/review-services.js";
+import {
+  acceptancePayload as reviewAcceptancePayload,
+  reviewerFacts,
+} from "../review/review-test-fixtures.js";
 
 /**
  * Durability behaviour of the nine bootstrap services: the command-driven sequence (DoD 1),
@@ -34,6 +40,34 @@ import type { Envelope } from "./bootstrap-test-fixtures.js";
  */
 
 afterEach(closeStores);
+
+const encoder = new TextEncoder();
+
+/**
+ * Seeds the non-human review decision required before final goal acceptance. The fixture goes
+ * through the production review pipeline so the close test cannot pass on a fabricated store
+ * row that no real review command could produce.
+ */
+function acceptReviewedNode(store: SqliteEventStore, nodeRef: string): void {
+  const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+    commandId: `cmd-bootstrap-review-accept-${nodeRef}`,
+    correlationId: "corr-bootstrap-review",
+    decidedAt: "2026-08-08T00:00:00.000Z",
+    expectedVersion: 0,
+    kind: "integration.accept_output",
+    payload: reviewAcceptancePayload({
+      reviewer: reviewerFacts({
+        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef: nodeRef }],
+        subjectRef: nodeRef,
+      }),
+      subjectRef: nodeRef,
+    }),
+    principalId: "reviewer-1",
+    projectId: PROJECT_ID,
+    schemaVersion: REVIEW_SCHEMA_VERSION,
+  })));
+  if (!outcome.ok) throw new Error(`review setup failed for ${nodeRef}: ${outcome.code}`);
+}
 
 function registerAndBind(store: SqliteEventStore): void {
   const sequence = bootstrapSequence();
@@ -117,6 +151,7 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
     (kind, index) => {
       const store = openStore();
       driveThrough(store, kind);
+      if (kind === "goal.close") acceptReviewedNode(store, "node-1");
       const before = decisionCount(store);
 
       const request = sequence[index] as Envelope;

@@ -45,7 +45,11 @@ export const LOOPBACK_HOSTNAMES: readonly string[] = Object.freeze([
 ]);
 
 export { HTTP_LISTED_TOOLS } from "./http-tool-bridge.js";
-export type { HttpAuthOutcome, HttpDispatchPort } from "./http-tool-bridge.js";
+export type {
+  HttpAuthOutcome,
+  HttpDispatchContext,
+  HttpDispatchPort,
+} from "./http-tool-bridge.js";
 
 export interface HttpAdapterOptions {
   readonly dispatchPort: HttpDispatchPort;
@@ -94,11 +98,13 @@ function refusalResponse(code: "CAPABILITY_DENIED" | "INPUT_INVALID", status?: n
   return errorResponse(createRuntimeError({ code }), status);
 }
 
-function isLoopbackHostname(value: string): boolean {
-  const withoutPort = value.startsWith("[")
-    ? value.slice(0, value.indexOf("]") + 1)
-    : (value.split(":")[0] ?? "");
-  return LOOPBACK_HOSTNAMES.includes(withoutPort.toLowerCase());
+const LOOPBACK_AUTHORITY_PATTERN = /^(127\.0\.0\.1|localhost|\[::1\])(?::([0-9]+))?$/i;
+
+function isLoopbackAuthority(value: string): boolean {
+  const match = LOOPBACK_AUTHORITY_PATTERN.exec(value);
+  if (match === null) return false;
+  const port = match[2];
+  return port === undefined || Number(port) <= 65_535;
 }
 
 /**
@@ -108,7 +114,7 @@ function isLoopbackHostname(value: string): boolean {
  */
 function loopbackRefusal(request: Request): Response | undefined {
   const host = request.headers.get("host");
-  if (host === null || !isLoopbackHostname(host)) return refusalResponse("CAPABILITY_DENIED");
+  if (host === null || !isLoopbackAuthority(host)) return refusalResponse("CAPABILITY_DENIED");
   const origin = request.headers.get("origin");
   if (origin === null) return undefined;
   let originHost: string;
@@ -117,7 +123,7 @@ function loopbackRefusal(request: Request): Response | undefined {
   } catch {
     return refusalResponse("CAPABILITY_DENIED");
   }
-  return isLoopbackHostname(originHost) ? undefined : refusalResponse("CAPABILITY_DENIED");
+  return isLoopbackAuthority(originHost) ? undefined : refusalResponse("CAPABILITY_DENIED");
 }
 
 function limitRefusal(): Response {

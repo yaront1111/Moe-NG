@@ -9,6 +9,7 @@ import * as rootSurface from "@moe/mcp";
 import type {
   HttpAdapterOptions,
   HttpAuthOutcome,
+  HttpDispatchContext,
   HttpDispatchPort,
   HttpMcpAdapter,
   HttpSessionPort,
@@ -23,7 +24,7 @@ import type {
  * equals itself: drop an export and it still passes. The counts are pinned separately so a
  * silently emptied list cannot pass either.
  *
- * Only ONE of the six names this change publishes is a runtime value. The other five are
+ * Only ONE of the seven names this change publishes is a runtime value. The other six are
  * types, leave no trace in a namespace object, and are proved reachable by annotation below —
  * putting them in a runtime list would be a test that cannot pass.
  */
@@ -156,7 +157,7 @@ it("loads the published HTTP surface from the bare specifier in a real Node proc
 
 /**
  * DoD 4. A type-only export leaves no runtime trace, so every assertion above is blind to the
- * five published types: the namespace has no key for them and the Node probe cannot see them.
+ * six published types: the namespace has no key for them and the Node probe cannot see them.
  * Reachability is proved instead by ANNOTATING a value with each type through the BARE
  * specifier and letting tsc check it — a relative import would compile while proving nothing
  * about the published surface, the same vacuous shape the hand-written list rules out.
@@ -165,7 +166,7 @@ it("loads the published HTTP surface from the bare specifier in a real Node proc
  * signal; the runtime expectation at the bottom only keeps these bindings live under
  * `noUnusedLocals` and is not what proves the item.
  *
- * Two of the five are pinned harder than mere existence, at no runtime cost:
+ * Two of the six are pinned harder than mere existence, at no runtime cost:
  *   - `adapterOptions` is a real object literal, so the published `HttpDispatchPort` and
  *     `HttpSessionPort` must be exactly the types the published options expect. Republishing
  *     a lookalike from elsewhere would fail here.
@@ -174,6 +175,7 @@ it("loads the published HTTP surface from the bare specifier in a real Node proc
  * No adapter or session is constructed: this item is reachability, not behaviour.
  */
 const dispatchPort: HttpDispatchPort = null as unknown as HttpDispatchPort;
+const dispatchContext: HttpDispatchContext = { credential: "type-surface-probe" };
 const sessionPort: HttpSessionPort = null as unknown as HttpSessionPort;
 const adapterOptions: HttpAdapterOptions = { dispatchPort, sessionPort };
 const adapter: HttpMcpAdapter = null as unknown as ReturnType<
@@ -181,9 +183,16 @@ const adapter: HttpMcpAdapter = null as unknown as ReturnType<
 >;
 const authOutcome: HttpAuthOutcome = { ok: true };
 
-it("reaches all five published types through the bare specifier", () => {
-  // Runtime cannot see a type. This keeps the five annotated bindings live and records that
-  // exactly five were declared; the proof itself is the typecheck leg of the gate.
-  expect([dispatchPort, sessionPort, adapterOptions, adapter, authOutcome]).toHaveLength(5);
+it("reaches all six published types through the bare specifier", () => {
+  // Runtime cannot see a type. This keeps the six annotated bindings live and records that
+  // exactly six were declared; the proof itself is the typecheck leg of the gate.
+  expect([
+    dispatchPort,
+    dispatchContext,
+    sessionPort,
+    adapterOptions,
+    adapter,
+    authOutcome,
+  ]).toHaveLength(6);
   expect(authOutcome).toEqual({ ok: true });
 });

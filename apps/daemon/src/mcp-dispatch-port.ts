@@ -1,5 +1,5 @@
 import { createRuntimeError } from "@moe/contracts";
-import type { StdioDispatchPort } from "@moe/mcp";
+import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
 import { readEventPage } from "./http/event-stream.js";
@@ -9,8 +9,8 @@ import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js"
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 
 /**
- * The production dispatch port behind the stdio MCP server: the same committed
- * adapter pipeline the HTTP listener serves, with no second authority.
+ * The production dispatch port behind both MCP servers: the same committed adapter pipeline
+ * the HTTP listener and stdio entry serve, with no second authority.
  *
  * Commands run through `handleCommandRequest` verbatim — authenticate,
  * compatibility, bounded decode, registry, authorize, payload shape, durable
@@ -25,8 +25,8 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 export interface McpDispatchPortConfig {
   /** The daemon's affordance surface, served to agents as work.get_context. */
   readonly affordances?: AffordancePort | undefined;
-  /** The transport credential this port presents to the adapter, held in closure. */
-  readonly credential: string;
+  /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
+  readonly fallbackCredential?: string | undefined;
   readonly deps: CommandAdapterDeps;
   /** The daemon's committed subscription seam — the provider's, folded on read. */
   readonly subscriptions: SubscriptionPort;
@@ -59,10 +59,13 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       }
       return Object.freeze({ ok: true as const });
     },
-    dispatchCommandBytes: (bytes: Uint8Array): Uint8Array => bytesOf(
+    dispatchCommandBytes: (
+      bytes: Uint8Array,
+      context?: HttpDispatchContext,
+    ): Uint8Array => bytesOf(
       handleCommandRequest(config.deps, {
         body: bytes,
-        credential: config.credential,
+        credential: context?.credential ?? config.fallbackCredential ?? null,
         protocolVersion: WIRE_PROTOCOL_VERSION,
       }),
     ),

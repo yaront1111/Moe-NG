@@ -284,6 +284,46 @@ it("never puts a credential in a URL or a log line", async () => {
   );
 });
 
+it.each(["/events/read", "/affordances/read"])(
+  "authenticates %s before revealing route availability or parsing its body",
+  async (path) => {
+    await withListener(async (listener) => {
+      const reply = await send(listener, {
+        body: "{not json",
+        credential: null,
+        path,
+      });
+      expect(reply.status).toBe(401);
+      expect(reply.body).toMatchObject({
+        error: { code: "AUTHENTICATION_FAILED" },
+        outcome: "REFUSED",
+        stage: "AUTHENTICATE",
+      });
+      expect(reply.body).not.toHaveProperty("layer", CONTROL_ROOM_LISTENER_LAYER);
+    });
+  },
+);
+
+it.each(["/events/read", "/affordances/read"])(
+  "checks %s protocol compatibility before revealing route availability or parsing its body",
+  async (path) => {
+    await withListener(async (listener) => {
+      const reply = await send(listener, {
+        body: "{not json",
+        path,
+        protocolVersion: "incompatible-client",
+      });
+      expect(reply.body).toMatchObject({
+        error: { code: "DISTRIBUTION_MISMATCH" },
+        outcome: "REFUSED",
+        stage: "COMPATIBILITY",
+      });
+      expect(reply.status).toBeGreaterThanOrEqual(400);
+      expect(reply.body).not.toHaveProperty("layer", CONTROL_ROOM_LISTENER_LAYER);
+    });
+  },
+);
+
 it("refuses the event page route when no subscription port is wired, without inventing a page", async () => {
   await withListener(async (listener) => {
     expectListenerRefusal(

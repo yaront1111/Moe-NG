@@ -9,17 +9,18 @@ import type { SpawnRequest } from "./agent-wrapper.js";
 
 /**
  * Spawns one `claude -p` process per staffed work item, wired to the moe-next
- * MCP server through a per-agent config file. Credentials reach the agent's
- * MCP server through that file's `env` block only — never argv, never the
- * mission text — and the file is removed the moment the agent exits.
+ * MCP server through a per-agent config file. That file points at the trusted
+ * loopback HTTP host and carries only the agent's scoped bearer — never the
+ * operator credential, store path, argv, or mission text — and is removed the
+ * moment the agent exits.
  */
 const DAEMON_DIR = new URL("../..", import.meta.url).pathname.replace(/^\/(?=[A-Za-z]:)/u, "");
-const MCP_MAIN = new URL("../mcp-main.ts", import.meta.url).pathname
-  .replace(/^\/(?=[A-Za-z]:)/u, "");
 
 /** Everything the spawner touches outside its own arguments, injectable for tests. */
 export interface AgentSpawnerOptions {
   readonly command?: string;
+  /** Injectable parent environment; every MOE_* authority variable is stripped from the child. */
+  readonly environment?: NodeJS.ProcessEnv;
   readonly log?: (line: string) => void;
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
@@ -34,11 +35,69 @@ const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 
 const CHAIN_TOOLS = "mcp__moe-next,mcp__moe-next__*";
 const CODING_TOOLS = `${CHAIN_TOOLS},Edit,Write,Read,Glob,Grep,Bash`;
+const CODING_BUILTIN_TOOLS = "Edit,Write,Read,Glob,Grep,Bash";
+
+const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
+  "ALL_PROXY", "APPDATA", "COLORTERM", "COMSPEC", "FORCE_COLOR", "HOMEDRIVE",
+  "HOMEPATH", "HOME", "HTTP_PROXY", "HTTPS_PROXY", "LANG", "LC_ALL", "LOCALAPPDATA",
+  "NODE_EXTRA_CA_CERTS", "NO_COLOR", "PATH", "PATHEXT", "PROGRAMDATA", "SHELL",
+  "SSL_CERT_DIR", "SSL_CERT_FILE", "SYSTEMROOT", "TEMP", "TERM", "TMP", "TMPDIR",
+  "USERPROFILE", "WINDIR",
+]);
+const PROVIDER_ENVIRONMENT_PREFIXES = Object.freeze([
+  "ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "GOOGLE_", "VERTEX_",
+] as const);
+const LOOPBACK_NO_PROXY = Object.freeze(["127.0.0.1", "localhost", "::1"] as const);
+
+const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "[::1]", "localhost"]);
+
+function trustedMcpOrigin(value: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("MCP_HTTP_ORIGIN_INVALID");
+  }
+  if (parsed.protocol !== "http:" || !LOOPBACK_HOSTS.has(parsed.hostname)
+    || parsed.username !== "" || parsed.password !== "" || parsed.origin !== value) {
+    throw new Error("MCP_HTTP_ORIGIN_INVALID");
+  }
+  return parsed.origin;
+}
+
+function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(source)) {
+    const normalized = key.toUpperCase();
+    if (normalized.startsWith("MOE_") || value === undefined) continue;
+    if (RUNTIME_ENVIRONMENT_KEYS.has(normalized)
+      || PROVIDER_ENVIRONMENT_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
+      environment[key] = value;
+    }
+  }
+  // Claude keeps provider credentials for its own API call but strips them
+  // from Bash, hooks and subprocess MCP servers. Scripted sessions also leave
+  // no resumable transcript containing mission or tool output.
+  environment["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1";
+  environment["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1";
+  // Claude honors standard proxy variables. Force its loopback MCP connection
+  // around any enterprise proxy so the scoped bearer never leaves this host.
+  const bypass = [source["NO_PROXY"], source["no_proxy"]]
+    .flatMap((value) => value?.split(/[\s,]+/u) ?? [])
+    .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
+  for (const host of LOOPBACK_NO_PROXY) {
+    if (!bypass.includes(host)) bypass.push(host);
+  }
+  environment["NO_PROXY"] = bypass.join(",");
+  environment["no_proxy"] = bypass.join(",");
+  return environment;
+}
 
 export function claudeSpawner(
-  storeEnv: Readonly<Record<string, string>>,
+  mcpOrigin: string,
   options: AgentSpawnerOptions = {},
 ): (request: SpawnRequest) => Promise<void> {
+  const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   // Per-agent files are removed as each agent exits; the directory itself goes
   // with the wrapper process, whichever way it ends.
@@ -70,28 +129,36 @@ export function claudeSpawner(
     // predates every cleanup path below.
     const invocation = agentSpawnInvocation(command, [
       "-p",
+      "--bare",
+      "--no-session-persistence",
+      "--strict-mcp-config",
       "--mcp-config", mcpConfigPath,
+      "--tools", coding ? CODING_BUILTIN_TOOLS : "",
       "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
     ], platform);
-    // Absolute entry path: MCP server configs carry no working directory, and
-    // node resolves the module's own relative imports from its file URL anyway.
     writeFileSync(mcpConfigPath, JSON.stringify({
       mcpServers: {
         "moe-next": {
-          args: [MCP_MAIN],
-          command: "node",
-          env: { ...storeEnv, MOE_SESSION_CREDENTIAL: request.credential },
+          headers: { Authorization: `Bearer ${request.credential}` },
+          type: "http",
+          url: trustedOrigin,
         },
       },
     }), "utf8");
-    return new Promise<void>((resolve) => {
-      const child = spawn(invocation.file, [...invocation.args], {
-        cwd: request.workspace ?? DAEMON_DIR,
-        shell: invocation.shell,
-        stdio: ["pipe", "inherit", "inherit"],
-      });
-      child.stdin?.write(request.mission);
-      child.stdin?.end();
+    return new Promise<void>((resolve, reject) => {
+      let child: ChildProcess;
+      try {
+        child = spawn(invocation.file, [...invocation.args], {
+          cwd: request.workspace ?? DAEMON_DIR,
+          env: agentEnvironment(options.environment ?? process.env),
+          shell: invocation.shell,
+          stdio: ["pipe", "inherit", "inherit"],
+        });
+      } catch (error) {
+        rmSync(mcpConfigPath, { force: true });
+        reject(error);
+        return;
+      }
       // A hung agent must not hold its maxAgents slot forever: kill its process
       // tree after the lifetime bound (on win32 the child is cmd.exe, so a plain
       // kill would orphan the real agent). The claim's own reap horizon frees the
@@ -107,14 +174,20 @@ export function claudeSpawner(
       // The config file carries the agent's credential; it must not outlive the
       // agent it was minted for. Both exit paths remove it; a missing file is fine.
       let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       const finish = (): void => {
         if (settled) return;
         settled = true;
-        clearTimeout(timer);
+        if (timer !== undefined) clearTimeout(timer);
         rmSync(mcpConfigPath, { force: true });
         resolve();
       };
-      const timer = setTimeout(() => {
+      const failInput = (): void => {
+        if (settled) return;
+        killTree();
+        finish();
+      };
+      timer = setTimeout(() => {
         // Free the slot on the deadline whether or not the kill lands: waiting
         // for the process to actually exit is the very hang this bound exists
         // to break. Kill is best-effort cleanup; a later exit is a no-op finish.
@@ -128,6 +201,16 @@ export function claudeSpawner(
         finish();
       });
       child.on("error", finish);
+      // A child can exit after spawn() succeeds but before stdin is written.
+      // Writable streams surface that race as an asynchronous EPIPE; without
+      // a listener it escapes the promise and crashes the whole wrapper.
+      child.stdin?.on("error", failInput);
+      try {
+        child.stdin?.write(request.mission);
+        child.stdin?.end();
+      } catch {
+        failInput();
+      }
     });
   };
 }

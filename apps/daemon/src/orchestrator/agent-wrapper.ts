@@ -83,6 +83,7 @@ export interface RunOnceReport {
 }
 
 const encoder = new TextEncoder();
+const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set(["approval.decide", "goal.close"]);
 
 function digestOf(payload: JsonObject): string {
   return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
@@ -114,11 +115,6 @@ export function codeMission(
   ];
   if (hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
-  }
-  if (hints.accept !== null) {
-    lines.push(
-      `Suggested integration.accept_output payload shape: ${JSON.stringify(hints.accept)}`,
-    );
   }
   return lines.join(" ");
 }
@@ -203,11 +199,24 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { kind: step.kind, outcome: opened.code, sessionId: null, workItemId };
     }
 
+    const closeSession = (version: number): void => {
+      dispatch(
+        config.operatorCredential,
+        "session.close",
+        { sessionId },
+        `session/${sessionId}`,
+        version,
+      );
+    };
+
     // The AGENT claims, so the fence names the agent: expiry doubles as the
     // reap horizon when a spawned process dies without releasing.
     const claimed = dispatch(secret, "work.claim", { expiresAt, workItemId },
       `work/${workItemId}`, 0);
     if (!claimed.ok) {
+      // Nothing was spawned, so no child can clean this identity up later.
+      // The open decision left the session at version 1.
+      try { closeSession(1); } catch { /* expiry is the fail-closed backstop */ }
       return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
     }
 
@@ -216,17 +225,49 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     if (brief !== null) {
       workspace = brief.workspace;
       missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
-        accept: config.payloadHint?.("integration.accept_output", step.aggregateId) ?? null,
+        accept: null,
         submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
       });
     } else {
       const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
       missionText = mission(workItemId, step.kind, expiresAt, hint);
     }
+    const revokeSession = (): void => {
+      // Resolve the current version from the daemon's own surface: an agent
+      // may have renewed while it ran, so assuming the version opened above
+      // would turn cleanup into a stale no-op. Revocation is best-effort here;
+      // the session's short expiry remains the fail-closed backstop if the
+      // surface itself is temporarily unavailable.
+      try {
+        const surface = config.affordances.readSurface();
+        if (surface.outcome !== "SURFACE") return;
+        const staffed = surface.steps.find((candidate) =>
+          workItemIdFor(candidate.kind, candidate.aggregateId) === workItemId);
+        if (staffed?.claim?.claimedBy === sessionId) {
+          // Release before closing the bearer. A crashed/failed child must not
+          // fence the work item for the rest of the 30-minute claim TTL.
+          dispatch(
+            secret,
+            "work.release",
+            { workItemId },
+            `work/${workItemId}`,
+            staffed.claim.version,
+          );
+        }
+        const aggregateId = `session/${sessionId}`;
+        const close = surface.steps.find((candidate) =>
+          candidate.kind === "session.close" && candidate.aggregateId === aggregateId);
+        if (close?.version === null || close?.version === undefined) return;
+        closeSession(close.version);
+      } catch { /* expiry still revokes the bearer if cleanup cannot run */ }
+    };
     const exit = config.spawnAgent({
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
-    }).catch(() => undefined).then(() => { active.delete(workItemId); });
+    }).catch(() => undefined).then(() => {
+      revokeSession();
+      active.delete(workItemId);
+    });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
   };
@@ -237,15 +278,15 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { active: active.size, spawned: [], surfaceOutcome: surface.code };
     }
     const spawned: SpawnReport[] = [];
-    // Staffing priority: code nodes are the point of the board, so they come
-    // first; goal.close comes last so a goal is never closed while its nodes
-    // still have unstaffed work in the same pass.
+    // Staffing priority: code nodes are the point of the board, so they come first.
+    // Human approval and goal closure stay visible on the board but are never delegated.
     const ordered = [...surface.steps].sort((a, b) => {
       const rank = (step: ChainStep): number =>
         step.kind === "node.deliver" ? 0 : step.kind === "goal.close" ? 2 : 1;
       return rank(a) - rank(b);
     });
     for (const step of ordered) {
+      if (HUMAN_ONLY_STEPS.has(step.kind)) continue;
       if (active.size >= config.maxAgents) break;
       if (step.status !== "READY" || step.claim !== null) continue;
       // Session lifecycle steps are identity plumbing the wrapper itself uses,

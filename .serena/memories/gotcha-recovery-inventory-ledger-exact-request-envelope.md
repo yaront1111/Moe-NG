@@ -1,0 +1,3 @@
+# Recovery inventory ledger exact request envelope
+
+`recordRecoveryReconciliation` validates its request with `exactDataRecord(request, REQUEST_KEYS)`. A coordinator request that extends `RecoveryDurableReconcileRequest` must not be passed through whole: its backup cursor, windows, project tag, and restored intents make the ledger answer `RECOVERY_INVENTORY_INPUT_INVALID` at `RECOVERY_INVENTORY_LEDGER`. Pass a freshly selected four-key scope `{ correlationId, decidedAt, principalId, projectId }`, while passing inventory facts separately. This preserves the ledger's hostile-input exactness without weakening it.

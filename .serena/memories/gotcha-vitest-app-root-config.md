@@ -1,0 +1,3 @@
+# Vitest app-root discovery
+
+The repository root `vitest.config.ts` includes only `packages/**/*.test.ts` and `tests/**/*.test.ts`. Merely passing `--root .` from an `apps/*` workspace still discovers the ancestor config and hides app tests. For dependency-minimal app packages without an extra config file, `vitest run --root . --config package.json src` loads the package JSON as an empty Vite config and restores default discovery under the app root. This was verified for `apps/daemon` on Vitest 4.1.10.

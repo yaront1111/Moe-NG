@@ -22,7 +22,7 @@
     "@moe/store": "workspace:*"
   },
   "scripts": {
-    "start": "node ./src/daemon-main.ts",
+    "start": "node ./src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=39123",
     "typecheck": "tsc --project tsconfig.json",
     "test": "vitest run --root . --config package.json src"
   }

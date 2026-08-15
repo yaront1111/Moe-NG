@@ -28,6 +28,81 @@ import {
 } from "./http-server-test-helpers.js";
 
 describe("http adapter — host and origin defence", () => {
+  it.each([
+    "127.0.0.1:7391@evil.example",
+    "127.0.0.1:7391junk",
+    "localhost:7391@evil.example",
+    "localhost:7391junk",
+    "[::1]@evil.example",
+    "[::1]junk",
+    "[::1]:7391@evil.example",
+    "[::1]:7391junk",
+    "[::1]:7391:80",
+    "::1",
+    "[::1",
+  ])("refuses malformed loopback-looking Host authority %s", async (host) => {
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      sessionPort: sessionPortFor(BEARER),
+    });
+
+    const response = await adapter.handleRequest(build({ body: INITIALIZE_BODY, host }));
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get(MCP_SESSION_ID_HEADER)).toBeNull();
+    expect(port.calls).toEqual([]);
+    await adapter.close();
+  });
+
+  it.each([
+    "127.0.0.1",
+    "127.0.0.1:0",
+    "127.0.0.1:65535",
+    "localhost",
+    "LOCALHOST:7391",
+    "[::1]",
+    "[::1]:7391",
+  ])("accepts exact loopback Host authority %s", async (host) => {
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      sessionPort: sessionPortFor(BEARER),
+    });
+
+    const response = await adapter.handleRequest(build({ body: INITIALIZE_BODY, host }));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get(MCP_SESSION_ID_HEADER)).not.toBeNull();
+    expect(port.calls).toEqual([]);
+    if (response.body !== null) await response.text();
+    await adapter.close();
+  });
+
+  it.each([
+    "127.0.0.1:",
+    "127.0.0.1:-1",
+    "127.0.0.1:65536",
+    "localhost:+7391",
+    "localhost:999999",
+    "[::1]:",
+    "[::1]:-1",
+    "[::1]:65536",
+  ])("refuses invalid loopback Host port %s", async (host) => {
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      sessionPort: sessionPortFor(BEARER),
+    });
+
+    const response = await adapter.handleRequest(build({ body: INITIALIZE_BODY, host }));
+
+    expect(response.status).toBe(403);
+    expect(response.headers.get(MCP_SESSION_ID_HEADER)).toBeNull();
+    expect(port.calls).toEqual([]);
+    await adapter.close();
+  });
+
   it("refuses a request whose Origin is not loopback, with zero dispatch", async () => {
     const port = createRecordingPort();
     const { adapter, sessionId } = await openSession(port);

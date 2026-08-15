@@ -110,6 +110,8 @@ describe("provider-run refusals", () => {
     );
     expect(refusal.storeCode).toBe("STORE_BUSY");
     expect(refusal.code).toBe("PROVIDER_RUN_STORE_UNAVAILABLE");
+    expect(refusal.layer).toBe("PROVIDER_RUN_LEDGER");
+    expect(refusal.outcome).toBe("REFUSED");
   });
 
   /** Epic rail 4: unverifiable evidence stays UNKNOWN and never gains authority. */

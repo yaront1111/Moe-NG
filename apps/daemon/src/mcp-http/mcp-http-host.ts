@@ -29,7 +29,6 @@ import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 
 export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
-  readonly credential: string;
   readonly deps: CommandAdapterDeps;
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
@@ -126,7 +125,6 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     adapter ??= createHttpMcpAdapter({
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
-        credential: options.credential,
         deps: options.deps,
         subscriptions: options.subscriptions,
       }),

@@ -40,6 +40,8 @@ export type ChainStepStatus = (typeof CHAIN_STEP_STATUSES)[number];
 export interface ChainStepClaim {
   readonly claimedBy: string;
   readonly expiresAt: string;
+  /** Durable work-claim aggregate version, used for exact release/renew CAS. */
+  readonly version: number;
 }
 
 export interface ChainStep {

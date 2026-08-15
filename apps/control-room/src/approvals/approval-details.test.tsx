@@ -123,7 +123,9 @@ describe("approval detail — plan", () => {
     })} />);
     const approve = screen.getByTestId("cr.action.approval-decide.approve");
     expect(approve.hasAttribute("disabled")).toBe(true);
-    expect(approve.getAttribute("data-reason-code")).toBe("REVISION_REBOUND");
+    expect(approve.getAttribute("data-reason-code"))
+      .toBe("APPROVAL_AUTHORITY_BINDING_MISMATCH");
+    expect(approve.getAttribute("data-refusing-layer")).toBe("HUMAN_AUTHORITY_GATE");
     expect(approve.getAttribute("data-refused-by")).toBe("RECORD_VALIDITY");
   });
 });
@@ -392,7 +394,9 @@ describe("policy-decided records on a detail surface", () => {
     })} />);
     const approve = screen.getByTestId("cr.action.approval-decide.approve");
     expect(approve.hasAttribute("disabled")).toBe(true);
-    expect(approve.getAttribute("data-reason-code")).toBe("ILLEGAL_TRANSITION");
+    expect(approve.getAttribute("data-reason-code"))
+      .toBe("APPROVAL_AUTHORITY_BINDING_MISMATCH");
+    expect(approve.getAttribute("data-refusing-layer")).toBe("HUMAN_AUTHORITY_GATE");
     expect(approve.getAttribute("data-refused-by")).toBe("RECORD_LIFECYCLE");
   });
 });

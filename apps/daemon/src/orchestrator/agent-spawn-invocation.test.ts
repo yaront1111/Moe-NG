@@ -33,6 +33,15 @@ describe("agentSpawnInvocation", () => {
     );
   });
 
+  it("preserves an intentionally empty Windows argument", () => {
+    const invocation = agentSpawnInvocation(
+      "claude",
+      ["--tools", "", "--strict-mcp-config"],
+      "win32",
+    );
+    expect(invocation.file).toBe('claude --tools "" --strict-mcp-config');
+  });
+
   it("refuses an argument that would break out of the shell line", () => {
     // A double quote inside an argument cannot be quoted safely under cmd.exe; the
     // wrapper never produces one, so a hostile or corrupt path fails closed here

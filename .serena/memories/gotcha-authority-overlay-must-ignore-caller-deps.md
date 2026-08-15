@@ -1,0 +1,3 @@
+# Narrow authority overlays must not inherit caller dependency replacements
+
+A factory advertised as retaining shipped production defaults cannot base its dependency set on `options.deps ?? defaults`. Even if it overwrites the two intended authority slots afterward, a caller-supplied complete deps object has already replaced runtime pinning, OS lock, physical boundary, observation, clock, delay, and duplicate policy. The factory must construct from private shipped defaults only (or reject a deps-bearing option with a stable result); tests that need seams should use an internal-only harness rather than widen the public factory.

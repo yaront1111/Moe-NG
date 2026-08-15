@@ -273,6 +273,7 @@ export function runSnapshottedRestoreQuiesce(
   const chain = readSuccessionChain(store, request.projectId, request.incarnationRef);
   if (!chain.ok) return restoreRefusal(chain.layer, chain.code);
   const record = Object.freeze({
+    backupCursor: verified.manifest.cursor,
     generationDigest,
     incarnationRef: request.incarnationRef,
     keyEpochRef: request.keyEpochRef,

@@ -46,6 +46,9 @@ importers:
       '@moe/control-room-model':
         specifier: workspace:*
         version: link:../../packages/control-room-model
+      '@moe/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       react:
         specifier: 19.2.8
         version: 19.2.8

@@ -1,0 +1,5 @@
+# Gotcha: call-only catches do not contain hostile fulfilled results
+
+Wrapping only `port()` or `await port()` is incomplete when the returned authority/lifecycle record is interpreted after the catch. A fulfilled object or Proxy can throw from discriminant/property reads, reject the public promise, bypass stable reason codes, and—after resource acquisition—skip cleanup and lock release.
+
+QA pattern: for every injected port, test both thrown/rejected invocation and a fulfilled hostile/malformed result through the production entrypoint. Assert an exact nonzero matrix, fulfilled public promise, frozen UNKNOWN with exact code/layer, zero unauthorized downstream effects, and cleanup/release exactly once for post-acquisition cases. Keep result validation and property inspection inside the owning containment boundary.

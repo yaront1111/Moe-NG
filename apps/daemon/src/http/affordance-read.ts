@@ -73,7 +73,11 @@ function claimOf(
   const active = activeClaim(claims.claims.get(workItemIdFor(kind, aggregateId)), now);
   return active === null
     ? null
-    : Object.freeze({ claimedBy: active.claimedBy, expiresAt: active.expiresAt });
+    : Object.freeze({
+      claimedBy: active.claimedBy,
+      expiresAt: active.expiresAt,
+      version: active.version,
+    });
 }
 
 function bootstrapAggregateId(

@@ -12,7 +12,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import {
+  join as nativeJoin,
+  relative as nativeRelative,
+  sep as nativeSeparator,
+  win32,
+} from "node:path";
 
 import { afterAll, expect, it } from "vitest";
 
@@ -28,7 +33,6 @@ import {
 import {
   CLAUDE_RUNTIME_PIN_ERROR_CODES,
   RUNTIME_PIN_CHUNK_BYTES,
-  createNodeClaudeRuntimeFs,
   prepareClaudeRuntimePin,
   type ClaudeRuntimeFacts,
   type ClaudeRuntimeFactsPort,
@@ -38,6 +42,11 @@ import {
   type ClaudeRuntimePinResult,
   type PreparedClaudeRuntime,
 } from "./claude-runtime-pin.js";
+import {
+  EMULATED_WIN32_RUNTIME_ROOT,
+  createEmulatedWin32RuntimeFs,
+  nativeRuntimePath,
+} from "./claude-runtime-pin-test-fixtures.js";
 
 /**
  * Every refusal code this suite has actually observed. The final assertion
@@ -56,7 +65,7 @@ afterAll(() => {
 });
 
 function newTempRoot(): string {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-pin-")));
+  const root = realpathSync(mkdtempSync(nativeJoin(tmpdir(), "moe-pin-")));
   TEMP_ROOTS.push(root);
   return root;
 }
@@ -94,6 +103,7 @@ function steppingClock(): ObservationClock {
 const LARGE_BYTES = RUNTIME_PIN_CHUNK_BYTES * 4 + 17;
 
 interface Fixture {
+  readonly nativeRoot: string;
   readonly root: string;
   readonly installedRoot: string;
   readonly pinRoot: string;
@@ -104,22 +114,26 @@ interface Fixture {
 }
 
 function makeFixture(): Fixture {
-  const root = newTempRoot();
-  const installedRoot = join(root, "Claude");
-  mkdirSync(join(installedRoot, "lib"), { recursive: true });
-  mkdirSync(join(root, "outside"), { recursive: true });
-  const executable = join(installedRoot, "claude.exe");
-  const launcher = join(installedRoot, "claude.cmd");
-  const large = join(installedRoot, "lib", "runtime.pack");
-  const outside = join(root, "outside", "claude.exe");
-  writeFileSync(executable, "MZ-claude-executable");
-  writeFileSync(launcher, "@echo off\r\nclaude %*\r\n");
-  writeFileSync(large, Buffer.alloc(LARGE_BYTES, 7));
-  writeFileSync(outside, "MZ-not-the-installed-one");
+  const nativeRoot = newTempRoot();
+  const root = EMULATED_WIN32_RUNTIME_ROOT;
+  const installedRoot = win32.join(root, "Claude");
+  const executable = win32.join(installedRoot, "claude.exe");
+  const launcher = win32.join(installedRoot, "claude.cmd");
+  const large = win32.join(installedRoot, "lib", "runtime.pack");
+  const outside = win32.join(root, "outside", "claude.exe");
+  mkdirSync(nativeRuntimePath(nativeRoot, win32.join(installedRoot, "lib")), {
+    recursive: true,
+  });
+  mkdirSync(nativeRuntimePath(nativeRoot, win32.join(root, "outside")), { recursive: true });
+  writeFileSync(nativeRuntimePath(nativeRoot, executable), "MZ-claude-executable");
+  writeFileSync(nativeRuntimePath(nativeRoot, launcher), "@echo off\r\nclaude %*\r\n");
+  writeFileSync(nativeRuntimePath(nativeRoot, large), Buffer.alloc(LARGE_BYTES, 7));
+  writeFileSync(nativeRuntimePath(nativeRoot, outside), "MZ-not-the-installed-one");
   return {
+    nativeRoot,
     root,
     installedRoot,
-    pinRoot: join(root, "pins"),
+    pinRoot: win32.join(root, "pins"),
     executable,
     launcher,
     large,
@@ -127,11 +141,15 @@ function makeFixture(): Fixture {
   };
 }
 
+function fixtureDigest(fixture: Fixture, path: string): string {
+  return sha256File(nativeRuntimePath(fixture.nativeRoot, path));
+}
+
 function closureOf(fixture: Fixture): readonly RuntimeClosureEntry[] {
   return [
-    { kind: "EXECUTABLE", path: fixture.executable, sha256: sha256File(fixture.executable) },
-    { kind: "LAUNCHER", path: fixture.launcher, sha256: sha256File(fixture.launcher) },
-    { kind: "PACKAGE", path: fixture.large, sha256: sha256File(fixture.large) },
+    { kind: "EXECUTABLE", path: fixture.executable, sha256: fixtureDigest(fixture, fixture.executable) },
+    { kind: "LAUNCHER", path: fixture.launcher, sha256: fixtureDigest(fixture, fixture.launcher) },
+    { kind: "PACKAGE", path: fixture.large, sha256: fixtureDigest(fixture, fixture.large) },
   ];
 }
 
@@ -188,8 +206,8 @@ interface Instrumented {
  * suite proves was moved by the real filesystem code, and the wrapper exists
  * only to count calls and inject faults at exact ordinals.
  */
-function instrument(hooks: FsHooks = {}): Instrumented {
-  const base = createNodeClaudeRuntimeFs();
+function instrument(fixture: Fixture, hooks: FsHooks = {}): Instrumented {
+  const base = createEmulatedWin32RuntimeFs(fixture.nativeRoot);
   const ioCalls: string[] = [];
   const reads: ReadRecord[] = [];
   const readOrdinals = new Map<string, number>();
@@ -292,7 +310,7 @@ async function run(
     quotedObservation: "quote" in overrides ? overrides.quote : makeQuote(closureOf(fixture)),
     installedRoot: overrides.installedRoot ?? fixture.installedRoot,
     pinRoot: overrides.pinRoot ?? fixture.pinRoot,
-    fs: overrides.fs ?? instrument().port,
+    fs: overrides.fs ?? instrument(fixture).port,
     facts: overrides.facts ?? factsPort().port,
     clock: steppingClock(),
   });
@@ -318,18 +336,23 @@ function expectPrepared(result: ClaudeRuntimePinResult): PreparedClaudeRuntime {
 }
 
 /** The pin root is only created once a closure is proven, so absent means empty. */
-function publishedRoots(pinRoot: string): readonly string[] {
-  return existsSync(pinRoot) ? readdirSync(pinRoot) : [];
+function publishedRoots(fixture: Fixture, pinRoot: string): readonly string[] {
+  const nativePinRoot = nativeRuntimePath(fixture.nativeRoot, pinRoot);
+  return existsSync(nativePinRoot) ? readdirSync(nativePinRoot) : [];
 }
 
-function listTree(root: string): readonly (readonly [string, string])[] {
+function listTree(fixture: Fixture, root: string): readonly (readonly [string, string])[] {
+  const nativeRoot = nativeRuntimePath(fixture.nativeRoot, root);
   const walk = (dir: string): string[] =>
     readdirSync(dir).flatMap((entry) => {
-      const path = join(dir, entry);
+      const path = nativeJoin(dir, entry);
       return statSync(path).isDirectory() ? walk(path) : [path];
     });
-  return walk(root)
-    .map((path) => [relative(root, path), sha256File(path)] as const)
+  return walk(nativeRoot)
+    .map((path) => [
+      nativeRelative(nativeRoot, path).split(nativeSeparator).join(win32.sep),
+      sha256File(path),
+    ] as const)
     .sort((left, right) => (left[0] < right[0] ? -1 : left[0] > right[0] ? 1 : 0));
 }
 
@@ -340,13 +363,13 @@ it("pins the declared closure into one digest-addressed root and binds the resul
   const facts = factsPort();
   const prepared = expectPrepared(await run(fixture, { quote, facts: facts.port }));
 
-  expect(prepared.pinnedRoot).toBe(join(fixture.pinRoot, prepared.pinnedClosureDigest));
+  expect(prepared.pinnedRoot).toBe(win32.join(fixture.pinRoot, prepared.pinnedClosureDigest));
   expect(prepared.quotedObservationDigest).toBe(quote.observationDigest);
-  expect(prepared.executablePath).toBe(join(prepared.pinnedRoot, "claude.exe"));
-  expect(listTree(prepared.pinnedRoot)).toEqual([
-    ["claude.cmd", sha256File(fixture.launcher)],
-    ["claude.exe", sha256File(fixture.executable)],
-    [join("lib", "runtime.pack"), sha256File(fixture.large)],
+  expect(prepared.executablePath).toBe(win32.join(prepared.pinnedRoot, "claude.exe"));
+  expect(listTree(fixture, prepared.pinnedRoot)).toEqual([
+    ["claude.cmd", fixtureDigest(fixture, fixture.launcher)],
+    ["claude.exe", fixtureDigest(fixture, fixture.executable)],
+    [win32.join("lib", "runtime.pack"), fixtureDigest(fixture, fixture.large)],
   ]);
 
   // The fresh observation is a NEW observation of the pinned bytes, not the quote.
@@ -358,12 +381,12 @@ it("pins the declared closure into one digest-addressed root and binds the resul
   expect(prepared.observation.reportedVersion).toBe(BASE_FACTS.reportedVersion);
   expect(prepared.observation.adapterCapabilitySchemaDigest).toBe(CAPABILITY_DIGEST);
   expect(prepared.observation.resolvedRuntimeClosure.map((entry) => entry.path)).toEqual([
-    join(prepared.pinnedRoot, "claude.cmd"),
-    join(prepared.pinnedRoot, "claude.exe"),
-    join(prepared.pinnedRoot, "lib", "runtime.pack"),
+    win32.join(prepared.pinnedRoot, "claude.cmd"),
+    win32.join(prepared.pinnedRoot, "claude.exe"),
+    win32.join(prepared.pinnedRoot, "lib", "runtime.pack"),
   ]);
   expect(prepared.pinRootIdentity).toBe(
-    canonicalDigest({ pinRoot: realpathSync(fixture.pinRoot), root: prepared.pinnedRoot }),
+    canonicalDigest({ pinRoot: fixture.pinRoot, root: prepared.pinnedRoot }),
   );
   expect(facts.observations()).toBe(2);
 
@@ -376,14 +399,15 @@ it("pins the declared closure into one digest-addressed root and binds the resul
 
 it("streams every source and destination in bounded chunks instead of one whole-file read", async () => {
   const fixture = makeFixture();
-  const probe = instrument();
+  const probe = instrument(fixture);
   const prepared = expectPrepared(await run(fixture, { fs: probe.port }));
 
   const largeReads = probe.reads.filter((read) => read.path === fixture.large);
   // The destination is verified while still staged, so it is read under the pin
   // root but not yet at its published path.
   const destinationReads = probe.reads.filter(
-    (read) => read.path !== fixture.large && read.path.endsWith(join("lib", "runtime.pack")),
+    (read) =>
+      read.path !== fixture.large && read.path.endsWith(win32.join("lib", "runtime.pack")),
   );
 
   // Hash source, copy source, re-hash source after copy: three bounded passes.
@@ -406,57 +430,59 @@ it("rebuilds byte-identically from a shuffled declaration into a separate pin ro
   const second = expectPrepared(
     await run(fixture, {
       quote: makeQuote(shuffled),
-      pinRoot: join(fixture.root, "pins-2"),
+      pinRoot: win32.join(fixture.root, "pins-2"),
     }),
   );
 
   expect(second.pinnedClosureDigest).toBe(first.pinnedClosureDigest);
-  expect(listTree(second.pinnedRoot)).toEqual(listTree(first.pinnedRoot));
-  expect(relative(fixture.pinRoot, first.pinnedRoot)).toBe(
-    relative(join(fixture.root, "pins-2"), second.pinnedRoot),
+  expect(listTree(fixture, second.pinnedRoot)).toEqual(listTree(fixture, first.pinnedRoot));
+  expect(win32.relative(fixture.pinRoot, first.pinnedRoot)).toBe(
+    win32.relative(win32.join(fixture.root, "pins-2"), second.pinnedRoot),
   );
 });
 
 it("adopts an already-published root whose bytes match instead of republishing", async () => {
   const fixture = makeFixture();
   const first = expectPrepared(await run(fixture));
-  const probe = instrument();
+  const probe = instrument(fixture);
   const second = expectPrepared(await run(fixture, { fs: probe.port }));
 
   expect(second.pinnedRoot).toBe(first.pinnedRoot);
   expect(second.pinnedClosureDigest).toBe(first.pinnedClosureDigest);
   expect(probe.ioCalls.some((call) => call.startsWith("openExclusiveWrite:"))).toBe(false);
-  expect(listTree(second.pinnedRoot)).toEqual(listTree(first.pinnedRoot));
+  expect(listTree(fixture, second.pinnedRoot)).toEqual(listTree(fixture, first.pinnedRoot));
 });
 
 it("refuses a published root whose bytes drifted and preserves it untouched", async () => {
   const fixture = makeFixture();
   const first = expectPrepared(await run(fixture));
-  const victim = join(first.pinnedRoot, "claude.exe");
-  writeFileSync(victim, "MZ-substituted-executable");
-  const tampered = sha256File(victim);
+  const victim = win32.join(first.pinnedRoot, "claude.exe");
+  const nativeVictim = nativeRuntimePath(fixture.nativeRoot, victim);
+  writeFileSync(nativeVictim, "MZ-substituted-executable");
+  const tampered = sha256File(nativeVictim);
 
   expectRefusal(await run(fixture), "CLAUDE_RUNTIME_PIN_COLLISION");
-  expect(sha256File(victim)).toBe(tampered);
-  expect(publishedRoots(fixture.pinRoot)).toEqual([first.pinnedClosureDigest]);
+  expect(sha256File(nativeVictim)).toBe(tampered);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([first.pinnedClosureDigest]);
 });
 
 it("refuses a published root carrying a member the closure never declared", async () => {
   const fixture = makeFixture();
   const first = expectPrepared(await run(fixture));
-  const smuggled = join(first.pinnedRoot, "lib", "inject.dll");
-  writeFileSync(smuggled, "smuggled-side-by-side-load");
-  const smuggledDigest = sha256File(smuggled);
+  const smuggled = win32.join(first.pinnedRoot, "lib", "inject.dll");
+  const nativeSmuggled = nativeRuntimePath(fixture.nativeRoot, smuggled);
+  writeFileSync(nativeSmuggled, "smuggled-side-by-side-load");
+  const smuggledDigest = sha256File(nativeSmuggled);
 
   expectRefusal(await run(fixture), "CLAUDE_RUNTIME_PIN_COLLISION");
   // Refused, not repaired: the tampered root is evidence and stays intact.
-  expect(sha256File(smuggled)).toBe(smuggledDigest);
-  expect(publishedRoots(fixture.pinRoot)).toEqual([first.pinnedClosureDigest]);
+  expect(sha256File(nativeSmuggled)).toBe(smuggledDigest);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([first.pinnedClosureDigest]);
 });
 
 it("refuses a non-Windows host before touching the filesystem or the observation port", async () => {
   const fixture = makeFixture();
-  const probe = instrument({ hostPlatform: () => "linux" });
+  const probe = instrument(fixture, { hostPlatform: () => "linux" });
   const facts = factsPort();
 
   expectRefusal(
@@ -556,7 +582,7 @@ it("generates a positive number of quote refusal cases", () => {
 
 it.each(QUOTE_CASES)("refuses $name at RUNTIME with $code", async ({ code, quote }) => {
   const fixture = makeFixture();
-  const probe = instrument();
+  const probe = instrument(fixture);
   expectRefusal(await run(fixture, { quote: quote(fixture), fs: probe.port }), code);
   // A rejected quote never reaches the pin root.
   expect(probe.ioCalls.some((call) => call.startsWith("openExclusiveWrite:"))).toBe(false);
@@ -622,17 +648,20 @@ const PATH_CASES: readonly PathCase[] = [
   {
     name: "a path outside the installed root",
     code: "CLAUDE_RUNTIME_PATH_ESCAPE",
-    closure: (fixture) => withExecutablePath(fixture, fixture.outside, sha256File(fixture.outside)),
+    closure: (fixture) =>
+      withExecutablePath(fixture, fixture.outside, fixtureDigest(fixture, fixture.outside)),
   },
   {
     name: "a declared entry that is not on disk",
     code: "CLAUDE_RUNTIME_PATH_MISSING",
-    closure: (fixture) => withExecutablePath(fixture, join(fixture.installedRoot, "absent.exe")),
+    closure: (fixture) =>
+      withExecutablePath(fixture, win32.join(fixture.installedRoot, "absent.exe")),
   },
   {
     name: "a directory declared as a closure member",
     code: "CLAUDE_RUNTIME_PATH_NOT_FILE",
-    closure: (fixture) => withExecutablePath(fixture, join(fixture.installedRoot, "lib")),
+    closure: (fixture) =>
+      withExecutablePath(fixture, win32.join(fixture.installedRoot, "lib")),
   },
   {
     name: "the same file declared twice under different casing",
@@ -642,7 +671,7 @@ const PATH_CASES: readonly PathCase[] = [
       {
         kind: "PACKAGE",
         path: fixture.executable.toUpperCase(),
-        sha256: sha256File(fixture.executable),
+        sha256: fixtureDigest(fixture, fixture.executable),
       },
     ],
   },
@@ -650,9 +679,17 @@ const PATH_CASES: readonly PathCase[] = [
     name: "an entry reached through a junction",
     code: "CLAUDE_RUNTIME_PATH_REPARSE",
     closure: (fixture) => {
-      const link = join(fixture.installedRoot, "link");
-      symlinkSync(join(fixture.installedRoot, "lib"), link, "junction");
-      return withExecutablePath(fixture, join(link, "runtime.pack"), sha256File(fixture.large));
+      const link = win32.join(fixture.installedRoot, "link");
+      symlinkSync(
+        nativeRuntimePath(fixture.nativeRoot, win32.join(fixture.installedRoot, "lib")),
+        nativeRuntimePath(fixture.nativeRoot, link),
+        "junction",
+      );
+      return withExecutablePath(
+        fixture,
+        win32.join(link, "runtime.pack"),
+        fixtureDigest(fixture, fixture.large),
+      );
     },
   },
 ];
@@ -673,7 +710,7 @@ it("generates a positive number of path refusal cases covering every path code",
 
 it.each(PATH_CASES)("refuses $name at RUNTIME with $code", async ({ code, closure }) => {
   const fixture = makeFixture();
-  const probe = instrument();
+  const probe = instrument(fixture);
   expectRefusal(await run(fixture, { quote: makeQuote(closure(fixture)), fs: probe.port }), code);
   expect(probe.ioCalls.some((call) => call.startsWith("openExclusiveWrite:"))).toBe(false);
 });
@@ -681,18 +718,24 @@ it.each(PATH_CASES)("refuses $name at RUNTIME with $code", async ({ code, closur
 it("refuses a source whose bytes changed between the quote and the launch", async () => {
   const fixture = makeFixture();
   const quote = makeQuote(closureOf(fixture));
-  writeFileSync(fixture.executable, "MZ-claude-executable-upgraded");
+  writeFileSync(
+    nativeRuntimePath(fixture.nativeRoot, fixture.executable),
+    "MZ-claude-executable-upgraded",
+  );
 
   expectRefusal(await run(fixture, { quote }), "CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH");
 });
 
 it("refuses when a source is rewritten while its own bytes are being copied", async () => {
   const fixture = makeFixture();
-  const probe = instrument({
+  const probe = instrument(fixture, {
     onReadChunk: (path, readOrdinal, chunkIndex) => {
       // Read 1 hashes the source; read 2 is the copy. Corrupt the tail mid-copy.
       if (path === fixture.large && readOrdinal === 2 && chunkIndex === 0) {
-        writeFileSync(fixture.large, Buffer.alloc(LARGE_BYTES, 9));
+        writeFileSync(
+          nativeRuntimePath(fixture.nativeRoot, fixture.large),
+          Buffer.alloc(LARGE_BYTES, 9),
+        );
       }
     },
   });
@@ -701,28 +744,31 @@ it("refuses when a source is rewritten while its own bytes are being copied", as
     await run(fixture, { fs: probe.port }),
     "CLAUDE_RUNTIME_PIN_DESTINATION_MISMATCH",
   );
-  expect(publishedRoots(fixture.pinRoot)).toEqual([]);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([]);
 });
 
 it("refuses when an already-copied source drifts before the closure is published", async () => {
   const fixture = makeFixture();
-  const probe = instrument({
+  const probe = instrument(fixture, {
     onOpenWrite: (_path, ordinal) => {
       // claude.cmd sorts first, so by the second destination it is copied AND
       // destination-verified: only the post-copy source re-hash can see this.
       if (ordinal === 2) {
-        writeFileSync(fixture.launcher, "@echo off\r\nsubstituted %*\r\n");
+        writeFileSync(
+          nativeRuntimePath(fixture.nativeRoot, fixture.launcher),
+          "@echo off\r\nsubstituted %*\r\n",
+        );
       }
     },
   });
 
   expectRefusal(await run(fixture, { fs: probe.port }), "CLAUDE_RUNTIME_PIN_SOURCE_DRIFT");
-  expect(publishedRoots(fixture.pinRoot)).toEqual([]);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([]);
 });
 
 it("refuses and removes the staging tree when a destination cannot be opened", async () => {
   const fixture = makeFixture();
-  const probe = instrument({
+  const probe = instrument(fixture, {
     onOpenWrite: (_path, ordinal) => {
       if (ordinal === 3) {
         throw new Error("injected openExclusiveWrite fault");
@@ -731,12 +777,12 @@ it("refuses and removes the staging tree when a destination cannot be opened", a
   });
 
   expectRefusal(await run(fixture, { fs: probe.port }), "CLAUDE_RUNTIME_PIN_COPY_FAILED");
-  expect(publishedRoots(fixture.pinRoot)).toEqual([]);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([]);
 });
 
 it("reports cleanup failure rather than the copy failure it could not undo", async () => {
   const fixture = makeFixture();
-  const probe = instrument({
+  const probe = instrument(fixture, {
     onOpenWrite: (_path, ordinal) => {
       if (ordinal === 3) {
         throw new Error("injected openExclusiveWrite fault");
@@ -805,7 +851,7 @@ it("generates a positive number of observation refusal cases covering both codes
 it.each(OBSERVATION_CASES)("refuses $name at RUNTIME with $code", async ({ code, facts }) => {
   const fixture = makeFixture();
   expectRefusal(await run(fixture, { facts: factsPort(facts).port }), code);
-  expect(publishedRoots(fixture.pinRoot)).toEqual([]);
+  expect(publishedRoots(fixture, fixture.pinRoot)).toEqual([]);
 });
 
 it("exercised every code in the frozen runtime-pin vocabulary", () => {

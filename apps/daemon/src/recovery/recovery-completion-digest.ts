@@ -39,7 +39,8 @@ export const RECOVERY_COVERAGE_PROOF_DIGEST_DOMAIN = "moe-recovery-coverage-proo
 
 /**
  * Sorted: the HTTP seam compares its payload allow-list ORDERED. `approval` is
- * the decision record, `command` the `approval.decide` command. The recovery
+ * the decision record, `command` the `approval.decide` command, and
+ * `authentication` is a signed, single-use session presentation. The recovery
  * command's own identity — commandId, correlationId, decidedAt, principalId,
  * projectId — is assembled server-side by the registry and is deliberately not
  * expressible here. Neither is `expectedVersion`: the seam envelope already
@@ -49,20 +50,14 @@ export const RECOVERY_COVERAGE_PROOF_DIGEST_DOMAIN = "moe-recovery-coverage-proo
  */
 export const RECOVERY_COMPLETE_PAYLOAD_KEYS = Object.freeze([
   "approval",
+  "authentication",
   "command",
   "reconciliationDigest",
 ] as const);
 
-/**
- * The step-up reference shape this command demands, carrying the instant it was
- * performed. Existing refs in this repo are opaque (`stepup-1`), and core's 300s
- * window compares a numeric `recentStepUpAt` an `ApprovalDecisionRecord` cannot
- * reach — so a ref without a readable instant cannot be shown to be RECENT, and
- * an opaque legacy ref is refused rather than assumed fresh.
- */
+/** @deprecated Timestamp-shaped refs are not authority; retained for source compatibility only. */
 export const RECOVERY_STEP_UP_REF_PREFIX = "recovery-step-up/1:" as const;
-
-/** Seconds, matching core's `STEP_UP_WINDOW` at identity/authenticate-command.ts. */
+/** @deprecated Recovery now uses the session proof's stricter 60-second freshness check. */
 export const RECOVERY_STEP_UP_WINDOW_SECONDS = 300;
 
 /**
@@ -76,6 +71,7 @@ export const RECOVERY_COMPLETION_CODES = Object.freeze([
   "RECOVERY_COMPLETION_REQUEST_MALFORMED",
   "RECOVERY_COMPLETION_EVIDENCE_ABSENT",
   "RECOVERY_COMPLETION_EVIDENCE_MISMATCH",
+  "RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT",
   "RECOVERY_COMPLETION_DIGEST_MISMATCH",
   "RECOVERY_COMPLETION_APPROVAL_INVALID",
   "RECOVERY_COMPLETION_STALE",
@@ -115,6 +111,7 @@ export interface RecoveryCompletionEvidence {
   readonly incarnationRef: string;
   readonly items: readonly RecoveryCompletionItemEvidence[];
   readonly keyEpochRef: string;
+  readonly policyRevisionRef: string;
   readonly projectId: string;
   readonly projectTag: string;
   readonly proofs: readonly RecoveryCompletionProofEvidence[];
@@ -178,6 +175,7 @@ export function recoveryCompletionPreimage(evidence: RecoveryCompletionEvidence)
     frame(evidence.restoreGenerationDigest) +
     frame(evidence.incarnationRef) +
     frame(evidence.keyEpochRef) +
+    frame(evidence.policyRevisionRef) +
     frame(evidence.anchorBindingDigest) +
     frameList(evidence.configuredClasses) +
     frameProofs(evidence.proofs) +

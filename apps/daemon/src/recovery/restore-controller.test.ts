@@ -451,6 +451,7 @@ describe("restore controller — inspect and discard", () => {
       ok: true,
       outcome: "INSTALLED",
       record: {
+        backupCursor: h.backupCursor,
         generationDigest: h.generationDigest,
         incarnationRef: binding.incarnationRef,
         keyEpochRef: binding.keyEpochRef,
@@ -472,10 +473,41 @@ describe("restore controller — inspect and discard", () => {
       installedAt: "2026-08-11T00:00:00.000Z",
       keyEpochRef: binding.keyEpochRef,
       payload: new TextEncoder().encode(JSON.stringify({
+        backupCursor: h.backupCursor,
         generationDigest: h.generationDigest,
         incarnationRef: binding.incarnationRef,
         keyEpochRef: binding.keyEpochRef,
         preparedIdentity: "f".repeat(64),
+        restoreCommandId: binding.restoreCommandId,
+        schemaVersion: RESTORE_CONTROLLER_SCHEMA_VERSION,
+      })),
+      slot: "ACTIVE",
+    });
+    expect(installed.ok).toBe(true);
+
+    const result = createRestorePort(h.store, PROJECT_ID).inspect();
+
+    expectRefusal(result, RESTORE_CONTROLLER_LAYER, "RESTORE_RECORD_UNREADABLE");
+  });
+
+  it("refuses a current installed record with no signed backup cursor", async () => {
+    const h = await restoreHarness("inspect-missing-cursor");
+    const binding = await anchoredIncarnation(h, "restore-cmd-1");
+    const installed = h.store.installRecoveryBinding({
+      bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+      incarnationRef: binding.incarnationRef,
+      installedAt: "2026-08-11T00:00:00.000Z",
+      keyEpochRef: binding.keyEpochRef,
+      payload: new TextEncoder().encode(JSON.stringify({
+        generationDigest: h.generationDigest,
+        incarnationRef: binding.incarnationRef,
+        keyEpochRef: binding.keyEpochRef,
+        preparedIdentity: preparedRestoreIdentity({
+          generationDigest: h.generationDigest,
+          incarnationRef: binding.incarnationRef,
+          keyEpochRef: binding.keyEpochRef,
+          restoreCommandId: binding.restoreCommandId,
+        }),
         restoreCommandId: binding.restoreCommandId,
         schemaVersion: RESTORE_CONTROLLER_SCHEMA_VERSION,
       })),

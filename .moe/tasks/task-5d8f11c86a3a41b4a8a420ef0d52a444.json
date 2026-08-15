@@ -121,7 +121,7 @@
       "completedAt": "2026-08-15T20:15:23.708Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -134,16 +134,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:23:14.137Z",
-  "updatedAt": "2026-08-15T20:17:20.330Z",
+  "updatedAt": "2026-08-15T20:45:20.787Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:35:35.430Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-15T20:45:20.787Z",
+    "wallClockMs": 7785357
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
-    "worker-fd8f822b"
+    "worker-fd8f822b",
+    "qa-32fd47c4",
+    "qa-7d1f37bd"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -196,5 +200,8 @@
     "packages/core/src/planning/approval-policy.js",
     "packages/core/src/index.ts",
     "packages/core/src/supersession/supersession-engine.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T20:45:20.787Z",
+  "reviewCompletedAt": "2026-08-15T20:45:20.787Z",
+  "reviewSummary": "Verified commit 18f0964 and all 9 task paths; working blobs match HEAD. Production files are 137/185 lines and bridges are exact. ApprovalPolicy is a frozen 2-member discriminated vocabulary with required delayMs and compile-time exhaustiveness; the separate gate is checked first, every policy is swept with exact nonzero cardinality, principal/moment/binding refusals pin code+layer, and approvePlan/reducer files are byte-unchanged. Verified Clause-1 consumer tasks exist: task-5fcfdae5, task-6fcca7da, task-e4af0e6e. Fresh direct equivalents in this Linux QA shell: TS 7.0.2 core typecheck EXIT 0; Vitest core 31 files/781 tests EXIT 0. Repo-wide TS loop: 17 packages EXIT 0 including core; only apps/daemon failed on foreign untracked provider-run-codec.test.ts, outside owned paths. Literal pnpm is unavailable in this shell, so no false green was claimed."
 }

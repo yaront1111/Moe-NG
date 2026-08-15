@@ -1,0 +1,3 @@
+# Decision: separate pure upcast routing from projection folding
+
+Keep pure projection evolution in two <=400-LOC tasks. Producer upcaster owns explicit opaque version routes and durable-envelope preservation. Consumer fold owns order/duplicate preflight, recursively plain frozen state, reducer invocation, and deterministic checkpoint output. Include one-line JS bridges in path/LOC budgets. Never infer future versions lexically, silently identity-upcast unknown versions, require cursor contiguity, import SQLite/I/O/clock/randomness, or publish a package-root API without ownership.

@@ -1,14 +1,12 @@
 import { applyApprovalCommand, reduceProject } from "@moe/core";
 import type { ApprovalDecisionRecord, RecoveryCompletionWitness } from "@moe/core";
 import { DurableStoreError } from "@moe/store";
-import type { CommandDecisionRecord, SqliteEventStore, StoredEvent } from "@moe/store";
+import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import {
   RECOVERY_COMPLETION_COMMAND_KIND,
   RECOVERY_COMPLETION_LAYER,
   RECOVERY_COMPLETION_SCHEMA_VERSION,
-  RECOVERY_STEP_UP_REF_PREFIX,
-  RECOVERY_STEP_UP_WINDOW_SECONDS,
   recoveryCompletionRefusal,
 } from "./recovery-completion-digest.js";
 import type { RecoveryCompletionRefused } from "./recovery-completion-digest.js";
@@ -18,15 +16,23 @@ import {
   completionStale,
   decodeRecoveryCompleteRequest,
   evidenceAbsent,
-  evidenceMismatched,
-  isHex64,
-  isInstant,
   nonEmpty,
   projectStateOf,
   readRecoveryCompletionEvidence,
   storeUnavailable,
 } from "./recovery-completion-evidence.js";
 import type { RecoveryCompleteRequest } from "./recovery-completion-evidence.js";
+import type {
+  RecoveryCompletionAuthority,
+  RecoveryCompletionAuthorityGrant,
+} from "./recovery-completion-authority.js";
+import type { RecoveryCompletionEvidenceFound } from "./recovery-completion-evidence.js";
+import {
+  acceptedRecoveryCompletion,
+  answerRecoveryCompletionReplay,
+  recoveryCompletionEventId,
+} from "./recovery-completion-replay.js";
+import type { RecoveryCompletionOutcome } from "./recovery-completion-replay.js";
 
 /** One public surface for the command: the evidence reader is republished here. */
 export {
@@ -49,7 +55,8 @@ export type {
  * be flipped while the project stayed fenced.
  *
  * NOTHING THE CALLER SENDS IS AUTHORITY. The request carries POINTERS — a
- * reconciliation record digest, an approval record and its decide command. The
+ * reconciliation record digest, an approval record, its decide command, and a
+ * signed session presentation. The
  * accepted digest, the witness hashes, the incarnation ref and the truth class
  * are recomputed or read out of the store, so a caller cannot name the facts
  * that authorise its own completion.
@@ -68,19 +75,10 @@ export type {
  */
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder();
-
-export interface RecoveryCompletionAccepted {
-  readonly advisoryOnly: false;
-  readonly authority: "DURABLE_DECISION";
-  readonly decision: CommandDecisionRecord;
-  readonly disposition: "DECIDED" | "REPLAYED";
-  readonly kind: typeof RECOVERY_COMPLETION_COMMAND_KIND;
-  readonly ok: true;
-  readonly witness: RecoveryCompletionWitness;
-}
-
-export type RecoveryCompletionOutcome = RecoveryCompletionAccepted | RecoveryCompletionRefused;
+export type {
+  RecoveryCompletionAccepted,
+  RecoveryCompletionOutcome,
+} from "./recovery-completion-replay.js";
 
 type ApprovalVerdict =
   | { readonly ok: true; readonly approval: ApprovalDecisionRecord }
@@ -90,27 +88,6 @@ const approvalInvalid = (reason: string): RecoveryCompletionRefused =>
   recoveryCompletionRefusal({
     code: "RECOVERY_COMPLETION_APPROVAL_INVALID", reason, refusedBy: RECOVERY_COMPLETION_LAYER,
   });
-
-/**
- * Step-up recency, measured against the SERVER's decision instant. The ref is a
- * caller-presented claim; what is enforced is that it states an instant, is not
- * in the future, and is inside the same 300s window core applies to a capability
- * step-up. Authenticating the step-up itself belongs to the identity fence.
- */
-function recentStepUp(stepUpAuthRef: string | null, decidedAt: string): boolean {
-  if (stepUpAuthRef === null || !stepUpAuthRef.startsWith(RECOVERY_STEP_UP_REF_PREFIX)) {
-    return false;
-  }
-  const rest = stepUpAuthRef.slice(RECOVERY_STEP_UP_REF_PREFIX.length);
-  // The LAST colon: an ISO instant carries two of its own, and splitting on the
-  // first would truncate every timestamp to its hour and refuse every ref.
-  const separator = rest.lastIndexOf(":");
-  if (separator < 0) return false;
-  const at = rest.slice(0, separator);
-  if (!isInstant(at) || !isHex64(rest.slice(separator + 1))) return false;
-  const elapsed = Date.parse(decidedAt) - Date.parse(at);
-  return elapsed >= 0 && elapsed < RECOVERY_STEP_UP_WINDOW_SECONDS * 1_000;
-}
 
 /**
  * (E) Core judges the approval lifecycle and every invariant it owns, and its
@@ -130,7 +107,27 @@ function recentStepUp(stepUpAuthRef: string | null, decidedAt: string): boolean 
  * `exactRevisionHash` to a planning run's submissionHash (planning-services.ts),
  * which is the J1 journey and knows nothing about recovery evidence.
  */
-function verifyApproval(request: RecoveryCompleteRequest, digest: string): ApprovalVerdict {
+function boundApproval(
+  approval: ApprovalDecisionRecord,
+  found: RecoveryCompletionEvidenceFound,
+  grant: RecoveryCompletionAuthorityGrant,
+): boolean {
+  return approval.actor === grant.principalId
+    && approval.actorKind === "HUMAN"
+    && approval.truthClass === "HUMAN_APPROVED"
+    && approval.riskTier === "R3"
+    && approval.decision === "APPROVE"
+    && nonEmpty(approval.decisionReason)
+    && approval.stepUpAuthRef === grant.stepUpAuthRef
+    && approval.applicablePolicyRef === found.evidence.policyRevisionRef
+    && approval.exactRevisionHash === found.digest;
+}
+
+function verifyApproval(
+  request: RecoveryCompleteRequest,
+  found: RecoveryCompletionEvidenceFound,
+  authority: RecoveryCompletionAuthority,
+): ApprovalVerdict {
   const verdict = applyApprovalCommand(request.approval, request.command);
   if (!verdict.ok) {
     return {
@@ -143,19 +140,10 @@ function verifyApproval(request: RecoveryCompleteRequest, digest: string): Appro
     };
   }
   const approval = verdict.value;
-  if (approval.actorKind !== "HUMAN" || approval.truthClass !== "HUMAN_APPROVED") {
-    return { ok: false, refusal: approvalInvalid("recovery.complete is human-only.") };
-  }
-  if (approval.riskTier !== "R3") {
-    return { ok: false, refusal: approvalInvalid("recovery.complete demands an R3 approval.") };
-  }
   if (approval.decision !== "APPROVE" || !nonEmpty(approval.decisionReason)) {
     return { ok: false, refusal: approvalInvalid("An R3 completion needs a reasoned APPROVE.") };
   }
-  if (!recentStepUp(approval.stepUpAuthRef, request.decidedAt)) {
-    return { ok: false, refusal: approvalInvalid("The approval carries no recent step-up.") };
-  }
-  if (approval.exactRevisionHash !== digest) {
+  if (approval.exactRevisionHash !== found.digest) {
     return {
       ok: false,
       refusal: recoveryCompletionRefusal({
@@ -165,71 +153,26 @@ function verifyApproval(request: RecoveryCompleteRequest, digest: string): Appro
       }),
     };
   }
-  return { ok: true, approval };
-}
-
-const eventIdFor = (commandId: string): string => `recovery-complete:${commandId}:recovered`;
-
-function accepted(
-  decision: CommandDecisionRecord,
-  disposition: "DECIDED" | "REPLAYED",
-  witness: RecoveryCompletionWitness,
-): RecoveryCompletionAccepted {
-  return Object.freeze({
-    advisoryOnly: false as const,
-    authority: "DURABLE_DECISION" as const,
-    decision,
-    disposition,
-    kind: RECOVERY_COMPLETION_COMMAND_KIND,
-    ok: true as const,
-    witness,
+  if (approval.applicablePolicyRef !== found.evidence.policyRevisionRef) {
+    return { ok: false, refusal: approvalInvalid("The approval policy is not current.") };
+  }
+  const granted = authority.authorize({
+    approvalRef: approval.approvalRef,
+    authentication: request.authentication,
+    commandId: request.commandId,
+    decisionReason: approval.decisionReason,
+    incarnationRef: found.evidence.incarnationRef,
+    keyEpochRef: found.evidence.keyEpochRef,
+    policyRevisionRef: found.evidence.policyRevisionRef,
+    principalId: request.principalId,
+    projectId: request.projectId,
+    recoveryDigest: found.digest,
   });
-}
-
-/**
- * (B) A retry is answered from what was DURABLY DERIVED, never echoed back from
- * the caller: the committed `ProjectRecovered` event is re-read and its witness
- * returned. A stored decision that is not this command's, or one whose event
- * binds a different reconciliation record, is a divergence and refuses.
- */
-function answerReplayed(
-  store: SqliteEventStore,
-  request: RecoveryCompleteRequest,
-  prior: CommandDecisionRecord,
-): RecoveryCompletionOutcome {
-  if (
-    prior.commandKind !== RECOVERY_COMPLETION_COMMAND_KIND
-    || prior.targetAggregateId !== request.projectId
-    || prior.effectDisposition !== "EFFECTS_COMMITTED"
-  ) {
-    return evidenceMismatched("A different command already holds this command identity.");
+  if (!granted.ok) return { ok: false, refusal: granted };
+  if (!boundApproval(approval, found, granted)) {
+    return { ok: false, refusal: approvalInvalid("The approval assertions are not authenticated.") };
   }
-  const wanted = eventIdFor(request.commandId);
-  // Both the page read and the payload decode are fenced: a store fault or a
-  // corrupt event body must return a typed refusal, because a crash escaping
-  // this function is not a refusal and carries no reason code at all.
-  let events: readonly StoredEvent[];
-  try {
-    events = store.readAggregateEvents(request.projectId, 0, 1_000).items;
-  } catch (error) {
-    return storeUnavailable(error);
-  }
-  for (const event of events) {
-    if (event.eventId !== wanted) continue;
-    let witness: RecoveryCompletionWitness | undefined;
-    try {
-      const parsed: unknown = JSON.parse(decoder.decode(event.payload));
-      witness = (parsed as { witness?: RecoveryCompletionWitness }).witness;
-    } catch {
-      return evidenceAbsent("The stored recovered event does not decode.");
-    }
-    if (witness === undefined) break;
-    if (witness.inventoryReconciliationHash !== request.reconciliationDigest) {
-      return evidenceMismatched("The replayed completion bound a different reconciliation record.");
-    }
-    return accepted(prior, "REPLAYED", witness);
-  }
-  return evidenceAbsent("The stored completion decision has no readable recovered event.");
+  return { ok: true, approval };
 }
 
 /** (F)+(G) The pure lifecycle authority, then ONE commit carrying its event. */
@@ -271,7 +214,7 @@ function commit(
       decidedAt: request.decidedAt,
       events: [{
         domainSchemaVersion: RECOVERY_COMPLETION_SCHEMA_VERSION,
-        eventId: eventIdFor(commandId),
+        eventId: recoveryCompletionEventId(commandId),
         eventType: event.kind,
         payload: encoder.encode(JSON.stringify(event)),
       }],
@@ -288,12 +231,13 @@ function commit(
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return completionStale(response.decision.resultCode);
   }
-  return accepted(response.decision, response.disposition, witness);
+  return acceptedRecoveryCompletion(response.decision, response.disposition, witness);
 }
 
 export function runRecoveryCompleteCommand(
   store: SqliteEventStore,
   input: unknown,
+  authority: RecoveryCompletionAuthority,
 ): RecoveryCompletionOutcome {
   const decoded = decodeRecoveryCompleteRequest(input);
   if (!decoded.ok) return decoded.refusal;
@@ -308,7 +252,7 @@ export function runRecoveryCompleteCommand(
   } catch (error) {
     return storeUnavailable(error);
   }
-  if (prior !== null) return answerReplayed(store, request, prior);
+  if (prior !== null) return answerRecoveryCompletionReplay(store, request, prior);
 
   const found = readRecoveryCompletionEvidence(
     store, request.projectId, request.reconciliationDigest,
@@ -325,7 +269,7 @@ export function runRecoveryCompleteCommand(
   // answer first and leave RECOVERY_COMPLETION_STALE untestable.
   if (request.expectedVersion !== observed) return completionStale(null);
 
-  const verified = verifyApproval(request, found.digest);
+  const verified = verifyApproval(request, found, authority);
   if (!verified.ok) return verified.refusal;
   return commit(store, request, Object.freeze({
     coverageProofHash: found.coverageProofHash,

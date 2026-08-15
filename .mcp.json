@@ -1,0 +1,27 @@
+{
+  "mcpServers": {
+    "moe": {
+      "command": "node",
+      "env": {
+        "MOE_PROJECT_PATH": "/mnt/d/projexts/moe-next"
+      },
+      "args": [
+        "/mnt/c/Users/Yaron/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/proxy/index.js"
+      ]
+    },
+    "serena": {
+      "command": "/home/sysadmin/.local/bin/serena",
+      "args": [
+        "start-mcp-server",
+        "--context",
+        "claude-code",
+        "--project",
+        "/mnt/d/projexts/moe-next",
+        "--enable-web-dashboard",
+        "false",
+        "--enable-gui-log-window",
+        "false"
+      ]
+    }
+  }
+}

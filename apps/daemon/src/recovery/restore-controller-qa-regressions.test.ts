@@ -135,6 +135,7 @@ describe("restore controller QA regressions", () => {
     const harness = await restoreHarness("outer-fences");
     const binding = await anchoredIncarnation(harness, "restore-outer-fences");
     const record: InstalledRestoreRecord = Object.freeze({
+      backupCursor: harness.backupCursor,
       generationDigest: harness.generationDigest,
       incarnationRef: binding.incarnationRef,
       keyEpochRef: binding.keyEpochRef,

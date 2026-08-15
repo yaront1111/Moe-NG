@@ -1,0 +1,116 @@
+{
+  "id": "task-d4329e8d020f40308209397079c5004d",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Expose agent spawn admission",
+  "description": "Objective: expose a first-class startup-admission result from the Claude spawner so callers can distinguish a coded preflight refusal from a process that actually started without waiting for that process to exit.\n\nDeliverable: apps/daemon's spawner provides a start API that returns either the exact SPAWN_ARGUMENT_UNQUOTABLE refusal code/layer or an accepted start carrying a separate child-exit promise; the existing claudeSpawner exit-lifetime adapter remains compatible for current callers. This is the producer prerequisite for task-58fd2c3781254d839ee27867f8f9f4e6's truthful wrapper report.\n\nNOT in scope: changing agent-wrapper reporting/polling, changing the unquotable character set or Windows command-line builder, weakening validate-before-credential-write, or inventing a generic code for uncoded child-process exceptions.\n\nVerification: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`; both legs must execute, the Vitest leg must print a nonzero Test Files/test count, and no `No projects matched`/zero-test output is acceptable.",
+  "definitionOfDone": [
+    "A public spawner start result distinguishes `{ ok: false, code: \"SPAWN_ARGUMENT_UNQUOTABLE\", layer: \"agent-spawn-invocation\" }` from an accepted start; the refusal test asserts both literals and proves its case count is nonzero.",
+    "An accepted start resolves after the child emits startup admission, returns a separate exit promise, and does not wait for the child lifetime before becoming observable; a test holds the child open to prove the distinction.",
+    "The existing `claudeSpawner` `(SpawnRequest) => Promise<void>` adapter and its current success/timeout/cleanup behavior remain compatible and its pre-existing tests stay green.",
+    "The unquotable refusal still occurs before any credential file is written; accepted starts still remove the credential file on exit/error, asserted from filesystem state rather than call counts.",
+    "A mutation drill collapsing the refusal into an accepted start turns the named exact code/layer test red, then the production file is restored byte-for-byte and verified by SHA-256.",
+    "Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` completes under the path-attributed baseline rule, with owned-package legs green and a nonzero daemon test count."
+  ],
+  "taskRails": [
+    "This is an interface prerequisite, not a second implementation of spawn validation: call the existing agentSpawnInvocation exactly once and preserve its validate-before-write ordering.",
+    "Startup admission and process lifetime are distinct promises/facts. Never await child exit to decide whether startup was admitted.",
+    "Catch only the landed typed SpawnInvocationRefusal into the coded start result. Unknown/synchronous child-process failures must not be mislabeled or silently absorbed.",
+    "Keep the legacy claudeSpawner adapter so this producer lands independently before its wrapper consumer; do not edit agent-wrapper files in this task.",
+    "Preserve explicit-path staging and the per-production-file 250/400 line rail; split a focused helper if agent-spawner.ts would reach 400."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE, THEN WRITE THE RED TESTS FIRST in `apps/daemon/src/orchestrator/agent-spawner.test.ts`. Confirm both owned files are clean relative to committed HEAD and that `agent-spawner.js` still wildcard-re-exports the TypeScript module; do not edit the bridge or wrapper files. Generalize the existing TMPDIR/TMP/TEMP sandbox helper so it can construct either spawner factory while still asserting exactly one captured config directory. Add a controlled fake child whose `spawn`, `error`, and `exit` events are emitted explicitly. Through the not-yet-landed `claudeSpawnStarter`, add: (a) a literal nine-token Windows table for `\"`, `%`, `&`, `|`, `<`, `>`, `^`, CR, and LF; pin the table length to 9, assert a positive executed-case count of 9, and for every case assert the production result equals `{ ok:false, code:\"SPAWN_ARGUMENT_UNQUOTABLE\", layer:\"agent-spawn-invocation\" }`, spawn calls remain zero, and the captured config directory is exactly empty; (b) a held-open child case proving the start promise is unsettled before `spawn`, resolves after `spawn`, returns an independently pending `exit` promise while the credential file exists, and only exit settles it/removes the file; (c) a pre-admission child `error` and an injected synchronous spawn throw that each reject with the original Error object (including a code/layer-shaped spoof), never return the coded refusal union, and leave no credential file; and (d) a post-admission error that preserves the accepted result, settles its lifetime, and removes the file. Update existing accepted legacy cases only as needed to emit `spawn` before exit/error/timeout, retaining every current success, mission, timeout, kill, logging, and cleanup assertion. Run the focused file and require red failures attributable to the missing starter/result surface, not fixture setup.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADD THE PUBLIC START-ADMISSION CONTRACT AND THE NARROW PREFLIGHT BOUNDARY in `agent-spawner.ts`. Export `AgentSpawnStartResult` as the closed union `{ readonly ok:false; readonly code:SpawnInvocationRefusalCode; readonly layer:typeof SPAWN_INVOCATION_LAYER } | { readonly ok:true; readonly exit:Promise<void> }`, export its callable `AgentSpawnStart` type, and add `claudeSpawnStarter(storeEnv, options): AgentSpawnStart`. Keep the existing option surface. For each request, call `agentSpawnInvocation` exactly once inside a catch scoped to that call alone and still before `writeFileSync`; convert only `instanceof SpawnInvocationRefusal` into a frozen exact code/layer refusal using the landed constant. Rethrow every other value unchanged. Do not copy the unquotable character rule, inspect Error messages, add a fallback refusal code, or broaden the catch over credential writing/process creation. Document that Node's `spawn` event admits the spawned shell/process boundary (with `shell:true`, not the inner Claude command's readiness) and that the returned `exit` is the existing bounded lifetime/credential-settlement promise, not independent proof that the OS process is gone after a timeout.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE TWO-STAGE CHILD LIFECYCLE AND LEGACY ADAPTER in `agent-spawner.ts`. After successful preflight, write the credential config, invoke the injected spawn, and on a synchronous spawn throw remove that just-written file then reject with the original error. Create distinct start-admission and idempotent lifetime settlement state. Attach `spawn`, `error`, and `exit` listeners immediately after process creation and before writing stdin or arming the timeout: `spawn` alone resolves the accepted start with its still-separate `exit` promise; `error` before admission rejects start unchanged and cleans up; `error` after admission and `exit` settle lifetime/cleanup without retroactively changing admission. Any terminal/timeout path reached while admission is pending must reject uncoded rather than hang or manufacture a stable code. Preserve one-shot timer clearing, credential removal, logging, platform-specific tree kill, and timeout slot release; execute kill cleanup through `try/finally` so a throwing kill cannot strand the promise or credential. Refactor `claudeSpawner` into a compatibility adapter over one `claudeSpawnStarter`: a typed refusal is reconstructed as `SpawnInvocationRefusal` to preserve its existing rejected `Promise<void>` behavior, while an accepted start awaits its `exit` settlement exactly as current callers expect. Keep the production file below 250 physical lines and run the focused test file green with a nonzero test count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RUN THE REQUIRED MUTATION-RESISTANCE DRILL against the production starter. Capture `sha256sum` of `agent-spawner.ts` and save its bytes only to an OS-temporary file with guaranteed cleanup. Mutate only the `SpawnInvocationRefusal` conversion so it returns an accepted arm with an already-resolved exit promise. Run the named nine-token refusal test and require a nonzero exit specifically because the exact `ok`/code/layer assertion failed (the filesystem assertions alone are insufficient). Restore the saved bytes without git checkout/reset, require the SHA-256 to match byte-for-byte, rerun that named test green, and prove no backup/probe file remains in the repository.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "PERFORM ONE ADVERSARIAL SELF-REVIEW over only the two owned-path diffs. Check that validation is invoked once/request and still precedes credential creation; no structural/error-message lookalike can enter the coded refusal arm; listeners cannot miss a `spawn` followed immediately by exit; pre-spawn error/exit/timeout cannot leave start pending; post-spawn error cannot relabel an accepted start; error+exit and timeout+late-exit settle and clean up once; synchronous spawn and kill failures cannot leak the credential; the accepted result becomes observable while its child is held open; the legacy adapter still waits for bounded lifetime and never converts unknown errors; Windows shell admission is not overstated as Claude readiness; the one-line bridge remains sufficient; no wrapper/root-export/foreign file changed; and `agent-spawner.ts` is below 250 physical lines. Add a focused regression case if any invariant is not already mechanically covered before proceeding.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "RUN THE SINGLE FRESH COMPLETION GATE exactly as specified: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Read both legs' output and exit status: the filter must resolve `@moe/daemon`, typecheck must cover the edited module, and Vitest must print nonzero `Test Files` and `Tests` counts with no `No projects matched`, `No test files found`, or `0 passed`. Apply the path-attributed baseline rule if concurrent foreign work is red: compare merge-base and HEAD failing-path sets, require no new failure intersects the two owned paths, and report foreign failures verbatim; do not fabricate a green completion. Finally confirm only the two explicit owned paths are staged/committed via pathspec and the commit contains no scratch or foreign bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-58fd2c3781254d839ee27867f8f9f4e6",
+  "priority": "HIGH",
+  "order": 105.8,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:46:20.297Z",
+  "updatedAt": "2026-08-15T21:03:44.748Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:51:43.356Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 2
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a",
+    "governor-a627169a"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T21:03:42.677Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected a sibling-module `claudeSpawnStarter` plus `AgentSpawnStartResult`, with `claudeSpawner` retained as an adapter. Rejected changing `claudeSpawner` itself to resolve on start because current wrapper callers depend on its process-lifetime/timeout promise. Rejected treating the synchronous return from `spawn()` or a pid as admission, and rejected awaiting child exit before admitting; Node exposes the dedicated `spawn` event for this boundary. Rejected a broad catch/generic spawn code because only `SpawnInvocationRefusal` owns a stable code. Rejected daemon-root publication and a new helper file: the existing `.js` bridge already wildcard-exports the module, the downstream consumer is a sibling daemon module, and root index files are unrelated/shared-tree hotspots.",
+    "codebaseInsights": "Fresh measurement at HEAD 2e34a5fe5e65cb936dbfdaf731090ab245382ffd found both owned paths clean. `agent-spawner.ts` is 133 physical lines and calls `agentSpawnInvocation` once at lines 71-75 before `writeFileSync` at 78; its current lifetime promise resolves on exit, error, or timeout. `agent-spawner.test.ts` is 239 lines and already captures the private mkdtemp directory by temporarily redirecting TMPDIR/TMP/TEMP with an exact-one-directory positive control. `agent-spawn-invocation.ts` already exports `SpawnInvocationRefusal`, `SpawnInvocationRefusalCode`, and `SPAWN_INVOCATION_LAYER = \"agent-spawn-invocation\"`; no validation reimplementation is needed. Official Node child-process semantics state that successful `spawn` precedes other child events, failed spawning emits `error` instead, and `exit` may or may not follow `error`, requiring guarded one-shot settlement. `agent-wrapper.ts:69,226-230` currently consumes `(SpawnRequest)=>Promise<void>` and deletes active work when it settles; this task deliberately leaves it unchanged. The named real consumer is follow-on task `task-912567934d54419683d1518d60059409`. `apps/daemon/package.json` names the workspace package `@moe/daemon` and defines real typecheck/Vitest scripts; `pnpm-workspace.yaml` includes `apps/*`, so the final filter is resolved by package name. This shell lacks pnpm and runs Node 18, while the repo pins Node >=24.16; the worker must run gates in the project-supported environment and verify count output rather than relying on exit code alone.",
+    "risks": "The event boundary is subtle: with `shell:true`, Node's `spawn` event proves the shell process started, not that the nested Claude command is ready. Attach all listeners before stdin and timeout work so back-to-back events cannot be missed, and guard error/exit because Node permits both. A pre-admission unknown failure must reject unchanged; a post-admission failure must settle lifetime without rewriting the already-observed admission. The timeout promise historically frees the wrapper slot even if kill is only best effort, so document `exit` as bounded lifetime/credential settlement rather than physical-death evidence. The legacy adapter must compose the starter rather than run preflight again. Shared-tree foreign edits exist elsewhere in apps/daemon; do not touch wrapper/root/index files.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-spawner.ts",
+      "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-invocation.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-15T21:03:44.748Z"
+}

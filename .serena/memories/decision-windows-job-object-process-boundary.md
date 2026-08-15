@@ -1,0 +1,5 @@
+# Decision: Windows provider cleanup needs a per-run Job Object
+
+For authoritative Windows provider execution, `taskkill.exe /PID /T /F` alone is not proof of whole-tree death: after the root exits it may no longer identify detached descendants. Node core exposes no per-run Job Object API. The production boundary must create the child suspended, create/configure a dedicated Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` and breakaway disabled, assign the child, then resume it. Any create/configure/assign/resume/query/close uncertainty is typed UNKNOWN with a stable process-boundary reason code/layer; partial processes are terminated and handles awaited. Non-Windows is typed UNSUPPORTED. Keep this as an internal runner process primitive consumed by provider launchers; daemon/store authority and durable activation-grant CAS stay outside it.
+
+Origin: planning audit for `task-acf73253a204435aba590894799814f2`; production prerequisite `task-4d1f8ba54cb6476c930c46b413f882aa`.

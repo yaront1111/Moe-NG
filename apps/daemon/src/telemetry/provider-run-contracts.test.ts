@@ -12,6 +12,7 @@
  */
 
 import type { ProviderRunRef } from "@moe/runner";
+import { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -46,8 +47,11 @@ describe("provider-run record identity", () => {
 });
 
 describe("deriveProviderRunAggregateId", () => {
-  it("is deterministic for one run identity", () => {
-    expect(deriveProviderRunAggregateId(ref())).toBe(deriveProviderRunAggregateId(ref()));
+  it("pins the deterministic aggregate id format", () => {
+    expect(deriveProviderRunAggregateId(ref())).toBe(
+      "moe-provider-run-record/1|aggregate|sha256:" +
+      "cc903fb8a131c2302532b40e2287ffdf56f60e041f00d3a473db5dc05a5d4f69",
+    );
   });
 
   /**
@@ -84,11 +88,11 @@ describe("deriveProviderRunAggregateId", () => {
   });
 
   /**
-   * Rows chosen to collide under a naive join. Each pair moves one character
-   * across a field boundary, so dropping the length framing maps both onto one
-   * aggregate id while every field-by-field row above stays green. The rows
-   * carrying the production separator `|` close the variant that keeps the
-   * separator but drops only the numeric prefix.
+   * Rows chosen to collide under a naive preimage join. Each pair moves one
+   * character across a field boundary, so dropping the length framing feeds the
+   * same bytes into the digest while every field-by-field row above stays green.
+   * The row carrying `|` closes the variant that keeps a separator but drops only
+   * the numeric prefix.
    */
   const COLLIDING: readonly (readonly [string, ProviderRunRef, ProviderRunRef])[] = [
     ["run/effect shift", ref({ runRef: "a", effectIntentId: "bc" }), ref({ runRef: "ab", effectIntentId: "c" })],
@@ -127,6 +131,21 @@ describe("deriveProviderRunAggregateId", () => {
    */
   it("derives an identifier of printable characters only", () => {
     expect(deriveProviderRunAggregateId(ref())).toMatch(/^[!-~]+$/u);
+  });
+
+  it("derives a store-admissible id from maximum producer run references", () => {
+    const maximumRef = ref({
+      attemptRef: "a".repeat(200),
+      effectIntentId: "e".repeat(200),
+      epoch: Number.MAX_SAFE_INTEGER,
+      runRef: "r".repeat(200),
+    });
+    const store = SqliteEventStore.openEphemeralForProjectTest("provider-run-contract-test");
+    try {
+      expect(store.readEvents(deriveProviderRunAggregateId(maximumRef))).toEqual([]);
+    } finally {
+      store.close();
+    }
   });
 
   it("namespaces the aggregate id with the record version", () => {

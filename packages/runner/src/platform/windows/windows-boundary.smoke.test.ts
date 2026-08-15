@@ -12,6 +12,7 @@ import { type WindowsProcessIdentity } from "./windows-process-contract.js";
 const CASES = Object.freeze(["close", "cancel", "timeout"] as const);
 const REPORT_BOUND_MS = 15_000;
 const DEATH_BOUND_MS = 10_000;
+const WINDOWS_HOST = process.platform === "win32";
 
 interface ReportedPair {
   readonly parent: WindowsProcessIdentity;
@@ -129,7 +130,7 @@ async function triggerStop(
   expect(outcome.truthClass).toBe("PROVEN");
 }
 
-describe("the TypeScript facade drives real Job containment", () => {
+describe.skipIf(!WINDOWS_HOST)("the TypeScript facade drives real Job containment", () => {
   it.each(CASES)("kills parent and detached grandchild through %s", async (trigger) => {
     const directory = mkdtempSync(join(dirname(releaseBinary("detached_spawner")), "facade-smoke-"));
     const reportPath = join(directory, "identities.txt");
@@ -155,9 +156,26 @@ describe("the TypeScript facade drives real Job containment", () => {
       rmSync(directory, { force: true, recursive: true });
     }
   }, 30_000);
+});
 
-  it("generated exactly the close, cancel and timeout cases", () => {
-    expect(CASES).toEqual(["close", "cancel", "timeout"]);
-    expect(CASES.length).toBe(3);
+it("generates exactly the close, cancel and timeout cases", () => {
+  expect(CASES).toEqual(["close", "cancel", "timeout"]);
+  expect(CASES.length).toBe(3);
+});
+
+it.skipIf(WINDOWS_HOST)("refuses the real boundary before resolution off Windows", () => {
+  const outcome = openWindowsProcessBoundary({
+    executable: "C:\\provider\\provider.exe",
+    argv: [],
+    cwd: "C:\\work",
+    environment: {},
+  });
+
+  expect("completed" in outcome).toBe(false);
+  if ("completed" in outcome) throw new Error("a non-Windows host opened a process boundary");
+  expect(outcome).toMatchObject({
+    truthClass: "UNKNOWN",
+    code: "PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED",
+    layer: "WINDOWS_PROCESS_REQUEST",
   });
 });

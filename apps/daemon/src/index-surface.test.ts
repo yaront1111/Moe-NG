@@ -194,6 +194,7 @@ import type {
 import type {
   RecoveryCompleteRequest,
   RecoveryCompletionAccepted,
+  RecoveryCompletionApprovalSubject,
   RecoveryCompletionCode,
   RecoveryCompletionEvidence,
   RecoveryCompletionEvidenceFound,
@@ -248,8 +249,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROJECT_CONFIGURATION_SELECTION_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_LAYER", "string"],
   ["RECOVERY_COMPLETE_PAYLOAD_KEYS", "object"],
+  ["RECOVERY_COMPLETION_APPROVAL_DOMAIN", "string"],
   ["RECOVERY_COMPLETION_CODES", "object"],
   ["RECOVERY_COMPLETION_COMMAND_KIND", "string"],
+  ["RECOVERY_COMPLETION_HUMAN_GATE_ID", "string"],
   ["RECOVERY_COMPLETION_LAYER", "string"],
   ["RECOVERY_COMPLETION_SCHEMA_VERSION", "string"],
   ["RECOVERY_INCARNATION_ERROR_CODES", "object"],
@@ -289,6 +292,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readRecoveryReconciliation", "function"],
   ["readSuccessionChain", "function"],
   ["recordRecoveryReconciliation", "function"],
+  ["recoveryCompletionApprovalDigest", "function"],
   ["recoveryCompletionDigest", "function"],
   ["recoveryCoverageProofDigest", "function"],
   ["refuseEntry", "function"],
@@ -323,7 +327,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(79);
+    expect(EXPECTED_EXPORTS.length).toBe(82);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -610,14 +614,14 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<typeof daemon.RECOVERY_COMPLETION_LAYER>().toEqualTypeOf<"RECOVERY_COMPLETION">();
     expectTypeOf<typeof daemon.RECOVERY_COMPLETION_COMMAND_KIND>()
       .toEqualTypeOf<"recovery.complete">();
-    // Pinned to the literal, not merely to `number`: this is the same 300s
-    // window core applies to a capability step-up, and a silent widening here
-    // would be a silently longer window.
-    expectTypeOf<typeof daemon.RECOVERY_STEP_UP_WINDOW_SECONDS>().toEqualTypeOf<300>();
-    // The payload allow-list is exactly the three POINTERS the command admits:
-    // no witness, no truth class, and no accepted digest.
+    expectTypeOf<typeof daemon.RECOVERY_COMPLETION_APPROVAL_DOMAIN>()
+      .toEqualTypeOf<"moe-recovery-completion-approval/1">();
+    // Authentication is evidence, never an answer. No witness, truth class, or
+    // caller-selected accepted digest is admitted.
     expect([...daemon.RECOVERY_COMPLETE_PAYLOAD_KEYS])
-      .toEqual(["approval", "command", "reconciliationDigest"]);
+      .toEqual(["approval", "authentication", "command", "reconciliationDigest"]);
+    expectTypeOf<Parameters<typeof daemon.recoveryCompletionApprovalDigest>>()
+      .toEqualTypeOf<[subject: RecoveryCompletionApprovalSubject]>();
     expectTypeOf<ReturnType<typeof daemon.recoveryCompletionDigest>>().toEqualTypeOf<string>();
     expectTypeOf<Parameters<typeof daemon.recoveryCompletionDigest>>()
       .toEqualTypeOf<[evidence: RecoveryCompletionEvidence]>();

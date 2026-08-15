@@ -155,5 +155,6 @@ export function tracedDeps(harness: BoundaryHarness, trace: string[]): ClaudeLau
 export function composed(
   grants: GrantStore, regs: RegistrationStore, deps: ClaudeLauncherDependencies,
 ): (value: unknown, options?: ClaudeLaunchOptions) => Promise<ClaudeLaunchResult> {
-  return composeDurableLauncher(deps, authorityOf(grants, regs));
+  const launch = composeDurableLauncher(deps, authorityOf(grants, regs));
+  return (value, options) => launch(value, options ?? { platform: "win32" });
 }

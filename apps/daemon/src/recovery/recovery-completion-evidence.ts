@@ -54,6 +54,7 @@ const REQUEST_KEYS = Object.freeze([
 
 export interface RecoveryCompleteRequest {
   readonly approval: unknown;
+  readonly authentication: unknown;
   readonly bytes: Uint8Array;
   readonly command: unknown;
   readonly commandId: string;
@@ -120,6 +121,14 @@ export const completionStale = (upstreamCode: string | null): RecoveryCompletion
     upstream: upstreamCode === null ? null : { code: upstreamCode, layer: DURABLE_STORE_LAYER },
   });
 
+export const completionIdempotencyConflict = (): RecoveryCompletionRefused =>
+  recoveryCompletionRefusal({
+    code: "RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT",
+    reason: "This command identity is already bound to different request bytes.",
+    refusedBy: RECOVERY_COMPLETION_LAYER,
+    upstream: { code: "IDEMPOTENCY_CONFLICT", layer: DURABLE_STORE_LAYER },
+  });
+
 /** A genuine store fault is never reported as a benign refusal of the request. */
 export const storeUnavailable = (error: unknown): RecoveryCompletionRefused =>
   recoveryCompletionRefusal({
@@ -183,6 +192,7 @@ export function decodeRecoveryCompleteRequest(input: unknown): RecoveryCompleteD
     ok: true,
     request: Object.freeze({
       approval: section["approval"],
+      authentication: section["authentication"],
       bytes: input,
       command: section["command"],
       commandId: record["commandId"] as string,
@@ -213,14 +223,39 @@ export function projectStateOf(
   return Object.freeze(snapshot) as unknown as ProjectState;
 }
 
+/** Reads the activation policy the restored project is durably running under. */
+function policyRevisionOf(store: SqliteEventStore, projectId: string): string | null {
+  let cursor = 0;
+  let policy: string | null = null;
+  for (;;) {
+    const page = store.readAggregateEvents(projectId, cursor, 1_000);
+    for (const event of page.items) {
+      if (event.eventType !== "ProjectActivated") continue;
+      const decoded = decodeBoundedJsonBytes(event.payload);
+      if (!decoded.ok || decoded.value === null || typeof decoded.value !== "object"
+        || Array.isArray(decoded.value)) return null;
+      const witness = (decoded.value as JsonObject)["witness"];
+      if (witness === null || typeof witness !== "object" || Array.isArray(witness)) return null;
+      const candidate = (witness as JsonObject)["policyRevisionHash"];
+      if (!isHex64(candidate) || (policy !== null && candidate !== policy)) return null;
+      policy = candidate;
+    }
+    if (!page.hasMore) return policy;
+    if (page.nextCursor === null || page.nextCursor <= cursor) return null;
+    cursor = page.nextCursor;
+  }
+}
+
 function assemble(
   record: RecoveryReconciliationRecord,
+  backupCursor: string,
+  policyRevisionRef: string,
   restoreCommandId: string,
   restoreGenerationDigest: string,
 ): RecoveryCompletionEvidenceFound {
   const evidence: RecoveryCompletionEvidence = Object.freeze({
     anchorBindingDigest: record.anchorBindingDigest,
-    backupCursor: record.backupCursor,
+    backupCursor,
     backupGenerationDigest: record.backupGenerationDigest,
     configuredClasses: Object.freeze([...record.configuredClasses]),
     incarnationRef: record.incarnationRef,
@@ -230,6 +265,7 @@ function assemble(
       sourceProofDigest: item.sourceProofDigest,
     }))),
     keyEpochRef: record.keyEpochRef,
+    policyRevisionRef,
     projectId: record.projectId,
     projectTag: record.projectTag,
     proofs: Object.freeze(record.proofs.map((proof) => Object.freeze({
@@ -257,10 +293,12 @@ function crossCheck(
 ): RecoveryCompletionEvidenceResult {
   let installed: ReturnType<typeof readInstalledRestore>;
   let anchored: ReturnType<typeof readAnchoredIncarnation>;
+  let policyRevisionRef: string | null;
   let state: ProjectState | null;
   try {
     installed = readInstalledRestore(store, projectId);
     anchored = readAnchoredIncarnation(store, projectId, record.incarnationRef);
+    policyRevisionRef = policyRevisionOf(store, projectId);
     state = projectStateOf(store, projectId);
   } catch (error) {
     return storeUnavailable(error);
@@ -277,12 +315,16 @@ function crossCheck(
     return evidenceAbsent("The record's incarnation is not durably anchored.");
   }
   if (state === null) return evidenceAbsent("The project has no durable state to complete.");
+  if (policyRevisionRef === null) {
+    return evidenceAbsent("The restored project has no readable activation policy revision.");
+  }
   const restore = installed.record;
   if (
     anchored.keyEpochRef !== record.keyEpochRef
     || anchored.bindingDigest !== record.anchorBindingDigest
     || anchored.backupGenerationDigest !== record.backupGenerationDigest
     || restore.incarnationRef !== record.incarnationRef
+    || restore.backupCursor !== record.backupCursor
     || restore.keyEpochRef !== record.keyEpochRef
     || restore.generationDigest !== record.backupGenerationDigest
     || restore.restoreCommandId !== anchored.restoreCommandId
@@ -293,7 +335,10 @@ function crossCheck(
   if (state.lifecycle !== "QUIESCED" || state.recoveryRequired !== true) {
     return evidenceMismatched("The project is not quiesced and awaiting recovery completion.");
   }
-  return assemble(record, restore.restoreCommandId, restore.generationDigest);
+  return assemble(
+    record, restore.backupCursor, policyRevisionRef,
+    restore.restoreCommandId, restore.generationDigest,
+  );
 }
 
 /**

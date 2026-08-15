@@ -38,8 +38,8 @@ async function main(): Promise<void> {
     credential,
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
-      credential,
       deps: provider.provide(),
+      fallbackCredential: credential,
       subscriptions,
     }),
     serverName: "moe-next",

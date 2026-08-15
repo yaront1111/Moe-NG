@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -89,7 +90,6 @@ async function withHarness(run: (harness: Harness) => Promise<void>): Promise<vo
   if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
-    credential: CREDENTIAL,
     deps: provider.provide(),
     enableJsonResponse: true,
     subscriptions,
@@ -153,8 +153,14 @@ function initializeRequest(origin: string, credential = CREDENTIAL): Request {
   return mcpRequest(origin, { body: INITIALIZE_BODY, credential });
 }
 
-async function openSession(host: McpHttpHost, origin: string): Promise<string> {
-  const response = await within("initialize", host.handleRequest(initializeRequest(origin)));
+async function openSession(
+  host: McpHttpHost,
+  origin: string,
+  credential = CREDENTIAL,
+): Promise<string> {
+  const response = await within("initialize", host.handleRequest(
+    initializeRequest(origin, credential),
+  ));
   const sessionId = response.headers.get(SESSION_ID_HEADER);
   if (response.body !== null) await within("initialize body", response.text());
   if (sessionId === null) throw new Error(`initialize minted no session: ${String(response.status)}`);
@@ -332,6 +338,77 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     });
   });
 
+  it("authorizes commands as the request bearer, never as the host bootstrap identity", async () => {
+    await withHarness(async ({ decisionCount, host }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const operatorSessionId = await openSession(host, started.origin);
+      const scopedCredential = "work-only-mcp-http-credential";
+      const scopedSessionId = "session-mcp-http-work-only";
+
+      const opened = await within("open scoped daemon session", host.handleRequest(mcpRequest(
+        started.origin,
+        {
+          body: JSON.stringify({
+            id: 2,
+            jsonrpc: "2.0",
+            method: "tools/call",
+            params: {
+              arguments: {
+                commandId: "cmd-mcp-http-open-work-only",
+                correlationId: "corr-mcp-http-open-work-only",
+                expectedVersion: 0,
+                payload: {
+                  capabilities: ["work.write"],
+                  credentialSha256: createHash("sha256")
+                    .update(scopedCredential, "utf8").digest("hex"),
+                  expiresAt: "2099-01-01T00:00:00.000Z",
+                  sessionId: scopedSessionId,
+                },
+                targetAggregateId: `session/${scopedSessionId}`,
+              },
+              name: "session_open",
+            },
+          }),
+          sessionId: operatorSessionId,
+        },
+      )));
+      const openedText = await within("open scoped daemon session body", opened.text());
+      expect(opened.status).toBe(200);
+      expect(openedText).toContain('\\"outcome\\":\\"ACCEPTED\\"');
+
+      const scopedMcpSessionId = await openSession(host, started.origin, scopedCredential);
+      const before = decisionCount();
+      const refused = await within("work-only admin command", host.handleRequest(mcpRequest(
+        started.origin,
+        {
+          body: JSON.stringify({
+            id: 3,
+            jsonrpc: "2.0",
+            method: "tools/call",
+            params: {
+              arguments: {
+                commandId: "cmd-mcp-http-forbidden-project-register",
+                correlationId: "corr-mcp-http-forbidden-project-register",
+                expectedVersion: 0,
+                payload: { owner: "work-only-session" },
+                targetAggregateId: PROJECT,
+              },
+              name: "project_register",
+            },
+          }),
+          credential: scopedCredential,
+          sessionId: scopedMcpSessionId,
+        },
+      )));
+      const refusedText = await within("work-only admin command body", refused.text());
+
+      expect(refused.status).toBe(200);
+      expect(refusedText).toContain("CAPABILITY_DENIED");
+      expect(decisionCount()).toBe(before);
+    });
+  });
+
   it("bridges node socket to Web Request with the SAME status, session header and body", async () => {
     await withHarness(async ({ host }) => {
       const started = await within("start", host.start());
@@ -384,7 +461,6 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
       const subscriptions = provider.subscriptions?.();
       if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
       const offHost = createMcpHttpHost({
-        credential: CREDENTIAL,
         deps: provider.provide(),
         host: "0.0.0.0",
         subscriptions,
@@ -417,11 +493,11 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     }
   });
 
-  it("covers exactly the nine host behaviours this suite claims", async () => {
+  it("covers exactly the ten host behaviours this suite claims", async () => {
     // A hand-written count is only worth writing if it can FAIL. `expect(6).toBe(6)` cannot, so
     // the number is read back off this file's own source: delete or add a case and this reddens.
     const source = readFileSync(new URL(import.meta.url), "utf8");
-    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(10); // nine behaviours + this counter
+    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(11); // ten behaviours + this counter
     // And the host's public surface, hand-listed so a silently dropped method is visible.
     await withHarness(async ({ host }) => {
       expect(Object.keys(host).sort()).toEqual(["handleRequest", "start", "stop"]);

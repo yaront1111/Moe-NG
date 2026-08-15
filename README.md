@@ -17,13 +17,14 @@ entry points, environment, and knobs):
   fail-closed on a fresh SQLite store, mints genesis recovery binding, and
   refuses unauthenticated, cross-origin, stale-protocol, or malformed requests
   with stable reason codes from the runtime error registry.
-- **Per-agent MCP server** (`apps/daemon/src/mcp-main.ts`): one tool per
-  runtime command kind plus `work_get_context` / `events_read`, scoped by a
-  session credential; the daemon's decoder stays the only payload authority.
+- **Scoped MCP surface**: the standalone stdio entry is
+  `apps/daemon/src/mcp-main.ts`; the wrapper uses one trusted loopback HTTP host
+  and per-agent bearer credentials. The daemon's decoder stays the only payload
+  authority.
 - **Wrapper** (`apps/daemon/src/orchestrator/agent-wrapper-main.ts`): staffs
-  every READY, unclaimed step with a scoped agent session and a real `claude -p`
-  process; a daemon-side verifier earns code-node acceptance by running the
-  node's own test, never from the agent's report.
+  READY, unclaimed non-human steps with a scoped agent session and a real
+  `claude -p` process; human approval and goal closure are never delegated. A
+  daemon-side development verifier reruns a node test before acceptance.
 - **Control room** (`apps/control-room`): the truth-preserving board; `?live=1`
   over the Vite proxy renders the daemon's own offer surface and dispatches
   offers back verbatim.
@@ -52,6 +53,12 @@ nothing. Phase 0 tooling can capture and check evidence in memory but never
 returns an authoritative `decision: GO`, `status: VERIFIED`, or freeze-decision
 bytes; a non-caller-mintable trust boundary is still required before any
 authoritative decision can exist.
+
+The current verifier is not an adversarial trust boundary: it runs a shell
+recipe from an agent-modifiable workspace under the wrapper's OS account. The
+live event feed also lacks durable exact-cursor acknowledgement, and the release
+inventory records source subjects rather than runnable daemon/control-room
+artifacts. These are release blockers, not operator configuration issues.
 
 ## Commands
 

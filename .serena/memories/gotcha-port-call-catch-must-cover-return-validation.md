@@ -1,0 +1,3 @@
+# Gotcha: port-call catch must cover returned-value validation
+
+Catching only `port(...)` is insufficient. A fulfilled port can return a hostile Proxy or malformed plain record; reading `.kind`, using `in`, or dereferencing nested proof fields outside the catch can reject the public promise, skip an acquired-lock release, or even turn an unknown discriminator into optimistic success. Treat call plus structural validation plus discriminator dispatch as one containment unit. After any physical lock/process acquisition, use cleanup/finally authority. Tests should generate nonzero throwing-proxy and malformed-result cases, require fulfilled frozen UNKNOWN with exact owning code/layer, and pin zero unauthorized effects or exactly-once close/unlock.

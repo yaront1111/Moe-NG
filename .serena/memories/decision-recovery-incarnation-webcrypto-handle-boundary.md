@@ -1,0 +1,7 @@
+# Recovery incarnation crypto boundary
+
+For recovery key-epoch minting on pinned Node 24, prefer WebCrypto Ed25519 with `extractable:false` over classic `KeyObject`. Never return the private `CryptoKey`: it remains sign-capable and structured-cloneable even when non-extractable. Retain it in a closure/WeakMap keyed by a frozen empty opaque handle; export only canonical full SPKI DER, its SHA-256 fingerprint and a self-verified public binding proof. A fabricated or cloned handle must not resolve.
+
+Freshness comparisons operate on `SHA256(raw 32-byte entropy)` and `SHA256(full canonical SPKI DER)`, independently from command-bound references. Reserve/burn the entropy fingerprint before key generation and the key fingerprint before later proof checks, so changing command/generation cannot mask repeat output and a later failure cannot make suspect material reusable. Do not add statistical/all-zero heuristics.
+
+Mint results remain `MINTED` with authority NONE. Non-extractable WebCrypto handles are process-local, not an OS-durable keystore; never call them crash-resume evidence. RecoveryAnchor/controller must later compose a real OS-protected persistent provider, and lower-level store code must not import upward from daemon.

@@ -5,7 +5,7 @@ import type { ProjectEvent, ProjectState } from "@moe/core";
 import type { RecoveryBindingSlot } from "@moe/store";
 
 export const RESTORE_CONTROLLER_LAYER = "DAEMON_RESTORE_CONTROLLER" as const;
-export const RESTORE_CONTROLLER_SCHEMA_VERSION = "moe-restore-controller/1" as const;
+export const RESTORE_CONTROLLER_SCHEMA_VERSION = "moe-restore-controller/2" as const;
 export const RESTORE_BINDING_SLOT: RecoveryBindingSlot = "ACTIVE";
 
 export const RESTORE_REFUSAL_LAYERS = Object.freeze([
@@ -53,6 +53,7 @@ export interface RestoreControllerRequest {
 }
 
 export interface InstalledRestoreRecord {
+  readonly backupCursor: string;
   readonly generationDigest: string;
   readonly incarnationRef: string;
   readonly keyEpochRef: string;
@@ -161,12 +162,13 @@ export function preparedRestoreIdentity(parts: PreparedRestoreParts): string {
 }
 
 const HEX64 = /^[0-9a-f]{64}$/u;
+const CANONICAL_CURSOR = /^(0|[1-9][0-9]*)$/u;
 const REQUEST_KEYS = Object.freeze([
   "container", "correlationId", "decidedAt", "faults", "incarnationRef", "keyEpochRef",
   "logicalPaths", "principalId", "projectId", "restoreCommandId", "trust",
 ]);
 const RECORD_KEYS = Object.freeze([
-  "generationDigest", "incarnationRef", "keyEpochRef", "preparedIdentity",
+  "backupCursor", "generationDigest", "incarnationRef", "keyEpochRef", "preparedIdentity",
   "restoreCommandId", "schemaVersion",
 ]);
 const isRef = (value: unknown): value is string =>
@@ -268,10 +270,14 @@ export function decodeRestoreRecord(bytes: Uint8Array): InstalledRestoreRecord |
     if (record.schemaVersion !== RESTORE_CONTROLLER_SCHEMA_VERSION || !isRef(record.restoreCommandId)) {
       return null;
     }
+    if (typeof record.backupCursor !== "string" || !CANONICAL_CURSOR.test(record.backupCursor)) {
+      return null;
+    }
     for (const key of ["generationDigest", "incarnationRef", "keyEpochRef", "preparedIdentity"]) {
       if (typeof record[key] !== "string" || !HEX64.test(record[key])) return null;
     }
     const decoded: InstalledRestoreRecord = {
+      backupCursor: record.backupCursor,
       generationDigest: record.generationDigest as string,
       incarnationRef: record.incarnationRef as string,
       keyEpochRef: record.keyEpochRef as string,

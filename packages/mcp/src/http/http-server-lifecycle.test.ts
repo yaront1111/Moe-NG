@@ -19,7 +19,7 @@ import {
   refuseResumption,
 } from "./http-resume.js";
 import { HTTP_LISTED_TOOLS, createHttpMcpAdapter } from "./http-server.js";
-import type { HttpDispatchPort } from "./http-server.js";
+import type { HttpDispatchContext, HttpDispatchPort } from "./http-server.js";
 import { MCP_SESSION_ID_HEADER } from "./http-session.js";
 import type { HttpAuthVerdict, HttpSessionPort } from "./http-session.js";
 import {
@@ -249,8 +249,11 @@ describe("http adapter — cancellation and disconnect", () => {
   function createDeferredPort(): DeferredPort {
     const captured: AbortSignal[] = [];
     const releases: (() => void)[] = [];
-    const dispatch = (_bytes: Uint8Array, signal?: AbortSignal): Promise<Uint8Array> => {
-      if (signal !== undefined) captured.push(signal);
+    const dispatch = (
+      _bytes: Uint8Array,
+      context: HttpDispatchContext,
+    ): Promise<Uint8Array> => {
+      if (context.signal !== undefined) captured.push(context.signal);
       return new Promise((resolve) => {
         releases.push(() => {
           resolve(CONFORMANCE_COMMAND_RESPONSE_BYTES);

@@ -1,0 +1,9 @@
+# Pure reducer deep-freeze and boundary gotchas
+
+- Never deep-freeze a result shell that still aliases caller-owned nested arrays/objects: it silently freezes the caller. Snapshot or clone borrowed state and witness data first, including terminal results that otherwise look unchanged.
+- `Object.keys` / `Object.values` omit symbols and non-enumerable fields. Exact runtime shapes should inspect `Reflect.ownKeys`, require enumerable own data descriptors, and freeze/traverse every property key.
+- Accessors and proxies can change values between validation and copying, or throw (including revoked-proxy `Array.isArray`). Snapshot descriptor values into plain null-prototype/array copies once, inside a catch boundary, then validate and reduce only the snapshots. Reject cycles, sparse/custom arrays, symbols, accessors, and unsupported prototypes fail closed.
+- Do not map nested snapshot failure to `undefined`: optional fields then confuse malformed values with absence and may authorize a weaker branch. Use an unforgeable internal sentinel so malformed optional proofs remain explicitly invalid while genuine absence stays undefined.
+- Safe-integer validation is insufficient without per-command delta guards. Guard every version/generation/epoch increment, including multi-event commands (+2).
+- A terminal successor operation may keep lifecycle terminal but still must advance concurrency version; otherwise two distinct stale commands can both create generation+1 successors.
+- Recovery facets need lifecycle invariants and explicit clearing on re-closure/cancellation, not only shape validation.

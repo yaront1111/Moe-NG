@@ -12,7 +12,7 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,5 +25,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-15T20:14:31.242Z"
+  "updatedAt": "2026-08-15T20:51:39.516Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:43:56.252Z"
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a"
+  ],
+  "blockedReason": "Fresh committed-byte measurement shows the claimed settings load path is absent from moe-next, so no production-ready plan can satisfy DoD 1 without inventing an unattached decoder. At HEAD ddb4753, `git grep -n -I -E 'approvalMode|speedModeDelayMs' HEAD -- apps packages scripts tools` returns 0; `git grep` finds no production reader of `.moe/project.json`. `docs/REPOSITORY_HYGIENE.md:13-16` states the producer is the external transitional Moe daemon. The actual authority is in sibling repo `/mnt/d/projexts/moes/packages/moe-daemon/src/tools/submitPlan.ts`: it reads `project.settings.approvalMode` and defaults `speedModeDelayMs` with `|| 2000` at lines 105 and 436, exactly the defect; `/mnt/d/projexts/moes/packages/moe-daemon/src/state/persistence.ts:87,113` also defaults both fields. Epic rail 2 forbids development outside `D:/projexts/moe-next`, and that sibling package has no `@moe/core` dependency. The only moe-next settings surface, `ProjectConfigurationSettings`, is a different exact-key durable contract: parser SETTINGS_KEYS are isolation/limits/network/orchestrationSource/policy/schemaVersions/selection and POLICY_KEYS contain no delay; using it would require the explicitly out-of-scope contract change and still would not reach the transitional auto-approval scheduler. The unrelated `readWrapperKnobs(process.env)` path has no approval vocabulary or plan-approval consumer. Gap, symbol by symbol: moe-next lacks a loader/decoder for `approvalMode` + `speedModeDelayMs`, lacks the timer/approval consumer that would call it, and lacks a legal package edge from the actual transitional consumer to `@moe/core`. Required prerequisite: land that loader and auto-approval consumer in a permitted workspace package (or authorize/relocate the sibling implementation), including the dependency edge; then re-plan this binding. Do not satisfy this with a standalone exported decoder, a mock-backed journey, or a change to live `.moe` state.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T20:50:49.043Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Loaded planning/systematic-debugging guidance; re-measured committed moe-next and the external transitional daemon; proved the settings loader/auto-approval consumer is absent locally and the exact defaulting defect lives in sibling moes; reported the blocker with symbol-by-symbol prerequisites; wrote Serena handoff memory.",
+      "whatRemains": "Task author/human must migrate the loader and approval scheduler into moe-next or authorize relocation/dependency work in the sibling repo, then unblock and re-plan.",
+      "pitfalls": "Do not attach a standalone decoder to wrapper knobs or product ProjectConfigurationSettings; neither reaches transitional plan auto-approval. Do not edit live .moe state or sibling code under current epic rails.",
+      "openQuestions": "Which repository/package is intended to own the real transitional settings load and auto-approval consumer, and how may it legally depend on @moe/core?",
+      "releasedAt": "2026-08-15T20:51:39.514Z",
+      "releasedBy": "architect-09b5f32a",
+      "reason": "Explicit architect handoff after measuring and reporting the missing cross-repository settings consumer; user requested continued planning on other tasks."
+    }
+  ]
 }

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join as nativeJoin, win32 } from "node:path";
 import { PassThrough } from "node:stream";
 
 import { afterAll, beforeAll } from "vitest";
@@ -31,7 +31,11 @@ import {
   buildProviderRuntimeObservation,
 } from "./claude-observation.js";
 import {
-  createNodeClaudeRuntimeFs,
+  EMULATED_WIN32_RUNTIME_ROOT,
+  createEmulatedWin32RuntimeFs,
+  nativeRuntimePath,
+} from "./claude-runtime-pin-test-fixtures.js";
+import {
   prepareClaudeRuntimePin,
   type ClaudeRuntimePinRequest,
   type PreparedClaudeRuntime,
@@ -68,11 +72,11 @@ function activatedCommit(request: Record<string, unknown>, label: string): Activ
  * `COMMIT.grant` while building its own module-scope fixture would otherwise see
  * `undefined`. Only the async pin still needs the hook.
  */
-const tempRoot = realpathSync(mkdtempSync(join(tmpdir(), "moe-launcher-")));
-const installedRoot = join(tempRoot, "Claude");
-const executable = join(installedRoot, "claude.exe");
-mkdirSync(installedRoot, { recursive: true });
-writeFileSync(executable, "MZ-claude-launcher-test");
+const tempRoot = realpathSync(mkdtempSync(nativeJoin(tmpdir(), "moe-launcher-")));
+const installedRoot = win32.join(EMULATED_WIN32_RUNTIME_ROOT, "Claude");
+const executable = win32.join(installedRoot, "claude.exe");
+mkdirSync(nativeRuntimePath(tempRoot, installedRoot), { recursive: true });
+writeFileSync(nativeRuntimePath(tempRoot, executable), "MZ-claude-launcher-test");
 const QUOTE = buildProviderRuntimeObservation({
   resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: executable, sha256: sha256("MZ-claude-launcher-test") }],
   reportedVersion: "claude-cli/1.2.3",
@@ -101,8 +105,8 @@ export const DRIFTED_COMMIT = activatedCommit(makeActivationRequest(), "drifted"
 export const runtimeRequest: ClaudeRuntimePinRequest = {
   quotedObservation: QUOTE.observation,
   installedRoot,
-  pinRoot: join(tempRoot, "pins"),
-  fs: createNodeClaudeRuntimeFs(),
+  pinRoot: win32.join(EMULATED_WIN32_RUNTIME_ROOT, "pins"),
+  fs: createEmulatedWin32RuntimeFs(tempRoot),
   facts: { observe: async () => ({
     platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
     reportedVersion: "claude-cli/1.2.3",

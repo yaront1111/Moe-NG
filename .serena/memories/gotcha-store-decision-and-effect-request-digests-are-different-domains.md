@@ -1,0 +1,3 @@
+# Store decision versus effect request digests
+
+A `commitExpectedVersionDecision` durable record has two different request-digest domains. `CommandDecisionRecord.requestSha256` and `StoredEvent.decisionTrace.requestSha256` identify the original scoped command request. `StoredEvent.requestSha256` and `CommandReceipt.requestSha256` identify the internal decision-effect request. They must be cross-checked within those pairs; equating the two domains makes valid committed effects unreadable. Validate both as canonical lowercase sha256 before granting current authority.

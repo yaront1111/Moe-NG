@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { readSessionLedger } from "../identity/session-read-model.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { SqliteEventStore } from "@moe/store";
 import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
@@ -93,9 +94,153 @@ describe("createAgentWrapper", () => {
     expect(text).toContain("no other fields");
   });
 
+  it("never hands a coding agent an acceptance payload it is forbidden to submit", () => {
+    const text = codeMission("node.deliver@node-1", "node-1", "2026-01-01T00:00:00.000Z", {
+      instructions: "do it", test: "node test.mjs", title: "T", workspace: "D:/ws",
+    }, {
+      accept: { forgedAcceptanceMarker: "must-not-reach-the-agent" },
+      submit: { findings: [], subjectRef: "node-1" },
+    });
+
+    expect(text).toContain("Suggested review.submit payload shape");
+    expect(text).not.toContain("forgedAcceptanceMarker");
+    expect(text).not.toContain("must-not-reach-the-agent");
+  });
+
   it("does not double-staff: the next pass sees the claims and spawns nothing", () => {
     const report = wrapper.runOnce();
     expect(report.spawned).toHaveLength(0);
     expect(report.active).toBe(2);
+  });
+
+  it("never staffs the human approval or goal-closure actions", () => {
+    const forbidden = createAgentWrapper({
+      affordances: {
+        boundProjectId: "proj-human-actions",
+        readSurface: () => ({
+          nextAllowedCommands: [],
+          outcome: "SURFACE",
+          steps: [
+            {
+              aggregateId: "plan-human-1", claim: null, kind: "approval.decide",
+              missing: [], status: "READY", version: 1,
+            },
+            {
+              aggregateId: "goal-human-1", claim: null, kind: "goal.close",
+              missing: [], status: "READY", version: 2,
+            },
+          ],
+        }),
+      },
+      claimTtlMs: 60_000,
+      clock: () => NOW,
+      deps: new Proxy({}, {
+        get: () => { throw new Error("human-only steps must never dispatch"); },
+      }) as never,
+      maxAgents: 2,
+      mintSecret: () => { throw new Error("human-only steps must never mint a credential"); },
+      operatorCredential: OPERATOR,
+      spawnAgent: () => { throw new Error("human-only steps must never spawn"); },
+    });
+
+    expect(forbidden.runOnce()).toEqual({
+      active: 0,
+      spawned: [],
+      surfaceOutcome: "SURFACE",
+    });
+  });
+
+  it("revokes the scoped session as soon as its agent exits", async () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "moe-wrapper-session-revoke-"));
+    const storePath = join(sandbox, "store.db");
+    const isolated = createStoreDependencies({
+      credential: OPERATOR,
+      principalId: "operator-local",
+      projectId: "proj-wrapper-revoke",
+      storePath,
+    });
+    try {
+      const isolatedAffordances = isolated.affordances;
+      if (isolatedAffordances === undefined) throw new Error("provider serves no affordances");
+      let suffix = 0;
+      const finite = createAgentWrapper({
+        affordances: isolatedAffordances(),
+        claimTtlMs: 60_000,
+        clock: () => NOW,
+        deps: isolated.provide(),
+        maxAgents: 1,
+        mintSecret: () => `revoke-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => undefined,
+      });
+
+      const report = finite.runOnce();
+      const sessionId = report.spawned[0]?.sessionId;
+      if (sessionId === null || sessionId === undefined) throw new Error("no session spawned");
+      await finite.settle();
+
+      const reader = SqliteEventStore.openForProject(storePath, "proj-wrapper-revoke");
+      try {
+        expect(readSessionLedger(reader, "proj-wrapper-revoke").sessions.get(sessionId))
+          .toMatchObject({ sessionId, status: "CLOSED", version: 2 });
+      } finally {
+        reader.close();
+      }
+      const surface = isolatedAffordances().readSurface();
+      if (surface.outcome !== "SURFACE") throw new Error(surface.code);
+      const staffed = surface.steps.find((step) =>
+        `${step.kind}@${step.aggregateId ?? "-"}` === report.spawned[0]?.workItemId);
+      expect(staffed?.claim).toBeNull();
+    } finally {
+      isolated.close();
+      rmSync(sandbox, { force: true, recursive: true });
+    }
+  });
+
+  it("revokes a newly opened session when the work claim is refused", () => {
+    const sandbox = mkdtempSync(join(tmpdir(), "moe-wrapper-claim-refusal-"));
+    const storePath = join(sandbox, "store.db");
+    const isolated = createStoreDependencies({
+      credential: OPERATOR,
+      principalId: "operator-local",
+      projectId: "proj-wrapper-claim-refusal",
+      storePath,
+    });
+    try {
+      const isolatedAffordances = isolated.affordances;
+      if (isolatedAffordances === undefined) throw new Error("provider serves no affordances");
+      let suffix = 0;
+      const refusing = createAgentWrapper({
+        affordances: isolatedAffordances(),
+        claimTtlMs: 60_000,
+        // The session opens durably, then authenticates as expired when it
+        // attempts the claim against the provider's real clock.
+        clock: () => 0,
+        deps: isolated.provide(),
+        maxAgents: 1,
+        mintSecret: () => `refuse-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: () => { throw new Error("a refused claim must never spawn"); },
+      });
+
+      const report = refusing.runOnce();
+      const sessionId = report.spawned[0]?.sessionId;
+      expect(report.spawned[0]?.outcome).toBe("AUTHENTICATION_FAILED");
+      if (sessionId === null || sessionId === undefined) throw new Error("no opened session");
+
+      const reader = SqliteEventStore.openForProject(
+        storePath,
+        "proj-wrapper-claim-refusal",
+      );
+      try {
+        expect(readSessionLedger(reader, "proj-wrapper-claim-refusal").sessions.get(sessionId))
+          .toMatchObject({ sessionId, status: "CLOSED", version: 2 });
+      } finally {
+        reader.close();
+      }
+    } finally {
+      isolated.close();
+      rmSync(sandbox, { force: true, recursive: true });
+    }
   });
 });

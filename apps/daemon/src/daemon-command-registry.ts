@@ -12,12 +12,15 @@ import type { HandlerTable, ServiceOutcome } from "./bootstrap/bootstrap-ledger.
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import type { SessionOutcome } from "./identity/session-ledger.js";
+import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND,
   RECOVERY_COMPLETION_SCHEMA_VERSION } from "./recovery/recovery-completion-digest.js";
 import { runRecoveryCompleteCommand, type RecoveryCompletionOutcome }
   from "./recovery/recovery-completion.js";
+import { createRecoveryCompletionAuthority }
+  from "./recovery/recovery-completion-authority.js";
 import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
@@ -125,15 +128,23 @@ const encoder = new TextEncoder();
 class DomainRefusal extends Error {
   public readonly code: string;
   public readonly detail: string;
+  public readonly httpStatus: number;
   public readonly layer: string;
 
-  public constructor(code: string, layer: string, detail: string) {
+  public constructor(code: string, layer: string, detail: string, httpStatus = 422) {
     super(`${code}: ${detail}`);
     this.code = code;
     this.detail = detail;
+    this.httpStatus = httpStatus;
     this.layer = layer;
   }
 }
+
+const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
+  "approval.decide",
+  "goal.close",
+  "integration.accept_output",
+]);
 
 function decisionOf(
   outcome: ActivationIngressOutcome | RecoveryCompletionOutcome | ReviewOutcome | ServiceOutcome
@@ -184,6 +195,12 @@ export interface DaemonCommandPorts {
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
+  const authorityClock = (): number => Date.parse(clock());
+  const recoveryAuthority = createRecoveryCompletionAuthority({
+    clock: authorityClock,
+    projectId,
+    sessions: createSessionAuthority(store, { clock: authorityClock, projectId }),
+  });
 
   const requestOf = (
     kind: string,
@@ -223,9 +240,20 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
             ? SESSION_SCHEMA_VERSION
             : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
+      if (OPERATOR_PRINCIPAL_KINDS.has(kind)
+        && principal.principalId !== operatorPrincipalId) {
+        throw new DomainRefusal(
+          "OPERATOR_PRINCIPAL_REQUIRED",
+          "DAEMON_AUTHORIZATION",
+          "this command requires the configured operator principal",
+          403,
+        );
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
-      if (recovery) return decisionOf(runRecoveryCompleteCommand(store, bytes));
+      if (recovery) {
+        return decisionOf(runRecoveryCompleteCommand(store, bytes, recoveryAuthority));
+      }
       if (review) return decisionOf(runReviewCommand(store, bytes));
       if (session) {
         return decisionOf(runSessionCommand(store, bytes, undefined, operatorPrincipalId));
@@ -234,9 +262,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
     };
     // ADMIN is the reach fence, NOT the human-only fence. `recovery.complete`
-    // is human-only because the approval gate in `recovery-completion.ts`
-    // demands a HUMAN R3 approval with a recent step-up; a capability is held
-    // by an agent session and could never carry that. A reader who mistakes
+    // is human-only because its concrete session authority authenticates a
+    // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
+    // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
     const requiredCapability = activation
       ? CAPABILITIES.WORK
@@ -264,7 +292,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         return Object.freeze({ decision: commit(), outcome: "DECIDED" } as const);
       } catch (error) {
         if (error instanceof DomainRefusal) {
-          return refusal(error.code, 422, error.detail, error.layer);
+          return refusal(error.code, error.httpStatus, error.detail, error.layer);
         }
         if (error instanceof IdempotencyConflictError) {
           return refusal(

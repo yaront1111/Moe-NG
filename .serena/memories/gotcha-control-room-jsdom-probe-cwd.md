@@ -1,0 +1,3 @@
+# Control-room jsdom probes resolve from the app workspace
+
+For one-off probes that import `jsdom`, run Node with cwd `apps/control-room`, not the repository root. The package is resolvable from the app workspace but a repo-root `import { JSDOM } from "jsdom"` fails with `ERR_MODULE_NOT_FOUND`. In the app cwd, direct `window.innerWidth = 800` sticks, a dispatched `resize` event invokes listeners, and both `window.matchMedia` and `window.ResizeObserver` are undefined.

@@ -1,0 +1,3 @@
+# Nonthrowing accessor authentication gotcha
+
+An "exact record" helper that calls `Object.keys` and then reads `value[key]` does not reject accessors; it invokes and launders a returning getter into ordinary data. A test using only a throwing getter proves exception containment, not structural rejection. At authentication boundaries, inspect own property descriptors and require data descriptors before reading values. Pin the production entry result to the exact structural refusal code/layer and assert zero durable effects.

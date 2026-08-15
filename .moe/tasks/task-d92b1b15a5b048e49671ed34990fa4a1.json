@@ -23,20 +23,24 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE BOTH SITES ON CURRENT BYTES (task rail 5). Shared worktree with live agents; these were measured today but that is not enough. No production edits.\n\n1. `git rev-parse --short HEAD`.\n2. DEFECT 1: read `answerReplayed` (activation-ledger-commit.ts:133-157). Confirm `store.readEvents(aggregateId)` at :140 feeds `readActivationLedgerRecord(aggregateId, events)` at :144, and that the reader's count guard at reader.ts:60-61 precedes its type discriminator at :65. Note the digest cross-check at :150 (ACTIVATION_LEDGER_REPLAY_DIVERGED) — it is correct and must survive.\n3. DEFECT 2: read `scanForEffect` (reader.ts:232-262) and the constants at :107. Confirm the only success exit is `if (!read.hasMore)` at :255, the fallthrough at :261, and — importantly — the two guards that terminate the loop INDEPENDENTLY of the page cap: the empty-page-with-hasMore check at :242 and the cursor-must-advance check at :258-259.\n4. READ THE AUTHOR'S CORRECTION (comment-76869409) before writing any test. Defect 1 is LATENT: `createFoundationClaudeLauncher` (foundation-launch-authority.ts:290) has ZERO callers and the authority is not exported from the daemon root. Confirm that yourself with a grep plus a positive control. This changes REPRODUCTION — the test must construct the aggregate tail directly rather than expecting a live path to produce it.\n5. `grep -c ''` activation-ledger-reader.ts (expect ~328 — already over the 250 target, under 400, pre-existing) and activation-ledger-commit.ts.\n6. Read activation-ledger-commit.test.ts and activation-ledger-reader.test.ts to see what must stay green and unmodified (DoD 6), and activation-ledger-fixtures.ts for the existing builders.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-commit.ts",
         "apps/daemon/src/activation/activation-ledger-reader.ts",
         "apps/daemon/src/activation/foundation-launch-authority.ts"
-      ]
+      ],
+      "note": "RE-MEASURED at HEAD ddb4753 (plan measured 9d60091; HEAD moved, both sites byte-identical). No production edits.\n\nDEFECT 1 CONFIRMED. activation-ledger-commit.ts:138-144 `answerReplayed`: `events = store.readEvents(aggregateId)` (:140) feeds `readActivationLedgerRecord(aggregateId, events)` (:144). reader.ts:60 ABSENT / :61 AMBIGUOUS count guards BOTH precede the type discriminator at :64-66. Digest cross-check present: `if (sealed.digest !== candidateDigest)` (:148) -> ACTIVATION_LEDGER_REPLAY_DIVERGED (:149) — plan cited :150, actual :148-149.\n\nDEFECT 2 CONFIRMED. reader.ts:107 `MAX_SCAN_PAGES = 64, SCAN_PAGE_SIZE = 100, MAX_QUERY_CHARS = 400`. scanForEffect :232-261; loop `for (let page = 0; page < MAX_SCAN_PAGES; ...)` :237; global read `store.readEventsAfter(cursor, SCAN_PAGE_SIZE)` from `cursor = 0n` (:235,:240); ONLY success exit `if (!read.hasMore) return { aggregateId: found, refusal: null }` :255; fallthrough `return no(\"FOUNDATION_BINDING_SCAN_INCOMPLETE\")` :260. The two cap-independent terminators confirmed: empty-page-with-hasMore at :244 (plan said :242) and cursor-must-advance `if (next === null || next <= cursor)` at :257 (plan said :258-259). Page cap is a false ceiling, not a safety net — confirmed.\n\nREACHABILITY (author correction comment-76869409 read in full). `grep -rn createFoundationClaudeLauncher` over all .ts/.js excluding node_modules = 3 hits: its definition (foundation-launch-authority.ts:290) and its OWN test file (:42 import, :602 call). ZERO production callers -> DEFECT 1 IS LATENT; test must construct the aggregate tail directly. POSITIVE CONTROL on identical query shape: `readCurrentEffectSessionBinding` has a real production consumer — coordination-adapter.ts:27 import, :218 call -> DEFECT 2 IS LIVE.\n\nLINE COUNTS (grep -c ''): activation-ledger-reader.ts 328, activation-ledger-commit.ts 210, activation-ledger-commit.test.ts 494, activation-ledger-reader.test.ts 133, activation-ledger-fixtures.ts 149.\n\nTEST-SURFACE FACTS FOR STEPS 2/4. Store: MAX_EVENTS_PER_COMMIT = 256, MAX_PAGE_SIZE = 1000 (store-contracts.ts:22,26) — 6,400+ filler events need >=26 `store.commit` calls, each its own transaction; a single 6,500-event commit is rejected. `SqliteEventStore.commit(CommitInput)` takes `{aggregateId, commandBytes, commandId, committedAt, events: EventDraft[], expectedVersion}` so filler can be spread over distinct aggregates each at expectedVersion 0. scanForEffect `continue`s on any non-EffectActivationCommitted eventType, so filler events are skipped, but EVERY activation-typed event must be well-formed or the scan refuses MALFORMED. Foundation tail types available via `FOUNDATION_TRANSITION_EVENT_TYPES` + `encodeFoundationTransition` (foundation-activation-transition.ts:31,214). Existing suites use `withDirectory`/`withStore` with close-in-finally (commit.test.ts:50-66) — reuse that discipline.",
+      "startedAt": "2026-08-15T20:20:35.809Z",
+      "completedAt": "2026-08-15T20:22:31.161Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD FOR DEFECT 1 — write both tests first, in `apps/daemon/src/activation/activation-ledger-commit.test.ts`.\n\nTEST A (DoD 1), the reproduction: commit an activation, then APPEND A FOREIGN EVENT to the same aggregate so it holds more than one event, then re-commit with the same idempotency key. Assert the ORIGINAL stored record is returned with disposition REPLAYED — not ACTIVATION_LEDGER_EVIDENCE_AMBIGUOUS, and not a caller-supplied echo. Prove it is the STORED record by re-committing with the same key but different record bytes and requiring the stored bytes to win.\n\nCONSTRUCT THE TAIL DIRECTLY. Defect 1 is latent — `createFoundationClaudeLauncher` has zero callers — so a test that waits for a live Foundation path to append the tail will never exercise the defect and will pass vacuously.\n\nTEST B (DoD 2), the guard that must NOT weaken: an aggregate carrying TWO ACTIVATION events still refuses with the exact ACTIVATION_LEDGER_EVIDENCE_AMBIGUOUS code and its layer, asserted literally. This is the test that distinguishes a correct fix (narrow the input) from a wrong one (relax the count check). Without it, \"take the first event\" passes Test A while destroying the ledger's core guarantee.\n\nBoth assert code AND layer, never merely that the call failed — two layers can refuse here and these defects are precisely cases of the wrong refusal winning.\n\nTest A fails now; Test B passes now and must still pass after step 3.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-commit.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T20:22:35.598Z"
     },
     {
       "stepId": "step-3",
@@ -102,16 +106,22 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:26:53.598Z",
-  "updatedAt": "2026-08-15T18:42:17.062Z",
+  "updatedAt": "2026-08-15T21:42:49.453Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:39:27.693Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-7f301fa7"
+    "architect-7f301fa7",
+    "worker-fd8f822b",
+    "governor-a627169a",
+    "architect-09b5f32a"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:42:15.006Z",
   "planningNotes": {
@@ -127,7 +137,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-15T20:20:19.316Z",
+    "escalatedAt": "2026-08-15T21:29:07.582Z"
   },
-  "planApprovedAt": "2026-08-15T18:42:17.062Z"
+  "planApprovedAt": "2026-08-15T18:42:17.062Z",
+  "workStartedAt": "2026-08-15T20:20:35.809Z"
 }

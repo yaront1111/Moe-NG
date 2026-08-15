@@ -1,0 +1,3 @@
+# Gotcha: launch-lock registration is not OS lock acquisition
+
+A pure registry that records a caller-supplied lock identity after a child reports STARTED cannot satisfy a requirement that an OS-exclusive launch lock be acquired before any provider process starts. Inspect the lock module’s actual effects: if it explicitly touches no OS, it is observational bookkeeping, not mutual exclusion. Assert event order and zero boundary/provider calls for every prior-registration, malformed-lock, duplicate, or credential-refusal arm. A test that expects “open/start, then register/refuse” proves the safety ordering is inverted even if cleanup later succeeds.

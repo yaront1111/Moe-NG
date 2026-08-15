@@ -30,8 +30,8 @@ const subscriptions = provider.subscriptions?.();
 if (subscriptions === undefined) throw new Error("provider serves no subscription port");
 
 const port = createMcpDispatchPort({
-  credential: CREDENTIAL,
   deps: provider.provide(),
+  fallbackCredential: CREDENTIAL,
   subscriptions,
 });
 

@@ -1,0 +1,3 @@
+# Parent recovery-inventory shell handoff
+
+The parent task was already SPIDR-decomposed and must not be planned as implementation work. I read the prior handoff, confirmed four child tasks exist, promoted the two dependency-free children task-f6c9011b24634de7b22ad10a26579883 and task-00956ac383784e81b0345bbf09256323 to PLANNING, fetched both contexts, and released the parent with a structured Moe handoff. I then claimed and submitted the task-00956ac plan. Later ordering: 009 DONE -> 091c plan; 009 + f6c DONE -> d7da plan. A governor/human should eventually archive/close the parent shell so it is not reclaimed.

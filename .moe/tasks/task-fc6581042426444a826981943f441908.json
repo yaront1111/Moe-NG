@@ -34,46 +34,72 @@
     {
       "stepId": "step-2",
       "description": "TDD — WRITE THE CODEC TESTS FIRST. Create `apps/daemon/src/telemetry/provider-run-codec.test.ts`.\n\nDETERMINISM (DoD 1): encoding the same record twice yields BYTE-IDENTICAL output. Compare the BYTES, not the digest — two different byte sequences can be asserted equal through their digests only if the digest function is the thing under test, which is circular.\n\nTHE DIGEST DOMAIN (the decision this slice owns): build a record carrying a deliberately WRONG `recordDigest` and assert the encoder OVERWRITES it, producing bytes that verify. If the encoder trusts the incoming value, a caller-supplied digest rides in and every later verification is theatre. Also assert that two records differing ONLY in recordDigest encode to the same bytes — that is what proves the field is excluded from the domain rather than merely overwritten.\n\nROUND TRIP: encode then decode returns a value equal to the input record, with the digest attached.\n\nFAILURE CASES, each asserting CODE and LAYER and OUTCOME — four layers can refuse in this family, so code alone is one stage away from vacuous:\n- Structurally malformed bytes -> PROVIDER_RUN_BYTES_MALFORMED.\n- Truncated bytes -> PROVIDER_RUN_BYTES_MALFORMED.\n- A digest that does not match its bytes -> PROVIDER_RUN_DIGEST_MISMATCH.\n- A recordVersion other than PROVIDER_RUN_RECORD_VERSION -> PROVIDER_RUN_VERSION_UNSUPPORTED.\n- A record that cannot be read back as a record -> PROVIDER_RUN_RECORD_UNREADABLE.\nAll carry layer PROVIDER_RUN_CODEC. Decode-side refusals carry outcome UNKNOWN (unverifiable evidence confers nothing); encode-side refusals carry REFUSED. Assert the outcome explicitly — it is the field that distinguishes them.\n\nUNDEFINED VS ABSENT VS NULL: JSON.stringify drops undefined, so a record with a field set to undefined and one lacking it can produce identical bytes. Pin whichever behaviour the module chooses; do not leave it unasserted.\n\nThese fail until steps 3-4 land.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.test.ts"
+      ],
+      "note": "TESTS FIRST, and they are RED for the right reason: \"Cannot find module './provider-run-codec.js'\" - the module does not exist yet, \"Test Files 1 failed (1)\".\n\nWHAT IS PINNED, and the reasoning behind the two that are not obvious:\n\nDETERMINISM compares BYTES (`expect(encoded(record()).bytes).toEqual(encoded(record()).bytes)`), never digests - comparing two encodings through their digests is circular when the digest is the thing under test.\n\nDIGEST DOMAIN, two cases: (a) two records differing ONLY in recordDigest must encode to the SAME bytes - that is what proves exclusion from the domain rather than mere overwriting; (b) a caller-supplied wrong recordDigest is overwritten with the digest of the bytes and those bytes still decode.\n\nTHE TWO GUARDS ARE DRILLED BY CONSTRUCTION, one case each, and each case is the forgery only its own guard can catch:\n- \"refuses bytes whose carried digest does not match the record: guard A\" splices a different valid hex64 into the trailing digest frame and asserts the BODY is byte-identical to the authentic one. The re-encode guard sees a canonical body and cannot refuse it, so only digest recomputation can.\n- \"refuses a non-canonical encoding of an otherwise authentic record: guard B\" re-serialises the body with its top-level keys REVERSED. Same byte length (same keys, same values), parses to an equal value - asserted with toEqual - so the digest over the decoded value still matches and only the byte comparison can refuse it.\nNeither case is answerable by the other guard, so disabling either reddens exactly one named case.\n\nFORGERY TECHNIQUE, mirroring activation-ledger-codec.test.ts:149-163: every hostile fixture is an EQUAL-LENGTH substitution inside real encoder output, so the test never rebuilds a frame and therefore never asserts against its own reimplementation of the format. `withBody` asserts the length it preserves, and a separate case asserts the body offset parses as JSON, so a framing change fails loudly instead of splicing garbage.\n\nEVERY refusal case asserts code AND layer AND outcome (REFUSED on encode, UNKNOWN on decode) plus storeCode null. A final case runs all seven refusal paths and asserts the emitted code SET equals exactly the six codes this stage owns and that each is a member of the IMPORTED PROVIDER_RUN_LEDGER_CODES / PROVIDER_RUN_LEDGER_LAYERS - which simultaneously proves no ledger/composition/reader code is selected here and that none of the six has become dead.\n\nUNDEFINED VS ABSENT VS NULL is decided and pinned in all three directions: undefined REFUSES with PROVIDER_RUN_FIELD_INVALID (including a hole in a nested array, which `.some()` would skip), null is data, and an absent field encodes to DIFFERENT bytes from an explicit null. Also pinned: NaN/Infinity refuse rather than becoming JSON `null`, and a cyclic record refuses instead of overflowing the stack.\n\nFixture types verified by reading the producing packages, not assumed: ProviderFactUnknown/ProviderQuantity/ProviderText (provider-telemetry-contracts.ts:132-138), ClaudeTelemetryLaunchFacts (claude-telemetry-launch.ts:49-64), ClaudeObservedModel (claude-result-telemetry.ts:83-87), ClockObservation (authority-kernel.ts:107-111), LayeredIssue (budget-measurement.ts:40-42), and the enum members \"REFUSED\"/\"UNKNOWN\"/\"EXIT_UNOBSERVED\"/\"NO_CONCURRENCY_FACTS\"/\"BUDGET_MEASUREMENT_MALFORMED\" from their frozen arrays.",
+      "startedAt": "2026-08-15T20:20:46.801Z",
+      "completedAt": "2026-08-15T20:23:55.936Z"
     },
     {
       "stepId": "step-3",
       "description": "ENCODE — canonical bytes and the digest (DoD 1). Create `apps/daemon/src/telemetry/provider-run-codec.ts`, mirroring activation-ledger-codec.ts.\n\n`encodeProviderRunRecord(record)` returns `{ok: true, bytes, digest, record}` or a `ProviderRunRefusal` from the imported constructors — never a throw, never a partially built value.\n\nTHE DIGEST DOMAIN, stated in the module comment because a reader cannot infer it: the digest is computed over the record with `recordDigest` EXCLUDED, then attached. Digesting the whole record would fold the digest field into its own input, which is either circular or silently blesses a stale caller-supplied value. The decoder recomputes over the same reduced domain.\n\nCanonical JSON: sort object keys, recurse arrays in order, and handle the record's nested shapes — frozen objects, `usage`/`usageRefusals` arrays, the nullable `observedStart`/`observedEnd`/`upstreamRefusal`, and the discriminated unions (`ProviderQuantity`, `ProviderText`, `ClaudeDeclaredSelection`) whose `known:false` arms carry code/layer. Decide and DOCUMENT the undefined-vs-absent-vs-null rule; JSON.stringify's silent dropping of undefined is a real collision source.\n\nValidate before encoding: a record failing shape or field checks refuses with PROVIDER_RUN_RECORD_MALFORMED or PROVIDER_RUN_FIELD_INVALID at layer PROVIDER_RUN_CODEC, outcome REFUSED.\n\nRE-DECLARE NOTHING — every code, layer, refusal shape and constructor comes from provider-run-refusals.ts, and the record type and version from provider-run-contracts.ts. Keep under 250 lines; if it overruns, split the canonical-JSON helper into its own module rather than trimming validation.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.ts"
+      ],
+      "note": "Implemented encodeProviderRunRecord in provider-run-codec.ts (224 lines total including decoder scaffolding needed by the already-written round-trip tests). The digest domain is canonical sorted-key JSON over the record with recordDigest excluded; caller digest is ignored and computed digest attached. Canonicalization fails closed on undefined, sparse/extra array keys, non-finite numbers, functions/symbols/accessors, non-plain objects and cycles; null and absent remain distinct. Codes/layer are selected only from imported frozen arrays. Focused real test command `pnpm exec vitest run --root . --config package.json src/telemetry/provider-run-codec.test.ts` executed 1 file/22 tests, all passed, exit 0. Exact daemon typecheck currently has one foreign diagnostic only at apps/daemon/src/work/foundation-attempt-service.test.ts:490:5 (`never` not callable); no codec diagnostic.",
+      "startedAt": "2026-08-15T21:28:47.161Z",
+      "completedAt": "2026-08-15T21:32:39.012Z"
     },
     {
       "stepId": "step-4",
       "description": "DECODE — BOTH GUARDS (DoD 2, DoD 3), in the same module.\n\nThe decoder verifies BEFORE trusting, with two INDEPENDENT guards:\n1. Recompute the digest over the decoded value's reduced domain and compare to the digest carried with the bytes.\n2. Re-encode the decoded value and compare the resulting BYTES to the input bytes.\n\nNeither is redundant and neither is decorative. A digest check alone accepts bytes that decode to an equal value through a DIFFERENT encoding — key order, spacing, an undefined-vs-absent difference — because the digest is over the value, not the bytes. A re-encode check alone accepts a consistently forged pair where the attacker recomputed the digest to match their own bytes. They stop different attacks, which is why step 6 drills them separately.\n\nRefusal mapping, all at layer PROVIDER_RUN_CODEC with outcome UNKNOWN, since a decode failure is unverifiable evidence rather than a declined operation:\n- unparseable or truncated input -> PROVIDER_RUN_BYTES_MALFORMED\n- digest mismatch (either guard) -> PROVIDER_RUN_DIGEST_MISMATCH\n- recordVersion not PROVIDER_RUN_RECORD_VERSION -> PROVIDER_RUN_VERSION_UNSUPPORTED\n- decodes but is not a readable record -> PROVIDER_RUN_RECORD_UNREADABLE\n\nNever throw, never return a partially adopted record: a caller must not be able to reach a half-populated ProviderRunRecord.\n\nAdd the `.js` bridge with bytes exactly `export * from \"./provider-run-codec.ts\";` plus LF — apps/daemon requires one per production module, and a missing bridge is caught by NEITHER tsc NOR vitest, so it ships silently. Run the step-2 tests; they must now pass.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.ts",
+        "apps/daemon/src/telemetry/provider-run-codec.js"
+      ],
+      "note": "Implemented fatal decode with exact header/body/tail framing and observable refusal precedence: malformed bytes/JSON -> BYTES_MALFORMED, parsed non-record -> RECORD_UNREADABLE, either header or body version mismatch -> VERSION_UNSUPPORTED, all decode refusals UNKNOWN at imported PROVIDER_RUN_CODEC. Guard A compares a digest recomputed by the production encoder over the decoded reduced domain to the carried tail; Guard B independently compares the re-encoded canonical BODY to the input body (not the digest tail, so changing only the tail is not redundantly caught by Guard B). No partial record escapes. Added byte-exact LF .js bridge; expected and actual sha256 both 7b6742148af72b13515f875e11ef61c2831ab964773b6ef2192a4b28cf01d089. Focused production test executed 1 file/22 tests, all passed, exit 0. Source is 226 physical lines.",
+      "startedAt": "2026-08-15T21:32:45.964Z",
+      "completedAt": "2026-08-15T21:33:43.168Z"
     },
     {
       "stepId": "step-5",
       "description": "DRILLS (DoD 2's explicit requirement, plus the digest-domain proof). Capture `sha256sum` of the codec BEFORE each mutation; restore by Edit and verify by `sha256sum` against the captured hash. Never `git checkout` — it reverts to HEAD and would destroy this slice's untracked new files. `git diff` is likewise blind to them, so an empty diff proves nothing.\n\nD1 — DIGEST GUARD ALONE. Disable ONLY the re-encode comparison, leaving digest recomputation. A named test must redden. If none does, the re-encode guard is decorative and DoD 2 is unmet.\nD2 — RE-ENCODE GUARD ALONE. Disable ONLY the digest recomputation, leaving the byte comparison. A named test must redden. Drilling both together proves nothing about either, which is why these are separate.\nD3 — DIGEST DOMAIN. Make the encoder INCLUDE recordDigest in the digest input. The test asserting that two records differing only in recordDigest encode identically must redden. This is the drill that proves the domain decision is real rather than commentary.\nD4 — TRUSTED CALLER DIGEST. Make the encoder keep the caller's recordDigest instead of overwriting it. The wrong-digest test must redden — this is the forged-digest-through-the-front-door path.\nD5 — LAYER. Change the layer constant used by the codec's refusals to another member of PROVIDER_RUN_LEDGER_LAYERS. A named test must redden ON THE LAYER assertion. If only code assertions redden, the tests are not pinning which of the four stages answered.\nD6 — OUTCOME. Flip a decode refusal from UNKNOWN to REFUSED. A named test must redden on the outcome field — epic rail 4 turns on that distinction.\n\nFor each drill record the test name and the assertion that reddened, and confirm it reddened on that assertion rather than on a crash.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.ts"
+      ],
+      "note": "All six byte-restored drills ran against production and each target hash restored to 86f7152faac933eea48eb999a771eacabdefad12c33959d59cee5f684af0fdba. D1 disabled only canonical-body comparison: `refuses a non-canonical encoding ... guard B` red because codec accepted. D2 disabled only recomputed-digest comparison: `refuses bytes whose carried digest ... guard A` red because codec accepted. D3 included recordDigest in the domain: `excludes recordDigest from the bytes it digests` red on byte equality. D4 retained caller digest: `overwrites a caller-supplied recordDigest...` red on `not.toBe(\"not-a-digest\")`. D5 selected imported layer[0]: `refuses a value that is not a record at all` red on layer, expected PROVIDER_RUN_CODEC got PROVIDER_RUN_COMPOSITION. D6 changed initial decode refusal to REFUSED: `refuses input that is not durable bytes at all` red on outcome, expected UNKNOWN got REFUSED. No drill crashed. Restored full focused suite: 1 file/22 tests passed, FOCUSED_EXIT=0.",
+      "startedAt": "2026-08-15T21:33:47.814Z",
+      "completedAt": "2026-08-15T21:37:10.293Z"
     },
     {
       "stepId": "step-6",
       "description": "GATE AND STRUCTURAL CHECKS (DoD 5, DoD 6), each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for two legs and a piped run reports the pipe's tail:\n1. `pnpm --filter @moe/daemon typecheck; echo \"TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"TEST_EXIT=$?\"`\nBoth must print 0. Record the vitest summary line and confirm a NONZERO executed test count — a run matching no files also exits 0.\n\nDoD 4, mechanically checkable: `grep -n 'PROVIDER_RUN_' apps/daemon/src/telemetry/provider-run-codec.ts` must show every code and layer arriving via IMPORT, with zero local re-definitions. Any bare string literal matching a member of PROVIDER_RUN_LEDGER_CODES or PROVIDER_RUN_LEDGER_LAYERS is a duplicate of the authority slice 1 owns.\n\nAlso confirm the codec selects only the SIX codes that belong to this stage — RECORD_MALFORMED, FIELD_INVALID, VERSION_UNSUPPORTED, BYTES_MALFORMED, DIGEST_MISMATCH, RECORD_UNREADABLE. Selecting REPLAY_DIVERGED, EXPECTED_VERSION_CONFLICT or a store code would put the codec's verdict in the ledger's vocabulary.\n\nStructural:\n- `provider-run-codec.js` exists with bytes exactly `export * from \"./provider-run-codec.ts\";` plus LF. Compare against the two sibling bridges rather than eyeballing, and confirm LF not CRLF.\n- `grep -c ''` provider-run-codec.ts: under 250.\n- `apps/daemon/src/index.ts` unchanged — index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61.\n- Slice 1's files unchanged: `git status --porcelain apps/daemon/src/telemetry/provider-run-contracts.* apps/daemon/src/telemetry/provider-run-refusals.*` must show nothing from this task.\n\nFOREIGN RED: shared worktree, and slice 1's worker may still be finishing. Apply the path-attributed-baseline rail; the delta intersected with provider-run-codec.* must be EMPTY. Disclose foreign red verbatim, never repair it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.ts",
         "apps/daemon/src/telemetry/provider-run-codec.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T21:37:41.252Z"
     },
     {
       "stepId": "step-7",
@@ -86,7 +112,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-682e25b5",
+  "assignedWorkerId": "worker-83e6139a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,12 +124,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-15T20:17:00.391Z",
+  "updatedAt": "2026-08-15T21:37:41.252Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 1
+    "executedStepCount": 5
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -124,7 +150,11 @@
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:27:47.869Z",
@@ -146,7 +176,8 @@
   },
   "planApprovedAt": "2026-08-15T18:27:49.923Z",
   "contextFetchedBy": [
-    "worker-682e25b5"
+    "worker-682e25b5",
+    "worker-83e6139a"
   ],
   "workStartedAt": "2026-08-15T20:13:25.699Z"
 }

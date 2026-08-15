@@ -16,69 +16,113 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE, AND CORRECT THE COMMAND NAME BEFORE ANYTHING ELSE. No production bytes written.\n\n1. THE NAME. The description says \"the existing plan.approve path in apps/daemon\". There is none — `grep -rn 'plan.approve' apps/daemon/src/` returns a single TEST FIXTURE hit. `plan.approve` is the CORE reducer's kind; the DAEMON's approval command is `approval.decide`. Confirm: daemon-command-registry.ts:45 maps it to CAPABILITIES.PLANNING, :94 pins its payload fields, and planning-services.ts:181 wires `\"approval.decide\": decideApproval`. Do NOT report blocked on the description's name.\n2. Read `decideApproval` (planning-services.ts:146-179) end to end, including its comment: design 299 makes this one click and one transaction, and \"returning early from any gate above it is what makes a partial approval unrepresentable\". Note the three existing exits and their layers (DAEMON_INGRESS, DAEMON_PREREQUISITE, and `refuseFromCore` surfacing the core code unchanged), and that `activateInitialGraph` is the SINGLE durable commit.\n3. Read `durableRun` (:123-133) — it reads the run via `stateOf(context.ledger, runId)`. That ledger record is the unit of work's durable identity and is where DoD 2's gate belongs.\n4. VERIFY THE CONTRACT ON DISK: APPROVAL_POLICY_KINDS, decideApprovalAuthority, grantHumanAuthority, APPROVAL_AUTHORITY_CODES, APPROVAL_AUTHORITY_LAYERS all exported from the @moe/core ROOT. Note that checkHumanAuthority and refuseApprovalAuthority are deliberately NOT published — enter through decideApprovalAuthority only.\n5. VERIFY THE DEPENDENCY EDGE by COMPILED PROBE with a negative control, probe deleted in the same command: import those five values plus types from the BARE `@moe/core` inside apps/daemon and typecheck. A root-barrel grep does not satisfy the rail.\n6. FIND THE TIMER for DoD 5. `decideApproval` is synchronous and calls no setTimeout, so locate where `delayMs` actually LEAVES the daemon toward a timer. Record it; the bound goes there, not in a helper.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/daemon-command-registry.ts",
         "packages/core/src/index.ts"
-      ]
+      ],
+      "note": "Re-measured at HEAD ddb4753 without production edits. Confirmed daemon command is approval.decide: daemon-command-registry.ts maps it to PLANNING and pins its required payload; planning-services.ts wires PLANNING_HANDLERS['approval.decide'] to decideApproval. The handler's durable run read precedes applyApprovalCommand and activateInitialGraph is the sole durable commit, so the authority decision must early-return after durableRun and before the core approval reducer. Verified @moe/core root exports APPROVAL_POLICY_KINDS, decideApprovalAuthority, grantHumanAuthority, APPROVAL_AUTHORITY_CODES/LAYERS and relevant types while deliberately withholding checkHumanAuthority/refuseApprovalAuthority. Dependency edge verified in apps/daemon/package.json (workspace:*), pnpm-lock apps/daemon importer (link:../../packages/core), and compiled bare-specifier probe: positive typecheck exit 0; negative missing-symbol control TS2305 exit 1; probe removed in the same try/finally command (PROBE_REMAINS=False). Repo search found no ApprovalAuthorityDecision.delayMs consumer or approval timer in daemon; decideApproval is synchronous, so the fail-closed bound must be applied when the authority decision leaves/is persisted by the daemon rather than passed to a timer.",
+      "startedAt": "2026-08-15T20:20:17.519Z",
+      "completedAt": "2026-08-15T20:23:06.522Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD — WRITE THE DAEMON-LEVEL TESTS FIRST, in `apps/daemon/src/planning/planning-services.test.ts`.\n\nDRIVE THE REAL HANDLER (DoD 1). Every case goes through `decideApproval` / PLANNING_HANDLERS with a real request and a real ledger context — never by calling `decideApprovalAuthority` directly. A test that calls the core function proves only what the core's own suite already proves, and repeats the \"exports the symbols is not composition\" failure that created this task.\n\nCASE A — THE UNCONDITIONAL GATE. Sweep EVERY member of APPROVAL_POLICY_KINDS against a GATED unit of work and assert the daemon refuses for each. Derive the case count from the imported array so a future member cannot slip past uncovered, but pin the member NAMES literally so the sweep cannot compare the array with itself.\n\nCASE B — NOTHING ACTIVATED. For each refusal, assert that NO activation occurred — not merely that the call returned a refusal. A gate placed after `activateInitialGraph` would still return a refusal while the graph had already activated, and an assertion on the return value alone cannot tell the two apart. This is the test that pins ORDERING.\n\nCASE C — CODE AND LAYER. Assert the stable code from APPROVAL_AUTHORITY_CODES and the layer from APPROVAL_AUTHORITY_LAYERS, literally. THREE layers can now refuse this handler (DAEMON_INGRESS, DAEMON_PREREQUISITE, and the authority's own), so each test states which answered. A gated case must be otherwise VALID — correct payload, matching exactRevisionHash — or an earlier guard answers first and the test proves nothing about the gate.\n\nCASE D — UNGATED WORK IS UNCHANGED (DoD 4): an ungated approval still approves and activates exactly as before.\n\nThese fail until steps 3-4 land.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "Added daemon-handler TDD coverage. The sweep pins APPROVAL_POLICY_KINDS literally, drives real plan.propose + approval.decide with otherwise-valid payloads, asserts APPROVAL_HUMAN_AUTHORITY_REQUIRED at HUMAN_AUTHORITY_GATE, no decision/approval event, and goal remains DRAFT; explicit ungated zero-delay control preserves approval/activation. Verified RED with the named test: vitest exited 1 at expect(outcome.ok).toBe(false), received true, proving the missing daemon composition.",
+      "startedAt": "2026-08-15T20:23:11.721Z",
+      "completedAt": "2026-08-15T20:33:19.441Z"
     },
     {
       "stepId": "step-3",
       "description": "PERSIST THE GATE ON THE UNIT OF WORK'S DURABLE IDENTITY (DoD 2). Create `apps/daemon/src/planning/approval-gate.ts` plus its `.js` bridge rather than growing planning-services.ts, which is already 183 lines against a 250 target.\n\nThe gate lives in the DURABLE RUN RECORD that `durableRun` reads via `stateOf(context.ledger, runId)` — the same record carrying `submissionHash` and `state.goalRef`. It must NOT be a lifecycle or status field.\n\nWHY THAT DISTINCTION IS THE WHOLE POINT: on 2026-08-15 a bulk promotion moved every BLOCKED task to PLANNING and CLEARED each task's recorded blockedReason as a side effect. A gate stored beside a status would have been cleared the same way, silently, for every gated unit at once. approval-authority.ts's own module comment states this; read it before designing the shape.\n\nWrite the read and the write so a gate that is present cannot be removed by any status transition, and so an ABSENT gate is distinguishable from a gate that failed to load — an unreadable gate must fail closed (treated as gated), never as ungated. Epic rail 4: unverifiable evidence never gains authority, and \"could not read the gate\" is exactly that.\n\nTEST IT AS AN ACTUAL TRANSITION: drive a real status change over the ledger and assert the gate survives. A unit test of a setter would pass while the real transition cleared it — which is the incident.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "apps/daemon/src/planning/approval-gate.ts",
         "apps/daemon/src/planning/approval-gate.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-gate.ts",
+        "apps/daemon/src/planning/approval-gate.js",
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "Added durable workIdentity.humanAuthorityGate persistence in the real plan.propose commit via approval-gate.ts/.js. The named test drives the real four-command planning lifecycle fold to durable PLANNING and reads the gate back from RUN_ID; focused run: 2 passed, 18 skipped, exit 0. Read semantics distinguish ABSENT from UNREADABLE and synthesize an ungranted sentinel for the latter so it cannot fail open. Daemon typecheck has no owned-path errors; the only current errors are foreign untracked src/telemetry/provider-run-codec.test.ts imports (provider-run-codec.js missing).",
+      "startedAt": "2026-08-15T20:33:22.424Z",
+      "completedAt": "2026-08-15T20:40:22.499Z"
     },
     {
       "stepId": "step-4",
       "description": "COMPOSE THE CONTRACT INTO THE HANDLER (DoD 1), in `apps/daemon/src/planning/planning-services.ts`.\n\nCall `decideApprovalAuthority` inside `decideApproval`, positioned:\n- AFTER `durableRun` resolves the runId, because the gate is a property of the unit of work and the work must be identified first;\n- BEFORE `applyApprovalCommand`, so no core verdict is computed for gated work;\n- and therefore necessarily before `activateInitialGraph`, the single durable commit.\nAn early return is the established idiom here — the handler's own comment says returning early from any gate above the commit is what makes a partial approval unrepresentable. Join that stack; do not add a check after the commit.\n\nENTER THROUGH `decideApprovalAuthority` ONLY. `checkHumanAuthority` and `refuseApprovalAuthority` are deliberately unpublished because decideApprovalAuthority consults the gate FIRST by construction (core/index.ts:135-138). Calling the gate directly would rebuild that ordering in a second place where a later edit could reorder it.\n\nSURFACE THE REFUSAL UNCHANGED. Carry the contract's own code and layer out through the existing `refuseFromCore`-style path — the handler already surfaces a core reason code unchanged and that is the pattern to reuse. Do NOT translate an authority refusal into BOOTSTRAP_PAYLOAD_INVALID or BOOTSTRAP_REVISION_HASH_MISMATCH; that would erase the very distinction DoD 3 requires the tests to pin.\n\nUngated work must take exactly the path it takes today (DoD 4). Run the step-2 tests: A, B, C must pass and D must still pass. Re-measure the file with `grep -c ''`; if it nears 250, move helpers into approval-gate.ts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts",
+        "apps/daemon/src/planning/approval-gate.ts",
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "Composed decideApprovalAuthority after durableRun identifies RUN_ID and before applyApprovalCommand/activateInitialGraph. The durable gate reader feeds the core entry point only; authority code/layer are surfaced unchanged. Expanded daemon ServiceRefusedBy from the core's published APPROVAL_AUTHORITY_LAYERS (necessary scope growth so the typed daemon outcome can carry the required layer). Added real-handler unreadable-gate and REQUIRE_HUMAN policy tests. Fresh planning-services file: 22/22 passed, exit 0. planning-services.ts is 212 lines; approval-gate.ts is 78.",
+      "startedAt": "2026-08-15T20:40:25.628Z",
+      "completedAt": "2026-08-15T20:45:06.602Z"
     },
     {
       "stepId": "step-5",
       "description": "BOUND delayMs BEFORE ANY TIMER (DoD 5), at the boundary step 1 located.\n\n`ApprovalAuthorityDecision.delayMs` is a safe non-negative integer, which is WIDER than setTimeout accepts. Above 2**31-1 setTimeout CLAMPS TO 1ms — so a delay meaning \"effectively never\" silently becomes \"immediately\", which is the worst possible direction for an auto-approval delay and is invisible in any test that only uses small values.\n\nBound it in PRODUCTION at the point delayMs leaves the daemon toward a timer. If step 1 found no timer inside the daemon, bound it where the decision is emitted or persisted, and say so in the module comment so the next consumer inherits the bound rather than re-deriving it. Bounding it inside a test helper proves nothing about production.\n\nDecide and document what a beyond-range delay MEANS — clamping to the maximum safe timer value and treating it as \"no auto-approval\" are different behaviours, and the choice must be explicit rather than implied by whatever Math.min happens to be written. Fail closed: when in doubt, longer delay or require-human, never sooner.\n\nTest it with a value ABOVE 2**31-1 and assert the production behaviour, not the clamp. A test using only realistic delays passes against the unbounded code and is exactly why this defect survives review.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/approval-gate.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-gate.ts",
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "Added the production approval-delay boundary before any approval/activation. Because this daemon path has no timer, zero is IMMEDIATE, representable positive delays remain DEFERRED, and values above 2**31-1 explicitly become REQUIRE_HUMAN rather than reaching setTimeout and clamping to 1ms; both non-immediate dispositions fail closed as APPROVAL_HUMAN_REVIEW_REQUIRED @ APPROVAL_POLICY. TDD named oversized and ordinary deferred tests both went red on received ok:true before implementation. Fresh full planning-services file: 24/24 passed, exit 0.",
+      "startedAt": "2026-08-15T20:45:12.520Z",
+      "completedAt": "2026-08-15T20:50:46.639Z"
     },
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS (DoD 6). Capture `sha256sum` of each target BEFORE mutating; restore by Edit and verify by `sha256sum`. Never `git checkout` — it reverts to HEAD and would destroy this task's untracked new module.\n\nD1 — REMOVE THE CALL (DoD 6, mandatory). Delete the `decideApprovalAuthority` call from `decideApproval`. A NAMED daemon test must go red on its refusal assertion. Record the test name.\n\nD2 — MOVE IT AFTER THE COMMIT. Relocate the call to below `activateInitialGraph`. Case B must redden on the no-activation assertion. If only Case A reddens and B does not, the tests are asserting the returned refusal without checking that nothing activated — which is the difference between a real gate and a late apology.\n\nD3 — GATE PERSISTENCE. Make the gate writable/clearable by a status transition. The step-3 transition test must redden. This is the 2026-08-15 incident reproduced deliberately.\n\nD4 — FAIL-OPEN ON UNREADABLE GATE. Make an unreadable gate read as UNGATED instead of gated. A NAMED test must redden — epic rail 4 requires unverifiable evidence to confer nothing.\n\nD5 — THE DELAY BOUND. Remove the delayMs bound. The above-2**31-1 test must redden. If it stays green, the test is using a realistic delay and never exercises the clamp.\n\nD6 — RESTAMPED CODE. Translate the authority refusal into BOOTSTRAP_PAYLOAD_INVALID. Case C must redden on the CODE and on the LAYER independently — if one assertion carries both, the layer is not separately pinned and a second layer answering first would go unnoticed.\n\nRecord for each drill the test name and the assertion that fired.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/approval-gate.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-gate.ts",
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "Mutation drills, each restored by inverse edit and sha256sum -c OK. D1 removed decideApprovalAuthority (substituted zero-delay success): 'refuses every approval policy for gated work before activation' reddened at outcome.ok expected false/received true. D2 moved the authority check below activateInitialGraph: same named test reddened at decisionCount expected 8/received 9, proving no-activation ordering. D3 let a transition's null candidate overwrite the stored gate: 'keeps the human authority gate on work identity across lifecycle transitions' reddened at persisted gate expected HUMAN_GATE/received null; the test now drives release -> reclaim -> repropose through the real ledger handler. D4 made UNREADABLE return gate:null: 'fails an unreadable persisted gate closed at the authority layer' reddened at outcome.ok. D5 removed the delay boundary: oversized-delay test reddened at outcome.ok. D6a restamped only the code: sweep reddened expected APPROVAL_HUMAN_AUTHORITY_REQUIRED/received BOOTSTRAP_PAYLOAD_INVALID. D6b restamped only the layer: sweep independently reddened expected HUMAN_AUTHORITY_GATE/received DAEMON_INGRESS. Restored full planning-services test file: 24/24 passed, exit 0.",
+      "startedAt": "2026-08-15T20:50:51.147Z",
+      "completedAt": "2026-08-15T21:03:49.229Z"
     },
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for several legs:\n1. `pnpm --filter @moe/daemon typecheck; echo \"DAEMON_TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"DAEMON_TEST_EXIT=$?\"`\n3. `pnpm --filter @moe/core test; echo \"CORE_TEST_EXIT=$?\"` — the contract's own suite must stay green and UNMODIFIED; this task consumes it and does not change it.\nAll must print 0 with a NONZERO executed test count.\n\n`grep -c ''` planning-services.ts (was 183) and approval-gate.ts — both under 250.\n\nADVERSARIAL SELF-REVIEW — invoke the skill, then check what is specific here:\n1. Do the tests drive the REAL daemon handler, or did any of them decay into calling `decideApprovalAuthority` directly? The latter proves nothing this task was created to prove.\n2. Is the gate consulted before `activateInitialGraph`? D2 is the evidence; a gate after the single durable commit refuses while the graph is already active.\n3. Does an unreadable gate fail CLOSED?\n4. Is the authority refusal surfaced with its own code and layer, or restamped into a BOOTSTRAP_* code?\n5. Is the gate stored on the durable run record rather than beside a status field? D3 is the evidence.\n6. Was `checkHumanAuthority` or `refuseApprovalAuthority` reached around? They are unpublished on purpose.\n7. Did the contract itself change? Out of scope — this task composes it.\n8. Any probe or scratch file left behind? Epic rail 5 — the step-1 edge probe must be long gone.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the owned daemon paths. Never `git add -A` (epic rail 3).\n\nHANDOFF: record that this closes Clause 1 for task-5d8f11c86a3a41b4a8a420ef0d52a444 — the contract now has a real consumer edge with a durable call site, not merely an export. Note the two remaining consumers that are still unbuilt (the control-room approval surface, whose approval-gating.ts reason channel is PROVISIONAL pending this vocabulary, and the orchestrator settings binding) so they are not assumed done. Also record the command-name correction: the daemon's approval command is `approval.decide`, not `plan.approve`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T21:03:53.592Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-83b3c121",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -90,19 +134,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:13:42.384Z",
-  "updatedAt": "2026-08-15T20:19:37.822Z",
+  "updatedAt": "2026-08-15T21:28:15.622Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:14:31.645Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
-    "architect-7f301fa7"
+    "architect-7f301fa7",
+    "worker-83b3c121",
+    "worker-83e6139a"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T20:18:08.901Z",
   "planningNotes": {
@@ -120,5 +174,20 @@
   "budget": {
     "wallClockMs": 6300000
   },
-  "planApprovedAt": "2026-08-15T20:18:10.962Z"
+  "planApprovedAt": "2026-08-15T20:18:10.962Z",
+  "workStartedAt": "2026-08-15T20:20:17.519Z",
+  "blockedReason": "Implementation is committed at ee28441 and owned focused evidence is green (planning-services 26/26; core 31 files/781 tests). Final exact daemon gates are unverifiable because shared-tree foreign WIP fails them: untracked apps/daemon/src/telemetry/provider-run-codec.test.ts imports absent ./provider-run-codec.js (task-fc658104 is WORKING 2/7, unassigned, file pre-existed this task); current typecheck also reports foreign apps/daemon/src/work/foundation-attempt-service.test.ts(490,5) never-call. Exact daemon test reports the same missing provider module plus foreign goal/recovery/dossier/bridge failures and load-test timeouts. Governor acknowledged this blocker in chat msg-7f22d719b67f4c1da0bb7c4d9d97c67c and instructed preserving foreign files and not fabricating a clean gate. I will not delete, reset, stash, or claim exit 0. Resume by re-running the plan's three exact legs after those files land/clear, then complete step 7/task.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T21:19:29.276Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Implementation complete and committed at ee28441 by explicit pathspec. Steps 1-6 complete; step 7 is the only remaining step. Focused real daemon planning handler tests are green 26/26; core exact suite is green 31 files/781 tests. Mutation drills and adversarial fixes are recorded. Serena handoff memory task-task-5fcfdae58ec7419fbcba0000ef08d3b6-handoff exists.",
+      "whatRemains": "Re-run the exact plan legs after shared-tree daemon WIP is clean: @moe/daemon typecheck, @moe/daemon test, @moe/core test, each separately with nonzero test counts; complete step 7 and complete_task. Current hard red includes untracked provider-run-codec.test.ts importing absent provider-run-codec.js from task-fc658104.",
+      "pitfalls": "Do not reset/stash/delete foreign WIP. Do not amend or recommit ee28441. The daemon command is approval.decide, not plan.approve. Preserve stable authority code/layer and the gate-before-activation ordering. Governor msg-7f22d719b67f4c1da0bb7c4d9d97c67c acknowledged the foreign-red block.",
+      "releasedAt": "2026-08-15T21:28:15.620Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff while the final gate is blocked by unassigned prerequisite/shared-tree work; user requested continuation, so I am moving to the specific provider-codec blocker rather than modifying foreign files."
+    }
+  ]
 }

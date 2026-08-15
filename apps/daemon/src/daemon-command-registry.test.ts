@@ -77,7 +77,7 @@ const ROWS: readonly Row[] = [
   // approval gate, which is what actually makes this command human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
     kind: "recovery.complete", layer: INGRESS,
-    payloadKeys: ["approval", "command", "reconciliationDigest"] },
+    payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "qualification.replan", layer: INGRESS,
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
@@ -235,6 +235,40 @@ describe("authorization ordering under a real session", () => {
     expect(send("cmd-review-denied", "review.submit", {})).toMatchObject({
       outcome: "PORT_REFUSED", refusal: { code: "REVIEW_PAYLOAD_INVALID" }, stage: "DISPATCH",
     });
+  });
+
+  it.each([
+    { capabilities: [PLANNING, WORK], kind: "approval.decide" },
+    { capabilities: [GOAL, WORK], kind: "goal.close" },
+    { capabilities: [REVIEW, WORK], kind: "integration.accept_output" },
+  ] as const)("keeps $kind behind the operator principal even when a session has its capability", ({
+    capabilities,
+    kind,
+  }) => {
+    const suffix = kind.replaceAll(".", "-");
+    const credential = openSession(
+      `cmd-open-operator-only-${suffix}`,
+      `sess-operator-only-${suffix}`,
+      `secret-operator-only-${suffix}`,
+      capabilities,
+    );
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    const before = reader.readCommandDecisionsAfter(0n, 1_000).items.length;
+
+    const refused = send(`cmd-forbidden-${suffix}`, kind, {}, credential);
+
+    expect(refused).toMatchObject({
+      httpStatus: 403,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: {
+        code: "OPERATOR_PRINCIPAL_REQUIRED",
+        layer: "DAEMON_AUTHORIZATION",
+      },
+      stage: "DISPATCH",
+    });
+    expect(reader.readCommandDecisionsAfter(0n, 1_000).items).toHaveLength(before);
+    reader.close();
   });
 });
 

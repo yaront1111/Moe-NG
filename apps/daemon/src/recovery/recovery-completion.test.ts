@@ -1,18 +1,37 @@
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { RECOVERY_BINDING_CODEC_VERSION } from "@moe/store";
+import {
+  MAX_EVENTS_PER_COMMIT,
+  RECOVERY_BINDING_CODEC_VERSION,
+  verifyBackupGeneration,
+} from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import {
+  SESSION_PROOF_ALGORITHM,
+  SESSION_PROOF_PROTOCOL_VERSION,
+} from "../identity/session-authority-contracts.js";
+import {
+  canonicalSessionProofBytes,
+  sessionAuthorityRequestDigest,
+  sessionClientKeyId,
+  sessionReplayDigest,
+} from "../identity/session-authority-protocol.js";
+import { createSessionAuthority } from "../identity/session-authority.js";
+import {
+  createRecoveryCompletionAuthority,
+  recoveryCompletionApprovalDigest,
+} from "./recovery-completion-authority.js";
+import type { RecoveryCompletionAuthority } from "./recovery-completion-authority.js";
 import {
   RECOVERY_COMPLETION_CODES,
   RECOVERY_COMPLETION_DIGEST_DOMAIN,
   RECOVERY_COMPLETION_LAYER,
   RECOVERY_COMPLETION_SCHEMA_VERSION,
   RECOVERY_COVERAGE_PROOF_DIGEST_DOMAIN,
-  RECOVERY_STEP_UP_REF_PREFIX,
   recoveryCompletionPreimage,
   recoveryCompletionDigest,
   recoveryCoverageProofDigest,
@@ -94,6 +113,7 @@ const EVIDENCE: RecoveryCompletionEvidence = Object.freeze({
   incarnationRef: hex("c3"),
   items: ITEMS,
   keyEpochRef: hex("d4"),
+  policyRevisionRef: hex("e4"),
   projectId: "project-1",
   projectTag: "moe-project:project-1",
   proofs: PROOFS,
@@ -118,6 +138,7 @@ const EVIDENCE_KEYS: readonly string[] = Object.freeze([
   "incarnationRef",
   "items",
   "keyEpochRef",
+  "policyRevisionRef",
   "projectId",
   "projectTag",
   "proofs",
@@ -127,8 +148,8 @@ const EVIDENCE_KEYS: readonly string[] = Object.freeze([
   "restoreGenerationDigest",
 ]);
 
-/** 11 scalars + configuredClasses[0] + 4 proof fields + 6 item fields. */
-const EXPECTED_SWEEP_CASES = 22;
+/** 12 scalars + configuredClasses[0] + 4 proof fields + 6 item fields. */
+const EXPECTED_SWEEP_CASES = 23;
 
 const flip = (value: unknown): unknown => {
   if (value === null) return "quarantine-ref-1";
@@ -193,6 +214,7 @@ describe("recovery completion digest", () => {
       "RECOVERY_COMPLETION_DIGEST_MISMATCH",
       "RECOVERY_COMPLETION_EVIDENCE_ABSENT",
       "RECOVERY_COMPLETION_EVIDENCE_MISMATCH",
+      "RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT",
       "RECOVERY_COMPLETION_REQUEST_MALFORMED",
       "RECOVERY_COMPLETION_STALE",
       "RECOVERY_COMPLETION_STORE_UNAVAILABLE",
@@ -293,12 +315,111 @@ describe("recovery completion digest", () => {
 
 const PROJECT_TAG = "moe-project:project-1";
 const BACKUP_CURSOR = "000000000000000000042";
-/** 60s before the harness decision instant: inside the 300s step-up window. */
-const STEP_UP_REF = `${RECOVERY_STEP_UP_REF_PREFIX}2026-08-10T23:59:00.000Z:${hex("5e")}`;
 const DECISION_REASON = "R3 cutover approved after external inventory review";
+const NOW = Date.parse(DECIDED_AT);
+const PROFILE_REVISION_ID = "recovery-completion-profile-v1";
+const TRANSPORT_ID = "recovery.complete";
 
 const encoder = new TextEncoder();
 let label = 0;
+
+interface RecoverySession {
+  readonly clientKeyId: string;
+  readonly completionAuthority: RecoveryCompletionAuthority;
+  readonly credentialId: string;
+  readonly generation: number;
+  readonly keyEpochRef: string;
+  readonly privateKey: ReturnType<typeof generateKeyPairSync>["privateKey"];
+  readonly sessionId: string;
+  readonly recoveryIncarnationRef: string;
+}
+
+function seedRecoverySession(
+  store: SqliteEventStore,
+  recoveryIncarnationRef: string,
+  keyEpochRef: string,
+  kind: "HUMAN" | "AGENT",
+): RecoverySession {
+  const sessions = createSessionAuthority(store, { clock: () => NOW, projectId: PROJECT_ID });
+  const principal = sessions.createPrincipal({
+    commandId: `recovery-principal-${label}`,
+    correlationId: `recovery-principal-correlation-${label}`,
+    kind,
+    principalId: PRINCIPAL_ID,
+    profileRevisionId: PROFILE_REVISION_ID,
+  });
+  if (!principal.ok) throw new Error(`principal creation refused: ${principal.code}`);
+  const keys = generateKeyPairSync("ed25519");
+  const publicKeySpkiHex = keys.publicKey
+    .export({ format: "der", type: "spki" }).toString("hex");
+  const clientKeyId = sessionClientKeyId(publicKeySpkiHex);
+  if (clientKeyId === null) throw new Error("Node produced a non-canonical Ed25519 key");
+  const sessionId = `recovery-session-${label}`;
+  const credentialId = `recovery-credential-${label}`;
+  const commandId = `recovery-session-open-${label}`;
+  const requestDigest = sessionAuthorityRequestDigest({
+    clientKeyId,
+    credentialId,
+    generation: 1,
+    kind: "OPEN_SESSION",
+    principalId: PRINCIPAL_ID,
+    profileRevisionId: PROFILE_REVISION_ID,
+    projectId: PROJECT_ID,
+    publicKeySpkiHex,
+    sessionId,
+    transportId: TRANSPORT_ID,
+    transportIds: [TRANSPORT_ID],
+  });
+  const issuedAt = NOW;
+  const nonce = "31".repeat(16);
+  const challenge = canonicalSessionProofBytes({
+    clientKeyId,
+    credentialId,
+    generation: 1,
+    issuedAt,
+    keyEpochRef,
+    nonce,
+    principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    recoveryIncarnationRef,
+    requestDigest,
+    requestId: commandId,
+    sessionId,
+    transportId: TRANSPORT_ID,
+  });
+  const opened = sessions.openSession({
+    clientKeyId,
+    commandId,
+    correlationId: `recovery-session-open-correlation-${label}`,
+    credentialId,
+    principalId: PRINCIPAL_ID,
+    proof: {
+      algorithm: SESSION_PROOF_ALGORITHM,
+      issuedAt,
+      nonce,
+      protocolVersion: SESSION_PROOF_PROTOCOL_VERSION,
+      signatureHex: sign(null, challenge, keys.privateKey).toString("hex"),
+    },
+    publicKeySpkiHex,
+    requestDigest,
+    sessionId,
+    transportId: TRANSPORT_ID,
+    transportIds: [TRANSPORT_ID],
+  });
+  if (!opened.ok) throw new Error(`session opening refused: ${opened.code}`);
+  return Object.freeze({
+    clientKeyId,
+    completionAuthority: createRecoveryCompletionAuthority({
+      clock: () => NOW, projectId: PROJECT_ID, sessions,
+    }),
+    credentialId,
+    generation: 1,
+    keyEpochRef,
+    privateKey: keys.privateKey,
+    recoveryIncarnationRef,
+    sessionId,
+  });
+}
 
 afterAll(() => {
   cleanupRestoreHarnesses();
@@ -326,6 +447,7 @@ function facts(
   backupGenerationDigest: string,
   evidenceFor: SubjectEvidenceFor,
   backupCursor: string = BACKUP_CURSOR,
+  identitySuffix = "",
 ): RecoveryReconciliationExternalFacts {
   const classDigest = (proofClass: RecoveryProofClass): string =>
     hex(`c${RECOVERY_PROOF_CLASSES.indexOf(proofClass)}`);
@@ -335,7 +457,7 @@ function facts(
       return {
         class: proofClass as string,
         evidence: evidenceFor(population, classDigest(proofClass)),
-        identity: `external-${population}`,
+        identity: `external-${population}${identitySuffix}`,
         population: population as string,
         sourceProofDigest: classDigest(proofClass),
       };
@@ -357,56 +479,77 @@ function facts(
 }
 
 interface Scenario {
+  readonly authority: RecoveryCompletionAuthority;
+  readonly backupCursor: string;
   readonly backupGenerationDigest: string;
   readonly digest: string;
   readonly incarnationRef: string;
+  readonly policyRevisionRef: string;
   readonly recordDigest: string;
   readonly store: SqliteEventStore;
+  readonly session: RecoverySession;
   readonly version: number;
 }
 
 /** A real QUIESCED project with a real installed restore, anchor and record. */
-async function scenario(evidenceFor: SubjectEvidenceFor = negativeComplete): Promise<Scenario> {
+async function scenario(
+  evidenceFor: SubjectEvidenceFor = negativeComplete,
+  principalKind: "HUMAN" | "AGENT" = "HUMAN",
+): Promise<Scenario> {
   const harness = await restoreHarness(`complete-${label}`);
   const binding = await anchoredIncarnation(harness, `restore-cmd-${label}`);
   const quiesced = runRestoreQuiesce(harness.store, restoreRequest(harness, binding));
   if (!quiesced.ok) throw new Error(`restore quiesce refused: ${quiesced.code}`);
+  const verified = verifyBackupGeneration(harness.container, harness.trust, {
+    observedLogicalPaths: harness.logicalPaths,
+  });
+  if (!verified.ok) throw new Error(`backup verification refused: ${verified.reason}`);
+  const backupCursor = verified.manifest.cursor;
   const written = recordRecoveryReconciliation(
     harness.store,
     {
       correlationId: "corr-1", decidedAt: DECIDED_AT,
       principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
     },
-    facts(binding.backupGenerationDigest, evidenceFor),
+    facts(binding.backupGenerationDigest, evidenceFor, backupCursor),
   );
   if (!written.ok) throw new Error(`reconciliation record refused: ${written.upstream.code}`);
   // The digest comes back through the PRODUCTION reader; a test-side
   // recomputation would be a helper reimplementing the surface it certifies.
   const evidence = readRecoveryCompletionEvidence(harness.store, PROJECT_ID, written.recordDigest);
+  const session = seedRecoverySession(
+    harness.store, binding.incarnationRef, binding.keyEpochRef, principalKind,
+  );
   return {
+    authority: session.completionAuthority,
+    backupCursor,
     backupGenerationDigest: binding.backupGenerationDigest,
     digest: evidence.ok ? evidence.digest : "",
     incarnationRef: binding.incarnationRef,
+    policyRevisionRef: evidence.ok
+      ? evidence.evidence.policyRevisionRef
+      : "face".padEnd(64, "0"),
     recordDigest: written.recordDigest,
     store: harness.store,
+    session,
     version: harness.store.getAggregateVersion(PROJECT_ID),
   };
 }
 
 /**
- * A SECOND durable record in the same store, differing only in its backup
- * cursor. Both pass every cross-check, so the digest is the only thing that can
- * tell them apart -- which is exactly the DoD-5 case where the world moved
- * after the human approved.
+ * A SECOND durable record in the same store, differing only in an external
+ * inventory identity. Both pass every cross-check, so the digest is the only
+ * thing that can tell them apart -- the DoD-5 case where the world moved after
+ * the human approved without abusing the installed backup cursor.
  */
-function secondRecordDigest(scene: Scenario, cursor: string): string {
+function secondRecordDigest(scene: Scenario): string {
   const written = recordRecoveryReconciliation(
     scene.store,
     {
       correlationId: "corr-2", decidedAt: DECIDED_AT,
       principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
     },
-    facts(scene.backupGenerationDigest, negativeComplete, cursor),
+    facts(scene.backupGenerationDigest, negativeComplete, scene.backupCursor, "-moved"),
   );
   if (!written.ok) throw new Error(`second record refused: ${written.upstream.code}`);
   const evidence = readRecoveryCompletionEvidence(
@@ -426,12 +569,16 @@ interface ApprovalPair {
   readonly command: Record<string, unknown>;
 }
 
-function approvalPair(digest: string, overrides: ApprovalOverrides = {}): ApprovalPair {
+function approvalPair(
+  scene: Scenario,
+  stepUpAuthRef: string,
+  overrides: ApprovalOverrides = {},
+): ApprovalPair {
   return {
     approval: {
-      actor: "human:operator-1",
+      actor: PRINCIPAL_ID,
       actorKind: "HUMAN",
-      applicablePolicyRef: hex("aa"),
+      applicablePolicyRef: scene.policyRevisionRef,
       approvalRef: "approval-recovery-r3-1",
       approvedNodeScope: [],
       budgetRef: hex("bb"),
@@ -439,12 +586,12 @@ function approvalPair(digest: string, overrides: ApprovalOverrides = {}): Approv
       decision: null,
       decisionReason: null,
       dependencyChanges: { additions: [], challenges: [], removals: [] },
-      exactRevisionHash: digest,
+      exactRevisionHash: scene.digest,
       lifecycle: "PENDING",
       planQualityAssessmentRef: hex("dd"),
       policyDecisionRef: null,
       riskTier: "R3",
-      stepUpAuthRef: STEP_UP_REF,
+      stepUpAuthRef,
       truthClass: "HUMAN_APPROVED",
       validity: "CURRENT",
       ...overrides.record,
@@ -453,7 +600,7 @@ function approvalPair(digest: string, overrides: ApprovalOverrides = {}): Approv
       decision: "APPROVE",
       decisionReason: DECISION_REASON,
       kind: "approval.decide",
-      stepUpAuthRef: STEP_UP_REF,
+      stepUpAuthRef,
       ...overrides.command,
     },
   };
@@ -463,20 +610,96 @@ interface RequestOptions {
   readonly approvals?: ApprovalOverrides;
   readonly commandId?: string;
   readonly envelope?: Record<string, unknown>;
+  readonly issuedAt?: number;
   readonly payload?: Record<string, unknown>;
   readonly reconciliationDigest?: string;
+  readonly nonce?: string;
+}
+
+function authenticationFor(
+  scene: Scenario,
+  pair: ApprovalPair,
+  commandId: string,
+  nonce: string,
+  issuedAt: number,
+): Record<string, unknown> {
+  const stepUpAuthRef = sessionReplayDigest({
+    clientKeyId: scene.session.clientKeyId,
+    generation: scene.session.generation,
+    nonce,
+    sessionId: scene.session.sessionId,
+  });
+  const approvalRef = String(pair.approval["approvalRef"] ?? "");
+  const decisionReason = String(pair.command["decisionReason"] ?? "");
+  const policyRevisionRef = String(pair.approval["applicablePolicyRef"] ?? "");
+  const requestDigest = recoveryCompletionApprovalDigest({
+    approvalRef,
+    commandId,
+    decisionReason,
+    incarnationRef: scene.incarnationRef,
+    keyEpochRef: scene.session.keyEpochRef,
+    policyRevisionRef,
+    principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    recoveryDigest: scene.digest,
+    stepUpAuthRef,
+  });
+  const challenge = canonicalSessionProofBytes({
+    clientKeyId: scene.session.clientKeyId,
+    credentialId: scene.session.credentialId,
+    generation: scene.session.generation,
+    issuedAt,
+    keyEpochRef: scene.session.keyEpochRef,
+    nonce,
+    principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    recoveryIncarnationRef: scene.session.recoveryIncarnationRef,
+    requestDigest,
+    requestId: commandId,
+    sessionId: scene.session.sessionId,
+    transportId: TRANSPORT_ID,
+  });
+  return {
+    clientKeyId: scene.session.clientKeyId,
+    credentialId: scene.session.credentialId,
+    generation: scene.session.generation,
+    principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    proof: {
+      algorithm: SESSION_PROOF_ALGORITHM,
+      issuedAt,
+      nonce,
+      protocolVersion: SESSION_PROOF_PROTOCOL_VERSION,
+      signatureHex: sign(null, challenge, scene.session.privateKey).toString("hex"),
+    },
+    requestDigest,
+    requestId: commandId,
+    sessionId: scene.session.sessionId,
+    transportId: TRANSPORT_ID,
+  };
 }
 
 function requestBytes(scene: Scenario, options: RequestOptions = {}): Uint8Array {
-  const pair = approvalPair(scene.digest, options.approvals ?? {});
+  const commandId = options.commandId ?? "recovery-complete-1";
+  const nonce = options.nonce ?? "51".repeat(16);
+  const stepUpAuthRef = sessionReplayDigest({
+    clientKeyId: scene.session.clientKeyId,
+    generation: scene.session.generation,
+    nonce,
+    sessionId: scene.session.sessionId,
+  });
+  const pair = approvalPair(scene, stepUpAuthRef, options.approvals ?? {});
   return encoder.encode(JSON.stringify({
-    commandId: options.commandId ?? "recovery-complete-1",
+    commandId,
     correlationId: "corr-complete-1",
     decidedAt: DECIDED_AT,
     expectedVersion: scene.version,
     kind: "recovery.complete",
     payload: {
       approval: pair.approval,
+      authentication: authenticationFor(
+        scene, pair, commandId, nonce, options.issuedAt ?? NOW,
+      ),
       command: pair.command,
       reconciliationDigest: options.reconciliationDigest ?? scene.recordDigest,
       ...options.payload,
@@ -486,6 +709,36 @@ function requestBytes(scene: Scenario, options: RequestOptions = {}): Uint8Array
     schemaVersion: RECOVERY_COMPLETION_SCHEMA_VERSION,
     ...options.envelope,
   }));
+}
+
+const runCompletion = (scene: Scenario, input: unknown) =>
+  runRecoveryCompleteCommand(scene.store, input, scene.authority);
+
+function rewriteRequest(
+  bytes: Uint8Array,
+  mutate: (envelope: Record<string, unknown>) => void,
+): Uint8Array {
+  const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("request fixture did not encode an object");
+  }
+  mutate(parsed as Record<string, unknown>);
+  return encoder.encode(JSON.stringify(parsed));
+}
+
+function payloadOf(envelope: Record<string, unknown>): Record<string, unknown> {
+  const payload = envelope["payload"];
+  if (payload === null || typeof payload !== "object" || Array.isArray(payload)) {
+    throw new Error("request fixture has no payload object");
+  }
+  return payload as Record<string, unknown>;
+}
+
+function recordOf(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("request fixture section is not an object");
+  }
+  return value as Record<string, unknown>;
 }
 
 const projectEvents = (store: SqliteEventStore): readonly string[] =>
@@ -502,6 +755,44 @@ const projectState = (store: SqliteEventStore): Record<string, unknown> => {
 const recoveredCount = (store: SqliteEventStore): number =>
   projectEvents(store).filter((kind) => kind === "ProjectRecovered").length;
 
+function appendReplayPadding(scene: Scenario): number {
+  const batchCount = 4;
+  let expectedVersion = scene.version;
+  let generated = 0;
+  for (let batch = 0; batch < batchCount; batch += 1) {
+    const events = Array.from({ length: MAX_EVENTS_PER_COMMIT }, (_, offset) => ({
+      domainSchemaVersion: RECOVERY_COMPLETION_SCHEMA_VERSION,
+      eventId: `recovery-replay-padding:${label}:${batch}:${offset}`,
+      eventType: "RecoveryReplayPadding",
+      payload: encoder.encode(JSON.stringify({ batch, offset })),
+    }));
+    generated += events.length;
+    const nextVersion = expectedVersion + events.length;
+    const response = scene.store.commitExpectedVersionDecision({
+      commandKind: "recovery.replay_padding",
+      committedResultBytes: encoder.encode(JSON.stringify({
+        ...projectState(scene.store), version: nextVersion,
+      })),
+      correlationId: `corr-replay-padding-${batch}`,
+      decidedAt: DECIDED_AT,
+      events,
+      expectedVersion,
+      key: {
+        commandId: `recovery-replay-padding-${label}-${batch}`,
+        principalId: PRINCIPAL_ID,
+        projectId: PROJECT_ID,
+      },
+      requestBytes: encoder.encode(JSON.stringify({ batch, expectedVersion })),
+      targetAggregateId: PROJECT_ID,
+    });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+      throw new Error(`replay padding refused: ${response.decision.resultCode}`);
+    }
+    expectedVersion = nextVersion;
+  }
+  return generated;
+}
+
 /** No refusal may leave a decision, an event, or a cleared quiesce behind. */
 function expectNothingWritten(scene: Scenario, commandId = "recovery-complete-1"): void {
   expect(scene.store.getCommandDecision({
@@ -516,7 +807,7 @@ describe("recovery.complete durable command", () => {
   it("commits one decision, one event, and clears QUIESCED for the exact evidence", async () => {
     const scene = await scenario();
     expect(scene.digest).toMatch(/^[0-9a-f]{64}$/u);
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const outcome = runCompletion(scene, requestBytes(scene));
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     if (!outcome.ok) throw new Error("unreachable");
@@ -535,11 +826,86 @@ describe("recovery.complete durable command", () => {
     expect(projectState(scene.store)["version"]).toBe(scene.version + 1);
   });
 
+  it("refuses a real signed AGENT at the human authority gate", async () => {
+    const scene = await scenario(negativeComplete, "AGENT");
+
+    const outcome = runCompletion(scene, requestBytes(scene));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("unreachable");
+    expect(outcome.code).toBe("APPROVAL_PRINCIPAL_NOT_HUMAN");
+    expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
+    expectNothingWritten(scene);
+    expect(scene.store.readEventsAfter(0n, 1_000).items.filter(
+      (event) => event.eventType === "SessionAuthorityReplayObserved",
+    )).toHaveLength(1);
+  });
+
+  it("pins proof freshness and every server-owned approval binding", async () => {
+    const cases: readonly (readonly [
+      string,
+      (scene: Scenario) => Uint8Array,
+      string,
+      string,
+    ])[] = [
+      ["stale proof", (scene) => requestBytes(scene, {
+        issuedAt: NOW - 60_001, nonce: "61".repeat(16),
+      }), "AUTHENTICATION_FAILED", "PROOF"],
+      ["future proof", (scene) => requestBytes(scene, {
+        issuedAt: NOW + 30_001, nonce: "62".repeat(16),
+      }), "AUTHENTICATION_FAILED", "PROOF"],
+      ["decision reason", (scene) => rewriteRequest(requestBytes(scene), (envelope) => {
+        recordOf(payloadOf(envelope)["command"])["decisionReason"] = "mutated after signing";
+      }), "AUTHENTICATION_FAILED", "BINDING"],
+      ["presentation project", (scene) => rewriteRequest(requestBytes(scene), (envelope) => {
+        recordOf(payloadOf(envelope)["authentication"])["projectId"] = "another-project";
+      }), "AUTHENTICATION_FAILED", "BINDING"],
+      ["current policy", (scene) => rewriteRequest(requestBytes(scene), (envelope) => {
+        recordOf(payloadOf(envelope)["approval"])["applicablePolicyRef"] = hex("bad1");
+      }), "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
+      ["derived step-up", (scene) => rewriteRequest(requestBytes(scene), (envelope) => {
+        const payload = payloadOf(envelope);
+        recordOf(payload["approval"])["stepUpAuthRef"] = hex("bad2");
+        recordOf(payload["command"])["stepUpAuthRef"] = hex("bad2");
+      }), "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
+    ];
+    expect(cases).toHaveLength(6);
+    for (const [name, request, code, layer] of cases) {
+      const scene = await scenario();
+      const outcome = runCompletion(scene, request(scene));
+      expect(outcome.ok, name).toBe(false);
+      if (outcome.ok) throw new Error("unreachable");
+      expect(outcome.code, name).toBe(code);
+      expect(outcome.refusedBy, name).toBe(layer);
+      expectNothingWritten(scene);
+    }
+  });
+
+  it("burns the signed proof before refusing a mutated step-up assertion", async () => {
+    const scene = await scenario();
+    const bad = requestBytes(scene, { approvals: {
+      command: { stepUpAuthRef: hex("bad3") },
+      record: { stepUpAuthRef: hex("bad3") },
+    } });
+    const first = runCompletion(scene, bad);
+    expect(first.ok).toBe(false);
+    if (first.ok) throw new Error("unreachable");
+    expect(first.code).toBe("RECOVERY_COMPLETION_APPROVAL_INVALID");
+    expect(first.refusedBy).toBe("RECOVERY_COMPLETION");
+
+    const reused = runCompletion(scene, requestBytes(scene));
+    expect(reused.ok).toBe(false);
+    if (reused.ok) throw new Error("unreachable");
+    expect(reused.code).toBe("SESSION_REPLAYED");
+    expect(reused.refusedBy).toBe("REPLAY");
+    expectNothingWritten(scene);
+  });
+
   it("answers a replayed commandId from the store without a second transition", async () => {
     const scene = await scenario();
-    const first = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const first = runCompletion(scene, requestBytes(scene));
     expect(first.ok, first.ok ? "" : first.code).toBe(true);
-    const second = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const second = runCompletion(scene, requestBytes(scene));
 
     expect(second.ok).toBe(true);
     if (!second.ok || !first.ok) throw new Error("unreachable");
@@ -547,6 +913,63 @@ describe("recovery.complete durable command", () => {
     expect(second.decision.decisionId).toBe(first.decision.decisionId);
     expect(recoveredCount(scene.store)).toBe(1);
     expect(projectState(scene.store)["version"]).toBe(scene.version + 1);
+  });
+
+  it("refuses every changed request behind a committed command identity", async () => {
+    const scene = await scenario();
+    const first = runCompletion(scene, requestBytes(scene));
+    expect(first.ok, first.ok ? "" : first.code).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+    const replacementStepUp = hex("6e");
+    const cases: readonly (readonly [string, RequestOptions])[] = [
+      ["applicable policy", { approvals: { record: { applicablePolicyRef: hex("ab") } } }],
+      ["decision reason", { approvals: { command: { decisionReason: "a different reason" } } }],
+      ["step-up binding", { approvals: {
+        command: { stepUpAuthRef: replacementStepUp },
+        record: { stepUpAuthRef: replacementStepUp },
+      } }],
+      ["expected version", { envelope: { expectedVersion: scene.version + 1 } }],
+    ];
+    expect(cases).toHaveLength(4);
+    for (const [name, options] of cases) {
+      const replay = runCompletion(scene, requestBytes(scene, options));
+      expect(replay.ok, name).toBe(false);
+      if (replay.ok) throw new Error("unreachable");
+      expect(replay.code, name).toBe("RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT");
+      expect(replay.refusedBy, name).toBe("RECOVERY_COMPLETION");
+      expect(replay.upstream, name).toEqual({
+        code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE",
+      });
+    }
+    expect(scene.store.getCommandDecision({
+      commandId: "recovery-complete-1", principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    })?.decisionId).toBe(first.decision.decisionId);
+    expect(recoveredCount(scene.store)).toBe(1);
+    expect(projectState(scene.store)["version"]).toBe(scene.version + 1);
+  });
+
+  it("replays the exact stored completion after more than one event page", async () => {
+    const scene = await scenario();
+    const generated = appendReplayPadding(scene);
+    expect(generated).toBe(1_024);
+    const padded = { ...scene, version: scene.store.getAggregateVersion(PROJECT_ID) };
+    const bytes = requestBytes(padded);
+    const first = runCompletion(scene, bytes);
+    expect(first.ok, first.ok ? "" : first.code).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+    expect(first.decision.previousVersion).toBeGreaterThan(1_000);
+
+    const replay = runCompletion(scene, bytes);
+    expect(replay.ok, replay.ok ? "" : replay.code).toBe(true);
+    if (!replay.ok) throw new Error("unreachable");
+    expect(replay.disposition).toBe("REPLAYED");
+    expect(replay.decision.decisionId).toBe(first.decision.decisionId);
+    const previousVersion = first.decision.previousVersion;
+    if (previousVersion === null) throw new Error("committed recovery has no previous version");
+    const page = scene.store.readAggregateEvents(PROJECT_ID, previousVersion, 1);
+    expect(page.items).toHaveLength(1);
+    expect(page.items[0]?.eventType).toBe("ProjectRecovered");
+    expect(scene.store.getAggregateVersion(PROJECT_ID)).toBe(first.decision.currentVersion);
   });
 
   it("refuses a malformed envelope at DAEMON_INGRESS before any evidence is read", async () => {
@@ -565,7 +988,7 @@ describe("recovery.complete durable command", () => {
     ];
     expect(cases).toHaveLength(5);
     for (const [name, bytes] of cases) {
-      const outcome = runRecoveryCompleteCommand(scene.store, bytes);
+      const outcome = runCompletion(scene, bytes);
       expect(outcome.ok, name).toBe(false);
       if (outcome.ok) throw new Error("unreachable");
       expect(outcome.code, name).toBe("RECOVERY_COMPLETION_REQUEST_MALFORMED");
@@ -578,8 +1001,8 @@ describe("recovery.complete durable command", () => {
   it("surfaces the ledger's own RECORD_NOT_FOUND for an unknown reconciliation digest",
     async () => {
       const scene = await scenario();
-      const outcome = runRecoveryCompleteCommand(
-        scene.store, requestBytes(scene, { reconciliationDigest: hex("dead") }),
+      const outcome = runCompletion(
+        scene, requestBytes(scene, { reconciliationDigest: hex("dead") }),
       );
       expect(outcome.ok).toBe(false);
       if (outcome.ok) throw new Error("unreachable");
@@ -593,7 +1016,7 @@ describe("recovery.complete durable command", () => {
 
   it("refuses an UNKNOWN-truth record with the inventory's own coordinator answer", async () => {
     const scene = await scenario(unresolved);
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const outcome = runCompletion(scene, requestBytes(scene));
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("unreachable");
     expect(outcome.code).toBe("UNKNOWN_TRUTH");
@@ -608,7 +1031,7 @@ describe("recovery.complete durable command", () => {
     // service is the only thing standing between a quarantined external object
     // and a cleared quiesce.
     const scene = await scenario(orphaned);
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const outcome = runCompletion(scene, requestBytes(scene));
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("unreachable");
     expect(outcome.code).toBe("RECOVERY_RECONCILIATION_REQUIRED");
@@ -618,7 +1041,7 @@ describe("recovery.complete durable command", () => {
 
   it("refuses a digest the approval did not bind, at RECOVERY_COMPLETION", async () => {
     const scene = await scenario();
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene, {
+    const outcome = runCompletion(scene, requestBytes(scene, {
       approvals: { record: { exactRevisionHash: hex("beef") } },
     }));
     expect(outcome.ok).toBe(false);
@@ -631,11 +1054,11 @@ describe("recovery.complete durable command", () => {
   it("refuses when the world moved after the approval, leaving the project quiesced", async () => {
     const scene = await scenario();
     // Both records are real, durable, and pass every cross-check; they differ
-    // only in the backup cursor the digest frames. The human approved one of
-    // them, and the request points at the other.
-    const approved = secondRecordDigest(scene, "000000000000000000043");
+    // only in one external inventory identity. The human approved one of them,
+    // and the request points at the other.
+    const approved = secondRecordDigest(scene);
     expect(approved).not.toBe(scene.digest);
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene, {
+    const outcome = runCompletion(scene, requestBytes(scene, {
       approvals: { record: { exactRevisionHash: approved } },
     }));
     expect(outcome.ok).toBe(false);
@@ -645,9 +1068,35 @@ describe("recovery.complete durable command", () => {
     expectNothingWritten(scene);
   });
 
+  it("refuses a reconciliation cursor that is not the signed installed restore cursor",
+    async () => {
+      const scene = await scenario();
+      const movedCursor = String(BigInt(scene.backupCursor) + 1n);
+      const written = recordRecoveryReconciliation(
+        scene.store,
+        {
+          correlationId: "corr-cursor-mismatch", decidedAt: DECIDED_AT,
+          principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+        },
+        facts(scene.backupGenerationDigest, negativeComplete, movedCursor),
+      );
+      expect(written.ok).toBe(true);
+      if (!written.ok) throw new Error("unreachable");
+
+      const evidence = readRecoveryCompletionEvidence(
+        scene.store, PROJECT_ID, written.recordDigest,
+      );
+      expect(evidence.ok).toBe(false);
+      if (evidence.ok) throw new Error("unreachable");
+      expect(evidence.code).toBe("RECOVERY_COMPLETION_EVIDENCE_MISMATCH");
+      expect(evidence.refusedBy).toBe("RECOVERY_COMPLETION");
+      expect(evidence.upstream).toBeNull();
+      expectNothingWritten(scene);
+    });
+
   it("lets core answer first for a SYSTEM_POLICY record that claims R3", async () => {
     const scene = await scenario();
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene, {
+    const outcome = runCompletion(scene, requestBytes(scene, {
       approvals: {
         command: { stepUpAuthRef: null },
         record: {
@@ -667,7 +1116,7 @@ describe("recovery.complete durable command", () => {
 
   it("refuses a SYSTEM_POLICY approval core accepts, because R3 is human-only", async () => {
     const scene = await scenario();
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene, {
+    const outcome = runCompletion(scene, requestBytes(scene, {
       approvals: {
         command: { stepUpAuthRef: null },
         record: {
@@ -684,8 +1133,6 @@ describe("recovery.complete durable command", () => {
   });
 
   it("refuses every approval binding weaker than a current, reasoned, stepped-up R3", async () => {
-    const stale = `${RECOVERY_STEP_UP_REF_PREFIX}2026-08-10T23:50:00.000Z:${hex("5e")}`;
-    const future = `${RECOVERY_STEP_UP_REF_PREFIX}2026-08-11T00:01:00.000Z:${hex("5e")}`;
     const cases: readonly (readonly [string, ApprovalOverrides, string, string])[] = [
       ["R2 tier", { record: { riskTier: "R2" } },
         "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
@@ -693,12 +1140,6 @@ describe("recovery.complete durable command", () => {
         "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
       ["an opaque step-up ref",
         { command: { stepUpAuthRef: "stepup-1" }, record: { stepUpAuthRef: "stepup-1" } },
-        "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
-      ["a step-up outside the 300s window",
-        { command: { stepUpAuthRef: stale }, record: { stepUpAuthRef: stale } },
-        "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
-      ["a step-up dated after the decision",
-        { command: { stepUpAuthRef: future }, record: { stepUpAuthRef: future } },
         "RECOVERY_COMPLETION_APPROVAL_INVALID", "RECOVERY_COMPLETION"],
       ["an absent decision reason", { command: { decisionReason: null } },
         "ILLEGAL_TRANSITION", "CORE_APPROVAL"],
@@ -710,11 +1151,11 @@ describe("recovery.complete durable command", () => {
       ["an INVALIDATED approval", { record: { validity: "INVALIDATED" } },
         "ILLEGAL_TRANSITION", "CORE_APPROVAL"],
     ];
-    expect(cases).toHaveLength(9);
+    expect(cases).toHaveLength(7);
     for (const [name, overrides, code, layer] of cases) {
       const scene = await scenario();
-      const outcome = runRecoveryCompleteCommand(
-        scene.store, requestBytes(scene, { approvals: overrides }),
+      const outcome = runCompletion(
+        scene, requestBytes(scene, { approvals: overrides }),
       );
       expect(outcome.ok, name).toBe(false);
       if (outcome.ok) throw new Error("unreachable");
@@ -726,7 +1167,7 @@ describe("recovery.complete durable command", () => {
 
   it("refuses a stale expectedVersion at this layer before core sees a command", async () => {
     const scene = await scenario();
-    const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene, {
+    const outcome = runCompletion(scene, requestBytes(scene, {
       envelope: { expectedVersion: scene.version - 1 },
     }));
     expect(outcome.ok).toBe(false);
@@ -738,11 +1179,11 @@ describe("recovery.complete durable command", () => {
 
   it("refuses a second completion on an already-recovered project", async () => {
     const scene = await scenario();
-    const first = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+    const first = runCompletion(scene, requestBytes(scene));
     expect(first.ok, first.ok ? "" : first.code).toBe(true);
     const after: Scenario = { ...scene, version: scene.store.getAggregateVersion(PROJECT_ID) };
-    const outcome = runRecoveryCompleteCommand(
-      scene.store, requestBytes(after, { commandId: "recovery-complete-2" }),
+    const outcome = runCompletion(
+      scene, requestBytes(after, { commandId: "recovery-complete-2" }),
     );
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("unreachable");
@@ -779,16 +1220,23 @@ describe("recovery.complete durable command", () => {
       );
       expect(written.ok).toBe(true);
       if (!written.ok) throw new Error("unreachable");
+      const session = seedRecoverySession(
+        harness.store, binding.incarnationRef, binding.keyEpochRef, "HUMAN",
+      );
 
       const scene: Scenario = {
+        authority: session.completionAuthority,
+        backupCursor: BACKUP_CURSOR,
         backupGenerationDigest: binding.backupGenerationDigest,
         digest: "",
         incarnationRef: binding.incarnationRef,
+        policyRevisionRef: hex("face"),
         recordDigest: written.recordDigest,
         store: harness.store,
+        session,
         version: harness.store.getAggregateVersion(PROJECT_ID),
       };
-      const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+      const outcome = runCompletion(scene, requestBytes(scene));
       expect(outcome.ok).toBe(false);
       if (outcome.ok) throw new Error("unreachable");
       expect(outcome.code).toBe("RECOVERY_COMPLETION_EVIDENCE_ABSENT");
@@ -805,7 +1253,7 @@ describe("recovery.complete durable command", () => {
   it("refuses a reconciliation record minted against another project's restore", async () => {
     const first = await scenario();
     const second = await scenario();
-    const outcome = runRecoveryCompleteCommand(first.store, requestBytes(first, {
+    const outcome = runCompletion(first, requestBytes(first, {
       reconciliationDigest: second.recordDigest,
     }));
     expect(outcome.ok).toBe(false);

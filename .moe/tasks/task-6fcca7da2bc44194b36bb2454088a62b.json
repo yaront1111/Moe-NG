@@ -11,9 +11,94 @@
     "A mutation drill weakening the code-to-layer mapping turns a named test red on its code-and-layer assertion, restored byte-exact and verified by hash."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-81081add",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the missing workspace consumer edge before code changes. Record the pre-edit repo-gate baseline required for path-attributed comparison, then add `@moe/core: workspace:*` to `apps/control-room` with a scoped pnpm workspace install so both the manifest and `pnpm-lock.yaml` importer change and no unrelated importer is rewritten. Prove all three edge legs: (a) the manifest dependency is exact, (b) the `apps/control-room` lock importer resolves it as `link:../../packages/core`, and (c) create a trap-cleaned probe under `apps/control-room/src` that imports the named values and types from the bare specifier `@moe/core`, run `pnpm --filter @moe/control-room typecheck` with exit 0, then delete the probe in the same command and assert it no longer exists. Do not use a temp-dir referrer, deep relative import, tsconfig paths, or leave probe bytes behind.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Pre-edit exact gate recorded at HEAD ddb4753e: control-room typecheck passed, then control-room Vitest executed but baseline exited 1 with `Test Files 18 passed (18)`, `Tests 240 passed (240)`, and 52 worker-start timeout errors under concurrent I/O (including approval-gating.test.tsx); remaining chained legs did not run. Added @moe/core workspace:* with scoped pnpm add. Reverted pnpm's unrelated peer-resolution normalization so the lock diff is exactly the apps/control-room importer edge to link:../../packages/core. Bare-specifier probe under apps/control-room/src imported all named registries, decideApprovalAuthority, and policy/gate/grant types; `pnpm --filter @moe/control-room typecheck` exited 0; trap deleted probe and absence was asserted.",
+      "startedAt": "2026-08-15T20:41:25.183Z",
+      "completedAt": "2026-08-15T20:56:34.887Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Write the red tests first in `approval-gating.test.tsx`. Replace assertions for the provisional runtime-code/source channel with a literal eight-entry code@layer expectation exercised through the production `approvalReason` surface; assert the generated count equals `APPROVAL_AUTHORITY_CODES.length`, equals 8, and is nonzero. Add DOM assertions that a gate refusal visibly renders `APPROVAL_HUMAN_AUTHORITY_REQUIRED` plus `HUMAN_AUTHORITY_GATE`, and a policy refusal visibly renders `APPROVAL_HUMAN_REVIEW_REQUIRED` plus `APPROVAL_POLICY` (not only disabled state/data attributes). Render both policy kinds, an unsatisfied gate, and a granted gate whose named HUMAN principal, gate/work binding, and grant moment are shown. Build a uniquely-qualified request for every `APPROVAL_DECISION_KINDS` member against one unsatisfied gate, assert the generated request/result cardinality is exact and nonzero, and assert every production resolver result is DISABLED or ABSENT with null commandId—never enabled. Preserve existing structural-guard coverage while updating it to assert the new stable code, canonical layer, and the separate local guard that answered.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "note": "TDD RED: focused production-surface run `pnpm --filter @moe/control-room exec vitest run src/approvals/approval-gating.test.tsx --maxWorkers=1` executed 1 file/20 tests and exited 1 with 14 expected failures. Failures specifically showed the first landed code rejected by the provisional runtime registry, old EXPECTED_VERSION_CONFLICT copy lacking layer, supplied authority ignored/enabled, no authority presentation in DOM, and local guards still emitting old runtime codes. Added literal 8-entry code@layer assertion with count==registry==8>0, visible gate/policy refusal assertions, both policy/grant render cases, exact nonzero all-decision control sweep, and structural guard code+layer+local-guard assertions. Test file remains 291 lines.",
+      "startedAt": "2026-08-15T20:56:43.014Z",
+      "completedAt": "2026-08-15T21:01:26.705Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Replace the provisional channel in `approval-gating.ts` with the landed @moe/core vocabulary. Import the runtime registries and `decideApprovalAuthority` from the bare package root plus the public policy/gate/grant/refusal types; remove `lookupRuntimeError`, RuntimeErrorCode/source validation, the PROVISIONAL comment, and the local runtime-code set. Define one frozen exhaustive `Record<ApprovalAuthorityCode, ApprovalAuthorityLayer>` with the six gate codes mapped to HUMAN_AUTHORITY_GATE and the two policy codes mapped to APPROVAL_POLICY; construct every `ApprovalReason` from that mapping so invented codes or wrong code/layer pairs are not representable. Carry `code`, `refusingLayer`, phrase, and the existing local `refusedBy` diagnostic separately on controls, and make unavailable copy include code and layer literally. Accept a supplied `{policy, gate}` authority context on approval requests, evaluate it once with `decideApprovalAuthority` before lifecycle/validity/hash checks, attach its policy/gate/result plus the record's existing truth class for presentation, and null commandId on refusal. Translate the existing stale lifecycle/validity/revision-binding client refusals to `APPROVAL_AUTHORITY_BINDING_MISMATCH@HUMAN_AUTHORITY_GATE` while retaining their precise phrases and local guard IDs. When no authority context is supplied, invent nothing and retain the pre-existing nextAllowedCommands-only behavior pending the separately scoped daemon wiring task. Keep the production file at or below 250 physical lines by deleting obsolete registry commentary and compacting helpers, not by weakening checks.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-gating.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "note": "Replaced the provisional contracts runtime-error channel with a frozen exhaustive 8-code canonical layer map and bare @moe/core decision/types. Resolver snapshots/evaluates one supplied authority context once before local guards, rejects malformed supplied context with APPROVAL_AUTHORITY_BINDING_MISMATCH@HUMAN_AUTHORITY_GATE, never invents context when absent, nulls command IDs on refusals, and attaches frozen policy/gate/validated grant/result/truth presentation. All structural refusals retain precise phrases/local guard IDs while emitting the stable binding code/layer. Production file is 241 lines; PROVISIONAL/lookupRuntimeError/RuntimeErrorCode/grantHumanAuthority are absent. `pnpm --filter @moe/control-room typecheck` exited 0. Two focused Vitest retries were attempted, but the loaded shared host failed to start the sole worker within 60s (`Test Files no tests`, infrastructure timeout); no test pass was claimed, and the concentrated green run remains required in step 5.",
+      "startedAt": "2026-08-15T21:01:30.493Z",
+      "completedAt": "2026-08-15T21:09:06.221Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Update the canonical `DecisionControl` rendering in `approval-inbox.tsx`. For every disabled/refused control, expose the stable code and canonical layer as distinct data attributes and visible operator text while retaining the local guard identifier for diagnostics. When the resolver supplies authority presentation, render the policy kind (and explicit delay for PROCEED_WITHOUT_HUMAN), gate id/work reference/satisfied state, and grant principal kind/id/moment through existing truth-preserving `FactRow` primitives using the record's supplied truth class; render no claims when the context was not supplied. A null grant is stated as unsatisfied, not treated as permission. Add no click handler, button, callback, or command that grants/overrides a gate; `onActivate` remains unreachable for refused controls. Keep ABSENT controls absent and preserve exact cr.fact/cr.chip prefix cardinality and unique IDs. Refactor/condense existing prose or helpers as needed so this production file remains at or below 250 physical lines.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/approvals/approval-inbox.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/approvals/approval-inbox.tsx"
+      ],
+      "note": "DecisionControl now exposes data-reason-code, data-refusing-layer, and data-refused-by separately; visible disabled copy contains code@layer. Supplied authority context renders policy/delay, gate id/work/satisfied state, and only a validated grant's HUMAN principal/id/moment through FactList→FactRow with the record truth class. Fact IDs include each unique control test ID. Missing context yields zero authority facts; null/invalid grants display UNSATISFIED and no principal claim. Inline inbox choices pass optional supplied authority; no grant/force/override affordance or import exists and refused controls have no activation handler. approval-inbox.tsx is 231 lines. Control-room typecheck exited 0. Focused Vitest was retried with a single threads worker, but the shared host again timed out starting that worker at 60s (`Test Files no tests`); this is recorded as unverified, not a pass, and step 5 still requires a real nonzero test count.",
+      "startedAt": "2026-08-15T21:09:10.370Z",
+      "completedAt": "2026-08-15T21:13:23.904Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform the required mutation-resistance drill and the single concentrated verification gate. Hash `approval-gating.ts`, copy it to an OS temp file with cleanup guaranteed, mutate only the canonical layer for `APPROVAL_HUMAN_REVIEW_REQUIRED` from APPROVAL_POLICY to HUMAN_AUTHORITY_GATE, and run the named eight-entry code@layer test expecting a nonzero exit specifically on its literal layer assertion. Restore the saved bytes, require the SHA-256 to match byte-for-byte, rerun that named test green, and leave no probe/backup file in the repository. Then run this exact fresh completion command: `pnpm --filter @moe/control-room typecheck && pnpm --filter @moe/control-room test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store && pnpm --filter @moe/daemon test`. Read output, not only exit status: the control-room, root, and daemon Vitest legs must each print a nonzero `Test Files`/test count and none may say `No projects matched`, `No test files found`, or `0 passed`. Compare repo-wide failing paths with the recorded pre-edit baseline; owned-package legs must be exit 0, and any foreign red must be reported verbatim with the path-attributed delta proving no new failure intersects these five owned paths.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/control-room/package.json",
+        "pnpm-lock.yaml",
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ],
+      "startedAt": "2026-08-15T21:13:34.433Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run one final adversarial self-review over only the five owned-path diffs. Check hostile/missing authority input cannot manufacture policy, gate, grant, code, layer, or command authority; supplied gate refusal always precedes policy/local guards and nulls commandId; every landed code maps to exactly one canonical layer; a malformed/empty gate or forged non-human grant stays refused; repeated/multiple controls do not duplicate IDs or create an enabled path; absent controls remain absent; visible refusal text contains both literals; and production never imports/calls `grantHumanAuthority` or adds a force/grant affordance. Confirm both edited production files are <=250 physical lines, the bare import and lock edge remain intact, no scratch/probe files remain, and only explicit owned paths will be staged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/package.json",
+        "pnpm-lock.yaml",
+        "apps/control-room/src/approvals/approval-gating.ts",
+        "apps/control-room/src/approvals/approval-inbox.tsx",
+        "apps/control-room/src/approvals/approval-gating.test.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-827a27f6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -25,11 +110,41 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:06.218Z",
-  "updatedAt": "2026-08-15T20:17:48.446Z",
+  "updatedAt": "2026-08-15T21:13:34.433Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T20:17:48.211Z"
+    "firstClaimAt": "2026-08-15T20:17:48.211Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
-    "architect-81081add"
-  ]
+    "architect-81081add",
+    "architect-d9dccf21",
+    "worker-827a27f6"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T20:39:59.113Z",
+  "planningNotes": {
+    "approachesConsidered": "Rejected retaining the @moe/contracts RuntimeErrorCode/source channel: it leaves the named PROVISIONAL dependency in place and cannot render the two landed refusal layers. Rejected minting grants or adding a force-approve UI: the control room has zero authority and grantHumanAuthority must remain a named-human boundary outside the surface. Rejected making every existing caller invent an authority context: daemon transport composition is explicitly task-5fcfdae58ec7419fbcba0000ef08d3b6; this slice adds a truthful optional supplied authority context, renders/evaluates it when present, and otherwise continues to derive controls only from daemon-supplied nextAllowedCommands without inventing policy/gate facts.",
+    "codebaseInsights": "Fresh measurements: `sha256sum /mnt/d/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md` returned the pinned 1d9d1ec97d3f07247fbbc088045e0ba2fd6da8307f10a9026c55106419383191. `rg -n PROVISIONAL apps/control-room/src/approvals/approval-gating.ts` finds the D2 marker at line 21. `rg` confirms @moe/core root exports APPROVAL_AUTHORITY_CODES/LAYERS, APPROVAL_POLICY_KINDS, decideApprovalAuthority and the ApprovalPolicy/HumanAuthorityGate/HumanAuthorityGrant types at packages/core/src/index.ts:143-154; the code list is eight members and the layers are HUMAN_AUTHORITY_GATE / APPROVAL_POLICY. Dependency rail remeasurement found the edge ABSENT: apps/control-room/package.json has no @moe/core dependency and the pnpm-lock.yaml `apps/control-room` importer has no entry, so no bare-specifier probe may be treated as passing before step 1. `pnpm-workspace.yaml` includes apps/* and apps/control-room/package.json names the package @moe/control-room with real `vitest run` and `tsc --project tsconfig.json` scripts, so the final filter is the package name, not a directory guess. Current owned paths are clean. Current production sizes are approval-gating.ts 229 lines and approval-inbox.tsx exactly 250 lines; edits must compact/refactor comments/helpers so neither exceeds 250 rather than growing either toward 400.",
+    "risks": "Keep the local guard identifier (`refusedBy`) distinct from the landed authority layer (`refusingLayer`): the former explains which client integrity check ran, while the latter is the stable contract field the operator must see. Evaluate a supplied authority context before local lifecycle/validity/hash checks so an unconditional gate cannot leak an enabled command. Do not accept arbitrary code/layer cross-products; derive/validate the canonical layer from an exhaustive production mapping (first six codes gate layer, final two policy layer). Do not fabricate an authority context when the daemon has not supplied one; omission renders no policy/gate/grant claims and preserves nextAllowedCommands as the only existing command authority. Reuse the record's supplied truth class when rendering authority facts, never upgrade it. Avoid duplicate cr.fact/cr.chip prefix IDs when multiple controls render. No production import or call of grantHumanAuthority and no grant/force button.",
+    "keyFiles": [
+      "apps/control-room/package.json",
+      "pnpm-lock.yaml",
+      "apps/control-room/src/approvals/approval-gating.ts",
+      "apps/control-room/src/approvals/approval-inbox.tsx",
+      "apps/control-room/src/approvals/approval-gating.test.tsx"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-15T20:40:01.205Z",
+  "workStartedAt": "2026-08-15T20:41:25.183Z"
 }

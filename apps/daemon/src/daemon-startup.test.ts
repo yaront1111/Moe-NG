@@ -109,7 +109,9 @@ it("declares the source entry, bin and canonical clean-shell start command", asy
     "moe-daemon": "./src/daemon-main.ts",
     "moe-mcp-http": "./src/mcp-http/mcp-http-main.ts",
   });
-  expect(manifest.scripts?.["start"]).toBe("node ./src/daemon-main.ts");
+  expect(manifest.scripts?.["start"]).toBe(
+    "node ./src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=39123",
+  );
   type HasCredential = "credential" extends keyof DaemonStartOptions ? true : false;
   expectTypeOf<HasCredential>().toEqualTypeOf<false>();
 });

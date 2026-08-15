@@ -150,8 +150,8 @@
       "completedAt": "2026-08-15T20:14:17.949Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-32fd47c4",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -170,12 +170,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:23.828Z",
-  "updatedAt": "2026-08-15T20:18:31.280Z",
+  "updatedAt": "2026-08-15T20:22:19.752Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:29:14.156Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-15T20:22:19.752Z",
+    "wallClockMs": 165185596
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -234,5 +236,8 @@
     "apps/daemon/src/configuration/project-configuration-selection.js",
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T20:22:19.752Z",
+  "reviewCompletedAt": "2026-08-15T20:22:19.752Z",
+  "reviewSummary": "Approved after independent base-ref/current-byte review. Fresh foreground exact gate `pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck` exited 0: contracts 12 files/416 tests, core 31/781, daemon 89/1823, all 18 selected workspace typechecks Done. Verified the versioned path-neutral contract covers project, policy/approval, provider/model/runtime refs, limits, network/isolation, schema refs and orchestration sourceSha; core canonical codec/sensitivity cases and stable code/layer refusals remain present; daemon persists identical canonical event/decision bytes, performs bounded decision/receipt-backed stable-tail reads, and fail-closes absent/stale/conflict/unreadable as UNKNOWN/NONE with exact code/layer/upstream. Confirmed CAS, exact replay, stale replay, reopen byte equality, moving-tail/store-throw/hostile-input/unsupported-schema cases, and the forged-record matrix pins exactly 17 nonzero cases. Confirmed the bare-root Windows-safe execFile consumer selects, closes, reopens and reads exact bytes. QA mutation drill disabled the production settingsDigest currentness comparison: the named stale-replay test exited 1 at its PROJECT_CONFIGURATION_STALE/PROJECT_CONFIGURATION_SELECTION assertion, then byte-exact restoration passed. Owned paths are committed/clean, exact LF bridge is correct, no probe/smoke residue, diff checks clean. Production files are 249, 1 and shared index 374 physical lines, all below the 400 hard cap; foreign shared-tree WIP was untouched."
 }

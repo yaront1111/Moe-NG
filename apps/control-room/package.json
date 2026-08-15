@@ -7,6 +7,7 @@
     "@moe/contracts": "workspace:*",
     "@moe/control-room-client": "workspace:*",
     "@moe/control-room-model": "workspace:*",
+    "@moe/core": "workspace:*",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

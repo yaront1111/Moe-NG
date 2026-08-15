@@ -19,18 +19,47 @@
     "Re-measure agent-wrapper.ts:74 and :226-231 on current bytes before editing; this file moved once already today when the spawner was extracted. Preserve foreign work and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Superseded by the measured interface producer task-d4329e8d020f40308209397079c5004d and truthful-report consumer task-912567934d54419683d1518d60059409.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 105.9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-770a24e9c0b04e9d97dec5b695f69e0b",
+      "author": "architect-d9dccf21",
+      "content": "Re-sliced after code measurement proved the synchronous/no-contract-change DoD impossible. Replacement path: producer task-d4329e8d020f40308209397079c5004d (Expose agent spawn admission, PLANNING, order 105.8) lands a backward-compatible start-admission/exit separation; consumer task-912567934d54419683d1518d60059409 (Report agent spawn admission truth, BACKLOG, order 105.9) updates wrapper/main/tests against that real surface. The replacement preserves the original objective and exact code/layer mutation coverage without Promise-state hacks or duplicate preflight authority.",
+      "timestamp": "2026-08-15T20:46:44.340Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:15:11.981Z",
-  "updatedAt": "2026-08-15T20:15:11.981Z"
+  "updatedAt": "2026-08-15T20:47:00.632Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:19:55.152Z"
+  },
+  "contextFetchedBy": [
+    "architect-94dd1835",
+    "architect-d9dccf21"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured wrapper/spawner/main/tests, traced the promise lifecycle, loaded systematic-debugging, recorded the precise blocker with Moe, and wrote memory gotcha-sync-wrapper-cannot-report-an-async-exit-promise-refusal.",
+      "whatRemains": "Governor/task author must add a spawn-start acknowledgement separate from the child-exit promise, or amend the conflicting no-spawner-change/unmodified-test rails; then an architect can replan the consumer.",
+      "pitfalls": "Do not await the child-exit promise, mutate a report after returning it, inspect Promise internals, or duplicate agentSpawnInvocation in the wrapper.",
+      "openQuestions": "Which start-result contract should become authoritative, and may agent-spawner/main plus existing synchronous wrapper tests change?",
+      "releasedAt": "2026-08-15T20:44:30.090Z",
+      "releasedBy": "architect-d9dccf21",
+      "reason": "Explicit architect handoff after reporting the measured contract conflict; user requested continued planning on other tasks."
+    }
+  ]
 }

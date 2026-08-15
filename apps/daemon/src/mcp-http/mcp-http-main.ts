@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { readBootstrapCredential } from "@moe/mcp";
 
 import {
   createStoreDependencies,
@@ -20,7 +19,6 @@ import {
  * Environment (all refusals name the VARIABLE, never a value):
  * - MOE_STORE_PATH / MOE_PROJECT_ID / MOE_DAEMON_CREDENTIAL — store wiring, same as the daemon
  *   bin and the stdio entry.
- * - MOE_SESSION_CREDENTIAL — the transport credential this process presents to the adapter.
  * - MOE_MCP_HTTP_PORT — optional; defaults to an ephemeral port. A value that is not a
  *   non-negative integer is refused BY NAME rather than silently coerced to 0, because a typo
  *   that quietly binds a random port is worse than a startup failure.
@@ -31,7 +29,6 @@ import {
  */
 
 async function main(): Promise<void> {
-  const credential = readBootstrapCredential();
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
   const subscriptions = provider.subscriptions?.();
@@ -39,7 +36,6 @@ async function main(): Promise<void> {
 
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
-    credential,
     deps: provider.provide(),
     port: readHttpPort(process.env),
     subscriptions,

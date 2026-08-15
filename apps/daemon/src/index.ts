@@ -236,6 +236,10 @@ export {
 // it and a runtime-loadability gate proving the module LOADS proved nothing
 // about anything IMPORTING it.
 export {
+  RECOVERY_COMPLETION_APPROVAL_DOMAIN, RECOVERY_COMPLETION_HUMAN_GATE_ID,
+  recoveryCompletionApprovalDigest, type RecoveryCompletionApprovalSubject,
+} from "./recovery/recovery-completion-authority.js";
+export {
   RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_CODES, RECOVERY_COMPLETION_COMMAND_KIND,
   RECOVERY_COMPLETION_LAYER, RECOVERY_COMPLETION_SCHEMA_VERSION, RECOVERY_STEP_UP_REF_PREFIX,
   RECOVERY_STEP_UP_WINDOW_SECONDS, recoveryCompletionDigest, recoveryCoverageProofDigest,

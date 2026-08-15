@@ -45,6 +45,7 @@ function quoteForCmd(argument: string): string {
   if (UNQUOTABLE.test(argument)) {
     throw new SpawnInvocationRefusal("SPAWN_ARGUMENT_UNQUOTABLE");
   }
+  if (argument === "") return '""';
   return /\s/u.test(argument) ? `"${argument}"` : argument;
 }
 

@@ -1,97 +1,85 @@
-import { lookupRuntimeError } from "@moe/contracts";
+import type { NextAllowedCommand, RuntimeCommandKind } from "@moe/contracts";
+import {
+  APPROVAL_AUTHORITY_CODES, APPROVAL_AUTHORITY_LAYERS, decideApprovalAuthority,
+} from "@moe/core";
 import type {
-  NextAllowedCommand,
-  RuntimeAggregate,
-  RuntimeCommandKind,
-  RuntimeErrorCode,
-} from "@moe/contracts";
+  ApprovalAuthorityCode, ApprovalAuthorityLayer, ApprovalAuthorityRefusal,
+  ApprovalAuthorityRequest, ApprovalAuthorityResult, ApprovalPolicy,
+  HumanAuthorityGate, HumanAuthorityGrant,
+} from "@moe/core";
 
 import type { ApprovalDecisionKind, ApprovalDecisionRecord } from "./approval-fixtures.js";
 
+const CODE_LAYERS = Object.freeze({
+  APPROVAL_HUMAN_AUTHORITY_REQUIRED: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_AUTHORITY_BINDING_MISMATCH: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_PRINCIPAL_MISSING: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_PRINCIPAL_UNNAMED: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_PRINCIPAL_NOT_HUMAN: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_GRANT_MOMENT_INVALID: "HUMAN_AUTHORITY_GATE",
+  APPROVAL_POLICY_DELAY_INVALID: "APPROVAL_POLICY",
+  APPROVAL_HUMAN_REVIEW_REQUIRED: "APPROVAL_POLICY",
+} satisfies Record<ApprovalAuthorityCode, ApprovalAuthorityLayer>);
+
+const AUTHORITY_PHRASES = Object.freeze({
+  APPROVAL_HUMAN_AUTHORITY_REQUIRED: "a named human has not satisfied this authority gate",
+  APPROVAL_AUTHORITY_BINDING_MISMATCH: "the authority is not bound to this unit of work",
+  APPROVAL_PRINCIPAL_MISSING: "the authority grant carries no principal",
+  APPROVAL_PRINCIPAL_UNNAMED: "the authority grant's human principal is unnamed",
+  APPROVAL_PRINCIPAL_NOT_HUMAN: "the authority grant principal is not human",
+  APPROVAL_GRANT_MOMENT_INVALID: "the authority grant moment is invalid",
+  APPROVAL_POLICY_DELAY_INVALID: "the approval policy delay is invalid",
+  APPROVAL_HUMAN_REVIEW_REQUIRED: "the approval policy requires human review",
+} satisfies Record<ApprovalAuthorityCode, string>);
+
 export interface ApprovalReason {
-  readonly code: RuntimeErrorCode;
+  readonly code: ApprovalAuthorityCode;
   readonly phrase: string;
-  readonly source: RuntimeAggregate;
+  readonly refusingLayer: ApprovalAuthorityLayer;
 }
 
-/**
- * One refusal reason, checked against the ratified registry at construction.
- *
- * The approvals reason channel is local because the landed shell fixtures carry none, and it
- * is PROVISIONAL pending the daemon's stable reason registry (spec §13-D2). It may only name
- * a code the ratified runtime registry defines, paired with a lifecycle source that code's
- * own registry row admits: an unknown spelling resolves to the `UNKNOWN_ERROR` descriptor,
- * which is how an invented code is caught, and an empty `validSources` row is
- * source-unrestricted by contract while any other row must list the source being claimed.
- */
-export function approvalReason(
-  code: RuntimeErrorCode,
-  source: RuntimeAggregate,
-  phrase: string,
-): ApprovalReason {
-  const descriptor = lookupRuntimeError(code);
-  if (descriptor.code !== code) {
-    throw new Error(`approval reason ${code} is not a ratified runtime error code`);
+/** Builds only canonical code/layer pairs from the landed runtime registries. */
+export function approvalReason(code: ApprovalAuthorityCode, phrase: string): ApprovalReason {
+  if (!APPROVAL_AUTHORITY_CODES.includes(code)) {
+    throw new Error(`approval reason ${code} is not a landed approval authority code`);
   }
-  const { validSources } = descriptor;
-  if (validSources.length > 0 && !validSources.includes(source)) {
-    throw new Error(`approval reason ${code} does not admit lifecycle source ${source}`);
+  const refusingLayer = CODE_LAYERS[code];
+  if (!APPROVAL_AUTHORITY_LAYERS.includes(refusingLayer)) {
+    throw new Error(`approval reason ${code} has no landed refusal layer`);
   }
-  return Object.freeze({ code, phrase, source });
+  return Object.freeze({ code, phrase, refusingLayer });
 }
 
-/** Every reason a control can carry; each is registry-checked at module load. */
+const bindingReason = (phrase: string): ApprovalReason =>
+  approvalReason("APPROVAL_AUTHORITY_BINDING_MISMATCH", phrase);
+
 export const APPROVAL_REASONS = Object.freeze({
-  CAPABILITY_DENIED: approvalReason(
-    "CAPABILITY_DENIED", "APPROVAL", "your capability does not cover this decision",
-  ),
-  CUTOVER_STATE: approvalReason(
-    "CUTOVER_STATE_INVALID", "CUTOVER", "the cutover already left the state this action requires",
-  ),
-  HASH_MISMATCH: approvalReason(
-    "EXPECTED_VERSION_CONFLICT", "GRAPH_REVISION",
+  HASH_MISMATCH: bindingReason(
     "this record's exact revision hash is not the identity the command would act on",
   ),
-  HASH_UNPINNED: approvalReason(
-    "STALE_EPOCH", "GRAPH_REVISION", "the returned command pinned no revision hash to compare",
+  HASH_UNPINNED: bindingReason("the returned command pinned no revision hash to compare"),
+  HUMAN_AUTHORITY_REQUIRED: approvalReason(
+    "APPROVAL_HUMAN_AUTHORITY_REQUIRED", "a named human must satisfy this authority gate",
   ),
-  INVALIDATED: approvalReason(
-    "REVISION_REBOUND", "GRAPH_REVISION",
-    "a newer revision rebound the identity this approval was given for",
-  ),
-  LIFECYCLE_CLOSED: approvalReason(
-    "ILLEGAL_TRANSITION", "APPROVAL", "this approval has already been decided or withdrawn",
-  ),
-  SUPERSEDED: approvalReason(
-    "SUPERSEDED_AUTHORITY", "GRAPH_REVISION", "a successor approval superseded this record",
-  ),
+  INVALIDATED: bindingReason("a newer revision rebound the identity this approval was given for"),
+  LIFECYCLE_CLOSED: bindingReason("this approval has already been decided or withdrawn"),
+  MALFORMED_AUTHORITY: bindingReason("the supplied authority context is missing or unverifiable"),
+  SUPERSEDED: bindingReason("a successor approval superseded this record"),
 });
 
-/**
- * Pure gating for approval decision controls. No JSX, no state, no transport.
- *
- * Two rules produce every control here, and neither of them is a phase lookup:
- *
- *  1. Spec §12 bar 4 — an enabled control exists only because a `nextAllowedCommands`
- *     entry exists. Nothing widens a control from a lifecycle enum or a transition table.
- *  2. Design 1007 — the daemon commits the prepare BEFORE the approval action enables, so
- *     the click can never approve an identity created after it. The client therefore
- *     re-checks the record against the identity the returned command pins, and refuses on
- *     any mismatch. This is a fail-closed client refusal, not a claim of authority.
- *
- * Spec §8.1 ("no supplied reason → the control is absent, never disabled-with-guessed-text")
- * governs the leg it actually describes: a control the §5 matrix expects that the daemon did
- * not return. The stale-record guards below are local refusals of a command the daemon DID
- * return, so they carry their own registry-checked reason rather than staying silent —
- * refusing without saying why would be the dishonest reading of the same rule.
- */
 export type ApprovalControlState = "ENABLED" | "DISABLED" | "ABSENT";
-
 export type ApprovalGuardId =
-  | "AFFORDANCE_ABSENT"
-  | "RECORD_LIFECYCLE"
-  | "RECORD_VALIDITY"
-  | "REVISION_HASH";
+  | "AFFORDANCE_ABSENT" | "AUTHORITY_CONTEXT" | "RECORD_LIFECYCLE"
+  | "RECORD_VALIDITY" | "REVISION_HASH";
+export type ApprovalAuthorityContext = ApprovalAuthorityRequest;
+
+export interface ApprovalAuthorityPresentation {
+  readonly gate: HumanAuthorityGate | null;
+  readonly grant: HumanAuthorityGrant | null;
+  readonly policy: ApprovalPolicy;
+  readonly result: ApprovalAuthorityResult;
+  readonly truthClass: ApprovalDecisionRecord["truthClass"];
+}
 
 export interface ApprovalControlRequest {
   readonly commandKind: RuntimeCommandKind;
@@ -101,70 +89,60 @@ export interface ApprovalControlRequest {
 }
 
 export interface ApprovalControl {
+  readonly authority?: ApprovalAuthorityPresentation | null;
   readonly commandId: string | null;
   readonly commandKind: RuntimeCommandKind;
   readonly destructive: boolean;
   readonly disabledText: string | null;
   readonly label: string;
   readonly reasonCode: string | null;
+  readonly reasonPhrase?: string | null;
   readonly refusedBy: ApprovalGuardId | null;
+  readonly refusingLayer?: ApprovalAuthorityLayer | null;
   readonly state: ApprovalControlState;
   readonly testId: string;
 }
 
 export interface ApprovalGatingInput {
   readonly affordances: readonly NextAllowedCommand[];
-  /** Daemon-shaped refusal reasons, keyed by the control's test ID. */
+  readonly authority?: ApprovalAuthorityContext | undefined;
   readonly reasons?: Readonly<Record<string, ApprovalReason>>;
   readonly record: ApprovalDecisionRecord;
   readonly requests: readonly ApprovalControlRequest[];
   readonly targetAggregateId: string;
 }
 
-/**
- * Spec §1.4: `cr.action.<commandName>` with `.` replaced by `-`, qualified when one command
- * carries more than one decision. Derived from the command name, never from display text.
- */
 export function controlTestId(commandKind: RuntimeCommandKind, qualifier?: string): string {
   const base = `cr.action.${commandKind.replaceAll(".", "-")}`;
   return qualifier === undefined ? base : `${base}.${qualifier}`;
 }
 
-/** Spec §8.1 copy, verbatim. */
 export function unavailableText(reason: ApprovalReason): string {
-  return `Unavailable: ${reason.phrase} (${reason.code}).`;
+  return `Unavailable: ${reason.phrase} (${reason.code} @ ${reason.refusingLayer}).`;
 }
 
-/**
- * Design 1007 kind routing: `graph.approve` carries expansion/revision approval; every other
- * kind is a member of the `approval.decide` typed union. Provisional pending spec §13-D1.
- */
 export function decisionCommandKind(kind: ApprovalDecisionKind): RuntimeCommandKind {
   return kind === "EXPANSION" ? "graph.approve" : "approval.decide";
 }
 
 function control(
   request: ApprovalControlRequest,
-  testId: string,
   state: ApprovalControlState,
   refusedBy: ApprovalGuardId | null,
   reason: ApprovalReason | null,
   commandId: string | null,
+  authority: ApprovalAuthorityPresentation | null,
 ): ApprovalControl {
   return Object.freeze({
-    commandId,
-    commandKind: request.commandKind,
+    authority, commandId, commandKind: request.commandKind,
     destructive: request.destructive === true,
-    disabledText: reason === null ? null : unavailableText(reason),
-    label: request.label,
-    reasonCode: reason === null ? null : reason.code,
-    refusedBy,
-    state,
-    testId,
+    disabledText: reason === null ? null : unavailableText(reason), label: request.label,
+    reasonCode: reason?.code ?? null, reasonPhrase: reason?.phrase ?? null, refusedBy,
+    refusingLayer: reason?.refusingLayer ?? null, state,
+    testId: controlTestId(request.commandKind, request.qualifier),
   });
 }
 
-/** The first guard that refuses, in a fixed order, with the reason that guard owns. */
 function refusal(
   record: ApprovalDecisionRecord,
   affordance: NextAllowedCommand,
@@ -178,52 +156,86 @@ function refusal(
   if (record.validity === "SUPERSEDED") {
     return ["RECORD_VALIDITY", APPROVAL_REASONS.SUPERSEDED];
   }
-  const pinned = affordance.graphRevisionHash;
-  if (pinned === undefined) {
+  if (affordance.graphRevisionHash === undefined) {
     return ["REVISION_HASH", APPROVAL_REASONS.HASH_UNPINNED];
   }
-  if (pinned !== record.exactRevisionHash) {
+  if (affordance.graphRevisionHash !== record.exactRevisionHash) {
     return ["REVISION_HASH", APPROVAL_REASONS.HASH_MISMATCH];
   }
   return null;
 }
 
+interface AuthorityEvaluation {
+  readonly presentation: ApprovalAuthorityPresentation | null;
+  readonly reason: ApprovalReason | null;
+}
+
+function snapshotRequest(context: ApprovalAuthorityContext): ApprovalAuthorityRequest {
+  if (context.gate === undefined || context.policy === undefined || context.policy === null) {
+    throw new Error("authority context omitted a required field");
+  }
+  const policy = Object.freeze({ ...context.policy }) as ApprovalPolicy;
+  if (context.gate === null) return Object.freeze({ gate: null, policy });
+  const supplied = context.gate.grant;
+  const grant = supplied === null || supplied === undefined
+    ? supplied
+    : Object.freeze({ ...supplied });
+  const gate = Object.freeze({ ...context.gate, grant }) as HumanAuthorityGate;
+  return Object.freeze({ gate, policy });
+}
+
+function authorityReason(refusal: ApprovalAuthorityRefusal): ApprovalReason {
+  const canonical = approvalReason(refusal.code, AUTHORITY_PHRASES[refusal.code]);
+  return refusal.layer === canonical.refusingLayer ? canonical : APPROVAL_REASONS.MALFORMED_AUTHORITY;
+}
+
+function evaluateAuthority(
+  context: ApprovalAuthorityContext | undefined,
+  truthClass: ApprovalDecisionRecord["truthClass"],
+): AuthorityEvaluation | null {
+  if (context === undefined) return null;
+  try {
+    if (typeof context !== "object" || context === null) throw new Error("invalid context");
+    const request = snapshotRequest(context);
+    const result = decideApprovalAuthority(request);
+    const presentation = Object.freeze({
+      gate: request.gate, grant: result.ok ? result.grant : null,
+      policy: request.policy, result, truthClass,
+    });
+    return Object.freeze({ presentation, reason: result.ok ? null : authorityReason(result) });
+  } catch {
+    return Object.freeze({ presentation: null, reason: APPROVAL_REASONS.MALFORMED_AUTHORITY });
+  }
+}
+
 function resolveOne(
   input: ApprovalGatingInput,
   request: ApprovalControlRequest,
+  authority: AuthorityEvaluation | null,
 ): ApprovalControl {
   const testId = controlTestId(request.commandKind, request.qualifier);
-  const affordance = input.affordances.find(
-    (entry) =>
-      entry.commandKind === request.commandKind
-      && entry.targetAggregateId === input.targetAggregateId,
-  );
+  const affordance = input.affordances.find((entry) =>
+    entry.commandKind === request.commandKind && entry.targetAggregateId === input.targetAggregateId);
   if (affordance === undefined) {
     const supplied = input.reasons?.[testId];
     return supplied === undefined
-      ? control(request, testId, "ABSENT", "AFFORDANCE_ABSENT", null, null)
-      : control(request, testId, "DISABLED", "AFFORDANCE_ABSENT", supplied, null);
+      ? control(request, "ABSENT", "AFFORDANCE_ABSENT", null, null, authority?.presentation ?? null)
+      : control(request, "DISABLED", "AFFORDANCE_ABSENT", supplied, null, authority?.presentation ?? null);
+  }
+  if (authority?.reason !== null && authority?.reason !== undefined) {
+    return control(request, "DISABLED", "AUTHORITY_CONTEXT", authority.reason, null, authority.presentation);
   }
   const refused = refusal(input.record, affordance);
   return refused === null
-    ? control(request, testId, "ENABLED", null, null, affordance.commandId)
-    : control(request, testId, "DISABLED", refused[0], refused[1], null);
+    ? control(request, "ENABLED", null, null, affordance.commandId, authority?.presentation ?? null)
+    : control(request, "DISABLED", refused[0], refused[1], null, authority?.presentation ?? null);
 }
 
-/**
- * Resolves every requested control against the daemon's affordances and the record.
- *
- * A control is only ever `ENABLED` with a non-null `commandId`; every refusing path returns
- * `commandId: null`, so a surface physically cannot submit a stale approval even if it
- * ignores the state field.
- */
-export function resolveApprovalControls(
-  input: ApprovalGatingInput,
-): readonly ApprovalControl[] {
-  return Object.freeze(input.requests.map((request) => resolveOne(input, request)));
+export function resolveApprovalControls(input: ApprovalGatingInput): readonly ApprovalControl[] {
+  const authority = evaluateAuthority(input.authority, input.record.truthClass);
+  return Object.freeze(input.requests.map((request) => resolveOne(input, request, authority)));
 }
 
-/** A control may be submitted only when it is enabled and carries a real command ID. */
 export function isSubmittable(control: ApprovalControl): boolean {
   return control.state === "ENABLED" && control.commandId !== null;
 }

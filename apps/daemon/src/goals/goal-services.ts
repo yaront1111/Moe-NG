@@ -12,6 +12,10 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import {
+  GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
+  hasDurableGoalCloseReviewAcceptance,
+} from "./goal-close-prerequisite.js";
 
 /**
  * Goal creation.
@@ -81,6 +85,13 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
   const zeroAuthorityWitness = payloadObject(request.payload, "zeroAuthorityWitness");
   if (goalId === null || closureWitness === null || zeroAuthorityWitness === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  if (!hasDurableGoalCloseReviewAcceptance(store, request.projectId, goalId)) {
+    return refuse(
+      request.kind,
+      GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
+      "DAEMON_PREREQUISITE",
+    );
   }
 
   const prior = stateOf(ledger, goalId);

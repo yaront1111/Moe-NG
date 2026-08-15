@@ -1,0 +1,3 @@
+# Gotcha: rejected raced promise must still close the boundary
+
+`Promise.race` does not convert rejections into typed terminal outcomes. If a process-boundary completion, timer, cancellation, or stream promise rejects and the launch wrapper has no containment/finally path, the public API rejects and skips cancel/close/stream-await cleanup. Add production-surface tests with rejecting lifecycle promises that require an immutable UNKNOWN with exact code/layer and prove cancel plus close exactly once. Do not test only resolved failure envelopes.

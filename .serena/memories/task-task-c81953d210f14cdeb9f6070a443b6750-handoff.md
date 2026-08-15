@@ -1,0 +1,11 @@
+# Durable Claude launcher authority — final handoff
+
+Task repair committed as `dadea79` (explicit pathspec: only `claude-launcher-authority.ts` and `.test.ts`). Earlier task bytes, including the new echo suite and test fixtures, were swept into foreign whole-tree commit `d7a71cb`; do not amend/reset/reclaim that commit. QA should review the owned base-ref diff plus `dadea79`.
+
+Production behavior: public `createClaudeLauncher` always composes `CLAUDE_LAUNCHER_DEFAULTS`, refuses caller `deps` with `CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER`, and replaces only durable grant consumption and registration. Durable CONSUMED success must equal the presented grant's exact pure one-use transition (same grantId/intentId/wrapperIdentity, state CONSUMED, version +1), else `ACTIVATION_COMMIT_INCOHERENT/ACTIVATION`. Durable REGISTERED success must equal every field of the pure-validated proposal at PREFLIGHT and STARTED, else `LAUNCH_LOCK_IDENTITY_CONFLICT/LAUNCH_LOCK`. Delegated refusals remain attributed to their own code/layer; malformed/thrown/thenable results remain contained.
+
+Fresh completion gate: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` exit 0, 58 files / 1827 tests. Bare-root Node smoke returned `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED/LAUNCHER` with zero authority calls. Seven mutation drills reddened (five original ordering/composition guards plus grant and registration relational echo bypasses) and restored byte-exact.
+
+Consumer edge recorded on task-6cbff01023b14b26a78fc5e3eb1dd8a9 as `comment-ba05dec3ca27496886419745a859fc74`. PREFLIGHT pending registrations are reservations and must never be fed back as `priorRegistration`; runtime-to-activation binding belongs to task-de496f4785a242569aa4ffc3ef6f1d69.
+
+Repo-wide typecheck/test had foreign scheduler red only in `packages/scheduler/src/expansion/expansion-current-hold.test.ts` and `packages/scheduler/src/index-surface.test.ts`; owned runner intersection was empty. Existing memory `gotcha-durable-success-must-echo-request` captures the non-obvious relational-authority rule.

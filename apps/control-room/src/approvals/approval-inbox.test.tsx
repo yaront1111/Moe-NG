@@ -145,10 +145,14 @@ describe("escalation and reconciliation items", () => {
     });
     const choice = screen.getByTestId("cr.action.escalation-decide");
     expect(choice.hasAttribute("disabled")).toBe(true);
-    expect(choice.getAttribute("data-reason-code")).toBe("REVISION_REBOUND");
+    expect(choice.getAttribute("data-reason-code"))
+      .toBe("APPROVAL_AUTHORITY_BINDING_MISMATCH");
+    expect(choice.getAttribute("data-refusing-layer")).toBe("HUMAN_AUTHORITY_GATE");
     expect(choice.getAttribute("data-refused-by")).toBe("RECORD_VALIDITY");
-    // Both returned choices are refused by the same guard, each stating its own reason.
-    expect(screen.getAllByText(/^Unavailable: .+ \(REVISION_REBOUND\)\.$/)).toHaveLength(2);
+    // Both returned choices are refused by the same stable code and canonical layer.
+    expect(screen.getAllByText(
+      /^Unavailable: .+ \(APPROVAL_AUTHORITY_BINDING_MISMATCH @ HUMAN_AUTHORITY_GATE\)\.$/,
+    )).toHaveLength(2);
   });
 
   it("carries the reconciliation idle line verbatim", () => {

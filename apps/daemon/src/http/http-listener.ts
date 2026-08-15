@@ -6,7 +6,7 @@ import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./docum
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { readEventPage } from "./event-stream.js";
-import { handleCommandRequest } from "./http-adapter.js";
+import { authenticateHttpRequest, handleCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -98,35 +98,56 @@ function serveCommand(
 
 function serveEventPage(
   response: ServerResponse,
+  request: IncomingMessage,
   options: StartListenerOptions,
   body: Uint8Array,
 ): void {
+  const access = authenticateHttpRequest(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  if (!access.ok) {
+    reply(response, access.httpStatus, access);
+    return;
+  }
   if (options.subscriptions === undefined) {
     refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
     return;
   }
-  const request = readEventRequest(body);
-  if (request === null) {
+  const eventRequest = readEventRequest(body);
+  if (eventRequest === null) {
     refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
     return;
   }
   // Always 200: the frame IS the answer and carries its own outcome, code and
   // layer. Minting an HTTP status per frame would be the translation table the
   // seam is forbidden to hold.
-  reply(response, 200, readEventPage(options.subscriptions, request));
+  reply(response, 200, readEventPage(options.subscriptions, eventRequest));
 }
 
 function serveAffordances(
   response: ServerResponse,
+  request: IncomingMessage,
   options: StartListenerOptions,
   body: Uint8Array,
 ): void {
+  const access = authenticateHttpRequest(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  if (!access.ok) {
+    reply(response, access.httpStatus, access);
+    return;
+  }
   if (options.affordances === undefined) {
     refuseRequest(response, "LISTENER_AFFORDANCES_UNAVAILABLE");
     return;
   }
-  const request = readAffordanceRequest(body);
-  if (request === null || affordanceProjectMismatch(request, options.affordances.boundProjectId)) {
+  const affordanceRequest = readAffordanceRequest(body);
+  if (affordanceRequest === null
+    || affordanceProjectMismatch(affordanceRequest, options.affordances.boundProjectId)) {
     // A malformed body OR a request naming a project this daemon does not
     // serve: both are invalid requests for this route, not a surface refusal.
     refuseRequest(response, "LISTENER_AFFORDANCE_REQUEST_INVALID");
@@ -192,8 +213,8 @@ async function serve(
   }
 
   if (path === COMMAND_PATH) serveCommand(response, request, options, body);
-  else if (path === EVENT_PAGE_PATH) serveEventPage(response, options, body);
-  else if (path === AFFORDANCE_PATH) serveAffordances(response, options, body);
+  else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
+  else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);
 }
 

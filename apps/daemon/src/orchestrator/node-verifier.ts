@@ -33,8 +33,12 @@ import type { NodeMission } from "./agent-wrapper.js";
  */
 
 export interface VerifierRunCapture {
+  /** Total raw stdout/stderr bytes observed, including bytes outside `output`. */
+  readonly byteCount: number;
   readonly exitCode: number | null;
+  /** Bounded output tail for operator-facing failure detail. */
   readonly output: string;
+  /** SHA-256 over every raw stdout/stderr byte in observed event order. */
   readonly sha256: string;
 }
 

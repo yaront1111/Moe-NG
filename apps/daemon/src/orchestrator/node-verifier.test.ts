@@ -90,7 +90,7 @@ function verifier(capture: VerifierRunCapture) {
 
 describe("createNodeVerifier", () => {
   it("skips a node with nothing submitted", async () => {
-    const reports = await verifier({ exitCode: 0, output: "", sha256: fill("aa") }).verifyOnce();
+    const reports = await verifier({ byteCount: 0, exitCode: 0, output: "", sha256: fill("aa") }).verifyOnce();
     expect(reports).toHaveLength(0);
   });
 
@@ -98,7 +98,7 @@ describe("createNodeVerifier", () => {
     seedCleanRound();
     const output = "assertion failed: expected 5";
     const sha = createHash("sha256").update(output, "utf8").digest("hex");
-    const reports = await verifier({ exitCode: 1, output, sha256: sha }).verifyOnce();
+    const reports = await verifier({ byteCount: output.length, exitCode: 1, output, sha256: sha }).verifyOnce();
     expect(reports).toEqual([
       { detail: "exit 1", nodeRef: NODE, outcome: "FAILED_ROUND_RECORDED" },
     ]);
@@ -112,7 +112,7 @@ describe("createNodeVerifier", () => {
   });
 
   it("does not re-verify a node whose latest round is its own failure", async () => {
-    const reports = await verifier({ exitCode: 0, output: "", sha256: fill("bb") }).verifyOnce();
+    const reports = await verifier({ byteCount: 0, exitCode: 0, output: "", sha256: fill("bb") }).verifyOnce();
     expect(reports).toHaveLength(0);
   });
 
@@ -149,7 +149,7 @@ describe("createNodeVerifier", () => {
     const greenOutput = "sandbox tests passed";
     const greenSha = createHash("sha256").update(greenOutput, "utf8").digest("hex");
     const reports = await verifier({
-      exitCode: 0, output: greenOutput, sha256: greenSha,
+      byteCount: greenOutput.length, exitCode: 0, output: greenOutput, sha256: greenSha,
     }).verifyOnce();
     expect(reports).toEqual([
       { detail: "EFFECTS_COMMITTED", nodeRef: NODE, outcome: "ACCEPTED" },

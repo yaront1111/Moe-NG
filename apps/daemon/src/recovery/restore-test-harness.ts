@@ -38,6 +38,7 @@ const roots: string[] = [];
 const stores: SqliteEventStore[] = [];
 
 export interface RestoreHarness {
+  readonly backupCursor: string;
   readonly container: unknown;
   readonly generationDigest: string;
   readonly logicalPaths: readonly string[];
@@ -205,6 +206,7 @@ export async function restoreHarness(
 
   const service = createRecoveryIncarnationService(createNodeRecoveryCryptoPort());
   return Object.freeze({
+    backupCursor: created.manifest.cursor,
     container,
     generationDigest: created.manifest.generationDigest,
     logicalPaths: created.manifest.objects.map((entry) => entry.logicalPath),
