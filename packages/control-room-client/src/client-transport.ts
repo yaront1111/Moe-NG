@@ -27,7 +27,11 @@ export type FetchLike = (input: string, init: RequestInit) => Promise<Response>;
 
 export interface TransportOptions {
   readonly csrfToken: string;
-  /** Injected for tests; production uses the ambient `fetch`. */
+  /**
+   * Injected for tests; a browser uses the ambient `fetch`. It is also the ONLY
+   * seam through which a non-browser caller can supply `Origin` — see
+   * `headersFor` for why this layer must not set that header itself.
+   */
   readonly fetch?: FetchLike | undefined;
   readonly origin: string;
   /** Sent in a header on every request, never on a URL (design 19.2). */
@@ -87,6 +91,23 @@ function refuse(code: TransportRefusalCode): TransportRefused {
   return Object.freeze({ code, delivered: false, layer: CONTROL_ROOM_TRANSPORT_LAYER } as const);
 }
 
+/**
+ * `Origin` is DELIBERATELY ABSENT, and the consequence is deliberate too.
+ *
+ * It is a forbidden header name in the fetch spec, so a browser drops whatever
+ * this layer sets and substitutes its own. Setting it was therefore inert where
+ * the client actually ships, while a non-browser fetch sent it verbatim and
+ * satisfied the daemon's Origin guard by a route no browser can take — the
+ * guard looked covered and was not.
+ *
+ * So a NON-BROWSER caller must supply `Origin` through its own `options.fetch`
+ * wrapper, exactly as a browser supplies it, because this layer cannot. Without
+ * one the daemon sees no Origin and refuses with LISTENER_ORIGIN_INVALID, which
+ * is the honest answer rather than a regression. Reintroducing the header behind
+ * an environment check would only restore the illusion.
+ *
+ * `options.origin` remains the request URL PREFIX below; that use is unrelated.
+ */
 function headersFor(options: TransportOptions): Readonly<Record<string, string>> {
   return {
     "content-type": "application/json",

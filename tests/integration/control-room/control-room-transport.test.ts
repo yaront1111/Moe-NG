@@ -18,7 +18,10 @@ import {
 } from "../../../apps/daemon/src/http/http-test-fixtures.js";
 import { createCompatGate } from "../../../packages/control-room-client/src/index.js";
 import { createControlRoomTransport } from "../../../packages/control-room-client/src/index.js";
-import type { ControlRoomTransport } from "../../../packages/control-room-client/src/index.js";
+import type {
+  ControlRoomTransport,
+  FetchLike,
+} from "../../../packages/control-room-client/src/index.js";
 import { GENERATED_CONTRACT_PINS } from "../../../packages/control-room-client/src/generated/generated-client.js";
 import type { ControlRoomClientSurface } from "../../../packages/control-room-client/src/client-compat.js";
 
@@ -53,6 +56,8 @@ function provider(): DaemonDependencyProvider {
   };
 }
 
+type CommandEnvelope = Parameters<ControlRoomTransport["sendCommand"]>[0];
+
 /** Everything the client is fed comes through the compat gate, as in production. */
 function gatedSurface(): ControlRoomClientSurface {
   const gate = createCompatGate({
@@ -68,9 +73,36 @@ function gatedSurface(): ControlRoomClientSurface {
   return gate.client;
 }
 
-function transportFor(daemon: StartedDaemon): ControlRoomTransport {
+/**
+ * The FETCH LAYER supplies `Origin`, exactly as a browser does.
+ *
+ * `Origin` is a forbidden header name, so the transport cannot set it: a browser
+ * would drop whatever it sent and substitute its own. A non-browser caller must
+ * therefore supply it here, and that is the only arrangement under which the
+ * daemon's guard is exercised the way a real browser client exercises it. Setting
+ * it inside the transport instead would satisfy the guard by a route no browser
+ * can take — the illusion this whole seam exists to remove.
+ */
+function fetchSupplyingOrigin(origin: string): FetchLike {
+  return async (input, init) => {
+    const headers = new Headers(init.headers);
+    headers.set("origin", origin);
+    return await fetch(input, { ...init, headers });
+  };
+}
+
+/**
+ * `browserOrigin` undefined means NO wrapper: the shipped transport sends what
+ * it sends, which is no Origin at all. That is a real caller shape, not a
+ * contrivance, so it is spelled as the absence of a wrapper rather than as a
+ * header the test deletes.
+ */
+function transportFor(daemon: StartedDaemon, browserOrigin?: string): ControlRoomTransport {
   return createControlRoomTransport({
     csrfToken: daemon.csrfToken,
+    fetch: browserOrigin === undefined ? undefined : fetchSupplyingOrigin(browserOrigin),
+    // Still the request URL PREFIX, and still correct: only the HEADER was ever
+    // the defect, so a refusal below cannot be blamed on a missing target.
     origin: daemon.origin,
     sessionCredential: GOOD_CREDENTIAL,
     wireProtocolVersion: gatedSurface().wireProtocolVersion,
@@ -84,7 +116,7 @@ async function withDaemon(
   const started = await startDaemon({ csrfToken: CSRF, dependencies: provider() });
   if (!started.ok) throw new Error(`daemon refused to start: ${started.code}`);
   try {
-    await run(started, transportFor(started));
+    await run(started, transportFor(started, started.origin));
   } finally {
     await started.shutdown();
   }
@@ -107,25 +139,31 @@ it("transports a committed read whose payload EQUALS the in-process handler's", 
   });
 });
 
-it("carries a command to the committed adapter and returns its decision unchanged", async () => {
-  await withDaemon(async (daemon, transport) => {
-    const affordance = {
+/** Always the GENERATED builder's envelope, so no hand-rolled shape reaches the daemon. */
+function commandEnvelope(id: string): CommandEnvelope {
+  const built = gatedSurface().commands["goal.create"](
+    {
       commandEnvelopeVersion: GENERATED_CONTRACT_PINS.commandEnvelopeVersion,
-      commandId: "cmd-integration-1",
+      commandId: `cmd-${id}`,
       commandKind: "goal.create" as const,
       expectedVersion: 0,
       inputSchemaVersion: "goal.create/1",
-      targetAggregateId: "goal-integration-1",
-    };
-    const built = gatedSurface().commands["goal.create"](affordance, {
-      correlationId: "corr-integration-1",
+      targetAggregateId: `goal-${id}`,
+    },
+    {
+      correlationId: `corr-${id}`,
       payload: { title: "ship it" },
       requestDigest: "c".repeat(64),
       sessionCredential: GOOD_CREDENTIAL,
-    });
-    if (!built.ok) throw new Error("generated builder refused the affordance fixture");
+    },
+  );
+  if (!built.ok) throw new Error("generated builder refused the affordance fixture");
+  return built.envelope;
+}
 
-    const answer = await transport.sendCommand(built.envelope);
+it("carries a command to the committed adapter and returns its decision unchanged", async () => {
+  await withDaemon(async (daemon, transport) => {
+    const answer = await transport.sendCommand(commandEnvelope("integration-1"));
     expect(answer).toMatchObject({ delivered: true });
     if (!answer.delivered) throw new Error("expected the daemon's answer to be delivered");
     // ACCEPTED proves the fix that mattered: the listener hands the adapter
@@ -171,6 +209,57 @@ it("refuses a malformed body at the ADAPTER, not the listener, naming its stage"
       ok: false,
       outcome: "REFUSED",
       stage: "DECODE",
+    });
+  });
+});
+
+/**
+ * THE COVERAGE GAP THIS FILE EXISTS TO CLOSE.
+ *
+ * The daemon's Origin guard used to be reachable only through the vite dev proxy
+ * or a hand-built request that happened to carry an Origin. The shipped transport
+ * itself set the header, so in Node it satisfied the guard by a route no browser
+ * can take, and in a browser the header was dropped before it left. Either way
+ * the real client path never met the guard.
+ *
+ * All three arms below drive the REAL transport. The Origin the daemon sees comes
+ * from the fetch layer or from nowhere — never from the transport's own headers.
+ */
+it("meets the daemon's Origin guard on the REAL transport path: admitted, foreign, absent", async () => {
+  await withDaemon(async (daemon) => {
+    // ADMITTED. The fetch layer supplies the matching Origin, as a browser does.
+    const admitted = await transportFor(daemon, daemon.origin).sendCommand(
+      commandEnvelope("origin-admitted"),
+    );
+    if (!admitted.delivered) throw new Error("expected the daemon's answer to be delivered");
+    expect(admitted.status).toBe(200);
+    // Named positively: the ADAPTER answered, so the listener passed it through.
+    // "not refused" would still pass if a different listener guard had refused.
+    expect(admitted.response).toMatchObject({ httpStatus: 200, ok: true, outcome: "ACCEPTED" });
+
+    // FOREIGN. Same transport, same correct URL prefix, only the Origin differs.
+    const foreign = await transportFor(daemon, "http://evil.example.com").sendCommand(
+      commandEnvelope("origin-foreign"),
+    );
+    if (!foreign.delivered) throw new Error("expected the daemon's answer to be delivered");
+    expect(foreign.status).toBeGreaterThanOrEqual(400);
+    // Exact code AND refusing layer. Two layers can refuse a /command request, so
+    // naming which one answered is half the assertion.
+    expect(foreign.response).toEqual({
+      code: "LISTENER_ORIGIN_INVALID",
+      layer: "CONTROL_ROOM_LISTENER",
+    });
+
+    // ABSENT. NO fetch wrapper, so the shipped transport sends exactly what it
+    // sends — and it sets no Origin header. This arm is the one that was
+    // impossible before: while headersFor set the header, this request was
+    // admitted, and the guard looked covered while nothing exercised it.
+    const absent = await transportFor(daemon).sendCommand(commandEnvelope("origin-absent"));
+    if (!absent.delivered) throw new Error("expected the daemon's answer to be delivered");
+    expect(absent.status).toBeGreaterThanOrEqual(400);
+    expect(absent.response).toEqual({
+      code: "LISTENER_ORIGIN_INVALID",
+      layer: "CONTROL_ROOM_LISTENER",
     });
   });
 });
