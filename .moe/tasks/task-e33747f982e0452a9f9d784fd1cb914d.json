@@ -165,8 +165,8 @@
       "completedAt": "2026-08-15T19:08:15.189Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-83b3c121",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -197,7 +197,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T20:16:21.372Z",
+  "updatedAt": "2026-08-15T20:18:49.846Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
@@ -278,12 +278,12 @@
   },
   "planApprovedAt": "2026-08-15T17:51:49.419Z",
   "workStartedAt": "2026-08-15T17:52:28.715Z",
-  "reviewStartedAt": "2026-08-15T18:49:17.938Z",
+  "reviewStartedAt": "2026-08-15T20:18:49.846Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts && pnpm --filter @moe/runner test",
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  8 passed (8)\n      Tests  190 passed (190)\n   Start at  21:48:33\n$ vitest run --root ../.. packages/runner/src\n RUN v4.1.10 D:/projexts/moe-next\n Test Files  62 passed (62)\n      Tests  2086 passed (2086)\n   Start at  21:48:36\nEXIT=0",
-    "reportedAt": "2026-08-15T18:49:17.938Z"
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 89 passed (89)\nTests 1823 passed (1823)\nDuration 4.75s\n\nRUN v4.1.10 D:/projexts/moe-next\nTest Files 62 passed (62)\nTests 2107 passed (2107)\nDuration 4.56s\n\n$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n$ vitest run --root ../.. packages/runner/src\nExit code: 0",
+    "reportedAt": "2026-08-15T20:18:49.846Z"
   },
   "filesModified": [
     "apps/daemon/src/activation/activation-embargo.test.ts",
@@ -294,9 +294,9 @@
     "apps/daemon/src/activation/activation-ingress.test.ts",
     "apps/daemon/src/activation/activation-ingress.ts",
     "apps/daemon/src/activation/activation-ingress.js",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
     "apps/daemon/src/daemon-command-registry.ts",
-    "apps/daemon/src/daemon-command-registry.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts"
+    "apps/daemon/src/daemon-command-registry.test.ts"
   ],
   "reviewCompletedAt": "2026-08-15T18:54:28.381Z",
   "rejectionDetails": {

@@ -1,14 +1,13 @@
 import { createHash, generateKeyPairSync } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
-import { join, posix } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 
 import {
   DISTRIBUTION_COMPONENT_KINDS,
 } from "../../../packages/contracts/src/distribution/distribution-contract.js";
 import type {
-  DistributionComponentKind,
   DistributionRefusalReason,
 } from "../../../packages/contracts/src/distribution/distribution-contract.js";
 import { createCompatGate } from "../../../packages/control-room-client/src/index.js";
@@ -24,8 +23,13 @@ import {
   publicKeyHex,
 } from "../../../tools/packaging/distribution-build.js";
 import type { DistributionBuildInput } from "../../../tools/packaging/distribution-build.js";
+import { DISTRIBUTION_INVENTORY } from "../../../tools/packaging/distribution-inventory.js";
 import { startDistribution } from "../../../tools/packaging/distribution-startup.js";
 import type { StartupDistributionExpectation } from "../../../packages/contracts/src/distribution/distribution-verifier.js";
+import {
+  RELEASE_COMPONENTS,
+  buildReleaseSubject,
+} from "../../../scripts/release/release-subject.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
@@ -52,74 +56,85 @@ function read(relative: string): Uint8Array {
   return new Uint8Array(readFileSync(join(REPO_ROOT, relative)));
 }
 
-function providerAssets(provider: string): readonly string[] {
-  const dir = posix.join("packages/runner/src/providers", provider);
-  return readdirSync(join(REPO_ROOT, dir))
-    .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
-    .sort()
-    .map((name) => posix.join(dir, name));
-}
+/**
+ * The ONE canonical production inventory, imported rather than rebuilt. This file used to
+ * carry a second hand-built list — and a `providerAssets()` DIRECTORY WALK for the two
+ * provider components — while scripts/release/release-subject.mjs carried a different one.
+ * Two lists meant two answers to "what ships"; the release script omitted the JetBrains
+ * adapter entirely and enumerated eleven claude assets where the walk found twenty-two.
+ *
+ * The walk is gone on purpose, not incidentally: its filter excluded `*.test.ts` but not
+ * `*-test-fixtures.ts`, so it swept claude-launcher-test-fixtures.ts and
+ * claude-launcher-authority-test-fixtures.ts into a SHIPPED distribution — exactly the
+ * fixture-as-shipped-artifact the IDE_ADAPTER test below is written to prevent. A walk
+ * also makes the distribution digest depend on whatever happens to be on disk at build
+ * time, which is the one thing a canonical inventory exists to stop.
+ *
+ * This array is the SUBJECT of the assertions below, never their source. Every expectation
+ * about it — the count, the ids, the kinds, the exact asset paths — is hand-written
+ * literal text. An expectation derived from the import would compare the array with itself
+ * and survive every future omission.
+ */
+const INVENTORY = DISTRIBUTION_INVENTORY;
 
 /**
- * The hand-reviewed inventory of components that actually exist in this tree.
+ * The exact shipped asset set, hand-transcribed from the shipped tree.
  *
- * IDE_ADAPTER IS NOW SHIPPED. The premise of its former absence — that `adapters/` does
- * not exist — stopped being true: task-9fd52b41f3ea4aad8c0c07bbe6fd3025 landed
+ * IDE_ADAPTER IS SHIPPED. The premise of its former absence — that `adapters/` does not
+ * exist — stopped being true: task-9fd52b41f3ea4aad8c0c07bbe6fd3025 landed
  * adapters/jetbrains and adapters/ide-contract, and
  * task-9fff3d4258ca4bd8b6e167761ee94fdf added the host that composes them. Its assets are
  * real shipped source read through the same `read(path)` helper as every other component,
- * so its digests come from the production builder rather than from a fixture.
- *
- * Both the `.ts` modules AND their `.js` bridges are enumerated: the bridges are what let
- * these modules resolve each other under plain Node, so a component shipped without them
- * would not load at all.
+ * so its digests come from the production builder rather than from a fixture. Both the
+ * `.ts` modules AND their `.js` bridges are enumerated: the bridges are what let these
+ * modules resolve each other under plain Node, so a component shipped without them would
+ * not load at all.
  *
  * The labelled contract FIXTURE at the bottom of this file is a different thing and stays:
  * it exercises the packaging path for an IDE_ADAPTER component that is not this one.
  */
-const JETBRAINS_ADAPTER_ASSETS = [
-  "adapters/ide-contract/src/index.js",
-  "adapters/ide-contract/src/index.ts",
-  "adapters/jetbrains/src/host/jetbrains-host-port-detail.js",
-  "adapters/jetbrains/src/host/jetbrains-host-port-detail.ts",
-  "adapters/jetbrains/src/host/jetbrains-host-ports.js",
-  "adapters/jetbrains/src/host/jetbrains-host-ports.ts",
-  "adapters/jetbrains/src/host/jetbrains-host.js",
-  "adapters/jetbrains/src/host/jetbrains-host.ts",
-  "adapters/jetbrains/src/index.js",
-  "adapters/jetbrains/src/index.ts",
-  "adapters/jetbrains/src/jetbrains-distribution-gate.js",
-  "adapters/jetbrains/src/jetbrains-distribution-gate.ts",
-] as const;
-
-const INVENTORY: ReadonlyArray<{
-  readonly assets: readonly string[];
-  readonly componentId: string;
-  readonly componentKind: DistributionComponentKind;
-}> = [
-  { assets: ["apps/daemon/src/index.ts"], componentId: "daemon", componentKind: "DAEMON" },
-  {
-    assets: ["apps/control-room/index.html"],
-    componentId: "control-room",
-    componentKind: "CONTROL_ROOM",
-  },
-  { assets: ["packages/mcp/src/index.ts"], componentId: "mcp-bridge", componentKind: "MCP_BRIDGE" },
-  {
-    assets: providerAssets("claude"),
-    componentId: "provider-claude",
-    componentKind: "PROVIDER_ADAPTER",
-  },
-  {
-    assets: providerAssets("codex"),
-    componentId: "provider-codex",
-    componentKind: "PROVIDER_ADAPTER",
-  },
-  {
-    assets: JETBRAINS_ADAPTER_ASSETS,
-    componentId: "ide-adapter-jetbrains",
-    componentKind: "IDE_ADAPTER",
-  },
-];
+const EXPECTED_ASSETS: Readonly<Record<string, readonly string[]>> = {
+  "control-room": ["apps/control-room/index.html"],
+  daemon: ["apps/daemon/src/index.ts"],
+  "ide-adapter-jetbrains": [
+    "adapters/ide-contract/src/index.js",
+    "adapters/ide-contract/src/index.ts",
+    "adapters/jetbrains/src/host/jetbrains-host-port-detail.js",
+    "adapters/jetbrains/src/host/jetbrains-host-port-detail.ts",
+    "adapters/jetbrains/src/host/jetbrains-host-ports.js",
+    "adapters/jetbrains/src/host/jetbrains-host-ports.ts",
+    "adapters/jetbrains/src/host/jetbrains-host.js",
+    "adapters/jetbrains/src/host/jetbrains-host.ts",
+    "adapters/jetbrains/src/index.js",
+    "adapters/jetbrains/src/index.ts",
+    "adapters/jetbrains/src/jetbrains-distribution-gate.js",
+    "adapters/jetbrains/src/jetbrains-distribution-gate.ts",
+  ],
+  "mcp-bridge": ["packages/mcp/src/index.ts"],
+  "provider-claude": [
+    "packages/runner/src/providers/claude/claude-cancel-reconcile.ts",
+    "packages/runner/src/providers/claude/claude-capabilities.ts",
+    "packages/runner/src/providers/claude/claude-observation.ts",
+    "packages/runner/src/providers/claude/claude-probe.ts",
+    "packages/runner/src/providers/claude/claude-render.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-closure.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-copy.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts",
+    "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+    "packages/runner/src/providers/claude/claude-stream-anomalies.ts",
+    "packages/runner/src/providers/claude/claude-stream.ts",
+  ],
+  "provider-codex": [
+    "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
+    "packages/runner/src/providers/codex/codex-capabilities.ts",
+    "packages/runner/src/providers/codex/codex-observation.ts",
+    "packages/runner/src/providers/codex/codex-probe.ts",
+    "packages/runner/src/providers/codex/codex-render-skills.ts",
+    "packages/runner/src/providers/codex/codex-render.ts",
+    "packages/runner/src/providers/codex/codex-stream-anomalies.ts",
+    "packages/runner/src/providers/codex/codex-stream.ts",
+  ],
+};
 
 /** Every durable instruction template this repo ships. Exactly three, hand-transcribed. */
 const TEMPLATE_PATHS = ["AGENTS.md", "CLAUDE.md", ".codex/agent-instructions.md"] as const;
@@ -236,6 +251,38 @@ describe("hand-reviewed distribution inventory", () => {
       expect(entry.assets.length, `${entry.componentId} must enumerate assets`)
         .toBeGreaterThan(0);
     }
+  });
+
+  test("no component id is declared twice in the canonical inventory", () => {
+    // A duplicate id would build two containers under one name; the startup gate refuses
+    // that with COMPONENT_DUPLICATE (asserted below), but the inventory should never
+    // reach it in the first place.
+    expect(new Set(INVENTORY.map((entry) => entry.componentId)).size).toBe(6);
+  });
+
+  test("every shipped component carries exactly its hand-transcribed asset set", () => {
+    // The pin that makes asset drift loud. `EXPECTED_ASSETS` is literal text; the
+    // canonical inventory is the subject. A path added, dropped or renamed there
+    // silently redefines the distribution digest unless this reddens.
+    expect(Object.keys(EXPECTED_ASSETS).sort()).toEqual([
+      "control-room", "daemon", "ide-adapter-jetbrains", "mcp-bridge", "provider-claude",
+      "provider-codex",
+    ]);
+    for (const entry of INVENTORY) {
+      expect(entry.assets, `${entry.componentId} asset set`)
+        .toEqual(EXPECTED_ASSETS[entry.componentId]);
+    }
+    // Proves the loop above actually ran over all six rather than over nothing.
+    expect(INVENTORY.length).toBe(6);
+  });
+
+  test("the canonical inventory and its entries are frozen against mutation", () => {
+    expect(Object.isFrozen(INVENTORY)).toBe(true);
+    for (const entry of INVENTORY) {
+      expect(Object.isFrozen(entry), `${entry.componentId} entry`).toBe(true);
+      expect(Object.isFrozen(entry.assets), `${entry.componentId} assets`).toBe(true);
+    }
+    expect(INVENTORY.length).toBe(6);
   });
 
   test("exactly one shipped component claims IDE_ADAPTER, built from real files", () => {

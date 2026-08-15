@@ -189,7 +189,7 @@
       "completedAt": "2026-08-15T19:05:32.888Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -209,12 +209,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T20:15:40.348Z",
+  "updatedAt": "2026-08-15T20:19:13.631Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-8b21d0bb",
     "architect-797c65f6",
-    "worker-682e25b5"
+    "worker-682e25b5",
+    "worker-fd8f822b"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-15T18:02:20.406Z",
@@ -268,8 +269,30 @@
     ]
   },
   "budget": {
-    "wallClockMs": 9000000
+    "wallClockMs": 9000000,
+    "warnedAt": "2026-08-15T20:17:59.228Z"
   },
   "planApprovedAt": "2026-08-15T18:12:51.902Z",
-  "workStartedAt": "2026-08-15T18:21:37.278Z"
+  "workStartedAt": "2026-08-15T18:21:37.278Z",
+  "reviewStartedAt": "2026-08-15T20:19:13.631Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  89 passed (89)\n      Tests  1823 passed (1823)\n   Start at  23:18:17\n   Duration  4.53s\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-15T20:19:13.631Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/recovery-completion.test.ts",
+    "apps/daemon/src/recovery/recovery-completion-digest.ts",
+    "apps/daemon/src/recovery/recovery-completion-digest.js",
+    "apps/daemon/src/recovery/recovery-completion.ts",
+    "apps/daemon/src/recovery/recovery-completion.js",
+    "apps/daemon/src/recovery/recovery-completion-evidence.ts",
+    "apps/daemon/src/recovery/recovery-completion-evidence.js",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts"
+  ]
 }

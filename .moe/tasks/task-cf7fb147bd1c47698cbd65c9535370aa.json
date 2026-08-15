@@ -160,8 +160,8 @@
       "completedAt": "2026-08-15T19:06:23.012Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f6ca780e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -186,7 +186,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:49.319Z",
-  "updatedAt": "2026-08-15T20:15:20.893Z",
+  "updatedAt": "2026-08-15T20:19:19.433Z",
   "contextFetchedBy": [
     "governor-7c5e6be6",
     "architect-a42f4965",
@@ -199,7 +199,9 @@
     "firstClaimAt": "2026-08-13T15:42:43.029Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-15T20:19:19.433Z",
+    "wallClockMs": 189396404
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -271,5 +273,8 @@
     "apps/daemon/src/recovery/effect-inventory.js",
     "apps/daemon/src/recovery/effect-inventory-collection.ts",
     "apps/daemon/src/recovery/effect-inventory-collection.js"
-  ]
+  ],
+  "completedAt": "2026-08-15T20:19:19.433Z",
+  "reviewCompletedAt": "2026-08-15T20:19:19.433Z",
+  "reviewSummary": "APPROVED at HEAD 18f0964. CRITICAL; I re-ran the gate and drilled the embargo myself.\n\nDoD 7, legs separate: daemon typecheck EXIT=0. daemon test EXIT=1 in MY tree only, and NOT this task's: the single failure is review/review-lineage.test.ts, caused by TWO UNCOMMITTED peer files (review-read-model.ts, review-test-fixtures.ts) adding a required highestRound guard to parseLineage without updating every fixture. Disjoint lane, not at HEAD, peer mid-TDD. I did not touch their work. Owned lane clean: src/recovery + src/activation, 28 files / 541 tests, EXIT=0. The worker's gate recorded HEAD_BEFORE==HEAD_AFTER==18f0964 green, the right discipline given this tree moves inside a 50s window.\n\nDoD 6 embargo mutation-check, run by me: I bypassed the production branch in activation-embargo.ts (QUIESCED/recoveryRequired -> false). FOUR named tests went red, including \"creates zero attempt, slot, lease, effect, grant or spend authority when embargoed\". Restored byte-exact, sha ca0ffdba.\n\nDoD 6 class generation: RECOVERY_PROOF_CLASSES is 6, RECOVERY_INVENTORY_POPULATIONS is 7 — the \"seven\" is the population set. Both pinned by HAND-WRITTEN literal names, so the assertion is not self-referential, plus toHaveLength(7), generated.toEqual(POPULATIONS) across the 6 canonical rows, and new Set(generated).size===7. A sweep producing zero cases cannot pass.\n\nDoD 4 ordering verified in runEffectActivateCommand: decode, then embargo at :299, only then claimStage->claimWork, armStage, activateStage, slotStage, budgetStage, commitStage last. Every enumerated allocation sits below the fence.\n\nNON-GATING: the OTHER work-claim entry, registry:233 -> runWorkClaimCommand, consults no embargo (zero hits in src/work production; positive control confirms the query finds them in src/activation). Not rejecting, since DoD 4 enumerates attempt/slot/lease/effect/spend and that path records board-work ownership. If ownership must be fenced during an embargo, it needs its own task."
 }
