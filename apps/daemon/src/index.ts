@@ -229,6 +229,34 @@ export {
   type RecoverySuccessionRequest, type RecoverySuccessionResult,
   type RecoverySuccessionService,
 } from "./recovery/recovery-succession.js";
+// R3 disaster-recovery completion, plus the reconciliation ledger it consumes.
+// The ledger pair is published HERE rather than left where it was written: it
+// had zero root exports and zero production consumers, so nothing could compose
+// it and a runtime-loadability gate proving the module LOADS proved nothing
+// about anything IMPORTING it.
+export {
+  RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_CODES, RECOVERY_COMPLETION_COMMAND_KIND,
+  RECOVERY_COMPLETION_LAYER, RECOVERY_COMPLETION_SCHEMA_VERSION, RECOVERY_STEP_UP_REF_PREFIX,
+  RECOVERY_STEP_UP_WINDOW_SECONDS, recoveryCompletionDigest, recoveryCoverageProofDigest,
+  type RecoveryCompletionCode, type RecoveryCompletionEvidence,
+  type RecoveryCompletionItemEvidence, type RecoveryCompletionProofEvidence,
+  type RecoveryCompletionRefused, type RecoveryCompletionUpstream,
+} from "./recovery/recovery-completion-digest.js";
+export {
+  readRecoveryCompletionEvidence, runRecoveryCompleteCommand, type RecoveryCompleteRequest,
+  type RecoveryCompletionAccepted, type RecoveryCompletionEvidenceFound,
+  type RecoveryCompletionEvidenceResult, type RecoveryCompletionOutcome,
+} from "./recovery/recovery-completion.js";
+export {
+  readRecoveryReconciliation, recordRecoveryReconciliation,
+  type RecoveryDurableReconcileRequest, type RecoveryReconciliationExternalFacts,
+  type RecoveryReconciliationFound, type RecoveryReconciliationReadResult,
+  type RecoveryReconciliationRecorded, type RecoveryReconciliationWriteResult,
+} from "./recovery/recovery-inventory-ledger.js";
+export type {
+  RecoveryInventoryRefusal, RecoveryReconciliationItem, RecoveryReconciliationProof,
+  RecoveryReconciliationRecord,
+} from "./recovery/recovery-inventory-contract.js";
 export {
   PROJECT_CONFIGURATION_SELECTION_CODES, PROJECT_CONFIGURATION_SELECTION_LAYER,
   readCurrentProjectConfiguration, selectProjectConfiguration,

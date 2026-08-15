@@ -22,27 +22,40 @@
     {
       "stepId": "step-1",
       "description": "Land the workspace dependency edge FIRST, because there is no escape hatch: this repo has no tsconfig \"paths\" and no project references, so a deep relative import into @moe/scheduler fails TS6059, and its package `exports` map is exclusive ({\".\": \"./src/index.ts\"}) so no subpath resolves. Add `\"@moe/scheduler\": \"workspace:*\"` to the dependencies of packages/runner/package.json (which today declares ONLY @moe/contracts) and run the workspace install so pnpm-lock.yaml gains the packages/runner importer entry. BOTH files are declared owned paths of this task. Verify all three forms the rail requires: (a) the manifest declares it; (b) pnpm-lock.yaml carries the importer entry under packages/runner; (c) a uniquely named temporary probe inside packages/runner imports `normalizeUsageMeasurement`, `BUDGET_MEASUREMENT_SOURCES`, `BUDGET_MEASUREMENT_COVERAGES`, `SUPPORTED_SOURCE_PARSER_VERSIONS`, `MEASUREMENT_ISSUE_LAYERS` and the types `UsageMeasurementRecord`, `ObservedIntervalRefs`, `PricebookBinding`, `NormalizedMeasurement`, `MeasurementResult`, `LayeredIssue` from the BARE specifier `@moe/scheduler`, then `pnpm --filter @moe/runner typecheck` exits 0 and the probe is deleted in the SAME command; confirm `git status --porcelain` shows no residue. NO CYCLE IS CREATED — verified: @moe/scheduler depends on @moe/context, @moe/contracts and @moe/core only, and the sole package depending on @moe/runner is apps/daemon. Note that packages/runner/src/materialization/dependency-witness-mirror.ts:18 documents the old contracts-only stance and MIRRORS scheduler types; leave that file alone — this task adds the edge for usage authority only and does not migrate existing mirrors. Finally capture the merge-base output of the exact verification command for the step-8 path-attributed comparison.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/package.json",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "note": "Dependency edge landed. (a) packages/runner/package.json now declares \"@moe/scheduler\": \"workspace:*\" alongside @moe/contracts; (b) pnpm-lock.yaml packages/runner importer carries '@moe/scheduler': specifier workspace:* version link:../scheduler (line 163-165); (c) temporary probe packages/runner/src/providers/telemetry/probe-step1-scheduler-edge.ts imported normalizeUsageMeasurement, BUDGET_MEASUREMENT_SOURCES, BUDGET_MEASUREMENT_COVERAGES, SUPPORTED_SOURCE_PARSER_VERSIONS, MEASUREMENT_ISSUE_LAYERS and types UsageMeasurementRecord, ObservedIntervalRefs, PricebookBinding, NormalizedMeasurement, MeasurementResult, LayeredIssue from the BARE specifier \"@moe/scheduler\"; pnpm --filter @moe/runner typecheck exit 0 and the probe was rm'd in the same command; git status --porcelain shows only package.json + pnpm-lock.yaml modified, no probe residue. Full `pnpm install` was required (not just --lockfile-only) to create packages/runner/node_modules/@moe/scheduler symlink. No cycle: @moe/scheduler depends on context/contracts/core only. MERGE-BASE BASELINE for step 8 captured at HEAD 98d6e72 BEFORE any bytes: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm --filter @moe/scheduler test` exit 0, runner 60 files/2016 tests passed, scheduler 43 files/1324 tests passed. No foreign red exists at baseline, so any red at HEAD is mine to fix.",
+      "startedAt": "2026-08-15T18:32:33.392Z",
+      "completedAt": "2026-08-15T18:35:26.677Z"
     },
     {
       "stepId": "step-2",
       "description": "RED: usage-normalization tests, in a new packages/runner/src/providers/telemetry/provider-run-record.test.ts. Drive ONLY the production surfaces. The envelope handed to `normalizeUsageMeasurement` is EXACTLY `{ measurement, pricebookBinding, truncated }` with no extra key — anything else refuses at layer MEASUREMENT with code BUDGET_OBSERVATION_MALFORMED. `UsageMeasurementRecord` fields are exactly {meter, quantity: number|null, coverage, source, providerRunRef, sourceParserVersion, sequence, rawReceiptDigest, observedInterval:{startRef,endRef}}. Assert: (a) a token fact that is UNKNOWN produces `quantity: null`, NEVER 0 — this is task rail 2 and the single most important assertion in the task; (b) coverage PARTIAL or UNKNOWN yields `pricebookBinding: null` and NO spend figure, while cost-basis metadata is still published; only COMPLETE may carry a PricebookBinding {pricebookRevisionRef, unitPriceMicros, pricedAtRef}; (c) a GENERATED sweep over the full 6 x 3 matrix of BUDGET_MEASUREMENT_SOURCES [PROVIDER_REPORTED_COMPLETE, PROVIDER_REPORTED_PARTIAL, DERIVED_LIST_PRICE, SUBSCRIPTION_QUOTA, ACTUAL_BILLED, UNKNOWN] x BUDGET_MEASUREMENT_COVERAGES [COMPLETE, PARTIAL, UNKNOWN], asserting its own exact non-zero case count — a sweep that silently produces zero cases passes while testing nothing; (d) sourceParserVersion is a member of SUPPORTED_SOURCE_PARSER_VERSIONS ([1,2]) and an out-of-range value refuses with its exact code; (e) every refusal narrows on `layer` BEFORE reading `code`, because the CONTRACT arm is typed BudgetIssueCode and the MEASUREMENT arm MeasurementIssueCode — pin both layer and code, never bare `!ok`; (f) redelivery of the same identity and bytes with `prior` returns the REFERENCE-IDENTICAL prior object (assert with toBe, not toEqual), and a sequence skip / rewind / identity conflict / foreign providerRunRef refuse with BUDGET_OBSERVATION_SEQUENCE_GAP / _SEQUENCE_REGRESSION / _IDENTITY_CONFLICT / _STREAM_MISMATCH respectively. Never hand-build a NormalizedMeasurement: it is a plain published interface so TypeScript permits it, but `identity` is computed by the normalizer and only a record that came out of `normalizeUsageMeasurement` carries authority. Record the suite RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/provider-run-record.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/telemetry/provider-run-record.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-usage-normalization.test.ts"
+      ],
+      "note": "RED recorded: `npx vitest run packages/runner/src/providers/telemetry/provider-usage-normalization.test.ts` exit 1, \"Cannot find module './provider-usage-normalization.js'\", Test Files 1 failed, no tests. TWO PLAN CORRECTIONS, both re-measured on disk. (1) FILE LAYOUT: the step-2 assertions live in a new provider-usage-normalization.test.ts rather than provider-run-record.test.ts, so neither test file approaches the 400-line split bar; provider-run-record.test.ts still lands in step 4. (2) PRICEBOOK RULE: the plan's \"only COMPLETE may carry a PricebookBinding\" is not the landed rule. budget-measurement.ts:157-166 says only DERIVED_LIST_PRICE may carry a binding (and MUST), at COMPLETE or PARTIAL; any other source carrying one refuses BUDGET_OBSERVATION_UNCORRELATED_BILLING_CLAIM. This seam derives no price, so it never emits DERIVED_LIST_PRICE and therefore never a binding — strictly stronger than the plan's phrasing. Tests pin the landed rule against the authority and the production silence separately. Suite drives the real launchClaudeWithTelemetry with the launcher's own fixture ports; the 6x3 = 18-case matrix asserts its own cardinality (9 allowed / 9 refused, both non-zero) and covers both frozen vocabularies by name; every refusal narrows on `layer` before reading `code` via measurementCodes/contractCodes helpers.",
+      "startedAt": "2026-08-15T18:36:48.231Z",
+      "completedAt": "2026-08-15T18:40:10.240Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN: create packages/runner/src/providers/telemetry/provider-usage-normalization.ts (target <=250 lines) plus its sibling bridge provider-usage-normalization.js containing exactly `export * from \"./provider-usage-normalization.ts\";` — every .ts in this tree has one and both tsc and vitest are blind to its absence. Export `normalizeProviderUsage(handoff, context)` which maps a ClaudeTelemetryHandoff onto one UsageMeasurementRecord per token meter and calls the bare-root `normalizeUsageMeasurement`. Mapping rules, all of which the step-2 suite pins: each of tokens.inputTokens / outputTokens / cacheCreationInputTokens / cacheReadInputTokens becomes its own meter row; a ProviderQuantity that is not `known` maps to `quantity: null` and coverage UNKNOWN, NEVER to 0; the handoff's ProviderCountCoverage maps onto BudgetMeasurementCoverage preserving COMPLETE/PARTIAL/UNKNOWN exactly, never widening; `source` is PROVIDER_REPORTED_COMPLETE only when every contributing fact is known AND the terminal outcome is ordinary completion, PROVIDER_REPORTED_PARTIAL when partially known, UNKNOWN when blind — and the choice is derived from observed facts, never accepted from a caller; providerRunRef comes from handoff.providerRunRef; sequence from handoff.sequence, refusing when it is not known; rawReceiptDigest from handoff.stdoutReceiptDigest, refusing when it is not known rather than substituting a placeholder; observedInterval is {startRef: launch.startedAt, endRef: launch.completedAt}, refusing when either is null. Attach a PricebookBinding ONLY when coverage is COMPLETE; otherwise pass `pricebookBinding: null` and carry cost-basis metadata separately with no spend figure. Do NOT reimplement the source/coverage matrix, the pricebook check, or the identity/sequence checks — `validateUsageMeasurement` is deliberately withheld from the scheduler root precisely so this module cannot route around the authority. Surface every scheduler refusal with its layer and code preserved verbatim in this module's own refusal shape, following the established own-code + own-layer + separate `upstream` pattern already used across this repo. Step-2 suite goes green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/provider-usage-normalization.ts",
         "packages/runner/src/providers/telemetry/provider-usage-normalization.js"
@@ -50,20 +63,36 @@
       "newFiles": [
         "packages/runner/src/providers/telemetry/provider-usage-normalization.ts",
         "packages/runner/src/providers/telemetry/provider-usage-normalization.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-usage-normalization.ts",
+        "packages/runner/src/providers/telemetry/provider-usage-normalization.js",
+        "packages/runner/src/providers/telemetry/provider-usage-contracts.ts",
+        "packages/runner/src/providers/telemetry/provider-usage-contracts.js",
+        "packages/runner/src/providers/telemetry/provider-usage-normalization.test.ts"
+      ],
+      "note": "GREEN: 41 tests pass, `pnpm --filter @moe/runner typecheck` exit 0. The single production module first measured 276 physical lines — above the <=250 per-file target the three landed telemetry sources hold (250/248/234) — so the vocabulary was split out into provider-usage-contracts.ts (105 lines: meters, codes, layers, cost bases, unpriced reasons, messages, types, refusal factory) leaving provider-usage-normalization.ts at 202 lines (the mapping only). Both have their one-line .js bridge. That is one more file pair than the plan named, taken to hold the per-file cap. TWO MAPPING FACTS THE PLAN DID NOT PREDICT, both measured: (1) a truncated capture yields NO usage rows at all, not blind ones — the parse refusal also blinds the SEQUENCE, and a run with no observation sequence cannot be placed in a monotonic stream, so it refuses PROVIDER_USAGE_SEQUENCE_UNKNOWN/USAGE_INPUT; the blind-count arm the plan describes is reached instead by a terminal record that reports its sequence and no usage block. (2) Guard order is interval, then sequence, then receipt, and the tests pin WHICH guard answers on each arm rather than merely that one did. source is derived only from observed facts (all four counts known AND terminal COMPLETED AND no telemetryRefusal => PROVIDER_REPORTED_COMPLETE; some known => PARTIAL; none => UNKNOWN) and never accepted from the caller. Scheduler refusals travel as own-code PROVIDER_USAGE_AUTHORITY_REFUSED at own-layer USAGE_AUTHORITY with `upstream` carrying the LayeredIssue set verbatim.",
+      "startedAt": "2026-08-15T18:40:13.680Z",
+      "completedAt": "2026-08-15T18:44:06.804Z"
     },
     {
       "stepId": "step-4",
       "description": "RED: provider-run-record tests, extending provider-run-record.test.ts. The record under test is PROVIDER-NEUTRAL — ClaudeTelemetryHandoff is Claude-shaped, and the benchmark consumer (task-b937811e8b72459ea169e5fff1238ce1) must not have to know that. Drive the record through the real production path `launchClaudeWithTelemetry`, not a hand-built handoff, so DoD 3's \"tests use that production call path rather than constructing a benchmark-only mirror\" is satisfied literally. Assert the record binds, each from its named source and each separately assertable: run/effect identity (providerRunRef, effectDigest, activationDigest); provider; selectedModelId, modelSnapshotKind and modelSnapshotEvidence from the declared ClaudeLaunchSelection; reasoningEffort; BOTH digest families side by side — configurationDigest/policyDigest/orchestrationDigest (launch-decision inputs, from the selection) AND runtimeBindingDigest/pinnedClosureDigest/observationDigest plus profileRevisionId (what the runtime actually was, from the launch facts); startedAt/completedAt; the exact terminal classification from PROVIDER_TERMINAL_OUTCOMES; the infrastructure classification from PROVIDER_INFRASTRUCTURE_OUTCOMES; token and step counts; and concurrency carrying BOTH `declaredCeiling` and `achieved`. THREE ARCHITECT RULINGS ON THE PRODUCER'S DELEGATED NAME DISAGREEMENT, to be encoded as tests rather than prose: (1) the two digest noun sets are DIFFERENT EVIDENCE, not two names for one thing — the record carries both and a test asserts neither is derived from the other; (2) `achieved` concurrency DID land as ClaudeTelemetryConcurrency.achieved, so the producer's \"half delivered\" note is stale — assert both halves present, and assert the UNKNOWN arm when achieved is not observed; (3) profileRevisionId is carried as a POSITIVE labelled field AND may never satisfy model or effort — add a test at the telemetry layer proving a record whose only model-ish evidence is profileRevisionId, runtime reportedVersion or the pinned closure digest reports model/effort as UNKNOWN with the exact code and layer, never as proven. Also assert: every declared outcome and measurement source is generated with an asserted non-zero exact cardinality; every UNKNOWN carries an exact code and layer and is never 0 or \"\"; the record is deeply frozen and detached from its inputs. Record RED.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/provider-run-record.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-run-record.test.ts"
+      ],
+      "note": "RED recorded first: `npx vitest run packages/runner/src/providers/telemetry/provider-run-record.test.ts` exit 1, \"Cannot find module './provider-run-record.js'\", no tests. 29 cases, all driven through the real launchClaudeWithTelemetry with the launcher's own fixture ports. All three architect rulings are encoded as tests: (1) both digest families asserted side by side with `new Set([...decision, ...runtime]).size === 6` plus a member-by-member non-containment check, so neither family can be derived from the other; (2) concurrency asserts declaredCeiling known 4 AND achieved UNKNOWN with exact code TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED/layer TELEMETRY_SCHEMA, and that achieved !== declaredCeiling; (3) the substitution test takes a REAL production handoff and removes exactly the declared selection, leaving pinnedClosureDigest, runtimeBindingDigest, observationDigest and the provider's OWN observed model id all known, then asserts model/effort are UNKNOWN with exact code+layer and that none of those six substitute values appears anywhere in the model field. Cardinality: 6 terminal + 10 infrastructure cases each asserted equal to the frozen vocabulary BY NAME, and 3 emitted measurement sources + 3 never-emitted sources asserted to sum to BUDGET_MEASUREMENT_SOURCES exactly. The UNKNOWN walker asserts >10 facts found BEFORE judging them, so a walker that found nothing cannot pass.",
+      "startedAt": "2026-08-15T18:45:09.242Z",
+      "completedAt": "2026-08-15T18:48:02.723Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN: create packages/runner/src/providers/telemetry/provider-run-record.ts (target <=250 lines) plus its one-line .js bridge. Export the frozen provider-neutral `ProviderRunRecord` type and `buildProviderRunRecord(handoff)` composing the existing ClaudeTelemetryHandoff with `normalizeProviderUsage`'s NormalizedMeasurement set. This module MAPS, it does not re-decide: terminal and infrastructure classifications come from the handoff's already-closed PROVIDER_TERMINAL_OUTCOMES / PROVIDER_INFRASTRUCTURE_OUTCOMES vocabularies, token and step facts from ClaudeTokenObservations / ClaudeStepObservations, concurrency from ClaudeTelemetryConcurrency verbatim including both declaredCeiling and achieved, and model/effort ONLY from the declared ClaudeLaunchSelection's selectedModelId / reasoningEffort. Never let profileRevisionId, runtime reportedVersion or pinnedClosureDigest flow into the model or effort field — that substitution is task rail 1 and step 4 pins it. Carry both digest families as distinct named fields. Every absent provider fact is an explicit UNKNOWN carrying a stable code and layer from the existing PROVIDER_TELEMETRY_CODES / PROVIDER_TELEMETRY_LAYERS vocabularies, never 0 and never an empty string. Preserve `handoff.telemetryRefusal` on the record rather than flattening it, so a partially-observed run stays inspectable. Deep-freeze and detach the returned record. Step-4 suite goes green.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/telemetry/provider-run-record.ts",
         "packages/runner/src/providers/telemetry/provider-run-record.js"
@@ -71,16 +100,24 @@
       "newFiles": [
         "packages/runner/src/providers/telemetry/provider-run-record.ts",
         "packages/runner/src/providers/telemetry/provider-run-record.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/telemetry/provider-run-record.ts",
+        "packages/runner/src/providers/telemetry/provider-run-record.js"
+      ],
+      "note": "GREEN: all 4 telemetry suites pass (137 tests), `pnpm --filter @moe/runner typecheck` exit 0. provider-run-record.ts is 241 physical lines by `grep -c ''` (under the 250 target) with its one-line .js bridge. The record MAPS only: terminal/infrastructure verbatim from the handoff's closed vocabularies, tokens/steps from the parser's observations under provider-NEUTRAL names (ProviderTokenCounts/ProviderStepCounts, so a consumer never names a Claude type), concurrency verbatim with both halves, usage through normalizeProviderUsage. Model, snapshot kind, snapshot evidence, reasoning effort, the three decision digests and profileRevisionId are read ONLY from the declared ClaudeLaunchSelection; runtimeBinding/pinnedClosure/observation digests only from the launch facts; observedModel travels in its own labelled field. ONE TYPING FACT FOUND ON THE WAY: inside a `declared.known === true` branch TypeScript narrows the union so the declared arm can no longer serve as the ProviderFactUnknown fallback (TS2739 x7), so a module constant SELECTION_UNREADABLE = unknownFact(\"TELEMETRY_DECLARED_SELECTION_UNREADABLE\",\"TELEMETRY_INPUT\") carries that unreachable-by-construction arm with the selection reader's own code rather than a launch-side one. A null OR EMPTY launch fact becomes an UNKNOWN inheriting the launcher's own refusal code+layer via launchUnknown(); a null launch fact is reachable only on arms that produced no observation, and every such arm carries telemetryRefusal, so no code is invented. Record is deep-frozen and detached (tokens/concurrency/providerRunRef are fresh objects; a write to `provider` throws TypeError).",
+      "startedAt": "2026-08-15T18:48:06.305Z",
+      "completedAt": "2026-08-15T18:48:18.451Z"
     },
     {
       "stepId": "step-6",
       "description": "End the telemetry island — this is DoD 3 and the single highest-value step for the downstream consumer. packages/runner/src/index.ts is 249 physical lines and today exports ZERO symbols from providers/telemetry/, so `launchClaudeWithTelemetry`, `ClaudeTelemetryHandoff`, `parseClaudeResultTelemetry` and the whole provider-telemetry contract vocabulary are unreachable from the bare @moe/runner root even though they are shipped production code. Publish a CURATED surface: `launchClaudeWithTelemetry`, `buildProviderRunRecord`, `normalizeProviderUsage`, the ProviderRunRecord type closure, PROVIDER_TERMINAL_OUTCOMES, PROVIDER_INFRASTRUCTURE_OUTCOMES, PROVIDER_COUNT_COVERAGE_CLASSES, PROVIDER_CONCURRENCY_FACTS, PROVIDER_TELEMETRY_CODES, PROVIDER_TELEMETRY_LAYERS, PROVIDER_TELEMETRY_CONTRACT_VERSION, CLAUDE_TELEMETRY_HANDOFF_VERSION, CLAUDE_RESULT_TELEMETRY_VERSION, and the types a caller needs to NAME and CONSTRUCT what it receives — ProviderQuantity, ProviderText, ProviderFactUnknown, ProviderRunRef, ProviderTelemetryRefusal, ClaudeTelemetryHandoff and its member types. Curated means deliberate: follow the precedent set by task-d23a913f and WITHHOLD the internal validators the composing surface applies itself, so a consumer cannot pre-validate one value and hand in another; add a negative-control test pinning those absences so a future widening is a reviewed act. Update packages/runner/src/index-surface.test.ts with the exact namespace and type assertions and the hand-written export count. A type-only export is invisible to a runtime key count — prove each published TYPE by importing it in a compiled position, not by counting. Re-measure index.ts with `grep -c ''` afterwards; PowerShell Measure-Object -Line undercounts.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/index.ts",
         "packages/runner/src/index-surface.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T18:48:51.892Z"
     },
     {
       "stepId": "step-7",
@@ -118,7 +155,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-4d8438c5",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -179,15 +216,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:06.538Z",
-  "updatedAt": "2026-08-15T18:20:13.355Z",
+  "updatedAt": "2026-08-15T18:48:51.892Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:09:54.588Z",
     "plannedStepCount": 9,
-    "plannedDistinctFileCount": 9
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-a42f4965",
-    "architect-797c65f6"
+    "architect-797c65f6",
+    "worker-4d8438c5"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -208,7 +247,13 @@
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:19:33.765Z",
   "planningNotes": {
@@ -229,7 +274,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 8100000
+    "wallClockMs": 8100000,
+    "warnedAt": "2026-08-15T18:31:53.749Z",
+    "escalatedAt": "2026-08-15T18:31:53.749Z"
   },
-  "planApprovedAt": "2026-08-15T18:19:35.867Z"
+  "planApprovedAt": "2026-08-15T18:19:35.867Z",
+  "workStartedAt": "2026-08-15T18:32:33.392Z"
 }

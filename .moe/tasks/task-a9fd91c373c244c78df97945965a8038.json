@@ -17,8 +17,8 @@
     "Multi-node/fan-out remains typed UNSUPPORTED with zero authority."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-94dd1835",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -37,15 +37,27 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-15T18:31:16.469Z",
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "updatedAt": "2026-08-15T18:31:36.149Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:31:30.175Z",
+  "blockedReason": "The task's own hard-dependency condition remains false. Registry extraction task-9cba79a1 is DONE, but task-e33747f982e0452a9f9d784fd1cb914d is still WORKING (not QA-approved DONE) and its apparent effect.activate changes are/just were foreign in-flight bytes; upstream task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED awaiting that committed activation path. A committed-HEAD grep for Foundation attempt dispatch/read APIs remains empty, so there is no production service for this ingress to delegate to. Governor comment-55c9ce72 already fixes the direction: e337 -> 6cb -> this task. Planning now would invent the dispatch authority or consume foreign work. Re-promote only after e337 and 6cb are both QA-approved DONE, then probe the registry/public host and stored-dispatch reader with deliberately disagreeing caller/stored replay values before naming symbols. Do not manufacture ACTIVE provider slots or reimplement registry/authentication.",
   "contextFetchedBy": [
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "architect-94dd1835"
   ],
   "blockedResourceId": null,
   "metrics": {
     "firstClaimAt": "2026-08-15T18:31:16.469Z"
-  }
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read the governor cycle-resolution comment, confirmed 9cba is DONE while e337 is still in flight and 6cb is blocked, and reported this ingress task BLOCKED in the decided upstream order.",
+      "whatRemains": "After e337 and then 6cb are QA-approved DONE, re-probe the committed registry/public host and exact durable dispatch result/read/replay APIs, then plan authenticated ingress.",
+      "pitfalls": "Do not reverse the dependency, consume foreign effect.activate WIP, manufacture ACTIVE slots, or create test-owned registry/authentication/dispatch authority.",
+      "openQuestions": "Exact 6cb request/result API remains unknown until it lands.",
+      "releasedAt": "2026-08-15T18:31:36.148Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Dependency order revalidated; free architect capacity."
+    }
+  ]
 }

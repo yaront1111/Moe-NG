@@ -16,7 +16,7 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,17 +29,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-15T18:10:39.508Z",
+  "updatedAt": "2026-08-15T18:32:29.546Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:32:23.731Z",
+  "blockedReason": "The task rail explicitly forbids planning before task-6cbff010 is DONE. That producer is currently BLOCKED awaiting the committed effect.activate path, and committed HEAD still has no Foundation durable attempt/release/result/reconciliation reader under apps/daemon/src. Therefore none of the required stored release facts—unchanged WORK_RELEASE_OR_PAUSE cause, released lease/slot, terminal effects/resources, observed safe boundary, and exactly one committed handoff—can be selected from production. Planning would reconstruct safe-release authority from caller/test data, which is forbidden. Re-promote only after 6cb is QA-approved DONE; then probe its exact project+attempt reader with missing/conflicting/unreadable cases and confirm every named fact is retained. If any fact is omitted, repair 6cb rather than inventing it here.",
   "contextFetchedBy": [
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-94dd1835"
   ],
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read prior handoff/context, confirmed 6cb remains blocked and no durable released-attempt reader exists, and reported this task BLOCKED.",
+      "whatRemains": "After 6cb is QA-approved DONE, verify its project+attempt reader retains every release/currentness/handoff fact before planning this adapter.",
+      "pitfalls": "Do not reconstruct safe-release authority from caller payload, DAEMON_VERIFIED fields, or fixtures; omitted producer facts require producer repair.",
+      "openQuestions": "Whether 6cb retains all named release facts remains unknown until it lands.",
+      "releasedAt": "2026-08-15T18:32:29.546Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Required producer remains absent; free architect capacity."
+    },
     {
       "whatIsDone": "Re-measured the hard prerequisite with Moe, confirmed task-6cbff01023b14b26a78fc5e3eb1dd8a9 remains BLOCKED with no approved/completed reader, reported this task BLOCKED, and wrote Serena handoff task-task-e62e3828df234c66969a99b8223487f4-handoff.",
       "whatRemains": "After task-6cbff010 is QA-approved DONE, remeasure its durable project+attempt release/result/reconciliation reader and only then plan the safe-release evidence adapter.",

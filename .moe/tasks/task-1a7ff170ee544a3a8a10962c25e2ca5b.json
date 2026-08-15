@@ -21,7 +21,7 @@
     "Scope is apps/daemon/src/telemetry/provider-run-ledger.* only."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,14 +34,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:57:08.294Z",
-  "updatedAt": "2026-08-15T18:14:37.722Z",
+  "updatedAt": "2026-08-15T18:43:29.511Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:08:33.234Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Prerequisites 2 and 3 unmet, RE-MEASURED now rather than inherited. `ls apps/daemon/src/telemetry/` at HEAD 9d60091:\n  provider-run-contracts.ts   PRESENT (+ .js bridge, + tests)\n  provider-run-refusals.ts    PRESENT (+ .js bridge, + tests)\n  provider-run-codec.ts       ABSENT\n  provider-run-normalize.ts   ABSENT\n\nClause 1 HOLDS — slice 1 landed at commit 9d60091, and its worker split the vocabulary into provider-run-refusals.ts, which is where this slice imports PROVIDER_RUN_LEDGER_CODES and PROVIDER_RUN_LEDGER_LAYERS from. Clauses 2 and 3 do NOT: I planned both slices this session and both plans are APPROVED, but no worker has executed either, so their symbols do not exist. Any step naming one is speculation.\n\nPROGRESS WORTH RECORDING so the next promotion is not blind: the chain is one hop shorter than filed. I verified my own over-specification correction — NORMALIZE DEPENDS ONLY ON THE CONTRACT, not the codec, whose bytes/digest are consumed HERE. So codec and normalize can now proceed IN PARALLEL; this slice needs both.\n\nA DECISION FROM SLICE 3'S PLAN THIS SLICE MUST INHERIT: the normalizer returns the record WITHOUT `recordDigest` — a draft type — because minting a digest is the codec's authority and a placeholder hex string would sit in a typed field reading as real. THIS SLICE OWNS THE BRIDGE: draft -> encode -> commit.\n\nAlso inherited: slice 1 built the narrow `ProviderRunStore` port (contracts.ts:156) naming exactly three methods, with `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent BY CONSTRUCTION. Verify that guard holds before committing — it makes the no-new-schema rail unreachable, not merely discouraged.\n\nUNBLOCK WHEN, re-run literally:\n(a) task-fc6581042426444a826981943f441908 DONE and provider-run-codec.ts exists;\n(b) task-ea27beb6e1954d0e9dba8ad49cc1641e DONE and provider-run-normalize.ts exists;\n(c) both have `.js` bridges.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:43:24.091Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Measurement only; no plan submitted, no production code written. Re-measured at HEAD f0f62c0: apps/daemon/src/telemetry/ holds provider-run-contracts.test.ts (8654 bytes, 21:05) and no provider-run-contracts.ts. Slice 1 was WORKING at 3/7 steps with worker-d6220bc6 live in that directory; codec and normalize siblings both BLOCKED. Reported BLOCKED on that measurement rather than a speculative plan.",

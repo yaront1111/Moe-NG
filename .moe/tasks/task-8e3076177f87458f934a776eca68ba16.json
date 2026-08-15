@@ -121,7 +121,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-d6220bc6",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T18:28:01.437Z",
+  "updatedAt": "2026-08-15T18:36:10.530Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,

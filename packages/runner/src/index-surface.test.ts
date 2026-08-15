@@ -97,6 +97,18 @@ import type {
   ProviderInfrastructureOutcome, ProviderQuantity, ProviderRunRef, ProviderTelemetryCode,
   ProviderTelemetryLayer, ProviderTelemetryRefusal, ProviderTerminalOutcome, ProviderText,
 } from "@moe/runner";
+/**
+ * The provider-RUN RECORD closure, through the same root and for the same
+ * reason: a consumer that receives a record but cannot NAME its parts cannot
+ * store, narrow or re-verify one.
+ */
+import type {
+  ProviderCostBasis, ProviderDecisionDigests, ProviderModelSelection, ProviderModelSnapshotKind,
+  ProviderObservedModel, ProviderRunConcurrency, ProviderRunIdentity, ProviderRunRecord,
+  ProviderRuntimeEvidence, ProviderStepCounts, ProviderTokenCounts, ProviderUnpricedReason,
+  ProviderUsageCode, ProviderUsageContext, ProviderUsageCostBasis, ProviderUsageLayer,
+  ProviderUsageMeasurement, ProviderUsageNormalized, ProviderUsageRefusal, ProviderUsageResult,
+} from "@moe/runner";
 /** The recovery, evidence and Claude observation seams, through the same root. */
 import type {
   ArtifactFsPort, ArtifactRef, ArtifactStore, BuildEvidenceReceiptInput, BuildEvidenceReceiptResult,
@@ -312,11 +324,19 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROVIDER_TELEMETRY_CONTRACT_VERSION", "string"], ["PROVIDER_TELEMETRY_LAYERS", "array"],
   ["PROVIDER_TERMINAL_OUTCOMES", "array"], ["launchClaudeWithTelemetry", "function"],
   ["parseClaudeResultTelemetry", "function"],
+  // The 10 values the provider-RUN RECORD seam publishes: 4 closed vocabularies,
+  // 1 meter table, 2 pinned versions, 1 pinned parser revision and the 2 entry
+  // points. Counted by hand from claude-surface.ts, never from the namespace.
+  ["PROVIDER_COST_BASES", "array"], ["PROVIDER_RUN_RECORD_VERSION", "string"],
+  ["PROVIDER_UNPRICED_REASONS", "array"], ["PROVIDER_USAGE_CODES", "array"],
+  ["PROVIDER_USAGE_CONTRACT_VERSION", "string"], ["PROVIDER_USAGE_LAYERS", "array"],
+  ["PROVIDER_USAGE_METERS", "object"], ["PROVIDER_USAGE_SOURCE_PARSER_VERSION", "number"],
+  ["buildProviderRunRecord", "function"], ["normalizeProviderUsage", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(216);
+  expect(EXPECTED_EXPORTS.length).toBe(226);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -2188,15 +2208,89 @@ it("withholds every fact-minting telemetry helper from the root", () => {
   const withheld = [
     "knownCount", "readCount", "readText", "countCoverage", "unknownFact",
     "telemetryRefusal", "snapshotRunRef", "PROVIDER_TELEMETRY_MESSAGES",
+    // The usage seam's own two minters: a fabricated REFUSAL is as dangerous as
+    // a fabricated measurement, because a consumer able to make one could report
+    // "normalization refused" over a run this package normalized perfectly well.
+    "providerUsageRefusal", "PROVIDER_USAGE_MESSAGES",
   ];
-  expect(withheld.length).toBe(8);
+  expect(withheld.length).toBe(10);
   expect(withheld.filter((name) => name in surface)).toEqual([]);
   // Positive control: the IDENTICAL membership check over names this seam does
   // publish, so the assertion above cannot be passing because `in` is broken.
   const published = [
     "launchClaudeWithTelemetry", "parseClaudeResultTelemetry",
     "PROVIDER_TELEMETRY_CODES", "PROVIDER_TERMINAL_OUTCOMES",
+    "buildProviderRunRecord", "normalizeProviderUsage", "PROVIDER_USAGE_METERS",
   ];
-  expect(published.length).toBe(4);
+  expect(published.length).toBe(7);
   expect(published.filter((name) => name in surface)).toEqual(published);
+});
+
+/**
+ * The provider-RUN RECORD seam, composed THROUGH THE PACKAGE ROOT: the record is
+ * built from a handoff the root's own launcher produced, so this proves the
+ * consumer edge the benchmark will use rather than a relative import that proves
+ * nothing. `request: null` is refused by the launcher itself, which lands on the
+ * arm whose facts must be UNKNOWN carrying an exact code and layer.
+ */
+it("builds a provider-run record through the root and names its type closure", async () => {
+  const launched: ClaudeTelemetryLaunchResult = await runner.launchClaudeWithTelemetry(
+    { providerRunRef: TELEMETRY_RUN_REF, request: null });
+  if (!launched.ok) throw new Error(`root telemetry launch refused: ${launched.code}`);
+  const record: ProviderRunRecord = runner.buildProviderRunRecord(launched.handoff);
+  const identity: ProviderRunIdentity = record.identity;
+  const model: ProviderModelSelection = record.model;
+  const observed: ProviderObservedModel = record.observedModel;
+  const decision: ProviderDecisionDigests = record.decisionDigests;
+  const runtimeEvidence: ProviderRuntimeEvidence = record.runtimeEvidence;
+  const tokens: ProviderTokenCounts = record.tokens;
+  const steps: ProviderStepCounts = record.steps;
+  const concurrency: ProviderRunConcurrency = record.concurrency;
+  const snapshotKind: ProviderModelSnapshotKind = model.snapshotKind;
+
+  expect(record.recordVersion).toBe(runner.PROVIDER_RUN_RECORD_VERSION);
+  expect(record.provider).toBe("claude");
+  expect(identity.providerRunRef).toEqual(TELEMETRY_RUN_REF);
+  expect(runner.PROVIDER_TERMINAL_OUTCOMES).toContain(record.terminal);
+  expect(runner.PROVIDER_INFRASTRUCTURE_OUTCOMES).toContain(record.infrastructure);
+  expect(runner.PROVIDER_CONCURRENCY_FACTS).toContain(concurrency.fact);
+  expect([snapshotKind, observed.snapshotKind]).toEqual(["UNKNOWN", "UNKNOWN"]);
+  // Every unmeasured fact on this arm carries the launcher's own reason, and no
+  // count anywhere became a zero.
+  const blind = { known: false, code: "TELEMETRY_LAUNCH_REFUSED", layer: "TELEMETRY_LAUNCH" };
+  expect([identity.effectDigest, runtimeEvidence.observationDigest, decision.policyDigest,
+    tokens.inputTokens, steps.count]).toEqual([blind, blind, blind, blind, blind]);
+});
+
+it("normalizes provider usage through the root and refuses an unobserved interval", async () => {
+  const launched: ClaudeTelemetryLaunchResult = await runner.launchClaudeWithTelemetry(
+    { providerRunRef: TELEMETRY_RUN_REF, request: null });
+  if (!launched.ok) throw new Error(`root telemetry launch refused: ${launched.code}`);
+  const context: ProviderUsageContext = { priors: [] };
+  const usage: ProviderUsageResult = runner.normalizeProviderUsage(launched.handoff, context);
+  if (usage.ok) throw new Error("an unlaunched run was measured through the root");
+  const refusal: ProviderUsageRefusal = usage;
+  const layer: ProviderUsageLayer = refusal.layer;
+  const code: ProviderUsageCode = refusal.code;
+
+  expect(runner.PROVIDER_USAGE_LAYERS).toContain(layer);
+  expect(runner.PROVIDER_USAGE_CODES).toContain(code);
+  expect([layer, code]).toEqual(["USAGE_INPUT", "PROVIDER_USAGE_INTERVAL_UNOBSERVED"]);
+  expect(runner.PROVIDER_USAGE_CONTRACT_VERSION).toBe("moe-provider-usage/1");
+  expect(runner.PROVIDER_USAGE_SOURCE_PARSER_VERSION).toBe(1);
+  // The normalized arm's own closure, named in a compiled position so a type
+  // dropped from the root fails to compile rather than silently vanishing.
+  const normalizedNames: readonly string[] = [
+    "measurements", "coverage", "source", "costBasis",
+  ] satisfies readonly (keyof ProviderUsageNormalized & string)[];
+  expect(normalizedNames.length).toBe(4);
+  // `spendMicros` is typed `null`, not `number | null`: the cost basis has no
+  // arm to put a spend figure in, and this line stops compiling if that widens.
+  const spend: ProviderUsageCostBasis["spendMicros"] = null;
+  const meter: ProviderUsageMeasurement["measurement"]["meter"] =
+    runner.PROVIDER_USAGE_METERS.inputTokens;
+  expect([spend, meter]).toEqual([null, "provider.input_tokens"]);
+  const basisClasses: readonly ProviderCostBasis[] = [...runner.PROVIDER_COST_BASES];
+  const reasons: readonly ProviderUnpricedReason[] = [...runner.PROVIDER_UNPRICED_REASONS];
+  expect([basisClasses.length, reasons.length]).toEqual([2, 3]);
 });

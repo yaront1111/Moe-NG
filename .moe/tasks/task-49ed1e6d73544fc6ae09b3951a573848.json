@@ -17,7 +17,7 @@
     "Only official MCP stdio and Streamable HTTP are permitted; do not add a custom MCP-over-WebSocket protocol."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -49,19 +49,29 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-15T18:10:30.523Z",
+  "updatedAt": "2026-08-15T18:32:02.514Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:11.847Z"
   },
   "contextFetchedBy": [
     "architect-db2146e3",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-94dd1835"
   ],
-  "blockedReason": null,
+  "blockedReason": "The sole remaining prerequisite is still absent. Task task-5e43a9e294ef48fdab23817c8c6cfc45 is BLOCKED on the attempt/verification/closure chain, and committed HEAD has no apps/daemon/src/foundation/foundation-surface.{ts,js}; therefore this host cannot name the bounded production command/query/session/coordination surface without deep imports or fake dispatch authority. The @moe/mcp side is already satisfied and must not be rebuilt: its bare root exports createHttpMcpAdapter/HTTP port types and apps/daemon/src/mcp-http/mcp-http-host.ts already composes the real daemon authenticator. Re-promote only after 5e43 is QA-approved DONE and re-probe its bare @moe/daemon surface. Event-read advancement and HTTP session reclamation remain required eventual host tests (not single-page shape checks), but they do not clear this dependency. Do not create a custom transport or duplicate the existing HTTP host.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:31:56.139Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-read prior remeasurements, confirmed the @moe/mcp HTTP root/composition gap is closed, confirmed Foundation daemon surface is still absent/blocked, and reported this host BLOCKED only on task-5e43.",
+      "whatRemains": "After task-5e43 is QA-approved DONE, probe the bare @moe/daemon Foundation surface and plan the real host; include event cursor advancement and bounded session reclamation tests.",
+      "pitfalls": "Do not rebuild the existing HTTP adapter/host, deep-import, inject fake dispatch/session authority, or settle for a single well-formed but frozen events.read page.",
+      "openQuestions": "Exact Foundation surface namespace remains unknown until 5e43 lands.",
+      "releasedAt": "2026-08-15T18:32:02.514Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Remaining public-surface dependency measured; free architect capacity."
+    },
     {
       "whatIsDone": "Verified official stdio/HTTP MCP implementations on disk, proved HTTP is not exported from @moe/mcp root, proved Foundation daemon ingress and owned host files are absent, reported the task BLOCKED, and wrote Serena handoff/gotcha memories.",
       "whatRemains": "Land task-5e43a9e294ef48fdab23817c8c6cfc45 and publish the existing Streamable HTTP adapter/type closure from @moe/mcp root; then re-probe and plan this host.",

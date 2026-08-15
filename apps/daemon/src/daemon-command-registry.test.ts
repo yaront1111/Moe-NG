@@ -73,6 +73,11 @@ const ROWS: readonly Row[] = [
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  // ADMIN is the reach fence only: an empty payload never reaches the R3
+  // approval gate, which is what actually makes this command human-only.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
+    kind: "recovery.complete", layer: INGRESS,
+    payloadKeys: ["approval", "command", "reconciliationDigest"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "qualification.replan", layer: INGRESS,
     payloadKeys: ["nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions"] },
@@ -153,11 +158,11 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-one characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-two characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(21);
-    expect(deps.registry.size).toBe(21);
+    expect(ROWS).toHaveLength(22);
+    expect(deps.registry.size).toBe(22);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -325,7 +330,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(21);
+    expect(ports.registry.size).toBe(22);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });

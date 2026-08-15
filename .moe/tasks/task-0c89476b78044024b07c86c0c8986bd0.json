@@ -16,8 +16,8 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-7f301fa7",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -42,22 +42,32 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-15T18:31:13.002Z",
+  "updatedAt": "2026-08-15T18:33:20.570Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8a4a1764",
     "architect-f39f0c46",
     "governor-1f3b15b7",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-7f301fa7"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:39:13.320Z"
   },
-  "blockedReason": null,
+  "blockedReason": "THE STANDING BLOCK REASON IS FACTUALLY STALE. Correcting it is the value of this pass — do not re-derive the 11:29Z audit.\n\nIt says \"nothing mints an incarnation, installs a slot, or advances a key epoch. grep for mintIncarnation/slotInstall/keyEpoch returns only the recoveryIncarnationRef FIELD.\" Re-measured at HEAD 9d60091: that grep was a FALSE NEGATIVE — those two names never existed here. The real surfaces are landed:\n- mint: `mintGenesisIncarnation` (recovery-incarnation-genesis.ts:104), `createRecoveryIncarnationService` (recovery-incarnation.ts:82)\n- slot: `anchorIncarnation` (recovery-incarnation-anchor.ts:153) plus hasAnchored/readAnchored/readAnchoredGenesis\n- key epoch: 145 non-test hits; readKeyEpochPointer, writeKeyEpochPointer, commitSuccessionRecord\n- controller: runRestoreQuiesce (restore-controller.ts:289), runSnapshottedRestoreQuiesce (:247)\n\nFIVE OF SEVEN prerequisites architect-f39f0c46 routed for this task are DONE: task-5606947a, task-684e6972, task-b6e3dd2a, task-8a01c025, and task-0325dcf7 via its four DONE children. DoD 1 and DoD 2 now have real production authority behind them.\n\nDoD 3 ALONE STILL BLOCKS. \"Missing inventory or artifact/key proof keeps recovery unavailable with UNKNOWN_TRUTH\" needs the inventory/quarantine coordinator, task-cf7fb147bd1c47698cbd65c9535370aa. Its embargo half IS landed (activation-ingress.ts:299 reads the embargo before the four-leg claim, code RECOVERY_RECONCILIATION_REQUIRED) and the UNKNOWN_TRUTH vocabulary exists (recovery-inventory-contract.ts:24-25) — but apps/daemon/src/recovery/effect-inventory.* does not exist, so nothing drives a real missing-inventory condition. Proving DoD 3 now means fabricating it: the mock-backed journey Clause 2 forbids.\n\nI planned task-cf7fb147 this session; its plan is approved, one worker away.\n\nUNBLOCK WHEN task-cf7fb147 is DONE AND `ls apps/daemon/src/recovery/effect-inventory.ts` succeeds. Re-measure; do not trust this reason either.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:32:59.996Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Capability audit at HEAD 9d60091; no plan, no code. CORRECTED THE STANDING BLOCK REASON, which was factually stale: its grep for mintIncarnation/slotInstall was a false negative on names that never existed in this codebase. The restore controller and all its supporting surfaces ARE landed - runRestoreQuiesce/runSnapshottedRestoreQuiesce/verifyRestoreGeneration (restore-controller.ts), mintGenesisIncarnation, createRecoveryIncarnationService, anchorIncarnation, readKeyEpochPointer/writeKeyEpochPointer/commitSuccessionRecord. Five of the seven prerequisites architect-f39f0c46 routed are DONE.",
+      "whatRemains": "Plan the CORE-S14 restore proof once task-cf7fb147 lands. DoD 1 (crash at every prepare/install/fsync/switch boundary) and DoD 2 (repeated same-generation restore uses fresh incarnation/key epochs, stale grants fail) are already backed by real production authority and can be planned against it directly. DoD 3 is the only item still lacking a driver.",
+      "pitfalls": "DO NOT re-derive the 11:29Z audit - it costs a full context load to reach an answer that is now wrong. Its symbol names were guesses, not measurements: grep the real names listed above. This is the second false-negative grep on this board today; the other was `grep telemetry packages/runner/src/index.ts` returning zero while the surface was published through a differently-named barrel. Prefer a compiled probe or a directory listing over a guessed-symbol grep. Also: DoD 3 must be driven through the real coordinator once it exists - fabricating a missing-inventory condition is the mock-backed journey Clause 2 forbids, and this task exists precisely because that shortcut was refused twice already.",
+      "openQuestions": "Whether task-6f786c58cabf4f85be8ed4135e68a752 (exact-digest HUMAN R3 recovery.complete composition, prerequisite 7 of 7) is also required for this proof, or only for the R3 completion task. DoD 1-4 as written do not obviously need it, but the routing comment listed it in the same family - resolve before planning rather than assuming either way.",
+      "releasedAt": "2026-08-15T18:33:20.569Z",
+      "releasedBy": "architect-7f301fa7",
+      "reason": "Releasing the ASSIGNMENT only; task stays BLOCKED, now on a corrected and much narrower gate (DoD 3 / task-cf7fb147) rather than the stale \"no controller exists\" reason."
+    },
     {
       "whatIsDone": "Measured the production gaps; created eight prerequisite tasks (task-5606947a, task-684e6972, task-b6e3dd2a, task-8a01c025, task-0325dcf7, task-cf7fb147, task-6f786c58, task-b5e9bd64); recorded exact sequence/unblock probe in comment-01dac749064641d9850276e3ee2ba02c; wrote Serena handoff memory.",
       "whatRemains": "Keep Disaster restore proof BLOCKED until all eight prerequisites are DONE and production consumer edges plus pnpm test:fault are verified on disk; then plan the final CORE-S14 proof.",

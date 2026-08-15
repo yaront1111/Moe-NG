@@ -22,7 +22,6 @@ import {
   RECOVERY_INVENTORY_POPULATIONS,
   RECOVERY_PROOF_CLASSES,
 } from "./recovery-inventory-contract.js";
-import { buildRecoveryReconciliationRecord } from "./recovery-inventory-record.js";
 import {
   appendDurableInventoryObservation,
   sealDurableInventoryWindow,
@@ -45,6 +44,10 @@ const CURSOR = "000000000000000000042";
 const END = "000000000000000000100";
 const HEX = (seed: string): string =>
   (seed.replace(/[^0-9a-f]/gu, "") + "0".repeat(64)).slice(0, 64);
+const EXPECTED_CLASSES = [
+  "PROVIDER_PROCESS_LAUNCH_LOCK", "RESOURCE", "WORKSPACE",
+  "INTEGRATION_TARGET", "GIT_INTEGRATION_ON_DISK", "ARTIFACT_OBJECT_STAGING",
+] as const;
 
 const stores: SqliteEventStore[] = [];
 const directories: string[] = [];
@@ -103,14 +106,18 @@ const durableWindow: DurableInventoryWindow = {
   endInclusive: END,
 };
 
-function sealEmpty(store: SqliteEventStore, binding: RestoreIncarnationBinding): void {
+function sealInventory(
+  store: SqliteEventStore,
+  binding: RestoreIncarnationBinding,
+  resourcePresent = false,
+): void {
   const sealed = sealDurableInventoryWindow(
     store,
     writeRequest(),
     basisFor(binding),
     durableWindow,
     [
-      { class: "RESOURCE", negativeProofDigest: HEX("e1"), sourceProofDigest: HEX("a1") },
+      { class: "RESOURCE", negativeProofDigest: resourcePresent ? null : HEX("e1"), sourceProofDigest: HEX("a1") },
       { class: "INTEGRATION_TARGET", negativeProofDigest: HEX("e2"), sourceProofDigest: HEX("b2") },
     ],
   );
@@ -153,22 +160,21 @@ const expectUnknown = (
   code: string,
   layer: string,
 ): void => {
+  expect("code" in result ? result.code : null).toBe("UNKNOWN_TRUTH");
+  expect("layer" in result ? result.layer : null).toBe("RECOVERY_INVENTORY");
   expect(result.ok).toBe(false);
   if (result.ok) throw new Error("expected recovery inventory hold");
-  expect(result.code).toBe("UNKNOWN_TRUTH");
-  expect(result.layer).toBe("RECOVERY_INVENTORY");
   expect(result.upstream).toEqual({ code, layer });
   expect(result.truth).toBe("UNKNOWN");
   expect(result.authority).toBe("NONE");
+  expect(result.record?.truth).toBe("UNKNOWN");
+  expect(result.recordDigest).toMatch(/^[0-9a-f]{64}$/u);
 };
 
 describe("effect inventory frozen cardinality", () => {
   it("pins six proof classes and seven populations by literal name", () => {
     expect(RECOVERY_PROOF_CLASSES).toHaveLength(6);
-    expect([...RECOVERY_PROOF_CLASSES]).toEqual([
-      "PROVIDER_PROCESS_LAUNCH_LOCK", "RESOURCE", "WORKSPACE",
-      "INTEGRATION_TARGET", "GIT_INTEGRATION_ON_DISK", "ARTIFACT_OBJECT_STAGING",
-    ]);
+    expect([...RECOVERY_PROOF_CLASSES]).toEqual(EXPECTED_CLASSES);
     expect(RECOVERY_INVENTORY_POPULATIONS).toHaveLength(7);
     expect([...RECOVERY_INVENTORY_POPULATIONS]).toEqual([
       "EFFECT_LOCK_WRAPPER_REGISTRATION", "PROVIDER_RUN", "RESOURCE",
@@ -187,31 +193,20 @@ describe("effect inventory frozen cardinality", () => {
 });
 
 describe("effect inventory configured coverage", () => {
-  const selected = {
-    anchorBindingDigest: HEX("a0"),
-    incarnationRef: HEX("b0"),
-    keyEpochRef: HEX("c0"),
-  };
-  const base = {
-    backupCursor: CURSOR,
-    backupGenerationDigest: HEX("d0"),
-    projectId: PROJECT_ID,
-    projectTag: PROJECT_TAG,
-    proofs: [],
-    selected,
-    subjects: [],
-  };
-
-  it("pins omitted, duplicate, unknown, and extra configuration codes", () => {
-    const cases: readonly [string, readonly string[], string][] = [
-      ["omitted", RECOVERY_PROOF_CLASSES.slice(0, -1), "RECOVERY_INVENTORY_CLASS_OMITTED"],
-      ["duplicate", [...RECOVERY_PROOF_CLASSES.slice(0, -1), RECOVERY_PROOF_CLASSES[0]], "RECOVERY_INVENTORY_CLASS_DUPLICATE"],
-      ["unknown", [...RECOVERY_PROOF_CLASSES.slice(0, -1), "NETWORK_SOCKET"], "RECOVERY_INVENTORY_CLASS_UNKNOWN"],
-      ["extra", [...RECOVERY_PROOF_CLASSES, RECOVERY_PROOF_CLASSES[0]], "RECOVERY_INVENTORY_CLASS_EXTRA"],
+  it("pins coordinator precedence for omitted, duplicate, unknown, and extra configuration", async () => {
+    const unknown = "NETWORK_SOCKET" as RecoveryInventoryClass;
+    const cases: readonly [string, readonly RecoveryInventoryClass[], string][] = [
+      ["omitted", RECOVERY_INVENTORY_CLASSES.slice(0, -1), "RECOVERY_INVENTORY_CLASS_OMITTED"],
+      ["duplicate", [...RECOVERY_INVENTORY_CLASSES.slice(0, -1), RECOVERY_INVENTORY_CLASSES[0]], "RECOVERY_INVENTORY_CLASS_DUPLICATE"],
+      ["unknown", [...RECOVERY_INVENTORY_CLASSES.slice(0, -1), unknown], "RECOVERY_INVENTORY_CLASS_UNKNOWN"],
+      ["extra", [...RECOVERY_INVENTORY_CLASSES, RECOVERY_INVENTORY_CLASSES[0]], "RECOVERY_INVENTORY_CLASS_EXTRA"],
     ];
     expect(cases).toHaveLength(4);
-    for (const [label, configuredClasses, code] of cases) {
-      const result = buildRecoveryReconciliationRecord({ ...base, configuredClasses });
+    for (const [label, classes, code] of cases) {
+      const { binding, store } = await prepare();
+      const result = await reconcileEffectInventory(store, request(binding), {
+        nodeRegistrations: classes.map((entry) => completeRegistration(entry)),
+      });
       expect(result.ok, label).toBe(false);
       if (result.ok) throw new Error(`expected ${label} refusal`);
       expect(result.code, label).toBe("UNKNOWN_TRUTH");
@@ -222,7 +217,7 @@ describe("effect inventory configured coverage", () => {
 
   it("accepts exactly one complete cursor/incarnation-bound proof per class", async () => {
     const { binding, store } = await prepare();
-    sealEmpty(store, binding);
+    sealInventory(store, binding);
     const result = await reconcileEffectInventory(store, request(binding), completeConfiguration());
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(`unexpected hold: ${result.upstream.code}`);
@@ -235,7 +230,7 @@ describe("effect inventory configured coverage", () => {
 describe("effect inventory fail-closed coverage", () => {
   it("does not treat a quiet empty enumerator as complete coverage", async () => {
     const { binding, store } = await prepare();
-    sealEmpty(store, binding);
+    sealInventory(store, binding);
     const registrations = RECOVERY_INVENTORY_CLASSES.map((entry) =>
       completeRegistration(entry, [], entry === "WORKSPACE" ? null : HEX(`f${entry}`)),
     );
@@ -251,7 +246,7 @@ describe("effect inventory fail-closed coverage", () => {
 
   it("retains node adapter uncertainty instead of restamping it", async () => {
     const { binding, store } = await prepare();
-    sealEmpty(store, binding);
+    sealInventory(store, binding);
     const registrations = RECOVERY_INVENTORY_CLASSES.map((entry) =>
       entry === "GIT_INTEGRATION_ON_DISK"
         ? Object.freeze({ class: entry, enumerate: () => ({ status: "UNAVAILABLE" }) })
@@ -282,14 +277,14 @@ describe("effect inventory fail-closed coverage", () => {
       },
     );
     if (!appended.ok) throw new Error(`append refused: ${appended.upstream.code}`);
-    sealEmpty(store, binding);
+    sealInventory(store, binding, true);
     const result = await reconcileEffectInventory(store, request(binding), completeConfiguration());
     expectUnknown(result, "RECOVERY_INVENTORY_ITEM_UNRESOLVED", "INVENTORY_ADAPTER");
   });
 
   it("holds an artifact whose restored-intent key proof is unverifiable", async () => {
     const { binding, store } = await prepare();
-    sealEmpty(store, binding);
+    sealInventory(store, binding);
     const artifact = {
       class: "ARTIFACT_OBJECT_STAGING",
       projectTag: PROJECT_TAG,
@@ -322,7 +317,7 @@ describe("effect inventory fail-closed coverage", () => {
 
   it("holds an item whose population cannot be established", async () => {
     const { binding, store } = await prepare();
-    sealEmpty(store, binding);
+    sealInventory(store, binding);
     const ambiguous = {
       class: "PROVIDER_PROCESS_LAUNCH_LOCK",
       projectTag: PROJECT_TAG,

@@ -14,6 +14,10 @@ import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/sess
 import type { SessionOutcome } from "./identity/session-ledger.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND,
+  RECOVERY_COMPLETION_SCHEMA_VERSION } from "./recovery/recovery-completion-digest.js";
+import { runRecoveryCompleteCommand, type RecoveryCompletionOutcome }
+  from "./recovery/recovery-completion.js";
 import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
@@ -62,13 +66,16 @@ const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freez
 
 type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
-  | typeof EFFECT_ACTIVATE_COMMAND_KIND;
+  | typeof EFFECT_ACTIVATE_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
   if (kind === EFFECT_ACTIVATE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
+    return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
+  }
   const family = kind in BOOTSTRAP_FAMILY
     ? BOOTSTRAP_FAMILY[kind as BootstrapCommandKind]
     : kind in REVIEW_FAMILY
@@ -86,6 +93,7 @@ const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
+    [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
@@ -128,8 +136,8 @@ class DomainRefusal extends Error {
 }
 
 function decisionOf(
-  outcome: ActivationIngressOutcome | ReviewOutcome | ServiceOutcome | SessionOutcome
-    | WorkClaimOutcome,
+  outcome: ActivationIngressOutcome | RecoveryCompletionOutcome | ReviewOutcome | ServiceOutcome
+    | SessionOutcome | WorkClaimOutcome,
 ): DurableDecision {
   if (!outcome.ok) {
     throw new DomainRefusal(
@@ -201,19 +209,23 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
+    const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
     const work = kind in WORK_FAMILY;
     const schemaVersion = activation
       ? ACTIVATION_INGRESS_SCHEMA_VERSION
-      : review
-        ? REVIEW_SCHEMA_VERSION
-        : session
-          ? SESSION_SCHEMA_VERSION
-          : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
+      : recovery
+        ? RECOVERY_COMPLETION_SCHEMA_VERSION
+        : review
+          ? REVIEW_SCHEMA_VERSION
+          : session
+            ? SESSION_SCHEMA_VERSION
+            : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
+      if (recovery) return decisionOf(runRecoveryCompleteCommand(store, bytes));
       if (review) return decisionOf(runReviewCommand(store, bytes));
       if (session) {
         return decisionOf(runSessionCommand(store, bytes, undefined, operatorPrincipalId));
@@ -221,15 +233,22 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
       return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
     };
+    // ADMIN is the reach fence, NOT the human-only fence. `recovery.complete`
+    // is human-only because the approval gate in `recovery-completion.ts`
+    // demands a HUMAN R3 approval with a recent step-up; a capability is held
+    // by an agent session and could never carry that. A reader who mistakes
+    // this line for the R3 fence will later weaken the approval check.
     const requiredCapability = activation
       ? CAPABILITIES.WORK
-      : review
-        ? REVIEW_FAMILY[kind as ReviewCommandKind]
-        : session
-          ? SESSION_FAMILY[kind as SessionCommandKind]
-          : work
-            ? WORK_FAMILY[kind as WorkClaimCommandKind]
-            : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
+      : recovery
+        ? CAPABILITIES.ADMIN
+        : review
+          ? REVIEW_FAMILY[kind as ReviewCommandKind]
+          : session
+            ? SESSION_FAMILY[kind as SessionCommandKind]
+            : work
+              ? WORK_FAMILY[kind as WorkClaimCommandKind]
+              : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
     return Object.freeze({
       handler, kind, payloadKeys: PAYLOAD_KEYS[kind], requiredCapability,
     });

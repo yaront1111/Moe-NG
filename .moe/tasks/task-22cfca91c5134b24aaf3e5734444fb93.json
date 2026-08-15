@@ -16,7 +16,7 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -54,21 +54,31 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-15T18:20:40.854Z",
+  "updatedAt": "2026-08-15T18:36:36.874Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
     "architect-a42f4965",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "architect-94dd1835"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh board remeasurement invalidates the reopen note's claim that every M4 dependency is done. Five production-capability prerequisites are DONE, but task-01c5f96ec1e247dc846fd628c929974a (real Linux/macOS host evidence) remains PLANNING, and the cross-epic durable provider consumer task-6cbff01023b14b26a78fc5e3eb1dd8a9 remains BLOCKED. The first GitHub cross-host run is useful evidence but is red on both hosts and exposed real portability defects/test collection failures; it does not satisfy the acceptance gate. Planning a green portability manifest now would require UNKNOWN rows for absent/unaccepted provider and host evidence or a test-only substitute, forbidden by Clause 2. Resume after 01c5 and 6cb are DONE and re-probe their committed production/evidence surfaces; only then add the real nonempty test:migration lane and shadow comparison.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:36:17.973Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read prior audit, current context, and human amendment; remeasured board: five capability prerequisites are DONE, but 01c5 cross-host evidence is PLANNING and 6cb durable provider dispatch remains BLOCKED; reported portability gate BLOCKED on both.",
+      "whatRemains": "Land 01c5 and 6cb, re-probe committed production/evidence subjects, then plan the real nonempty test:migration lane and one-commit frozen shadow comparison.",
+      "pitfalls": "The first off-Windows workflow run is red evidence, not a pass. Never certify missing subjects with UNKNOWN rows, alias test:migration, generate zero cases, use off-host fixtures, or synthesize legacy/provider authority.",
+      "openQuestions": "None for this acceptance shell; the cross-host repair task owns the observed Linux/macOS failures.",
+      "releasedAt": "2026-08-15T18:36:36.873Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Explicit acceptance-task handoff after remeasuring two still-open capability prerequisites."
+    },
     {
       "whatIsDone": "Remeasured every portability subject at HEAD 30458afd, proved the acceptance task is blocked by absent production consumers/corpus/platform evidence, created six prerequisite tasks, reported blocked, commented the task, and wrote Serena handoff/decision memories.",
       "whatRemains": "Land/re-probe task-2159fa19, task-159be643, task-69d32b1d, task-9fff3d42, task-45d12ec, task-01c5f96, plus the relevant durable provider consumer task-6cbff010; then reclaim, add the real nonempty test:migration script, and plan the shadow gate.",

@@ -19,7 +19,7 @@
     "Keep each production source focused, target <=250 physical lines and split before 400; preserve foreign work and stage only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -57,19 +57,29 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-12T16:21:56.200Z",
-  "updatedAt": "2026-08-15T18:10:41.673Z",
+  "updatedAt": "2026-08-15T18:35:38.607Z",
   "contextFetchedBy": [
     "architect-a9210e34",
-    "architect-a42f4965"
+    "architect-a42f4965",
+    "architect-94dd1835"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T16:01:23.174Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh board and handoff remeasurement shows this task's post-audit prerequisites are not complete. task-2d37939dddde447bb98e53a2bd9e6c60 (current hold binding/target preservation) is landed, but task-e62e3828df234c66969a99b8223487f4 (durable current safe-release evidence) and its consumer task-738a12a816e8421a96edd84648565a38 (authenticated atomic full-hold + EXPANSION PlanningRun persistence) are both BLOCKED. Without 738, the daemon has no trusted durable current hold/run pair to feed the landed scheduler bridge; planning c417 now would reintroduce caller-selected/test-seeded authority that its DoD forbids. Resume only after 738 is DONE and re-probe the full hold reader/writer, safe-release provenance, public bridge symbols, and apps/daemon bare dependency edge.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:35:18.267Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read both prior handoffs and current task context; confirmed bridge tasks 2d969 and 2d379 are landed, but e62 safe-release evidence and 738 atomic current-hold persistence remain BLOCKED; reported c417 BLOCKED on 738.",
+      "whatRemains": "After 738 is DONE, remeasure its durable full-hold/run/current-authority surface, public scheduler bridge, and daemon dependency edge, then submit the bounded admission-through-approved-binding plan.",
+      "pitfalls": "Do not accept caller-selected currentAuthority or seed full holds in tests; do not reconstruct safe-release evidence; preserve exact code/layer/origin/component/target and stop before child activation.",
+      "openQuestions": "Whether the eventual durable attempt producer retains every safe-release fact required by e62; repair that producer if not.",
+      "releasedAt": "2026-08-15T18:35:38.606Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Explicit architect handoff after confirming the later durable-authority prerequisites are still blocked."
+    },
     {
       "whatIsDone": "Re-measured the landed scheduler bridge and all three dependency-edge checks; proved the missing daemon durable full-hold writer/reader and bridge target-provenance loss; created ordered prerequisites task-2d37939, task-e62e3828, and task-738a12a8; commented and reported c417 BLOCKED; wrote Serena handoff and reusable decision memory.",
       "whatRemains": "Land the three prerequisites (safe-release reader waits on task-6cbff010), then reclaim c417, re-probe their exact public/durable surfaces, and submit the bounded admission -> bind -> prepare -> approve -> durable pre-activation plan.",

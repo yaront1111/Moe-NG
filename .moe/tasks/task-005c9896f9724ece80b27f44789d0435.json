@@ -16,7 +16,7 @@
     "Keep production modules focused, target <=250 lines, split before 400; explicit paths only and no sibling worktree."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -54,11 +54,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:53:10.623Z",
-  "updatedAt": "2026-08-15T18:10:32.316Z",
+  "updatedAt": "2026-08-15T18:34:50.375Z",
   "contextFetchedBy": [
     "worker-37edea60",
     "architect-a42f4965",
-    "architect-a9210e34"
+    "architect-a9210e34",
+    "architect-94dd1835"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T13:32:08.207Z",
@@ -68,11 +69,20 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh board remeasurement shows the QA-required production bridge child task-2d9696160e674f26a8d422c45829d80e is DONE, but the required durable daemon consumer task-c4171c1cfe854cb78dd233794b342025 is still PLANNING and cannot yet supply the production call site/partial-admission zero-authority proof. Its upstream chain is not ready: task-738a12a816e8421a96edd84648565a38 is BLOCKED on task-e62e3828df234c66969a99b8223487f, which is blocked on durable attempt dispatch. Re-submitting the prior pure core/scheduler closeout would repeat the validated QA failure. Resume only after c417 is DONE and grep/probe confirms a durable apps/daemon caller of the production expansion admission/approval surface plus a production-boundary partial-admission refusal with no child authority.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:34:28.138Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read both prior handoffs and the QA rejection, remeasured the epic board, confirmed bridge child task-2d9696160e674f26a8d422c45829d80e is DONE, and reported the parent BLOCKED on the still-missing daemon consumer task-c4171c1cfe854cb78dd233794b342025.",
+      "whatRemains": "Land c417 after its upstream safe-release/persistence chain, then independently verify a durable apps/daemon call site and production-boundary partial-admission zero-authority proof before replanning this parent closeout.",
+      "pitfalls": "Never resubmit pure package-root tests or revive the archived broad consumer. Do not let a daemon mapper invent opportunity/current-authority bytes; consume the landed bridge and exact durable evidence.",
+      "openQuestions": "None; ordered blocker is c417, whose current upstream chain includes blocked 738 -> e62 -> durable attempt dispatch.",
+      "releasedAt": "2026-08-15T18:34:50.374Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Explicit architect handoff after fresh dependency remeasurement; parent is honestly blocked, freeing architect for the next PLANNING item."
+    },
     {
       "whatIsDone": "Re-read QA rejection, current parent context, prior handoff, and child contexts. Confirmed parent closeout remains vacuous. Reported parent BLOCKED with ordered needsFrom task-2d9696160e674f26a8d422c45829d80e then task-c4171c1cfe854cb78dd233794b342025.",
       "whatRemains": "Land task-2d9696160e674f26a8d422c45829d80e, then plan/land task-c4171c1cfe854cb78dd233794b342025 against its measured bridge. Only after both are DONE should the parent be resumed for final production-consumer proof and closeout.",

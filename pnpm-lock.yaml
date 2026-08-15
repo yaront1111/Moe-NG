@@ -160,6 +160,9 @@ importers:
       '@moe/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@moe/scheduler':
+        specifier: workspace:*
+        version: link:../scheduler
 
   packages/scheduler:
     dependencies:

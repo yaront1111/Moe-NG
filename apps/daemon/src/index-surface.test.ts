@@ -9,6 +9,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as daemon from "@moe/daemon";
 import type { ProjectConfigurationManifest } from "@moe/contracts";
+import type { RecoveryCompletionWitness } from "@moe/core";
 // Imported through the PUBLIC package roots, so these assertions also prove the
 // daemon's published closure is expressible without a deep import.
 import type { EffectIntent } from "@moe/runner";
@@ -189,6 +190,29 @@ import type {
   WorkRequestParse,
   WorkResult,
 } from "@moe/daemon";
+import type {
+  RecoveryCompleteRequest,
+  RecoveryCompletionAccepted,
+  RecoveryCompletionCode,
+  RecoveryCompletionEvidence,
+  RecoveryCompletionEvidenceFound,
+  RecoveryCompletionEvidenceResult,
+  RecoveryCompletionItemEvidence,
+  RecoveryCompletionOutcome,
+  RecoveryCompletionProofEvidence,
+  RecoveryCompletionRefused,
+  RecoveryCompletionUpstream,
+  RecoveryDurableReconcileRequest,
+  RecoveryInventoryRefusal,
+  RecoveryReconciliationExternalFacts,
+  RecoveryReconciliationFound,
+  RecoveryReconciliationItem,
+  RecoveryReconciliationProof,
+  RecoveryReconciliationReadResult,
+  RecoveryReconciliationRecord,
+  RecoveryReconciliationRecorded,
+  RecoveryReconciliationWriteResult,
+} from "@moe/daemon";
 
 type ExportKind = "function" | "number" | "object" | "string";
 
@@ -222,8 +246,15 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PREREQUISITE_REFUSAL_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_LAYER", "string"],
+  ["RECOVERY_COMPLETE_PAYLOAD_KEYS", "object"],
+  ["RECOVERY_COMPLETION_CODES", "object"],
+  ["RECOVERY_COMPLETION_COMMAND_KIND", "string"],
+  ["RECOVERY_COMPLETION_LAYER", "string"],
+  ["RECOVERY_COMPLETION_SCHEMA_VERSION", "string"],
   ["RECOVERY_INCARNATION_ERROR_CODES", "object"],
   ["RECOVERY_INCARNATION_SCHEMA_VERSION", "string"],
+  ["RECOVERY_STEP_UP_REF_PREFIX", "string"],
+  ["RECOVERY_STEP_UP_WINDOW_SECONDS", "number"],
   ["RECOVERY_SUCCESSION_ERROR_CODES", "object"],
   ["RECOVERY_SUCCESSION_LAYER", "string"],
   ["RECOVERY_SUCCESSION_SCHEMA_VERSION", "string"],
@@ -252,10 +283,16 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readAnchoredIncarnation", "function"],
   ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
+  ["readRecoveryCompletionEvidence", "function"],
+  ["readRecoveryReconciliation", "function"],
   ["readSuccessionChain", "function"],
+  ["recordRecoveryReconciliation", "function"],
+  ["recoveryCompletionDigest", "function"],
+  ["recoveryCoverageProofDigest", "function"],
   ["refuseEntry", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
+  ["runRecoveryCompleteCommand", "function"],
   ["selectProjectConfiguration", "function"],
   ["startControlRoomListener", "function"],
   ["startDaemon", "function"],
@@ -284,7 +321,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(65);
+    expect(EXPECTED_EXPORTS.length).toBe(78);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -535,6 +572,71 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<RecoveryIncarnationCryptoPort>();
     expectTypeOf<ReturnType<RecoveryIncarnationCryptoPort["generateSigningKey"]>>()
       .toEqualTypeOf<Promise<RecoveryIncarnationKeyPair>>();
+  });
+
+  it("publishes the R3 completion command and the reconciliation ledger it consumes", () => {
+    // Every assertion below imports the TYPE in a compiled position. A
+    // type-only export is invisible to the runtime key catalogue above, so
+    // counting keys would leave the whole published type closure unproven.
+    expectTypeOf<(typeof daemon.RECOVERY_COMPLETION_CODES)[number]>()
+      .toEqualTypeOf<RecoveryCompletionCode>();
+    expectTypeOf<typeof daemon.RECOVERY_COMPLETION_LAYER>().toEqualTypeOf<"RECOVERY_COMPLETION">();
+    expectTypeOf<typeof daemon.RECOVERY_COMPLETION_COMMAND_KIND>()
+      .toEqualTypeOf<"recovery.complete">();
+    // Pinned to the literal, not merely to `number`: this is the same 300s
+    // window core applies to a capability step-up, and a silent widening here
+    // would be a silently longer window.
+    expectTypeOf<typeof daemon.RECOVERY_STEP_UP_WINDOW_SECONDS>().toEqualTypeOf<300>();
+    // The payload allow-list is exactly the three POINTERS the command admits:
+    // no witness, no truth class, and no accepted digest.
+    expect([...daemon.RECOVERY_COMPLETE_PAYLOAD_KEYS])
+      .toEqual(["approval", "command", "reconciliationDigest"]);
+    expectTypeOf<ReturnType<typeof daemon.recoveryCompletionDigest>>().toEqualTypeOf<string>();
+    expectTypeOf<Parameters<typeof daemon.recoveryCompletionDigest>>()
+      .toEqualTypeOf<[evidence: RecoveryCompletionEvidence]>();
+    expectTypeOf<ReturnType<typeof daemon.recoveryCoverageProofDigest>>().toEqualTypeOf<string>();
+    expectTypeOf<RecoveryCompletionEvidence["proofs"]>()
+      .toEqualTypeOf<readonly RecoveryCompletionProofEvidence[]>();
+    expectTypeOf<RecoveryCompletionEvidence["items"]>()
+      .toEqualTypeOf<readonly RecoveryCompletionItemEvidence[]>();
+    expectTypeOf<RecoveryCompletionItemEvidence["quarantineRef"]>().toEqualTypeOf<string | null>();
+    expectTypeOf<ReturnType<typeof daemon.runRecoveryCompleteCommand>>()
+      .toEqualTypeOf<RecoveryCompletionOutcome>();
+    expectTypeOf<RecoveryCompletionOutcome>()
+      .toEqualTypeOf<RecoveryCompletionAccepted | RecoveryCompletionRefused>();
+    // The witness a caller receives is the one core validated, and a refusal
+    // never carries authority.
+    expectTypeOf<RecoveryCompletionAccepted["witness"]>()
+      .toEqualTypeOf<RecoveryCompletionWitness>();
+    expectTypeOf<RecoveryCompletionAccepted["authority"]>().toEqualTypeOf<"DURABLE_DECISION">();
+    expectTypeOf<RecoveryCompletionRefused["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoveryCompletionRefused["upstream"]>()
+      .toEqualTypeOf<RecoveryCompletionUpstream | null>();
+    expectTypeOf<ReturnType<typeof daemon.readRecoveryCompletionEvidence>>()
+      .toEqualTypeOf<RecoveryCompletionEvidenceResult>();
+    expectTypeOf<RecoveryCompletionEvidenceResult>()
+      .toEqualTypeOf<RecoveryCompletionEvidenceFound | RecoveryCompletionRefused>();
+    expectTypeOf<RecoveryCompletionEvidenceFound["record"]>()
+      .toEqualTypeOf<RecoveryReconciliationRecord>();
+    expectTypeOf<RecoveryCompleteRequest["reconciliationDigest"]>().toEqualTypeOf<string>();
+    // The reconciliation ledger is reachable from the root, so the completion
+    // command has a published producer rather than an unreachable island.
+    expectTypeOf<ReturnType<typeof daemon.readRecoveryReconciliation>>()
+      .toEqualTypeOf<RecoveryReconciliationReadResult>();
+    expectTypeOf<ReturnType<typeof daemon.recordRecoveryReconciliation>>()
+      .toEqualTypeOf<RecoveryReconciliationWriteResult>();
+    expectTypeOf<RecoveryReconciliationReadResult>()
+      .toEqualTypeOf<RecoveryReconciliationFound | RecoveryInventoryRefusal>();
+    expectTypeOf<RecoveryReconciliationWriteResult>()
+      .toEqualTypeOf<RecoveryReconciliationRecorded | RecoveryInventoryRefusal>();
+    expectTypeOf<RecoveryReconciliationRecord["items"]>()
+      .toEqualTypeOf<readonly RecoveryReconciliationItem[]>();
+    expectTypeOf<RecoveryReconciliationRecord["proofs"]>()
+      .toEqualTypeOf<readonly RecoveryReconciliationProof[]>();
+    expectTypeOf<RecoveryReconciliationExternalFacts["subjects"]>().not.toBeAny();
+    expectTypeOf<RecoveryDurableReconcileRequest["projectId"]>().toEqualTypeOf<string>();
+    expectTypeOf<RecoveryInventoryRefusal["authority"]>().toEqualTypeOf<"NONE">();
+    expectTypeOf<RecoveryInventoryRefusal["truth"]>().toEqualTypeOf<"UNKNOWN">();
   });
 
   it("names every recovery succession branch and keeps a succession non-authoritative", () => {

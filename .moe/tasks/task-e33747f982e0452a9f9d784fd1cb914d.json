@@ -150,18 +150,33 @@
     {
       "stepId": "step-8",
       "description": "Adversarial self-review before complete_task. Load the `adversarial-self-review` skill and read your own diff as an attacker. Specifically check: (1) can any path reach claimWork/activateEffect/activateProviderSlot/activateReservation/commitActivationLedgerRecord without passing readActivationEmbargo — including a thrown-and-caught store error that lands in a `catch` above the embargo; (2) does any refusal assertion in the two new suites pass with only `!ok`, and is every asserted code actually present in the test file (a code absent from the file means that whole branch is unguarded); (3) is the embargo refusal answered by an EARLIER guard than the one you think — trace which branch answers for each of the six causes and confirm the drill in step 7 reddens the embargo comparison rather than a sibling; (4) does `activateEffect` ever receive a caller-supplied `intent`, or `activateProviderSlot`/`activateReservation` a caller-supplied attemptRef/expectedVersion — all four must be server-derived; (5) do the two new .js bridges exist and re-export the .ts siblings; (6) count physical lines with `grep -c ''` (PowerShell Measure-Object -Line undercounts) on every touched production file and confirm none exceeds 400 and each new module is at or near its <=250 target; (7) confirm no debug/probe/scratch file remains and that you stage and commit ONLY this task's owned paths by explicit pathspec — never git add -A.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/activation/activation-embargo.ts",
         "apps/daemon/src/activation/activation-ingress.test.ts",
         "apps/daemon/src/activation/activation-embargo.test.ts"
       ],
-      "startedAt": "2026-08-15T18:26:12.112Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-embargo.ts",
+        "apps/daemon/src/activation/activation-embargo.js",
+        "apps/daemon/src/activation/activation-embargo.test.ts",
+        "apps/daemon/src/activation/activation-ingress-contracts.ts",
+        "apps/daemon/src/activation/activation-ingress-contracts.js",
+        "apps/daemon/src/activation/activation-ingress.ts",
+        "apps/daemon/src/activation/activation-ingress.js",
+        "apps/daemon/src/activation/activation-ingress.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "Adversarial self-review, all 7 checks run. (1) BYPASS: grep over apps/daemon/src excluding tests/fixtures shows activation-ingress.ts is the ONLY production caller of claimWork, activateEffect, activateProviderSlot, activateReservation and commitActivationLedgerRecord; runEffectActivateCommand's only production caller is daemon-command-registry.ts:214. work-race-world.ts:156 also calls claimWork but runtime-entrypoint.test.ts names work-race-* as scaffolding by construction. No catch sits above the embargo: readActivationEmbargo wraps BOTH store reads itself and a throw maps to RESTORE_UNREADABLE, never to clear; if it threw anyway the ingress propagates and nothing is accepted. (2) VACUITY: zero bare `!ok`/`toBe(false)` assertions in either suite; every asserted code is present in its file (RECOVERY_RECONCILIATION_REQUIRED x1 literal + by production constant, PROJECT_RECOVERY_REQUIRED 2/1, PROJECT_STATE_ABSENT 2, PROJECT_STATE_UNREADABLE 3, PROJECT_STATE_MISMATCHED 3, RESTORE_UNREADABLE 3, RESTORE_RECORD_UNREADABLE 2, ACTIVATION_INGRESS_REQUEST_MALFORMED 1+1 registry, ACTIVATION_INGRESS_PAYLOAD_MALFORMED 1, ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT 1, WORK_INTENT_COMMAND_MISMATCH 1). (3) WHICH BRANCH: drill 2 reddened exactly the 4 embargo-dependent cases and left the 3 CLEAR and 5 corruption/upstream cases green, so each cause is answered by its own branch and the drill hits the comparison. (4) SERVER-DERIVED: activateEffect gets `{...section, intent: armed}` with the server intent spread LAST and the section key-fenced to 10 keys that exclude `intent`; activateProviderSlot's attemptRef and activateReservation's attemptRef/expectedVersion come from the activation commit and the claim successors. (5) BRIDGES: all three are the exact one-line re-export. (6) grep -c '': embargo 167, ingress-contracts 233, ingress 321, registry 261 — none over 400, and 321 sits inside this directory's norm (siblings 328/296/294). (7) No scratch/debug/probe files; committed e72fd19 by explicit 10-path pathspec, never git add -A. RESIDUAL RISKS, disclosed not fixed: (a) TOCTOU — a restore quiesce committing between the embargo read and the ledger commit would let one activation through; closing it needs a re-check inside the commit transaction via commitExpectedVersionDecisionWithApply, which ActivationLedgerStore deliberately does not expose (task rail 1, another task's owned surface). It degrades to one extra activation for reconciliation to find, not silent corruption. (b) The embargo precedes the replay lookup, so replaying an already-accepted commandId after a later quiesce returns RECOVERY_RECONCILIATION_REQUIRED instead of REPLAYED — fail-closed, durable record untouched. (c) True parallel concurrency is not exercised in-process; the store's expectedVersion-0 CAS is the guarantee and the sequential form is tested. (d) ACTIVATION_LEDGER_GRANT_ID_CONFLICT is unreachable from this ingress (reasoned in the suite header) and stays covered at activation-ledger-commit.test.ts:260. (e) The one-line registrySize 20->21 in daemon-store-dependencies.test.ts was swept into FOREIGN commit 598b792 before I could stage it; per project rail I did not amend, reset, or claim it.",
+      "startedAt": "2026-08-15T18:26:12.112Z",
+      "completedAt": "2026-08-15T18:48:23.507Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-fd8f822b",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f6ca780e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -186,18 +201,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T18:26:12.112Z",
+  "updatedAt": "2026-08-15T18:49:27.882Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-a9210e34",
     "architect-4eca9b79",
     "architect-797c65f6",
-    "worker-fd8f822b"
+    "worker-fd8f822b",
+    "qa-f6ca780e"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -224,7 +240,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T17:51:47.361Z",
@@ -258,5 +275,25 @@
     "escalatedAt": "2026-08-15T17:52:09.821Z"
   },
   "planApprovedAt": "2026-08-15T17:51:49.419Z",
-  "workStartedAt": "2026-08-15T17:52:28.715Z"
+  "workStartedAt": "2026-08-15T17:52:28.715Z",
+  "reviewStartedAt": "2026-08-15T18:49:17.938Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts && pnpm --filter @moe/runner test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  8 passed (8)\n      Tests  190 passed (190)\n   Start at  21:48:33\n$ vitest run --root ../.. packages/runner/src\n RUN v4.1.10 D:/projexts/moe-next\n Test Files  62 passed (62)\n      Tests  2086 passed (2086)\n   Start at  21:48:36\nEXIT=0",
+    "reportedAt": "2026-08-15T18:49:17.938Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-embargo.test.ts",
+    "apps/daemon/src/activation/activation-embargo.ts",
+    "apps/daemon/src/activation/activation-embargo.js",
+    "apps/daemon/src/activation/activation-ingress-contracts.ts",
+    "apps/daemon/src/activation/activation-ingress-contracts.js",
+    "apps/daemon/src/activation/activation-ingress.test.ts",
+    "apps/daemon/src/activation/activation-ingress.ts",
+    "apps/daemon/src/activation/activation-ingress.js",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts"
+  ]
 }

@@ -18,7 +18,7 @@
     "Use public package roots across boundaries, exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -50,9 +50,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:05.524Z",
-  "updatedAt": "2026-08-15T18:10:39.739Z",
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
-  "blockedResourceId": null
+  "updatedAt": "2026-08-15T18:32:56.808Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:32:51.310Z",
+  "blockedReason": "One of two hard dependencies is now landed, but the other remains absent. task-2d37939dddde447bb98e53a2bd9e6c60 is DONE and publishes bare-root @moe/scheduler `bindCurrentExpansionHold`; task-e62e3828df234c66969a99b8223487f4 is BLOCKED on 6cb and has no production safe-release reader. Without e62's stored release evidence/handoff authority, this task cannot atomically create a valid hold/run without trusting caller/test facts, explicitly forbidden by its rails. Re-promote only after e62 is QA-approved DONE; then re-probe both public surfaces and the daemon dependency edge. Preserve the landed rule that absent currentAuthority is UNKNOWN, disagreement REFUSED, and goalVersion equality must be fenced by the daemon caller. Do not seed or synthesize release evidence.",
+  "blockedResourceId": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-15T18:32:33.746Z"
+  },
+  "contextFetchedBy": [
+    "architect-94dd1835"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Confirmed task-2d379 hold binding is DONE/public, task-e62e safe-release authority remains BLOCKED, and reported this task BLOCKED only on e62.",
+      "whatRemains": "After e62 is QA-approved DONE, re-probe both surfaces/dependency edges and plan atomic hold+PlanningRun persistence.",
+      "pitfalls": "Do not synthesize release evidence, seed holds, or forget daemon-side goalVersion equality; absence is UNKNOWN and disagreement REFUSED.",
+      "openQuestions": "Exact e62 result/read shape remains unknown until it lands.",
+      "releasedAt": "2026-08-15T18:32:56.807Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Remaining safe-release dependency measured; free architect capacity."
+    }
+  ]
 }

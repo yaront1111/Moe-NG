@@ -16,7 +16,7 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -108,20 +108,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:15.290Z",
-  "updatedAt": "2026-08-15T18:11:26.489Z",
+  "updatedAt": "2026-08-15T18:35:33.470Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-5b5302ee",
     "governor-1f3b15b7",
-    "governor-7c5e6be6"
+    "governor-7c5e6be6",
+    "architect-7f301fa7"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T11:24:40.426Z"
   },
-  "blockedReason": null,
+  "blockedReason": "BLOCK STANDS, but its cited evidence is substantially STALE and must stop being re-cited as fresh. architect-8ee37119 recorded partial decay on 2026-08-10 (comment-f0afd9ff); the reopenReason still repeats voided premises. Measured at HEAD 9d60091:\n\n1. \"root package.json has neither test:fault nor test:security\" — FALSE. Both exist at package.json:22-23, and BOTH TYPECHECK FIRST: `tsc -p tests/fault/tsconfig.json && vitest run --config tests/fault/vitest.config.ts`, same for security. That also refutes \"tests/** is otherwise untypechecked\" for these lanes.\n2. \"adapters/ absent entirely\" — FALSE. `ls adapters` -> ide-contract, jetbrains. Flagged void five days ago, still cited.\n3. \"Linux/macOS platform effect ports absent\" — FALSE. linux-observation and macos-observation both in packages/runner/src/platform/.\n4. \"daemon authenticateCommand absent or uncomposed\" — 2 non-test hits.\n5. The hostile-test LANE EXISTS: tests/security/ has lane-smoke.security.ts + tsconfig.json + vitest.config.ts; tests/fault/ has foundation/ + tsconfig + vitest.config. That is task-b5e9bd64, DONE.\n\nWHY IT STILL BLOCKS, on the premise that survives. DoD 1 requires \"EVERY declared authority and external-effect boundary\" to have hostile before/after/race coverage. That is a whole-system enumeration, not a fixture set, and cannot be planned as one task without narrowing the DoD or guessing the boundary list — both forbidden. The right output remains the implementation-ready RE-SLICE architect-5b5302ee was authoring (authority transports, integrity, durable store faults, runtime/provider faults, final gate wiring), with G0 owning the package.json + tests/fault lane — and item 1 means G0's lane work may already be partly done.\n\nNEXT ARCHITECT: do not re-derive the audit, but do not trust the reopenReason's list either. Re-measure each named boundary by LISTING (ls, grep -n '^export'), never a guessed-symbol grep — that error produced a false negative twice today.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T18:35:25.551Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Verified and documented the Clause 2 block; recorded eight detailed planning passes, the prerequisite DAG, security/fault shard architecture, evidence/version ratchets, and promoted the two dependency-ready recovery prerequisites.",
