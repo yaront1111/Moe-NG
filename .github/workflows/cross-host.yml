@@ -1,0 +1,56 @@
+# Cross-host execution environment for platform observation evidence.
+#
+# Exists to satisfy the standing constraint recorded on
+# task-01c5f96ec1e247dc846fd628c929974a: agent sessions run on win32, task rail 1
+# forbids win32-only completion, and until now the repo had no Linux or macOS
+# runner to delegate to. This workflow is that runner.
+#
+# fail-fast is off on purpose: a red Linux leg must not cancel the macOS leg,
+# because the evidence wanted is per-host, and a cancelled leg is UNKNOWN rather
+# than a result.
+name: cross-host
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  gate:
+    name: gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record host facts
+        run: |
+          echo "runner.os=${{ runner.os }}"
+          echo "process.platform=$(node -p 'process.platform' 2>/dev/null || echo 'node-not-yet-installed')"
+          uname -a
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Platform identity
+        run: |
+          node -p "JSON.stringify({platform: process.platform, arch: process.arch, node: process.version})"
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
