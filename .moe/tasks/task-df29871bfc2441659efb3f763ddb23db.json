@@ -118,28 +118,40 @@
     {
       "stepId": "step-7",
       "description": "Mutation drills, the ones DoD 6 names plus the ones that protect the reader. For each: sha256 first, edit with the Edit tool, confirm the anchor matched once, run only the named test, reverse the edit, confirm the sha256 is restored — never git checkout, which reverts to HEAD and would destroy uncommitted work in this shared worktree. D1 (named by DoD 6): replace the framed aggregate-id derivation with a bare concatenation — the injectivity table reddens on the colliding pair, proving the framing is load-bearing rather than decorative. D2 (named by DoD 6): change expectedVersion from 0 to the observed version — the distinct-command conflict case and the race case redden, because a second activation would then be accepted onto the same aggregate. D3: mint a fresh event id instead of copying the grantId — the grantId-reuse case reddens. D4: have the reader accept the first event when two are present — the exactly-one case reddens. D5: skip the digest check in the reader — the per-field mutation sweep reddens; confirm it reddens on MANY fields, since a sweep that reddens on only one has quietly stopped sweeping. Read every failure message and confirm it names the assertion the drill targets; a red for the wrong reason means the drill is broken, not that the guard is proven.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-contracts.ts",
         "apps/daemon/src/activation/activation-ledger-codec.ts",
         "apps/daemon/src/activation/activation-ledger-commit.ts"
-      ]
+      ],
+      "note": "Eight drills. Protocol every time: sha256 of all four production sources recorded first, Edit tool (never git checkout — it reverts to HEAD and would destroy the uncommitted peer work in this shared worktree), run only the named test, reverse with Edit, `sha256sum -c` confirms byte-exact restore. Every restore verified OK; final state confirmed by 3 files / 33 tests green.\n\nD1a bare concat `${NS}${a}${b}` -> injectivity test RED \"expected 7 to be 12\".\nD1b THE QA NOTE'S DRILL: keep `|`, drop only the length prefixes -> RED \"expected 11 to be 12\". Exactly one collision, from the (\"a|b\",\"c\")/(\"a\",\"b|c\") pair added in step 3. Under the old `:`-only table this mutant survived with all tests green; it no longer does.\nD2 expectedVersion 0 -> `store.readEvents(aggregateId).length` (a real \"observed version\") -> \"refuses a distinct command on the same pair with EXPECTED_VERSION_CONFLICT\" RED, `second.ok` true, i.e. a second activation accepted onto the same aggregate. HONEST LIMIT: the race case did NOT redden under this mutant, because both racers sit behind the shared gate and both observe version 0. So the race is drilled separately:\nD2b aggregate id derived from `idempotencyKey + grantId` -> race RED \"expected [ …(2) ] to have a length of 1 but got 2\" — both racers accepted onto distinct aggregates. This is the aggregate-id half of DoD 6's \"mutation of the production aggregate-id or expected-version guard reddens the named replay/race test\".\nD3 mint `${grantId}-${commandId}` instead of copying grantId -> \"refuses a reused grantId on a different aggregate\" RED, `reused.ok` true.\nD4 reader accepts >1 event (`length > 1` -> `length > 99`) -> \"refuses two events as UNKNOWN with its exact code and layer\" RED.\nD5 skip the reader's digest check -> sweep RED \"expected 'ACTIVATION_LEDGER_RECORD_MALFORMED' to be 'ACTIVATION_LEDGER_DIGEST_MISMATCH'\": the re-encode guard answered instead, so the drill also proves WHICH guard must answer.\nD5c MANY-FIELD PROOF. The sweep loop aborts on its first hard assertion, so \"reddens on many fields\" is unobservable in one run. Disabled BOTH digest guards and temporarily softened the two loop assertions to expect.soft (test edit, restored, `grep -c expect.soft` now 0). Result: 10 of 12 fields escape decode entirely — activationDigest, attempt, budgetReservation, budgetView, effectIntent, grant, lease, predecessorAttemptVersion, predecessorIntentVersion, providerSlot — and the remaining 2 (activationVersion, recordVersion, the pinned literals) refuse with the WRONG code. All 12 redden; the sweep has not quietly stopped sweeping.\nD6 QA'S NAMED DRILL: revert the REPLAYED branch to echoing the caller's record -> BOTH new tests RED — \"expected [ 'commitExpectedVersionDecision' ] to deeply equal [ …(2) ]\" (readEvents never called) and \"expected true to be false\" (the drifted grant reported ok). The exact defect QA reproduced.\nD7 disable only the divergence comparison, keeping the durable read -> ONLY the drift test RED; the positive replay stays green. Proves the digest comparison is load-bearing independently of the read, so neither half is decoration.\n\nEvery failure message names the assertion its drill targets; no drill reddened for an unrelated reason and none over-reddened into a broken environment.",
+      "startedAt": "2026-08-15T11:39:52.400Z",
+      "completedAt": "2026-08-15T11:44:20.126Z"
     },
     {
       "stepId": "step-8",
       "description": "Gate, review, commit. Run `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test` fresh in the foreground and keep the verbatim tail; subtract the step-1 baseline and confirm no new failing path intersects the owned paths, disclosing any foreign red verbatim rather than fabricating green. Root `pnpm test` excludes apps/**, so the daemon leg is the only one gating this work. Re-measure every new production file with `grep -c ''` against the 250 target. Adversarial review over the owned diff: is any SQLite object or DDL created (rail 1 forbids it); is any claim or activation outcome CONSTRUCTED rather than persisted as given; can a partial tuple be observed on any failure path; does any refusal flatten the store's upstream code; is the aggregate-id derivation injective for adversarial inputs including empty components and separator-bearing ids; does the reader ever answer from the fields that did parse; and does the record's field set still cover every fact DoD 1 enumerates — count the nouns in that sentence against the interface, because an eight-fact list is easy to ship with seven. Then `git add` the six new files first (a commit pathspec naming an untracked path commits nothing at all), confirm `git status --porcelain` stages no foreign entry — .moe/**, packages/store/**, packages/contracts/** and adapters/** carry other agents' work — commit by explicit eight-path pathspec, and verify with `git show --stat`. Record task-e33747f982e0452a9f9d784fd1cb914d as the production consumer per DoD 6 and global clause 1.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-contracts.ts",
         "apps/daemon/src/activation/activation-ledger-codec.ts",
         "apps/daemon/src/activation/activation-ledger-commit.ts",
         "apps/daemon/src/activation/activation-ledger-codec.test.ts",
         "apps/daemon/src/activation/activation-ledger-commit.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-commit.ts",
+        "apps/daemon/src/activation/activation-ledger-commit.test.ts",
+        "apps/daemon/src/activation/activation-ledger-codec.test.ts"
+      ],
+      "note": "GATE, fresh, foreground, all three legs:\n  pnpm --filter @moe/daemon typecheck -> EXIT 0\n  pnpm --filter @moe/daemon test      -> EXIT 0, Test Files 75 passed (75), Tests 1600 passed (1600)\n  pnpm --filter @moe/store test       -> EXIT 0, Test Files 41 passed (41), Tests 469 passed (469)\nBASELINE SUBTRACTION: step-1 measured typecheck EXIT 1 on ONE foreign untracked file (identity/genesis-first-boot.test.ts TS2769) and daemon test 1598. Both legs are now green — the peer landed that file — so the delta is +2 tests, exactly the two I added, and the failing-path set at HEAD is EMPTY. No disclosure needed; nothing was fabricated.\n\nSIZE (grep -c '', not Measure-Object): contracts 244, codec 236, commit 210, reader 71. All under the 250 target, none near 400.\n\nCOMMIT — THE KNOWN FOREIGN-HOOK HAZARD FIRED, AND I DID NOT TOUCH IT. `git diff HEAD -- apps/daemon/src/activation/` is EMPTY and all 12 owned files hash-match HEAD, because the whole-tree completion hook of ANOTHER task swept my bytes in: 0a53ac0 \"feat(task-e19074f841f9450296799abfba9bfcaa): Genesis recovery binding\" carries all four files I edited. Per project rail 5 I did NOT amend it, reset, or manufacture an empty commit. I verified the committed bytes are the GATED bytes and not a drill artifact: neither 275986a nor 0a53ac0 contains `if (false)`, `readEvents(aggregateId).length`, or a stripped `aggregateId.length` framing.\nREVIEW BY BASE-REF DIFF, not by commit label:\n  this session   `git diff 139f11c..HEAD -- apps/daemon/src/activation/`  4 files, +174/-8\n  whole task     `git diff ab45234..HEAD -- apps/daemon/src/activation/`  12 files, +1791\nNo scratch/probe/debug file remains; `git status --porcelain` stages nothing of mine (only daemon-owned .moe/** churn).\n\nADVERSARIAL REVIEW over the owned diff:\n- SQLite/DDL: zero. grep for CREATE TABLE|CREATE INDEX|DatabaseSync|withApply|exec(|PRAGMA over the added lines returns NONE. The port names only commitExpectedVersionDecision and readEvents, so an apply callback is unreachable by construction.\n- CONSTRUCTED vs PERSISTED: nothing constructed. eventId is COPIED from grant.grantId; the record is the caller's, validated but never rewritten.\n- PARTIAL TUPLE: impossible by shape — all twelve facts are ONE event payload in ONE transaction. Injected-throw test reopens and asserts zero events and aggregate version 0.\n- CONCURRENCY ON THE NEW READ PATH: the aggregate can only ever hold one event (expectedVersion pinned 0), so the post-decision read is not a TOCTOU window — a second appender must conflict first. If the read somehow returns zero or two events the reader answers EVIDENCE_ABSENT / EVIDENCE_AMBIGUOUS, i.e. fails closed rather than reconstructing.\n- FLATTENING: every store-raised refusal keeps its upstream code in storeCode; REPLAY_DIVERGED carries null precisely because no store call refused, and that null is asserted.\n- INJECTIVITY under adversarial input: empty components, `:`-bearing and now `|`-bearing ids, all distinct; D1a/D1b prove the framing is load-bearing.\n- READER answering from partial parse: no such branch; digest is checked before framing is parsed.\n- DoD 1 NOUN COUNT: lease, ACTIVE attempt-bound providerSlot, ACTIVATED budgetReservation, post-reservation budgetView, ACTIVE effectIntent, RUNNING attempt, UNUSED grant, predecessorIntentVersion, predecessorAttemptVersion, activationDigest = 10 named facts, plus recordVersion and activationVersion = 12 interface fields = ACTIVATION_LEDGER_RECORD_KEYS.length. Nothing shipped short.\n- NOTED, NOT FIXED (theoretical): (a) answerReplayed re-encodes the durable record only to obtain its digest, one extra sha256 over <=1MB — the alternative is widening ActivationLedgerDecodeResult, which I judged worse than the cost; (b) refuseThrown would map a DurableStoreError EXPECTED_VERSION_CONFLICT raised by readEvents onto the conflict code, which readEvents cannot actually raise.\n\nCONSUMER, per DoD 6 and global clause 1: task-e33747f982e0452a9f9d784fd1cb914d is the recorded production consumer. This task lands a pure daemon-side package; grep confirms zero imports of src/activation/ from anywhere else, so the consumer edge is that task's to land.",
+      "startedAt": "2026-08-15T11:44:26.401Z",
+      "completedAt": "2026-08-15T11:46:05.614Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -164,12 +176,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:43:11.801Z",
-  "updatedAt": "2026-08-15T11:39:37.326Z",
+  "updatedAt": "2026-08-15T11:48:03.384Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T21:00:46.726Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 14,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -201,7 +213,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -234,26 +248,20 @@
   },
   "planApprovedAt": "2026-08-14T11:55:48.989Z",
   "workStartedAt": "2026-08-14T11:56:10.069Z",
-  "reviewStartedAt": "2026-08-15T11:24:36.277Z",
+  "reviewStartedAt": "2026-08-15T11:48:03.384Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation src/runtime-entrypoint.test.ts && pnpm --filter @moe/store test",
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/store test",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  4 passed (4)\n      Tests  35 passed (35)\n   Start at  14:22:56\n   Duration  1.11s\n\n@moe/store test:\n Test Files  41 passed (41)\n      Tests  469 passed (469)\n\nFINAL_EXIT=0",
-    "reportedAt": "2026-08-15T11:24:36.277Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  75 passed (75)\n      Tests  1600 passed (1600)\n   Start at  14:46:15\n$ vitest run --root ../.. packages/store/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  41 passed (41)\n      Tests  469 passed (469)\n   Start at  14:46:19\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-15T11:48:03.384Z"
   },
   "filesModified": [
     "apps/daemon/src/activation/activation-ledger-contracts.ts",
-    "apps/daemon/src/activation/activation-ledger-contracts.js",
     "apps/daemon/src/activation/activation-ledger-codec.test.ts",
     "apps/daemon/src/activation/activation-ledger-codec.ts",
     "apps/daemon/src/activation/activation-ledger-codec.js",
-    "apps/daemon/src/activation/activation-ledger-reader.ts",
-    "apps/daemon/src/activation/activation-ledger-reader.js",
     "apps/daemon/src/activation/activation-ledger-commit.test.ts",
-    "apps/daemon/src/activation/activation-ledger-commit.ts",
-    "apps/daemon/src/activation/activation-ledger-reader.test.ts",
-    "apps/daemon/src/activation/activation-ledger-commit.js",
-    "apps/daemon/src/activation/activation-ledger-fixtures.ts"
+    "apps/daemon/src/activation/activation-ledger-commit.ts"
   ],
   "reviewCompletedAt": "2026-08-15T11:32:43.010Z",
   "rejectionDetails": {

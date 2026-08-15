@@ -128,8 +128,8 @@
       "completedAt": "2026-08-15T11:37:36.138Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -148,12 +148,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T23:20:28.506Z",
-  "updatedAt": "2026-08-15T11:38:33.209Z",
+  "updatedAt": "2026-08-15T11:42:42.834Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:26:51.902Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-15T11:42:42.834Z",
+    "wallClockMs": 130550932
   },
   "contextFetchedBy": [
     "architect-a42f4965",
@@ -219,5 +221,8 @@
     "apps/daemon/src/recovery/restore-test-harness.ts",
     "apps/daemon/src/recovery/restore-controller.test.ts",
     "apps/daemon/src/identity/genesis-first-boot.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T11:42:42.834Z",
+  "reviewCompletedAt": "2026-08-15T11:42:42.834Z",
+  "reviewSummary": "VERIFIED BY RE-RUN, not by reading the notes.\n\nGATES (fresh, foreground, exit codes to file, not piped): daemon typecheck EXIT=0; daemon test EXIT=0, 75 files/1600 tests; store test EXIT=0, 41 files/469 tests.\n\nDoD 1: genesis-first-boot.test.ts:149 drives the REAL createStoreDependencies over a mkdtemp store, positively establishes GENESIS_FENCED, asserts the WHOLE result equals verdict AUTHENTICATED + principalId + projectId + capabilities. Not \"nothing threw\", not \"!== REFUSED\".\n\nDoD 2: exactly one production installer, ensureGenesisRecoveryBinding at daemon-store-dependencies.ts:98. Grep over apps/ packages/ finds no other non-test caller (worker.mjs and restore-test-harness.ts are test-only, harness has zero production importers). Minting decision recorded in planningNotes with security reasoning.\n\nDoD 3: I RAN THE DRILL MYSELF. git diff ab45234..HEAD over session-authenticator.ts is EMPTY. Mutated the fence at :102 (=== null to === undefined); the NAMED production-boundary test reddened on its own assertion: genesis-first-boot.test.ts > \"refuses the operator on an unbound store, silently and without a refusal\" (expected UNAUTHENTICATED, got a principal). Restored from byte copy, sha256 back to b8203c9a...9035e, git diff clean. Refusals pin code SESSION_REPLAYED AND layer IDENTITY; store codes verbatim.\n\nDoD 4: restore-bound store byte-identical incl. digest, settles PRESENT not INSTALLED.\n\nDoD 5: ran the plain-Node smoke myself outside vitest on a genuinely empty new dir: exit 0, AUTHENTICATED, GENESIS_FENCED, echoing MY principal/project (relational, not canned).\n\nRAILS: genesis-recovery-binding.ts 248 lines (<=250). Owned paths clean, no stray files. Production file swept into foreign commit 139f11c, per epic rail NOT a rejection reason, verified by base-ref diff. refuseOrAdopt is out-of-plan but FORCED (winner's own anchor is history; refusing killed a well-fenced store), disclosed, mints nothing, history refusal holds."
 }

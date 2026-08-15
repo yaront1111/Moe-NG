@@ -18,9 +18,92 @@
     "If shared schema or wire contracts change, run full regression as required by the global schema rail.",
     "Target <=250 physical lines per production source and split before 400; the cap is per file."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-4eca9b79",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Explore and baseline before editing: record `git rev-parse HEAD`, the merge/base ref, `git status --porcelain`, and the pre-diff failing-path output of the task's full verification chain without claiming it as the final gate. Confirm the five owned paths are still absent/clean and leave all foreign `.moe`/activation work untouched. Reconfirm the daemon manifest declares `@moe/scheduler` and `@moe/store`, the lock importer contains both, then create a uniquely named temporary TypeScript probe under `apps/daemon/src/recovery` that imports `ResourceRow` from bare `@moe/scheduler` and `SqliteEventStore` from bare `@moe/store`; run daemon typecheck and delete the probe in the same Node `finally`, asserting it no longer exists.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Baseline recorded at HEAD 0a53ac067c4fbdbc197881bb256bdcea1ea63a62, branch moe/work-2026-08-08, merge-base vs main 1e3057ab938236a98105177fb060021ff992b529.\n\nOWNED PATHS ABSENT: `ls apps/daemon/src/recovery/ | grep -i durable` exit 1 — none of the five planned paths exist.\n\nFOREIGN WIP (untouched, disclosed): .moe/messages/*.jsonl, .moe/tasks/*.json (daemon state); apps/daemon/src/activation/activation-ledger-codec.ts and .test.ts (peer, uncommitted).\n\nDEPENDENCY EDGE, all three legs verified:\n(a) apps/daemon/package.json dependencies declare \"@moe/scheduler\": \"workspace:*\" and \"@moe/store\": \"workspace:*\".\n(b) pnpm-lock.yaml importer `apps/daemon:` carries both, link:../../packages/scheduler and link:../../packages/store.\n(c) Compiled probe apps/daemon/src/recovery/zz-probe-w40286572-tmp.ts imported ResourceRow from bare \"@moe/scheduler\" and SqliteEventStore from bare \"@moe/store\"; `pnpm --filter @moe/daemon typecheck` exit 0; probe deleted in the same command and re-asserted absent (PROBE_DELETED=yes).\n\nPRE-DIFF GATE BASELINE (per-leg exit codes captured separately, not `&&`-masked) — ALL GREEN:\n  pnpm --filter @moe/scheduler test  -> SCHED_EXIT=0\n  pnpm --filter @moe/store test      -> STORE_EXIT=0\n  pnpm --filter @moe/daemon test     -> DAEMON_EXIT=0 (75 files, 1600 tests passed)\n  pnpm typecheck                     -> TYPECHECK_EXIT=0 (repo-wide, all packages Done)\nZero foreign red at merge-base state, so any later failing path intersecting owned paths is attributable to this diff.\n\nRE-MEASURED SURFACES (not taken from the description):\n- apps/daemon/src/recovery/recovery-inventory-contract.ts freezes RECOVERY_PROOF_CLASSES with RESOURCE at index 1 and INTEGRATION_TARGET at index 3, RECOVERY_INVENTORY_UPSTREAM_LAYERS includes \"INVENTORY_ADAPTER\", and publishes exactDataRecord/isPlainArray/isReflectableObject/recoveryInventoryRefusal plus the closed RECOVERY_INVENTORY_UPSTREAM_CODES vocabulary I must reuse.\n- packages/runner RECOVERY_INVENTORY_CLASSES is still exactly four and cannot represent RESOURCE or INTEGRATION_TARGET, so the daemon-side typed bridge (not a runner widening) is the correct deliverable.\n- @moe/scheduler root exports reserveAll/adapterConfirm/adapterFail, which generate all four ACQUISITION_STATES (PENDING_ACQUIRE, ACTIVE, RELEASED, QUARANTINED) from real production transitions — no hand-built ResourceRow authority needed.\n- SqliteEventStore public surface confirmed: commitExpectedVersionDecision, readAggregateEvents(aggregateId, afterSeq, limit), getCommandDecision, getHealth, readRecoveryBinding, close. No schema/raw-SQLite access required.",
+      "startedAt": "2026-08-15T11:42:07.538Z",
+      "completedAt": "2026-08-15T11:45:10.837Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Write the failing acceptance suite first. Using real public scheduler transitions (not hand-built row authority), a file-backed `SqliteEventStore`, the production recovery-incarnation/anchor APIs, and bare workspace imports, cover: all generated resource states including QUARANTINED and `fenceable:false`; multiple integration targets/attempts; exact effect-intent/source-proof binding; seal/reopen equality; exact project/start-excluded/end-included cursor, backup-generation, and current-incarnation filtering; immutable exact two-class fragments; and COMPLETE-empty only with a verified negative proof. Add hostile/missing/unmatched/malformed/duplicate/truncated/unreadable cases asserting the exact existing upstream code and `INVENTORY_ADAPTER` layer, including zero accessor/proxy trap hits. Each class/state/refusal sweep must assert its generated count is nonzero. Name focused tests for the later completeness and fenceability mutation drills, and demonstrate the focused file is red before production implementation.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ],
+      "startedAt": "2026-08-15T11:45:13.652Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the exact durable contract and canonical codec. Define the closed `RESOURCE | INTEGRATION_TARGET` vocabulary, caller basis (project tag plus backup cursor/generation only), internal selected scope (store project plus anchored incarnation/key epoch/binding digest), resource and integration observation unions, window seal, immutable class fragment, and typed registration shapes. Caller inputs must have exact own enumerable data keys and cannot contain current refs, counters, item arrays, or authority fields. Canonical bytes use one field order, bounded sizes/counts, deterministic code-point ordering, a body digest, semantic revalidation before digest acceptance, and byte-for-byte re-encode checks. Reuse the daemon's already-admitted stable upstream tuples: invalid input, missing record/seal, unreadable/noncanonical bytes, duplicate/conflict/count mismatch, truncated coverage, and binding mismatch remain UNKNOWN at `INVENTORY_ADAPTER`; add no new authority or disposition. Keep the TS source <=250 lines and add the exact one-line LF runtime bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Implement the durable provider over the public store surface, with no SQLite/schema access. On every append, seal, and read, derive project identity from `getHealth`, read the ACTIVE recovery binding, read the matching daemon anchor, and require exact incarnation/key epoch/binding/generation agreement; never accept those refs from the caller. Persist one canonical observation per call through deterministic `commitExpectedVersionDecision` identities into a dedicated aggregate addressed by project, backup cursor/generation, and current incarnation. Snapshot `ResourceRow` exhaustively (including state, capacity, epoch, external, and a closed FENCEABLE/NON_FENCEABLE projection) without reimplementing scheduler transitions; bind resource identity as `(resourceId,effectIntentRef)`. Bind integration identity as `(attemptRef,targetRef,effectIntentRef)` plus intent digest and source proof. Replay identical writes, refuse divergent duplicates, and serialize append versus seal by expected aggregate version so no post-seal row can succeed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Complete the same provider with the sealed reader and daemon composition seam. Seal only after reading and validating all typed aggregate rows; require exactly one source coverage proof for each of the two classes, compute per-class nonzero cardinality/ordered row-digest commitments, require a bound negative proof for a zero-row class, and commit one terminal seal whose stored global position is the inclusive window end. Read only the dedicated aggregate with bounded pagination, require exact sequence/decision trace/event types, canonical bytes, unique identities, one final seal, exact counts/digests, and positions `(backupCursor,endInclusive]`; missing/partial/unreadable evidence returns the precise UNKNOWN tuple and never a partial list. Export a frozen literal two-registration tuple/factory whose enumerators accept only basis/window, recheck the selected binding, return frozen raw observations plus proof fragments, and never decide adoption, quarantine, signing authority, or `recovery.complete`; no mutable global registry or caller item list. Keep the production source <=250 lines and the `.js` bridge exactly one LF-terminated export line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory.js",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Run the single concentrated verification gate. First run the focused daemon test, then perform two reversible mutation drills against the production surface: weaken the seal completeness/count comparison and alter the ResourceRow fenceability projection; in each case assert the specifically named focused test exits nonzero, count both drills (nonzero), reverse only that owned patch without `git restore/reset`, and confirm the original bytes return. Check no probe/debug/generated evidence remains. Then run exactly `pnpm --filter @moe/scheduler test && pnpm --filter @moe/store test && pnpm --filter @moe/daemon test && pnpm typecheck` fresh in the foreground and record exit status/output. Compare failures with the pre-diff baseline and disclose foreign red verbatim; completion requires no new failing path intersecting these five owned paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.js",
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory.js",
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Load `adversarial-self-review` and inspect the complete owned-path diff as an attacker: concurrent/replayed append versus seal, empty/huge/duplicate arrays, wrong cursor/project/generation, stale or absent ACTIVE binding/anchor, hostile descriptors/proxies, digest/order ambiguity, partial pagination, post-seal writes, non-fenceable and QUARANTINED omission, integration identity collisions, accidental mutable/global state, and any path that could emit authority from UNKNOWN. Verify Windows handles close before cleanup and both production files remain <=250 lines (split before 400 only via replan). If review changes bytes, rerun the exact gate above. Finally run `git status --porcelain`, unstage any foreign staged path, commit only with the explicit five-path pathspec, verify `git show --stat` contains only owned paths, record downstream consumer `task-cf7fb147bd1c47698cbd65c9535370aa`, and call `moe.complete_task`; if QA rejects, address only the pinned rejection and rerun the same gate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory-contract.js",
+        "apps/daemon/src/recovery/durable-recovery-inventory.ts",
+        "apps/daemon/src/recovery/durable-recovery-inventory.js",
+        "apps/daemon/src/recovery/durable-recovery-inventory.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-40286572",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,13 +115,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:41.056Z",
-  "updatedAt": "2026-08-15T11:07:53.819Z",
+  "updatedAt": "2026-08-15T11:45:13.653Z",
   "metrics": {
-    "firstClaimAt": "2026-08-13T16:21:56.007Z"
+    "firstClaimAt": "2026-08-13T16:21:56.007Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
     "architect-a9210e34",
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "worker-40286572"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -53,5 +140,30 @@
       "releasedBy": "architect-a9210e34",
       "reason": "Explicit architect handoff after evidence-based prerequisite block; freeing capacity for the next eligible planning task."
     }
-  ]
+  ],
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T11:41:50.742Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the task's explicit 'equally explicit typed bridge' option, implemented inside the daemon over the existing public SqliteEventStore decision/event API. Rejected widening @moe/runner: its RecoveryInventoryRegistration class union is intentionally frozen to four node-side classes and cannot represent RESOURCE or INTEGRATION_TARGET. Rejected dedicated SQLite tables/schema v5: it would add migration/schema ownership without improving the required post-restore inventory proof and would exceed this task's focused file budget. Rejected a global readEventsAfter scan or caller item array: neither proves complete population. The selected design uses one dedicated, incarnation-addressed aggregate with typed row events and a terminal two-class seal; reads use readAggregateEvents for that aggregate only. Rejected adding scheduler persistence: ResourceRow already is the scheduler authority, so the daemon snapshots that public type without duplicating its transitions.",
+    "codebaseInsights": "Remeasured rather than trusting the stale task snapshot. At planning HEAD 275986add4c5e0a05c3f654eb67e40fed83418bf, `git rev-parse HEAD:apps/daemon/src/recovery/recovery-inventory-contract.ts` returned 6ed4a8a473297d6e502b1c2a9266cf4f9f9cd25c. That committed contract freezes six proofs/seven populations, with RESOURCE->[RESOURCE] and INTEGRATION_TARGET->[INTEGRATION_TARGET]; runner remains four-class only. `rg` found @moe/scheduler's root-exported ResourceRow with resourceId/capacityUnits/epoch/state/effectIntentRef/external/fenceable and PENDING_ACQUIRE|ACTIVE|RELEASED|QUARANTINED production transitions, but no durable resource inventory and no production IntegrationAttempt anywhere in scheduler/store/daemon. SqliteEventStore already exposes commitExpectedVersionDecision, readAggregateEvents, getHealth, and readRecoveryBinding, so no schema/root-store change is needed. `apps/daemon/package.json` declares both @moe/scheduler and @moe/store as workspace dependencies; pnpm-lock.yaml's apps/daemon importer contains both. A temporary compiled probe under apps/daemon/src/recovery imported ResourceRow from bare @moe/scheduler and SqliteEventStore from bare @moe/store, `pnpm --filter @moe/daemon typecheck` exited 0, and the probe was deleted in the same command. The five planned paths were absent and clean; foreign .moe and apps/daemon/src/activation WIP are explicitly excluded.",
+    "risks": "The seal must prove exact cardinality/order for both classes; `every()` without a two-class count is vacuous. A seal digest by itself is not completeness unless it binds the typed source proofs, row identities/digests, project, backup cursor/generation, selected anchor/incarnation/key epoch, and exact end cursor. Concurrent append/seal must use expected-version serialization so a row cannot appear after a successful seal. Duplicate identity is (resourceId,effectIntentRef) for resources and (attemptRef,targetRef,effectIntentRef) for integrations, preserving distinct attempts while refusing conflicting repeats. No bridge result may decide ADOPTED/QUARANTINED or grant recovery.complete. Keep both new production TS files <=250 physical lines; exact one-line LF .js bridges are required. File-backed reopen tests must close every SQLite handle before Windows temp-directory cleanup. Consumer composition remains task-cf7fb147bd1c47698cbd65c9535370aa; do not treat that downstream blocked task as a prerequisite.",
+    "keyFiles": [
+      "packages/scheduler/src/authority/resource-model.ts",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+      "apps/daemon/src/recovery/recovery-inventory-subject.ts",
+      "apps/daemon/src/recovery/recovery-incarnation-anchor.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T11:41:54.517Z",
+    "escalatedAt": "2026-08-15T11:41:54.517Z"
+  },
+  "planApprovedAt": "2026-08-15T11:41:52.799Z",
+  "workStartedAt": "2026-08-15T11:42:07.538Z"
 }
