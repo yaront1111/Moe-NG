@@ -233,6 +233,18 @@ it("refuses a state-changing request carrying no CSRF token or a wrong one", asy
   });
 });
 
+it("an empty configured CSRF token satisfies NO request, not one bearing an empty header", async () => {
+  // A `!==` compare admits `x-moe-csrf: ` (empty header) when the token is also
+  // empty. An empty token can never be a secret, so it refuses everything.
+  await withListener(
+    async (listener) => {
+      expectListenerRefusal(await send(listener, { csrf: "", path: "/command" }), "LISTENER_CSRF_INVALID");
+      expectListenerRefusal(await send(listener, { csrf: null, path: "/command" }), "LISTENER_CSRF_INVALID");
+    },
+    { csrfToken: "" },
+  );
+});
+
 it("refuses an unknown route without reaching the adapter", async () => {
   await withListener(async (listener) => {
     expectListenerRefusal(

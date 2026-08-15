@@ -65,6 +65,19 @@ async function withDaemon(run: (daemon: StartedDaemon) => Promise<void>): Promis
   }
 }
 
+it("mints a random CSRF token when the operator supplies an empty one", async () => {
+  // `--csrf-token=` reaches here as "". An empty token is not a secret; treat
+  // it as unsupplied and mint a real one rather than starting a daemon whose
+  // guard any empty header satisfies.
+  const started = await startDaemon({ csrfToken: "", dependencies: provider });
+  if (!started.ok) throw new Error(`daemon refused: ${started.code}`);
+  try {
+    expect(started.csrfToken.length).toBeGreaterThan(0);
+  } finally {
+    await started.shutdown();
+  }
+});
+
 it("declares every refusal code it can emit in one frozen vocabulary", () => {
   expect(Object.isFrozen(DAEMON_ENTRY_REFUSAL_CODES)).toBe(true);
   expect(new Set(DAEMON_ENTRY_REFUSAL_CODES).size).toBe(DAEMON_ENTRY_REFUSAL_CODES.length);

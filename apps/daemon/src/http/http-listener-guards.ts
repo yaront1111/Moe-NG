@@ -125,7 +125,11 @@ export function checkHeaders(
   // Absent and foreign are both refused: a missing Origin is not a safe default
   // for a state-changing request.
   if (request.headers.origin !== origin) return "LISTENER_ORIGIN_INVALID";
-  if (request.headers[CSRF_HEADER] !== csrfToken) return "LISTENER_CSRF_INVALID";
+  // An empty token is not a secret: a bare `!==` would let `x-moe-csrf:` (empty)
+  // through. An empty configured token therefore satisfies NO request.
+  if (csrfToken === "" || request.headers[CSRF_HEADER] !== csrfToken) {
+    return "LISTENER_CSRF_INVALID";
+  }
   return null;
 }
 

@@ -169,7 +169,9 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps
   // credentials out of URLs and logs, so this value is never written to the log
   // sink and never placed on a query string.
-  const csrfToken = options.csrfToken ?? randomUUID();
+  // Empty is treated as unsupplied: `--csrf-token=` reaches here as "", and an
+  // empty token is a secret no header can safely match, so mint a real one.
+  const csrfToken = (options.csrfToken ?? "") === "" ? randomUUID() : options.csrfToken;
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
