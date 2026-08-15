@@ -35,6 +35,10 @@ const PRODUCTION_MODULES = Object.freeze([
   ["timing.ts", "export function evaluateTiming("],
   ["command-latency.tsx", "export function CommandLatency("],
   ["wire-timing.ts", "export function buildLiveTimingReceipt("],
+  ["effort-records.ts", "export function effortRefusal("],
+  ["effort-admission.ts", "export function shapeEffortObservation("],
+  ["effort-intervals.ts", "export function createIntervalMachine("],
+  ["effort-collector.ts", "export function createEffortCollector("],
 ] as const);
 
 /**
