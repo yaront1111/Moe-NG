@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const schedulerRoot = join(repositoryRoot, "packages", "scheduler");
+const REPOSITORY_SCAN_TIMEOUT_MS = 30_000;
 const sourceExtension = /\.(?:[cm]?[jt]s|[jt]sx|astro|mdx|svelte|vue)$/u;
 const forbiddenInternalPath = /(?:@moe\/scheduler\/|scheduler[\\/]src[\\/])/u;
 /**
@@ -330,7 +331,7 @@ it("keeps scheduler registrars behind the package-root import boundary", async (
   expect(scanned.length).toBeGreaterThan(0);
   expect(scanned).toContain(scannedWitness);
   expect(violations).toEqual([]);
-});
+}, REPOSITORY_SCAN_TIMEOUT_MS);
 
 it("covers forbidden and allowed boundary cases", () => {
   expect(forbiddenImportCases.length).toBeGreaterThan(0);

@@ -18,9 +18,11 @@ interface FakeChild {
   readonly args: readonly string[];
   readonly emitter: EventEmitter;
   readonly file: string;
+  readonly kill: ReturnType<typeof vi.fn>;
   readonly options: { readonly cwd?: unknown; readonly env?: NodeJS.ProcessEnv | undefined;
     readonly detached?: unknown; readonly shell?: unknown };
   readonly stdin: PassThrough;
+  readonly unref: ReturnType<typeof vi.fn>;
 }
 
 function fakeSpawn(pid?: number): {
@@ -31,8 +33,10 @@ function fakeSpawn(pid?: number): {
   const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
     const emitter = new EventEmitter();
     const stdin = new PassThrough();
-    calls.push({ args, emitter, file, options, stdin });
-    return Object.assign(emitter, { pid, stdin }) as unknown as ReturnType<
+    const kill = vi.fn();
+    const unref = vi.fn();
+    calls.push({ args, emitter, file, kill, options, stdin, unref });
+    return Object.assign(emitter, { kill, pid, stdin, unref }) as unknown as ReturnType<
       NonNullable<AgentSpawnerOptions["spawn"]>
     >;
   };
@@ -264,7 +268,7 @@ describe("claudeSpawner", () => {
     }
   });
 
-  it("bounds settlement after an accepted POSIX group kill when close never arrives", async () => {
+  it("surfaces fatal containment failure when close never confirms POSIX tree death", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
     const groupKills: number[] = [];
@@ -281,24 +285,27 @@ describe("claudeSpawner", () => {
       const done = spawner(request());
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
-      let resolved = false;
-      void done.then(() => { resolved = true; });
+      let settled = false;
+      void done.finally(() => { settled = true; }).catch(() => undefined);
 
       await vi.advanceTimersByTimeAsync(49);
       expect(groupKills).toEqual([-4321]);
-      expect(resolved).toBe(false);
+      expect(settled).toBe(false);
       expect(existsSync(configPathOf(child))).toBe(true);
 
       await vi.advanceTimersByTimeAsync(1);
-      await done;
-      expect(resolved).toBe(true);
+      await expect(done).rejects.toMatchObject({
+        code: "AGENT_PROCESS_CONTAINMENT_FAILED",
+        reason: "CLOSE_NOT_OBSERVED",
+      });
+      expect(settled).toBe(true);
       expect(existsSync(configPathOf(child))).toBe(false);
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("contains a Windows taskkill error and waits for the agent to close", async () => {
+  it("pins Windows taskkill and surfaces its failure despite agent close", async () => {
     vi.useFakeTimers();
     const agent = fakeSpawn(8765);
     const killer = fakeSpawn(9876);
@@ -313,30 +320,121 @@ describe("claudeSpawner", () => {
     };
     const spawner = claudeSpawner(MCP_ORIGIN, {
       command: "claude", killGraceMs: 30, log: () => undefined,
+      environment: { SYSTEMROOT: "C:\\Windows" },
       platform: "win32", spawn, timeoutMs: 20,
     });
     try {
       const done = spawner(request());
       const configPath = configPathOf(agent.calls[0] as FakeChild);
       let resolved = false;
-      void done.then(() => { resolved = true; });
+      void done.then(() => { resolved = true; }, () => undefined);
       await vi.advanceTimersByTimeAsync(20);
 
       expect(calls[0]?.options.detached).toBe(false);
       expect(calls[1]).toMatchObject({
         args: ["/pid", "8765", "/T", "/F"],
-        file: "taskkill",
+        file: "C:\\Windows\\System32\\taskkill.exe",
       });
+      expect(killer.calls[0]?.unref).toHaveBeenCalledTimes(1);
       expect(() => killer.calls[0]?.emitter.emit("error", new Error("taskkill unavailable")))
         .not.toThrow();
+      expect(killer.calls[0]?.kill).toHaveBeenCalledWith("SIGKILL");
       expect(() => agent.calls[0]?.emitter.emit("error", new Error("direct kill failed")))
         .not.toThrow();
       expect(resolved).toBe(false);
-      expect(existsSync(configPath)).toBe(true);
+      expect(existsSync(configPath)).toBe(false);
 
       agent.calls[0]?.emitter.emit("close", 1, null);
-      await done;
-      expect(resolved).toBe(true);
+      await expect(done).rejects.toMatchObject({
+        code: "AGENT_PROCESS_CONTAINMENT_FAILED",
+        reason: "TREE_KILL_FAILED",
+      });
+      expect(resolved).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("surfaces a POSIX group-kill failure even when the direct child closes", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude",
+      killGraceMs: 30,
+      killProcessGroup: () => { throw new Error("EPERM"); },
+      log: () => undefined,
+      platform: "linux",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      const rejected = done.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(20);
+      calls[0]?.emitter.emit("close", null, "SIGKILL");
+      expect(await rejected).toMatchObject({
+        code: "AGENT_PROCESS_CONTAINMENT_FAILED",
+        reason: "TREE_KILL_FAILED",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the containment rejection authoritative when a fatal observer throws", async () => {
+    vi.useFakeTimers();
+    const { spawn } = fakeSpawn(4321);
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude",
+      killProcessGroup: () => { throw new Error("EPERM"); },
+      log: () => undefined,
+      onFatalContainment: () => { throw new Error("observer failed"); },
+      platform: "linux",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      const rejected = done.catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(await rejected).toMatchObject({
+        code: "AGENT_PROCESS_CONTAINMENT_FAILED",
+        reason: "TREE_KILL_FAILED",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("close cancels owned agents and waits for confirmed process-tree death", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
+    const groupKills: number[] = [];
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude",
+      killGraceMs: 30,
+      killProcessGroup: (pid) => { groupKills.push(pid); },
+      log: () => undefined,
+      platform: "linux",
+      spawn,
+      timeoutMs: 10_000,
+    });
+    try {
+      const running = spawner(request());
+      let closed = false;
+      const closing = spawner.close();
+      void closing.then(() => { closed = true; });
+
+      expect(groupKills).toEqual([-4321]);
+      expect(closed).toBe(false);
+      await expect(spawner(request({ sessionId: "sess-late" })))
+        .rejects.toThrowError("AGENT_SPAWNER_CLOSED");
+
+      calls[0]?.emitter.emit("close", null, "SIGKILL");
+      await expect(running).resolves.toBeUndefined();
+      await expect(closing).resolves.toBeUndefined();
+      expect(closed).toBe(true);
+      expect(spawner.activeCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }

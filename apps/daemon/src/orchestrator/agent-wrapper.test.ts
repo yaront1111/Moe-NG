@@ -119,6 +119,38 @@ function withReleaseConflict(
   return { ...deps, registry };
 }
 
+function withSessionCloseConflict(deps: CommandAdapterDeps): CommandAdapterDeps {
+  const close = deps.registry.get("session.close");
+  if (close === undefined) throw new Error("session.close is not registered");
+  const registry = new Map(deps.registry);
+  registry.set("session.close", {
+    ...close,
+    handler: (input) => ({
+      commandId: input.envelope.commandId,
+      disposition: "DECIDED",
+      effectId: null,
+      resultCode: "EXPECTED_VERSION_CONFLICT",
+    }),
+  });
+  return { ...deps, registry };
+}
+
+function withClaimConflict(deps: CommandAdapterDeps): CommandAdapterDeps {
+  const claim = deps.registry.get("work.claim");
+  if (claim === undefined) throw new Error("work.claim is not registered");
+  const registry = new Map(deps.registry);
+  registry.set("work.claim", {
+    ...claim,
+    handler: (input) => ({
+      commandId: input.envelope.commandId,
+      disposition: "DECIDED",
+      effectId: null,
+      resultCode: "EXPECTED_VERSION_CONFLICT",
+    }),
+  });
+  return { ...deps, registry };
+}
+
 const wrapper = createAgentWrapper({
   affordances: affordances(),
   claimTtlMs: 60_000,
@@ -301,6 +333,40 @@ describe("createAgentWrapper", () => {
     }
   });
 
+  it("does not spawn when work.claim is durably decided without effects", () => {
+    const projectId = "proj-wrapper-claim-no-effect";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const refusing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: withClaimConflict(harness.isolated.provide()), maxAgents: 1,
+        mintSecret: () => `no-effect-${String(suffix += 1).padStart(4, "0")}${"0".repeat(24)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: () => { throw new Error("a no-effect claim must never spawn"); },
+      });
+
+      const report = refusing.runOnce();
+      const refused = report.spawned[0];
+      if (refused?.sessionId === null || refused?.sessionId === undefined) {
+        throw new Error("no opened session reported");
+      }
+      expect(refused.outcome).toBe("EXPECTED_VERSION_CONFLICT");
+      expect(report.active).toBe(0);
+      const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+      try {
+        expect(readSessionLedger(reader, projectId).sessions.get(refused.sessionId))
+          .toMatchObject({ status: "CLOSED", version: 2 });
+        expect(readWorkClaimLedger(reader, projectId).claims.get(refused.workItemId))
+          .toBeUndefined();
+      } finally {
+        reader.close();
+      }
+    } finally {
+      harness.dispose();
+    }
+  });
+
   it("claims a READY step at its previously released claim aggregate version", () => {
     const projectId = "proj-wrapper-reclaim";
     const harness = isolatedHarness(projectId);
@@ -448,6 +514,9 @@ describe("createAgentWrapper", () => {
           const claim = stale.steps.find((step) =>
             `${step.kind}@${step.aggregateId ?? "-"}` === request?.workItemId)?.claim;
           if (claim === null || claim === undefined) return stale;
+          // This injector targets the bounded work.release retry loop. The
+          // independent session.close cleanup reads the surface afterward.
+          if (renewals >= 3) return stale;
           renewals += 1;
           renewClaim(raceStore, projectId, request, claim.version, `refuse-renew-${renewals}`);
           return stale;
@@ -474,7 +543,7 @@ describe("createAgentWrapper", () => {
       expect(readWorkClaimLedger(raceStore, projectId).claims.get(staffed.workItemId))
         .toMatchObject({ status: "OPEN", version: 4 });
       expect(readSessionLedger(raceStore, projectId).sessions.get(staffed.sessionId))
-        .toMatchObject({ status: "OPEN", version: 1 });
+        .toMatchObject({ status: "CLOSED", version: 2 });
       expect(settlement).toBe("AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT");
       await expect(refusing.settle()).rejects.toThrow(settlement);
       expect(refusing.runOnce()).toEqual({
@@ -484,6 +553,187 @@ describe("createAgentWrapper", () => {
       });
     } finally {
       raceStore.close();
+      harness.dispose();
+    }
+  });
+
+  it("retains release and close failures in deterministic order", async () => {
+    const projectId = "proj-wrapper-dual-cleanup-failure";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      let suffix = 0;
+      const refusing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: withSessionCloseConflict(withReleaseConflict(
+          harness.isolated.provide(), () => true,
+        )),
+        maxAgents: 1,
+        mintSecret: () => `dual-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => undefined,
+      });
+
+      const staffed = refusing.runOnce().spawned[0];
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
+        throw new Error("nothing spawned");
+      }
+      const failure = await refusing.settle().then(
+        () => null,
+        (error: unknown) => error,
+      );
+      if (!(failure instanceof AggregateError)) throw new Error("expected AggregateError");
+      const messages = failure.errors.map((error: unknown) =>
+        error instanceof Error ? error.message : "NON_ERROR");
+      expect(messages).toEqual([
+        "AGENT_CLEANUP_FAILED:session.close:EXPECTED_VERSION_CONFLICT",
+        "AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT",
+      ]);
+      expect(failure.message).toBe(
+        "AGENT_CLEANUP_FAILED:session.close:EXPECTED_VERSION_CONFLICT" +
+        "|AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT",
+      );
+      expect(refusing.runOnce().surfaceOutcome).toBe(failure.message);
+      expect(readWorkClaimLedger(reader, projectId).claims.get(staffed.workItemId))
+        .toMatchObject({ status: "OPEN", version: 1 });
+      expect(readSessionLedger(reader, projectId).sessions.get(staffed.sessionId))
+        .toMatchObject({ status: "OPEN", version: 1 });
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("closes a minted session when command-id minting fails before claim ownership", () => {
+    const projectId = "proj-wrapper-mint-setup-failure";
+    const harness = isolatedHarness(projectId);
+    try {
+      let calls = 0;
+      const failing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => {
+          calls += 1;
+          if (calls >= 4) throw new Error("MINT_FAILED_AFTER_OPEN");
+          return `mint-${String(calls).padStart(4, "0")}${"0".repeat(28)}`;
+        },
+        operatorCredential: OPERATOR,
+        spawnAgent: () => { throw new Error("setup failure must never spawn"); },
+      });
+
+      const report = failing.runOnce();
+      const failed = report.spawned[0];
+      if (failed?.sessionId === null || failed?.sessionId === undefined) {
+        throw new Error("no minted session reported");
+      }
+      expect(failed.outcome).toBe("AGENT_SETUP_FAILED:work.claim:UNEXPECTED_ERROR");
+      expect(report.surfaceOutcome).toBe(failed.outcome);
+      const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+      try {
+        expect(readSessionLedger(reader, projectId).sessions.get(failed.sessionId))
+          .toMatchObject({ status: "CLOSED", version: 2 });
+        expect(readWorkClaimLedger(reader, projectId).claims.get(failed.workItemId))
+          .toBeUndefined();
+      } finally {
+        reader.close();
+      }
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("releases the exact claim and closes the session when payload hints throw", () => {
+    const projectId = "proj-wrapper-payload-setup-failure";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const failing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `hint-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        payloadHint: () => { throw new Error("PAYLOAD_HINT_FAILED"); },
+        spawnAgent: () => { throw new Error("setup failure must never spawn"); },
+      });
+
+      const report = failing.runOnce();
+      const failed = report.spawned[0];
+      if (failed?.sessionId === null || failed?.sessionId === undefined) {
+        throw new Error("no claimed session reported");
+      }
+      expect(failed.outcome).toBe("AGENT_SETUP_FAILED:mission:UNEXPECTED_ERROR");
+      expect(report.surfaceOutcome).toBe(failed.outcome);
+      const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+      try {
+        expect(readWorkClaimLedger(reader, projectId).claims.get(failed.workItemId))
+          .toMatchObject({ status: "RELEASED", version: 2 });
+        expect(readSessionLedger(reader, projectId).sessions.get(failed.sessionId))
+          .toMatchObject({ status: "CLOSED", version: 2 });
+      } finally {
+        reader.close();
+      }
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("cleans authority when a coding brief accessor throws after the claim", () => {
+    const projectId = "proj-wrapper-node-mission-setup-failure";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const nodeRef = "node-mission-setup";
+      const workItemId = `node.deliver@${nodeRef}`;
+      const nodePort: AffordancePort = {
+        boundProjectId: projectId,
+        readSurface: () => {
+          const live = harness.port.readSurface();
+          if (live.outcome !== "SURFACE") return live;
+          const record = readWorkClaimLedger(reader, projectId).claims.get(workItemId);
+          return {
+            ...live,
+            steps: [{
+              aggregateId: nodeRef,
+              claim: record?.status === "OPEN" ? {
+                claimedBy: record.claimedBy,
+                expiresAt: record.expiresAt,
+                version: record.version,
+              } : null,
+              claimAggregateVersion: record?.version ?? 0,
+              kind: "node.deliver",
+              missing: [],
+              status: "READY",
+              version: 1,
+            }, ...live.steps.filter((step) => step.kind === "session.close")],
+          };
+        },
+      };
+      let suffix = 0;
+      const failing = createAgentWrapper({
+        affordances: nodePort, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `brief-${String(suffix += 1).padStart(4, "0")}${"0".repeat(27)}`,
+        nodeMission: () => ({
+          instructions: "implement", test: "pnpm test", title: "node",
+          get workspace(): string { throw new Error("WORKSPACE_ACCESS_FAILED"); },
+        }),
+        operatorCredential: OPERATOR,
+        spawnAgent: () => { throw new Error("setup failure must never spawn"); },
+      });
+
+      const report = failing.runOnce();
+      const failed = report.spawned[0];
+      if (failed?.sessionId === null || failed?.sessionId === undefined) {
+        throw new Error("no claimed session reported");
+      }
+      expect(failed.outcome).toBe("AGENT_SETUP_FAILED:mission:UNEXPECTED_ERROR");
+      expect(report.surfaceOutcome).toBe(failed.outcome);
+      expect(readWorkClaimLedger(reader, projectId).claims.get(failed.workItemId))
+        .toMatchObject({ status: "RELEASED", version: 2 });
+      expect(readSessionLedger(reader, projectId).sessions.get(failed.sessionId))
+        .toMatchObject({ status: "CLOSED", version: 2 });
+    } finally {
+      reader.close();
       harness.dispose();
     }
   });

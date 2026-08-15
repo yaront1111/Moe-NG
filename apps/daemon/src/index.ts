@@ -157,6 +157,12 @@ export {
 } from "./http/http-contract.js";
 export { handleCommandRequest } from "./http/http-adapter.js";
 export {
+  OPERATOR_CAPABILITIES,
+  createDaemonCommandPorts,
+  type DaemonCommandPortOptions,
+  type DaemonCommandPorts,
+} from "./daemon-command-registry.js";
+export {
   DOCTOR_COMMAND_KINDS,
   DOCTOR_ERROR_CODES,
   DOCTOR_RECOVERY_SCHEMA_VERSION,

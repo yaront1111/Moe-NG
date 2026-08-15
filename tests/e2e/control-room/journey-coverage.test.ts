@@ -35,6 +35,7 @@ import {
 
 const HERE = resolve(fileURLToPath(import.meta.url), "..");
 const REPO_ROOT = resolve(HERE, "..", "..", "..");
+const PRODUCTION_SOURCE_SCAN_TIMEOUT_MS = 30_000;
 
 /**
  * A hop-counted root breaks silently if this file ever moves, and every scan below
@@ -188,7 +189,7 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
       .filter((path) => readFileSync(path, "utf8").includes(id))
       .map(relative);
     expect(carriers).toEqual([]);
-  });
+  }, PRODUCTION_SOURCE_SCAN_TIMEOUT_MS);
 
   /**
    * The subtler half, and the one a file-existence check cannot catch: these
@@ -206,6 +207,7 @@ describe("the ledger's UNKNOWNs still describe real gaps", () => {
         .map(relative);
       expect(importers).toEqual([]);
     },
+    PRODUCTION_SOURCE_SCAN_TIMEOUT_MS,
   );
 
   /**

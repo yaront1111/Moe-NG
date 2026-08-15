@@ -1,0 +1,39 @@
+{
+  "id": "task-ff589abd7dd84ee197a9abee729bef78",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Share validated streamed Claude runtime source discovery",
+  "description": "Objective: add one internal runner primitive that discovers caller-named Claude runtime source candidates through the same Windows path/containment/reparse/canonicalization authority used by runtime pinning, then streams their digests without first reading an unvalidated path. Refactor the existing quote-resolution path to share that primitive, preserving its behavior. This is the prerequisite for task-32eddfd3c9644558b7218778e1f07e92; it does not observe a version, spawn a process, define the installed-runtime closure, publish a package-root API, or grant launch authority. Owned paths: packages/runner/src/providers/claude/claude-runtime-pin-closure.ts/.js, claude-runtime-source.ts/.js, and claude-runtime-source.test.ts. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm typecheck.",
+  "definitionOfDone": [
+    "An internal bounded discovery function accepts at most MAX_RUNTIME_CLOSURE_ENTRIES caller-named kind/path candidates and one canonical installed root, validates path shape, containment, every segment, entry kind, realpath identity, and duplicates before streaming any bytes, then returns sorted immutable SourceEntry records with production SHA-256 digests.",
+    "The existing resolveSources quote path delegates to the same source-inspection authority and preserves exact success ordering plus every existing stable CLAUDE_RUNTIME_* refusal code and RUNTIME layer; no parallel path/reparse/digest policy remains.",
+    "Malformed, empty, overflow, duplicate, missing, non-file, reparse/junction, escape, unreadable, and drift/race cases fail closed with exact stable code and layer; tests assert no source read before validation and positive generated case counts.",
+    "Mutation drills against the production surface prove the tests fail if segment validation, canonical containment, streamed digesting, or the shared resolveSources delegation is bypassed.",
+    "Both production TypeScript modules remain below 250 physical lines, each JavaScript bridge remains one line, and the runner plus repository typecheck gates execute with a nonzero test count."
+  ],
+  "taskRails": [
+    "TDD every change; refusal tests assert exact stable reason code and refusing layer, and every generated sweep asserts a positive case count.",
+    "Keep the primitive internal to @moe/runner: no bare-root export, caller filesystem/process/clock port, closure-classification policy, launch, or authority.",
+    "Use the existing ClaudeRuntimeFsPort, streamDigest, Windows path rules, and refusal vocabulary; refactor shared authority instead of copying it. Preserve foreign work and commit only the five explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-09b5f32a",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-32eddfd3c9644558b7218778e1f07e92",
+  "priority": "CRITICAL",
+  "order": 80,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T23:20:07.255Z",
+  "updatedAt": "2026-08-15T23:20:58.365Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T23:20:54.104Z"
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a"
+  ]
+}

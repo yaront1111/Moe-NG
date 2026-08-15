@@ -1,4 +1,5 @@
 import * as daemon from "@moe/daemon";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -10,6 +11,10 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  acceptancePayload as reviewAcceptancePayload,
+  reviewerFacts,
+} from "../review/review-test-fixtures.js";
 
 /**
  * J1's command path, driven end to end through the PUBLISHED `@moe/daemon` root.
@@ -22,6 +27,8 @@ import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
  */
 
 const encoder = new TextEncoder();
+const OPERATOR_CREDENTIAL = "j1-operator-credential";
+const OPERATOR_PRINCIPAL_ID = "j1-operator";
 
 /**
  * Design 1095: the per-goal happy path is EXACTLY three human actions. Restated by hand and in
@@ -55,6 +62,55 @@ const HANDLERS: daemon.HandlerTable = Object.freeze({
 
 function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcome {
   return daemon.runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), HANDLERS);
+}
+
+/**
+ * Records the daemon-side review acceptance required before the third human action.
+ * Production dispatch remains package-root-only; the deep import above supplies request data.
+ */
+function acceptReviewedNode(store: SqliteEventStore, nodeRef = "node-1"): void {
+  const ports = daemon.createDaemonCommandPorts({
+    clock: () => "2026-08-16T00:00:00.000Z",
+    operatorPrincipalId: OPERATOR_PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    store,
+  });
+  const outcome = daemon.handleCommandRequest({
+    authenticator: {
+      authenticate: (credential) => credential === OPERATOR_CREDENTIAL
+        ? {
+          principal: {
+            capabilities: daemon.OPERATOR_CAPABILITIES,
+            principalId: OPERATOR_PRINCIPAL_ID,
+            projectId: PROJECT_ID,
+          },
+          verdict: "AUTHENTICATED" as const,
+        }
+        : { verdict: "UNAUTHENTICATED" as const },
+    },
+    ...ports,
+  }, {
+    body: encoder.encode(JSON.stringify({
+      commandId: `cmd-j1-review-accept-${nodeRef}`,
+      commandKind: "integration.accept_output",
+      correlationId: "corr-j1-review",
+      expectedVersion: 0,
+      payload: reviewAcceptancePayload({
+        reviewer: reviewerFacts({
+          leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef: nodeRef }],
+          subjectRef: nodeRef,
+        }),
+        subjectRef: nodeRef,
+      }),
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: OPERATOR_CREDENTIAL,
+      targetAggregateId: nodeRef,
+    })),
+    credential: OPERATOR_CREDENTIAL,
+    protocolVersion: daemon.WIRE_PROTOCOL_VERSION,
+  });
+  if (!outcome.ok) throw new Error(`authenticated review setup failed for ${nodeRef}`);
 }
 
 /**
@@ -117,6 +173,7 @@ describe("J1 is exactly three human actions (design 1095)", () => {
     let lifecycleAfterThird: string | undefined;
 
     for (const request of sequence) {
+      if (request.kind === "goal.close") acceptReviewedNode(store);
       const outcome = drive(store, request);
       expect(outcome.ok, `${request.kind}: ${outcome.ok ? "" : outcome.code}`).toBe(true);
       if (!isHumanAction(request.kind)) continue;
@@ -161,6 +218,8 @@ describe("each command is idempotent on replay (DoD 5)", () => {
       expect(drive(store, request).ok, request.kind).toBe(true);
     }
     const request = sequence[index] as Envelope;
+
+    if (request.kind === "goal.close") acceptReviewedNode(store);
 
     const first = drive(store, request);
     expect(first.ok, first.ok ? "" : first.code).toBe(true);

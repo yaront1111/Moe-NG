@@ -1,0 +1,3 @@
+# Moving WAL readers need a finite captured horizon
+
+Strictly advancing cursor + `hasMore` is not a liveness proof when each page opens a fresh SQLite WAL snapshot: a concurrent writer can keep advancing forever. A fail-closed authority scan needs one lossless scalar horizon captured once (`CAST(COALESCE(MAX(global_position),0) AS TEXT)`), then contiguous validation through H. Test synchronous liveness in a child/Worker watchdog; a same-thread Promise/Vitest timeout cannot interrupt an infinite synchronous loop. Assert the exact page count, exactly one horizon read, and exact refusal code/layer. A paging index improves cost but does not make the evidence window finite.

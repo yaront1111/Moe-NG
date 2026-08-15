@@ -50,7 +50,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:49:05.524Z",
-  "updatedAt": "2026-08-15T18:32:56.808Z",
+  "updatedAt": "2026-08-15T22:48:59.816Z",
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-15T18:32:51.310Z",
   "blockedReason": "One of two hard dependencies is now landed, but the other remains absent. task-2d37939dddde447bb98e53a2bd9e6c60 is DONE and publishes bare-root @moe/scheduler `bindCurrentExpansionHold`; task-e62e3828df234c66969a99b8223487f4 is BLOCKED on 6cb and has no production safe-release reader. Without e62's stored release evidence/handoff authority, this task cannot atomically create a valid hold/run without trusting caller/test facts, explicitly forbidden by its rails. Re-promote only after e62 is QA-approved DONE; then re-probe both public surfaces and the daemon dependency edge. Preserve the landed rule that absent currentAuthority is UNKNOWN, disagreement REFUSED, and goalVersion equality must be fenced by the daemon caller. Do not seed or synthesize release evidence.",
@@ -59,7 +59,8 @@
     "firstClaimAt": "2026-08-15T18:32:33.746Z"
   },
   "contextFetchedBy": [
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "governor-a627169a"
   ],
   "priorHandoffs": [
     {

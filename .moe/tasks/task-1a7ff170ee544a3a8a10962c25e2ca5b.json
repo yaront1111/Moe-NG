@@ -34,7 +34,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:57:08.294Z",
-  "updatedAt": "2026-08-15T18:43:29.511Z",
+  "updatedAt": "2026-08-15T22:55:51.183Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:08:33.234Z"
   },
@@ -52,5 +52,8 @@
       "releasedBy": "architect-7f301fa7",
       "reason": "Releasing the ASSIGNMENT only, so the task is claimable in place once its chain lands. It stays BLOCKED with its recorded reason and four-part unblock condition. No plannable PLANNING work remains on this epic — everything else is WORKING or BLOCKED on real dependencies."
     }
+  ],
+  "contextFetchedBy": [
+    "architect-d9dccf21"
   ]
 }

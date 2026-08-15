@@ -1,0 +1,39 @@
+{
+  "id": "task-7ba898f5f587453f80c1e93e93e4977c",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Make Windows broker control polling nonblocking",
+  "description": "PREREQUISITE for task-6cbff01023b14b26a78fc5e3eb1dd8a9 (Durable Claude attempt dispatch).\n\nFresh real-Windows measurement on Windows 10.0.26200 / Node 24.16 with the actual release broker and copied harmless executables found the public Claude launcher cannot complete a normal provider run lasting more than the broker's first 50ms wait slice. `packages/runner/src/platform/windows/native/broker/src/watch.rs:23-43` documents the production defect: after the first slice it calls synchronous `read_frame` on silent-open fd0, blocks, and cannot observe the later child exit. The parent then reaches its timeout, closes/destroys provider streams, and the public launcher returns exact `CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT` instead of PROVEN. Direct boundary measurement likewise resolves only at the parent timeout. No COMPLETED frame exists before timeout, so changing TypeScript `BrokerSession.onCompleted` cannot fix this pre-terminal deadlock.\n\nDeliverable: make post-LAUNCH control observation nonblocking without weakening CANCEL, EOF, framing, containment, or stream-evidence rules. Keep Win32 unsafe calls inside `boundary.rs`; expose an explicit readiness/pending decision through the broker byte-channel contract and have `watch.rs` wait in bounded slices while consuming control only when ready. Do not infer pending from EOF, copy OS authority outside the boundary, ignore cancellation, add a launcher dependency-injection seam, or use a mock-backed positive proof.\n\nExpected owned scope for architect remeasurement: `packages/runner/src/platform/windows/native/broker/src/frames.rs`, `boundary.rs`, `watch.rs`, `packages/runner/src/platform/windows/native/broker/Cargo.toml` if the pinned windows-sys Pipes feature is required, and one focused existing/new broker test path. NOT in scope: daemon dispatch, grant authority, runtime hydration, review, or E2E canary.",
+  "definitionOfDone": [
+    "A real Windows conformance test using the actual built broker and a harmless provider that remains alive beyond 50ms then exits naturally completes before the configured timeout and the public launcher returns OBSERVED/PROVEN with nonempty, complete stdout/stderr evidence.",
+    "Post-LAUNCH silent-open control is represented as PENDING, never EOF or a protocol refusal; actual EOF, a legal CANCEL, malformed/duplicate frames, and readiness API failure each retain their exact stable reason/layer and containment behavior.",
+    "Cancellation remains prompt and bounded, provider descendants remain Job-contained, and no path ignores fd0 until the 30-minute broker timeout.",
+    "Win32 calls/unsafe code remain confined to the production boundary module; no deep import, mock boundary, test-only production branch, whole-launch seam, or locally restated launcher authority is introduced.",
+    "TDD and a mutation drill prove the readiness gate is load-bearing; runner Rust/TypeScript tests and real Windows conformance execute with nonzero test counts."
+  ],
+  "taskRails": [
+    "Use TDD; every refusal asserts its exact stable reason code and layer, and any generated sweep asserts exact nonzero cardinality.",
+    "Keep each production source <=250 physical lines and the plan <=10 affected files.",
+    "The positive proof must use the real Windows broker/launcher boundary; a scripted ByteChannel test alone cannot certify the defect."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-d9dccf21",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "priority": "CRITICAL",
+  "order": 105.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T23:23:57.874Z",
+  "updatedAt": "2026-08-15T23:26:29.028Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T23:26:22.137Z"
+  },
+  "contextFetchedBy": [
+    "architect-d9dccf21"
+  ]
+}

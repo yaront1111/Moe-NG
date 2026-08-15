@@ -36,7 +36,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-15T18:29:34.106Z",
+  "updatedAt": "2026-08-15T22:39:30.462Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:08.863Z"
   },
@@ -44,7 +44,8 @@
     "architect-db2146e3",
     "governor-1f3b15b7",
     "governor-7c5e6be6",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "governor-a627169a"
   ],
   "blockedReason": "Fresh HEAD audit confirms this task's producer is absent. At HEAD e72fd19540051ebc9f97db43f0e94577fad0f9d8, all five owned foundation-verification paths are absent as expected, and `git grep -n -E 'foundation-attempt|FoundationAttempt|read.*Attempt|attempt dispatch' HEAD -- apps/daemon/src` returns no durable attempt producer/read surface. Moe task task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED (its committed effect.activate prerequisite is not yet QA-approved/reachable), so this service cannot load authoritative input/result/runtime identities or activate verification without recreating attempt authority in tests/owned files. The other hard dependency is present: a bare-root Node probe from apps/daemon loads @moe/runner and finds runVerifierProcess, buildVerificationRecipe, buildEvidenceReceipt, receiptDigestInput, recipeSealMatches, VERIFIER_PROCESS_ERROR_CODES/LAYERS and related limits. Required next event: task-6cbff010 reaches QA-approved DONE and exposes the exact durable attempt/result/runtime/read/replay identities; then re-probe its committed production API and plan this five-file consumer. Do not invent placeholder attempt rows, accept caller replacements, deep-import, or narrow the DoD.",
   "blockedResourceId": null,

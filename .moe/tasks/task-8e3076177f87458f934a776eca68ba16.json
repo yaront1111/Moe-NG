@@ -121,7 +121,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-618633fa",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T21:50:36.177Z",
+  "updatedAt": "2026-08-15T22:55:56.324Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
@@ -165,7 +165,9 @@
     "governor-8466bf0e",
     "worker-cf1f58d0",
     "worker-618633fa",
-    "architect-09b5f32a"
+    "architect-09b5f32a",
+    "governor-a627169a",
+    "architect-d9dccf21"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -204,5 +206,16 @@
   "blockedReason": "Governor-a627169a ruled to re-block: the required owned-package leg `pnpm --filter @moe/daemon test` is not exit 0 at committed HEAD f4966b5, despite the owned telemetry delta being green. Fresh merge-base daemon: exit 0, 80 files/1675 tests. Fresh HEAD committed-byte daemon: exit 1, 2 failed | 90 passed files and 3 failed | 1918 passed tests. Exact foreign failures: `src/runtime-entrypoint.test.ts` reports missing bridge `orchestrator/verifier-process-runner.ts`; `src/goals/j1-command-path.test.ts` has two `goal.close` cases refused with stable code `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`. No failing path intersects apps/daemon/src/telemetry/**. Focused telemetry tests pass 2 files/28 tests; daemon typecheck exit 0; scheduler passes 43 files/1326 tests. Runner Linux red is baseline-only with empty owned delta. The bounded aggregate-id fix and strengthened reason-layer test are committed byte-for-byte inside foreign whole-tree commit f4966b5 (the completion-hook hazard); per rail I did not amend/reset/recommit. QA review base-ref diff is recorded in Serena task handoff. Raw daemon gate must quiesce before completion; I will not fabricate exit 0 or edit foreign paths.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:50:36.177Z"
+  "blockedAt": "2026-08-15T21:50:36.177Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "All task-owned implementation and adversarial repair are complete. Original contract commit 9d60091; bounded aggregate-id fix and strengthened refusal assertions are committed in foreign whole-tree commit f4966b5. Focused telemetry: 2 files/28 tests green; daemon typecheck green; scheduler 43 files/1326 tests green; runner owned failing-path delta empty. Serena handoff `task-task-8e3076177f87458f934a776eca68ba16-handoff` contains hashes, mutation evidence, consumers and QA diff.",
+      "whatRemains": "Only step 7 raw gate/completion after foreign daemon failures clear. At HEAD 6ca5da0 the missing verifier bridge is fixed, but `pnpm --filter @moe/daemon test` still exits 1: two cases in src/goals/j1-command-path.test.ts refuse goal.close with GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED (1 failed/92 passed files; 2 failed/1943 passed tests). Governor ruled raw daemon exit must be 0 before completion.",
+      "pitfalls": "Do not amend/reset/recommit the task bytes swept into f4966b5 and do not fix foreign goal paths. QA review via base-ref diff d01a512..HEAD over the six provider-run contract/refusal files. Rerun all four named legs from a committed-byte snapshot after the goal-closure owner lands.",
+      "openQuestions": "The durable Review-qualified goal closure task task-8f9305b9bb5e4b8db327a55981b2ea0e remains BLOCKED; its resolution likely owns the remaining J1 refusal/test update.",
+      "releasedAt": "2026-08-15T22:26:20.525Z",
+      "releasedBy": "worker-618633fa",
+      "reason": "Explicit handoff after re-verifying the blocked raw daemon gate; user requested continued work and another WORKING task is available."
+    }
+  ]
 }

@@ -115,7 +115,7 @@
       "completedAt": "2026-08-15T22:03:25.683Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -128,17 +128,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:06.218Z",
-  "updatedAt": "2026-08-15T22:06:02.230Z",
+  "updatedAt": "2026-08-15T22:59:12.009Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:17:48.211Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-15T22:59:12.009Z",
+    "wallClockMs": 9683798
   },
   "contextFetchedBy": [
     "architect-81081add",
     "architect-d9dccf21",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "qa-7d1f37bd",
+    "governor-a627169a"
   ],
   "stepsCompleted": [
     "step-1",
@@ -184,5 +188,8 @@
     "apps/control-room/src/approvals/approval-inbox.tsx",
     "apps/control-room/src/approvals/approval-details.test.tsx",
     "apps/control-room/src/approvals/approval-inbox.test.tsx"
-  ]
+  ],
+  "completedAt": "2026-08-15T22:59:12.009Z",
+  "reviewCompletedAt": "2026-08-15T22:59:12.009Z",
+  "reviewSummary": "Reviewed ddb4753..HEAD over all seven owned paths; task bytes are committed via the documented foreign whole-tree captures. Owned paths are clean and git diff --check passes. DoD 1-4: approval-gating.ts consumes the eight landed @moe/core codes/layers, removes the named provisional channel, validates forged code/layer pairs fail closed, evaluates the human gate before local guards, and nulls commandId on refusal. DecisionControl visibly renders code+layer and truthful policy/gate/grant facts; no grantHumanAuthority/force/override affordance exists. The gated-control sweep pins exact nonzero cardinality and all results DISABLED/ABSENT with null commandId. Dependency edge independently verified: manifest workspace:*, lock importer link:../../packages/core, and a temporary in-package bare @moe/core probe typechecked exit 0 and was removed in the same command. Mutation drill repeated: weakening APPROVAL_HUMAN_REVIEW_REQUIRED to HUMAN_AUTHORITY_GATE made the named test fail on the literal expected APPROVAL_POLICY layer; restored SHA-256 matched. Fresh local-deps snapshot: focused approval-gating 1 file/23 tests exit 0; @moe/control-room typecheck exit 0 and full test 70 files/860 tests exit 0; repo typecheck exit 0; foundation 32/661 exit 0; store 42/501 exit 0. Repo-wide foreign red only: packages/runner/src/platform/windows/windows-boundary.test.ts:524 (snapshot lacks host broker), and daemon apps/daemon/src/goals/j1-command-path.test.ts:121,166 with GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED; neither intersects owned paths. Live exact-chain retry hit the already-recorded Vitest worker-start timeout baseline. Production lines: approval-gating.ts 240, approval-inbox.tsx 231; no probe/scratch remains."
 }

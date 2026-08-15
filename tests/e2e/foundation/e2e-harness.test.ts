@@ -35,6 +35,7 @@ import {
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
 const harnessDirectory = "tests/e2e/foundation";
+const REPOSITORY_SCAN_TIMEOUT_MS = 30_000;
 
 /**
  * Every non-test module in this directory, read off disk rather than listed by
@@ -232,7 +233,7 @@ describe("harness containment", () => {
       }
     }
     expect(importers).toEqual([]);
-  });
+  }, REPOSITORY_SCAN_TIMEOUT_MS);
 
   it("keeps fixtures on the input side: they import nothing from apps/", async () => {
     const text = await readFile(

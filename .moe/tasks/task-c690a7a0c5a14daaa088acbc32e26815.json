@@ -15,13 +15,93 @@
     "No deep imports, tsconfig paths, project-reference workaround, or subprocess cwd trick may replace the manifest+lock+compiled bare-specifier proof.",
     "Preserve the root test script set, use TDD, and stage only the three explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Establish the dependency edge in the first implementation step, with TDD and collision safety. Reconfirm prerequisite commit `e391175` is an ancestor, all three owned paths are clean, the new file is absent, and capture merge-base outputs for the repo-wide gates required by the path-attributed baseline policy before changing anything. Create `tests/fault/cross-host/production-surfaces.fault.ts` first with static BARE imports from `@moe/runner` (`PLATFORM_BOUNDARIES`, `observeLinuxPlatform`, `observeMacosPlatform`) and `@moe/daemon` (`collectDoctorVersionReport`); hand-write the independent four-symbol catalogue and ordered seven-boundary tuple, and literally name consumer task `task-01c5f96ec1e247dc846fd628c929974a`. Run the fault-lane typecheck before the manifest change and record RED that explicitly names TS2307 for BOTH bare packages (not a generic failure). Then add an alphabetized root `dependencies` block with exactly `@moe/daemon: workspace:*` and `@moe/runner: workspace:*`, and use the repository-declared pnpm 11.0.8 workspace-root add/install flow to generate and materialize the lock edge. Inspect the diff immediately: the `.` importer must contain only the corresponding `link:apps/daemon` and `link:packages/runner` additions, all existing root scripts/importers must remain byte-for-byte unchanged, and no foreign work may be absorbed.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "newFiles": [
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "note": "Pre-flight at HEAD 6ca5da0: `git merge-base --is-ancestor e391175 HEAD` exit 0 (prereq task-f6ef0a45 on disk); owned paths clean with package.json sha256 137b5267...18ffb5 and pnpm-lock.yaml sha256 033e6efe...16c73 (identical to planning measurement); tests/fault/cross-host absent.\n\nPre-diff repo-wide baseline captured BEFORE any byte changed (path-attributed baseline policy). Failing paths at merge-base:\n- `pnpm typecheck` EXIT=1 — apps/daemon/src/work/foundation-attempt-service.test.ts(284,77) error TS2339: Property 'code' does not exist on type 'FoundationBindingResult'. FOREIGN path, not owned.\n- `pnpm test:meta` EXIT=0 (32 files, 661 tests). `pnpm test:store` EXIT=0 (42 files, 504 tests).\n- `pnpm test` EXIT=1 — Test Files 4 failed | 270 passed (274); failing FILE SET = packages/mcp/src/mcp-runtime-entrypoint.test.ts, packages/mcp/src/mcp-root-surface.test.ts, packages/review/src/runtime-entrypoint.test.ts, packages/store/src/projections/projection-crash-drill.test.ts. All FOREIGN.\n\nTDD RED recorded before the manifest change: `pnpm exec tsc -p tests/fault/tsconfig.json` EXIT=1 with BOTH bare packages named —\n  tests/fault/cross-host/production-surfaces.fault.ts(29,44): error TS2307: Cannot find module '@moe/daemon' or its corresponding type declarations.\n  tests/fault/cross-host/production-surfaces.fault.ts(30,81): error TS2307: Cannot find module '@moe/runner' or its corresponding type declarations.\n\nThen added an alphabetized root `dependencies` block with exactly `@moe/daemon: workspace:*` and `@moe/runner: workspace:*` and ran `pnpm install` under pinned node v24.16.0 / pnpm 11.0.8 (EXIT=0, \"Scope: all 19 workspace projects\", \"Already up to date\" for registry deps). Diff is exactly minimal: package.json +4 lines (dependencies block only), pnpm-lock.yaml +7 lines confined to the `.` importer gaining `link:apps/daemon` and `link:packages/runner`. All root scripts and every other lock importer byte-for-byte unchanged; no foreign bytes absorbed. Root links materialized: node_modules/@moe/daemon -> ../../apps/daemon, node_modules/@moe/runner -> ../../packages/runner.",
+      "startedAt": "2026-08-15T22:57:14.419Z",
+      "completedAt": "2026-08-15T23:03:09.987Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Drive the durable consumer test GREEN without reimplementing either producer. Against the actual imported values, assert the independently written public-symbol names are exactly `PLATFORM_BOUNDARIES`, `observeLinuxPlatform`, `observeMacosPlatform`, and `collectDoctorVersionReport`, with exact cardinality 4 and kinds object/function/function/function. Separately assert the production boundary catalogue equals the hand-written ordered seven-name tuple, has exact cardinality 7, has Set cardinality 7, is frozen, and every produced name is a nonempty string; keep the consumer task id in the named test/describe or durable explanatory comment and state that publication/loadability grants no host-evidence authority. Run the focused TypeScript and Vitest legs under pinned Node/pnpm, require exactly one test file and the plan's exact nonzero test count (choose and retain a deterministic count), and refactor only this test if needed. Do not call the OS classifiers as executing-host probes and do not add a force/authority behavior, local substitute catalogue, deep import, or conditional skip.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "modifiedFiles": [
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "note": "GREEN under pinned node v24.16.0 / pnpm 11.0.8, no production code touched.\n\n- `pnpm exec tsc -p tests/fault/tsconfig.json` EXIT=0 (was EXIT=1 with TS2307 naming both bare packages before the manifest edit). The lane program pulls in both producers' reachable production sources and stays clean; it does NOT include the foreign daemon test file that reddens repo-wide `pnpm typecheck`.\n- `pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts` EXIT=0 — `Test Files 1 passed (1)`, `Tests 4 passed (4)`. Retained deterministic count = 4 tests in exactly 1 file.\n\nAssertions bind to the imported production values: 4-symbol catalogue with exact cardinality 4, unique names, exact ordered names [PLATFORM_BOUNDARIES, observeLinuxPlatform, observeMacosPlatform, collectDoctorVersionReport], specifier set exactly {@moe/runner, @moe/daemon}, and observed kinds object/function/function/function. Boundary test asserts against the imported PLATFORM_BOUNDARIES: length 7, ordered deep-equality with the hand-written tuple, Set size 7, Object.isFrozen true, every name a nonempty string, plus an explicit `inspected === 7` guard so a zero-case sweep cannot pass. Third test polices bare-specifier discipline over this module's own bytes (no leading `.`, no `/src/`, no `.ts`, @moe specifiers exactly the two roots, count > 0). Fourth pins callable shapes (arity 1/1/0, AsyncFunction, the two OS adapters are distinct references) WITHOUT invoking them as executing-host probes. Consumer task-01c5f96ec1e247dc846fd628c929974a is named in the describe title and the file header; the header states publication/loadability grants no host-evidence authority.\n\nANTI-VACUITY PROOF (rail 6): mutated only my own owned file — swapped PATH_SYMLINK/LOCK in the hand-written tuple — and reran: EXIT=1, `Tests 1 failed | 3 passed (4)`, AssertionError on \"reads the production boundary catalogue as the exact ordered seven-name tuple\". Restored from a trap-protected copy; sha256 of the restored file matches the pre-mutation byte-for-byte (RESTORED_MATCHES_ORIGINAL=YES) and the temp copy was deleted. Production sources were deliberately NOT mutated: they are foreign-owned in this shared tree and a foreign whole-tree commit could capture the mutation.",
+      "startedAt": "2026-08-15T23:03:12.944Z",
+      "completedAt": "2026-08-15T23:07:06.534Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Prove both compiler and real root runtime resolution with disposable, trap-cleaned probes. In one shell command, create an in-repository probe under `tests/fault/cross-host`, install EXIT/HUP/INT/TERM cleanup before executing it, statically import the same four values by their BARE package roots, hard-code the exact seven expected names, and fail unless the ordered production tuple is exactly seven unique nonempty names and all three functions are callable. Run `pnpm exec tsc -p tests/fault/tsconfig.json` and then execute that probe with plain pinned Node from the repository root (Node's built-in type stripping only); capture both independent exit-0 results and the printed seven names/callable names, explicitly delete the probe, clear the trap, and assert it is absent. Also run an independent repository-root `node --experimental-strip-types --input-type=module -e` bare-import probe with the same runtime assertions so neither a Vitest transform nor a package-directory cwd can mask the edge. Confirm `git status` lists no probe/scratch/generated evidence and only the three persistent owned paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "note": "Two independent, trap-cleaned probes; both exit 0. No repository bytes persisted by either.\n\nPROBE A — in-repo compiled + plain-Node, single shell command with `trap 'rm -f \"$PROBE\"' EXIT HUP INT TERM` installed BEFORE creation. Created `tests/fault/cross-host/edge-probe.probe.ts` (named so it is inside `tests/fault/tsconfig.json`'s `./**/*.ts` include but outside the Vitest lane's `**/*.fault.ts` include), statically importing all four values from the two BARE package roots, hard-coding the seven expected names, and throwing unless length 7, Set size 7, all names nonempty strings, exact ordered join match, and all three exports typeof \"function\".\n  PROBE_CREATED=YES\n  PROBE_TSC_EXIT=0   (`pnpm exec tsc -p tests/fault/tsconfig.json` with the probe in the program)\n  PROBE_BOUNDARIES=PROVIDER_LAUNCH,GIT_WORKSPACE,PATH_SYMLINK,LOCK,SIGNAL_CANCELLATION,RUNTIME_CLOSURE,CRASH_RECOVERY\n  PROBE_CALLABLES=observeLinuxPlatform,observeMacosPlatform,collectDoctorVersionReport\n  PROBE_NODE_EXIT=0  (`node tests/fault/cross-host/edge-probe.probe.ts` from the repository root, Node v24.16.0 built-in type stripping only — no bundler, no Vitest transform)\n  PROBE_ABSENT=YES   (explicitly deleted, trap cleared, absence asserted)\n\nPROBE B — independent repository-root eval, so neither a Vitest transform nor a package-directory cwd can mask the edge: `node --experimental-strip-types --input-type=module -e '...'` with `await import(\"@moe/runner\")` / `await import(\"@moe/daemon\")` and the same runtime assertions.\n  ROOT_EVAL_CWD=/mnt/d/projexts/moe-next\n  ROOT_EVAL_BOUNDARIES=PROVIDER_LAUNCH,GIT_WORKSPACE,PATH_SYMLINK,LOCK,SIGNAL_CANCELLATION,RUNTIME_CLOSURE,CRASH_RECOVERY\n  ROOT_EVAL_CALLABLES=observeLinuxPlatform,observeMacosPlatform,collectDoctorVersionReport\n  ROOT_EVAL_EXIT=0\n\nResidue check: `git status --short -- package.json pnpm-lock.yaml tests/fault/cross-host/` shows exactly ` M package.json`, ` M pnpm-lock.yaml`, `?? tests/fault/cross-host/`; `ls tests/fault/cross-host/` contains only `production-surfaces.fault.ts`; a porcelain grep for probe/scratch/tsbuildinfo/log/evidence artifacts returns NONE. Foreign dirt elsewhere (tests/e2e/*, tests/runtime/package-loadability*.ts, tests/integration/release-archive-cleanup.test.ts, apps/daemon/*) is untouched and will not be staged.",
+      "startedAt": "2026-08-15T23:07:09.588Z",
+      "completedAt": "2026-08-15T23:09:32.590Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Run the single concentrated verification step in a fresh foreground pinned environment. First rerun and record the repo-wide HEAD legs `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`, compare their exact failing-path set with the captured merge-base baseline, and disclose any foreign red verbatim; the owned-path delta must be empty. Then run, without a pipe or semicolon masking an earlier exit, the task's exact completion command: `pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts`. Require every leg exit 0 and a Vitest summary proving one file and the exact nonzero test count; `No projects matched`, `No test files found`, or zero tests is failure, not evidence. Record this exact command and untruncated count-bearing tail for completion.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "note": "PATH-ATTRIBUTED BASELINE — owned-path delta is EMPTY. Foreign red disclosed verbatim, never hidden.\n\nLegs at merge-base (pre-diff) -> at HEAD (post-diff), pinned node v24.16.0 / pnpm 11.0.8:\n- `pnpm typecheck`: EXIT=1 -> EXIT=0. Baseline red was FOREIGN — apps/daemon/src/work/foundation-attempt-service.test.ts(284,77): error TS2339: Property 'code' does not exist on type 'FoundationBindingResult'. Its owner fixed it mid-session; my diff neither caused nor repaired it.\n- `pnpm test`: EXIT=1 -> EXIT=1. Baseline failing FILE SET {packages/mcp/src/mcp-runtime-entrypoint.test.ts, packages/mcp/src/mcp-root-surface.test.ts, packages/review/src/runtime-entrypoint.test.ts, packages/store/src/projections/projection-crash-drill.test.ts}; HEAD set {packages/mcp/src/mcp-root-surface.test.ts, packages/review/src/runtime-entrypoint.test.ts}. HEAD is a strict SUBSET of baseline -> new-failure set EMPTY. (274 files both runs; HEAD 2 failed | 272 passed, 2 failed | 6509 passed | 3 skipped.)\n- `pnpm test:meta`: EXIT=0 -> EXIT=1, and `pnpm test:store`: EXIT=0 -> EXIT=0 but `pnpm verify:store` EXIT=1 on a later sampling. Both new reds are the documented slow-fs class, not my diff, and both are FOREIGN paths:\n  * packages/testkit/src/foundation/foundation-incident-probe-precision.test.ts — `Error: Test timed out in 20000ms`, no AssertionError. Re-run isolated with --testTimeout=180000: `Test Files 1 passed (1)`, `Tests 6 passed (6)`, EXIT=0.\n  * packages/store/src/recovery-initial-install.test.ts — `ENOENT: no such file or directory, realpath '/tmp/moe-initial-install-race-0lsNVG'` from recovery-initial-install-race-worker.mjs, a tmpdir race. Re-run isolated: `Test Files 1 passed (1)`, `Tests 16 passed (16)`, EXIT=0.\n- `pnpm verify:foundation` EXIT=1 and `pnpm verify:store` EXIT=1 at HEAD are fully determined by the two flakes above (they are `pnpm typecheck && pnpm test:meta` and `pnpm typecheck && pnpm test:store`); typecheck itself is EXIT=0 at HEAD.\nIntersection of (HEAD failing paths minus baseline failing paths) with my owned paths {package.json, pnpm-lock.yaml, tests/fault/cross-host/production-surfaces.fault.ts} = EMPTY. No owned path appears in any failure.\n\nEXACT COMPLETION COMMAND, foreground, `&&`-chained so no leg's exit is masked, no pipe:\n`pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts`\nGATE_EXIT=0. Leg evidence: install printed \"Scope: all 19 workspace projects / Already up to date / Done in 300ms using pnpm v11.0.8\" — the frozen-lockfile check itself proves manifest and lock agree; tsc exited 0 silently; Vitest printed the count-bearing summary `Test Files  1 passed (1)` / `Tests  4 passed (4)` (Duration 54.57s). Not \"No projects matched\", not \"No test files found\", not zero tests — the count line is present and nonzero, and it matches the retained deterministic count of 4.",
+      "startedAt": "2026-08-15T23:09:49.261Z",
+      "completedAt": "2026-08-15T23:23:45.810Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Perform the final adversarial review over `git diff <merge-base>..HEAD -- package.json pnpm-lock.yaml tests/fault/cross-host/production-surfaces.fault.ts`: verify the root manifest/lock agree on both `workspace:*` links, all root scripts and unrelated lock importers are unchanged, the durable test binds production imports rather than a helper, exact 4/7 cardinalities make an empty/generated sweep impossible, every import is from a bare package root, the literal downstream consumer id is present, and no deep path/cwd/tsconfig/project-reference escape hatch or surviving probe exists. Check physical line count of the new source remains below 250 and no foreign path is staged. If review changes any owned byte, rerun the exact verification command from the prior step. Commit/stage only the three explicit pathspecs; never use a whole-tree operation.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "modifiedFiles": [
+        "package.json",
+        "pnpm-lock.yaml",
+        "tests/fault/cross-host/production-surfaces.fault.ts"
+      ],
+      "note": "Adversarial review over `git diff 6ca5da0 -- package.json pnpm-lock.yaml tests/fault/cross-host/production-surfaces.fault.ts`. Every checklist item verified on the bytes, not on intent:\n\n- Manifest/lock agree on both links: package.json `\"@moe/daemon\": \"workspace:*\"`, `\"@moe/runner\": \"workspace:*\"`; lock `.` importer `@moe/daemon -> link:apps/daemon`, `@moe/runner -> link:packages/runner`. `pnpm install --frozen-lockfile` exits 0, which is the agreement proof.\n- Root scripts unchanged: the package.json diff is +4 lines / -0; the only `+` lines are the dependencies block. No script line appears on either side.\n- Unrelated lock importers unchanged: exactly ONE hunk, `@@ -7,6 +7,13 @@`, +7/-0, inside the `.` importer. No other importer is in the diff.\n- Test binds production imports, not a helper: assertions run against the imported `PLATFORM_BOUNDARIES`/`observeLinuxPlatform`/`observeMacosPlatform`/`collectDoctorVersionReport`; there is no local re-derivation of either catalogue. Proven non-vacuous in step 2 by mutating my hand-written tuple and watching the production comparison go red.\n- Empty/generated sweep impossible: literal 4 and 7 cardinalities, unique-name Set checks, and an explicit `inspected === 7` counter on the boundary loop.\n- Every import is a bare package root: the only 5 specifiers are `node:fs`, `node:url`, `vitest`, `@moe/daemon`, `@moe/runner`. No leading `.`, no `/src/`, no `.ts` — and the third test enforces this over the file's own bytes so a future deep-relative fallback turns it red.\n- Consumer id present literally: `task-01c5f96ec1e247dc846fd628c929974a` in the file header and in `CONSUMER_TASK_ID`, which is interpolated into the describe title.\n- No escape hatch: no tsconfig/`paths`/project-reference change anywhere in the diff, no `process.chdir`/cwd trick, no `.only`/`.skip`/`.todo`/conditional skip, and neither OS classifier nor the doctor collector is ever invoked.\n- No surviving probe: `tests/fault/cross-host/` contains only `production-surfaces.fault.ts`; porcelain grep for probe/scratch/tsbuildinfo/log/evidence returns NONE.\n- Size: 166 physical lines, well under the 250 target.\n\nStaging/commit used explicit pathspecs only — `git add -- <3 paths>` then `git commit --only -m ... -- <3 paths>`; no `git add -A`, no whole-tree operation, no reset/stash/merge/push. Commit 5839518 contains exactly `package.json`, `pnpm-lock.yaml`, `tests/fault/cross-host/production-surfaces.fault.ts`, 3 files changed, 177 insertions(+), 0 deletions. A foreign whole-tree commit e9b3796 (\"fix release archive cleanup result preservation\") landed on the branch mid-session; it did not capture my bytes and I did not touch it.\n\nNo owned byte changed during review, but the exact verification command was still rerun FRESH post-commit at HEAD 5839518 with the owned paths clean: `pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts` -> GATE_EXIT=0, `Test Files 1 passed (1)`, `Tests 4 passed (4)`. The gated bytes and the committed bytes are the same bytes.",
+      "startedAt": "2026-08-15T23:23:48.364Z",
+      "completedAt": "2026-08-15T23:25:41.144Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-7d1f37bd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human directed additional unblocking. Hard dependency task-f6ef0a45 is DONE, and two independent fresh read-only measurements report root package.json and pnpm-lock.yaml clean; the fault test path is absent as expected. Restore to PLANNING for the real manifest/lock/bare-root consumer edge.",
   "createdBy": "WORKER",
   "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
   "priority": "HIGH",
@@ -29,18 +109,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:51:02.604Z",
-  "updatedAt": "2026-08-15T21:26:27.231Z",
+  "updatedAt": "2026-08-15T23:26:58.023Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T20:13:10.854Z"
+    "firstClaimAt": "2026-08-15T20:13:10.854Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-94dd1835",
-    "architect-09b5f32a"
+    "architect-09b5f32a",
+    "governor-a627169a",
+    "architect-d9dccf21",
+    "worker-5243b3cb",
+    "qa-7d1f37bd"
   ],
-  "blockedReason": "The task's literal hard dependency is still unmet: task-f6ef0a45f52c45c7bb54f250170aa223 is PLANNING and held by another architect, not DONE. Fresh HEAD 18f0964 shows package.json/pnpm-lock and daemon root paths clean, but repository-root bare probes for both @moe/runner and @moe/daemon still fail ERR_MODULE_NOT_FOUND, and the doctor collector therefore cannot yet be named from the public daemon root. Planning the durable call site before f6ef lands would either reference an absent root export or weaken the call site. Resume after f6ef is DONE, then remeasure its bare export and the clean shared manifest/lock paths.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T20:13:41.652Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Fetched full context, remeasured HEAD and relevant paths, confirmed f6ef doctor publication remains PLANNING, and reproduced root ERR_MODULE_NOT_FOUND for both target bare packages; reported BLOCKED on f6ef.",
@@ -51,5 +138,49 @@
       "releasedBy": "architect-94dd1835",
       "reason": "Explicit architect handoff after confirming the hard prerequisite is still in PLANNING."
     }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T22:53:38.214Z",
+  "planningNotes": {
+    "approachesConsidered": "Use the root workspace as the real consumer: add normal `dependencies` on `@moe/daemon` and `@moe/runner`, generate the root importer links with pinned pnpm, and keep one durable fault-lane test that binds the actual bare-root values. Rejected devDependencies because the requested consumer edge is a runtime/public production dependency; rejected deep relative imports, tsconfig `paths`, project references, package-directory cwd tricks, or a temp-directory referrer because they would bypass rather than prove root bare-specifier resolution. Rejected hand-editing the lockfile without a pinned workspace install, changing root scripts, duplicating platform/doctor logic in a helper, or treating OS classifiers as executing-host evidence. The durable test proves publication/loadability only and does not add a refusal path, so the reason-code mutation rail is not triggered.",
+    "codebaseInsights": "Fresh measurement at HEAD 6ca5da0: `git status --short -- package.json pnpm-lock.yaml tests/fault/cross-host/production-surfaces.fault.ts` printed nothing; SHA-256 was package 137b5267c0d7c29447e645f15426a0f80447dc902f52076dde2cd5060018ffb5 and lock 033e6efe50006dd0125d2ebec51e67f1ad00dfbfbebf673f6b9866f2acc16c73; the fault file/directory was absent. `git merge-base --is-ancestor e391175 HEAD` exited 0, confirming prerequisite task-f6ef0a45f52c45c7bb54f250170aa223 is on disk. Grep confirmed `@moe/runner` publishes `PLATFORM_BOUNDARIES`, `observeLinuxPlatform`, and `observeMacosPlatform`, while `@moe/daemon` publishes zero-argument async `collectDoctorVersionReport`. Root `package.json` has no `dependencies`, the `.` lock importer has only devDependencies, root `node_modules/@moe` is absent, and from-root bare imports of both packages fail with `ERR_MODULE_NOT_FOUND`; therefore the edge is genuinely missing. The exact frozen boundary tuple on disk is PROVIDER_LAUNCH, GIT_WORKSPACE, PATH_SYMLINK, LOCK, SIGNAL_CANCELLATION, RUNTIME_CLOSURE, CRASH_RECOVERY. `tests/fault/tsconfig.json` includes all lane `.ts` files; its Vitest config includes `**/*.fault.ts` with `passWithNoTests: false`. This shell's default Node is 18 and cannot provide the pinned execution evidence; the worker must use the declared Node >=24.16 <25 and pnpm 11.0.8 and inspect test-count output.",
+    "risks": "The root manifest and lockfile are shared collision points: re-check both against HEAD immediately before editing/installing and stop/report a collision rather than incorporating foreign bytes. Extensive foreign daemon work is present; never touch or stage it, and if it breaks the owned bare-root gate, disclose/block rather than repair it. A lock-only update does not materialize root links. Vitest can resolve source in ways that mask a broken plain-Node edge, so both an in-repo TypeScript probe and a repository-root plain-Node probe are mandatory. Root tests intentionally do not discover `.fault.ts`; require an explicit focused summary with one test file and the exact nonzero test count. No probe, generated evidence, or scratch file may survive.",
+    "keyFiles": [
+      "package.json",
+      "pnpm-lock.yaml",
+      "tests/fault/cross-host/production-surfaces.fault.ts",
+      "packages/runner/src/index.ts",
+      "packages/runner/src/platform/platform-contract.ts",
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/recovery/doctor-version.node.ts",
+      "tests/fault/tsconfig.json",
+      "tests/fault/vitest.config.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T22:53:41.588Z",
+    "escalatedAt": "2026-08-15T22:53:41.588Z"
+  },
+  "planApprovedAt": "2026-08-15T22:53:40.289Z",
+  "workStartedAt": "2026-08-15T22:57:14.419Z",
+  "reviewStartedAt": "2026-08-15T23:26:38.880Z",
+  "verification": {
+    "command": "pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts",
+    "exitCode": 0,
+    "outputTail": "HEAD=5839518  node=v24.16.0  pnpm=11.0.8\nowned-path status (must be clean):\n(end)\nScope: all 19 workspace projects\nAlready up to date\nDone in 232ms using pnpm v11.0.8\n\n RUN  v4.1.10 /mnt/d/projexts/moe-next/tests/fault\n\n\n Test Files  1 passed (1)\n      Tests  4 passed (4)\n   Start at  02:24:46\n   Duration  35.09s (transform 30.00s, setup 0ms, import 31.03s, tests 5ms, environment 0ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-15T23:26:38.880Z"
+  },
+  "filesModified": [
+    "package.json",
+    "pnpm-lock.yaml",
+    "tests/fault/cross-host/production-surfaces.fault.ts"
   ]
 }

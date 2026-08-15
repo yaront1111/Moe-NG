@@ -1,14 +1,41 @@
-# Plan handoff — bounded activation-ledger aggregate identifiers
+# Worker handoff — bounded activation-ledger aggregate identifiers
 
-- Approved task: `task-8f84c56d88504f80aa2fefdf69f093bd`.
-- Owned paths: `apps/daemon/src/activation/activation-ledger-contracts.ts` and new `apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts` only.
-- Preserve the complete current namespaced length-framed identifier byte-for-byte when its UTF-8 encoding is <=512 bytes. Hash only overflow as `moe-activation-ledger/1|aggregate|sha256:<64 lowercase hex>`, hashing the complete framed legacy preimage.
-- Fresh source measurement: contracts file was 244 lines and clean; derivation returned the framed string verbatim. Current fixture literal is `moe-activation-ledger/1|aggregate|18:effect-aggregate-1|10:idem-key-1` (69 bytes). Exact 512-byte boundary is `a`*200 / `b`*269.
-- Overflow exact vectors: ASCII max digest `bdd4da6783d902fb5f8b32dd80ab9d6eb2ce872584cac2b7c03baa7bff881dc4`; multibyte max digest `c2c6dfeaf460969855dc3f31ef92ee3169ad2e3a04c38caa79f630cd4a9ffe42`.
-- Bare-concatenation collision pair (`x`*399, `x`*400) vs (`x`*400, `x`*399) must remain distinct; framed digests are `2f8707d26da0515f83b21cacee2e29ee339ed1c13a2f3bb3ac78e7bbabaee6a0` and `f5d4c1cb9d030deb779e5cfb34d55febee5c6193809c756a25116e9eea3fbcb5`.
-- Both @moe/runner and @moe/store dependency edges were verified via daemon manifest, lockfile importer, and a deleted in-package bare-specifier typecheck probe.
-- Tests must use public `parseEffectIntent`, real file-backed `SqliteEventStore`, production commit, close/reopen, exact nonzero cardinalities, and hardcoded vectors rather than a test-side hash oracle.
-- Active sibling work owns `activation-ledger-commit.ts` and its existing test; never edit, stage, or restore those paths.
-- Mutation drills: (1) overflow returns legacy must make named max/file-store test red; (2) bare-concatenation digest must make named framing test red; out-of-repo backup and byte-exact hash restoration required.
-- Exact completion gate: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`, with positive nonzero test counts. Architect shell lacked executable pnpm, so worker must supply fresh evidence.
-- See the approved six-step Moe implementation plan for baseline attribution, TDD sequence, and adversarial review details.
+Task `task-8f84c56d88504f80aa2fefdf69f093bd` is implementation-complete through step 4 and BLOCKED at step 5 only by live foreign daemon orchestrator WIP.
+
+## Landed owned bytes
+
+- `apps/daemon/src/activation/activation-ledger-contracts.ts`
+  - Builds the exact legacy namespace/code-unit-length-framed identifier once.
+  - Returns it byte-for-byte when `Buffer.byteLength(legacy, "utf8") <= 512`.
+  - Only overflow returns `moe-activation-ledger/1|aggregate|sha256:<lowercase hex>`, hashing the complete versioned framed legacy preimage.
+  - 241 physical lines; SHA-256 `bd568cf71cf6ce6f04e718e909171dfe410e81e118304e85c4d73156234727a8`.
+- `apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts`
+  - Exactly four tests: 69/512-byte legacy pins, two exact public-parser maximum vectors, swapped-length bare-concatenation adversary, and two real file-backed SQLite commits/reopen reads.
+  - Every generated sweep pins exact nonzero cardinality; mutation refusal output exposes exact code/layer/storeCode.
+  - SHA-256 `61ee9dbc53f2f2510b41045f54378fece65e853ccffbc3442c57d4347323b150`.
+- Fresh focused gate after restoration: 1 file, 4/4 tests passed.
+
+## Mutation evidence
+
+Pre/post source hash was byte-identical `bd568cf7...`.
+1. Overflow->legacy mutation: named real-store test executed 1 (3 skipped) and reddened for both cases with `ACTIVATION_LEDGER_FIELD_INVALID` / `ACTIVATION_LEDGER` / `STORE_INPUT_INVALID`.
+2. Digest-input->bare-concatenation mutation: named framing test executed 1 (3 skipped), expected `2f8707...` and received the shared bare digest `1ff936...`.
+No backup/probe/transcript/tmp residue remained.
+
+## Shared-tree/commit hazard
+
+Foreign whole-tree completion commit `6ca5da07da2c28f56867ab0ddf39c6448785cbdf` for task `task-d92b1b15a5b048e49671ed34990fa4a1` swept both owned files byte-exact. Do not amend/reset/recommit or create an empty claim commit. QA review surface:
+```
+git diff f4966b534ee5e9f9671668795d5dd1e844f0521b..HEAD -- \
+  apps/daemon/src/activation/activation-ledger-contracts.ts \
+  apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts
+```
+
+## Final-gate block
+
+Fresh exact command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exited 1 in typecheck before tests because foreign live orchestrator tests expect production still being written:
+- `agent-spawner.test.ts:393,405`: missing `close` / `activeCount`.
+- untracked `agent-wrapper-main.test.ts:30,31,60,61,83,84`: missing `shutdownWrapperRuntime` / `createWrapperStopSignal`.
+- `verifier-process-runner.test.ts:126,155,187,217,241,249,251,257`: missing `killGraceMs` / `close` / `activeCount`.
+
+Repo-wide/head failure intersection with the two owned paths was empty. The separately executed daemon suite proved execution (94 files, 1964 tests) but had 23 foreign failures; focused owned tests are green. Resume step 5 only after foreign orchestrator WIP settles, rerun the exact gate fresh, then perform step 6 adversarial review.

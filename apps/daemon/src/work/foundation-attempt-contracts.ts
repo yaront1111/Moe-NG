@@ -94,13 +94,18 @@ export const FOUNDATION_ATTEMPT_INPUT_KEYS = Object.freeze(["baseIdentity", "ent
 export const FOUNDATION_ATTEMPT_TEMPLATE_KEYS = Object.freeze([
   "argv", "bootstrapCredentialDigest", "cwd", "environment", "launchSelection", "limits", "runtime",
 ] as const);
+export const FOUNDATION_ATTEMPT_RUNTIME_KEYS = Object.freeze([
+  "installedRoot", "pinRoot", "quotedObservation",
+] as const);
 export interface FoundationAttemptBinding {
   readonly attemptAggregateId: string; readonly nodeKey: string; readonly sessionId: string;
 }
 export interface FoundationAttemptLaunchTemplate {
   readonly argv: readonly string[]; readonly bootstrapCredentialDigest: string;
   readonly cwd: string; readonly environment: Readonly<Record<string, string>>;
-  readonly launchSelection: unknown; readonly limits: unknown; readonly runtime: unknown;
+  readonly launchSelection: unknown; readonly limits: unknown;
+  readonly runtime: { readonly installedRoot: string; readonly pinRoot: string;
+    readonly quotedObservation: Record<string, unknown> };
 }
 export interface FoundationAttemptDispatchRequest {
   readonly activationRequestBytes: Uint8Array;
@@ -195,6 +200,7 @@ export function attemptRecordBody(
 export function launchRequestBody(
   record: ActivationLedgerRecord, bound: FoundationAttemptBound,
   template: FoundationAttemptLaunchTemplate,
+  runtimePorts: { readonly clock: unknown; readonly facts: unknown; readonly fs: unknown },
 ): Record<string, unknown> {
   return {
     argv: template.argv, attempt: record.attempt,
@@ -202,7 +208,10 @@ export function launchRequestBody(
     cwd: template.cwd, duplicateDelivery: null, effect: record.effectIntent,
     environment: template.environment, grant: record.grant,
     launchSelection: template.launchSelection, limits: template.limits, priorRegistration: null,
-    reconciliation: null, runtime: template.runtime,
+    reconciliation: null, runtime: Object.freeze({
+      clock: runtimePorts.clock, facts: runtimePorts.facts, fs: runtimePorts.fs,
+      ...template.runtime,
+    }),
     wrapperIdentity: record.grant.wrapperIdentity,
   };
 }

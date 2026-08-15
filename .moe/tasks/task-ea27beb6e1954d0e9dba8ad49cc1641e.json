@@ -82,7 +82,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "PARKED BY GOVERNOR at architect-7f301fa7's measured request, 2026-08-15T18:13Z. SERIAL SPIDR FAMILY — slice 3 of 4. Promoted ahead of its prerequisite once already; that cost a full claim-measure-block cycle.\n\nARCHITECT'S OWN CORRECTION, RECORDED AND UNRESOLVED: architect-7f301fa7 wrote this task's dependency clauses and then disclosed over-specifying them. They declared it depends on the record contract AND the canonical codec, but the codec's bytes/digest are consumed by the LEDGER (task-1a7ff170), NOT by the normalizer. If that holds, this slice depends only on the record contract and can promote one hop earlier, shortening the chain. VERIFY THE IMPORT DIRECTION BEFORE THE NEXT PROMOTION — do not inherit either version of the clause.\n\nPROMOTE WHEN, in the shortened form if the correction holds:\n1. task-8e3076177f87458f934a776eca68ba16 is DONE, AND\n2. apps/daemon/src/telemetry/provider-run-contracts.ts exists and exports the record contract, AND\n3. (only if the correction does NOT hold) task-fc6581042426444a826981943f441908 is DONE with its codec exports present on disk.\n\nComposition target: production normalizeUsageMeasurement. Do not plan a caller-supplied telemetry mirror or an injected fake normalizer — the production-surface and fail-closed rails forbid both, and that prohibition is what created this family in the first place.",
+  "reopenReason": "Human explicitly directed governance to unblock more tasks. The prior approved plan is structurally stale: DONE task-159f4c21 already owns the runner+scheduler normalization authority, so re-executing it would duplicate production truth. Re-plan only around a freshly measured absent daemon draft-record/consumer adapter (or return BLOCKED with an archive recommendation if no distinct gap exists); do not copy the landed source/coverage matrix.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -90,17 +90,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:31.168Z",
-  "updatedAt": "2026-08-15T21:54:32.248Z",
+  "updatedAt": "2026-08-15T23:03:57.863Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:07:21.024Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6
   },
-  "blockedReason": "Step-1 fresh measurement finds the task's claimed gap already closed by DONE task-159f4c21ef9149e8a65f24735c9c1475, so implementing the approved plan would duplicate a landed production authority (global stale-gap rail). Committed `packages/runner/src/providers/telemetry/provider-usage-normalization.ts` already exports `normalizeProviderUsage`, calls production bare-root `@moe/scheduler.normalizeUsageMeasurement` for every token meter, threads per-meter prior accepted `NormalizedMeasurement`, preserves UNKNOWN quantity null/PARTIAL lower bounds, and forwards scheduler issues with code/layer. It is published from the bare `@moe/runner` root through `surface/provider-record-surface.ts`; index-surface.test.ts pins the symbol and a real root call. `packages/runner/package.json` already declares `@moe/scheduler`. The landed `buildProviderRunRecord` is a real consumer. Conversely, current public `ClaudeTelemetryHandoff` has no raw `usage envelopes` field at all; it carries token facts and telemetryRefusal. A new daemon module cannot perform the plan's raw-envelope loop without recreating runner's `sourceOf`, `rowFor`, meter mapping and source/coverage decisions, explicitly forbidden by task rails. Wrapping `normalizeProviderUsage` would require a different plan/DoD (and would not directly call scheduler as current DoD requires). No provider-run-normalize.* exists and this task wrote zero bytes. Required resolution: verify whether daemon only needs a thin draft-record adapter over the existing root surface, create/amend that task if so, or archive this duplicate; never land a second normalizer.",
+  "blockedReason": "Fresh audit at HEAD 6ca5da0: no production-ready plan exists under the three-file scope. Recommend ARCHIVE this stale task and replace it with prerequisites.\n\nDONE task-159f4c21 already owns normalization: @moe/runner.normalizeProviderUsage maps a ClaudeTelemetryHandoff to four token meters, calls scheduler normalization with per-meter priors, preserves null/PARTIAL/source provenance and exact runner+scheduler refusals; buildProviderRunRecord consumes it. The handoff has token facts, not the envelope array assumed by the old plan. Rebuilding it duplicates authority.\n\nA daemon adapter is not lossless:\n1. Runner and daemon declare incompatible ProviderRunRecord keysets under the SAME \"moe-provider-run-record/1\" literal.\n2. daemon provider-run-codec validates canonicality/version only and casts JSON, so it can seal the incompatible runner shape as the daemon type.\n3. Runner ProviderUsageRefusal has its own {code,layer} plus scheduler issues; daemon usageRefusals stores only scheduler issues. Mapping drops/falsifies provenance.\n4. No public runner validator snapshots unknown handoffs; buildProviderRunRecord is typed, so malformed-raw-handoff validation would be copied.\n5. Live daemon dispatch receives ClaudeLaunchResult; launchClaudeWithTelemetry launches again. No existing-result-to-handoff seam exists.\n\nDependency edge is present: daemon manifest+lock declare runner/scheduler, and a trap-deleted in-package BARE probe importing required symbols typechecked exit 0. provider-run-normalize.*, draft builder and daemon call site are absent; paths are clean.\n\nSafe unblock: (A) widened contract/codec task with a NEW durable-envelope version, public runner record/result embedded rather than remapped, daemon clocks outside it, digest-less draft and exact schema validation; (B) a public seam deriving telemetry from the already executed launch result without relaunch; (C) rewire ledger task task-1a7ff170ee544a3a8a10962c25e2ca5b away from this stale dependency. No bytes written.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:54:14.276Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T23:03:09.834Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Read-only root-cause audit completed; zero bytes. Reported BLOCKED with archive recommendation and exact contract/version/provenance/live-launch gaps. Serena handoff updated.",
+      "whatRemains": "Governance/human must archive the stale task or create the contract-v2/codec-validation and existing-launch telemetry prerequisites, then rewire the ledger dependency.",
+      "pitfalls": "Do not re-run the old normalizer plan: task-159 already owns it. Same version names two incompatible record schemas; codec currently shape-casts canonical JSON. A thin adapter loses ProviderUsageRefusal code/layer, and launchClaudeWithTelemetry would relaunch.",
+      "openQuestions": "Whether governance will widen this task to own the six-file contract/codec reconciliation or archive it and create new prerequisite ids.",
+      "releasedAt": "2026-08-15T23:03:57.861Z",
+      "releasedBy": "architect-d9dccf21",
+      "reason": "Explicit architect handoff after measured block so the architect can continue the PLANNING queue."
+    },
     {
       "whatIsDone": "Measurement only, zero bytes. Proved DONE task-159f4c21 already landed/published the production runner+scheduler usage composition and a real consumer. Reported blocker with symbol-level evidence.",
       "whatRemains": "Governance must archive or replan around any truly absent daemon draft-record adapter. Current plan/DoD cannot be executed without duplicating source/coverage/meter mapping authority.",
@@ -143,7 +152,9 @@
   },
   "planApprovedAt": "2026-08-15T18:30:06.305Z",
   "contextFetchedBy": [
-    "worker-83e6139a"
+    "worker-83e6139a",
+    "governor-a627169a",
+    "architect-d9dccf21"
   ],
   "workStartedAt": "2026-08-15T21:53:07.292Z"
 }

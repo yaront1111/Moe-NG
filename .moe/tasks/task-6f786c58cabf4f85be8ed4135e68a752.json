@@ -180,11 +180,11 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-5d4e2d6f",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "Rejected after diff/source review. Production files are 257/342/339 lines (<400), bridges are exact, committed task blobs matched HEAD before peer edits, and the focused recovery suite passed: 1 file/22 tests. The accept path nevertheless trusts an unverified backup cursor and caller-fabricable HUMAN/step-up claims, failing DoD 1/2/5 and the human-only rail; replay also bypasses exact request identity. Gate disclosure: literal pnpm could not start in this QA shell (pnpm absent, exit 127). Direct Node 24/Vitest ran the focused suite green. Direct TS 7 and full daemon run were red on live foreign WIP/environment paths only: index-surface doctor export WIP, untracked provider-run-codec.test.ts, planning-services.test.ts, and Node-pin/plain-Node timing. Those reds are disclosed, not attributed.",
+  "reopenReason": "The sole named foreign spawner collision is now clear on disk; the same live assigned worker requested resume to rerun the exact Node 24.16 daemon gate and finish steps 9–10.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -199,7 +199,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T21:55:29.734Z",
+  "updatedAt": "2026-08-15T22:43:09.500Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-5d4e2d6f"
@@ -213,8 +213,8 @@
     "reopenCount": 1
   },
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:55:29.734Z",
-  "blockedReason": "QA fixes and four mutation drills are complete; focused recovery is freshly 28/28 green. The mandatory exact command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` cannot exit 0 because foreign pre-existing orchestrator WIP fails typecheck at agent-spawner.test.ts:237,273,274,315 (`killProcessGroup`/`killGraceMs` absent and implicit-any params). Producer task-d4329e8 measured this WIP as predating its claim and governor is identifying the owner. Shared-tree rails forbid editing, resetting, stashing, or committing those foreign paths; I will not fabricate verification.",
+  "blockedAt": "2026-08-15T22:37:47.663Z",
+  "blockedReason": "Fresh exact Node 24.16 gate after the spawner cleanup: daemon typecheck exits 0; daemon test executes 93 files / 1,949 tests but exits 1 with 5 foreign failures. j1-command-path.test.ts has two GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED failures, and index-surface.test.ts changed during the run; both remain foreign-dirty after a five-minute quiescence wait. The other three failures are package-root subprocess timeouts in graph-preview-request, index-surface project configuration, and runtime-entrypoint. Focused recovery is freshly 28/28 green and no failure is in recovery code. Shared-tree rails forbid modifying/resetting/stashing/committing the foreign tests; exact exit 0 cannot be truthfully recorded.",
   "blockedResourceId": null,
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -376,6 +376,17 @@
           "description": "answerReplayed ignores prior.requestSha256, so the same command key plus reconciliationDigest accepts changed approval/reason/step-up/version as REPLAYED instead of idempotency conflict. It also searches only the first 1,000 events. Preserve the store's canonical request identity and paginate/read the exact business event; test changed requests and replay after more than 1,000 prior events."
         }
       ]
+    }
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "QA reopen fixes are implemented and committed (some bytes captured by foreign whole-tree commit f4966b5): signed BackupGeneration cursor binding, authenticated HUMAN SessionProof authority with durable step-up ref, current durable policy/reason binding, exact raw-request replay identity, >1000-event replay lookup, and real registry composition. Four production mutation drills reddened and restored byte-exact. Fresh focused recovery is 28/28 green; earlier restore/completion/activation 96/96 and registry+completion 131/131.",
+      "whatRemains": "Resume step 9 after foreign daemon paths settle. Run exact Node 24.16 `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`; require exit 0 and nonzero count. Then complete step 9, run step-10 adversarial/regression review, update Serena handoff, and complete_task with the fresh exact gate.",
+      "pitfalls": "Do not edit/reset/stash/commit foreign j1-command-path.test.ts or index-surface.test.ts WIP. Latest exact gate typechecked but daemon test exited 1: 5 foreign failures (two GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED; three package-root subprocess timeouts), 93 files/1,949 tests executed. Do not amend/recommit foreign whole-tree commit f4966b5; QA reviews base-ref owned-path diff. Exact env/wrapper is in Serena handoff memory.",
+      "openQuestions": "Task-6cbff010 is actively repairing the J1/root surface. Resume only after its committed bytes make the daemon gate quiescent; no recovery defect remains known.",
+      "releasedAt": "2026-08-15T22:43:09.499Z",
+      "releasedBy": "worker-5d4e2d6f",
+      "reason": "Explicit handoff while task-6cbff010 repairs the foreign J1/root-surface daemon gate; freeing worker for another claimable task."
     }
   ]
 }

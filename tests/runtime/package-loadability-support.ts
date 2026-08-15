@@ -173,7 +173,7 @@ export async function observeWorkspacePackage(
 export async function probeRuntimeEntry(
   root: string,
   entry: string,
-  timeoutMs = 10_000,
+  timeoutMs = 30_000,
   delayMs = 0,
 ): Promise<RuntimeProbeResult> {
   const child = spawn(process.execPath, [

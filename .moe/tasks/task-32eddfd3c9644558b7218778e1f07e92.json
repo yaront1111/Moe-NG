@@ -1,0 +1,70 @@
+{
+  "id": "task-32eddfd3c9644558b7218778e1f07e92",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Observe installed Claude runtime from production Windows facts",
+  "description": "Objective: supply the missing production host adapter behind Claude runtime pinning. Fresh measurement at committed HEAD 6ca5da07 found `probeClaudeRuntime` and `prepareClaudeRuntimePin`, but no production `ClaudeProbePort`/`ClaudeRuntimeFactsPort`; all callers are tests or recovery inventory, while task-6cbff010 can currently succeed only by injecting `{fs,facts,clock}` from its test. Deliverable: an internal @moe/runner Windows host module that takes only bounded plain installed-runtime configuration, resolves and streams the complete native Claude closure, obtains version and platform facts through a shell-free bounded Windows process/OS boundary, feeds the production capability/observation builders, and returns immutable current facts/observation or an existing stable RUNTIME/Windows-process refusal. Unproven capabilities remain UNSUPPORTED. No caller-supplied observation, digest, version, capability answer, filesystem capability, clock, or process seam may become authority. This producer is consumed by task 6f8f1e5c (server-owned pin-request hydration; create immediately after this task) and ultimately task-6cbff010. NOT in scope: grant consumption, daemon/store orchestration, provider work launch, review, or final acceptance. Owned paths: packages/runner/src/providers/claude/claude-host-runtime.ts, claude-host-runtime.js, and claude-host-runtime.test.ts. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm typecheck.",
+  "definitionOfDone": [
+    "On Windows, the production adapter resolves a bounded local installed root/executable, streams closure digests, performs a shell-free bounded version/facts observation, and returns a production-built immutable ProviderRuntimeObservation plus ClaudeRuntimeFacts whose digest and truth class recompute.",
+    "Malformed, non-Windows, missing/reparse/escaping, unreadable, timed-out, malformed-output, and drifted observations fail closed with the exact existing RUNTIME or Windows-process reason code and refusing layer; no case upgrades UNKNOWN/UNSUPPORTED to PROVEN.",
+    "Only capabilities proved by the production observation are SUPPORTED; a version-only probe leaves every other capability explicitly UNSUPPORTED, with generated cases asserting a positive count.",
+    "Tests exercise the production surface and include a real Windows conformance leg (native Windows or `/init` bridge) plus mutation drills proving closure hashing, fresh version/platform facts, and fail-closed classification are load-bearing.",
+    "All three owned files are the only changed paths, each production source is below 250 physical lines, and runner/repo typecheck plus a nonzero runner test suite pass."
+  ],
+  "taskRails": [
+    "Use the existing `probeClaudeRuntime`, observation builder, runtime-pin filesystem, and Windows process boundary internally; do not reimplement their authority or publish their injectable ports.",
+    "The public result may expose facts/data, never filesystem/process/clock capabilities; input is bounded plain data and error messages do not echo runtime paths, argv, environment, or secrets.",
+    "TDD every behavior; every failure test asserts exact stable reason code and layer, generated sweeps assert a positive case count, and mutation drills target the production surface.",
+    "Keep the TypeScript production file below 250 physical lines, the .js bridge one line, and commit only the three explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "priority": "CRITICAL",
+  "order": 78,
+  "comments": [
+    {
+      "id": "comment-0e70b140c9f141ecac46896d8e39c2d2",
+      "author": "architect-09b5f32a",
+      "content": "Consumer-ID correction (the description's provisional `6f8f1e5c` label was not a Moe task id): the exact immediate consumer is task-75ee4a84bdd14d06b672abb18ed48cba, `Hydrate Claude pin requests from server-owned host capabilities`; ultimate consumer remains task-6cbff01023b14b26a78fc5e3eb1dd8a9. Plan/QA must use these exact IDs.",
+      "timestamp": "2026-08-15T22:56:32.833Z"
+    },
+    {
+      "id": "comment-8bb9fba4839644949ee1e3243a4cfb5b",
+      "author": "architect-09b5f32a",
+      "content": "Fresh deeper measurement found a prerequisite that makes the originally confirmed single-file observer unsafe to plan yet. `claude-runtime-pin-fs.ts` exposes bounded chunk reads, but `resolveSources` performs the segment/reparse/containment checks only while also comparing an already-known digest; there is no production primitive that returns a digest after those checks. Computing the digest first would read an unvalidated escape/reparse target, while copying the private segment walk into `claude-host-runtime.ts` would create parallel authority and violate this task's rail. Also, `listFiles()` recursively materializes an unbounded array; this task will not use it and will define the supported native standalone `claude.exe` closure as exactly the explicitly named executable. Created prerequisite task-ff589abd7dd84ee197a9abee729bef78 to extract/sharedly test validated streamed source discovery and shrink the currently 281-line closure module. After it is DONE, remeasure and plan this task around: exact one native EXECUTABLE candidate; real Job-boundary `--version`; only PIN_METHOD and VERSION_REPORT supported; nine capabilities UNSUPPORTED/HOLD_UNKNOWN; two-pass post-version source validation; production-only facts; and required Linux-parent `/init` -> Windows Node 24 conformance with a positive receipt count.",
+      "timestamp": "2026-08-15T23:20:17.949Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T22:55:50.647Z",
+  "updatedAt": "2026-08-15T23:23:29.148Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T22:56:58.019Z"
+  },
+  "contextFetchedBy": [
+    "architect-09b5f32a",
+    "architect-d9dccf21",
+    "worker-827a27f6"
+  ],
+  "blockedReason": "Blocked on task-ff589abd7dd84ee197a9abee729bef78: current runner APIs cannot stream a newly discovered digest only after the existing path/reparse/containment checks. Planning around it would either read an unvalidated path or duplicate runtime-pin authority.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T23:20:18.001Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the host-observer design, confirmed real Windows bridge/Node/claude availability, and identified that existing resolveSources needs a pre-known digest while its path checks are private. Created prerequisite task-ff589abd7dd84ee197a9abee729bef78 and recorded exact downstream design in comment-8bb9fba4839644949ee1e3243a4cfb5b.",
+      "whatRemains": "After task-ff589abd7dd84ee197a9abee729bef78 is DONE, remeasure committed bytes and plan the standalone-native host observer with real Job-boundary --version, two-pass validation, only PIN_METHOD/VERSION_REPORT support, and required /init Windows conformance.",
+      "pitfalls": "Do not hash a candidate before segment/reparse/containment validation; do not use the unbounded listFiles walk; do not run Windows Vitest against WSL pnpm. Use Linux Vitest parent plus /init Windows Node child with explicit node.exe argv[0].",
+      "openQuestions": "None for the prerequisite. The downstream observer must not claim it establishes the full Foundation provider admission profile; it only supplies fresh launch-time facts and a narrow two-capability observation.",
+      "releasedAt": "2026-08-15T23:20:48.722Z",
+      "releasedBy": "architect-09b5f32a",
+      "reason": "Explicit architect handoff while measured prerequisite task-ff589abd7dd84ee197a9abee729bef78 lands; freeing planning slot to plan the prerequisite."
+    }
+  ]
+}

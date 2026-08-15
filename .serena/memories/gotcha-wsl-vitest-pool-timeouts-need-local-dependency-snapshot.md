@@ -1,0 +1,5 @@
+# WSL Vitest pool timeouts can come from NTFS-hosted node_modules
+
+On a loaded host, moving only source into /tmp but symlinking node_modules back to /mnt/d still produced 60-second Vitest worker-start timeouts, including focused one-file runs. A snapshot whose node_modules tree was hardlinked from an existing ext4 audit snapshot ran the same focused suite in ~2 seconds and the full control-room suite in ~9 seconds.
+
+For QA evidence, use committed source in a fresh /tmp snapshot and local ext4 dependencies when available. Disable pnpm's automatic dependency-status install in such a snapshot with pnpm_config_verify_deps_before_run=false, ensure new workspace dependency symlinks exist, and still disclose any missing ignored host artifacts (for example a built Windows broker) rather than calling repo-wide red green.

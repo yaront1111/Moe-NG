@@ -70,21 +70,28 @@
     {
       "stepId": "step-4",
       "description": "Perform both required production-surface mutation drills using an out-of-repository byte-for-byte backup, recorded SHA-256, an EXIT restore trap, and exactly-one-replacement guards. First replace only the overflow branch with the unbounded legacy return; run the named maximum/file-store test and require a nonzero executed-test count plus a red failure caused by the 512-byte contract/store rejection. Restore and verify the original hash, then replace only the digest input with bare `aggregateId + idempotencyKey`; run the named framing-collision/hash-vector test and require a nonzero executed-test count plus a red code/hash distinction assertion. Restore again, prove the production file hash is byte-identical to the pre-drill hash, and confirm no backup, probe, transcript, or generated evidence remains.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-contracts.ts",
+        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+      ],
+      "note": "Both production-surface drills used an out-of-repo mktemp backup, EXIT restore trap, and Python count==1 replacement guards. Pre-drill source SHA-256 bd568cf71cf6ce6f04e718e909171dfe410e81e118304e85c4d73156234727a8. D1 replaced only the overflow digest/return with unbounded legacy (mutated ef40d20...); named real-store maximum test executed 1 test (3 skipped), exited 1, and reddened with BOTH cases pinned to ACTIVATION_LEDGER_FIELD_INVALID at ACTIVATION_LEDGER with storeCode STORE_INPUT_INVALID. Restored hash exactly. D2 replaced only digest input legacy with aggregateId + idempotencyKey (mutated 4e014050...); named swapped-length framing test executed 1 test (3 skipped), exited 1, expected framed digest 2f8707... but received bare-collision digest 1ff936.... Restored source SHA byte-exact after each drill and at exit. Test outcome reporting was hardened so a store refusal exposes its exact code/layer/storeCode rather than booleans alone. No probe/backup/transcript/tmp residue in owned directory. Fresh post-drill focused suite passed 1 file/4 tests and source hash remained bd568cf7....",
+      "startedAt": "2026-08-15T22:19:46.359Z",
+      "completedAt": "2026-08-15T22:23:13.927Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Single final verification gate: first run the same repo-wide baseline legs against HEAD and compute the HEAD-minus-merge-base failing-path delta, intersected with this task's two owned paths; disclose all foreign red verbatim and stop if this diff introduced any owned-path failure. Then run the exact completion command fresh in the foreground: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Require exit 0 from both chained legs and inspect daemon test output for a positive, nonzero test-file and test count (including the four focused tests); `No projects matched`, `No test files found`, `0 passed`, piped/tail exit status, or sibling-WIP-caused red is not a pass.",
       "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-contracts.ts",
         "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
       ],
-      "startedAt": "2026-08-15T22:19:46.359Z"
-    },
-    {
-      "stepId": "step-5",
-      "description": "Single final verification gate: first run the same repo-wide baseline legs against HEAD and compute the HEAD-minus-merge-base failing-path delta, intersected with this task's two owned paths; disclose all foreign red verbatim and stop if this diff introduced any owned-path failure. Then run the exact completion command fresh in the foreground: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Require exit 0 from both chained legs and inspect daemon test output for a positive, nonzero test-file and test count (including the four focused tests); `No projects matched`, `No test files found`, `0 passed`, piped/tail exit status, or sibling-WIP-caused red is not a pass.",
-      "status": "PENDING",
-      "affectedFiles": [
-        "apps/daemon/src/activation/activation-ledger-contracts.ts",
-        "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
-      ]
+      "startedAt": "2026-08-15T22:23:17.757Z"
     },
     {
       "stepId": "step-6",
@@ -96,8 +103,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-83e6139a",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -109,12 +116,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:45:32.402Z",
-  "updatedAt": "2026-08-15T22:19:46.359Z",
+  "updatedAt": "2026-08-15T22:35:46.201Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:45:59.442Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
@@ -123,7 +130,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T21:55:31.933Z",
@@ -145,5 +153,20 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-15T21:55:33.995Z",
-  "workStartedAt": "2026-08-15T21:58:06.953Z"
+  "workStartedAt": "2026-08-15T21:58:06.953Z",
+  "blockedReason": "Implementation and focused acceptance are complete, but the plan's exact final command is currently blocked by foreign daemon orchestrator WIP. Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exited 1 in the first leg, so the test leg did not run. Exact foreign TS errors: agent-spawner.test.ts:393/405 expects missing close/activeCount; untracked agent-wrapper-main.test.ts:30/31/60/61 expects missing shutdownWrapperRuntime and :83/84 expects missing createWrapperStopSignal; verifier-process-runner.test.ts:126/155/187/217/241 passes missing killGraceMs and :249/251/257 expects missing close/activeCount. None intersects owned paths. The separately executed daemon suite proved nonvacuous (94 files, 1964 tests) but was foreign-red with 23 failures in graph-preview/index/runtime-entrypoint and the same orchestrator files; our focused owned suite is freshly green at 1 file/4 tests. Repo-wide HEAD gates: typecheck initially exit 0 before the foreign WIP moved; test exit 1 with 12 foreign failures (268/273 files, 6492/6507 passed); foundation and store later stopped at the newly introduced foreign orchestrator type errors; daemon test exit 1 with 23 foreign failures (87/94 files, 1941/1964 passed). Failing-path intersection with activation-ledger-contracts.ts and activation-ledger-aggregate-id.test.ts is empty.\n\nA foreign whole-tree completion commit 6ca5da0 for task-d92b1b15a5b048e49671ed34990fa4a1 swept both owned files byte-exact while this task was in progress. Per rail, I did not amend/reset/recommit. Review surface is `git diff f4966b534ee5e9f9671668795d5dd1e844f0521b..HEAD -- apps/daemon/src/activation/activation-ledger-contracts.ts apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts`; owned paths are clean and hashes are bd568cf7... and 61ee9dbc....",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T22:34:09.680Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-4 complete: production overflow hashing landed, exact four-test acceptance green, both required mutation drills red and byte-exact restored. Repo-wide/head path intersection with owned files is empty. Foreign commit 6ca5da0 swept the owned bytes.",
+      "whatRemains": "Resume step 5 after foreign orchestrator WIP settles; rerun exact `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` fresh. If green, complete step 5, run step 6 adversarial review, and complete task without amending/recommitting the foreign whole-tree commit.",
+      "pitfalls": "Do not touch agent-spawner/agent-wrapper-main/verifier-process-runner WIP. Do not amend/reset/recommit or create an empty task commit. Review base diff f4966b5..HEAD over the two owned paths. See Serena task handoff for exact hashes/errors/mutation evidence.",
+      "openQuestions": "When will the foreign daemon orchestrator tests and their production counterparts become consistent enough for the exact package gate?",
+      "releasedAt": "2026-08-15T22:35:46.199Z",
+      "releasedBy": "worker-83e6139a",
+      "reason": "Explicit handoff after exact final gate was blocked by live foreign orchestrator WIP; freeing worker for another claimable task."
+    }
+  ]
 }

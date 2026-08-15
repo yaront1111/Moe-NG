@@ -1,6 +1,7 @@
 /** Package-root publication contract for the daemon command surface. */
 import { execFile } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -43,6 +44,8 @@ import type {
   CommandRegistry,
   CommandRegistryEntry,
   ControlRoomListener,
+  DaemonCommandPortOptions,
+  DaemonCommandPorts,
   DaemonDependencyProvider,
   DaemonEntryRefusalCode,
   DaemonEntryRefused,
@@ -244,6 +247,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["LISTENER_REFUSAL_CODES", "object"],
   ["MAX_COMMAND_PAYLOAD_FIELDS", "number"],
   ["MAX_EVENT_PAGE_SIZE", "number"],
+  ["OPERATOR_CAPABILITIES", "object"],
   ["PLANNING_HANDLERS", "object"],
   ["PREREQUISITE_REFUSAL_CODES", "object"],
   ["PROJECT_CONFIGURATION_SELECTION_CODES", "object"],
@@ -276,6 +280,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
   ["collectDoctorVersionReport", "function"],
+  ["createDaemonCommandPorts", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
   ["createRecoverySuccessionService", "function"],
@@ -327,7 +332,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(82);
+    expect(EXPECTED_EXPORTS.length).toBe(84);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -571,6 +576,12 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<ReviewHandlerTable[ReviewCommandKind]>()
       .toEqualTypeOf<ReviewCommandHandler | undefined>();
     expectTypeOf(daemon.REVIEW_HANDLERS).toEqualTypeOf<ReviewHandlerTable>();
+    expectTypeOf<Parameters<typeof daemon.createDaemonCommandPorts>>()
+      .toEqualTypeOf<[options: DaemonCommandPortOptions]>();
+    expectTypeOf<ReturnType<typeof daemon.createDaemonCommandPorts>>()
+      .toEqualTypeOf<DaemonCommandPorts>();
+    expectTypeOf<DaemonCommandPorts["decisions"]>().toEqualTypeOf<CommandDecisionPort>();
+    expectTypeOf<DaemonCommandPorts["registry"]>().toEqualTypeOf<CommandRegistry>();
   });
 
   it("names every recovery incarnation branch and keeps the mint non-authoritative", () => {
@@ -746,8 +757,7 @@ describe("project configuration package-root consumer edge", () => {
 
   it("selects and reopens exact current bytes through bare package roots", async () => {
     const daemonDirectory = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-    const directory = mkdtempSync(join(daemonDirectory, ".project-configuration-smoke-"));
-    const scriptPath = join(directory, "consumer.ts");
+    const directory = mkdtempSync(join(tmpdir(), "moe-project-configuration-smoke-"));
     const databasePath = join(directory, "consumer.db");
     const source = `
 import assert from "node:assert/strict";
@@ -795,10 +805,12 @@ try {
 } finally { store.close(); }
 `;
     try {
-      writeFileSync(scriptPath, source, { encoding: "utf8" });
-      const result = await execFileAsync(process.execPath, ["--experimental-strip-types", scriptPath], {
+      const result = await execFileAsync(process.execPath, [
+        "--experimental-strip-types", "--input-type=module", "--eval", source,
+      ], {
+        cwd: daemonDirectory,
         windowsHide: true,
-        timeout: 20_000,
+        timeout: 60_000,
         maxBuffer: 1_048_576,
       });
       expect(result.stderr).toBe("");
@@ -811,5 +823,5 @@ try {
     } finally {
       rmSync(directory, { force: true, recursive: true });
     }
-  });
+  }, 75_000);
 });

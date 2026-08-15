@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-15T20:24:35.697Z",
+  "updatedAt": "2026-08-15T22:38:34.276Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 8,
@@ -172,7 +172,8 @@
     "governor-7c5e6be6",
     "architect-a42f4965",
     "architect-94dd1835",
-    "worker-d6220bc6"
+    "worker-d6220bc6",
+    "governor-a627169a"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
   "blockedReason": "Step-1 resume gate TRIPPED at HEAD 65a3241 (past f1a494e cited in the unblock). Three of seven named capabilities have ONLY test/test-harness callers — the hard stop step 1 defines. Full file:line evidence: comment-90116e38af76441397716ce20fc3a992.\n\nNOT re-litigating the unblock: governor-f70d1157's four cleared claims all re-verified TRUE. These three are DIFFERENT capabilities it never covered, and are the three planningNotes.risks flagged.\n\nA. PINNED CLAUDE. createFoundationClaudeLauncher (activation/foundation-launch-authority.ts:290) callers = own .test.ts:42,602 + .js bridge. `git grep launchClaude` outside packages/runner = ZERO. Production's only Claude spawn is claudeSpawner via agent-wrapper-main.ts:82 — unpinned: no observation, no version/closure check, no registration commit. Kills step 2 pinnedClaudeRuntimeObservation + DoD 3.\n\nB. RESTART RECONCILIATION. reconcileOnRestart (recovery/restart-reconciliation.ts:235) callers = continuation-test-harness.ts:6,73 + two .test.ts; that harness imported only by two .test.ts. startDaemon (daemon-entry.ts:162) read in full: resolveDependencies -> startControlRoomListener, no reconciliation sweep. Registry wires recovery.complete + createRestorePort — different capabilities. Restart emits no {ADOPTED,SUSPECT,QUARANTINED,RECONCILIATION_COMMAND}, so step 4/DoD 2 could only pass by calling the pure reducer from the test = test-owned authority.\n\nC. COORDINATION. createCoordinationAdapter (coordination/coordination-adapter.ts:111) caller = own .test.ts. ZERO imports of apps/daemon/src/coordination/ from any module outside that dir. daemon-command-registry.ts admits bootstrap/review/session(credential-only)/work/effect.activate/recovery.complete — no coordination or terminal kind. Kills step 3 advisoryOnly session/terminal + DoD 3.\n\nEdges fine (probe from apps/daemon: launchClaude+admitResume function, coordination 14 exports). Gap is COMPOSITION not publication. NEEDED: production tasks landing consumer edges A, B, C.",

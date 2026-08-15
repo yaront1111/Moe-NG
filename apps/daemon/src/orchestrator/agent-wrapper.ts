@@ -9,6 +9,7 @@ import { handleCommandRequest } from "../http/http-adapter.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
+import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -84,16 +85,9 @@ export interface RunOnceReport {
 
 const encoder = new TextEncoder();
 const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set(["approval.decide", "goal.close"]);
-const CLEANUP_ATTEMPTS = 3;
 
-function cleanupError(action: string, outcome: string): Error {
-  return new Error(`AGENT_CLEANUP_FAILED:${action}:${outcome}`);
-}
-
-function errorOf(value: unknown): Error {
-  return value instanceof Error && value.message.startsWith("AGENT_CLEANUP_FAILED:")
-    ? value
-    : cleanupError("unknown", "UNEXPECTED_ERROR");
+function setupError(action: string): Error {
+  return new Error(`AGENT_SETUP_FAILED:${action}:UNEXPECTED_ERROR`);
 }
 
 function digestOf(payload: JsonObject): string {
@@ -155,12 +149,19 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   const active = new Map<string, Promise<void>>();
   const cleanupFailures: Error[] = [];
 
+  const failures = (): Error[] => [...cleanupFailures].sort((a, b) =>
+    a.message < b.message ? -1 : a.message > b.message ? 1 : 0);
+  const failureOutcome = (): string | null => {
+    const ordered = failures();
+    return ordered.length === 0 ? null : ordered.map((error) => error.message).join("|");
+  };
+
   const dispatch = (
     credential: string, kind: string, payload: JsonObject,
-    target: string, expectedVersion: number,
+    target: string, expectedVersion: number, commandId?: string,
   ): { code: string; ok: boolean } => {
     const envelope = {
-      commandId: `wrap-${config.mintSecret().slice(0, 18)}`,
+      commandId: commandId ?? `wrap-${config.mintSecret().slice(0, 18)}`,
       commandKind: kind,
       correlationId: "agent-wrapper",
       expectedVersion,
@@ -191,140 +192,94 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // claim would leave a fenced item nobody is working on until expiry.
     let brief: NodeMission | null = null;
     if (step.kind === "node.deliver") {
-      brief = config.nodeMission?.(step.aggregateId ?? "") ?? null;
+      try {
+        brief = config.nodeMission?.(step.aggregateId ?? "") ?? null;
+      } catch {
+        const failure = setupError("node.mission");
+        cleanupFailures.push(failure);
+        return { kind: step.kind, outcome: failure.message, sessionId: null, workItemId };
+      }
       if (brief === null) {
         return { kind: step.kind, outcome: "NODE_BRIEF_MISSING", sessionId: null, workItemId };
       }
     }
-    const secret = config.mintSecret();
-    // The full mint, never a prefix: distinct mints can share long prefixes.
-    const sessionId = `sess-wrap-${config.mintSecret()}`;
-    const expiresAt = new Date(config.clock() + config.claimTtlMs).toISOString();
+    let secret: string;
+    let sessionId: string;
+    let expiresAt: string;
+    try {
+      secret = config.mintSecret();
+      // The full mint, never a prefix: distinct mints can share long prefixes.
+      sessionId = `sess-wrap-${config.mintSecret()}`;
+      expiresAt = new Date(config.clock() + config.claimTtlMs).toISOString();
+    } catch {
+      const failure = setupError("identity.mint");
+      cleanupFailures.push(failure);
+      return { kind: step.kind, outcome: failure.message, sessionId: null, workItemId };
+    }
 
-    const opened = dispatch(config.operatorCredential, "session.open", {
-      capabilities: [...capabilities],
-      credentialSha256: createHash("sha256").update(secret, "utf8").digest("hex"),
-      expiresAt,
+    const cleanupAuthority = createAgentAuthorityCleanup({
+      affordances: config.affordances,
+      dispatch,
+      operatorCredential: config.operatorCredential,
+      secret,
       sessionId,
-    }, `session/${sessionId}`, 0);
-    if (!opened.ok) {
+      workItemId,
+    });
+
+    const failSetup = (action: string, releaseClaim: boolean): SpawnReport => {
+      const failure = setupError(action);
+      cleanupFailures.push(failure, ...cleanupAuthority(releaseClaim));
+      return { kind: step.kind, outcome: failure.message, sessionId, workItemId };
+    };
+
+    let opened: { code: string; ok: boolean };
+    try {
+      opened = dispatch(config.operatorCredential, "session.open", {
+        capabilities: [...capabilities],
+        credentialSha256: createHash("sha256").update(secret, "utf8").digest("hex"),
+        expiresAt,
+        sessionId,
+      }, `session/${sessionId}`, 0);
+    } catch {
+      return failSetup("session.open", false);
+    }
+    if (!opened.ok || opened.code !== "EFFECTS_COMMITTED") {
       return { kind: step.kind, outcome: opened.code, sessionId: null, workItemId };
     }
 
-    const closeSession = (version: number): { code: string; ok: boolean } =>
-      dispatch(
-        config.operatorCredential,
-        "session.close",
-        { sessionId },
-        `session/${sessionId}`,
-        version,
-      );
-
-    const closeScopedSession = (): void => {
-      let outcome = "SESSION_NOT_VISIBLE";
-      for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
-        let surface: ReturnType<AffordancePort["readSurface"]>;
-        try {
-          surface = config.affordances.readSurface();
-        } catch {
-          outcome = "SURFACE_READ_FAILED";
-          continue;
-        }
-        if (surface.outcome !== "SURFACE") {
-          outcome = surface.code;
-          continue;
-        }
-        const aggregateId = `session/${sessionId}`;
-        const close = surface.steps.find((candidate) =>
-          candidate.kind === "session.close" && candidate.aggregateId === aggregateId);
-        // Absence from a readable surface proves the session is no longer OPEN.
-        if (close === undefined) return;
-        if (close.version === null) {
-          outcome = "SESSION_VERSION_NOT_VISIBLE";
-          continue;
-        }
-        let closed: { code: string; ok: boolean };
-        try {
-          closed = closeSession(close.version);
-        } catch {
-          outcome = "COMMAND_DISPATCH_FAILED";
-          continue;
-        }
-        if (closed.ok && closed.code === "EFFECTS_COMMITTED") return;
-        outcome = closed.code;
-      }
-      throw cleanupError("session.close", outcome);
-    };
-
     // The AGENT claims, so the fence names the agent: expiry doubles as the
     // reap horizon when a spawned process dies without releasing.
-    const claimed = dispatch(secret, "work.claim", { expiresAt, workItemId },
-      `work/${workItemId}`, step.claimAggregateVersion);
-    if (!claimed.ok) {
-      // Nothing was spawned, so no child can clean this identity up later.
-      try { closeScopedSession(); } catch (error) { cleanupFailures.push(errorOf(error)); }
+    let claimed: { code: string; ok: boolean };
+    try {
+      claimed = dispatch(secret, "work.claim", { expiresAt, workItemId },
+        `work/${workItemId}`, step.claimAggregateVersion);
+    } catch {
+      // Dispatch may have committed before throwing. Probe the durable claim
+      // and release only this session's exact visible version before closing.
+      return failSetup("work.claim", true);
+    }
+    if (!claimed.ok || claimed.code !== "EFFECTS_COMMITTED") {
+      cleanupFailures.push(...cleanupAuthority(false));
       return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
     }
 
     let missionText: string;
     let workspace: string | null = null;
-    if (brief !== null) {
-      workspace = brief.workspace;
-      missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
-        accept: null,
-        submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
-      });
-    } else {
-      const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
-      missionText = mission(workItemId, step.kind, expiresAt, hint);
-    }
-    const revokeSession = (): void => {
-      let outcome = "WORK_ITEM_NOT_VISIBLE";
-      for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
-        let surface: ReturnType<AffordancePort["readSurface"]>;
-        try {
-          surface = config.affordances.readSurface();
-        } catch {
-          outcome = "SURFACE_READ_FAILED";
-          continue;
-        }
-        if (surface.outcome !== "SURFACE") {
-          outcome = surface.code;
-          continue;
-        }
-        const staffed = surface.steps.find((candidate) =>
-          workItemIdFor(candidate.kind, candidate.aggregateId) === workItemId);
-        if (staffed === undefined) continue;
-        // A readable current surface with no claim by this session proves our
-        // durable fence is gone; retrying a release would not be idempotent.
-        if (staffed.claim === null || staffed.claim.claimedBy !== sessionId) {
-          outcome = "RELEASED";
-          break;
-        }
-        let released: { code: string; ok: boolean };
-        try {
-          released = dispatch(
-            secret,
-            "work.release",
-            { workItemId },
-            `work/${workItemId}`,
-            staffed.claim.version,
-          );
-        } catch {
-          outcome = "COMMAND_DISPATCH_FAILED";
-          continue;
-        }
-        if (released.ok && released.code === "EFFECTS_COMMITTED") {
-          outcome = "RELEASED";
-          break;
-        }
-        outcome = released.code;
+    try {
+      if (brief !== null) {
+        workspace = brief.workspace;
+        missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
+          accept: null,
+          submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
+        });
+      } else {
+        const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
+        missionText = mission(workItemId, step.kind, expiresAt, hint);
       }
-      if (outcome !== "RELEASED") throw cleanupError("work.release", outcome);
-      // Release before closing the bearer. A crashed/failed child must not
-      // fence the work item for the rest of the claim TTL.
-      closeScopedSession();
-    };
+    } catch {
+      return failSetup("mission", true);
+    }
+
     const request = {
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
@@ -333,24 +288,22 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // into the same rejected-promise path as a normal spawner failure.
     let spawned: Promise<void>;
     try {
-      spawned = config.spawnAgent(request);
+      spawned = Promise.resolve(config.spawnAgent(request));
     } catch (error) {
       spawned = Promise.reject(error);
     }
     const exit = spawned
       .catch(() => undefined)
-      .then(revokeSession)
-      .catch((error: unknown) => { cleanupFailures.push(errorOf(error)); })
+      .then(() => { cleanupFailures.push(...cleanupAuthority(true)); })
       .finally(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
   };
 
   const runOnce = (): RunOnceReport => {
-    const failedCleanup = [...cleanupFailures].sort((a, b) =>
-      a.message < b.message ? -1 : a.message > b.message ? 1 : 0)[0];
-    if (failedCleanup !== undefined) {
-      return { active: active.size, spawned: [], surfaceOutcome: failedCleanup.message };
+    const priorFailure = failureOutcome();
+    if (priorFailure !== null) {
+      return { active: active.size, spawned: [], surfaceOutcome: priorFailure };
     }
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {
@@ -373,8 +326,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (step.kind.startsWith("session.")) continue;
       if (active.has(workItemIdFor(step.kind, step.aggregateId))) continue;
       spawned.push(staff(step));
+      if (failureOutcome() !== null) break;
     }
-    return { active: active.size, spawned, surfaceOutcome: "SURFACE" };
+    return { active: active.size, spawned, surfaceOutcome: failureOutcome() ?? "SURFACE" };
   };
 
   return Object.freeze({
@@ -383,11 +337,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     /** Resolves when every currently spawned agent has exited. */
     settle: async (): Promise<void> => {
       await Promise.all([...active.values()]);
-      const failures = [...cleanupFailures].sort((a, b) =>
-        a.message < b.message ? -1 : a.message > b.message ? 1 : 0);
-      if (failures.length === 1) throw failures[0];
-      if (failures.length > 1) {
-        throw new AggregateError(failures, "AGENT_CLEANUP_FAILED");
+      const ordered = failures();
+      if (ordered.length === 1) throw ordered[0];
+      if (ordered.length > 1) {
+        throw new AggregateError(ordered, ordered.map((error) => error.message).join("|"));
       }
     },
   });

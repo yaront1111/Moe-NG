@@ -135,7 +135,7 @@ it("proves the real-Node probe with positive and negative controls", async () =>
   if (results[1]?.outcome === "IMPORT_FAILED") {
     expect(results[1].specifier).toContain("deliberately-unresolvable.ts");
   }
-});
+}, 45_000);
 
 it("reports a child-process timeout as its own outcome", async () => {
   const packages = await discoverWorkspacePackages(repositoryRoot);
@@ -168,4 +168,4 @@ it("loads every Node-entry workspace package or pins its temporary bridge owner"
   const report = observations.map(formatObservation).join("\n");
 
   expect(issues, `runtime package report:\n${report}`).toEqual([]);
-});
+}, 180_000);

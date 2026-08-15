@@ -1,0 +1,57 @@
+{
+  "id": "task-75ee4a84bdd14d06b672abb18ed48cba",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Hydrate Claude pin requests from server-owned host capabilities",
+  "description": "Objective: make the shipped Claude launcher consumable from bounded authenticated daemon data without letting a client or test supply runtime authority. Hard dependency: task-32eddfd3c9644558b7218778e1f07e92 must first land the production Windows host observation/facts adapter. Fresh measurement at committed HEAD 6ca5da07: `ClaudeRuntimePinRequest` requires `{quotedObservation,installedRoot,pinRoot,fs,facts,clock}`, but only the first three are serializable; `createNodeClaudeRuntimeFs` and the facts port are withheld from bare `@moe/runner`, and there is no `createClaudeRuntimePinRequest`/daemon hydrator. Deliverable: a public bare-root @moe/runner factory that accepts exactly the three bounded plain runtime-reference fields, snapshots and validates them, and privately attaches the shipped Node runtime filesystem, a fresh facts observer from task-32eddfd3, and the host clock. It returns the existing pin-request/refusal contract; it never accepts or exports fs/facts/clock/process/default-dependency overrides. Real consumer: task-6cbff010 Durable Claude attempt dispatch, which must replace its temporary `FoundationAttemptDeps.runtimePorts` with this factory after this task lands. NOT in scope: daemon/store dispatch, activation/grant authority, physical provider work launch, review, or E2E canary. Owned paths: packages/runner/src/providers/claude/claude-runtime-request.ts, claude-runtime-request.js, claude-runtime-request.test.ts, packages/runner/src/surface/claude-surface.ts, and packages/runner/src/index-surface.test.ts. Verification: pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test && pnpm typecheck.",
+  "definitionOfDone": [
+    "The bare-root `createClaudeRuntimePinRequest` accepts only exact bounded plain `{quotedObservation, installedRoot, pinRoot}` data and returns a frozen request using the shipped Node filesystem, fresh production host facts, and host clock; caller-supplied functions, capabilities, extra keys, accessors, proxies, or thenables are refused.",
+    "Malformed quote/path input fails with the exact existing Claude runtime-pin reason code and `RUNTIME` layer, and a host observation failure remains UNKNOWN; no field is defaulted from caller claims or optimistically upgraded.",
+    "Passing the factory result into production `prepareClaudeRuntimePin` on the real Windows conformance path rehashes/pins the quoted closure and produces matching quoted digest plus freshly different observation/pin binding; byte, version, capability, or platform drift asserts the exact stable code/layer and never reaches a launch boundary.",
+    "The `@moe/runner` root publishes the factory and necessary data/result types while negative surface tests keep `createNodeClaudeRuntimeFs`, raw facts/process ports, `CLAUDE_LAUNCHER_DEFAULTS`, and dependency composition withheld.",
+    "Task-6cbff010 is recorded as the production consumer; before completion the worker verifies apps/daemon's manifest and lock importer edge to @moe/runner and a temporary compiled bare-specifier import of `createClaudeRuntimePinRequest`, deleting the probe in the same command.",
+    "All production files remain below 250 physical lines, the bridge is one line, runner tests execute with a nonzero count, and runner/repo typechecks pass."
+  ],
+  "taskRails": [
+    "Compose task-32eddfd3's production observer and existing runtime-pin implementation; do not recreate runtime facts, accept a test facts port, or expose individual launcher/default dependencies.",
+    "Public input is serializable plain data only. Runtime capabilities are minted inside @moe/runner after validation and never cross authenticated JSON.",
+    "TDD every behavior; exact reason code and layer on every refusal, positive generated-case counts, and mutation drills against the production factory rather than a test helper.",
+    "Keep each production source below 250 lines and commit only the five explicit owned paths; preserve foreign work in the shared tree."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
+  "priority": "CRITICAL",
+  "order": 79,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T22:56:27.313Z",
+  "updatedAt": "2026-08-15T23:23:29.250Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T23:04:01.496Z"
+  },
+  "contextFetchedBy": [
+    "architect-d9dccf21",
+    "worker-827a27f6"
+  ],
+  "blockedReason": "Fresh prerequisite measurement at committed HEAD 6ca5da07 blocks planning without speculation. Hard dependency task-32eddfd3c9644558b7218778e1f07e92 is still PLANNING (actively claimed by architect-09b5f32a), not DONE. Its three promised production files are all absent: packages/runner/src/providers/claude/claude-host-runtime.ts, its .js bridge, and claude-host-runtime.test.ts. Repo search finds no production host-runtime observer/factory/result symbol to compose; only the existing injectable ClaudeRuntimeFactsPort.observe in claude-runtime-pin.ts exists.\n\nThis task's three new request files are also correctly absent, while the two existing owned surface/test files are clean. The current task must consume task-32eddfd3's exact landed factory/result/refusal API and privately attach fresh host facts. Naming an observer, signature, success shape, or error mapping now would invent an API and risks either duplicating host authority or accepting a test facts port, both explicitly forbidden by task rail 1 and the project stale-dependency rail.\n\nLiteral unblock condition: task-32eddfd3 reaches DONE; its three committed files are present; grep confirms its production observer/factory and stable result/refusal symbols; read their exact signatures and tests; then re-measure that the factory can be imported internally without exposing fs/facts/process/clock, and plan createClaudeRuntimePinRequest against those actual bytes. No current-task bytes were written.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T23:05:37.746Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Read-only prerequisite audit; zero bytes. Reported BLOCKED and wrote Serena handoff. Verified task-32ed is PLANNING and all three producer files/symbols are absent.",
+      "whatRemains": "After task-32ed is DONE, remeasure its actual observer factory/result/refusal API and plan the five owned paths against those committed symbols.",
+      "pitfalls": "Do not plan against the injectable ClaudeRuntimeFactsPort or invent the future host observer name/signature. Public factory must never expose fs/facts/process/clock/default dependency ports.",
+      "openQuestions": "The exact producer symbol/signature and refusal union are intentionally unknown until task-32ed lands.",
+      "releasedAt": "2026-08-15T23:06:17.633Z",
+      "releasedBy": "architect-d9dccf21",
+      "reason": "Explicit architect handoff after prerequisite absence measurement so planning can continue elsewhere."
+    }
+  ]
+}

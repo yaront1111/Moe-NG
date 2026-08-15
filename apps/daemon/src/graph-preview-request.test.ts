@@ -252,7 +252,7 @@ describe("evaluateGraphPreviewRequestBytes", () => {
     const result = spawnSync(
       process.execPath,
       ["--experimental-strip-types", "--input-type=module", "--eval", script],
-      { cwd: packageRoot, encoding: "utf8" },
+      { cwd: packageRoot, encoding: "utf8", timeout: 20_000 },
     );
 
     expect(result.status).toBe(0);
@@ -263,7 +263,7 @@ describe("evaluateGraphPreviewRequestBytes", () => {
       outcome: "REQUEST_EVALUATED",
       preview: { outcome: "ANALYZED" },
     });
-  });
+  }, 30_000);
 
   it("keeps internal source subpaths sealed", () => {
     const packageRoot = fileURLToPath(new URL("..", import.meta.url));

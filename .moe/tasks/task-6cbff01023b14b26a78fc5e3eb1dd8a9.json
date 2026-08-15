@@ -99,25 +99,37 @@
     {
       "stepId": "step-5",
       "description": "TDD recovery/concurrency hardening — add each case RED, then minimally refine the service. Gate the winning launch promise and issue concurrent identical deliveries: assert one activation, one dispatch reservation, one PROCESS_OBSERVED registration (PREFLIGHT is not process authority), one final record, exactly one launcher invocation, and one capture; the loser must adopt the byte-identical final durable record or return exact `FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS`/SUSPECT before launch. Replay after completion must answer from stored bytes even when a caller candidate drifts; changed command/manifest/binding bytes must refuse without overwrite. Cover restart windows with reservation-only, grant-consumed-only, PREFLIGHT-only, PROCESS_OBSERVED-without-result, result-capture throw/malformed result, UNKNOWN/cancelled launch observation, and ambiguous final commit: persist or read an honest UNKNOWN/SUSPECT advisory bound to the current effect/session/process facts, never turn it into a result manifest, never feed pending registration back as prior, and never silently relaunch. Assert raw event-type and decision counts and exact code/layer for every refusal; generated crash cases must assert a positive case count.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
       ],
-      "startedAt": "2026-08-15T22:17:48.690Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-codec.ts",
+        "apps/daemon/src/work/foundation-attempt-codec.js",
+        "apps/daemon/src/work/foundation-attempt-contracts.ts",
+        "apps/daemon/src/work/foundation-attempt-store.ts",
+        "apps/daemon/src/work/foundation-attempt-store.js",
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "note": "Hardened replay/recovery with a full dispatch identity digest (activation request, binding, graph, sealed input manifest, and launch template), exact FOUNDATION_ATTEMPT_REPLAY_MISMATCH@DAEMON_FOUNDATION_ATTEMPT refusal, and no overwrite/relaunch on drift. Added pre-activation unverifiable-binding refusal before any authority write and contained hostile fulfilled launcher/capture proxies with exact local codes. Fresh isolated ext4 run: daemon typecheck exit 0; focused service suite Test Files 1 passed, Tests 22 passed.",
+      "startedAt": "2026-08-15T22:17:48.690Z",
+      "completedAt": "2026-08-15T22:23:48.217Z"
     },
     {
       "stepId": "step-6",
       "description": "Adversarial self-review — read the complete five-file diff as an attacker and check concurrent double delivery, replay identity, null/empty/huge/proxy inputs, cross-project/session/attempt drift, PREFLIGHT-vs-STARTED confusion, activation/result commit ambiguity, port throw/rejection/thenable behavior, manifest substitution, secret/message echo, Windows/Linux path handling, frozen output and cleanup. Run byte-restored mutation drills against production: allow a second execution-bearing node, let a REPLAYED reservation launch, or answer replay from candidate bytes; require the named production-surface tests to go red on the exact code/layer/count assertion, confirm each mutation actually applied, then restore hashes exactly. Remove every probe/artifact and keep only owned paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T22:23:57.955Z"
     },
     {
       "stepId": "step-7",
@@ -132,7 +144,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-827a27f6",
   "branch": null,
   "prLink": null,
@@ -184,27 +196,53 @@
       "author": "worker-827a27f6",
       "content": "Reopen measurement confirms QA's line gate: foundation-attempt-contracts.ts=359 and service.ts=294. I will expand owned scope by four focused files, staying at 9 distinct paths / <=10: foundation-attempt-codec.ts/.js for hostile-safe request/payload codec and foundation-attempt-store.ts/.js for reservation/final-record persistence. Existing public bridges remain one line; no unrelated daemon path will be touched. This is required to satisfy DoD <=250 per production file and QA's instruction to expand through Moe rather than declare the gate complete.",
       "timestamp": "2026-08-15T22:08:05.617Z"
+    },
+    {
+      "id": "comment-71efa190376442509cbfbf807b0dfa75",
+      "author": "worker-827a27f6",
+      "content": "Human resumed the blocked audit. I found WSL interop is available only via `/init`, giving a real Windows 10.0.26200 host with Node 24 and Rust. Expanding owned scope to the final allowed 10th path: `apps/daemon/src/work/foundation-attempt-windows.test.ts`. It will be a real Windows conformance test using the actual shipped broker/launcher; no runner API/backdoor or fake PROVEN boundary. Existing 9 owned paths remain unchanged. Production is also being tightened to remove the whole-launch override, admit only serializable runtime references, inject daemon-owned runtime ports, and require the durable GRANT_CONSUMED -> PREFLIGHT_REGISTERED -> PROCESS_OBSERVED tail before accepting PROVEN.",
+      "timestamp": "2026-08-15T22:47:31.255Z"
+    },
+    {
+      "id": "comment-58da1ca8f31d4fb2b1360dc0e3480040",
+      "author": "architect-09b5f32a",
+      "content": "ARCHITECT RE-MEASUREMENT at committed HEAD 6ca5da07 (2026-08-16): the launcher dependency is still incomplete despite the real Windows `/init` path being available. `createClaudeLauncher` requires runtime `{quotedObservation,installedRoot,pinRoot,fs,facts,clock}`; the authenticated foundation codec must accept only the first three as plain data; `createNodeClaudeRuntimeFs`, `ClaudeRuntimeFactsPort`, and `prepareClaudeRuntimePin` are deliberately withheld from the bare root; and `rg` finds no production host facts observer or daemon hydrator. The current WIP `FoundationAttemptDeps.runtimePorts` is therefore test-owned authority unless replaced by a production factory.\n\nTwo bounded prerequisites were created rather than narrow DoD 2 or publish launcher defaults: task-32eddfd3c9644558b7218778e1f07e92 (internal production Windows installed-runtime observation/current facts) -> task-75ee4a84bdd14d06b672abb18ed48cba (bare-root `createClaudeRuntimePinRequest` that accepts only the 3-field serializable reference and privately attaches shipped capabilities) -> THIS task. After both land, remove `runtimePorts` from `FoundationAttemptDeps`, consume the bare-root factory, verify apps/daemon manifest+lock+compiled bare import, and drive the real default launcher under Windows. A physical-boundary override task was deliberately NOT created because `/init` gives a real Windows 10.0.26200 / Node 24.16 path.\n\nDo not fold the dirty J1/index files into this 10-path launcher scope: review/goal.close is explicitly out of scope. That compatibility is being measured separately; no launcher plan may use fixture-backed review acceptance as evidence.",
+      "timestamp": "2026-08-15T22:56:43.940Z"
+    },
+    {
+      "id": "comment-898cea3ad8d349d9ba38ce35e72e1942",
+      "author": "worker-827a27f6",
+      "content": "Step-6 scope update from real Windows conformance measurement (not a mocked boundary): the actual broker plus harmless copied Windows executables cannot produce a launcher PROVEN result. The boundary emits COMPLETED, but BrokerSession.onCompleted records terminal with closeChannels=false and never ends the control channel; the broker/session only closes at the launcher timeout, then provider stream capture is destroyed and the public launcher returns CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT. A raw boundary probe confirmed the completed result only resolves at the configured timeout, masking this when streams are not captured.\n\nThis is a prerequisite production defect surfaced by the task's required real physical acceptance path. I will make the smallest runner correction in packages/runner/src/platform/windows/windows-boundary-session.ts: on natural completion, end only the control channel and arm cleanup while leaving provider stdout/stderr open to drain to EOF. Failure/cancel paths continue closing provider channels. The already-red real Windows daemon integration test is the TDD failure proof.\n\nTo keep the approved <=10 affected-path limit, I will fold the untracked new foundation-attempt-windows.test.ts cases into the already-owned foundation-attempt-service.test.ts and delete the separate file before completion. Final path count remains 10: the original nine plus windows-boundary-session.ts. No runner API, dependency injection seam, mock boundary, or authority backdoor is added.",
+      "timestamp": "2026-08-15T23:18:13.475Z"
+    },
+    {
+      "id": "comment-c0e80502b346439dbe72b828a35e28eb",
+      "author": "worker-827a27f6",
+      "content": "Correction to comment-898cea after re-reading the native broker instead of trusting the post-terminal hypothesis: the measured failure is PRE-terminal. `watch.rs:23-43` explicitly records that after the first 50ms wait slice the real synchronous fd0 read blocks while the parent keeps control silent/open. The raw boundary's COMPLETED only arrives after the parent timeout closes fd0; therefore an `onCompleted`/endControl TypeScript change cannot repair it. I did not edit the runner session file.\n\nCreated exact prerequisite `task-7ba898f5f587453f80c1e93e93e4977c` to add nonblocking control readiness at the native broker boundary with real Windows proof. The current task is also still missing the architect-measured production runtime authority chain: `task-32eddfd3c9644558b7218778e1f07e92` (itself waiting on task-ff589abd7dd84ee197a9abee729bef78) then `task-75ee4a84bdd14d06b672abb18ed48cba`. Current `FoundationAttemptDeps.runtimePorts` is intentionally WIP/test-composed and cannot ship as server authority.\n\nThese gaps are outside the current task's already-full 10-path scope and cannot be solved by a mock, a fast-<50ms provider loophole, a deep import, or a local restatement. Blocking step 6 until all three producer chains land; preserve the current WIP for resumption.",
+      "timestamp": "2026-08-15T23:24:08.724Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-15T22:17:48.690Z",
+  "updatedAt": "2026-08-15T23:24:42.597Z",
   "contextFetchedBy": [
     "governor-a627169a",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "architect-09b5f32a",
+    "architect-d9dccf21"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 11,
+    "executedStepCount": 12,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedReason": null,
+  "blockedReason": "Adversarial review found two independent missing production capabilities that prevent safe verification and are outside this task's full 10-path scope.\nFirst, the current FoundationAttemptDeps.runtimePorts remains caller/test-composed runtime authority. Architect remeasurement requires the production chain task-ff589abd7dd84ee197a9abee729bef78 -> task-32eddfd3c9644558b7218778e1f07e92 -> task-75ee4a84bdd14d06b672abb18ed48cba, after which this service can replace runtimePorts with the bare-root server-owned hydrator.\nSecond, real Windows 10.0.26200 testing with the actual release broker proves packages/runner native watch blocks on silent-open fd0 after its first 50ms slice (documented at watch.rs:23-43); provider exit is not observed until parent timeout, and the public launcher returns CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT. No COMPLETED exists before timeout, so the previously proposed TypeScript onCompleted patch is ineffective. Prerequisite task-7ba898f5f587453f80c1e93e93e4977c was created for nonblocking native control polling with a real Windows proof.\nA mock boundary, deep import, locally forged runtime ports, or sub-50ms executable would narrow/fake DoD 1/2 and violate task rails. WIP and exact evidence are preserved in Serena handoff.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T23:24:42.597Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Read both prior handoffs/comments, rechecked the dependency board and committed HEAD, confirmed all launcher/ledger/runtime bridge prerequisites except effect.activate are landed, and reported the task BLOCKED with exact evidence.",
@@ -238,7 +276,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [
     {

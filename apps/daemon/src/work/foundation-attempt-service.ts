@@ -1,7 +1,7 @@
 /** Durable single-node dispatch. Binding -> activation -> reservation -> launch -> advisory. */
 
 import { buildInputManifest, buildResultManifest } from "@moe/runner";
-import type { ClaudeLaunchOptions, ClaudeLaunchResult } from "@moe/runner";
+import type { ClaudeLaunchOptions, ClaudeLaunchRequest } from "@moe/runner";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { decodeActivationRequestBytes } from "../activation/activation-ingress-contracts.js";
@@ -22,7 +22,8 @@ import type {
 } from "./foundation-attempt-contracts.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
-  commitFoundationPhase, readFoundationReservationDigest, readStoredFoundationAttempt,
+  commitFoundationPhase, readDurableFoundationObservation,
+  readFoundationReservationDigest, readStoredFoundationAttempt,
 } from "./foundation-attempt-store.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
@@ -30,12 +31,13 @@ export type {
   FoundationAttemptOutcome, FoundationAttemptRecordAnswer,
 } from "./foundation-attempt-store.js";
 
-/** The two boundaries a test may replace — the physical launch and the physical
- *  post-launch workspace observation. Every decision above them stays production. */
+/** The daemon owns runtime capabilities; only post-launch workspace observation
+ * is supplied by composition. The shipped launcher and its physical boundary
+ * are deliberately not replaceable through this service. */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
-  readonly launch?: (value: unknown, options?: ClaudeLaunchOptions) => Promise<ClaudeLaunchResult>;
-  readonly launchOptions?: ClaudeLaunchOptions;
+  readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
+  readonly runtimePorts: Pick<ClaudeLaunchRequest["runtime"], "clock" | "facts" | "fs">;
   readonly store: SqliteEventStore;
 }
 
@@ -80,14 +82,14 @@ async function contained(call: () => unknown, requirePromise: boolean): Promise<
   } catch { return null; }
 }
 
-function observedParts(value: unknown): readonly [unknown, unknown] | null {
-  if (!isRecord(value) || value["kind"] !== "OBSERVED" || value["ok"] !== true
-    || value["truthClass"] !== "PROVEN") return null;
-  const observation = value["observation"], registration = value["registration"];
-  return isRecord(observation) && isRecord(registration)
-    && textOf(observation, "observationDigest") !== null
-    && textOf(registration, "processIdentity") !== null
-    ? [observation, registration] : null;
+function narrowLaunchOptions(
+  options: FoundationAttemptDeps["launchOptions"],
+): ClaudeLaunchOptions | undefined {
+  if (options === undefined) return undefined;
+  return Object.freeze({
+    ...(options.platform === undefined ? {} : { platform: options.platform }),
+    ...(options.signal === undefined ? {} : { signal: options.signal }),
+  });
 }
 
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
@@ -176,8 +178,16 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     const section = envelope.request.payload["activation"];
     const claim = exactKeys(isRecord(section) ? section["claim"] : null, CLAIM_KEYS);
     if (claim === null) return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
-    if (preActivationBindingMatches(request, envelope.request.payload) === false) {
+    if (preActivationBindingMatches(request, envelope.request.payload) !== true) {
       return refuseLocal("FOUNDATION_ATTEMPT_BINDING_MISMATCH");
+    }
+    const identity = identifyFoundationDispatch(
+      request, sealed.manifest as unknown as Record<string, unknown>);
+    if (!identity.ok) return identity;
+    const target = deriveDispatchAggregateId(request.binding.attemptAggregateId);
+    const priorDigest = readFoundationReservationDigest(store, target);
+    if (priorDigest !== null && priorDigest !== identity.digest) {
+      return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
     }
     const activation = runEffectActivateCommand(store, request.activationRequestBytes);
     if (!activation.ok) return foundationAttemptRefusal(activation.code, activation.refusedBy);
@@ -185,16 +195,10 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     const bound: FoundationAttemptBound = Object.freeze({
       aggregateId: request.binding.attemptAggregateId, claim, commandId, correlationId, nodeKey,
       principalId, projectId, sessionId: request.binding.sessionId,
-      target: deriveDispatchAggregateId(request.binding.attemptAggregateId),
+      target,
     });
     const record = durableActivation(store, bound);
     if (isRefusal(record)) return record;
-    const identity = identifyFoundationDispatch(request, sealed.manifest as unknown as Record<string, unknown>);
-    if (!identity.ok) return identity;
-    const priorDigest = readFoundationReservationDigest(store, bound.target);
-    if (priorDigest !== null && priorDigest !== identity.digest) {
-      return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
-    }
     const reservation = encodeFoundationPayload({
       activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
       attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey,
@@ -219,16 +223,18 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       return adopted.ok || adopted.code !== "FOUNDATION_ATTEMPT_RECORD_ABSENT" ? adopted
         : refuseLocal("FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS");
     }
-    const launch = deps.launch ?? createFoundationClaudeLauncher({
+    const launch = createFoundationClaudeLauncher({
       aggregateId: bound.aggregateId, correlationId, key: { commandId, principalId, projectId },
       projectId, store,
     });
     const result = await contained(
-      () => launch(launchRequestBody(record, bound, request.launchTemplate), deps.launchOptions),
+      () => launch(launchRequestBody(
+        record, bound, request.launchTemplate, deps.runtimePorts),
+      narrowLaunchOptions(deps.launchOptions)),
       true);
     const manifest = sealed.manifest as unknown as Record<string, unknown>;
     if (!isRecord(result)) return unproven(bound, record, manifest, null);
-    const observed = observedParts(result);
+    const observed = readDurableFoundationObservation(store, bound, record, result);
     if (observed === null) return unproven(bound, record, manifest, result);
     return await capture(bound, record, manifest, observed[0], observed[1]);
   }

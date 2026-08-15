@@ -234,7 +234,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:06.538Z",
-  "updatedAt": "2026-08-15T19:16:15.162Z",
+  "updatedAt": "2026-08-15T22:54:55.994Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:09:54.588Z",
     "plannedStepCount": 9,
@@ -247,7 +247,9 @@
   },
   "contextFetchedBy": [
     "worker-fd8f822b",
-    "qa-f6ca780e"
+    "qa-f6ca780e",
+    "governor-a627169a",
+    "architect-d9dccf21"
   ],
   "blockedReason": null,
   "blockedResourceId": null,

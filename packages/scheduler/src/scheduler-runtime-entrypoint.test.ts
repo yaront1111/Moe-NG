@@ -2,17 +2,39 @@ import { Worker } from "node:worker_threads";
 
 import { expect, it } from "vitest";
 
+const WORKER_PROBE_TIMEOUT_MS = 20_000;
+const WORKER_TEST_TIMEOUT_MS = 30_000;
+
 it("loads and executes the scheduler entrypoint in Node's strip-types runtime", async () => {
   const result = await new Promise<unknown>((resolve, reject) => {
     const worker = new Worker(
       new URL("./scheduler-entrypoint-smoke-worker.mjs", import.meta.url),
       { execArgv: ["--experimental-strip-types"] },
     );
-    worker.once("message", resolve);
-    worker.once("error", reject);
+    let settled = false;
+    const cleanup = (): void => {
+      clearTimeout(timeout);
+      worker.removeAllListeners();
+    };
+    const settle = (outcome: () => void): void => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      void worker.terminate().then(outcome, reject);
+    };
+    const timeout = setTimeout(() => {
+      settle(() => reject(new Error(
+        `scheduler entrypoint smoke worker timed out after ${WORKER_PROBE_TIMEOUT_MS}ms`,
+      )));
+    }, WORKER_PROBE_TIMEOUT_MS);
+
+    worker.once("message", (message) => settle(() => resolve(message)));
+    worker.once("error", (error) => settle(() => reject(error)));
     worker.once("exit", (code) => {
       if (code !== 0) {
-        reject(new Error(`scheduler entrypoint smoke worker exited with ${code}`));
+        settle(() => reject(new Error(`scheduler entrypoint smoke worker exited with ${code}`)));
+      } else {
+        settle(() => reject(new Error("scheduler entrypoint smoke worker exited without a result")));
       }
     });
   });
@@ -36,4 +58,4 @@ it("loads and executes the scheduler entrypoint in Node's strip-types runtime", 
     stageCount: 1,
     validateType: "function",
   });
-});
+}, WORKER_TEST_TIMEOUT_MS);

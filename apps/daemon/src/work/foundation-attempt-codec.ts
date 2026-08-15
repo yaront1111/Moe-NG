@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   FOUNDATION_ATTEMPT_BINDING_KEYS, FOUNDATION_ATTEMPT_INPUT_KEYS,
-  FOUNDATION_ATTEMPT_REQUEST_KEYS, FOUNDATION_ATTEMPT_SCHEMA_VERSION,
+  FOUNDATION_ATTEMPT_REQUEST_KEYS, FOUNDATION_ATTEMPT_RUNTIME_KEYS, FOUNDATION_ATTEMPT_SCHEMA_VERSION,
   FOUNDATION_ATTEMPT_TEMPLATE_KEYS, refuseLocal,
 } from "./foundation-attempt-contracts.js";
 import type {
@@ -102,11 +102,14 @@ export function decodeFoundationAttemptRequest(input: unknown): FoundationAttemp
     return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
   }
   const environment = stringRecord(template["environment"]);
+  const runtime = exactKeys(template["runtime"], FOUNDATION_ATTEMPT_RUNTIME_KEYS);
   const argv = template["argv"], entries = manifest["entries"];
   if (!text(binding["attemptAggregateId"]) || !text(binding["nodeKey"])
     || !text(binding["sessionId"]) || !text(manifest["baseIdentity"])
     || !Array.isArray(entries) || !Array.isArray(argv) || !argv.every(text)
-    || !text(template["cwd"]) || environment === null
+    || !text(template["cwd"]) || environment === null || runtime === null
+    || !text(runtime["installedRoot"]) || !text(runtime["pinRoot"])
+    || !isRecord(runtime["quotedObservation"])
     || !text(template["bootstrapCredentialDigest"])) {
     return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
   }
@@ -120,7 +123,8 @@ export function decodeFoundationAttemptRequest(input: unknown): FoundationAttemp
     launchTemplate: Object.freeze({ argv: Object.freeze([...argv]),
       bootstrapCredentialDigest: template["bootstrapCredentialDigest"], cwd: template["cwd"],
       environment, launchSelection: template["launchSelection"], limits: template["limits"],
-      runtime: template["runtime"] }),
+      runtime: Object.freeze({ installedRoot: runtime["installedRoot"], pinRoot: runtime["pinRoot"],
+        quotedObservation: runtime["quotedObservation"] }) }),
   }) });
 }
 

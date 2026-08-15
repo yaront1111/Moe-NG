@@ -2,7 +2,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 as windowsPath } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
@@ -27,11 +27,36 @@ export interface AgentSpawnerOptions {
   /** Maximum wait for process close after requesting tree termination. */
   readonly killGraceMs?: number;
   readonly log?: (line: string) => void;
+  /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
+  readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
   readonly timeoutMs?: number;
   /** Platform override for the kill strategy (win32 needs a tree kill). */
   readonly platform?: NodeJS.Platform;
+}
+
+export type AgentProcessContainmentReason =
+  | "CLOSE_NOT_OBSERVED"
+  | "PID_UNAVAILABLE"
+  | "TREE_KILL_FAILED";
+
+export class AgentProcessContainmentError extends Error {
+  readonly code = "AGENT_PROCESS_CONTAINMENT_FAILED";
+  readonly reason: AgentProcessContainmentReason;
+
+  constructor(reason: AgentProcessContainmentReason) {
+    super(`AGENT_PROCESS_CONTAINMENT_FAILED:${reason}`);
+    this.name = "AgentProcessContainmentError";
+    this.reason = reason;
+  }
+}
+
+/** Callable spawn boundary plus explicit ownership of every process it starts. */
+export interface AgentSpawner {
+  (request: SpawnRequest): Promise<void>;
+  readonly activeCount: () => number;
+  readonly close: () => Promise<void>;
 }
 
 /** Default agent lifetime: the claim TTL, so a hung agent frees its slot no later
@@ -106,7 +131,7 @@ function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
 export function claudeSpawner(
   mcpOrigin: string,
   options: AgentSpawnerOptions = {},
-): (request: SpawnRequest) => Promise<void> {
+): AgentSpawner {
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   CONFIG_DIRS.add(configDir);
@@ -119,11 +144,19 @@ export function claudeSpawner(
   const platform = options.platform ?? process.platform;
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
+  const active = new Set<{
+    readonly done: Promise<void>;
+    readonly terminate: () => void;
+  }>();
+  const containmentFailures: AgentProcessContainmentError[] = [];
+  let closed = false;
+  let closing: Promise<void> | undefined;
   // `async` is load-bearing, not decoration: building the invocation below can
   // REFUSE, and the wrapper calls this as `spawnAgent(...).catch(...)` without
   // awaiting. Outside a promise a refusal would escape synchronously and take
   // the poll tick with it, so every throw here must surface as a rejection.
-  return async (request: SpawnRequest): Promise<void> => {
+  const spawnAgent = async (request: SpawnRequest): Promise<void> => {
+    if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents work IN their workspace and get the file/exec tools a
     // worker needs; chain-step agents keep the MCP-only surface.
@@ -155,7 +188,10 @@ export function claudeSpawner(
         },
       },
     }), "utf8");
-    return new Promise<void>((resolve, reject) => {
+    let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
+    let terminateOwned: () => void = () => undefined;
+    let completedBeforeRegistration = false;
+    const done = new Promise<void>((resolve, reject) => {
       let child: ChildProcess;
       try {
         child = spawn(invocation.file, [...invocation.args], {
@@ -170,25 +206,102 @@ export function claudeSpawner(
         reject(error);
         return;
       }
-      // A hung agent must not hold its maxAgents slot forever: kill its process
-      // tree after the lifetime bound (on win32 the child is cmd.exe, so a plain
-      // kill would orphan the real agent). The claim's own reap horizon frees the
-      // work item; this frees the wrapper slot and the credentialed config file.
-      const killDirect = (): void => {
-        try { child.kill("SIGKILL"); } catch { /* already gone */ }
+      // The config file carries the agent's credential; it must not outlive the
+      // owned process. Every settlement path removes it; a missing file is fine.
+      let settled = false;
+      let terminating = false;
+      let childClosed = false;
+      let treeKillConfirmed = false;
+      let killHelper: ChildProcess | undefined;
+      let killTimer: ReturnType<typeof setTimeout> | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const cleanup = (): void => {
+        if (timer !== undefined) clearTimeout(timer);
+        if (killTimer !== undefined) clearTimeout(killTimer);
+        if (killHelper !== undefined) {
+          try { killHelper.kill("SIGKILL"); } catch { /* already gone */ }
+          try { killHelper.unref(); } catch { /* optional for injected children */ }
+          killHelper = undefined;
+        }
+        rmSync(mcpConfigPath, { force: true });
+        if (owned !== undefined) active.delete(owned);
+        else completedBeforeRegistration = true;
+      };
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        resolve();
+      };
+      const failContainment = (reason: AgentProcessContainmentReason): void => {
+        if (settled) return;
+        settled = true;
+        const error = new AgentProcessContainmentError(reason);
+        containmentFailures.push(error);
+        closed = true;
+        cleanup();
+        try {
+          options.onFatalContainment?.(error);
+        } catch { /* an observer cannot replace or suppress the containment failure */ }
+        reject(error);
+      };
+      const killDirectBestEffort = (): void => {
+        try { child.kill("SIGKILL"); } catch { /* containment failure is reported separately */ }
+      };
+      const maybeFinishTermination = (): void => {
+        if (terminating && treeKillConfirmed && childClosed) finish();
+      };
+      const systemRoot = (): string | null => {
+        const environment = options.environment ?? process.env;
+        const entry = Object.entries(environment).find(([key, value]) =>
+          key.toUpperCase() === "SYSTEMROOT" && typeof value === "string" && value !== "");
+        const value = entry?.[1];
+        return value !== undefined && windowsPath.isAbsolute(value) ? value : null;
       };
       const killTree = (): void => {
-        if (platform === "win32" && child.pid !== undefined) {
-          try {
-            const killer = spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-              stdio: "ignore",
-            });
-            killer.on("error", killDirect);
-          } catch { killDirect(); }
+        if (child.pid === undefined) {
+          killDirectBestEffort();
+          failContainment("PID_UNAVAILABLE");
           return;
         }
-        if (platform === "win32" || child.pid === undefined) {
-          killDirect();
+        if (platform === "win32") {
+          const root = systemRoot();
+          if (root === null) {
+            killDirectBestEffort();
+            failContainment("TREE_KILL_FAILED");
+            return;
+          }
+          try {
+            const killer = spawn(
+              windowsPath.join(root, "System32", "taskkill.exe"),
+              ["/pid", String(child.pid), "/T", "/F"],
+              { stdio: "ignore", windowsHide: true },
+            );
+            killHelper = killer;
+            try { killer.unref(); } catch { /* injected children may omit it */ }
+            let killerSettled = false;
+            const failKiller = (): void => {
+              if (killerSettled) return;
+              killerSettled = true;
+              killDirectBestEffort();
+              failContainment("TREE_KILL_FAILED");
+            };
+            killer.once("error", failKiller);
+            killer.once("close", (code) => {
+              if (killerSettled) return;
+              killerSettled = true;
+              if (code !== 0) {
+                killDirectBestEffort();
+                failContainment("TREE_KILL_FAILED");
+                return;
+              }
+              treeKillConfirmed = true;
+              maybeFinishTermination();
+            });
+          } catch {
+            killDirectBestEffort();
+            failContainment("TREE_KILL_FAILED");
+          }
           return;
         }
         try {
@@ -197,21 +310,12 @@ export function claudeSpawner(
           // This is lifecycle containment, not hermetic isolation: a hostile
           // same-UID process can still escape into a new session/process group.
           killProcessGroup(-child.pid, "SIGKILL");
-        } catch { killDirect(); }
-      };
-      // The config file carries the agent's credential; it must not outlive the
-      // agent it was minted for. Both exit paths remove it; a missing file is fine.
-      let settled = false;
-      let terminating = false;
-      let killTimer: ReturnType<typeof setTimeout> | undefined;
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const finish = (): void => {
-        if (settled) return;
-        settled = true;
-        if (timer !== undefined) clearTimeout(timer);
-        if (killTimer !== undefined) clearTimeout(killTimer);
-        rmSync(mcpConfigPath, { force: true });
-        resolve();
+          treeKillConfirmed = true;
+          maybeFinishTermination();
+        } catch {
+          killDirectBestEffort();
+          failContainment("TREE_KILL_FAILED");
+        }
       };
       const beginTermination = (): void => {
         if (settled || terminating) return;
@@ -219,10 +323,13 @@ export function claudeSpawner(
         // Arm the hard bound before signalling: an injected/test boundary can
         // report `close` synchronously from killTree(), and finish() must be
         // able to cancel this timer in that race.
-        killTimer = setTimeout(finish, killGraceMs);
+        killTimer = setTimeout(() => {
+          failContainment(treeKillConfirmed ? "CLOSE_NOT_OBSERVED" : "TREE_KILL_FAILED");
+        }, killGraceMs);
         if (typeof killTimer.unref === "function") killTimer.unref();
         killTree();
       };
+      terminateOwned = beginTermination;
       const failInput = (): void => { beginTermination(); };
       timer = setTimeout(() => {
         log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
@@ -233,9 +340,17 @@ export function claudeSpawner(
       if (typeof timer.unref === "function") timer.unref();
       child.on("close", (code) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
-        finish();
+        childClosed = true;
+        if (terminating) maybeFinishTermination();
+        else finish();
       });
-      child.on("error", () => { if (!terminating) finish(); });
+      child.on("error", () => {
+        if (settled || terminating) return;
+        // A spawn error with no pid proves no owned process exists. Once a pid
+        // exists, an error is not exit evidence and must go through tree death.
+        if (child.pid === undefined) finish();
+        else beginTermination();
+      });
       // A child can exit after spawn() succeeds but before stdin is written.
       // Writable streams surface that race as an asynchronous EPIPE; without
       // a listener it escapes the promise and crashes the whole wrapper.
@@ -247,5 +362,32 @@ export function claudeSpawner(
         failInput();
       }
     });
+    owned = { done, terminate: terminateOwned };
+    if (!completedBeforeRegistration) active.add(owned);
+    return done;
   };
+
+  const callable = spawnAgent as AgentSpawner;
+  Object.defineProperties(callable, {
+    activeCount: { value: (): number => active.size },
+    close: {
+      value: (): Promise<void> => {
+        if (closing !== undefined) return closing;
+        closed = true;
+        closing = (async (): Promise<void> => {
+          const current = [...active];
+          for (const process of current) process.terminate();
+          await Promise.allSettled(current.map((process) => process.done));
+          rmSync(configDir, { force: true, recursive: true });
+          CONFIG_DIRS.delete(configDir);
+          if (containmentFailures.length === 1) throw containmentFailures[0];
+          if (containmentFailures.length > 1) {
+            throw new AggregateError(containmentFailures, "AGENT_PROCESS_CONTAINMENT_FAILED");
+          }
+        })();
+        return closing;
+      },
+    },
+  });
+  return callable;
 }

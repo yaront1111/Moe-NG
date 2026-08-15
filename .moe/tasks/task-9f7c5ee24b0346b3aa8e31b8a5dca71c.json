@@ -21,62 +21,97 @@
     {
       "stepId": "step-1",
       "description": "PRE-FLIGHT / RE-MEASURE WITHOUT WRITING BYTES. Record the task-start commit and `git status --short` for `scripts/release/supply-chain.mjs`, `tests/integration/release-supply-chain.test.mjs`, and the proposed new test. The canonical-inventory owner finished at 2e34a5f and current status is clean; if any required path is dirty at worker start, stop and report the collision rather than reset, stash, or edit over foreign work. Re-read archiveSource and cleanRoots: confirm the former still has an unguarded cleanup and the latter still catches and reports each cleanup failure; confirm no one has already created the focused test. Record a byte hash for the existing `tests/integration/release-supply-chain.test.mjs` because DoD requires it to remain unmodified. Confirm `typecheck:release`, `test:integration`, and Vitest's `tests/**/*.test.ts` include on current bytes. Capture the repo-wide baseline failure paths and exit codes before the diff by running each required leg separately (`pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`, and `pnpm --filter @moe/daemon test`); the daemon filter must show a nonzero executed-test count, never `No projects matched`. Do not commit logs or generated evidence.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
       ],
-      "startedAt": "2026-08-15T21:55:55.884Z"
+      "note": "Re-measured at HEAD 6ca5da0; all three required paths are clean and the new focused test is absent. Existing release-supply-chain.test.mjs hash is e603b7358166a01558a9011074b5975669aca16b8e8229c27ba5f4295d350be5 and will remain pinned. archiveSource still has unguarded finally rmSync at lines 56-65; cleanRoots still catches/reports cleanup at 185-188. supply-chain.mjs is 257 lines (<400). package.json still includes typecheck:release and test:integration; Vitest includes tests/**/*.test.ts.\n\nFresh pre-diff baselines under exact Node 24.16.0 / pnpm 11.0.8, each run separately:\n- pnpm typecheck: exit 0.\n- pnpm test: exit 1 after 273 files / 6,507 tests discovered (6,494 passed, 3 skipped); 10 timeout/loadability failures in foreign paths: tests/runtime/package-loadability.test.ts, packages/core/src/runtime-entrypoint.test.ts, packages/runner/src/runtime-entrypoint.test.ts, packages/import/src/legacy-shadow.test.ts, packages/mcp/src/mcp-root-surface.test.ts, packages/mcp/src/mcp-runtime-entrypoint.test.ts, packages/review/src/runtime-entrypoint.test.ts, tests/e2e/foundation/e2e-harness.test.ts, packages/testkit/src/foundation/foundation-incident-probe-precision.test.ts.\n- pnpm verify:foundation: exit 1, 32 files / 661 tests, only packages/testkit/src/foundation/foundation-incident-probe-precision.test.ts timeout.\n- pnpm verify:store: exit 0, 42 files / 501 tests passed.\n- pnpm --filter @moe/daemon test: real filter executed 95 files / 1,971 tests; exit 1 with foreign apps/daemon/src/work/foundation-attempt-service.test.ts (10 active task-6cbff010 failures) and apps/daemon/src/index-surface.test.ts package-root timeout. No baseline failure intersects this task's two owned paths.\n\nNo task bytes written; required paths remained clean and existing test hash unchanged after the baselines.",
+      "startedAt": "2026-08-15T21:55:55.884Z",
+      "completedAt": "2026-08-15T22:55:02.681Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, WITH THE MINIMUM PRODUCTION TEST SEAM. In `archiveSource`, make the function a named export and add one optional dependency object whose sole override is `rmSync`; default it to the imported real `rmSync`. Do not add the catch yet, do not inject command/tar/git, and leave SYSTEM_PORTS calling archiveSource with one argument. Create `tests/integration/release-archive-cleanup.test.ts`, importing and exercising this production export. Build a tiny temporary Git repository using Node child-process/path/fs APIs (no shell-concatenated paths), commit one file, and use its real HEAD for archive success. Add four explicit named cases: (1) a throwing injected rmSync was attempted exactly once, is reported through a console.error spy, and the caller still receives the exact `{ destination, ok: true }`; (2) with a nonexistent repository root plus a pre-created `<destination>.tar`, the throwing injected rmSync was attempted/reported and the caller still receives the full exact refusal `{ code: \"RELEASE_SUPPLY_CHAIN_REFUSED\", ok: false, reason: \"SOURCE_ARCHIVE_FAILED\", refusedBy: \"RELEASE_SUPPLY_CHAIN\" }`; (3) default cleanup removes the real archive after success; and (4) default cleanup removes the pre-created archive after that exact refusal. Assert filesystem absence, not merely mock calls, in cases 3-4. Restore the console spy and recursively remove temporary roots with the test's real rmSync in finally/afterEach. Run only `pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts`: all four tests must be discovered, and the two throwing-cleanup cases must fail because the current unguarded finally replaces their results.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
       ],
       "newFiles": [
         "tests/integration/release-archive-cleanup.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-archive-cleanup.test.ts"
+      ],
+      "note": "TDD RED landed with the minimum seam only: archiveSource is now a named export and accepts a single optional rmSync dependency defaulting to the real imported rmSync; SYSTEM_PORTS remains a one-argument production caller and no catch/fix exists yet. Added a focused four-case integration test using a real temporary Git repository and real git archive/tar. It pins the exact success value, the full SOURCE_ARCHIVE_FAILED code/reason/refusedBy object, one cleanup attempt/report, and actual archive absence on default success/refusal paths. Temporary roots and console spies restore in afterEach.\n\nFocused RED command executed a nonzero count: `pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts` => Test Files 1 failed; Tests 2 failed | 2 passed (4); exit 1. Both named throwing-cleanup cases failed for the intended reason: `promise rejected \"Error: EBUSY: archive held\" instead of resolving`, proving the unguarded finally replaced the computed success and refusal. Existing release-supply-chain.test.mjs remains byte-unmodified at SHA-256 e603b7358166a01558a9011074b5975669aca16b8e8229c27ba5f4295d350be5.",
+      "startedAt": "2026-08-15T22:55:10.849Z",
+      "completedAt": "2026-08-15T22:56:59.973Z"
     },
     {
       "stepId": "step-3",
       "description": "MINIMUM FIX / GREEN. Change only archiveSource's finally block so the injected-or-default removal is attempted inside `try`, and on error calls `console.error(`release temporary cleanup failed: ${archive}: ${String(error)}`)` without rethrowing. Match cleanRoots' existing wording and subordinate-cleanup discipline; add at most a concise why-comment that cleanup reporting must not replace the already-computed archive result. Do not touch cleanRoots, SYSTEM_PORTS, release evidence, releaseRefusal, or any refusal vocabulary. The imported real rmSync remains the production default, including `{ force: true }`, so successful cleanup behavior is unchanged. Run the focused Vitest file once: require exactly four executed/passing tests, including literal code/reason/layer assertions for the refusal.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ],
+      "note": "Minimal GREEN implemented only in archiveSource's finally: the injected/default removeArchive call remains `{ force: true }`, is attempted inside try, and cleanup errors are reported with the same `release temporary cleanup failed: <path>: <error>` convention as cleanRoots without rethrowing. No cleanRoots, SYSTEM_PORTS, evidence, releaseRefusal, or vocabulary change.\n\nFocused run: `pnpm exec vitest run tests/integration/release-archive-cleanup.test.ts` => Test Files 1 passed; Tests 4 passed (4); exit 0. The refusal cases assert literal code RELEASE_SUPPLY_CHAIN_REFUSED, reason SOURCE_ARCHIVE_FAILED and layer RELEASE_SUPPLY_CHAIN through the exact frozen expected object. Narrow checkJs gate `pnpm typecheck:release` also exits 0.",
+      "startedAt": "2026-08-15T22:57:03.716Z",
+      "completedAt": "2026-08-15T22:57:50.633Z"
     },
     {
       "stepId": "step-4",
       "description": "LOAD-BEARING MUTATION DRILL. Hash `scripts/release/supply-chain.mjs`, copy it to an out-of-repo temporary file, and install an EXIT trap that restores the bytes even if the drill command fails. Mutate exactly the new guarded finally back to the equivalent unguarded injected/default removal call (`finally { removeArchive(archive, { force: true }); }`), asserting exactly one replacement occurred. Run the two named `preserves ... when cleanup throws` tests and require a nonzero exit with both cases reported failed on the result-preservation assertions; a zero-test or zero-failure run is itself failure. Restore from the temporary copy, delete it, and compare the production file's SHA-256 to the pre-drill hash byte-for-byte before proceeding. Do not leave a probe, archive, transcript, or generated evidence file in the repository.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs"
+      ],
+      "note": "Load-bearing mutation drill used an out-of-repo mktemp backup/output plus EXIT trap; it asserted exactly one guarded-cleanup replacement, mutated only the finally back to unguarded `removeArchive`, and restored without git checkout/reset. Named filter executed exactly the two preservation cases: Test Files 1 failed; Tests 2 failed | 2 skipped (4); mutation exit 1. Both named tests failed on `promise rejected Error: EBUSY: archive held instead of resolving`, proving the production guard preserves both computed results. Before/after SHA-256 matched exactly: 2339a2078fa6c53c9a7d3cf7635be6baee5d0beaada79b6866f8015481bdb040. Temporary backup/output were deleted and no repo artifact remains. Fresh post-restore focused run: 1 file / 4 tests passed, exit 0.",
+      "startedAt": "2026-08-15T22:57:54.505Z",
+      "completedAt": "2026-08-15T22:59:48.378Z"
     },
     {
       "stepId": "step-5",
       "description": "ONE FINAL VERIFICATION STEP. First re-run the five repo-wide legs from step 1 separately and compare their HEAD failing-path sets with the recorded baseline; the new failing-path delta intersected with this task's owned paths must be empty, and any foreign red must be quoted verbatim with exact paths. Confirm `git diff --name-only` is restricted to `scripts/release/supply-chain.mjs` plus the new focused test, the stored hash proves the existing release-supply-chain.test.mjs is unchanged, and the production source remains below 400 physical lines. Then run the exact completion-evidence command fresh in the foreground: `pnpm typecheck:release && pnpm test:integration`. It must exit 0; output must show the new focused file executed exactly four passing tests and the existing Node release suite executed a nonzero passing count. Preserve the command, exit code, and output tail for moe.complete_task.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-archive-cleanup.test.ts"
+      ],
+      "note": "Fresh post-diff repository baselines, each run separately under Node 24.16.0/pnpm 11.0.8:\n- pnpm typecheck: exit 0 (baseline exit 0).\n- pnpm test: exit 1; 274 files / 6514 tests. Only failing path at HEAD: packages/mcp/src/mcp-runtime-entrypoint.test.ts. Baseline had ten foreign timeout/loadability failures; no failure intersects owned paths.\n- pnpm verify:foundation: exit 0; 32 files / 661 tests (baseline foreign timeout is now green).\n- pnpm verify:store: exit 0; 42 files / 504 tests (baseline exit 0 / 501 tests).\n- pnpm --filter @moe/daemon test: exit 1; 96 files / 1971 tests. Exact failing paths: apps/daemon/src/graph-preview-request.test.ts, apps/daemon/src/index-surface.test.ts, and two failures in apps/daemon/src/runtime-entrypoint.test.ts. They are subprocess timeout/null-status failures and do not intersect this task's owned paths. Baseline daemon red was foreign foundation-attempt-service + index-surface; the new graph/runtime paths are active foreign WIP, not owned-path deltas.\nFresh exact completion gate: `pnpm typecheck:release && pnpm test:integration` exit 0. Integration Vitest: Test Files 4 passed (4), Tests 208 passed (208). Node release suite: tests 60, pass 60, fail 0.\nPost-gate integrity: owned status remains only modified scripts/release/supply-chain.mjs plus untracked tests/integration/release-archive-cleanup.test.ts; git diff --check exit 0; production file 264 lines (<400); existing tests/integration/release-supply-chain.test.mjs SHA-256 remains e603b7358166a01558a9011074b5975669aca16b8e8229c27ba5f4295d350be5.",
+      "startedAt": "2026-08-15T22:59:51.999Z",
+      "completedAt": "2026-08-15T23:14:09.686Z"
     },
     {
       "stepId": "step-6",
       "description": "FINAL ADVERSARIAL SELF-REVIEW, scoped only to this task's diff. Load `adversarial-self-review`; inspect `git diff -- scripts/release/supply-chain.mjs tests/integration/release-archive-cleanup.test.ts` as an attacker. Verify production callers cannot accidentally lose the real rmSync default, cleanup is attempted once on every success/refusal exit, an injected EBUSY cannot replace either exact result, reporter text follows cleanRoots, console spies and temporary Git/archive paths are always restored on test failure, refusal assertions pin code + reason + owning layer, and the happy refusal removal test starts with a real archive so absence is non-vacuous. Confirm no change to cleanRoots, evidence shape, refusal vocabulary, SYSTEM_PORTS, or the existing release test; no scratch files remain; and only explicit owned paths will be staged/committed. If any check fails, fix it and repeat the single final verification command before calling moe.complete_task.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-archive-cleanup.test.ts"
+      ],
+      "note": "Loaded adversarial-self-review, verification-before-completion, and regression-check; read the complete owned diff as hostile input.\nAdversarial findings:\n- The optional seam is per-call and nullish-defaults to the imported real rmSync, so production SYSTEM_PORTS callers keep the real cleanup behavior without passing dependencies.\n- One finally attempts cleanup exactly once after every computed success/refusal path. The cleanup catch reports using the established cleanRoots `release temporary cleanup failed:` convention and cannot replace either computed result. No new shared mutable state or check-then-act authority was introduced; concurrent same-destination archive races pre-existed and are not widened by the local seam.\n- Four production-surface tests cover exact success + exact SOURCE_ARCHIVE_FAILED refusal under injected EBUSY, and real removal after both success and refusal. The refusal assertion pins `RELEASE_SUPPLY_CHAIN_REFUSED`, `SOURCE_ARCHIVE_FAILED`, and owning layer `RELEASE_SUPPLY_CHAIN`; the real-refusal removal test precreates the archive, making absence non-vacuous.\n- afterEach restores console spies before recursively removing every registered temporary Git root, including assertion-failure paths.\n- No diff to cleanRoots, SYSTEM_PORTS, evidence shape, refusal vocabulary, or the existing Node release test. Existing test SHA-256 remains e603b7358166a01558a9011074b5975669aca16b8e8229c27ba5f4295d350be5. No probe/bak/orig scratch files found. Production source is 264 lines (<400).\nCommitted by explicit pathspec only as e9b379681545ed38da88da17c76f477db4f03191 (`fix release archive cleanup result preservation`). Commit contains exactly the two owned paths; new test mode is 100644; owned status is clean; task diff-check exit 0. A foreign commit advanced HEAD from 6ca5da0 to 77e037c before staging, but it did not capture either owned path; our task commit's parent is 77e037c and its path list is exact.\nFresh post-commit exact verification under Node v24.16.0/pnpm 11.0.8: `pnpm typecheck:release && pnpm test:integration` exit 0. Vitest: Test Files 4 passed (4), Tests 208 passed (208). Node release suite: tests 60, suites 4, pass 60, fail 0.",
+      "startedAt": "2026-08-15T23:14:18.995Z",
+      "completedAt": "2026-08-15T23:17:34.721Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human directed additional unblocking. The sole preflight collision is cleared: two independent fresh read-only measurements report tests/integration/release-supply-chain.test.mjs clean at HEAD. Resume the approved six-step TDD plan from step 1 without overwriting the swept foreign history.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -84,17 +119,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:21:38.693Z",
-  "updatedAt": "2026-08-15T21:57:50.914Z",
+  "updatedAt": "2026-08-15T23:26:08.462Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:44:33.224Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 6,
+    "doneAt": "2026-08-15T23:26:08.462Z",
+    "wallClockMs": 9695238
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
-    "worker-83e6139a"
+    "worker-83e6139a",
+    "governor-a627169a",
+    "worker-5d4e2d6f",
+    "qa-7d1f37bd"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T20:56:39.749Z",
   "planningNotes": {
@@ -116,10 +164,10 @@
   },
   "planApprovedAt": "2026-08-15T20:56:41.818Z",
   "workStartedAt": "2026-08-15T21:55:55.884Z",
-  "blockedReason": "Step 1 preflight found a required path already foreign-dirty before this task wrote any bytes, so the approved collision rail forbids proceeding. HEAD=f4966b534ee5e9f9671668795d5dd1e844f0521b. `git status --short -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs tests/integration/release-archive-cleanup.test.ts` reports only ` M tests/integration/release-supply-chain.test.mjs`. The foreign diff changes the release package-command test from execFileSync to spawnSync and adds a non-Windows SUPPORTED_OS_EVIDENCE_MISSING refusal branch (lines ~745-765). The task explicitly requires that existing test stay green and UNMODIFIED and step 1 says to report a collision if any required path is dirty. New cleanup test is absent; supply-chain.mjs is clean at 257 lines. No baseline gates or edits were attempted after detecting the collision, and this worker changed zero files.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:57:04.530Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 preflight only: measured HEAD/status/symbols/scripts; detected required existing integration test foreign-dirty before any task edits; reported BLOCKED and wrote Serena handoff. No repository bytes changed.",
@@ -130,5 +178,19 @@
       "releasedBy": "worker-83e6139a",
       "reason": "Explicit handoff after plan-mandated shared-tree collision block; freeing worker for another claimable task."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-15T23:21:57.141Z",
+  "verification": {
+    "command": "pnpm typecheck:release && pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "NODE=v24.16.0 PNPM=11.0.8\nTest Files  4 passed (4)\nTests  208 passed (208)\nrelease distribution subject: passed\nrelease supply-chain evidence: passed\nrelease CLI and filesystem boundary: passed\nrelease package command: passed\nℹ tests 60\nℹ suites 4\nℹ pass 60\nℹ fail 0\nCOMPLETE_TASK_VERIFICATION_EXIT=0",
+    "reportedAt": "2026-08-15T23:21:57.141Z"
+  },
+  "filesModified": [
+    "scripts/release/supply-chain.mjs",
+    "tests/integration/release-archive-cleanup.test.ts"
+  ],
+  "completedAt": "2026-08-15T23:26:08.462Z",
+  "reviewCompletedAt": "2026-08-15T23:26:08.462Z",
+  "reviewSummary": "Reviewed commit e9b3796 and current owned bytes (+114/-3, exactly supply-chain.mjs and the new focused integration test); current HEAD matches the task commit, diff-check is clean, the pre-existing release-supply-chain test is byte-identical (SHA-256 e603b7...0be5), and production is 264 lines (<400).\nVerified archiveSource keeps the real rmSync default for SYSTEM_PORTS, attempts cleanup once in finally, reports cleanup errors with the established cleanRoots prefix, and never lets that subordinate error replace the computed success or exact RELEASE_SUPPLY_CHAIN_REFUSED/SOURCE_ARCHIVE_FAILED/RELEASE_SUPPLY_CHAIN refusal. No cleanRoots/evidence/vocabulary changes.\nTests use real git archive/tar: both throwing-cleanup arms assert exact outcomes, one cleanup call and exact report; both default-cleanup arms assert a real archive is absent, including a non-vacuous pre-created refusal archive.\nFresh QA gate in committed-HEAD ext4 snapshot: `pnpm typecheck:release && pnpm test:integration` EXIT 0; Vitest 4 files/208 tests, Node release suite 60/60.\nIndependent mutation restored the unguarded finally: the two named preservation cases executed and failed because EBUSY replaced their results (2 failed/2 skipped). Restored byte-exact SHA-256 2339a2...b040; focused file then passed 4/4."
 }

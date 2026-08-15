@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { observeScope } from "@moe/runner";
+import { CLAUDE_LAUNCHER_VERSION, observeScope } from "@moe/runner";
 import type { GitObserver, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -14,23 +14,29 @@ import {
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "../activation/activation-ingress-contracts.js";
+import { runEffectActivateCommand } from "../activation/activation-ingress.js";
+import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
+import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
+import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_ATTEMPT_RECORD_VERSION, FOUNDATION_DISPATCH_EVENT_TYPES,
+  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES,
   decodeFoundationAttemptRequest, decodeFoundationPayload, deriveDispatchAggregateId,
   encodeFoundationPayload, sameBytes,
 } from "./foundation-attempt-contracts.js";
+import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
+import { readDurableFoundationObservation } from "./foundation-attempt-store.js";
 
 /**
  * Foundation attempt dispatch over a REAL SqliteEventStore and the REAL
  * activation ingress, scheduler validator and workspace manifest builders.
  *
- * ONLY TWO BOUNDARIES ARE EVER REPLACED: the physical Claude launch and the
- * physical post-launch workspace observation. Every claim, activation, grant,
- * reservation, registration and store decision below is production code — a
- * suite that stubbed those would be asserting its own fixtures.
+ * The physical Claude launch is NEVER replaced here. Cross-platform cases use
+ * the real launcher's explicit non-Windows refusal; the separate Windows suite
+ * exercises the shipped broker. Only post-launch workspace observation is a
+ * service dependency. Every authority/store decision below is production code.
  *
  * NOTHING HERE HAND-FORGES A GRANT. `parseActivationGrant` demands a hex64
  * grantId derived from the whole successor intent and `canonicalDigest` is not
@@ -144,12 +150,21 @@ const MULTI_NODE_GRAPH = Object.freeze({
 });
 
 const LAUNCH_TEMPLATE = Object.freeze({
-  argv: ["claude", "--model", "claude-opus-5"], bootstrapCredentialDigest: DIGEST_B,
-  cwd: "C:/work", environment: { PATH: "C:/bin" },
-  launchSelection: { effort: "high", model: "claude-opus-5" },
+  argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
+  bootstrapCredentialDigest: DIGEST_B, cwd: "C:/work", environment: {},
+  launchSelection: {
+    concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
+    modelSnapshotEvidence: "claude-opus-5/build-2026-05-14",
+    modelSnapshotKind: "DATED_SNAPSHOT", orchestrationDigest: "3e".repeat(32),
+    policyDigest: "2d".repeat(32), profileRevisionId: "profile-revision-19",
+    provider: "claude", reasoningEffort: "high", selectedModelId: "claude-opus-5",
+  },
   limits: { stderrBytes: 1_024, stdoutBytes: 1_024, tailBytes: 256, timeoutMs: 1_000 },
-  runtime: { executablePath: "C:/claude.exe" },
+  runtime: { installedRoot: "C:\\installed", pinRoot: "C:\\pins", quotedObservation: {} },
 });
+const RUNTIME_PORTS = {
+  clock: {}, facts: {}, fs: {},
+} as unknown as Parameters<typeof createFoundationAttemptService>[0]["runtimePorts"];
 const INPUT_MANIFEST = Object.freeze({
   baseIdentity: HEAD,
   entries: [{ byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A }],
@@ -225,30 +240,29 @@ function captureAnswer(): Record<string, unknown> {
 
 interface Harness {
   readonly captureCalls: Record<string, unknown>[];
-  readonly launchCalls: Record<string, unknown>[];
+  readonly runtimeTouches: () => number;
   readonly service: { dispatch(input: unknown): Promise<FoundationAttemptOutcome> };
 }
 
 interface HarnessOptions {
-  readonly capture?: (input: Record<string, unknown>) => unknown;
-  readonly launch?: (value: unknown) => Promise<unknown>;
+  readonly platform?: string;
 }
 
 function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness {
   const captureCalls: Record<string, unknown>[] = [];
-  const launchCalls: Record<string, unknown>[] = [];
+  let runtimeTouches = 0;
+  const runtimePorts = {
+    clock: { observedAt: () => "2026-08-15T00:00:00.000Z" }, facts: {},
+    fs: { hostPlatform: () => { runtimeTouches += 1; return "win32"; } },
+  } as unknown as Parameters<typeof createFoundationAttemptService>[0]["runtimePorts"];
   const service = createFoundationAttemptService({
     captureResult: (input) => {
       captureCalls.push(input);
-      return (options.capture ?? captureAnswer)(input);
+      return captureAnswer();
     },
-    launch: async (value) => {
-      launchCalls.push(value as Record<string, unknown>);
-      return await ((options.launch ?? (async () => OBSERVED_RESULT))(value) as Promise<never>);
-    },
-    store,
+    launchOptions: { platform: options.platform ?? "linux" }, runtimePorts, store,
   });
-  return { captureCalls, launchCalls, service };
+  return { captureCalls, runtimeTouches: () => runtimeTouches, service };
 }
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
@@ -257,6 +271,65 @@ function eventTypes(store: SqliteEventStore, aggregateId: string): readonly stri
 
 function expectRefusal(outcome: FoundationAttemptOutcome, code: string, refusedBy: string): void {
   expect(outcome).toMatchObject({ advisoryOnly: true, authority: "NONE", code, ok: false, refusedBy });
+}
+
+function nested(value: Record<string, unknown>, key: string): Record<string, unknown> {
+  const found = value[key];
+  if (typeof found !== "object" || found === null || Array.isArray(found)) {
+    throw new TypeError(`${key} is not a record`);
+  }
+  return found as Record<string, unknown>;
+}
+
+function durableObservedFixture(label: string): {
+  readonly bound: FoundationAttemptBound; readonly record: ActivationLedgerRecord;
+  readonly store: SqliteEventStore; readonly value: Record<string, unknown>;
+} {
+  const store = readyStore(label);
+  const activated = runEffectActivateCommand(store, activationBytes());
+  if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
+  const initial = readFoundationActivationHistory(
+    ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
+  if (!initial.ok) throw new Error(`activation unreadable: ${initial.result.status}`);
+  const { record } = initial.history;
+  const authority = createFoundationLauncherAuthority({
+    aggregateId: ACTIVATION_AGGREGATE, correlationId: "corr-tail",
+    key: { commandId: "cmd-tail", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    projectId: PROJECT_ID, store,
+  });
+  const consumed = authority.consumeGrantDurably(record.grant, record.grant.wrapperIdentity);
+  const grant = nested(consumed as Record<string, unknown>, "grant");
+  const preflight = {
+    ...REGISTRATION, processIdentity: `pending:${record.grant.wrapperIdentity}`,
+    registeredAt: "2026-08-15T00:00:00.500Z",
+  };
+  const reserved = authority.commitProcessRegistration({
+    claim: CLAIM, phase: "PREFLIGHT", prior: null, registration: preflight,
+  });
+  const observed = authority.commitProcessRegistration({
+    claim: CLAIM, phase: "STARTED", prior: null, registration: REGISTRATION,
+  });
+  if (nested(reserved as Record<string, unknown>, "registration")["processIdentity"]
+      !== preflight.processIdentity
+    || nested(observed as Record<string, unknown>, "registration")["processIdentity"]
+      !== REGISTRATION.processIdentity) {
+    throw new Error("production registration authority refused the fixture");
+  }
+  const bound: FoundationAttemptBound = Object.freeze({
+    aggregateId: ACTIVATION_AGGREGATE, claim: CLAIM, commandId: "cmd-dispatch-1",
+    correlationId: "corr-dispatch", nodeKey: NODE_KEY, principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID, sessionId: SESSION_ID, target: DISPATCH_AGGREGATE,
+  });
+  const observation = {
+    ...OBSERVATION, activationDigest: record.activationDigest, grantId: record.grant.grantId,
+    launcherVersion: CLAUDE_LAUNCHER_VERSION, lockIdentity: REGISTRATION.lockIdentity,
+    processIdentity: REGISTRATION.processIdentity, reasonCode: null, reasonLayer: null,
+    truthClass: "PROVEN", wrapperIdentity: REGISTRATION.wrapperIdentity,
+  };
+  return { bound, record, store, value: {
+    code: null, consumedGrant: grant, kind: "OBSERVED", layer: null,
+    observation, ok: true, registration: { ...REGISTRATION }, truthClass: "PROVEN",
+  } };
 }
 
 describe("foundation attempt dispatch — request fencing", () => {
@@ -277,6 +350,26 @@ describe("foundation attempt dispatch — request fencing", () => {
       });
     }
     expect(generated).toBe(smuggled.length);
+  });
+
+  it("refuses caller-supplied runtime capabilities with the exact local code", () => {
+    const capabilities = ["fs", "facts", "clock"] as const;
+    expect(capabilities).toHaveLength(3);
+    let generated = 0;
+    for (const capability of capabilities) {
+      const runtime = {
+        installedRoot: "C:\\installed", pinRoot: "C:\\pins", quotedObservation: {},
+        [capability]: {},
+      };
+      const launchTemplate = { ...structuredClone(LAUNCH_TEMPLATE), runtime };
+      const decoded = decodeFoundationAttemptRequest(dispatchRequest({ launchTemplate }));
+      generated += 1;
+      expect(decoded).toMatchObject({
+        code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", refusedBy: DAEMON_FOUNDATION_ATTEMPT,
+      });
+    }
+    expect(generated).toBe(capabilities.length);
+    expect(generated).toBeGreaterThan(0);
   });
 
   it("refuses an unknown top-level key and a missing one", () => {
@@ -342,61 +435,50 @@ describe("foundation attempt dispatch — request fencing", () => {
     expect(again.ok && again.digest).toBe(encoded.digest);
     expect(again.ok && sameBytes(again.bytes, encoded.bytes)).toBe(true);
   });
+
+  it("rejects every substituted PROVEN authority field against the durable tail", () => {
+    const fixture = durableObservedFixture("durable-substitution");
+    expect(readDurableFoundationObservation(
+      fixture.store, fixture.bound, fixture.record, fixture.value)).not.toBeNull();
+    const cases: readonly (readonly [string, (value: Record<string, unknown>) => void])[] = [
+      ["outer truth", (value) => { value["truthClass"] = "UNKNOWN"; }],
+      ["outer reason", (value) => { value["code"] = "CLAUDE_LAUNCH_CANCELLED";
+        value["layer"] = "LAUNCHER"; }],
+      ["grant id", (value) => { nested(value, "consumedGrant")["grantId"] = DIGEST_A; }],
+      ["grant intent", (value) => { nested(value, "consumedGrant")["intentId"] = "intent-2"; }],
+      ["grant wrapper", (value) => { nested(value, "consumedGrant")["wrapperIdentity"] = "wrapper-2"; }],
+      ["grant state", (value) => { nested(value, "consumedGrant")["state"] = "UNUSED"; }],
+      ["grant version", (value) => { nested(value, "consumedGrant")["version"] = 999; }],
+      ["registration lock", (value) => { nested(value, "registration")["lockIdentity"] = "lock-2"; }],
+      ["registration wrapper", (value) => { nested(value, "registration")["wrapperIdentity"] = "wrapper-2"; }],
+      ["registration process", (value) => { nested(value, "registration")["processIdentity"] = "windows:7:7"; }],
+      ["registration credential", (value) => { nested(value, "registration")["bootstrapCredentialDigest"] = DIGEST_C; }],
+      ["registration moment", (value) => { nested(value, "registration")["registeredAt"] = "2026-08-15T00:00:09.000Z"; }],
+      ["observation launcher", (value) => { nested(value, "observation")["launcherVersion"] = "forged/1"; }],
+      ["observation truth", (value) => { const part = nested(value, "observation");
+        part["truthClass"] = "UNKNOWN"; part["reasonCode"] = "CLAUDE_LAUNCH_CANCELLED";
+        part["reasonLayer"] = "LAUNCHER"; }],
+      ["observation activation", (value) => { nested(value, "observation")["activationDigest"] = DIGEST_B; }],
+      ["observation grant", (value) => { nested(value, "observation")["grantId"] = DIGEST_C; }],
+      ["observation lock", (value) => { nested(value, "observation")["lockIdentity"] = "lock-2"; }],
+      ["observation wrapper", (value) => { nested(value, "observation")["wrapperIdentity"] = "wrapper-2"; }],
+      ["observation process", (value) => { nested(value, "observation")["processIdentity"] = "windows:8:8"; }],
+    ];
+    expect(cases).toHaveLength(19);
+    let generated = 0;
+    for (const [, mutate] of cases) {
+      const changed = structuredClone(fixture.value);
+      mutate(changed);
+      expect(readDurableFoundationObservation(
+        fixture.store, fixture.bound, fixture.record, changed)).toBeNull();
+      generated += 1;
+    }
+    expect(generated).toBe(cases.length);
+    expect(generated).toBeGreaterThan(0);
+  });
 });
 
-describe("foundation attempt dispatch — the accepted single-node path", () => {
-  it("commits the activation and reservation before the first launch, then records", async () => {
-    const store = readyStore("accepted");
-    let seenAtLaunch: readonly string[] = [];
-    const run = harness(store, {
-      launch: async (value) => {
-        seenAtLaunch = [
-          ...eventTypes(store, ACTIVATION_AGGREGATE), ...eventTypes(store, DISPATCH_AGGREGATE),
-        ];
-        void value;
-        return OBSERVED_RESULT;
-      },
-    });
-
-    const outcome = await run.service.dispatch(dispatchRequest());
-
-    expect(outcome.ok).toBe(true);
-    if (!outcome.ok) return;
-    // The durable activation and this service's reservation both PRECEDE the launch.
-    expect(seenAtLaunch).toEqual(["EffectActivationCommitted", "FoundationDispatchReserved"]);
-    expect(run.launchCalls).toHaveLength(1);
-    expect(run.captureCalls).toHaveLength(1);
-    const launched = run.launchCalls[0] ?? {};
-    // Store-decoded authority, the admitted claim, and no caller-supplied prior.
-    expect(launched).toMatchObject({
-      attempt: { attemptId: "attempt-1", state: "RUNNING" },
-      claim: CLAIM, duplicateDelivery: null, effect: { intentId: "intent-1", state: "ACTIVE" },
-      grant: { intentId: "intent-1", state: "UNUSED" }, priorRegistration: null,
-      wrapperIdentity: "wrapper-1",
-    });
-    expect(Object.keys(launched)).not.toContain("freshRuntime");
-    const { record } = outcome;
-    expect(record).toMatchObject({
-      advisoryOnly: true, attemptId: "attempt-1", effectId: "intent-1", nodeKey: NODE_KEY,
-      recordVersion: FOUNDATION_ATTEMPT_RECORD_VERSION, sessionId: SESSION_ID,
-      stderrSha256: DIGEST_B, stdoutSha256: DIGEST_A, truthClass: "PROVEN",
-      wrapperIdentity: "wrapper-1",
-    });
-    expect(record["observation"]).toMatchObject({
-      freshRuntimeDigest: DIGEST_C, observationDigest: DIGEST_A, registrationDigest: DIGEST_C,
-      runtimeBindingDigest: DIGEST,
-    });
-    // PROCESS_OBSERVED identity, not the pending preflight reservation.
-    expect(record["registration"]).toMatchObject({ processIdentity: "windows:4242:99" });
-    expect(record["resultManifest"]).toMatchObject({ baseIdentity: HEAD });
-    expect(eventTypes(store, DISPATCH_AGGREGATE))
-      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
-    // The read model answers the identical bytes the dispatch returned.
-    const reread = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
-    expect(reread.ok && reread.digest).toBe(outcome.digest);
-    expect(reread.ok && reread.record).toStrictEqual(record);
-  });
-
+describe("foundation attempt dispatch — authority gates", () => {
   it("refuses a second execution-bearing node with no claim, activation or dispatch residue", async () => {
     const store = readyStore("multinode");
     const before = readDurableLedger(store, PROJECT_ID).decisionCount;
@@ -406,7 +488,7 @@ describe("foundation attempt dispatch — the accepted single-node path", () => 
       dispatchRequest({ graphSnapshot: structuredClone(MULTI_NODE_GRAPH) }));
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_MULTI_NODE_UNSUPPORTED", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(0);
+    expect(run.runtimeTouches()).toBe(0);
     expect(run.captureCalls).toHaveLength(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
@@ -427,28 +509,89 @@ describe("foundation attempt dispatch — the accepted single-node path", () => 
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: "session-9" },
     }));
     expectRefusal(wrongSession, "FOUNDATION_ATTEMPT_BINDING_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(0);
+    expect(run.runtimeTouches()).toBe(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
 
-  it("never upgrades a malformed PROVEN-shaped launcher answer", async () => {
-    const store = readyStore("malformed-proven");
-    const run = harness(store, {
-      launch: async () => ({ kind: "OBSERVED", truthClass: "PROVEN" }),
-    });
+  it("refuses an unverifiable pre-activation binding locally before any authority write", async () => {
+    const store = readyStore("missing-session-binding");
+    const run = harness(store);
+    const envelope = JSON.parse(new TextDecoder().decode(activationBytes())) as {
+      payload: { lease: { record: Record<string, unknown> } };
+    };
+    delete envelope.payload.lease.record["ownerSessionRef"];
 
-    const outcome = await run.service.dispatch(dispatchRequest());
+    const outcome = await run.service.dispatch(dispatchRequest({
+      bytes: encoder.encode(JSON.stringify(envelope)),
+    }));
 
-    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(1);
-    expect(run.captureCalls).toHaveLength(0);
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_BINDING_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.runtimeTouches()).toBe(0);
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+    expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
+  it("refuses an unreservable dispatch identity before any authority write", async () => {
+    const store = readyStore("oversized-identity");
+    const run = harness(store);
+    const wide = Object.fromEntries(Array.from(
+      { length: 64 }, (_, index) => [`field${index}`, "x".repeat(8_192)]));
+    const launchTemplate = {
+      ...structuredClone(LAUNCH_TEMPLATE), launchSelection: wide, limits: wide,
+    };
+
+    const outcome = await run.service.dispatch(dispatchRequest({ launchTemplate }));
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_RECORD_DRIFT", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.runtimeTouches()).toBe(0);
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+    expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
+  it("does not expose a whole-launch override that can mint PROVEN", async () => {
+    const store = readyStore("whole-launch-override");
+    let forgedCalls = 0;
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer,
+      launch: async () => {
+        forgedCalls += 1;
+        return OBSERVED_RESULT;
+      },
+      launchOptions: { platform: "linux" },
+      runtimePorts: RUNTIME_PORTS,
+      store,
+    } as Parameters<typeof createFoundationAttemptService>[0]);
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    expect(forgedCalls).toBe(0);
     const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
     expect(stored.ok && stored.record).toMatchObject({
-      reasonCode: "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", reasonLayer: DAEMON_FOUNDATION_ATTEMPT,
-      resultManifest: null, truthClass: "SUSPECT",
+      reasonCode: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", reasonLayer: "LAUNCHER",
+      resultManifest: null, truthClass: "UNKNOWN",
     });
   });
+
+  it("does not forward a nested launcher dependency override", async () => {
+    const store = readyStore("nested-launch-override");
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer,
+      launchOptions: { deps: {}, platform: "linux" },
+      runtimePorts: RUNTIME_PORTS, store,
+    } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", reasonLayer: "LAUNCHER",
+      resultManifest: null, truthClass: "UNKNOWN",
+    });
+  });
+
 });
 
 /** A real store whose Nth `commitExpectedVersionDecision` aborts. Every other
@@ -480,13 +623,13 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
   it("aborts the activation commit, refuses with the ledger's own code, and launches nothing", async () => {
     const real = readyStore("abort-activation");
     const injected = abortingStore(real, 1);
-    const run = harness(injected.store);
+    const run = harness(injected.store, { platform: "win32" });
 
     const outcome = await run.service.dispatch(dispatchRequest());
 
     expect(injected.fired()).toBe(1);
     expectRefusal(outcome, "ACTIVATION_LEDGER_STORE_UNAVAILABLE", "ACTIVATION_LEDGER");
-    expect(run.launchCalls).toHaveLength(0);
+    expect(run.runtimeTouches()).toBe(0);
     expect(run.captureCalls).toHaveLength(0);
     expect(real.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(real.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
@@ -495,46 +638,32 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
   it("aborts the reservation commit after a committed activation and still launches nothing", async () => {
     const real = readyStore("abort-reservation");
     const injected = abortingStore(real, 2);
-    const run = harness(injected.store);
+    const run = harness(injected.store, { platform: "win32" });
 
     const outcome = await run.service.dispatch(dispatchRequest());
 
     expect(injected.fired()).toBe(1);
     expectRefusal(
       outcome, "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(0);
+    expect(run.runtimeTouches()).toBe(0);
     expect(eventTypes(real, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(real.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
 });
 
 describe("foundation attempt dispatch — duplicate delivery and recovery", () => {
-  it("keeps one claim, one reservation and one launch across concurrent identical deliveries", async () => {
+  it("keeps one claim and reservation across concurrent identical deliveries", async () => {
     const store = readyStore("concurrent");
-    // Assigned synchronously by the executor; the default keeps the binding
-    // callable for TypeScript, which cannot see that the executor already ran.
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    const run = harness(store, {
-      launch: async () => {
-        await gate;
-        return OBSERVED_RESULT;
-      },
-    });
+    const run = harness(store);
 
     const first = run.service.dispatch(dispatchRequest());
     const second = run.service.dispatch(dispatchRequest());
     const loser = await second;
-    release();
     const winner = await first;
 
-    expect(run.launchCalls).toHaveLength(1);
-    expect(run.captureCalls).toHaveLength(1);
-    expect(winner.ok).toBe(true);
-    // The loser reached the reservation second and must not have launched.
+    expectRefusal(winner, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
     expectRefusal(loser, "FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.captureCalls).toHaveLength(0);
     expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(eventTypes(store, DISPATCH_AGGREGATE))
       .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
@@ -545,13 +674,15 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     const run = harness(store);
 
     const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok).toBe(true);
     const second = await run.service.dispatch(dispatchRequest());
 
-    expect(first.ok && second.ok).toBe(true);
-    expect(run.launchCalls).toHaveLength(1);
-    expect(run.captureCalls).toHaveLength(1);
-    expect(second.ok && first.ok && second.digest).toBe(first.ok ? first.digest : "");
-    expect(second.ok && second.record).toStrictEqual(first.ok ? first.record : null);
+    expect(second.ok).toBe(true);
+    expect(run.captureCalls).toHaveLength(0);
+    expect(second.ok && stored.ok && second.digest).toBe(stored.ok ? stored.digest : "");
+    expect(second.ok && second.record).toStrictEqual(stored.ok ? stored.record : null);
     expect(eventTypes(store, DISPATCH_AGGREGATE))
       .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
   });
@@ -560,64 +691,19 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     const store = readyStore("replay-template-drift");
     const run = harness(store);
     const first = await run.service.dispatch(dispatchRequest());
-    expect(first.ok).toBe(true);
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const before = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(before.ok).toBe(true);
     const changed = { ...structuredClone(LAUNCH_TEMPLATE), cwd: "D:/other-worktree" };
 
     const replay = await run.service.dispatch(dispatchRequest({ launchTemplate: changed }));
 
     expectRefusal(replay, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(1);
-    expect(run.captureCalls).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(0);
     expect(eventTypes(store, DISPATCH_AGGREGATE))
       .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
     const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
-    expect(stored.ok && first.ok && stored.digest).toBe(first.ok ? first.digest : "");
-  });
-
-  it("persists an honest UNKNOWN with no result manifest when capture cannot answer", async () => {
-    const store = readyStore("capture-throw");
-    const run = harness(store, {
-      capture: () => {
-        throw new Error("workspace observation failed");
-      },
-    });
-
-    const outcome = await run.service.dispatch(dispatchRequest());
-
-    expectRefusal(outcome, "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.launchCalls).toHaveLength(1);
-    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
-    expect(stored.ok).toBe(true);
-    if (!stored.ok) return;
-    expect(stored.record).toMatchObject({
-      advisoryOnly: true, reasonCode: "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN",
-      reasonLayer: DAEMON_FOUNDATION_ATTEMPT, resultManifest: null, truthClass: "UNKNOWN",
-    });
-    // The observed process facts survive even though the result did not.
-    expect(stored.record["registration"]).toMatchObject({ processIdentity: "windows:4242:99" });
-  });
-
-  it("records a SUSPECT advisory and never relaunches when the launch port throws", async () => {
-    const store = readyStore("launch-throw");
-    const run = harness(store, {
-      launch: async () => {
-        throw new Error("boundary lost");
-      },
-    });
-
-    const outcome = await run.service.dispatch(dispatchRequest());
-
-    expectRefusal(outcome, "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
-    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
-    expect(stored.ok && stored.record).toMatchObject({
-      resultManifest: null, truthClass: "SUSPECT",
-    });
-    // A restart-shaped redelivery adopts the stored fact instead of launching again.
-    const again = await run.service.dispatch(dispatchRequest());
-    expect(again.ok).toBe(true);
-    expect(run.launchCalls).toHaveLength(1);
-    expect(eventTypes(store, DISPATCH_AGGREGATE))
-      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+    expect(stored.ok && before.ok && stored.digest).toBe(before.ok ? before.digest : "");
   });
 
   it("reports the real runner's own UNSUPPORTED refusal on a non-Windows platform", async () => {
@@ -625,7 +711,8 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     // NO launch port: this is the production default launcher, composed over the
     // durable authority ports, refusing at its own platform gate.
     const service = createFoundationAttemptService({
-      captureResult: captureAnswer, launchOptions: { platform: "linux" }, store,
+      captureResult: captureAnswer, launchOptions: { platform: "linux" },
+      runtimePorts: RUNTIME_PORTS, store,
     });
 
     const outcome = await service.dispatch(dispatchRequest());

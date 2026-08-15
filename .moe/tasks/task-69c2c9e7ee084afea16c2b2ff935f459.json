@@ -1,0 +1,55 @@
+{
+  "id": "task-69c2c9e7ee084afea16c2b2ff935f459",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Expose bounded event-type paging from the public store",
+  "description": "SPIDR prerequisite 2 of 2 for task-16d5bc3a10864351adf5be10dfa7df00. Hard dependency: task-d20ffd0775b4420bb2318c79019b4127 must be DONE and committed so the v5 `(event_type, global_position)` index is real before this API promises an indexed path.\n\nFresh measurement at HEAD 6ca5da07: the public `SqliteEventStore`/`DecisionLedgerCore`/`EventReadModelStore` chain exposes aggregate paging and global paging only. The event rows already carry `eventType`, but daemon callers must currently fetch and decode every global event to select one type. The authoritative design requires type filters on the event API, and task-16d5 must preserve cross-aggregate uniqueness, so the minimum reusable store surface is a type-filtered global cursor page—not a daemon-specific effect query.\n\nDeliverable: publish `SqliteEventStore.readEventsByTypeAfter(eventType, afterGlobalPosition, limit?, maxDecodedBytes?)` through the existing store read layers and bare `@moe/store` root. It returns `CursorPage<StoredEvent, bigint>` containing only exact event-type matches in strictly increasing global position, uses the same single-snapshot two-phase candidate/materialization and decoded-byte budget rules as `readEventsAfter`, and is backed by the v5 composite index. This task owns the reusable store query only. Consumer/final hardening task: task-16d5bc3a10864351adf5be10dfa7df00 will call it for `EffectActivationCommitted` and prove the preserved ambiguity invariant.\n\nOwned paths: `packages/store/src/event-read-query.ts`, `event-read-model.ts`, `decision-ledger.ts`, `sqlite-event-store.ts`, and `event-read-model-contract.test.ts`. Verification: `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test && pnpm verify:store && pnpm typecheck && pnpm test`; every test leg must report a nonzero count.",
+  "definitionOfDone": [
+    "The public bare-root `SqliteEventStore` exposes the exact bounded `readEventsByTypeAfter(eventType, afterGlobalPosition, limit?, maxDecodedBytes?)` method and returns the existing `CursorPage<StoredEvent, bigint>` contract without adding a daemon-specific store type.",
+    "Across interleaved event types, paging returns only exact matches in strictly increasing global position with no duplicate or skipped matching row; `hasMore` and `nextCursor` are computed over the filtered stream, and literal nonzero page/case counts prevent a vacuous sweep.",
+    "Candidate selection and materialization run in one read snapshot, enforce the same `limit + 1` preflight and decoded-byte budget as global paging, and use parameterized SQL over the v5 `(event_type, global_position)` index.",
+    "Hostile/empty/oversized event types, invalid cursors/limits/byte budgets, an oversized first matching row, storage corruption, and snapshot faults fail closed with the exact existing durable store code; an unknown but valid event type returns an honest empty page.",
+    "A temporary compiled probe inside `apps/daemon` imports `SqliteEventStore` and `CursorPage` from the bare `@moe/store` specifier, typechecks a call to `readEventsByTypeAfter`, and is deleted in the same command; the daemon manifest and lock importer links remain present. The named production consumer is task-16d5bc3a10864351adf5be10dfa7df00.",
+    "A production mutation that drops the type predicate or delegates to unfiltered global paging makes a named interleaving test red on exact returned event IDs/count, is confirmed applied, and is restored byte-exact; fresh `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test && pnpm verify:store && pnpm typecheck && pnpm test` exits 0 with nonzero test counts."
+  ],
+  "taskRails": [
+    "Do not expose raw DatabaseSync, daemon activation vocabulary, payload JSON paths, caller SQL, or an unbounded array. This is a generic store-owned exact event-type cursor query.",
+    "Reuse production input validation, snapshot, decoded-byte budget, row decoding, and cursor assertions. Do not copy a simplified test-only pager or silently normalize invalid event types.",
+    "The query must be index-backed by task-d20ffd0775b4420bb2318c79019b4127. A filtered API implemented as a full `SCAN domain_events` does not satisfy this task.",
+    "Preserve all global/aggregate paging behavior and public signatures. Assert exact stable store codes on rejection paths and literal positive counts for generated/interleaved cases.",
+    "Touch and commit only the five owned paths; preserve foreign WIP. Shared public store changes require the full store and repo regression named above."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-71f616ad",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human directed additional unblocking. Literal prerequisite is now satisfied: task-d20ffd077 is QA-approved DONE at commit 77e037c with schema v5 and the named domain_events(event_type, global_position) index. Re-enter planning to expose the bounded public store query against those committed bytes.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-16d5bc3a10864351adf5be10dfa7df00",
+  "priority": "MEDIUM",
+  "order": 3,
+  "comments": [
+    {
+      "id": "comment-b951d19b8e5a491dbfcbd1db7e0fecaa",
+      "author": "architect-71f616ad",
+      "content": "PLANNING measurement at HEAD 6ca5da0 (rail: task claims about disk are stale by default; re-measured in both directions).\n\nGAP CLAIMED PRESENT — confirmed still open (not a duplicate):\n- `grep -rn \"readEventsByTypeAfter\" packages/store/src apps adapters` -> 0 hits. The deliverable symbol does not exist anywhere.\n- Read chain today is aggregate + global only: `decision-ledger.ts:71,135` (interface + delegate), `event-read-model.ts:71`, `sqlite-event-store.ts:342` -> `#core.readEventsAfter`.\n\nDEPENDENCY CLAIMED PRESENT — confirmed ABSENT (blocker):\n- `grep -n \"SCHEMA_VERSION\\s*=\" packages/store/src/store-internals.ts` -> `SCHEMA_VERSION = 4` (line 8). Not 5.\n- `grep -n \"SQLITE_SCHEMA_MANIFEST_VERSION\" packages/store/src/store-contracts.ts` -> `\"moe-sqlite-schema/4\"` (line 21). Not `/5`.\n- `grep -rn \"CREATE INDEX\" packages/store/src/sqlite-schema-manifest.ts` -> exactly two indexes, both on `outbox_messages` (`outbox_pending_order` :79, `outbox_event_order` :83). No index on `domain_events`.\n- `grep -c \"domain_events_event_type_position\" packages/store/src/*.ts` -> 0 occurrences repo-wide.\n- `.moe/tasks/task-d20ffd0775b4420bb2318c79019b4127.json` -> `status: PLANNING`, `completedAt: null`. The prerequisite is not merely uncommitted; it is not yet planned.\n\nConsequence: DoD item 3 (\"parameterized SQL over the v5 `(event_type, global_position)` index\") and task rail 3 (\"a filtered API implemented as a full `SCAN domain_events` does not satisfy this task\") are unsatisfiable at HEAD. Planning now would force the worker to either ship a full-scan query against v4 or narrow the DoD — both forbidden. Reporting blocked instead of submitting a speculative plan.\n\nPre-cleared for the post-unblock plan (no re-measurement needed):\n- Dependency edge for DoD 5 is already REAL: `apps/daemon/package.json:22` declares `\"@moe/store\": \"workspace:*\"`, and `pnpm-lock.yaml:90` carries the `apps/daemon:` importer. Only the temporary compiled bare-specifier probe remains to be run/deleted; no manifest edit needed, so `apps/daemon/package.json` and `pnpm-lock.yaml` stay out of owned paths.\n- Per-FILE cap watch (epic rail 5, per file not per task): `sqlite-event-store.ts` is already 368 lines — under 400 but close. The new public method there must be a thin delegate only; the candidate/materialization logic belongs in `event-read-query.ts` (229) with `event-read-model.ts` (96) and `decision-ledger.ts` (149) carrying pass-through signatures. If the delegate would push `sqlite-event-store.ts` past 400, split that file rather than compressing the query.\n- Verification legs resolve by package NAME: `@moe/store` is `packages/store` and is a real workspace package, so `pnpm --filter @moe/store test` will not vacuously exit 0 — but the DoD still requires reading the `Test Files N passed` count line, not the exit code.",
+      "timestamp": "2026-08-15T22:28:05.730Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T22:26:01.838Z",
+  "updatedAt": "2026-08-15T23:24:27.515Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T22:26:30.426Z"
+  },
+  "contextFetchedBy": [
+    "architect-71f616ad",
+    "architect-d9dccf21",
+    "governor-a627169a"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
+}
