@@ -498,7 +498,7 @@ describe("project configuration current-read integrity", () => {
         receipt: { ...receipt, requestSha256: "event-digest" },
       }), code: "PROJECT_CONFIGURATION_CONFLICT" },
       { name: "event id type", port: portFor(records, {
-        decision: { ...decision, businessEventIds: [numericEventId] },
+        decision: { ...decision, businessEventIds: [numericEventId] } as unknown as CommandDecisionRecord,
         page: { ...records.page, items: [{ ...event, eventId: numericEventId }] },
         receipt: { ...receipt, eventIds: [numericEventId] },
       }), code: "PROJECT_CONFIGURATION_CONFLICT" },
