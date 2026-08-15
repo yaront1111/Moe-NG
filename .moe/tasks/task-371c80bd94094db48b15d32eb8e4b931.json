@@ -125,22 +125,29 @@
     {
       "stepId": "step-7",
       "description": "Run the mutation drills DoD-6 requires, against the PRODUCTION surface. [1] BYPASS THE PRODUCTION RENDER TIMESTAMP - make recovery-actions.tsx pass a fixed literal instead of the clock-derived render observation; the named live integration test from step 5 must go red on the render phase, proving the test reads production's value and not its own. [2] Weaken the cross-clock guard in the step-2 bridge so mismatched clocks subtract anyway; the cross-clock case must go red - and note it must go red on the UNKNOWN assertion, not merely on some duration differing, or the drill proved nothing about the guard. [3] Make a WireUnknownValue fall through to TIMING_SOURCE_ABSENT instead of TIMING_UPSTREAM_UNKNOWN; the layer-attribution assertion must go red. For each drill: confirm it actually applied (print the replaced line range and chain with &&, since a drill that applied nothing reads as green), read the failure MESSAGE rather than the count (over-reddening means a broken environment), restore with Edit rather than git checkout (checkout reverts to HEAD and destroys uncommitted work), and hash-check back to the pre-drill bytes before the next drill.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.ts",
         "apps/control-room/src/recovery/recovery-actions.tsx",
         "apps/control-room/src/recovery/recovery-actions.test.tsx"
       ],
-      "startedAt": "2026-08-15T13:34:02.641Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-command-timing.tsx",
+        "apps/control-room/src/performance/wire-timing.ts"
+      ],
+      "note": "All three DoD-6 drills run against the PRODUCTION surface. Each applied (proved by a grep count, not by assumption), each reddened on the assertion the plan named, each restored with Edit and hash-checked byte-identical before the next.\n\nDRILL 1 - BYPASS THE PRODUCTION RENDER TIMESTAMP. Target is live/live-command-timing.tsx:45, NOT recovery-actions.tsx: step 4 recorded that recovery-actions is reachable from zero application roots, so the real consumer edge is the live timeline. Replaced `readClientClock(useClock())` with `readClientClock({ now: () => 1_100 })`.\n  The literal matters: the scripted clock in the step-5 test returns 1_000 then 1_030, so a literal 1_030 would have been an EQUIVALENT MUTANT reproducing the same 30 and surviving while proving nothing. 1_100 forces a different span.\n  RED: `× measures the render phase from readings production took, not from a literal` - \"expected '100' to be '30'\". 1 failed | 8 passed. The named live test therefore reads production's clock-derived value, not one it supplied.\n  Deliberately NOT over-reddening: the no-clock test still passed, correctly - `received` refuses TIMING_CLOCK_UNAVAILABLE on the `from` side, so render never reaches the `to` reading. The drill could not have masked that arm.\n\nDRILL 2 - WEAKEN THE CROSS-CLOCK GUARD. Deleted the `from.clock !== to.clock` refusal in wire-timing.ts pairing() so mismatched clocks subtract anyway. Mutated toward NEVER REFUSING, not inverted: `===` would have made matching clocks refuse and reddened everything for the wrong reason. grep TIMING_CLOCK_MISMATCH in the bridge: 1 -> 0.\n  RED on the UNKNOWN assertion in every case, never merely on a differing duration - 6 failed | 47 passed:\n    \"expected undefined to be 'TIMING_CLOCK_MISMATCH'\"  (live path, rendered dataset)\n    \"expected null to be 'TIMING_CLOCK_MISMATCH'\"       (reasonCode null = it measured)\n    \"expected true to be false\"                          (known flipped: a number was published)\n    \"expected 'TIMING_NEGATIVE_INTERVAL' to be 'TIMING_CLOCK_MISMATCH'\" (x2)\n  That last pair is the sharpest result on this task. With the clock guard gone the BACKWARD-skewed pairs fell through to the negative-interval guard and still refused - which is exactly why the plan insisted the load-bearing case use FORWARD skew. The forward cases produced `known: true`, i.e. a plausible confidently WRONG duration. The negative-interval guard is demonstrably not a substitute for clock identity; it covers only half the skew.\n\nDRILL 3 - COLLAPSE THE SEAM REFUSAL. Made a refused wire reading return READING_ABSENT instead of TIMING_UPSTREAM_UNKNOWN. grep TIMING_UPSTREAM_UNKNOWN in the bridge: 1 -> 0.\n  RED on layer attribution - 6 failed | 47 passed:\n    \"expected 'TIMING_SOURCE_ABSENT' to be 'TIMING_UPSTREAM_UNKNOWN'\" (x4)\n    \"expected 'TIMING_SOURCE_ABSENT' not to be 'TIMING_SOURCE_ABSENT'\"  <- the test that exists solely to keep the two facts distinct\n    `× keeps a seam-caused stream refusal labelled CONTROL_ROOM while carrying SEAM` - the carrier assertion, proving the upstream {code, layer} is what names the refusing layer.\n\nRESTORE DISCIPLINE. Edit, never git checkout (checkout reverts to HEAD and would destroy uncommitted work in a shared tree). sha256 after every restore:\n  live-command-timing.tsx c1f7a4ee31938f781f9cb03fe8345397a83d2c3c0cd72c8e2c8feb69081e597a\n  wire-timing.ts          ebb4a7b385fdcfb5d3f99ede42936b4492f34818d5ff017801f1651bf37702bf\n  wire-timing-cases.test.ts 8d7129e31f076e23adefc29df5f8a6e8ab5f8ce2091e56f79988eb62d2580589\nAll three identical to pre-drill.\n\nSHARED-WORKTREE DISCLOSURE, and I checked it rather than assuming. A foreign whole-tree completion hook committed my step-6 file during this step: apps/control-room/src/performance/wire-timing-cases.test.ts is now tracked, swept into commit 702b28a which is LABELLED for a peer's task (task-bdb80e99, \"Bound the import dependsOn graph walk\"). The label is wrong; the bytes are mine. I scanned every commit in 4aa29d5..HEAD for off-baseline bytes of the two drilled production files - NONE captured a drilled version, so no mutation reached history. HEAD bytes equal working-tree bytes for all three files. QA should diff against base ref 4aa29d5 rather than trusting commit labels.\n\nFull package green after restores: npx vitest run -> 68 files, 844 tests passed, exit 0.",
+      "startedAt": "2026-08-15T13:34:02.641Z",
+      "completedAt": "2026-08-15T13:36:42.091Z"
     },
     {
       "stepId": "step-8",
       "description": "Verification gate, on FRESH output pasted into complete_task - never a remembered result. Run: pnpm --filter @moe/control-room test && pnpm --filter @moe/control-room-client test && pnpm typecheck. Read EVERY summary line rather than the final exit code, because a multi-leg run can exit 0 while one leg is red. Note two things measured during planning so they are not rediscovered as surprises: the control-room-client leg should be unaffected - readEventPage is an untyped passthrough returning SendResult and does NOT type the event page shape, so NO generated-client change is needed and packages/control-room-client/src/generated/generated-client.ts must remain untouched; and `pnpm test` at the root SKIPS apps/**, so the owned-package legs above are the only ones that actually gate this work. Apply the path-attributed baseline rail for any repo-wide red: record failures at the merge-base, at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY, disclosing any foreign red verbatim with its exact failing lines and paths.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/performance/live-timing.test.ts",
         "apps/control-room/src/recovery/recovery-actions.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:36:44.733Z"
     },
     {
       "stepId": "step-9",
@@ -167,12 +174,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:21.413Z",
-  "updatedAt": "2026-08-15T13:34:02.641Z",
+  "updatedAt": "2026-08-15T13:36:44.733Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T11:52:51.938Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -184,7 +191,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-14T11:56:26.853Z",

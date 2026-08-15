@@ -29,7 +29,7 @@
     {
       "stepId": "step-2",
       "description": "TDD first: add a focused real-SqliteEventStore suite and extend the real coordination-adapter suite before production code. Seed sequence 1 only through `commitActivationLedgerRecord`; assert the exact sequence-2 grant, sequence-3 PREFLIGHT, and sequence-4 observed chain, same-command byte-identical replay with unchanged counts, different-command idempotency/version conflicts, injected throws at every phase, restart/reopen, and two-connection races with an asserted nonzero race count, exactly one winner per phase, exact target-aggregate event counts and public decision counts, and no event for the failed phase (an already committed earlier fence remains consumed). Pin runner code/layer/leg for every grant and registration refusal. Add nonzero generated context-mutation and hostile-shape sweeps against the production decoder/history reader. Cover binding not-found, query mismatch, terminal intent/attempt, inactive/expired lease, cross-project, duplicate, malformed, unreadable, and incomplete-page cases plus the millisecond/second boundary (deadline millisecond and +1000 ms). In coordination tests seed a real BOUND case and prove every ABSENT/UNKNOWN maps to `COORDINATION_TERMINAL_BINDING_INVALID` at `ADDRESS` with zero mailbox mutation. Capture the initial focused red run using `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/foundation-launch-authority.test.ts src/coordination/coordination-adapter.test.ts`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/foundation-launch-authority.test.ts",
         "apps/daemon/src/coordination/coordination-adapter.test.ts"
@@ -37,12 +37,18 @@
       "newFiles": [
         "apps/daemon/src/activation/foundation-launch-authority.test.ts"
       ],
-      "startedAt": "2026-08-15T13:26:21.279Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts",
+        "apps/daemon/src/coordination/coordination-adapter.test.ts"
+      ],
+      "note": "TDD RED captured before any production byte. Command: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/foundation-launch-authority.test.ts src/coordination/coordination-adapter.test.ts` -> EXIT=1, \"Test Files 2 failed (2) | Tests 1 failed | 10 passed (11)\".\n\nTwo distinct reds, both the right ones:\n1. foundation-launch-authority.test.ts fails at COLLECTION: \"Cannot find module './foundation-activation-transition.js'\". The transition contract/codec, the extended reader exports and the authority module do not exist yet.\n2. coordination-adapter.test.ts fails on the POSITIVE arm only: after seeding a real activation through df298's commitActivationLedgerRecord, resolveEffectBinding still answers `{bound:false,effectId:null,sessionId:null}` instead of `{bound:true,effectId:\"effect-bound-one\",sessionId:\"session-terminal-bound\"}`. That is the unconditional stub at coordination-adapter.ts, which is exactly what step 6 replaces. Its ten NEGATIVE assertions already pass, which is the point: a port that refuses unconditionally satisfies every negative, so the positive is the only assertion that can distinguish a real binding from the stub.\n\nFIXTURES ARE PRODUCED, NOT HAND-WRITTEN. `parseActivationGrant` requires `isDigest(grantId)` (hex64) and `validateActivationCommit` requires `grantId === deriveGrantId(intentId, activationDigest)`; `canonicalDigest` is NOT published at the runner root, so a hand-built grant can never be coherent. Both suites therefore build their activation half by calling the published `activateEffect` with a full ARMED/LAUNCH_REQUESTED request plus a matching mirrored lease proof, and read intent/attempt/grant/activationDigest off the returned ActivationCommit. df298's own activation-ledger-fixtures.ts uses GRANT_ID=\"grant-0001\", which does NOT parse through the runner parser — it was only ever fed to the codec — so it could not be reused here.\n\nCoverage written (all currently red or unreachable): sequence-2 grant CAS with byte-decoded payload, sequence-3 PREFLIGHT and sequence-4 PROCESS_OBSERVED chain, same-command replay with unchanged event AND decision counts, different-command duplicate, pure kernel/grant refusals, durable-drift and unreadable-activation SUSPECT, injected throw at each phase asserting no event was written, out-of-order PROCESS_OBSERVED, malformed claim/registration/non-null-prior/unclassifiable-phase, lock and wrapper relation drift, history-fold prefix plus a missing-middle-event hole, BOUND/ABSENT/UNKNOWN vocabulary case by case, the millisecond boundary (deadline*1000 and +999 BOUND, +1000 EXPIRED), an 8x8=64-case hostile query sweep and a 1-per-byte truncation sweep — both asserting a nonzero generated case count — and a two-connection worker-thread race asserting results.length===2, exactly one CONSUMED, GRANT_ALREADY_CONSUMED/GRANT for the loser, and exactly two public events at reopen.\n\nEvery refusal assertion pins code AND layer AND leg via toStrictEqual on {code,kind,layer,leg}, so a refusal answered by a different layer reddens instead of passing.",
+      "startedAt": "2026-08-15T13:26:21.279Z",
+      "completedAt": "2026-08-15T13:36:25.948Z"
     },
     {
       "stepId": "step-3",
       "description": "Create the focused transition contract/codec without restating `EffectActivationCommitted`, its initial codec, aggregate derivation, or initial commit. Define record version `moe-foundation-activation-transition/1`, the exact ordered tags/events `GRANT_CONSUMED`/`FoundationActivationGrantConsumed`, `PREFLIGHT_REGISTERED`/`FoundationLaunchPreflightRegistered`, and `PROCESS_OBSERVED`/`FoundationLaunchProcessObserved`, and fixed tag-specific primitive tuples sealed by SHA-256 so encode/decode is canonical and byte-comparable. Every transition carries activationDigest, grantId, intentId, attemptId, wrapperIdentity; registration transitions additionally carry exact lockIdentity, processIdentity, bootstrapCredentialDigest, and registeredAt, but never copy leaseToken or other authority secrets. Add exact descriptor-safe snapshots (Reflect.ownKeys plus enumerable own data descriptors; accessors/proxies fail closed), bounded UTF-8 decoding, frozen outputs, and stable binding result vocabulary at layer `FOUNDATION_ACTIVATION_BINDING`: ABSENT codes `FOUNDATION_BINDING_NOT_FOUND`, `FOUNDATION_BINDING_QUERY_MISMATCH`, `FOUNDATION_BINDING_TERMINAL`, `FOUNDATION_BINDING_LEASE_INACTIVE`, `FOUNDATION_BINDING_LEASE_EXPIRED`; UNKNOWN codes `FOUNDATION_BINDING_QUERY_INVALID`, `FOUNDATION_BINDING_PROJECT_MISMATCH`, `FOUNDATION_BINDING_ACTIVATION_INCOHERENT`, `FOUNDATION_BINDING_EVIDENCE_MALFORMED`, `FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS`, `FOUNDATION_BINDING_EVIDENCE_UNREADABLE`, `FOUNDATION_BINDING_SCAN_INCOMPLETE`. Keep the TS source <=250 physical lines and add the exact one-line double-quoted LF bridge.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/foundation-activation-contracts.ts",
         "apps/daemon/src/activation/foundation-activation-contracts.js"
@@ -50,15 +56,23 @@
       "newFiles": [
         "apps/daemon/src/activation/foundation-activation-contracts.ts",
         "apps/daemon/src/activation/foundation-activation-contracts.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/foundation-activation-transition.ts",
+        "apps/daemon/src/activation/foundation-activation-transition.js"
+      ],
+      "note": "Landed apps/daemon/src/activation/foundation-activation-transition.ts + its exact one-line double-quoted LF bridge (`export * from \"./foundation-activation-transition.ts\";`, verified with `cat -A`, single `$` terminator).\n\nRESTATES NOTHING FROM df298. The module imports only node:crypto. It declares no EffectActivationCommitted record, no ACTIVATION_LEDGER_* code, no aggregate derivation and no commit: `grep -c \"ACTIVATION_LEDGER\\|deriveActivationAggregateId\\|EffectActivationCommitted\"` over it is 0. Sequence 1 stays df298's event.\n\nShape: record version `moe-foundation-activation-transition/1`; ordered tags GRANT_CONSUMED / PREFLIGHT_REGISTERED / PROCESS_OBSERVED mapped to event types FoundationActivationGrantConsumed / FoundationLaunchPreflightRegistered / FoundationLaunchProcessObserved. GRANT_TUPLE = (tag, activationDigest, grantId, intentId, attemptId, wrapperIdentity); REGISTRATION_TUPLE adds (lockIdentity, processIdentity, bootstrapCredentialDigest, registeredAt). Encoding is length-first framing of PLAIN UTF-8 strings — no JSON, so there is no key order, no duplicate-key ambiguity and no number to round — sealed by a trailing SHA-256 over the body. Decode verifies the seal BEFORE parsing framing, then re-encodes the validated tuple and requires the digest to reproduce, so a stored payload is byte-comparable to a fresh encoding without trusting the framing that produced it. A GRANT_CONSUMED transition must carry null in all four registration slots, so a registration field cannot be smuggled onto the grant tag.\n\nNO SECRET COPIED: `grep -c \"leaseToken\\|leaseProof\\|authorityHashRef\"` over the file is 0. Only the credential DIGEST crosses, which is all the launch-lock protocol itself handles.\n\nDescriptor-safe snapshot: `snapshotFoundationRecord` uses Reflect.ownKeys (catches symbol keys Object.keys misses), requires the own-key count to match exactly, and refuses any slot that is not an ENUMERABLE own DATA descriptor — so an accessor or a proxy fails closed instead of running a getter inside a refuse-only guard. Both Reflect.ownKeys and getOwnPropertyDescriptor are wrapped, because a revoked proxy throws from either.\n\nBounded decoding: TextDecoder(\"utf-8\", {fatal:true}) so mis-framed bytes refuse instead of becoming U+FFFD; MAX_TRANSITION_BYTES 65_536; MAX_TEXT_CHARS 400. Outputs are frozen.\n\nTWO TRAPS HIT AND FIXED HERE, both worth the next agent's attention:\n1. My first draft wrote the control-character guard as a regex with backslash-u escapes. The Write tool JSON-DECODED them, so real control bytes (NUL through 0x1f, 0x7f) landed in the source: `grep` reported \"Binary file matches\" and the class had silently become `[space-hyphen]`, which would have rejected every identifier containing a hyphen. It typechecked clean. Replaced with a code-point walk (`code < 0x20 || code === 0x7f`) using hex numeric literals — no escape sequence survives in the file. Verified with `grep -aP '[\\x00-\\x08\\x0b-\\x1f\\x7f]'` returning zero hits.\n2. Validation reads values through typed guards, never `String(value)`: a hostile object with a throwing toString would otherwise throw out of a guard whose job is to refuse.\n\nBinding vocabulary at layer FOUNDATION_ACTIVATION_BINDING: ABSENT { NOT_FOUND, QUERY_MISMATCH, TERMINAL, LEASE_INACTIVE, LEASE_EXPIRED }, UNKNOWN { QUERY_INVALID, PROJECT_MISMATCH, ACTIVATION_INCOHERENT, EVIDENCE_MALFORMED, EVIDENCE_AMBIGUOUS, EVIDENCE_UNREADABLE, SCAN_INCOMPLETE }, plus frozen constructors and the BOUND result type.\n\nLINE COUNT DEVIATION, DISCLOSED: 296 physical lines (`grep -c ''`), not the <=250 the plan step asked for. It is under epic rail 5's hard split point (400) but over the 250 target. I trimmed three comment blocks and compacted the declarations to get from 327 down to 296; going further would have meant either deleting load-bearing rationale or adding a 9th/10th owned path outside the approved plan's eight. I chose the disclosed target miss over an unapproved file. `pnpm --filter @moe/daemon typecheck` reports ZERO errors from this file (the only remaining errors name the not-yet-written reader exports and authority module, which are steps 4 and 5).",
+      "startedAt": "2026-08-15T13:36:28.394Z",
+      "completedAt": "2026-08-15T13:41:09.204Z"
     },
     {
       "stepId": "step-4",
       "description": "Extend the 71-line reader, without changing `readActivationLedgerRecord`, with a history fold and `readCurrentEffectSessionBinding(store, projectId, effectId, sessionId, nowMilliseconds)`. The history fold requires one aggregate with contiguous sequences, isolates sequence 1 and calls the strict df298 reader on that singleton, then admits only the exact optional prefix GRANT_CONSUMED -> PREFLIGHT_REGISTERED -> PROCESS_OBSERVED and rechecks every carried activation/grant/intent/attempt/wrapper/lock/process identity. Re-parse intent/attempt/grant through the public runner parsers, require `validateActivationCommit` COHERENT and its digest equal the stored activationDigest, parse the lease through public scheduler `parseLeaseRecord`, require the durable lease equal `effectIntent.leaseBinding`, ACTIVE intent/RUNNING attempt, ACTIVE lease, configured store health plus sequence-1 decisionTrace project, and no caller-derived positive identity. For lookup, paginate `readEventsAfter(0n, 100)` with monotonic/no-empty-progress checks, validate every initial-event candidate, and require exactly one matching committed intent; any unreadable candidate or incomplete/ambiguous scan is UNKNOWN. Return frozen exact `{status:'BOUND', effectId:<committed intentId>, sessionId:<committed lease.ownerSessionRef>, activationDigest}` only when query equality and liveness hold. Validate safe millisecond input, use `Math.floor(nowMilliseconds/1000)`, and expire only when seconds are greater than the deadline. Finish this production file <=250 lines; its existing LF bridge already re-exports it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-reader.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:41:11.943Z"
     },
     {
       "stepId": "step-5",
@@ -126,7 +140,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:47.411Z",
-  "updatedAt": "2026-08-15T13:26:21.279Z",
+  "updatedAt": "2026-08-15T13:41:11.943Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -135,7 +149,7 @@
     "firstClaimAt": "2026-08-15T12:40:26.844Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-4eca9b79",
@@ -145,7 +159,9 @@
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:16:22.507Z",

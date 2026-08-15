@@ -34,41 +34,68 @@
     {
       "stepId": "step-2",
       "description": "Remove the forbidden header from the client. packages/control-room-client/src/client-transport.ts:90-96 headersFor returns an object containing `origin: options.origin`, passed as `headers` to fetch at :108-111. `Origin` is a FORBIDDEN header name in the fetch spec: a browser silently drops it and substitutes its own, so this entry is inert in the only environment that matters. Delete that one entry. Leave the other headers untouched - content-type, x-moe-csrf, x-moe-protocol-version, x-moe-session-credential - and leave the URL construction at :108 alone, since it uses options.origin as the request PREFIX and that use is correct and unrelated. In packages/control-room-client/src/client-transport.test.ts assert the EXACT set of header names headersFor produces, so re-adding `origin` fails loudly rather than passing silently.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/control-room-client/src/client-transport.ts",
         "packages/control-room-client/src/client-transport.test.ts"
       ],
-      "startedAt": "2026-08-15T13:33:43.077Z"
+      "modifiedFiles": [
+        "packages/control-room-client/src/client-transport.ts",
+        "packages/control-room-client/src/client-transport.test.ts"
+      ],
+      "note": "TDD order held: the exact-header-set assertion was written and run RED first, for the right reason — the failure diff was literally `+ \"origin\",` inside the sorted key list — then the production entry was deleted.\n\nTest added to client-transport.test.ts: `it(\"sets the EXACT header set it intends, and no forbidden header among them\")`. It asserts the WHOLE sorted key set from the captured fetch init — [\"content-type\",\"x-moe-csrf\",\"x-moe-protocol-version\",\"x-moe-session-credential\"] — not a subset, so re-adding `origin` (or any other header) fails loudly instead of passing silently. Also pins `not.toHaveProperty(\"origin\")` and re-asserts the URL is `${ORIGIN}/command`, since the URL prefix is a SEPARATE use of options.origin that must survive.\n\nRemoved the stale `expect(call?.headers[\"origin\"]).toBe(ORIGIN)` from the credential test — it asserted the defect.\n\nProduction change is exactly one line: client-transport.ts headersFor no longer emits `origin: options.origin`. content-type, x-moe-csrf, x-moe-protocol-version, x-moe-session-credential untouched; `${options.origin}${path}` at the fetch call untouched; TransportOptions.origin still required and still used.\n\nVerified: pnpm --filter @moe/control-room-client test → 6 files, 41 passed. pnpm --filter @moe/control-room-client typecheck → exit 0. Generated client untouched. client-transport.ts now 137 lines (grep -c '').",
+      "startedAt": "2026-08-15T13:33:43.077Z",
+      "completedAt": "2026-08-15T13:34:19.964Z"
     },
     {
       "stepId": "step-3",
       "description": "STATE AND HANDLE THE CONSEQUENCE - this is the part a careless fix gets wrong. In a BROWSER, removing the header changes nothing: it was being dropped anyway and the browser supplies Origin itself. In NODE it changes everything: no Origin header is sent, so the daemon's guard sees undefined and refuses every request with LISTENER_ORIGIN_INVALID. The transport supports non-browser use through options.fetch, so this is a real behavior change, not a theoretical one. Decide it explicitly and record the decision in a comment on headersFor: a non-browser caller must supply Origin through its own fetch wrapper, exactly as a browser does, because the transport cannot set it. Do NOT reintroduce the header behind an environment check, and do NOT relax the daemon guard to admit a missing Origin - task rail 1 forbids the latter and the former merely restores the illusion.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/control-room-client/src/client-transport.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/client-transport.ts"
+      ],
+      "note": "The consequence is stated in the code, not left as a footnote.\n\nDECISION RECORDED on headersFor: `Origin` is deliberately absent, and so is the fallout. In a browser nothing changes — the header was being dropped and replaced anyway. In Node everything changes: no Origin is sent, the daemon sees undefined and refuses with LISTENER_ORIGIN_INVALID. That refusal is the HONEST answer, not a regression, and a non-browser caller closes it by supplying Origin through its own options.fetch wrapper, exactly as a browser does — because this layer cannot.\n\nExplicitly written into the comment as forbidden: reintroducing the header behind an environment check (restores the illusion) and relaxing the daemon guard (task rail 1). Neither was done.\n\nSecond touch: the TransportOptions.fetch doc said only \"Injected for tests; production uses the ambient fetch\", which is now incomplete — options.fetch is the ONLY seam through which a non-browser caller can supply Origin, so it points at headersFor for the reason. Without that pointer the next reader hits the Node refusal and re-adds the header.\n\nComment-only step; no behavior changed. pnpm --filter @moe/control-room-client typecheck exit 0; test 6 files / 41 passed. client-transport.ts is 158 physical lines by grep -c '' — under the 250 target.",
+      "startedAt": "2026-08-15T13:34:22.185Z",
+      "completedAt": "2026-08-15T13:34:48.090Z"
     },
     {
       "stepId": "step-4",
       "description": "Close the coverage gap the item is really about, in the one place that can. Neither package can import the other - apps/daemon does not depend on @moe/control-room-client and the client depends only on @moe/contracts - so an end-to-end test belongs in tests/integration/control-room/control-room-transport.test.ts, which already drives createControlRoomTransport. Extend it so a REAL transport instance talks to a REAL daemon listener and the Origin the daemon sees comes from the fetch layer the way a browser supplies it, NOT from headersFor. Assert three arms by exact code: a correct Origin is admitted; a mismatched Origin refuses with LISTENER_ORIGIN_INVALID; and a request with no Origin at all refuses with the same code. Do NOT hand-set an Origin inside headersFor to make this pass - that reproduces exactly the illusion this task exists to remove, and it is the single most likely wrong turn here.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/control-room/control-room-transport.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/control-room/control-room-transport.test.ts"
+      ],
+      "note": "Coverage gap closed in tests/integration/control-room/control-room-transport.test.ts, the one place that can host it (no dependency edge exists in either direction between apps/daemon and @moe/control-room-client, and none was added).\n\nFIRST, the removal was proven REAL, not cosmetic. Running the integration leg immediately after step 2, before any test change: 2 failed / 2 passed, both failures `{\"code\":\"LISTENER_ORIGIN_INVALID\",\"layer\":\"CONTROL_ROOM_LISTENER\"}`. The shipped transport, driving a real daemon over a real socket, is refused by the real guard. That is the behaviour step 3 predicted.\n\nNEW SEAM: fetchSupplyingOrigin(origin) wraps ambient fetch and sets Origin on the way out — the FETCH LAYER supplies it, exactly as a browser does, never headersFor. transportFor(daemon, browserOrigin?) makes `undefined` mean NO wrapper, so the absent-Origin arm is the shipped transport's own behaviour rather than a header a test deleted. withDaemon now passes started.origin so existing tests keep a correct Origin.\n\nNEW TEST, three arms, each by exact code and refusing layer:\n- ADMITTED — fetch layer supplies the matching Origin: status 200, response {httpStatus:200, ok:true, outcome:\"ACCEPTED\"}. Named positively so a different listener guard refusing cannot pass it.\n- FOREIGN — http://evil.example.com, same transport, same correct URL prefix: status>=400, response EQUALS {code:\"LISTENER_ORIGIN_INVALID\", layer:\"CONTROL_ROOM_LISTENER\"} (toEqual, not toMatchObject).\n- ABSENT — no wrapper at all: same exact code and layer. This arm was IMPOSSIBLE before; while headersFor set the header this request was admitted.\n\nAlso extracted commandEnvelope(id) so every arm uses the GENERATED builder's envelope; CommandEnvelope is derived as Parameters<ControlRoomTransport[\"sendCommand\"]>[0], so no new package import edge.\n\nTHREE DRILLS, all restored and sha-verified:\n1. Re-add `origin: options.origin` to headersFor (the illusion) → ABSENT arm RED: \"expected 200 to be greater than or equal to 400\". The forbidden header made a no-Origin request succeed. This is the drill that matters — the arm cannot be satisfied by the thing this task removes. Client restored, sha256 cd1e11b8…\n2. Disable the daemon guard (`if (false)`) → FOREIGN arm RED at line 245.\n3. (step 1) `if (true)` → ADMITTED arm RED.\nGuard restored, sha256 ae13a94d…, git diff empty.\n\nDISCLOSED FOREIGN RED, not mine: \"transports a committed read whose payload EQUALS the in-process handler's\" fails on a wall-clock skew — `- \"value\": \"2026-08-15T13:36:33.934Z\"` vs `+ \"value\": \"2026-08-15T13:36:33.930Z\"`, 4ms apart. Source is seamObservation from observer.now() in apps/daemon/src/http/event-stream.ts:80,87 (DEFAULT_SEAM_OBSERVER, wall clock); the daemon and the in-process readEventPage take separate readings, so whole-payload equality can only pass inside one millisecond. ATTRIBUTED BY PROBE: I restored merge-base bytes (de936fe) for BOTH client-transport.ts and this integration test — merge-base client still had `origin: options.origin` at :93 — and the same test still failed identically. Pre-existing at merge-base, outside my diff, and fixing it needs an observer-injection seam through startDaemon that does not exist. Not repaired: out of scope and it would invent a production seam another task owns.\n\nControl-room integration leg: 4 passed / 1 failed (that one). My three arms pass.\n\nHAZARD NOTE: foreign commit 79d9651 (task-702dcb63) is a whole-tree commit that swept my in-progress client-transport.ts bytes into another task's commit. Known hazard per the global rail — not amended, not reset. QA should review by base-ref diff `git diff de936fe..HEAD -- <owned paths>` plus the working tree.",
+      "startedAt": "2026-08-15T13:34:52.650Z",
+      "completedAt": "2026-08-15T13:39:12.831Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test && pnpm --filter @moe/daemon test, plus the focused integration leg for tests/integration/control-room. Run integration legs from PowerShell rather than Git Bash - MSYS path translation has produced fake failures in this repo's integration suites before, and a fake failure here looks exactly like a real Origin refusal. Read every summary line rather than the final exit code. Then review as an attacker: (1) Does ANY code path still set a forbidden header - re-grep the client for `origin:` inside a headers object. (2) Did the daemon guard get weakened in any way to make a test pass? (3) Does the dev vite proxy path still work, or did it depend on the removed header - check the proxy configuration before concluding. (4) Confirm packages/control-room-client/src/generated/generated-client.ts is UNTOUCHED; it is marked GENERATED - DO NOT EDIT BY HAND with @moe/contracts as its source of truth, and if the change reached generated output this task should report blocked and name a contracts/codegen task instead. (5) Confirm every touched production source is at or under 250 physical lines using `grep -c ''` (client-transport.ts is 138 today; PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/control-room-client/src/client-transport.ts",
         "tests/integration/control-room/control-room-transport.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/control-room-client/src/client-transport.ts",
+        "packages/control-room-client/src/client-transport.test.ts",
+        "apps/daemon/src/http/http-listener.test.ts",
+        "tests/integration/control-room/control-room-transport.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW, all five checks run:\n\n(1) NO forbidden header remains. `grep -rn \"origin\" packages/control-room-client/src/*.ts` (non-test) returns exactly three hits, none a header: TransportOptions.origin declaration :36, a comment :109, and the URL prefix `${options.origin}${path}` :128. Generated client has zero `origin:`.\n(2) GUARD NOT WEAKENED. `git diff de936fe -- http-listener-guards.ts http-listener.ts` is EMPTY. Guard sha256 ae13a94d… matches its pre-drill backup; :127 still reads `if (request.headers.origin !== origin) return \"LISTENER_ORIGIN_INVALID\"`.\n(3) DEV VITE PROXY UNAFFECTED. apps/control-room/vite.config.ts:59-66 sets `changeOrigin: true` and `headers: { origin: DAEMON_ORIGIN }` on every proxied path — the PROXY supplies Origin and overrides whatever arrives, so the dev path never depended on the client header. Nothing to repair.\n(4) GENERATED CLIENT UNTOUCHED. `git diff --stat de936fe --` and `git status --porcelain --` on src/generated/ are both empty. No blocked report needed.\n(5) SIZE. client-transport.ts 158 lines by `grep -c ''` (was 138; +20 is the decision comment), under the 250 target. http-listener-guards.ts untouched at 153.\n\nEXTRA — the integration test is typechecked by NOTHING. No tsconfig covers tests/integration (only e2e, fault, security have one) and the root gate is `pnpm --recursive typecheck`, so a type error there is invisible to every gate. Ran it explicitly under the repo's strict flag set (--strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax, nodenext): exit 0. No probe file written.\n\nCHECKLIST: headersFor is pure and the fetch wrapper builds a fresh Headers per call — no shared mutable state, nothing to race. Each arm uses a distinct commandId/aggregateId, and the two refused arms never reach the adapter, so ordering cannot leak between them. withDaemon shuts down in `finally`, on the throw path too. The ADMITTED arm is not vacuous-by-undici: the ABSENT arm runs the same code path with no wrapper and is REFUSED, which proves undici does not auto-supply Origin — the two arms are each other's control.\n\nFRESH GATE ON COMMITTED BYTES (commit 48c6298, chained, PowerShell, stops on any non-zero): client typecheck exit 0; client test 6 files / 41 passed; daemon src/http 6 files / 82 passed; integration Origin-guard arm 1 passed. FINAL_EXIT=0.\n\nFOREIGN RED, DISCLOSED AND ATTRIBUTED — the full `pnpm --filter @moe/daemon test` leg exits 1: \"Test Files 3 failed | 74 passed (77) / Tests 2 failed | 1631 passed (1633)\". The three:\n- FAIL src/activation/foundation-launch-authority.test.ts — \"Cannot find module './foundation-launch-authority.js'\". UNTRACKED peer file, its production module does not exist; a peer mid-TDD.\n- FAIL src/runtime-entrypoint.test.ts > \"has an exact .js bridge for every runtime module and none for test-tier ones\" — reddened by the same peer's untracked foundation-activation-transition.{ts,js}.\n- FAIL src/coordination/coordination-adapter.test.ts > \"maps only a committed, live activation to the exact positive binding\" — file is ` M` in git status, a peer's in-flight edit.\nBASELINE PROBE: restored merge-base bytes (de936fe) of my only daemon file and re-ran the same leg — IDENTICAL failure set, \"3 failed | 74 passed (77) / 2 failed | 1630 passed (1632)\". My diff adds exactly the one passing test (1630→1631) and removes none. Delta ∩ owned paths is EMPTY. My daemon diff is +18/-1 confined to src/http/http-listener.test.ts; all 82 src/http tests pass. Restored, sha256 fef1b3d9…\n\nALSO PRE-EXISTING: the integration equality test \"transports a committed read whose payload EQUALS the in-process handler's\" fails on wall-clock skew (`- \"value\":\"…33.934Z\"` vs `+ \"…33.930Z\"`, 4ms) from observer.now() at event-stream.ts:80,87. Reproduced at merge-base with merge-base client-transport.ts (origin header still present at :93) — pre-existing, not repaired: the fix needs an observer-injection seam through startDaemon that does not exist, and inventing it is out of scope.\n\nCommitted by explicit pathspec only (client-transport.ts, control-room-transport.test.ts). The other two owned files were already swept into foreign whole-tree commit 79d9651 (task-702dcb63) — not amended, not reset, per the global rail.",
+      "startedAt": "2026-08-15T13:39:15.427Z",
+      "completedAt": "2026-08-15T13:42:22.684Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -80,15 +107,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:28.441Z",
-  "updatedAt": "2026-08-15T13:33:43.077Z",
+  "updatedAt": "2026-08-15T13:43:04.438Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:05:58.161Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 1
+    "executedStepCount": 5
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:08:13.624Z",
@@ -110,5 +141,18 @@
   "contextFetchedBy": [
     "worker-06df66bb"
   ],
-  "workStartedAt": "2026-08-15T13:31:21.472Z"
+  "workStartedAt": "2026-08-15T13:31:21.472Z",
+  "reviewStartedAt": "2026-08-15T13:43:04.438Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room-client typecheck && pnpm --filter @moe/control-room-client test && (cd apps/daemon && npx vitest run --root . --config package.json src/http) && npx vitest run tests/integration/control-room -t \"Origin guard\"",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n Test Files  6 passed (6)\n      Tests  41 passed (41)\n   Start at  16:41:54\n   Duration  362ms (transform 566ms, setup 0ms, import 769ms, tests 333ms, environment 0ms)\n\n Test Files  6 passed (6)\n      Tests  82 passed (82)\n   Start at  16:41:55\n   Duration  1.00s (transform 2.16s, setup 0ms, import 2.91s, tests 283ms, environment 0ms)\n\n Test Files  1 passed (1)\n      Tests  1 passed | 4 skipped (5)\n   Start at  16:41:56\n   Duration  653ms (transform 412ms, setup 0ms, import 523ms, tests 30ms, environment 0ms)\n\nFINAL_EXIT=0",
+    "reportedAt": "2026-08-15T13:43:04.438Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/http/http-listener.test.ts",
+    "packages/control-room-client/src/client-transport.ts",
+    "packages/control-room-client/src/client-transport.test.ts",
+    "tests/integration/control-room/control-room-transport.test.ts"
+  ]
 }

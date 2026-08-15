@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign } from "node:crypto";
+import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,9 +8,14 @@ import type {
   CoordinationAddress, CoordinationEndpoint, CoordinationEnvelopeKind, CoordinationRole,
   CoordinationSendResult,
 } from "@moe/coordination";
+import {
+  SUPERVISOR_ACTIVATION_VERSION, SUPERVISOR_EFFECT_PROTOCOL_VERSION, activateEffect,
+} from "@moe/runner";
 import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { commitActivationLedgerRecord } from "../activation/activation-ledger-commit.js";
+import { ACTIVATION_LEDGER_RECORD_VERSION } from "../activation/activation-ledger-contracts.js";
 import {
   SESSION_PROOF_ALGORITHM, SESSION_PROOF_PROTOCOL_VERSION,
 } from "../identity/session-authority-contracts.js";
@@ -742,5 +747,161 @@ describe("daemon coordination advisory and control traffic carry no authority", 
     });
     expect(closed).toEqual({ code: "AUTHENTICATION_FAILED", layer: "BINDING", ok: false });
     expect(lifecycleDigest(state, sessionIds)).toBe(before);
+  });
+});
+
+/**
+ * The effect port's POSITIVE arm, seeded through the production activation
+ * commit adapter rather than injected. Without a matching positive, the negative
+ * assertions above are satisfied by a port that refuses unconditionally — which
+ * is exactly what this adapter used to do.
+ */
+const EFFECT_ID = "effect-bound-one";
+const EFFECT_AGGREGATE = "effect-aggregate-bound-one";
+const EFFECT_IDEMPOTENCY = "idem-bound-one";
+const LEASE_DEADLINE_SECONDS = Math.floor(NOW / 1_000) + 3_600;
+
+function effectDigest(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/** Commits one real activation whose lease is owned by `sessionId`. */
+function seedActivation(state: Harness, sessionId: string): void {
+  const lease = {
+    authorityHashRef: effectDigest("bound-authority"), bootId: "boot-bound", epoch: 2,
+    kind: "ASSIGNMENT" as const, leaseId: "lease-bound", leaseToken: "token-bound",
+    monotonicObservation: 1_000, ownerSessionRef: sessionId,
+    serverWallDeadline: LEASE_DEADLINE_SECONDS, state: "ACTIVE" as const, version: 5,
+  };
+  const outcome = activateEffect({
+    attempt: {
+      aggregateId: EFFECT_AGGREGATE, attemptId: "attempt-bound", intentId: EFFECT_ID,
+      state: "LAUNCH_REQUESTED", version: 7,
+    },
+    claim: {
+      claimedAt: "2026-08-11T08:00:00.000Z", claimId: "claim-bound", intentId: EFFECT_ID,
+      lockIdentity: "lock-bound", wrapperIdentity: "wrapper-bound",
+    },
+    dependencyWitnesses: [], desiredState: "ACTIVE",
+    intent: {
+      aggregateId: EFFECT_AGGREGATE, desiredState: "ACTIVE", expectedGraphEpoch: 4,
+      idempotencyKey: EFFECT_IDEMPOTENCY, inputBinding: effectDigest("bound-input"),
+      intentId: EFFECT_ID, leaseBinding: lease, predecessorCursor: "cursor-bound",
+      protocolVersion: SUPERVISOR_EFFECT_PROTOCOL_VERSION,
+      runtimeObservationDigest: effectDigest("bound-runtime"), state: "ARMED", version: 6,
+    },
+    leaseProof: {
+      authorityHashRef: effectDigest("bound-authority"), epoch: 2, expectedVersion: 5,
+      leaseToken: "token-bound", ownerSessionRef: sessionId,
+    },
+    lockIdentity: "lock-bound", observedGraphEpoch: 4,
+    observedRuntimeDigest: effectDigest("bound-runtime"), tombstone: null,
+    wrapperIdentity: "wrapper-bound",
+  });
+  if (outcome.kind !== "ACTIVATED") {
+    throw new Error(`activation fixture refused: ${outcome.failure.code}`);
+  }
+  const committed = commitActivationLedgerRecord(state.store, {
+    correlationId: "correlation-bound-activation",
+    decidedAt: "2026-08-11T08:30:00.000Z",
+    key: {
+      commandId: "command-bound-activation", principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    },
+    record: {
+      activationDigest: outcome.commit.activationDigest,
+      activationVersion: SUPERVISOR_ACTIVATION_VERSION,
+      attempt: outcome.commit.attempt,
+      budgetReservation: {
+        accountId: "account-bound", admissionRef: "admission-bound", attemptRef: "attempt-bound",
+        lines: [{ meter: "tokens", purpose: "EXECUTION", quantity: 10 }],
+        neverStartedProofRef: null, reservationId: "reservation-bound", state: "ACTIVATED",
+        version: 3,
+      },
+      budgetView: {
+        accountId: "account-bound",
+        meters: [{ available: 90, committed: 0, meter: "tokens", quarantined: 0, reserved: 10 }],
+        state: "OPEN", version: 3,
+      },
+      effectIntent: outcome.commit.intent,
+      grant: outcome.commit.grant,
+      lease,
+      predecessorAttemptVersion: 7,
+      predecessorIntentVersion: 6,
+      providerSlot: {
+        attemptRef: "attempt-bound", dimension: "provider:claude", requestId: "request-bound",
+        slotRef: "slot-bound", state: "ACTIVE",
+      },
+      recordVersion: ACTIVATION_LEDGER_RECORD_VERSION,
+    },
+    requestBytes: new TextEncoder().encode("bound-activation-request"),
+  });
+  if (!committed.ok) throw new Error(`activation commit refused: ${committed.code}`);
+}
+
+describe("daemon coordination adapter answers the effect port from the ledger", () => {
+  it("maps only a committed, live activation to the exact positive binding", () => {
+    const state = harness();
+    const pair = registeredPair(state);
+    const terminal = openSession(state, "terminal-bound");
+    const terminalAddress = Object.freeze({
+      effectId: EFFECT_ID, role: "TERMINAL" as const, sessionId: terminal.sessionId,
+    });
+    register(state, terminalAddress, "terminal-bound");
+    const query = { effectId: EFFECT_ID, now: state.now, sessionId: terminal.sessionId };
+    const before = lifecycleDigest(state, [pair.coder.sessionId, terminal.sessionId]);
+
+    // Nothing is committed yet, so the port must still refuse at ADDRESS.
+    expect(state.adapter.resolveEffectBinding(query))
+      .toEqual({ bound: false, effectId: null, sessionId: null });
+    expect(sendAs(
+      state, pair.coder,
+      envelopeOf("EVENT", "message-unbound-effect", pair.coderAddress, terminalAddress),
+      [terminal.sessionId],
+    )).toEqual({
+      code: "COORDINATION_TERMINAL_BINDING_INVALID", detail: expect.any(String), layer: "ADDRESS",
+      outcome: "REFUSED",
+    });
+    // The mailbox endpoint is gated by the SAME port, so an unbound terminal
+    // cannot read its own mailbox either, and nothing was mutated on the way.
+    expect(readAs(state, terminal, terminalAddress)).toEqual({
+      code: "COORDINATION_TERMINAL_BINDING_INVALID", detail: expect.any(String), layer: "ADDRESS",
+      outcome: "REFUSED",
+    });
+    expect(lifecycleDigest(state, [pair.coder.sessionId, terminal.sessionId])).toBe(before);
+
+    seedActivation(state, terminal.sessionId);
+    const bound = state.adapter.resolveEffectBinding(query);
+    expect(bound).toEqual({ bound: true, effectId: EFFECT_ID, sessionId: terminal.sessionId });
+    expect(Object.isFrozen(bound)).toBe(true);
+    expect(Object.keys(bound as object)).toStrictEqual(["bound", "effectId", "sessionId"]);
+    // The same send now reaches the mailbox: the ONLY thing that changed is the
+    // durable activation, which is what makes the negative above non-vacuous.
+    accepted(sendAs(
+      state, pair.coder,
+      envelopeOf("EVENT", "message-bound-effect", pair.coderAddress, terminalAddress),
+      [terminal.sessionId],
+    ));
+    const delivered = readAs(state, terminal, terminalAddress);
+    expect(delivered.outcome).toBe("READ");
+
+    // A different session asking about the same effect is refused, and the
+    // answer carries no internal binding reason at all.
+    const wrong = state.adapter.resolveEffectBinding({
+      effectId: EFFECT_ID, now: state.now, sessionId: pair.coder.sessionId,
+    });
+    expect(wrong).toEqual({ bound: false, effectId: null, sessionId: null });
+    expect(state.adapter.resolveEffectBinding({
+      effectId: "effect-never-committed", now: state.now, sessionId: terminal.sessionId,
+    })).toEqual({ bound: false, effectId: null, sessionId: null });
+
+    // Expiry is a property of the durable lease, not of this process.
+    expect(state.adapter.resolveEffectBinding({
+      effectId: EFFECT_ID, now: (LEASE_DEADLINE_SECONDS + 1) * 1_000,
+      sessionId: terminal.sessionId,
+    })).toEqual({ bound: false, effectId: null, sessionId: null });
+
+    state.reopen();
+    expect(state.adapter.resolveEffectBinding(query))
+      .toEqual({ bound: true, effectId: EFFECT_ID, sessionId: terminal.sessionId });
   });
 });

@@ -96,8 +96,8 @@
       "completedAt": "2026-08-15T13:22:25.035Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,12 +122,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:45:50.059Z",
-  "updatedAt": "2026-08-15T13:30:16.133Z",
+  "updatedAt": "2026-08-15T13:34:36.475Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:55:16.606Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T13:34:36.475Z",
+    "wallClockMs": 2359869
   },
   "stepsCompleted": [
     "step-1",
@@ -170,5 +172,8 @@
     "packages/store/src/backup-generation-publish.ts",
     "packages/store/src/backup-generation-publish.js",
     "packages/store/src/backup-generation.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:34:36.475Z",
+  "reviewCompletedAt": "2026-08-15T13:34:36.475Z",
+  "reviewSummary": "APPROVED. Gate re-run by me at HEAD de936fe, foreground: (pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test) EXIT=0, 42 files / 502 tests, &&-chained so no leg masked. git status -- packages/store/ empty: committed bytes == gated bytes.\n\nDoD 1+2 - 4 mutation drills, each red on the intended DISK-STATE assertion, each restored sha256 == base 57cc6c9b (publish.ts) / d54a023c (backup-generation.ts):\nD1 original rm-then-rename restored -> 1 red, \"keeps a complete generation resolvable when the publish is interrupted\", on \"no manifest at ...\\generation\\manifest.json\". Defect reproduced.\nD2 resolveInterruptedPublish disabled -> 2 red (restore-the-aside, refuse-on-broken-aside).\nD3 generationIsComplete inventory check skipped -> 2 red, incl \"half-populated generation\". D2 left that one green because a leftover aside collides on the Windows rename anyway - worker disclosed exactly that; D3 proves the assertion is bound to completeness, not the collision.\nD4 catch-block aside restore removed -> 1 red, same disk-state assertion. Pins DoD 3.\n\nDoD 3 - expectRefusal (test:172) asserts code BACKUP_PROOF_UNKNOWN + layer BACKUP_GENERATION + reason + truth UNKNOWN + frozen + no manifest/manifestPath leak. Interrupt asserts DURABILITY_FAULT.\n\nDoD 4 - structural, not only the pin: git diff e6597e4..HEAD --stat over backup-generation-manifest.ts is EMPTY and computeGenerationDigest lives there, so identical bytes digest identically by construction. Fixture pin ee01db28 locks it forward; sibling test pins the produced manifest key set against drift.\n\nPer-FILE caps via grep -c '': backup-generation.ts 213, publish.ts 120. .js bridge committed. 4 owned paths, no scratch files.\n\nAccepted limit: rename-aside not atomic, finalPath briefly absent - architect pre-ruled continuous finalPath as the rejected pointer-indirection design, routed separately."
 }

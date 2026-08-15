@@ -96,7 +96,7 @@
       "completedAt": "2026-08-15T13:28:40.691Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -109,12 +109,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:20.342Z",
-  "updatedAt": "2026-08-15T13:30:26.638Z",
+  "updatedAt": "2026-08-15T13:43:21.858Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:58:27.180Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T13:43:21.858Z",
+    "wallClockMs": 2694678
   },
   "stepsCompleted": [
     "step-1",
@@ -141,7 +143,8 @@
   },
   "planApprovedAt": "2026-08-15T13:00:01.080Z",
   "contextFetchedBy": [
-    "worker-06df66bb"
+    "worker-06df66bb",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T13:18:20.592Z",
   "reviewStartedAt": "2026-08-15T13:30:26.638Z",
@@ -155,5 +158,8 @@
     "packages/store/src/recovery-anchor-fs.ts",
     "packages/store/src/recovery-anchor-fs.test.ts",
     "packages/store/src/recovery-anchor-contracts.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:43:21.858Z",
+  "reviewCompletedAt": "2026-08-15T13:43:21.858Z",
+  "reviewSummary": "APPROVED. Full evidence: Serena memory task-task-6a31a86fdcd84795a8fae6e5d6978d2c-qa-verdict.\n\nGATE re-run by QA (foreground, && chained, redirected): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` EXIT=0, tsc clean, 42 files / 502 tests passed, 0 failed / 0 skipped. Matches task.verification (DoD 5).\n\nBYTES: no commit bears this task id for the owned paths; de936fe carries the label but only packages/import + packages/review (foreign whole-tree sweep) - not a rejection reason per rail. Reviewed via `git diff 7263d13..HEAD -- <owned>`: contracts +1, fs.ts +84/-6, test.ts +386 new. sha256 of `git show HEAD:<path>` MATCHES the working tree for all three, so committed bytes ARE gated bytes. git status -- packages/store empty; no scratch files.\n\nMY OWN MUTATION DRILLS (pre-drill sha256 recorded; restored + re-verified IDENTICAL after each; Edit, never git checkout):\n1. Removed the bytesWritten comparison (DoD 4's required drill): 8 NAMED tests red, all on \"expected the durable write to refuse, but it reported success\".\n2. sync() moved INSIDE the loop: 2 red - \"1-bytes-via-[1] flush: expected [ 1, 1 ] to deeply equal [ 1 ]\".\n3. Offset rewound to 0: 2 red on CONTENT equality (duplicated bytes), incl. publishFileAtomically.\n\nDoD 1-4: loop advances by proven bytes only, so at most byteLength iterations - bounded, no spin. Refusals assert the exact PAIR {code:\"RECOVERY_ANCHOR_WRITE_INCOMPLETE\", layer:\"RECOVERY_ANCHOR\"} via toEqual, never \"it threw\". closes===1 / syncedAt===[] observed AT THE SEAM on the failure path. Sweep cardinality hand-written (16 / 4 empty / 6 multi-chunk); I recomputed 6 by hand and it matches.\n\nSIZES (grep -c ''): fs.ts 200 (<=250). contracts 261 - under 400, already 260 at merge-base.\n\nOUT OF SCOPE, disclosed: backup-generation.ts:45 still discards bytesWritten (task-1fb6e871)."
 }

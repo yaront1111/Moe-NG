@@ -100,7 +100,7 @@
       "completedAt": "2026-08-15T13:19:41.874Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -113,12 +113,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:01.896Z",
-  "updatedAt": "2026-08-15T13:20:44.242Z",
+  "updatedAt": "2026-08-15T13:38:38.836Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:56:49.280Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T13:38:38.836Z",
+    "wallClockMs": 2509556
   },
   "stepsCompleted": [
     "step-1",
@@ -145,7 +147,8 @@
   },
   "planApprovedAt": "2026-08-15T12:58:23.628Z",
   "contextFetchedBy": [
-    "worker-40286572"
+    "worker-40286572",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T13:11:01.078Z",
   "reviewStartedAt": "2026-08-15T13:20:44.242Z",
@@ -161,5 +164,8 @@
     "packages/store/src/recovery-anchor-install.ts",
     "packages/store/src/recovery-anchor-marker.ts",
     "packages/store/src/recovery-anchor-marker.js"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:38:38.836Z",
+  "reviewCompletedAt": "2026-08-15T13:38:38.836Z",
+  "reviewSummary": "APPROVED. Re-ran the gate myself at pristine HEAD bytes: pnpm --filter @moe/store typecheck exit 0; test exit 0, Test Files 42 passed (42), Tests 502 passed (502), zero failed/skipped (worker reported 41/490; delta is peer growth, not narrowing).\n\nFiles sit in foreign whole-tree commit 7263d13 (task-cbc42f33) — not a rejection per rail 5. Committed bytes == disk bytes for all 5 owned paths (hash-object vs HEAD:<path>, MATCH x5). Reviewed by base-ref diff 192360e..HEAD: +255/-5.\n\nDoD1/3 — I re-traced the signature claim rather than trusting it. RECOVERY_BINDING_SLOTS frozen [\"ACTIVE\",\"PENDING\"]; selectInactiveSlot (recovery-anchor.ts:51) never returns its argument; buildAnchorRecord has exactly ONE prod caller (anchor.ts:90) passing target=selectInactiveSlot(current), so current!=target at PREPARE always; resealAnchorRecord has 2 prod sites — install.ts:257 (the switch, sole writer of currentSlot:=targetSlot) and marker.ts:33 (state only). So PREPARED+currentSlot===targetSlot is unreachable pre-switch. Marker-only path calls no writeInactiveSlot/stampIncarnation.\n\nDoD4 — ran all 3 drills myself, restoring from an out-of-repo copy with a sha check each time:\n- arm dead (line 123 -> return null): RED 1, \"records the marker without crossing a single install boundary again\", msg names INACTIVE_INSTALL.\n- over-broad (if(false)): RED 7, incl. \"still runs a full install when the crash landed BEFORE the switch\".\n- identity guard scoped back to the INSTALLED arm: RED 1, intruder-fence test.\nRestored to sha e731e684; DRILL_ residue 0; git status -- packages/store/ empty.\n\nRefusals pin exact code+layer: RECOVERY_ANCHOR_INCARNATION_REUSED (install) and RECOVERY_ANCHOR_COMMAND_MISMATCH (resume), both RECOVERY_ANCHOR_LAYER. Sweep cardinality pinned to hand-written 8 vs 8 declared fault points. DoD2 idempotence proven by unchanged mtimeMs + observed [].\n\nPer-file (grep -c ''): anchor.ts 210, marker.ts 36, install.ts 262 (shrank from 263)."
 }
