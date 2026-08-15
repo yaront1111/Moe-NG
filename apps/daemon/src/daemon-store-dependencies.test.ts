@@ -320,7 +320,7 @@ try {
     registerCapability: entry.requiredCapability,
     registerHandler: typeof entry.handler,
     registerPayloadKeys: entry.payloadKeys,
-    registrySize: deps.registry.size,
+    registryKinds: [...deps.registry.keys()].sort(),
     sameEffect: first.decision?.effectId === second.decision?.effectId,
     second: shapeOf(second),
   });
@@ -364,7 +364,16 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
-      registrySize: 22,
+      // The kind SET, not its size: a bare count lands every registration as an
+      // off-by-one naming nothing. A new command writes its own kind here.
+      registryKinds: [
+        "approval.decide", "effect.activate", "escalation.decide", "goal.close",
+        "goal.create", "integration.accept_output", "plan.propose", "policy.install",
+        "policy.validate", "project.activate", "project.bind_repository", "project.register",
+        "provider.probe", "qualification.replan", "recovery.complete", "review.submit",
+        "session.close", "session.open", "session.renew", "work.claim", "work.release",
+        "work.renew",
+      ],
       sameEffect: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",

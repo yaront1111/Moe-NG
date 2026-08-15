@@ -1,7 +1,7 @@
 import { applyApprovalCommand, reduceProject } from "@moe/core";
 import type { ApprovalDecisionRecord, RecoveryCompletionWitness } from "@moe/core";
 import { DurableStoreError } from "@moe/store";
-import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
+import type { CommandDecisionRecord, SqliteEventStore, StoredEvent } from "@moe/store";
 
 import {
   RECOVERY_COMPLETION_COMMAND_KIND,
@@ -205,10 +205,24 @@ function answerReplayed(
     return evidenceMismatched("A different command already holds this command identity.");
   }
   const wanted = eventIdFor(request.commandId);
-  for (const event of store.readAggregateEvents(request.projectId, 0, 1_000).items) {
+  // Both the page read and the payload decode are fenced: a store fault or a
+  // corrupt event body must return a typed refusal, because a crash escaping
+  // this function is not a refusal and carries no reason code at all.
+  let events: readonly StoredEvent[];
+  try {
+    events = store.readAggregateEvents(request.projectId, 0, 1_000).items;
+  } catch (error) {
+    return storeUnavailable(error);
+  }
+  for (const event of events) {
     if (event.eventId !== wanted) continue;
-    const parsed: unknown = JSON.parse(decoder.decode(event.payload));
-    const witness = (parsed as { witness?: RecoveryCompletionWitness }).witness;
+    let witness: RecoveryCompletionWitness | undefined;
+    try {
+      const parsed: unknown = JSON.parse(decoder.decode(event.payload));
+      witness = (parsed as { witness?: RecoveryCompletionWitness }).witness;
+    } catch {
+      return evidenceAbsent("The stored recovered event does not decode.");
+    }
     if (witness === undefined) break;
     if (witness.inventoryReconciliationHash !== request.reconciliationDigest) {
       return evidenceMismatched("The replayed completion bound a different reconciliation record.");
@@ -224,7 +238,13 @@ function commit(
   request: RecoveryCompleteRequest,
   witness: RecoveryCompletionWitness,
 ): RecoveryCompletionOutcome {
-  const verdict = reduceProject(projectStateOf(store, request.projectId) ?? undefined, {
+  let state;
+  try {
+    state = projectStateOf(store, request.projectId) ?? undefined;
+  } catch (error) {
+    return storeUnavailable(error);
+  }
+  const verdict = reduceProject(state, {
     commandId: request.commandId,
     expectedVersion: request.expectedVersion,
     kind: "recovery.complete",

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { RECOVERY_BINDING_CODEC_VERSION } from "@moe/store";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
@@ -751,6 +752,55 @@ describe("recovery.complete durable command", () => {
     expect(outcome.refusedBy).toBe("RECOVERY_COMPLETION");
     expect(recoveredCount(scene.store)).toBe(1);
   });
+
+  it("refuses a record whose project never installed a restore, before any other gate",
+    async () => {
+      // A REAL anchored incarnation and a REAL durable record, but the ACTIVE
+      // slot holds bytes that are not a restore record — so the store never
+      // restored. The evidence reader consults the installed restore before the
+      // anchor and before project state, and this pins that it answers first.
+      const harness = await restoreHarness(`absent-${label}`);
+      const binding = await anchoredIncarnation(harness, `restore-cmd-absent-${label}`);
+      expect(harness.store.installRecoveryBinding({
+        bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
+        incarnationRef: binding.incarnationRef,
+        installedAt: DECIDED_AT,
+        keyEpochRef: binding.keyEpochRef,
+        payload: encoder.encode("not-a-restore-record"),
+        slot: "ACTIVE",
+      })).toMatchObject({ ok: true, outcome: "INSTALLED" });
+      const written = recordRecoveryReconciliation(
+        harness.store,
+        {
+          correlationId: "corr-1", decidedAt: DECIDED_AT,
+          principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+        },
+        facts(binding.backupGenerationDigest, negativeComplete),
+      );
+      expect(written.ok).toBe(true);
+      if (!written.ok) throw new Error("unreachable");
+
+      const scene: Scenario = {
+        backupGenerationDigest: binding.backupGenerationDigest,
+        digest: "",
+        incarnationRef: binding.incarnationRef,
+        recordDigest: written.recordDigest,
+        store: harness.store,
+        version: harness.store.getAggregateVersion(PROJECT_ID),
+      };
+      const outcome = runRecoveryCompleteCommand(scene.store, requestBytes(scene));
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) throw new Error("unreachable");
+      expect(outcome.code).toBe("RECOVERY_COMPLETION_EVIDENCE_ABSENT");
+      expect(outcome.refusedBy).toBe("RECOVERY_COMPLETION");
+      // The restore controller's own code rides along rather than being
+      // flattened into a bare "not available".
+      expect(outcome.upstream?.layer).toBe("DAEMON_RESTORE_CONTROLLER");
+      expect(scene.store.getCommandDecision({
+        commandId: "recovery-complete-1", principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+      })).toBeNull();
+      expect(recoveredCount(scene.store)).toBe(0);
+    });
 
   it("refuses a reconciliation record minted against another project's restore", async () => {
     const first = await scenario();
