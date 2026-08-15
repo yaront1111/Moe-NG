@@ -73,10 +73,7 @@ function dependenciesFor(storePath: string): ReturnType<typeof createStoreDepend
 
 describe("recovery.restore_quiesce reachability from the daemon entry surface", () => {
   it("exposes a restore port on the provider the daemon bin loads", async () => {
-    const h = await restoreHarness("reach-port");
-    h.store.close();
-
-    const provider = dependenciesFor(h.storePath);
+    const provider = dependenciesFor(pristineStorePath("port"));
     const entryModule = await import("../daemon-store-dependencies." + "ts");
 
     expect(typeof entryModule.default.restore).toBe("function");
@@ -124,10 +121,9 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
     // Nothing here installs a row by hand — the provider's own genesis installer
     // writes it — so this proves the INSTALLER and the classifier agree, not
     // merely that the decoder can read bytes a fixture wrote.
-    const h = await restoreHarness("reach-genesis");
-    h.store.close();
+    const storePath = pristineStorePath("genesis");
 
-    const provider = dependenciesFor(h.storePath);
+    const provider = dependenciesFor(storePath);
     const inspection = provider.restore().inspect();
 
     expect(inspection).toMatchObject({ ok: true, outcome: "GENESIS_FENCED" });
@@ -138,7 +134,7 @@ describe("recovery.restore_quiesce reachability from the daemon entry surface", 
 
     // And again on a second boot through a fresh provider: the genesis anchor is
     // re-offered, recognised as a repeat, and the classification stays stable.
-    const reopened = dependenciesFor(h.storePath);
+    const reopened = dependenciesFor(storePath);
     expect(reopened.restore().inspect()).toMatchObject({
       ok: true,
       outcome: "GENESIS_FENCED",

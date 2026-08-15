@@ -644,6 +644,42 @@ describe("genesis recovery binding — atomic first install", () => {
     expect(result.binding.recoveryIncarnationRef).toBe(CURRENT_WINNER_INCARNATION);
   });
 
+  it("refuses UNVERIFIED when a committed install will not read back", () => {
+    // The read-back is a SECOND, independent check, not a leftover: the store's
+    // transaction says the row landed, and this asks the row itself. Trusting the
+    // install result alone would report an INSTALLED fence over a slot that
+    // cannot be read — which is the one state where the daemon must not boot.
+    let installs = 0;
+    const store = {
+      commitExpectedVersionDecision: (): never => {
+        throw new Error("must not anchor a fence that never read back");
+      },
+      installInitialRecoveryBinding: (): RecoveryInitialInstallResult => {
+        installs += 1;
+        return Object.freeze({
+          binding: Object.freeze({ slot: "ACTIVE" }),
+          bindingDigest: "8d".repeat(32),
+          ok: true as const,
+          outcome: "INSTALLED" as const,
+        }) as unknown as RecoveryInitialInstallResult;
+      },
+      installRecoveryBinding: (): RecoveryInstallResult => {
+        throw new Error("the replacing installer must never be reached");
+      },
+      readCommandDecisionsAfter: (): DecisionPage => NO_DECISIONS,
+      readRecoveryBinding: (): RecoveryBindingReadResult => ABSENT_SLOT,
+    } as unknown as Parameters<typeof ensureGenesisRecoveryBinding>[0];
+
+    const result = ensureGenesisRecoveryBinding(store, { clock: CLOCK, projectId: PROJECT_ID });
+
+    expect(installs).toBe(1);
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("unreachable");
+    expect(result.code).toBe("GENESIS_INSTALL_UNVERIFIED");
+    expect(result.storeCode).toBe("READ_BACK_FAILED");
+    expect(GENESIS_RECOVERY_ERROR_CODES).toContain(result.code);
+  });
+
   it("refuses a store carrying authoritative history with the store's OWN code", () => {
     // Hardening, and deliberate: a deleted or corrupted binding row must not let
     // a store that has already served a workload silently re-genesis itself,

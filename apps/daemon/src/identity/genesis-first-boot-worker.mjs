@@ -14,6 +14,13 @@ import { ensureGenesisRecoveryBinding } from "./genesis-recovery-binding.js";
  * production through the bare `@moe/store` specifier and the `.js` bridges for
  * exactly that reason.
  *
+ * CHILD-PROCESS mode (`parentPort === null`) is the DoD 5 first-boot smoke: it
+ * takes a store directory that has never been restored, builds the real
+ * dependency provider, authenticates once and prints a JSON verdict. It resolves
+ * `../daemon-store-dependencies.js` through Node's own resolver, so a broken
+ * bridge or an undeclared dependency anywhere under the daemon's composition
+ * root fails HERE and nowhere else.
+ *
  * WORKER-THREAD mode (`parentPort !== null`) serves the concurrent-install race.
  * The store handle is wrapped so the FIRST `readRecoveryBinding` reports what it
  * observed and then blocks on a shared gate; both handles are released only once
@@ -107,4 +114,40 @@ if (parentPort !== null) {
     store.close();
   }
   parentPort.postMessage(report);
+} else {
+  const report = (value) => { process.stdout.write(JSON.stringify(value)); };
+  const storePath = process.env.MOE_STORE_PATH ?? "";
+  const projectId = process.env.MOE_PROJECT_ID ?? "";
+  const credential = process.env.MOE_DAEMON_CREDENTIAL ?? "";
+  if (storePath === "" || projectId === "" || credential === "") {
+    // Named rather than silent: a smoke that ran against no store at all would
+    // otherwise exit 0 and read as a passing first boot.
+    report({ ok: false, reason: "FIRST_BOOT_SMOKE_ENV_MISSING" });
+    process.exitCode = 1;
+  } else {
+    const { createStoreDependencies } = await import("../daemon-store-dependencies.js");
+    const provider = createStoreDependencies({
+      credential,
+      principalId: process.env.MOE_PRINCIPAL_ID ?? "operator-local",
+      projectId,
+      storePath,
+    });
+    try {
+      const result = provider.provide().authenticator.authenticate(credential);
+      const inspection = provider.restore().inspect();
+      report({
+        capabilities: result.principal === undefined ? null : [...result.principal.capabilities],
+        ok: result.verdict === "AUTHENTICATED",
+        principalId: result.principal === undefined ? null : result.principal.principalId,
+        projectId: result.principal === undefined ? null : result.principal.projectId,
+        restoreOutcome: inspection.ok ? inspection.outcome : inspection.code,
+        verdict: result.verdict,
+      });
+      if (result.verdict !== "AUTHENTICATED") process.exitCode = 1;
+    } finally {
+      // Released before the process exits so the driver's rmSync cannot race a
+      // live handle on Windows.
+      provider.close();
+    }
+  }
 }

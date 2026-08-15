@@ -150,7 +150,10 @@ function backupObjects(root: string, sourceGenerationDigest: string): Record<str
   });
 }
 
-export async function restoreHarness(label: string): Promise<RestoreHarness> {
+export async function restoreHarness(
+  label: string,
+  options: { readonly fenceGenesis?: boolean } = {},
+): Promise<RestoreHarness> {
   const root = mkdtempSync(join(tmpdir(), `moe-restore-${label}-`));
   roots.push(root);
   const storePath = join(root, "project.db");
@@ -158,6 +161,21 @@ export async function restoreHarness(label: string): Promise<RestoreHarness> {
   const seed = SqliteEventStore.openForProject(storePath, PROJECT_ID);
   let cursor: string;
   try {
+    // Fenced while the store is still PRISTINE, which is the production order: a
+    // daemon boots on a new store and genesis fences it before any work lands.
+    // The store's initial installer refuses to mint a first binding over
+    // authoritative history, so fencing after the seed would be backwards as
+    // well as refused. Opt-in, so no other harness user changes shape.
+    if (options.fenceGenesis === true) {
+      const fenced = ensureGenesisRecoveryBinding(seed, {
+        clock: () => DECIDED_AT,
+        projectId: PROJECT_ID,
+      });
+      if (!fenced.ok) throw new Error(`genesis fence setup failed: ${fenced.code}`);
+      if (fenced.outcome !== "INSTALLED") {
+        throw new Error(`genesis fence did not install: ${fenced.outcome}`);
+      }
+    }
     seedReadyProject(seed);
     // Read back rather than assumed: the capture refuses a cursor that is ahead
     // of or behind the database it is copying.

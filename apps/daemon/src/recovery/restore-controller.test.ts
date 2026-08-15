@@ -895,14 +895,15 @@ describe("genesis fence classification — the layer that answers", () => {
 
 describe("restore over a genesis fence — the EXISTING flow, atomically", () => {
   it("replaces a verified fence and retires its refs from the authentication fence", async () => {
-    const h = await restoreHarness("genesis-to-restore");
-    // The store fences itself first, exactly as a fresh daemon does.
+    // The store fences itself while pristine, exactly as a fresh daemon does
+    // before any work lands; a second call must ADOPT that fence, not re-mint.
+    const h = await restoreHarness("genesis-to-restore", { fenceGenesis: true });
     const fenced = ensureGenesisRecoveryBinding(h.store, {
       clock: () => DECIDED_AT,
       projectId: PROJECT_ID,
     });
-    if (!fenced.ok || fenced.outcome !== "INSTALLED") {
-      throw new Error("the genesis fence must install before a restore can replace it");
+    if (!fenced.ok || fenced.outcome !== "PRESENT") {
+      throw new Error("the genesis fence must be present before a restore can replace it");
     }
     const genesisRef = fenced.binding.recoveryIncarnationRef;
 
