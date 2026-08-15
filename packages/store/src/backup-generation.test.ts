@@ -20,6 +20,7 @@ import * as storeModule from "./index.js";
 // Not part of the public surface: the digest pin below has to call the exact
 // production function whose output every existing backup receipt recorded.
 import { computeGenerationDigest } from "./backup-generation-manifest.js";
+import { generationIsComplete } from "./backup-generation-publish.js";
 
 /**
  * A crash between the two publish renames cannot be reproduced by returning an
@@ -909,6 +910,53 @@ describe("backup generation contract — unchanged by the crash-safe publish", (
       expect(readPublished(h.destinationPath).manifest.generationDigest).toBe(firstDigest);
       expect(existsSync(`${h.destinationPath}.staging`)).toBe(false);
       expect(existsSync(`${h.destinationPath}.previous`)).toBe(false);
+    } finally {
+      h.cleanup();
+    }
+  });
+});
+
+/** Manifest bytes that parse or fail to parse, none of which are a generation. */
+const HOSTILE_MANIFESTS = Object.freeze(["null", "[]", "{}", '"x"', "{ not json }"] as const);
+
+describe("generationIsComplete — the fact recovery decides from", () => {
+  it("answers false for a hostile manifest instead of throwing", async () => {
+    const h = harness("complete-hostile", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(true);
+
+      let cases = 0;
+      for (const payload of HOSTILE_MANIFESTS) {
+        writeFileSync(join(h.destinationPath, "manifest.json"), payload);
+        // A boolean question must never answer by throwing. `null` and `"x"`
+        // both parse, and reading a field off either is a TypeError that would
+        // escape as the catch-all refusal, hiding which check answered.
+        await expect(generationIsComplete(h.destinationPath)).resolves.toBe(false);
+        cases += 1;
+      }
+      // A sweep that produced zero cases would pass while testing nothing.
+      expect(cases).toBe(HOSTILE_MANIFESTS.length);
+      expect(HOSTILE_MANIFESTS.length).toBeGreaterThan(0);
+    } finally {
+      h.cleanup();
+    }
+  });
+
+  it("answers false for a generation whose declared bytes are missing", async () => {
+    const h = harness("complete-missing", 2);
+    try {
+      expect(await createBackupGeneration(request(h))).toMatchObject({ ok: true });
+      const declared = readPublished(h.destinationPath).manifest.objects;
+      expect(declared.length).toBeGreaterThan(0);
+
+      // The manifest still verifies; only a declared object file is gone. This
+      // is the half-published directory that presents as a complete generation.
+      rmSync(join(h.destinationPath, ...declared[0]!.logicalPath.split("/")), { force: true });
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(false);
+
+      rmSync(join(h.destinationPath, "database.sqlite"), { force: true });
+      await expect(generationIsComplete(h.destinationPath)).resolves.toBe(false);
     } finally {
       h.cleanup();
     }

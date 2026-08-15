@@ -42,9 +42,12 @@ export async function generationIsComplete(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-  const carried = container as { keyId?: unknown; publicKeySpkiDer?: unknown };
+  // `JSON.parse("null")` parses cleanly, so the cast is null-tolerant: reading a
+  // field off it would be a TypeError escaping a function whose whole contract
+  // is to ANSWER, and it would surface as the catch-all refusal instead.
+  const carried = container as { keyId?: unknown; publicKeySpkiDer?: unknown } | null;
   const verified = verifyBackupGeneration(container, {
-    anchoredKeys: [{ keyId: carried.keyId, publicKeySpkiDer: carried.publicKeySpkiDer }],
+    anchoredKeys: [{ keyId: carried?.keyId, publicKeySpkiDer: carried?.publicKeySpkiDer }],
   });
   if (!verified.ok) return false;
   if (!(await pathExists(join(path, "database.sqlite")))) return false;
