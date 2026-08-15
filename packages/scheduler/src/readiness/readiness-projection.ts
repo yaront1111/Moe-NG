@@ -155,7 +155,9 @@ function collectReasons(
     // Code units, never localeCompare: collation depends on the host's ICU data,
     // so two machines would order the same reasons differently — and that failure
     // never reproduces locally. Same form as the code tie-break directly above.
-    return 0;
+    const edgeA = String(a.edgeKey);
+    const edgeB = String(b.edgeKey);
+    return edgeA < edgeB ? -1 : edgeA > edgeB ? 1 : 0;
   });
 }
 

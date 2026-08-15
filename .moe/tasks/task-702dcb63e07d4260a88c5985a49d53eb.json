@@ -72,7 +72,7 @@
       ]
     }
   ],
-  "status": "AWAITING_APPROVAL",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -85,7 +85,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:08.778Z",
-  "updatedAt": "2026-08-15T13:05:52.332Z",
+  "updatedAt": "2026-08-15T13:05:54.378Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:04:22.863Z",
     "plannedStepCount": 6,
@@ -107,5 +107,6 @@
   },
   "budget": {
     "wallClockMs": 5400000
-  }
+  },
+  "planApprovedAt": "2026-08-15T13:05:54.378Z"
 }

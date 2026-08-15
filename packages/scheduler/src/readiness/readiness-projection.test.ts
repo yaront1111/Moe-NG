@@ -360,13 +360,23 @@ describe("edgeKey tie-break is code-point ordered, not locale ordered", () => {
 });
 
 /**
- * TOTALITY, not one lucky pair. A comparator can order one example correctly
- * and still be a partial order: if any two distinct reasons compare EQUAL,
- * Array.prototype.sort's stability lets the INPUT order leak into the output.
- * So the property is witnessed rather than restated — the same reason set is
- * projected from every permutation of its inputs and must come back identical.
- * That is a direct consequence of totality and needs no second copy of the
- * comparator living in this file to check it.
+ * TOTALITY, not one lucky pair — and read the next paragraph before trusting
+ * what these three tests prove, because it is narrower than it looks.
+ *
+ * MEASURED: frontier.ts:219-221 ALREADY sorts each blocked node's reasons by
+ * edgeKey, in the same code-unit form. Since `Array.prototype.sort` is stable,
+ * that canonical order survives the (layer, code) regrouping here even if the
+ * edgeKey tie-break did nothing. Replacing the tie-break with `return 0` is
+ * therefore an EQUIVALENT MUTANT through this entry point: all of these stay
+ * green. Do not read that as vacuity and do not "simplify" the tie-break away —
+ * replacing it with `localeCompare` reddens the sequence test below, which is
+ * the regression that actually happened and the one being locked out. The
+ * tie-break is a defensive invariant that keeps this comparator correct on its
+ * own terms rather than by coupling to a sort two modules upstream.
+ *
+ * So what IS witnessed here: the projection is deterministic end to end. The
+ * same reason set is projected from every permutation of its inputs and must
+ * come back identical — no second copy of the comparator lives in this file.
  */
 const TIE_EDGE_UPPER_A = "dev-edge-Alpha";
 const TIE_UNKNOWN_EDGE = "dev-edge-Unknown";
@@ -448,6 +458,10 @@ describe("readiness reason ordering is a total order", () => {
 
   it("leaves no two reasons comparing equal, so stability cannot leak input order", () => {
     const ordered = mixedReasons(ALL_EDGES);
+    // Fixture guard: every entry differs in at least one of layer, code or
+    // edgeKey, so the permutation check above is exercising distinct keys
+    // rather than quietly comparing a set that could never have reordered.
     expect(new Set(ordered).size).toBe(ordered.length);
+    expect(ordered.length).toBe(6);
   });
 });

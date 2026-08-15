@@ -404,6 +404,30 @@ describe("never-zero", () => {
     expect(JSON.stringify(tokens)).not.toContain("11");
   });
 
+  it("refuses a truncation that lands EXACTLY on a record boundary", async () => {
+    // The dangerous shape, and the one a tail-length check cannot see: the
+    // capture is cut at a newline, so every record it holds is complete, no
+    // framing anomaly is raised, and the visible usage sums to a number that is
+    // indistinguishable from a real total. Only `truncated` knows it is a prefix.
+    const first = line({ seq: 1, type: "result", subtype: "success", num_turns: 1,
+      usage: { input_tokens: 4, output_tokens: 2, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0 } });
+    const stdout = `${first}${line({ seq: 2, type: "result", subtype: "success", num_turns: 9,
+      usage: { input_tokens: 400, output_tokens: 200, cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0 } })}`;
+    const boundary = Buffer.byteLength(first, "utf8");
+    expect(Buffer.byteLength(stdout, "utf8")).toBeGreaterThan(boundary);
+    const { tokens, steps, telemetryRefusal, infrastructure } = await armHandoff(
+      { stdout, overrides: { limits: { ...LIMITS, stdoutBytes: boundary } } });
+    expect(telemetryRefusal?.code).toBe("TELEMETRY_CAPTURE_TRUNCATED");
+    expect(infrastructure).toBe("CAPTURE_TRUNCATED");
+    expect(tokens.coverage).toBe("UNKNOWN");
+    expect(steps.coverage).toBe("UNKNOWN");
+    // Not merely a different number: the prefix's own plausible total is absent.
+    expect(tokens.inputTokens).not.toEqual({ known: true, value: 4 });
+    expect(JSON.stringify({ tokens, steps })).not.toContain('"value"');
+  });
+
   it("keeps a missing usage block unmeasured while the step count stays observed", async () => {
     const { tokens, steps } = await armHandoff({ stdout: NO_USAGE });
     const absent = { known: false, code: "TELEMETRY_USAGE_ABSENT", layer: "TELEMETRY_RESULT" };

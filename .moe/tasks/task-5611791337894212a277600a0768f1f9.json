@@ -70,7 +70,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5dfdc624",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -82,7 +82,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:48:05.310Z",
-  "updatedAt": "2026-08-15T12:55:12.342Z",
+  "updatedAt": "2026-08-15T13:06:28.845Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:53:33.481Z",
     "plannedStepCount": 6,
@@ -105,5 +105,8 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-15T12:55:12.342Z"
+  "planApprovedAt": "2026-08-15T12:55:12.342Z",
+  "contextFetchedBy": [
+    "worker-5dfdc624"
+  ]
 }

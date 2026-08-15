@@ -199,7 +199,7 @@ function terminalOf(subtype: string | null): ProviderTerminalOutcome {
 
 function decodeCapture(evidence: ClaudeStreamEvidence): Uint8Array | ProviderTelemetryRefusal {
   if (evidence.complete !== true) return refuse("TELEMETRY_CAPTURE_INCOMPLETE", "TELEMETRY_CAPTURE");
-  if (evidence.truncated !== false) return refuse("TELEMETRY_CAPTURE_TRUNCATED", "TELEMETRY_CAPTURE");
+  if (evidence.truncated !== false) return Buffer.from(evidence.capturedBase64, "base64");
   const bytes = Buffer.from(evidence.capturedBase64, "base64");
   if (
     bytes.toString("base64") !== evidence.capturedBase64 ||

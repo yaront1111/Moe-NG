@@ -148,16 +148,31 @@
     {
       "stepId": "step-8",
       "description": "Verification gate then adversarial self-review; load the adversarial-self-review skill. Run on FRESH output pasted into complete_task: pnpm --filter @moe/control-room test && pnpm typecheck. Read every summary line, not the final exit code. Note that root `pnpm test` SKIPS apps/**, so the filtered control-room leg is the only one that actually gates this work. Then review as an attacker: (1) Is there ANY path where one observation is derived from another - re-read every construction site, since this is the rail most likely to be violated by a convenience helper added late? (2) Can a record exist without provenance or reach storage with a defaulted source? (3) Does the collector read any clock, Date, or random source of its own? (4) Does an unterminated or overlapping interval ever resolve to a number rather than UNKNOWN? (5) Does anything here produce a score, threshold or verdict - the rail says observational only, granting no authority? (6) Confirm both new production sources are at or under 250 physical lines with `grep -c ''` (PowerShell Measure-Object -Line undercounts). Record parent task-1eeb2dccce204671b442704cd60b38ad as the named consumer for the global consumer-edge rail. Then git status --porcelain, confirm no drill file remains, and commit by explicit pathspec only - never a bare git commit, since the index is shared with live peers.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/performance/effort-records.ts",
         "apps/control-room/src/performance/effort-collector.ts"
       ],
-      "startedAt": "2026-08-15T13:03:38.259Z"
+      "modifiedFiles": [
+        "apps/control-room/src/performance/effort-records.ts",
+        "apps/control-room/src/performance/effort-admission.ts",
+        "apps/control-room/src/performance/effort-intervals.ts",
+        "apps/control-room/src/performance/effort-collector.ts",
+        "apps/control-room/src/performance/effort-records.test.ts",
+        "apps/control-room/src/performance/effort-admission.test.ts",
+        "apps/control-room/src/performance/effort-collector.test.ts",
+        "apps/control-room/src/performance/effort-attribution.test.ts",
+        "apps/control-room/src/performance/effort-non-inference.test.ts",
+        "apps/control-room/src/performance/effort-sweeps.test.ts",
+        "apps/control-room/src/performance/timing.test.ts"
+      ],
+      "note": "GATE, fresh and post-commit, both legs read line by line: pnpm --filter @moe/control-room test -> 67 files / 814 tests passed, exit 0. pnpm typecheck -> every package Done including apps/control-room and apps/daemon, exit 0. Legs run separately with their exit codes captured to variables, not piped, so no tail exit code masked a red.\n\nADVERSARIAL REVIEW, all six attacker questions:\n(1) DERIVATION. Re-read every construction site. build() reads only the payload's own fields; the interval machine reads only the SAME interval's own open observation for its start; deriveDecision is the single declared derivation. Nothing crosses record kinds. NOTED AND DELIBERATE: a closed interval names the provenance and command identity of the observation that OPENED it, so a close carrying a different commandId does not re-attribute the interval — the close record itself is still stored with its own attribution, so nothing is lost. I considered refusing that mismatch and rejected it: a focus interval legitimately opened under a command and closed with no command context would then fail, pushing callers to fabricate a commandId, which is worse than the honest rule.\n(2) PROVENANCE. No path stores a defaulted source: source is checked absent-first, must be a member of EFFORT_SOURCES, and there is no fallback. The one ?? in the domain is RECORD_FIELDS[type] ?? [], which fails closed (every non-base key refused) and is unreachable behind a validated type.\n(3) CLOCKS. grep for Date.now/new Date(/performance.now/Math.random/process.env across all four modules: zero hits. Also structurally enforced now that timing.test.ts's REAL_TIME_API scan covers them.\n(4) NUMBERS FROM UNKNOWNS. unresolve() emits reasonCode + layer + the observed start only; no duration exists anywhere in the domain. Drill 2 proved the tests bite.\n(5) AUTHORITY. No score, threshold, verdict or acceptability field on any record, outcome or decision, and a code-line source scan (prose stripped, stripper itself policed for non-vacuity) finds none in the sources.\n(6) LINES, counted with grep -c '': effort-records 228, effort-admission 192, effort-intervals 180, effort-collector 129. All at or under 250; four modules rather than the planned two because one file would have been ~356.\n\nAlso checked: no module-level mutable state, so two collectors cannot interfere; returned arrays are frozen copies, so a caller cannot mutate internals; Object.hasOwn (not `in`) is used throughout, so a poisoned prototype cannot smuggle a field, and an own __proto__ key is refused by the unknown-key sweep; NaN/Infinity timestamps refused; empty-string commandId refused.\n\nCONSUMER for the composition rail: parent task-1eeb2dccce204671b442704cd60b38ad, which owns integration. This slice lands no live call site by design; sibling slice 2 owns the live consumer edge.\n\nCOMMIT 871c9b4, by explicit pathspec only (11 paths, no git add -A). git status --porcelain clean for apps/control-room afterwards; no drill, probe or scratch file remains, verified by grep for all three drill fragments. Committed bytes verified identical to gated bytes by sha256 on all four production modules.",
+      "startedAt": "2026-08-15T13:03:38.259Z",
+      "completedAt": "2026-08-15T13:05:58.277Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-86bbe9fd",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -169,12 +184,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-14T09:08:44.795Z",
-  "updatedAt": "2026-08-15T13:03:38.259Z",
+  "updatedAt": "2026-08-15T13:06:33.842Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:40:23.627Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "stepsCompleted": [
     "step-1",
@@ -183,7 +198,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:42:48.961Z",
@@ -206,5 +222,25 @@
     "worker-86bbe9fd",
     "architect-4eca9b79"
   ],
-  "workStartedAt": "2026-08-15T12:46:07.822Z"
+  "workStartedAt": "2026-08-15T12:46:07.822Z",
+  "reviewStartedAt": "2026-08-15T13:06:33.842Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "vitest run\n\n Test Files  67 passed (67)\n      Tests  814 passed (814)\n   Start at  16:05:28\n   Duration  6.04s\n\n--- typecheck ---\npackages/contracts typecheck: Done\npackages/core typecheck: Done\npackages/skills typecheck: Done\npackages/mcp typecheck: Done\npackages/testkit typecheck: Done\npackages/runner typecheck: Done\npackages/review typecheck: Done\npackages/scheduler typecheck: Done\napps/control-room typecheck: Done\napps/daemon typecheck: Done\nTEST_EXIT=0 TYPECHECK_EXIT=0",
+    "reportedAt": "2026-08-15T13:06:33.842Z"
+  },
+  "filesModified": [
+    "apps/control-room/src/performance/effort-records.ts",
+    "apps/control-room/src/performance/effort-records.test.ts",
+    "apps/control-room/src/performance/effort-admission.ts",
+    "apps/control-room/src/performance/effort-admission.test.ts",
+    "apps/control-room/src/performance/effort-collector.ts",
+    "apps/control-room/src/performance/effort-collector.test.ts",
+    "apps/control-room/src/performance/effort-intervals.ts",
+    "apps/control-room/src/performance/effort-attribution.test.ts",
+    "apps/control-room/src/performance/effort-non-inference.test.ts",
+    "apps/control-room/src/performance/timing.test.ts",
+    "apps/control-room/src/performance/effort-sweeps.test.ts"
+  ]
 }
