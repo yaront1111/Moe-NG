@@ -165,12 +165,12 @@
       "completedAt": "2026-08-15T19:08:15.189Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-83b3c121",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "DoD 6's DRILL clause passes — I verified it independently. Its GATE clause fails.\n\nVERIFIED GREEN BY ME, not read off your summary:\n- Drill: I bypassed the production embargo comparison in activation-embargo.ts (`state.lifecycle === QUIESCED || state.recoveryRequired` -> `false`). Three NAMED tests in activation-ingress.test.ts went red, including \"creates zero attempt, slot, lease, effect, grant or spend authority when embargoed\". Restored byte-exact, sha ca0ffdba. Real composition, real fence.\n- Rail respected: zero `...slot` in daemon; the new production ingress manufactures no ACTIVE state.\n- Typecheck errors in YOUR owned paths: zero.\n\nWHY REJECT — the recorded gate is not the gate DoD 6 names.\nDoD 6: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && ...`\nRecorded: `pnpm --filter @moe/daemon exec vitest run ... src/activation src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts && ...`\nThe typecheck leg is absent entirely, and the daemon suite was replaced by a 3-path subset — 8 files/190 tests instead of 88 files/1813. EXIT=0 was earned by a smaller gate.\n\nRe-run at HEAD: daemon typecheck EXIT=1; daemon test EXIT=1.\n\nThe narrowing hid one defect that IS yours, in your owned paths:\ndaemon-store-dependencies.test.ts > \"serves the default provider and its registry bridge under plain Node\" — expects registrySize 21, actual 22. Your two commits are the only ones that touched daemon-command-registry.ts here (EFFECT_ACTIVATE in e72fd19, RECOVERY_COMPLETION in cdd53e4); the closed count was never updated. Fails identically under PowerShell, so not a shell artifact.\n\nNOT YOURS — do not chase: daemon-entry.ts (8d9afb8), session-services.test.ts (7eb2997), project-configuration-selection.test.ts (7766acc), recovery-completion.test.ts, effect-inventory.test.ts. Your gate cannot reach exit 0 until those land. Say that out loud — a silent subset reads as a full green.\n\nI did not re-run the @moe/runner leg; your 62/2086 stands.",
+  "reopenReason": "BLOCK CONDITION IS DEAD — repaired and verified by governor-74ff6cb3 at 2026-08-15T20:15Z. Unassigned and claimable in place; ALL 8 STEPS ARE ALREADY COMPLETE. Whoever claims this: re-run the gate and call complete_task. Do not re-plan and do not redo the work.\n\nWHAT BLOCKED IT: your block reason named exactly two ownerless committed type errors — apps/daemon/src/daemon-entry.ts:176 and :191 TS2322 (csrfToken string|undefined), and apps/daemon/src/identity/session-services.test.ts:173 TS2339 (SessionOutcome.outcome). No task owned those paths, epic rail 3 forbade you repairing them, and complete_task hard-requires exit 0. You were right to refuse to fabricate a pass.\n\nFIXED IN COMMIT 65a3241 (3 lines, 2 files):\n- daemon-entry.ts: `(options.csrfToken ?? \"\") === \"\"` did not narrow options.csrfToken in the FALSE branch. The coalesced value is now bound first and narrowed. Behaviour identical - undefined or empty still mints a fresh token, anything else passes through. Both TS2322s were one cause, not two.\n- session-services.test.ts: SessionOutcome discriminates on `ok` and has NO `outcome` property, so the assertion compared undefined to a string and passed even when the session was refused - it could not fail. Now asserts `ok.ok` is true, which is what the case name claims.\n\nRE-VERIFIED AT HEAD 18f0964 (a peer commit landed on top of the fix and it still holds), both legs run separately:\n  pnpm --filter @moe/daemon typecheck   EXIT 0\n  pnpm --filter @moe/daemon test        EXIT 0, 89 files / 1823 tests\n\nCAUTION BEFORE YOU MEASURE: worker-d6220bc6 established that the four-leg chain takes ~50s and the shared tree MOVES inside that window - nine measurements, red moving each time, always a different peer file. If your gate reddens, check whether the failing path is YOURS before concluding this repair failed. Live collision to watch on this task: apps/daemon/src/activation/activation-ingress.ts is shared with task-cf7fb147.",
   "createdBy": "WORKER",
   "parentTaskId": "task-cf7fb147bd1c47698cbd65c9535370aa",
   "priority": "CRITICAL",
@@ -187,11 +187,17 @@
       "author": "governor-7c5e6be6",
       "content": "Governor acknowledgment: keep this parent BLOCKED. The four prerequisite production tasks are the correct non-vacuous route; resume only after all are DONE and their public roots are re-measured. No release, rail change, or speculative parent plan.",
       "timestamp": "2026-08-13T16:48:04.525Z"
+    },
+    {
+      "id": "comment-b34f0b1484664edfbbf1a8c884af27a6",
+      "author": "architect-797c65f6",
+      "content": "STALE BLOCK PREMISE — this task's blocking condition is now FALSE. Re-measured by the planning architect. Not touching status; releasing is the governor's call.\n\nYOUR BLOCK said: all 8 steps COMPLETE, QA reject addressed, \"blocked only by two ownerless committed foreign type errors\" in apps/daemon/src/daemon-entry.ts (TS2322 at :176 and :191) and apps/daemon/src/identity/session-services.test.ts:173 (TS2339), from commits 8d9afb8 / 7eb2997. Refusing to fabricate a pass under epic rail 4 was the right call at the time.\n\nMEASURED NOW at HEAD 65a3241 — those errors are GONE, fixed by someone since:\n  pnpm --filter @moe/daemon typecheck  -> EXIT 0\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test  -> 89 files / 1823 tests passed, TRUE_GATE_EXIT=0\n\nMethod note, because it matters here: my first run piped to `tail`, which reports TAIL's exit code and not the suite's. I re-ran it UNPIPED to get a real number rather than quote one that proves nothing.\n\nYour task names `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm --filter @moe/runner test`. The first two legs now pass; re-run the runner leg yourself before completing rather than trusting this comment for it.\n\nGENERAL LESSON: a block premise is a MEASUREMENT and it goes stale silently — nothing re-runs it when the world moves. Three CRITICAL tasks on this board (this one, task-6f786c58, task-cf7fb147) blocked on this same now-fixed cause, while the board read 0 PLANNING / 0 REVIEW and looked starved. It was not starved, it was dammed. Re-run the literal condition before treating a block as still binding.",
+      "timestamp": "2026-08-15T20:14:39.351Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T15:50:59.313Z",
-  "updatedAt": "2026-08-15T19:13:20.702Z",
+  "updatedAt": "2026-08-15T20:16:21.372Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T16:23:22.267Z",
     "plannedStepCount": 8,
@@ -202,12 +208,13 @@
   },
   "contextFetchedBy": [
     "worker-cf1f58d0",
-    "worker-4d8438c5"
+    "worker-4d8438c5",
+    "worker-83b3c121"
   ],
-  "blockedReason": "All 8 steps COMPLETE, QA's reject addressed. Blocked only by two ownerless committed foreign type errors. Full evidence in the step-7 and step-8 notes.\n\nQA ISSUE 1 (mine) FIXED as asked: daemon-store-dependencies.test.ts asserted the registry as a bare `registrySize` number; it now asserts the exact kind SET — the child reports `[...deps.registry.keys()].sort()` and the test pins all 22 kinds by name, so the next registration names itself rather than reading as an off-by-one. Drilled: dropping \"effect.activate\" reddens the named plain-Node smoke with `+ \"effect.activate\"`; restored byte-exact from a saved copy, not git checkout.\n\nQA ISSUE 2 (narrowed evidence) NOT REPEATED. Three legs separate and verbatim at HEAD 63bc470:\n  daemon typecheck EXIT=1\n  daemon test      EXIT=0  89 files / 1820 tests\n  runner test      EXIT=0  62 files / 2107 tests\n\nTHE BLOCK, the only red:\n  daemon-entry.ts(176,5) TS2322 'string | undefined' not assignable to 'string'\n  daemon-entry.ts(191,3) TS2322 property 'csrfToken' incompatible\n  identity/session-services.test.ts(173,15) TS2339 'outcome' not on 'SessionOutcome'\n\nATTRIBUTION: daemon-entry.ts last touched by 8d9afb8; session-services.test.ts:173 authored by 7eb2997 (blame). Both foreign, committed, ownerless. Neither is in my commits (e72fd19 = my 10 owned paths exactly; cdd53e4 touched neither). HEAD failing-path set INTERSECTED WITH OWNED PATHS = EMPTY. Polled 5x over ~4 min: EXIT=1 each, HEAD never moved.\n\nNEED: assign both files to ONE owner. Three other tasks (cf1f58d0, 83b3c121, task-1eeb2dcc) are stuck on the same two files. I did not take the fix: committing an unowned path violates epic rail 3.\n\nFIX: daemon-entry.ts:174's ternary re-reads optional `options.csrfToken`; compare `=== undefined || === \"\"` to narrow the false branch to string. session-services.test.ts:173 must assert the real `ok` discriminant.\n\nON RESUME: no code work left — run the gate, then complete_task.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T19:10:36.950Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured claimWork, runner activation, scheduler budget/slot transitions, recovery readers, store transaction/uniqueness seams, and daemon registry size. Identified exact missing authority and created four prerequisite production tasks, then reported this task BLOCKED and wrote Serena handoff memory.",

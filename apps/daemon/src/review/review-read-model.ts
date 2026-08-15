@@ -92,6 +92,10 @@ function parseLineage(value: JsonValue | undefined): ReviewLineage | undefined {
   if (!isPlainJsonObject(value)) return undefined;
   const records = value["records"];
   if (!isRef(value["digest"]) || typeof value["unsuccessfulRounds"] !== "number") return undefined;
+  // `highestRound` is required: a stored lineage without it predates the
+  // append-only frontier and cannot be trusted to report it, so fail closed
+  // rather than defaulting a value the digest never covered.
+  if (typeof value["highestRound"] !== "number") return undefined;
   if (!Array.isArray(records) || !records.every(validRecord)) return undefined;
   return value as unknown as ReviewLineage;
 }

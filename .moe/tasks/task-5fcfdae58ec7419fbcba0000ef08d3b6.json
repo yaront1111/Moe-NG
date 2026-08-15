@@ -1,0 +1,36 @@
+{
+  "id": "task-5fcfdae58ec7419fbcba0000ef08d3b6",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Compose the approval policy contract into the daemon approval path",
+  "description": "CONSUMER EDGE for task-5d8f11c86a3a41b4a8a420ef0d52a444, which landed the contract as a PURE @moe/core module with NO consumer. Clause 1 requires this task to exist; it is the primary consumer.\n\nWHAT LANDED AND IS READY TO COMPOSE (commit 18f0964, verify before planning — task rail 6 says a description's claims about disk are stale by default):\n- packages/core/src/planning/approval-policy.ts — APPROVAL_POLICY_KINDS (frozen, [\"PROCEED_WITHOUT_HUMAN\",\"REQUIRE_HUMAN\"]), the ApprovalPolicy union with a REQUIRED delayMs on the auto arm, and decideApprovalAuthority(request) -> ApprovalAuthorityResult.\n- packages/core/src/planning/approval-authority.ts — HumanAuthorityGate, HumanAuthorityGrant, grantHumanAuthority, APPROVAL_AUTHORITY_CODES (8), APPROVAL_AUTHORITY_LAYERS (2).\n- All five values are published from the @moe/core ROOT (index-surface.test.ts pins 80).\n- checkHumanAuthority and refuseApprovalAuthority are deliberately NOT published: decideApprovalAuthority is the only intended entry point, because it consults the gate FIRST by construction. Do not reach around it.\n\nTHE GAP THIS TASK CLOSES: nothing imports the contract. The daemon can still approve a plan with no policy consulted and no gate checked, which is the state the contract was written to end.\n\nSCOPE: compose decideApprovalAuthority in front of the existing plan.approve path in apps/daemon, and persist the HumanAuthorityGate on the unit of work. approvePlan (packages/core/src/planning/planning-run-submission.ts:172) and its reducer arm (planning-run-reducer.ts:174) must keep their current behaviour for UNGATED work with their existing tests green and UNMODIFIED — the policy composes IN FRONT of them, it does not replace them.\n\nCRITICAL, from the incident that motivated the contract: the gate must be persisted on the WORK'S OWN DURABLE IDENTITY, not as a lifecycle/status field. On 2026-08-15 a bulk promotion of every BLOCKED task cleared each task's recorded blockedReason; a gate stored like a status would have been cleared the same way. approval-authority.ts's module comment states this and is worth reading before designing the persistence.\n\nFOR THE CONSUMER, a hazard the contract documents but cannot enforce: ApprovalAuthorityDecision.delayMs is a safe non-negative integer, which is WIDER than setTimeout accepts. A delay above 2**31-1 CLAMPS TO 1ms, so \"effectively never\" silently becomes \"immediately\". Bound it here, where the timer lives.\n\nNOT IN SCOPE: the control-room surface (its own task), the orchestrator settings file (its own task), changing the contract itself.",
+  "definitionOfDone": [
+    "The daemon's plan-approval path calls decideApprovalAuthority and honours its verdict; a gated unit of work cannot be approved through the daemon under any approval policy, proved by a test that drives the real daemon handler rather than the core function.",
+    "The HumanAuthorityGate is persisted on the unit of work's durable identity, and a test proves a bulk status transition does NOT clear it - the exact mechanism of the 2026-08-15 incident.",
+    "Every daemon-level refusal asserts the stable code AND the refusing layer from APPROVAL_AUTHORITY_CODES / APPROVAL_AUTHORITY_LAYERS, never merely that approval did not happen.",
+    "approvePlan and its plan.approve reducer arm keep their current behaviour for ungated work, with their existing tests green and unmodified.",
+    "delayMs is bounded before it reaches any timer, with a test pinning the behaviour above 2**31-1 rather than letting it clamp to 1ms.",
+    "A mutation drill removing the decideApprovalAuthority call turns a named daemon test red on its refusal assertion, restored byte-exact and verified by hash."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-7f301fa7",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:13:42.384Z",
+  "updatedAt": "2026-08-15T20:14:49.135Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:14:31.645Z"
+  },
+  "contextFetchedBy": [
+    "architect-7f301fa7"
+  ]
+}

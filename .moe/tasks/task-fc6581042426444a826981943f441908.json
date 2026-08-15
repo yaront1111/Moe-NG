@@ -21,12 +21,15 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE AND CONFIRM THE PROMOTION CONDITION. No production bytes written.\n\nThis task was parked with a THREE-CLAUSE literal condition precisely because a DONE flag with an absent file has occurred on this board. Re-run all three:\n1. Is task-8e3076177f87458f934a776eca68ba16 DONE? At planning it was WORKING at 6/7, its last step being the gate/adversarial pass. If it is still not DONE and its files have since changed under you, stop and report blocked rather than planning against moving bytes.\n2. `ls apps/daemon/src/telemetry/provider-run-contracts.ts` and `provider-run-refusals.ts` — both must exist.\n3. `grep -n '^export' ` both files and confirm the symbols this slice imports: PROVIDER_RUN_RECORD_VERSION, ProviderRunRecord (with its recordDigest field), and from the REFUSALS module PROVIDER_RUN_LEDGER_CODES, PROVIDER_RUN_LEDGER_LAYERS, ProviderRunRefusal, providerRunRefusal, providerRunUnknown.\n\nNOTE THE SPLIT: slice 1 put the vocabulary in provider-run-refusals.ts, NOT in contracts.ts as this task's description assumed. Import codes and layers from the refusals module.\n\n4. Confirm `provider-run-codec.*` does NOT exist. If it does, a peer started this; stop.\n5. READ apps/daemon/src/activation/activation-ledger-codec.ts end to end — sha256 helper at :42, `canonicalJson` at :58-63, per-field encode at :138. It is the in-repo template and this slice mirrors it.\n6. Read provider-run-contracts.test.ts to see the assertion style slice 1 established, so this slice's tests read consistently.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-contracts.ts",
         "apps/daemon/src/telemetry/provider-run-refusals.ts",
         "apps/daemon/src/activation/activation-ledger-codec.ts"
-      ]
+      ],
+      "note": "PROMOTION CONDITION RE-RUN LITERALLY at HEAD 18f0964. No production bytes written.\n\n1. task-8e3076177f87458f934a776eca68ba16 is BLOCKED, not DONE, steps 1-6 COMPLETED and step-7 IN_PROGRESS. Its blockedReason says code complete and COMMITTED at 9d60091; the block is a gate/quiesce block (peers mid-refactor reddening @moe/daemon), not a code block. Assignee is null - no live worker in that directory.\n2. apps/daemon/src/telemetry/provider-run-contracts.ts EXISTS (196 lines) and provider-run-refusals.ts EXISTS (104), both committed.\n3. FILES HAVE NOT MOVED: `git diff --stat 9d60091..HEAD -- apps/daemon/src/telemetry/` is EMPTY and `git status --porcelain apps/daemon/src/telemetry/` is EMPTY. The plan's stop clause is \"still not DONE AND its files have since changed under you\" - the second conjunct is false by measurement, so the bytes I import are settled and I proceed rather than block.\n\nSYMBOLS VERIFIED BY READING, not by grep alone. From provider-run-refusals.ts: PROVIDER_RUN_LEDGER_LAYERS:25 (4 members, mine is PROVIDER_RUN_CODEC), PROVIDER_RUN_LEDGER_CODES:52 (17 codes), ProviderRunRefusal:81 {ok,outcome,code,layer,storeCode}, providerRunRefusal:89, providerRunUnknown:99 (\"Reader refusals are always UNKNOWN\"). From provider-run-contracts.ts: PROVIDER_RUN_RECORD_VERSION:56, ProviderRunRecord:93 with recordDigest:145.\n4. provider-run-codec.* ABSENT - `ls` errors. No peer started this.\n5. Template activation-ledger-codec.ts read end to end: sha256 helper :41, canonicalJson :58-63, framing :104-118, encode :125, decode :198 with digest-then-re-encode.\n6. provider-run-contracts.test.ts read - assertion style noted (swept tables assert their own generated labels, no \"is defined\" cases).\n\nTWO THINGS THE PLAN DID NOT ANTICIPATE, both recorded now because they change the design:\n(a) NO PROVIDER_RUN_RECORD_KEYS EXISTS. The template's fixed-field-order framing is built from ACTIVATION_LEDGER_RECORD_KEYS; slice 1 shipped no equivalent. DoD 4 forbids re-declaring record fields here, so this codec cannot enumerate the field list. It will use sorted-key canonical JSON over the whole record instead, which needs no key enumeration. The only two field names it must name are `recordVersion` (version guard) and `recordDigest` (the digest domain), and both will be bound with `satisfies keyof ProviderRunRecord` so a rename in contracts.ts breaks compile here rather than drifting silently.\n(b) tsconfig.base.json has exactOptionalPropertyTypes, noUncheckedIndexedAccess, verbatimModuleSyntax and noUnusedLocals on.\n\nBASELINE GATE RUN BEFORE WRITING ANY BYTES, so authorship of any later red is unambiguous (@moe/daemon is my owned package and an owned red is a block, not a disclosure): `pnpm --filter @moe/daemon typecheck` printed no diagnostics and `pnpm --filter @moe/daemon test` exit 0 with \"Test Files 89 passed (89) / Tests 1823 passed (1823)\". The daemon has QUIESCED since slice 1 measured it red at 21:22-21:26 - that is the condition its block asked for.",
+      "startedAt": "2026-08-15T20:13:25.699Z",
+      "completedAt": "2026-08-15T20:17:00.391Z"
     },
     {
       "stepId": "step-2",
@@ -83,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-682e25b5",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -95,11 +98,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-15T18:27:49.923Z",
+  "updatedAt": "2026-08-15T20:17:00.391Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -119,7 +123,9 @@
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:27:47.869Z",
   "planningNotes": {
@@ -134,7 +140,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-15T20:13:10.259Z",
+    "escalatedAt": "2026-08-15T20:13:10.259Z"
   },
-  "planApprovedAt": "2026-08-15T18:27:49.923Z"
+  "planApprovedAt": "2026-08-15T18:27:49.923Z",
+  "contextFetchedBy": [
+    "worker-682e25b5"
+  ],
+  "workStartedAt": "2026-08-15T20:13:25.699Z"
 }

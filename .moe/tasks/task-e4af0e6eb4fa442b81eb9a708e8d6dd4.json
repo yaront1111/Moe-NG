@@ -1,0 +1,29 @@
+{
+  "id": "task-e4af0e6eb4fa442b81eb9a708e8d6dd4",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Bind the orchestrator settings to the typed approval policy",
+  "description": "CONSUMER EDGE for task-5d8f11c86a3a41b4a8a420ef0d52a444. Clause 1 requires this task to exist. This is the consumer closest to the incident that motivated the contract.\n\nTHE INCIDENT, stated exactly, because it is what this task prevents recurring. On 2026-08-15 the orchestrating board ran auto-approval on a 2s delay configured OUTSIDE any typed contract — a setting nobody had stated per unit of work. Every BLOCKED task was promoted to PLANNING inside a two-minute window, clearing each task's recorded blockedReason. Two were release-cutover tasks whose descriptions named an explicit human authority gate as a hard dependency: a GA activation record requiring GO_ACTIVATE, and a legacy quiesce drill requiring GO_QUIESCE. Neither GO had ever been issued — verified by scanning every message channel. Both became claimable under that 2s delay, so no human would have seen a plan before a worker began executing it.\n\nWHAT LANDED (commit 18f0964, published from the @moe/core root, verify by grep before naming symbols):\n- APPROVAL_POLICY_KINDS, frozen: [\"PROCEED_WITHOUT_HUMAN\", \"REQUIRE_HUMAN\"].\n- ApprovalPolicy, a discriminated union whose PROCEED_WITHOUT_HUMAN arm carries a REQUIRED delayMs. It is deliberately impossible to express an auto-approval policy without stating its delay — that is the whole point, and it is exactly the property the untyped setting lacked.\n- decideApprovalAuthority, HumanAuthorityGate, grantHumanAuthority, APPROVAL_AUTHORITY_CODES, APPROVAL_AUTHORITY_LAYERS.\n\nSCOPE: decode the orchestrator's approval settings into a typed ApprovalPolicy, refusing rather than defaulting when the delay is absent or malformed. NOT IN SCOPE: the daemon wiring (task-5fcfdae58ec7419fbcba0000ef08d3b6), the control-room surface (task-6fcca7da2bc44194b36bb2454088a62b), or changing the contract.\n\nDO NOT MAKE THE SETTING THE GATE. A blanket project-wide switch is what FAILED in the incident, and the contract's rails say so: fast delegation was the correct setting for most of that board, and flipping everything to manual review to protect two tasks is the wrong trade. This task binds the POLICY. The gate is per-unit-of-work and is not expressible in, or satisfiable by, a settings file — if the design lets a settings value approve gated work, the design is wrong.\n\nA DECODE THAT DEFAULTS IS THE DEFECT. An absent delay must produce a refusal with a stable code, not a fallback value. `mem:pinned-value-is-a-decision-only-if-another-was-representable` — a decoder that cannot express \"refuse\" makes every decoded delay meaningless.",
+  "definitionOfDone": [
+    "The orchestrator's approval settings decode into a typed ApprovalPolicy from @moe/core, with the decode reachable from the settings load path rather than only exported.",
+    "An absent, empty, or malformed auto-approval delay is REFUSED with an exact stable code and its layer, asserted literally - never defaulted to a fallback delay. A test proves the refusal is representable by showing a valid settings value decoding successfully in the same suite.",
+    "No settings value, or combination of them, approves gated work; a test enumerates every ApprovalPolicy member decodable from settings against a gated unit and asserts refusal for each, with a nonzero exact cardinality equal to the vocabulary size.",
+    "The settings binding introduces no project-wide switch that stands in for the per-unit-of-work gate, and a test asserts a gated unit stays refused under the most permissive settings the file can express.",
+    "A mutation drill making the decoder default an absent delay instead of refusing turns a named test red on its code-and-layer assertion, restored byte-exact and verified by hash."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:14:28.557Z",
+  "updatedAt": "2026-08-15T20:14:31.242Z"
+}

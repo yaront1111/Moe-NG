@@ -88,12 +88,17 @@ export function findingFingerprint(finding: ReviewFinding): string {
 function lineageDigest(
   records: readonly ReviewFindingRecord[],
   unsuccessfulRounds: number,
+  highestRound: number,
 ): string {
-  return canonicalDigest({ records, unsuccessfulRounds });
+  // highestRound is INSIDE the digest so a store-corruption that lowered the
+  // frontier to resurrect an earlier round is caught as a mismatch, exactly as
+  // a truncated records array or a reset unsuccessfulRounds counter is.
+  return canonicalDigest({ highestRound, records, unsuccessfulRounds });
 }
 
 export const EMPTY_REVIEW_LINEAGE: ReviewLineage = deepFreeze<ReviewLineage>({
-  digest: lineageDigest([], 0),
+  digest: lineageDigest([], 0, 0),
+  highestRound: 0,
   records: [],
   unsuccessfulRounds: 0,
 });
@@ -104,7 +109,8 @@ export const EMPTY_REVIEW_LINEAGE: ReviewLineage = deepFreeze<ReviewLineage>({
  * cap, or a truncated `records` array, which would make every repeat finding look fresh.
  */
 function lineageAttested(lineage: ReviewLineage): boolean {
-  return lineage.digest === lineageDigest(lineage.records, lineage.unsuccessfulRounds);
+  return lineage.digest
+    === lineageDigest(lineage.records, lineage.unsuccessfulRounds, lineage.highestRound);
 }
 
 /**
@@ -123,7 +129,7 @@ function inertFinding(finding: ReviewFinding): ReviewFinding {
 
 /**
  * The ordering comparison below cannot police the round number itself: every comparison against
- * NaN is false, so `NaN <= lastRound(...)` does not refuse and the append-only guard is bypassed
+ * NaN is false, so `NaN <= highestRound` does not refuse and the append-only guard is bypassed
  * entirely. Admission therefore runs BEFORE that comparison, and refuses rather than coercing —
  * `Number(x)` or a `|| 0` fallback would turn a malformed round into round 0 and silently rewrite
  * lineage history. `isSafeInteger` rather than `isInteger`: past 2^53 increments stop being
@@ -131,13 +137,6 @@ function inertFinding(finding: ReviewFinding): ReviewFinding {
  */
 function admissibleRound(round: number): boolean {
   return Number.isSafeInteger(round) && round >= 0;
-}
-
-function lastRound(lineage: ReviewLineage): number {
-  return lineage.records.reduce(
-    (highest, record) => record.round > highest ? record.round : highest,
-    0,
-  );
 }
 
 /**
@@ -151,7 +150,10 @@ export function recordReviewRound(
 ): ReviewResult<ReviewRoundOutcome> {
   if (!lineageAttested(lineage)) return refuse("FINDING_LINEAGE_DIGEST_MISMATCH");
   if (!admissibleRound(round.round)) return refuse("FINDING_ROUND_INVALID");
-  if (round.round <= lastRound(lineage)) return refuse("FINDING_LINEAGE_APPEND_ONLY");
+  // The frontier is the highest round EVER admitted, not the highest recorded:
+  // a clean round appends no record but still advances it, so an earlier or
+  // equal round can never be replayed after an acceptance.
+  if (round.round <= lineage.highestRound) return refuse("FINDING_LINEAGE_APPEND_ONLY");
   const seen = new Set(lineage.records.map((record) => record.fingerprint));
   const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => ({
     finding: inertFinding(finding),
@@ -164,6 +166,8 @@ export function recordReviewRound(
   const clean = added.length === 0;
   const unsuccessfulRounds = lineage.unsuccessfulRounds + (clean ? 0 : 1);
   const records = [...lineage.records, ...added];
+  // The guard above proved round.round > highestRound, so this only ever raises it.
+  const highestRound = round.round;
   const escalated = unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT;
   const route: ReviewRoute = escalated
     ? "ESCALATE"
@@ -173,7 +177,8 @@ export function recordReviewRound(
     ok: true,
     value: {
       lineage: {
-        digest: lineageDigest(records, unsuccessfulRounds),
+        digest: lineageDigest(records, unsuccessfulRounds, highestRound),
+        highestRound,
         records,
         unsuccessfulRounds,
       },

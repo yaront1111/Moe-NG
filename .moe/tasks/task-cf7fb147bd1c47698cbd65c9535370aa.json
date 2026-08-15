@@ -160,12 +160,12 @@
       "completedAt": "2026-08-15T19:06:23.012Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-cf1f58d0",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-f6ca780e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-directed unblock after live dependency re-measurement: task-b6e3dd2 and task-8a01c025 are DONE; archived SPIDR shell task-0325dcf7 explicitly records its four implementation children task-00956ac3, task-091c93db, task-d7da9be4, and task-f6c9011 as DONE and the production inventory surface delivered. Hand planning to architects; re-measure current public symbols and call sites before planning.",
+  "reopenReason": "Human-directed continuation after two explicit block reports; scope is expanded narrowly to repair the two clean committed ownerless daemon typecheck blockers named in the handoff, then run the exact final gate.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -176,17 +176,24 @@
       "author": "architect-a42f4965",
       "content": "Planning audit at HEAD c0c5929 found the task is not implementable as written; created prerequisite production tasks: task-fb997625e61f487a9afa1cc56c67687a (publish four real runner adapter registrations), task-47eecd22b3b94a57a9632672c19ebd97 (durable resource/integration inventory providers), task-e33747f982e0452a9f9d784fd1cb914d (non-vacuous daemon four-leg claim/effect.activate ingress plus persisted embargo), and task-f6cf8d16c2654641a92b0ee36924de0c (freeze 7-population mapping and durable quarantine/reconciliation record). Exact contradiction: design line 978 names 7 populations; CORE-S14 names 6 categories; runner contract has 4 combined classes; adding resource yields 5 proof classes; description lists 6; DoD says 7. Do not duplicate combined proofs to fabricate seven. Coordinator should be re-promoted only after these prerequisites land and its stale class wording is reconciled against the frozen contract.",
       "timestamp": "2026-08-13T15:51:26.082Z"
+    },
+    {
+      "id": "comment-b6a295ff473c4ab7a09b0e1d241d99a4",
+      "author": "architect-797c65f6",
+      "content": "STALE BLOCK PREMISE — this task's blocking condition is now FALSE. Re-measured by an architect. Not touching status; releasing is the governor's call.\n\nYOUR BLOCK said implementation, adversarial review, commits, handoff, owned-path compile, focused 16/16 tests and the full daemon suite (89 files / 1820 tests) were all complete, and that the mandatory final command could not honestly exit 0 because of \"two committed FOREIGN regressions outside this task's owned paths\": apps/daemon/src/daemon-entry.ts:176 and :191 TS2322 (commit 8d9afb8), and apps/daemon/src/identity/session-services.test.ts:173 TS2339 (commit 7eb2997), reproduced fresh at HEAD 63bc470. That was a correct refusal under epic rail 4 and the path-attributed-baseline rail.\n\nMEASURED NOW at HEAD 65a3241 — all three are GONE, fixed by someone since:\n  pnpm --filter @moe/daemon typecheck  -> EXIT 0\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test  -> 89 files / 1823 tests passed, TRUE_GATE_EXIT=0\n\nRe-run UNPIPED. My first attempt piped through `tail`, which reports tail's exit code rather than the suite's, so I discarded that number and re-ran clean. Worth repeating because it is the same class of mistake as trusting a stale block.\n\nThat is verbatim your mandatory final command. It now exits 0.\n\nRELEVANT TO WHAT YOU BUILT: task-6f786c58 (R3 disaster-recovery completion composition) was planned to consume the reconciliation record you produce, and it is stranded in BLOCKED on this identical stale cause. Its plan notes one gap that is yours rather than its: no production command writes a RecoveryReconciliationRecord, because RECOVERY_RECONCILIATION_COMMAND_KIND = \"recovery.reconcile_external\" (recovery-inventory-contract.ts:28) was reserved and never wired. If that is inside your DoD, it is worth confirming before completing; if not, it needs a follow-up task so the surface does not stay an island.\n\nGENERAL LESSON: a block premise is a MEASUREMENT and it goes stale silently. Three CRITICAL tasks sat blocked on this one cause while the board read 0 PLANNING / 0 REVIEW and looked starved of work. It was dammed, not starved. Re-run the literal condition before treating any block as still binding.",
+      "timestamp": "2026-08-15T20:15:04.955Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:07:49.319Z",
-  "updatedAt": "2026-08-15T19:08:03.036Z",
+  "updatedAt": "2026-08-15T20:15:20.893Z",
   "contextFetchedBy": [
     "governor-7c5e6be6",
     "architect-a42f4965",
     "architect-4eca9b79",
     "architect-7f301fa7",
-    "worker-cf1f58d0"
+    "worker-cf1f58d0",
+    "qa-f6ca780e"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T15:42:43.029Z",
@@ -194,10 +201,10 @@
     "plannedDistinctFileCount": 9,
     "executedStepCount": 8
   },
-  "blockedReason": "Implementation, adversarial review, commits, handoff, owned-path compile, focused 16/16 tests, and full daemon 89 files/1820 tests are complete. The exact mandatory final command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` cannot honestly exit 0 because daemon typecheck has only two committed FOREIGN regressions outside this task's owned paths: apps/daemon/src/daemon-entry.ts:176 and :191 TS2322 (commit 8d9afb8), and apps/daemon/src/identity/session-services.test.ts:173 TS2339 (commit 7eb2997). Fresh re-runs at HEAD 63bc470 reproduce them; failing-path delta intersected with apps/daemon/src/recovery/effect-inventory* is EMPTY. Full daemon tests exit 0. Four workers independently confirmed the same ownerless red; governor was paged at msg-4ae85a30d3334ec2a6d871886ec7ba5b. Rails forbid repairing foreign paths or fabricating exit 0, while moe.complete_task hard-requires exitCode 0. Resume after one explicitly assigned owner lands those two fixes, then rerun the exact gate and call complete_task.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T19:08:03.036Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured current production, identified the non-vacuous capability gaps and cardinality contradiction, created four prerequisite production tasks, commented the parent, reported it BLOCKED, and wrote Serena handoff memory.",
@@ -244,5 +251,25 @@
     "escalatedAt": "2026-08-15T18:21:23.000Z"
   },
   "planApprovedAt": "2026-08-15T18:16:37.884Z",
-  "workStartedAt": "2026-08-15T18:22:03.173Z"
+  "workStartedAt": "2026-08-15T18:22:03.173Z",
+  "reviewStartedAt": "2026-08-15T20:15:15.941Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  89 passed (89)\n      Tests  1823 passed (1823)\n   Start at  23:14:41\n   Duration  4.68s (transform 37.17s, setup 0ms, import 75.78s, tests 34.49s, environment 8ms)\n\nHEAD_BEFORE=18f09644026dfd70778eb7baf1f6b4499b1dbfb7\nHEAD_AFTER=18f09644026dfd70778eb7baf1f6b4499b1dbfb7\nFINAL_GATE_EXIT=0",
+    "reportedAt": "2026-08-15T20:15:15.941Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+    "apps/daemon/src/recovery/restart-reconciliation.ts",
+    "apps/daemon/src/activation/activation-ingress.ts",
+    "apps/daemon/src/recovery/effect-inventory.test.ts",
+    "apps/daemon/src/recovery/effect-inventory-join.ts",
+    "apps/daemon/src/recovery/effect-inventory-join.js",
+    "apps/daemon/src/recovery/effect-inventory-join.test.ts",
+    "apps/daemon/src/recovery/effect-inventory.ts",
+    "apps/daemon/src/recovery/effect-inventory.js",
+    "apps/daemon/src/recovery/effect-inventory-collection.ts",
+    "apps/daemon/src/recovery/effect-inventory-collection.js"
+  ]
 }

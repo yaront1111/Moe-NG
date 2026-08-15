@@ -16,7 +16,7 @@
     "Preserve the root test script set, use TDD, and stage only the three explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,9 +25,30 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
   "priority": "HIGH",
-  "order": 19.3,
+  "order": 3,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:51:02.604Z",
-  "updatedAt": "2026-08-15T18:51:02.604Z"
+  "updatedAt": "2026-08-15T20:13:58.822Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:13:10.854Z"
+  },
+  "contextFetchedBy": [
+    "architect-94dd1835"
+  ],
+  "blockedReason": "The task's literal hard dependency is still unmet: task-f6ef0a45f52c45c7bb54f250170aa223 is PLANNING and held by another architect, not DONE. Fresh HEAD 18f0964 shows package.json/pnpm-lock and daemon root paths clean, but repository-root bare probes for both @moe/runner and @moe/daemon still fail ERR_MODULE_NOT_FOUND, and the doctor collector therefore cannot yet be named from the public daemon root. Planning the durable call site before f6ef lands would either reference an absent root export or weaken the call site. Resume after f6ef is DONE, then remeasure its bare export and the clean shared manifest/lock paths.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-15T20:13:41.652Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fetched full context, remeasured HEAD and relevant paths, confirmed f6ef doctor publication remains PLANNING, and reproduced root ERR_MODULE_NOT_FOUND for both target bare packages; reported BLOCKED on f6ef.",
+      "whatRemains": "After f6ef is DONE, re-probe @moe/daemon.collectDoctorVersionReport, verify manifest/lock paths are clean, then submit the three-file dependency-edge plan.",
+      "pitfalls": "Do not deep-import, add tsconfig paths/project references, or use a subprocess cwd trick; the manifest, lock importer, compiled bare import, and durable call site are all mandatory.",
+      "openQuestions": "None.",
+      "releasedAt": "2026-08-15T20:13:58.820Z",
+      "releasedBy": "architect-94dd1835",
+      "reason": "Explicit architect handoff after confirming the hard prerequisite is still in PLANNING."
+    }
+  ]
 }

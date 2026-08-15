@@ -236,6 +236,10 @@ export interface ReviewFindingRecord {
 /** Append-only rejection lineage. `digest` attests the exact recorded sequence. */
 export interface ReviewLineage {
   readonly digest: string;
+  /** The highest round number ever admitted, INCLUDING clean rounds that append
+   *  no record. The append-only frontier reads this, not the record set, so a
+   *  clean (accepting) round cannot leave an earlier round resubmittable. */
+  readonly highestRound: number;
   readonly records: readonly ReviewFindingRecord[];
   readonly unsuccessfulRounds: number;
 }

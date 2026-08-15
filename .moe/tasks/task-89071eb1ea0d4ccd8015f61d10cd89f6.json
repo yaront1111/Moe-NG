@@ -123,7 +123,7 @@
       "completedAt": "2026-08-15T19:52:52.109Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -143,16 +143,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:12:38.745Z",
-  "updatedAt": "2026-08-15T19:54:27.015Z",
+  "updatedAt": "2026-08-15T19:59:06.405Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:21:32.935Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-15T19:59:06.405Z",
+    "wallClockMs": 5853470
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
-    "worker-fd8f822b"
+    "worker-fd8f822b",
+    "qa-f6ca780e"
   ],
   "stepsCompleted": [
     "step-1",
@@ -196,5 +199,8 @@
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
     "apps/daemon/src/orchestrator/agent-spawner.test.ts",
     "apps/daemon/src/orchestrator/agent-spawn-invocation.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T19:59:06.405Z",
+  "reviewCompletedAt": "2026-08-15T19:59:06.405Z",
+  "reviewSummary": "APPROVED at HEAD 6361091 (4 owned files, +145/-19). I re-ran both drills myself.\n\nDoD 4 is the one that matters, since existsSync===false is satisfied equally by never-written and written-then-deleted. I disabled BOTH cleanup sites (rmSync in finish :114 and the process.once(\"exit\") sweep :45) and re-ran the file: 3 cleanup-dependent tests went RED, the positive control proving the drill applied and that written files DO survive and ARE visible to these assertions, while \"refuses an unquotable command line without ever writing the credential to disk\" stayed GREEN. The credential is NEVER WRITTEN on the refusal path. Restored byte-exact, sha 4fedcef9.\n\nDoD 5: I reverted to the original defective ordering (write :73 above guard :82) and that same NAMED test went red on the credential-presence assertion. Restored byte-exact, same sha.\n\nDoD 1/3: guard :71 precedes writeFileSync :78 on every path; the arrow is async :57 so the refusal stays a REJECTION. Without it the throw escapes the unawaited .catch().then() at agent-wrapper.ts:226 and kills the poll tick. Suite green covers the pre-existing regex assertions unmodified.\n\nDoD 2: SpawnInvocationRefusal carries code and layer as real properties, pinned literally via toMatchObject. super(code) makes the message the bare code, so the refused argument and config path are NOT echoed (rail 5).\n\nDoD 6, legs separate: daemon test EXIT=0, 89 files/1823 tests. daemon typecheck EXIT=1, 3 errors in 2 files, ZERO in any owned orchestrator path. Same ownerless red blocking five tasks; disclosed with a measured baseline rather than narrowed. Approved on that disclosure, consistent with task-1eeb2dcc.\n\nOUTSTANDING, RECORDED SO IT IS NOT SILENTLY DROPPED: phantom SPAWNED at agent-wrapper.ts:226-231 is UNCHANGED. .catch(()=>undefined) still swallows the refusal and outcome:\"SPAWNED\" returns unconditionally, so the board is told an agent is running that does not exist. Out of this task's rail, correctly not widened. Needs its own task."
 }

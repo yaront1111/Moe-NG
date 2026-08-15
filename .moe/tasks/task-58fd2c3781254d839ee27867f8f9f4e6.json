@@ -1,0 +1,36 @@
+{
+  "id": "task-58fd2c3781254d839ee27867f8f9f4e6",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Wrapper reports SPAWNED for a spawn that refused",
+  "description": "Objective: stop the orchestrator reporting an agent as SPAWNED when the spawn refused and no process was ever created.\n\nMEASURED DEFECT, verified on current bytes at apps/daemon/src/orchestrator/agent-wrapper.ts:226-231:\n\n    const exit = config.spawnAgent({\n      credential: secret, expiresAt, kind: step.kind,\n      mission: missionText, sessionId, workItemId, workspace,\n    }).catch(() => undefined).then(() => { active.delete(workItemId); });\n    active.set(workItemId, exit);\n    return { kind: step.kind, outcome: \"SPAWNED\", sessionId, workItemId };\n\n`.catch(() => undefined)` swallows EVERY rejection — no code, no log, no record — and `outcome: \"SPAWNED\"` is returned unconditionally, without consulting the promise at all. When the spawn refuses, the board is told an agent is running that does not exist. That is a fail-open on the orchestration path: a leaked file is recoverable, a phantom SPAWNED is a false fact the scheduler then acts on.\n\nTHE INFORMATION NOW EXISTS AND IS BEING DISCARDED. task-89071eb1 (DONE) made the spawner refuse properly: apps/daemon/src/orchestrator/agent-spawner.ts:71 validates the command line BEFORE minting the credential, and agent-spawner.test.ts:229 pins the refusal as `code: \"SPAWN_ARGUMENT_UNQUOTABLE\"`. So a real, coded refusal is produced one layer down and then thrown away by the blanket catch above. This task is strictly the consumption half.\n\nTHE FIX IS SMALL AND THE TYPE ALREADY ALLOWS IT. agent-wrapper.ts:74 already declares `readonly outcome: \"SPAWNED\" | string;` — the report shape can carry a non-SPAWNED outcome today. No contract change is needed to report the refusal; only the reporting logic hardcodes success.\n\nPROVENANCE: raised by governor-18a42000's adversarial audit of today's diff (7 lenses, 35 findings, 36 independent skeptic verdicts). This finding survived BOTH skeptics with ZERO kills — the strongest result in that sweep — and I re-verified it on current bytes myself. It was posted as a comment on task-89071eb1 asking that it be fixed there or explicitly deferred in writing. That task landed touching only agent-spawner.ts and its test, never agent-wrapper.ts, with no deferral recorded. Filing it here so the second clause is not lost — the same half-fix pattern that produced task-70b6361d.\n\nNOT IN SCOPE: the spawner's own refusal (already correct), the DEP0190 command-line build, the UNQUOTABLE character set, the credential-minting order, or the wrapper's polling loop.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "A refused spawn is reported as a refusal, not as SPAWNED: a test drives the wrapper with a request the spawner refuses and asserts the returned report carries the refusal outcome and its exact stable reason code, distinguishable by the caller from a real spawn.",
+    "A successful spawn still reports SPAWNED with its existing shape, and every current agent-wrapper test stays green and unmodified - this changes only the refused path.",
+    "No rejection is swallowed silently: the blanket `.catch(() => undefined)` no longer discards a coded refusal. Any rejection the wrapper still absorbs by design is one it has explicitly classified, and a test names which.",
+    "The in-flight bookkeeping stays correct on the refused path: `active` must not retain an entry for a workItemId whose agent never started, asserted directly rather than inferred.",
+    "A mutation drill proves the coverage is load-bearing: restoring the unconditional `outcome: \"SPAWNED\"` turns a NAMED test red on the refusal assertion, and the drill is restored byte-exact and verified by hash.",
+    "Fresh pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test exits 0, each leg's exit code read separately."
+  ],
+  "taskRails": [
+    "This is a fail-open on the orchestration path. The wrapper must never report SPAWNED for a spawn that did not start; when in doubt about a rejection's meaning, report it rather than absorbing it.",
+    "Assert the reason code and the layer, not merely that the outcome differed from SPAWNED. The refusal already carries SPAWN_ARGUMENT_UNQUOTABLE at the spawner; the test must pin what the WRAPPER reports.",
+    "Do not re-fix the spawner. task-89071eb1 already landed validate-before-mint and the coded refusal; re-implementing either would be a silent duplicate colliding with landed work in this shared worktree.",
+    "A blanket catch on a path that can carry an authority refusal is the anti-pattern being corrected. Do not replace it with a broader catch or a log-and-continue - the refusal must reach the caller's report.",
+    "Re-measure agent-wrapper.ts:74 and :226-231 on current bytes before editing; this file moved once already today when the spawner was extracted. Preserve foreign work and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 105.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:15:11.981Z",
+  "updatedAt": "2026-08-15T20:15:11.981Z"
+}

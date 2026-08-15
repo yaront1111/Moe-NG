@@ -363,6 +363,7 @@ export function tamperedRoundResult(): Record<string, unknown> {
   return {
     lineage: {
       digest: hex64("dead"),
+      highestRound: 1,
       records: [
         {
           finding: finding(),

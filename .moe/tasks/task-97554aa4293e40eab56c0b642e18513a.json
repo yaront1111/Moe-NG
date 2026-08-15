@@ -19,13 +19,14 @@
     {
       "stepId": "step-1",
       "description": "Resume gate and destructive-lane isolation. Against committed HEAD (never foreign uncommitted bytes), grep/probe the concrete production consumers for: the MCP HTTP/stdio daemon host, the real agent wrapper, the pinned Claude launcher/authority binding, bounded verifier receipt path, restart reconciliation plus safe continuation, durable coordination/session/terminal adapter, and review-qualified acceptance. Prove public workspace edges from inside `apps/daemon`: each dependency is declared in `apps/daemon/package.json`, linked in the `apps/daemon` importer of `pnpm-lock.yaml`, and a temporary compiled probe imports the required symbols by bare specifier and typechecks exit 0, deleting the probe in the same command. If any capability has only test/test-harness callers or no durable host caller, call `moe.report_blocked` with the exact missing symbol and consumer edge; do not continue with a mock or direct-helper journey. Once all edges are real, add an isolated Vitest config that includes the existing `*.test.ts` support tests plus destructive `*.e2e.ts`, uses node/forks with file parallelism disabled, max concurrency 1, deterministic non-shuffled order, no retries, no focused tests, and no pass-with-zero-tests. Point `test:e2e` at this config without changing the ordinary `pnpm test` include set. Prove discovery both ways: root `pnpm test` collects zero `*.e2e.ts`; `pnpm test:e2e` collects a nonzero exact journey-file set.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "package.json"
       ],
       "newFiles": [
         "tests/e2e/foundation/vitest.config.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T20:12:54.454Z"
     },
     {
       "stepId": "step-2",
@@ -88,8 +89,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-d6220bc6",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -116,11 +117,17 @@
       "author": "architect-8c9073cd",
       "content": "ARCHITECT RE-AUDIT 2026-08-09: the reopen premise is incomplete. Existing harness steps 1-4 remain banked at 69663dc, but production probes found no physical Claude launcher/verifier, no durable work/evidence composition, no public review/recovery ingress, caller-invented release/handoff authority that binds all five recovery classifications, opaque caller-supplied goal-closure witnesses, no coordination authority adapter, and no real MCP daemon host. Created prerequisite child tasks: `task-5855a9c6b8da4a428dd0e75ed9ae36d1`, `task-acf73253a204435aba590894799814f2`, `task-69f2b6f785ca4ba3a932a8256b0edfb8`, `task-6cbff01023b14b26a78fc5e3eb1dd8a9`, `task-44d4873eb9f746b1a978e97ff9743dc4`, `task-8f9305b9bb5e4b8db327a55981b2ea0e`, `task-4afcb06422ed4adb89430b7ea9758d7f`, `task-5e43a9e294ef48fdab23817c8c6cfc45`, `task-49ed1e6d73544fc6ae09b3951a573848`. Do not resume E2E journey planning until each is DONE and its capability is re-probed on disk.",
       "timestamp": "2026-08-09T12:29:46.178Z"
+    },
+    {
+      "id": "comment-90116e38af76441397716ce20fc3a992",
+      "author": "worker-d6220bc6",
+      "content": "STEP-1 RESUME-GATE EVIDENCE — measured at committed HEAD 65a3241ec313ac06a2705ea912ae876bdc442f46 (NOT f1a494e; HEAD moved since the unblock). Every claim below is grep/probe on disk, not a status field.\n\n=== WHAT IS REAL (no dispute) ===\nWorkspace edges from apps/daemon prove out. Plain-Node probe run with cwd=D:\\projexts\\moe-next\\apps\\daemon:\n  runner launchClaude: function\n  runner admitResume: function\n  coordination keys: 14\n  daemon root: exports=78 REVIEW_HANDLERS=object\napps/daemon/package.json:16 declares \"@moe/coordination\": \"workspace:*\".\nProduction hosts real and reachable:\n  apps/daemon/src/mcp-http/mcp-http-main.ts:40 -> createMcpHttpHost (mcp-http-host.ts:111)\n  apps/daemon/src/orchestrator/agent-wrapper-main.ts:74 -> createAgentWrapper (agent-wrapper.ts:147)\n  agent-wrapper-main.ts:132 -> createNodeVerifier (node-verifier.ts:153) with a real bounded spawn + sha-256 receipt\nGovernor-f70d1157's four cleared claims re-verified true and NOT re-litigated here: GOAL_HANDLERS, approval.decide activation, integration.accept_output in REVIEW_HANDLERS, apps/daemon/src/review/ persistence. The gaps below are DIFFERENT capabilities the unblock never addressed.\n\n=== GAP A — pinned Claude launcher / authority binding: TEST-ONLY ===\nSymbol: createFoundationClaudeLauncher, apps/daemon/src/activation/foundation-launch-authority.ts:290 (sibling createFoundationLauncherAuthority same file).\nComplete caller set: foundation-launch-authority.test.ts:42 (import), :602 (call), plus the .js bridge. Zero production consumers.\n`git grep -n launchClaude -- '*.ts' | grep -v ^packages/runner` returns ZERO lines: @moe/runner's launcher has no consumer anywhere outside its own package.\nThe only real Claude spawn in production is claudeSpawner (orchestrator/agent-spawner.ts) at agent-wrapper-main.ts:82 — it spawns MOE_AGENT_COMMAND (default \"claude\") with env credentials and performs NO pin observation, NO version/executable-closure check, NO registration commit.\nBlocks: step 2's \"pinnedClaudeRuntimeObservation observes the actual Windows Claude executable/version/closure through the production runner observation and pinning surface ... fail closed with its literal production reason code\", and DoD 3's \"run the actual pinned Claude wrapper\".\n\n=== GAP B — restart reconciliation + safe continuation: TEST-ONLY ===\nSymbols: reconcileOnRestart, apps/daemon/src/recovery/restart-reconciliation.ts:235; evaluateContinuationCommandBytes, recovery/continuation-service.ts.\nComplete caller set for reconcileOnRestart: recovery/continuation-test-harness.ts:6,73 (a TEST HARNESS by name and by fact), restart-reconciliation.test.ts:28,133,216, restart-reconciliation-idempotence.test.ts:55,56,82,83,84. continuation-test-harness.ts is itself imported only by continuation-binding.test.ts:16 and continuation-service.test.ts:21. Zero durable-host callers.\nBoot path read in full: startDaemon (daemon-entry.ts:162) does resolveDependencies -> startControlRoomListener -> freeze/return. No reconciliation sweep at startup.\ndaemon-command-registry.ts wires runRecoveryCompleteCommand (recovery/recovery-completion.js) and daemon-store-dependencies.ts:16 wires createRestorePort (recovery/restore-controller-commands.js). Both are DIFFERENT capabilities (completion digest; restore/quiesce) — neither classifies in-flight attempts.\nBlocks: step 4 / DoD 2 entirely. Restarting the production host today emits no {ADOPTED, SUSPECT, QUARANTINED, RECONCILIATION_COMMAND} records to assert set equality over, so the only way to produce them in an E2E is to call the pure reducer from the test — i.e. test-owned authority, which the plan and epic rail 4 forbid.\n\n=== GAP C — durable coordination / typed session+terminal communication: TEST-ONLY ===\nSymbol: createCoordinationAdapter, apps/daemon/src/coordination/coordination-adapter.ts:111. Only callers: coordination-adapter.test.ts:84,90.\n`git grep -n \"coordination/\" -- 'apps/daemon/src/**'` filtered to exclude apps/daemon/src/coordination/ returns ZERO lines. The entire coordination directory is unreachable from every production module in the daemon.\ndaemon-command-registry.ts admits exactly: BOOTSTRAP_FAMILY (10 kinds), REVIEW_FAMILY (4), SESSION_FAMILY (3 — session.open/renew/close, credential lifecycle only), WORK_FAMILY (3), effect.activate, recovery.complete. There is NO coordination/terminal envelope command kind, so no MCP client can send or read a typed advisory envelope.\nBlocks: step 3's \"Exercise typed session and terminal communication through the durable coordination surface, proving advisory text remains advisoryOnly: true and that every state change has a separate authenticated command receipt\", and DoD 3's \"typed session/terminal communication with exact receipts\".\n\n=== WHY THIS IS A STOP, NOT A WORKAROUND ===\nStep 1 names this condition verbatim: \"If any capability has only test/test-harness callers or no durable host caller, call moe.report_blocked with the exact missing symbol and consumer edge; do not continue with a mock or direct-helper journey.\" planningNotes.risks names the same three symbols as the load-bearing risk. packages/testkit/src/foundation/foundation-model-j3j4.ts exists and would make a green J3/J4 trivial to fake — that is precisely the mock-backed journey this epic's terminal acceptance gate must not accept. Project rail Clause 2 forbids the narrowed DoD / mock-backed journey / authority-reimplemented-in-test escapes.\n\n=== WHAT WOULD UNBLOCK ===\nThree production tasks, each landing a consumer edge (not just an export):\nA. Compose createFoundationClaudeLauncher/createFoundationLauncherAuthority into the agent spawn path so claudeSpawner's launch is pin-observed and fails closed by code on a non-approved host.\nB. Call reconcileOnRestart from the daemon boot path (startDaemon or the store-dependency composition root) so a restart durably writes its classification records, and expose the continuation command through the registry.\nC. Register a coordination command kind in daemon-command-registry.ts backed by createCoordinationAdapter so typed session/terminal envelopes cross MCP with authenticated receipts.\nSteps 2-8 of this plan are unchanged and can resume the moment these three consumer edges exist.",
+      "timestamp": "2026-08-15T20:15:27.774Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-15T18:21:51.519Z",
+  "updatedAt": "2026-08-15T20:16:59.964Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 8,
@@ -164,13 +171,14 @@
     "governor-1f3b15b7",
     "governor-7c5e6be6",
     "architect-a42f4965",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "worker-d6220bc6"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
-  "blockedReason": null,
+  "blockedReason": "Step-1 resume gate TRIPPED at HEAD 65a3241 (past f1a494e cited in the unblock). Three of seven named capabilities have ONLY test/test-harness callers — the hard stop step 1 defines. Full file:line evidence: comment-90116e38af76441397716ce20fc3a992.\n\nNOT re-litigating the unblock: governor-f70d1157's four cleared claims all re-verified TRUE. These three are DIFFERENT capabilities it never covered, and are the three planningNotes.risks flagged.\n\nA. PINNED CLAUDE. createFoundationClaudeLauncher (activation/foundation-launch-authority.ts:290) callers = own .test.ts:42,602 + .js bridge. `git grep launchClaude` outside packages/runner = ZERO. Production's only Claude spawn is claudeSpawner via agent-wrapper-main.ts:82 — unpinned: no observation, no version/closure check, no registration commit. Kills step 2 pinnedClaudeRuntimeObservation + DoD 3.\n\nB. RESTART RECONCILIATION. reconcileOnRestart (recovery/restart-reconciliation.ts:235) callers = continuation-test-harness.ts:6,73 + two .test.ts; that harness imported only by two .test.ts. startDaemon (daemon-entry.ts:162) read in full: resolveDependencies -> startControlRoomListener, no reconciliation sweep. Registry wires recovery.complete + createRestorePort — different capabilities. Restart emits no {ADOPTED,SUSPECT,QUARANTINED,RECONCILIATION_COMMAND}, so step 4/DoD 2 could only pass by calling the pure reducer from the test = test-owned authority.\n\nC. COORDINATION. createCoordinationAdapter (coordination/coordination-adapter.ts:111) caller = own .test.ts. ZERO imports of apps/daemon/src/coordination/ from any module outside that dir. daemon-command-registry.ts admits bootstrap/review/session(credential-only)/work/effect.activate/recovery.complete — no coordination or terminal kind. Kills step 3 advisoryOnly session/terminal + DoD 3.\n\nEdges fine (probe from apps/daemon: launchClaude+admitResume function, coordination 14 exports). Gap is COMPOSITION not publication. NEEDED: production tasks landing consumer edges A, B, C.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T20:16:59.964Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Re-audited the production surfaces, preserved completed harness steps 1-4, created and linked nine bounded production prerequisite tasks, reported the canary BLOCKED, and wrote the durable Serena handoff.",

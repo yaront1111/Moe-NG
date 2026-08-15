@@ -130,7 +130,7 @@
     {
       "stepId": "step-7",
       "description": "Load the `adversarial-self-review` skill and read the owned diff as an attacker. Concretely: replay twice, and replay after a replacement selection; two writers at the same expectedVersion; the aggregate head moving on every stable-tail attempt; malformed / proxy / accessor / symbol-keyed / sparse / oversized requests and byte views (note Array.isArray throws on a revoked proxy, and `.slice()` on caller bytes consults Symbol.species — the codec already uses the `new Uint8Array(bytes)` constructor form for this reason, so do not weaken it); event and decision records transplanted across projects; an absent decision for a present event; mutated decision result bytes; an unsupported manifest schemaVersion; codec UNKNOWN propagation with `upstream` intact; a closed store throwing; and Windows SQLite handle cleanup. Confirm that no physical configuration path, no defaulted manifest, no profileRevisionId substituted for settingsDigest or the orchestration sourceSha, no deep package import, no unbounded loop and no caller-owned alias can cross the boundary. Verify every refusal assertion in the new suite pins a code AND a layer AND (where foreign) upstream — a bare `!ok` is one added layer away from vacuous — and that each of the four closed codes actually appears in the test file. If review changes any byte, rerun the exact step-6 command and REPLACE the evidence with the fresh output. Before handoff, inspect the shared index and stage/commit ONLY the five owned paths by explicit pathspec; unstage foreign entries; never `git add -A`, reset or stash; then verify the resulting commit contains nothing else.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/configuration/project-configuration-selection.ts",
         "apps/daemon/src/configuration/project-configuration-selection.js",
@@ -138,15 +138,24 @@
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts"
       ],
-      "startedAt": "2026-08-15T18:28:14.328Z"
+      "modifiedFiles": [
+        "apps/daemon/src/configuration/project-configuration-selection.ts",
+        "apps/daemon/src/configuration/project-configuration-selection.js",
+        "apps/daemon/src/configuration/project-configuration-selection.test.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ],
+      "note": "Resumed after human unblock and independently confirmed blocker repair commit 65a3241. Fresh exact foreground gate EXIT 0: contracts 12 files/416 tests; core 31/781; daemon 89/1823; repo typecheck all 18 selected workspace projects Done. Adversarial review covers replay/replacement/CAS races, bounded moving tails, hostile exact records/arrays/byte views, nonhex digests/event ids, transplanted durable records, missing/mutated decision/receipt bytes, unsupported schema, codec/store provenance, closed handles, and Windows child cleanup; refusal tests pin own code+layer+upstream and forged sweep exact count 17. Mechanical: selection source 249, LF bridge exact, probes/smoke absent, owned paths clean, no staged paths, diff checks clean, public runtime/type/smoke closure present. Initial five-path bytes remain in foreign whole-tree commit 98d6e72; hardening commits are 7766acc, 7f5662e, d3fe750. apps/daemon/src/index.ts was 346 at this task's publication commit; later foreign activation/recovery tasks expanded current shared file to 374, still below the hard 400 split boundary, and their work was preserved rather than deleted. QA should review `git diff f0f62c0..HEAD --` over the five paths.",
+      "startedAt": "2026-08-15T18:28:14.328Z",
+      "completedAt": "2026-08-15T20:14:17.949Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-83b3c121",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Block condition met, re-run literally by governor-74ff6cb3 and approved by the human at 2026-08-15T16:00Z. The block read: \"Its approved step 1 explicitly requires task-0c21ba2 and task-bcea7056 DONE, but both are BACKLOG and absent on disk.\" Both are now DONE: task-0c21ba2 (Project configuration manifest contract) and task-bcea7056 (Project configuration digest codec). The stated premise — \"missing contract/codec authority\" — no longer holds. ARCHITECT: this task already has an APPROVED plan whose step 1 named those two deps, so re-read the existing plan before re-planning from scratch, and re-measure the contract and codec at their PUBLIC roots rather than trusting the DONE statuses. Confirm the manifest contract and digest codec are exported and reachable from the path this task owns; if step 1's premise still fails on reachability, re-block with the failing import rather than working around it.",
+  "reopenReason": "Human explicitly requested unblock; retry the completed implementation's final exact gate and finish step 7.",
   "createdBy": "WORKER",
   "parentTaskId": "task-b937811e8b72459ea169e5fff1238ce1",
   "priority": "HIGH",
@@ -161,12 +170,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T16:07:23.828Z",
-  "updatedAt": "2026-08-15T19:08:49.285Z",
+  "updatedAt": "2026-08-15T20:15:34.513Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T22:29:14.156Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-a9210e34",
@@ -179,7 +188,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:00:33.017Z",
@@ -205,9 +215,23 @@
     "escalatedAt": "2026-08-15T17:57:18.041Z"
   },
   "planApprovedAt": "2026-08-15T18:00:35.119Z",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T19:08:49.285Z",
-  "blockedReason": "Implementation, focused verification, adversarial review, mutation drills, and explicit-path commits are complete. The required exact gate cannot exit 0 because `pnpm --filter @moe/daemon typecheck` repeatedly fails only in foreign clean committed paths: apps/daemon/src/daemon-entry.ts:176,191 TS2322 (`csrfToken` remains string|undefined, commit 8d9afb8) and apps/daemon/src/identity/session-services.test.ts:173 TS2339 (`SessionOutcome.outcome` does not exist, commit 7eb2997). Latest daemon tests are independently green at 89 files/1820 tests; configuration focused suites are 116/116 green and owned paths have no tsc errors. These files are outside the five owned paths, so epic rail 3 forbids this worker from repairing them; governor-8466bf0e and all workers were paged multiple times with the exact two-line repair. Runtime complete_task requires exitCode 0, so fabricating or narrowing evidence is forbidden. Handoff: Serena task-task-5dfc98fc3e7f4035a8012bd9ba032de3-handoff. Once the two foreign repairs land, re-run the exact four-leg command, complete step 7, then complete_task.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "blockedResourceId": null,
-  "workStartedAt": "2026-08-15T18:05:14.599Z"
+  "workStartedAt": "2026-08-15T18:05:14.599Z",
+  "reviewStartedAt": "2026-08-15T20:15:34.513Z",
+  "verification": {
+    "command": "pnpm --filter @moe/contracts test && pnpm --filter @moe/core test && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "Test Files  12 passed (12)\\nTests  416 passed (416)\\nTest Files  31 passed (31)\\nTests  781 passed (781)\\nTest Files  89 passed (89)\\nTests  1823 passed (1823)\\nScope: 18 of 19 workspace projects\\npackages/runner typecheck: Done\\napps/daemon typecheck: Done\\n$ pnpm --recursive typecheck\\nExit code: 0",
+    "reportedAt": "2026-08-15T20:15:34.513Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/configuration/project-configuration-selection.test.ts",
+    "apps/daemon/src/configuration/project-configuration-selection.ts",
+    "apps/daemon/src/configuration/project-configuration-selection.js",
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/index-surface.test.ts"
+  ]
 }

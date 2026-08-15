@@ -1,0 +1,29 @@
+{
+  "id": "task-6fcca7da2bc44194b36bb2454088a62b",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Replace the provisional control-room approval refusal channel with the landed vocabulary",
+  "description": "CONSUMER EDGE for task-5d8f11c86a3a41b4a8a420ef0d52a444. Clause 1 requires this task to exist.\n\nTHE PROVISIONAL MARKER THAT NAMES THIS WORK: apps/control-room/src/approvals/approval-gating.ts carries an approval refusal-reason channel EXPLICITLY MARKED PROVISIONAL pending the daemon's stable reason registry (spec section 13-D2). That registry now exists for the approval decision. Re-read the file before planning and confirm the marker is still there and still says that — task rail 6: a description's claims about disk are stale by default, in BOTH directions.\n\nWHAT LANDED (commit 18f0964, published from the @moe/core root, verify by grep before naming symbols):\n- APPROVAL_AUTHORITY_CODES, 8 stable codes: APPROVAL_HUMAN_AUTHORITY_REQUIRED, APPROVAL_AUTHORITY_BINDING_MISMATCH, APPROVAL_PRINCIPAL_MISSING, APPROVAL_PRINCIPAL_UNNAMED, APPROVAL_PRINCIPAL_NOT_HUMAN, APPROVAL_GRANT_MOMENT_INVALID, APPROVAL_POLICY_DELAY_INVALID, APPROVAL_HUMAN_REVIEW_REQUIRED.\n- APPROVAL_AUTHORITY_LAYERS, 2: HUMAN_AUTHORITY_GATE, APPROVAL_POLICY. The layer is what tells a reader WHICH refusal answered, and the UI should surface it — \"refused\" alone is what the contract exists to stop being the whole story.\n- APPROVAL_POLICY_KINDS and the ApprovalPolicy union for rendering the policy in force.\n- HumanAuthorityGate / HumanAuthorityGrant for rendering a gate and who satisfied it.\n\nDEPENDENCY EDGE, verify all three before planning (project rail 7 — this repo has no tsconfig \"paths\" and no project references, so a deep relative import fails with TS6059): (a) apps/control-room/package.json declares @moe/core in \"dependencies\"; (b) pnpm-lock.yaml carries the importer entry; (c) a compiled probe inside apps/control-room importing from the BARE specifier \"@moe/core\" typechecks exit 0, probe deleted in the same command. If the edge is absent, the first plan step is the manifest edit plus workspace install, with both files declared as owned paths — never plan around the gap.\n\nSCOPE: the control-room approval surface only. Render the policy in force, render a human authority gate and its grant, and map every refusal to its exact code AND layer. NOT IN SCOPE: the daemon wiring (task-5fcfdae58ec7419fbcba0000ef08d3b6), the orchestrator settings file, or changing the contract.\n\nWORTH KNOWING: the gate's whole point is that no UI control can satisfy it. A \"force approve\" affordance is not a missing feature — do not add one. Satisfying a gate takes a named human principal through grantHumanAuthority; an agent, and a button that calls one, cannot.",
+  "definitionOfDone": [
+    "The PROVISIONAL marker in apps/control-room/src/approvals/approval-gating.ts is gone, and its refusal channel now carries codes from the landed APPROVAL_AUTHORITY_CODES rather than a local provisional set.",
+    "Every rendered refusal shows the stable code AND the refusing layer; a test asserts both literally for at least one gate-layer and one policy-layer refusal, never merely that the control was disabled.",
+    "The dependency edge from apps/control-room to @moe/core is verified three ways - manifest dependency, lockfile importer entry, and a bare-specifier probe that typechecks exit 0 and is deleted in the same command.",
+    "The surface offers no affordance that approves gated work; a test enumerates every approval control against a gated unit and asserts each is refused or absent, with a nonzero exact cardinality.",
+    "A mutation drill weakening the code-to-layer mapping turns a named test red on its code-and-layer assertion, restored byte-exact and verified by hash."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-15T20:14:06.218Z",
+  "updatedAt": "2026-08-15T20:14:10.784Z"
+}

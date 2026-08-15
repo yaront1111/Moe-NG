@@ -181,6 +181,36 @@ describe("round admission did not replace the append-only guard", () => {
     expect(late.layer).toBe("FINDINGS");
   });
 
+  it("advances the append-only frontier past a CLEAN (accepting) round, which appends no record", () => {
+    // The bug: a clean round routes ACCEPT and appends no finding record, so a
+    // frontier read only off records() forgot the round number entirely, and an
+    // earlier or equal round could be resubmitted AFTER an acceptance.
+    const first = recorded(EMPTY_REVIEW_LINEAGE, 1, [MISSING_ORACLE]);
+    const cleanFifth = recorded(first.lineage, 5, []);
+    expect(cleanFifth.routing.route).toBe("ACCEPT");
+    expect(cleanFifth.lineage.records).toHaveLength(1); // no record was appended
+    expect(cleanFifth.lineage.highestRound).toBe(5);
+
+    for (const stale of [3, 5]) {
+      const late = recordReviewRound(cleanFifth.lineage, roundInput(stale));
+      expect(late.ok).toBe(false);
+      if (late.ok) throw new Error(`round ${String(stale)} should be refused after the clean round`);
+      expect(late.code).toBe("FINDING_LINEAGE_APPEND_ONLY");
+    }
+    // A round PAST the clean frontier still lands.
+    const sixth = recordReviewRound(cleanFifth.lineage, roundInput(6));
+    expect(sixth.ok).toBe(true);
+  });
+
+  it("a clean round on an empty lineage advances the frontier too", () => {
+    expect(EMPTY_REVIEW_LINEAGE.highestRound).toBe(0);
+    const clean = recorded(EMPTY_REVIEW_LINEAGE, 2, []);
+    expect(clean.routing.route).toBe("ACCEPT");
+    expect(clean.lineage.highestRound).toBe(2);
+    expect(recordReviewRound(clean.lineage, roundInput(1)).ok).toBe(false);
+    expect(recordReviewRound(clean.lineage, roundInput(2)).ok).toBe(false);
+  });
+
   it("refuses round 0 against an empty lineage as append-only, not as inadmissible", () => {
     const result = recordReviewRound(EMPTY_REVIEW_LINEAGE, roundInput(0));
 

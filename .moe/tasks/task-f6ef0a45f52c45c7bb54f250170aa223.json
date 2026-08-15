@@ -15,8 +15,53 @@
     "Publish the existing collector only; do not create a second doctor authority or accept caller-supplied platform/tool versions.",
     "Keep the root below the 400-line split threshold, preserve exact curated exports, use TDD, and stage only the two owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BACKLOG",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE, STARTING WITH THE WIP GATE (task rail 1). No production bytes written.\n\n1. `git status --porcelain apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` — must be EMPTY. It was empty at planning time, but the rail exists because these files have carried foreign WIP before, and adding an export on top of someone else's in-flight edit is exactly the duplicate-export failure it warns about. If either file is dirty, STOP and wait or report blocked; do not \"work around\" it.\n2. Confirm the collector: `apps/daemon/src/recovery/doctor-version.node.ts:164`, `export async function collectDoctorVersionReport(): Promise<DoctorVersionReport>`. Note it is ASYNC — that shapes the probe in step 2.\n3. Confirm the type lives in a DIFFERENT module: `DoctorVersionReport` at `apps/daemon/src/recovery/doctor-version-contract.ts:66`. Do not confuse it with `DoctorVersionReportInput` (:209), which is not published by this task.\n4. Confirm the gap: `grep -n collectDoctorVersionReport apps/daemon/src/index.ts` returns nothing.\n5. Read the existing doctor block at index.ts:159-175 — including `export type { DoctorVersionsReported } from \"./recovery/doctor-version-contract.js\";`, which is the line the new type joins.\n6. Read the catalogue mechanics in index-surface.test.ts: the `[name, kind]` pairs, the `EXPECTED_EXPORTS.length` pin, and the per-name kind/defined-ness checks at :120-124. Record the CURRENT count.\n7. `grep -c ''` apps/daemon/src/index.ts (expect ~374 against a 400 threshold) and confirm doctor-version.node.js exists as the sibling bridge.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/src/recovery/doctor-version.node.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD — WRITE THE PROOFS FIRST, in `apps/daemon/src/index-surface.test.ts`. Three distinct proofs, because the function and the type need different mechanisms.\n\nPROOF A — RUNTIME CATALOGUE (DoD 3): add `[\"collectDoctorVersionReport\", \"function\"]` to `EXPECTED_EXPORTS` in its alphabetical position (between `claimWork` and `createNodeRecoveryCryptoPort`) and bump the length pin by one. The existing per-name kind and defined-ness checks then cover it.\n\nPROOF B — THE TYPE, WHICH THE CATALOGUE CANNOT SEE (DoD 1). `EXPECTED_EXPORTS` checks `typeof value` and asserts defined-ness; a TYPE is `undefined` at runtime, so listing `DoctorVersionReport` there would FAIL rather than pin it. Prove it at COMPILE time instead — a type-only import from the bare `@moe/daemon` root plus an `expectTypeOf`-style assertion, or a compiled probe. Publishing the type and proving only the function meets half of DoD 1 while looking complete.\n\nPROOF C — CALLABLE THROUGH THE BARE ROOT (DoD 4 and DoD 2). Import from the bare `@moe/daemon` specifier, CALL the collector and AWAIT it, then assert a field actually derived from the running process — the platform or the Node version — matches what this process reports. A `typeof x === \"function\"` check would pass for any stub and would prove neither callability nor DoD 2's \"no caller can select host identity\". Pass NOTHING and observe host truth come back; that absence of an argument is the point.\n\nDo NOT re-cover the collector's fail-closed behaviour — doctor-version.node.test.ts already owns that (:288, :303, :333), and duplicating it creates a second place to maintain one claim.\n\nAll three fail until step 3.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "PUBLISH FROM THE ROOT (DoD 1), in `apps/daemon/src/index.ts`. Two lines, joining the shape already there.\n\n- The FUNCTION from the Node-native module: `export { collectDoctorVersionReport } from \"./recovery/doctor-version.node.js\";`\n- The TYPE from the contract module, which the root already pulls from at :175: add `DoctorVersionReport` alongside `DoctorVersionsReported` in `export type { ... } from \"./recovery/doctor-version-contract.js\";`\n\nPUBLISH THE EXISTING COLLECTOR ONLY (task rail 2). No second doctor authority, no wrapper that accepts caller-supplied platform or tool versions, no re-derivation of the report. If you find yourself writing anything that reads the process, you are building a second collector — stop.\n\nPreserve the file's existing curation and ordering; match the surrounding export style rather than introducing a new one. The root is at 374 lines against a 400 split threshold (task rail 3), so two added lines is the budget — do not reformat to make room, which would also break the two-owned-path constraint.\n\nRun step 2's three proofs; all must now pass. Run the whole daemon suite and confirm nothing else moved.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MUTATION DRILLS. Capture `sha256sum` of each target BEFORE mutating; restore by Edit and verify by `sha256sum`. Never `git checkout` — it reverts to HEAD and would discard this task's uncommitted work.\n\nD1 — THE COUNT-ONLY CHANGE MUST FAIL (DoD 3, the drill that DoD item is really asking for). Remove the `[\"collectDoctorVersionReport\", \"function\"]` entry from `EXPECTED_EXPORTS` but LEAVE the bumped length pin. A NAMED test must go red. If it passes, the catalogue is a count rather than a list, and any future export can slip in unnamed — which is precisely what DoD 3 forbids.\n\nD2 — THE FUNCTION EXPORT. Remove the `collectDoctorVersionReport` re-export from index.ts. Proof A must redden on the defined-ness/kind assertion AND Proof C must redden on the import. Record both test names.\n\nD3 — THE TYPE EXPORT. Remove `DoctorVersionReport` from the type re-export line. Proof B must fail — as a TYPECHECK error if it is a compiled proof, which is the expected shape. `pnpm --filter @moe/daemon typecheck` must exit nonzero. If nothing fails, the type is published but unproven and DoD 1 is half unmet.\n\nD4 — THE CALLABILITY PROOF. Replace the awaited call in Proof C with a `typeof` check only. It must still pass — demonstrating why the awaited call is the load-bearing part — then restore it and confirm the awaited version also passes. This drill documents WHY Proof C is shaped as it is, so a later reader does not simplify it back into a shape check.\n\nRecord for each drill the test name and the assertion or typecheck error that fired.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT (DoD 5). Each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for both:\n1. `pnpm --filter @moe/daemon test; echo \"TEST_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon typecheck; echo \"TYPECHECK_EXIT=$?\"`\nBoth must print 0. Record the vitest summary line and confirm a NONZERO executed test count.\n\n`grep -c ''` apps/daemon/src/index.ts — must remain below the 400 split threshold (was 374).\n\nADVERSARIAL SELF-REVIEW — invoke the skill, then check what is specific here:\n1. Is the TYPE proven by something the runtime catalogue cannot do? If the only evidence is `EXPECTED_EXPORTS`, the type half of DoD 1 is unproven — D3 is the check.\n2. Does the callability proof actually AWAIT the collector and observe a process-derived field, or has it decayed into a `typeof` check? D4 exists to make that visible.\n3. Was a second doctor authority introduced, or any path that accepts caller-supplied platform or tool versions? Task rail 2.\n4. Did anything outside the two owned paths change? `git status --porcelain` must show only index.ts and index-surface.test.ts.\n5. Was the collector's own fail-closed coverage duplicated? It belongs to doctor-version.node.test.ts.\n6. Any probe or scratch file left behind? Epic rail 5.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the two owned paths. Never `git add -A` (epic rail 3).\n\nHANDOFF must record TWO things:\n(a) task-01c5f96ec1e247dc846fd628c929974a as the cross-host evidence consumer (DoD 5);\n(b) THE CROSS-TASK HAZARD found while measuring, which nobody currently owns: `scripts/release/supply-chain.mjs:231` hardcodes BOTH `componentCount: 5` AND `doctor: { missingSymbol: \"@moe/daemon.collectDoctorVersionReport\", reason: \"DOCTOR_COMPATIBILITY_UNAVAILABLE\", status: \"UNKNOWN\" }`. This task falsifies the missing-symbol half; task-ec70ba5b904848b496b9bf5d2c2be92f falsifies the count half. Neither task owns that file, so the release evidence will keep asserting a symbol is missing that is present — recorded as UNKNOWN, which reads as a considered verdict rather than a stale literal. Do NOT edit it here; name it so it gets an owner.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,9 +70,36 @@
   "createdBy": "WORKER",
   "parentTaskId": "task-01c5f96ec1e247dc846fd628c929974a",
   "priority": "HIGH",
-  "order": 19.2,
+  "order": 2,
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:50:43.546Z",
-  "updatedAt": "2026-08-15T18:50:43.546Z"
+  "updatedAt": "2026-08-15T20:14:13.012Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-15T20:11:47.380Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-7f301fa7"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T20:14:10.962Z",
+  "planningNotes": {
+    "approachesConsidered": "SMALL TASK, TWO OWNED FILES, AND THE WORK IS ALMOST ENTIRELY IN GETTING THE PROOFS RIGHT. The publish itself is two lines. What decides whether it is worth anything is that the root-surface catalogue actually pins the new name, and that the TYPE export is proven by something other than the runtime catalogue — which cannot see it.\n\nTHE TYPE IS INVISIBLE TO THE RUNTIME CATALOGUE. `EXPECTED_EXPORTS` is a hand-written `[name, kind]` list checked with `typeof` (index-surface.test.ts:120-124). `DoctorVersionReport` is a TYPE: it vanishes at runtime, so adding it there would fail the defined-ness check, and omitting it means DoD 1's type half is unproven. The type needs a COMPILE-TIME proof — an `expectTypeOf`/type-only import in the test, or the packaging-style compiled probe. Two different mechanisms for two different exports; a plan that treats them alike gets one of them wrong.\n\nTHE COLLECTOR IS ASYNC. `export async function collectDoctorVersionReport(): Promise<DoctorVersionReport>` (doctor-version.node.ts:164). DoD 4 wants a plain-Node probe that \"observes a callable collector\" — a `typeof x === \"function\"` check passes for any stub, so the probe must actually CALL and AWAIT it and observe a real field derived from the running process. That is also what distinguishes DoD 2 (\"no caller can select host identity\") from a shape check.\n\nPUBLISH, DO NOT RE-IMPLEMENT (task rail 2). The root already has a doctor block at index.ts:159-174 re-exporting from `./recovery/doctor-commands.js`, plus `export type { DoctorVersionsReported } from \"./recovery/doctor-version-contract.js\";` at :175. So there is an established shape to join: the function comes from `./recovery/doctor-version.node.js`, and the type from `./recovery/doctor-version-contract.js` — the same module that line already pulls from. No new collector, no caller-supplied platform or tool versions.\n\nREJECTED: adding fail-closed tests for the collector's own behaviour. DoD 4 says the focused tests \"pin fail-closed behavior of the EXISTING collector rather than reimplementing it\", and doctor-version.node.test.ts already covers it (:288, :303, :333). This task's tests prove REACHABILITY through the bare root; duplicating the behaviour coverage would create a second place to maintain the same claim.",
+    "codebaseInsights": "RE-MEASURED AT HEAD 9d60091 (description cites 26ac640/8d9afb8).\n\nTASK RAIL 1 SATISFIED: `git status --porcelain apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts` returns EMPTY. Both owned paths are clean and committed — the foreign WIP the rail warns about is not present. Re-check this before editing; it was true at planning time only.\n\nTHE COLLECTOR: `apps/daemon/src/recovery/doctor-version.node.ts:164`, `export async function collectDoctorVersionReport(): Promise<DoctorVersionReport>`. Its sibling `.js` bridge exists (doctor-version.node.js). Same module also exports readObservedRuntime (:36), readDeclaredPins (:58), readPnpmVersion (:140), and re-exports resolveRepoRoot / readWorkspaceComponents (:32) and type WorkspaceInventory (:33) — those together are the platform/arch/Node/pnpm/pins/workspace-inventory derivation DoD 2 names.\n\nTHE TYPE: `DoctorVersionReport` is at `apps/daemon/src/recovery/doctor-version-contract.ts:66` — NOT in the .node module. (`DoctorVersionReportInput` at :209 is a different type; do not publish it.)\n\nTHE ROOT TODAY: apps/daemon/src/index.ts is 374 lines. Its doctor block at :159-174 exports DOCTOR_COMMAND_KINDS, DOCTOR_ERROR_CODES, DOCTOR_RECOVERY_SCHEMA_VERSION, evaluateDoctorCommandBytes and nine doctor types from `./recovery/doctor-commands.js`; :175 is `export type { DoctorVersionsReported } from \"./recovery/doctor-version-contract.js\";`. `collectDoctorVersionReport` is NOT exported — zero hits in index.ts, confirming the gap.\n\nTHE CATALOGUE: index-surface.test.ts holds a hand-written `EXPECTED_EXPORTS` of `[name, kind]` pairs (function/string/object/number), asserts `EXPECTED_EXPORTS.length` (61 when I measured), and checks each name's runtime kind at :120-124 including a defined-ness assertion. Function entries are listed alphabetically in a block from `anchorIncarnation` through `runRecoveryCompleteCommand`; `collectDoctorVersionReport` sorts between `claimWork` and `createNodeRecoveryCryptoPort`.\n\nTHE CONSUMER, and it is literal rather than notional: `scripts/release/supply-chain.mjs:231` records\n  `doctor: { missingSymbol: \"@moe/daemon.collectDoctorVersionReport\", reason: \"DOCTOR_COMPATIBILITY_UNAVAILABLE\", status: \"UNKNOWN\" }`\nThat is the exact string this task makes false.\n\nCROSS-TASK HAZARD FOUND WHILE MEASURING — see risks. The SAME line 231 also hardcodes `componentCount: 5`, and task-ec70ba5b (canonical distribution inventory, which I planned this session) changes the shipped component set to SIX. Neither task owns scripts/release/supply-chain.mjs.",
+    "risks": "CROSS-TASK HAZARD, RAISE IT RATHER THAN FIX IT. `scripts/release/supply-chain.mjs:231` is a single line carrying BOTH `componentCount: 5` AND `doctor: { missingSymbol: \"@moe/daemon.collectDoctorVersionReport\", reason: \"DOCTOR_COMPATIBILITY_UNAVAILABLE\", status: \"UNKNOWN\" }`. Two separate in-flight tasks each falsify half of it: THIS task makes the missing-symbol claim false, and task-ec70ba5b (canonical distribution inventory) makes the component count 5 wrong. NEITHER task owns that file. Left alone, the release evidence will assert a symbol is missing that is present, and a component count that is short by one — recorded as UNKNOWN, which reads as a considered verdict rather than a stale literal. Do not edit it here (owned paths are the two daemon files), but state it in the handoff and file or name the follow-up so it is owned by someone.\n\nTHE TYPE EXPORT HAS NO RUNTIME PROOF. `EXPECTED_EXPORTS` checks `typeof value` and a defined-ness assertion; a type is `undefined` at runtime, so listing `DoctorVersionReport` there would FAIL the catalogue rather than pin it. Prove the type at COMPILE time instead — a type-only import from the bare root plus `expectTypeOf`, or the compiled-probe pattern. A task that publishes the type and proves only the function has met half of DoD 1 while looking complete.\n\nDoD 3 IS A DRILL REQUIREMENT IN DISGUISE: \"cardinality/list assertions cannot pass from a count-only change\". Bumping 61 to 62 without adding the NAME must FAIL. If it passes, the catalogue is a count and not a list, and every future export can slip in unnamed. Drill it explicitly.\n\nA `typeof === \"function\"` PROBE IS NOT A CALLABLE COLLECTOR. The export is async; the probe must await it and observe a field actually derived from the running process (platform or Node version), or it proves only that a binding exists. This is also the only real check on DoD 2's \"no caller can select host identity\" — pass nothing and see host truth come back.\n\nTHE ROOT IS AT 374 LINES against a 400 split threshold (task rail 3). Two added export lines is fine; anything larger is not, and reformatting the file to make room would blow the two-owned-path constraint.\n\nDO NOT CREATE A SECOND DOCTOR AUTHORITY (task rail 2), and do not duplicate the existing collector's fail-closed coverage — doctor-version.node.test.ts already owns that at :288/:303/:333. This task's tests prove reachability through the BARE root specifier, not behaviour.\n\nRE-CHECK THE WIP GATE BEFORE EDITING. Both owned files were clean at planning time, but this is a shared worktree and task rail 1 exists because they have carried foreign WIP before. A duplicate export added on top of someone else's in-flight edit is the exact failure the rail names.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts",
+      "apps/daemon/src/recovery/doctor-version.node.ts",
+      "apps/daemon/src/recovery/doctor-version-contract.ts",
+      "scripts/release/supply-chain.mjs"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-15T20:14:13.012Z"
 }
