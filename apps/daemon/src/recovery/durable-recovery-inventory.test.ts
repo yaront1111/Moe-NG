@@ -20,22 +20,42 @@ import type { RecoveryProofClass } from "./recovery-inventory-contract.js";
 import { recordRecoveryReconciliation } from "./recovery-inventory-ledger.js";
 import {
   DURABLE_INVENTORY_ADAPTER_LAYER,
+  DURABLE_INVENTORY_COMMAND_KIND,
   DURABLE_INVENTORY_CURSOR_DIGITS,
+  DURABLE_INVENTORY_ROW_EVENT_TYPE,
+  DURABLE_INVENTORY_SEAL_EVENT_TYPE,
   DURABLE_RECOVERY_INVENTORY_CLASSES,
+  DURABLE_RECOVERY_INVENTORY_SCHEMA_VERSION,
   DURABLE_RESOURCE_FENCEABILITIES,
   DURABLE_RESOURCE_STATES,
   DURABLE_INVENTORY_CODES_ARE_ADMITTED,
   DURABLE_RESOURCE_STATES_MATCH_SCHEDULER,
+  durableInventoryDigest,
+  durableInventoryScopeDigest,
 } from "./durable-recovery-inventory-contract.js";
 import { durableResourceObservation } from "./durable-recovery-inventory-shape.js";
 import type {
   DurableIntegrationObservation,
   DurableInventoryBasis,
   DurableInventoryClassCoverage,
+  DurableInventorySeal,
+  DurableInventorySelectedScope,
   DurableInventoryWindow,
   DurableResourceObservation,
 } from "./durable-recovery-inventory-contract.js";
-import { readDurableRecoveryInventory } from "./durable-recovery-inventory-reader.js";
+import {
+  durableSealBody,
+  encodeDurableRow,
+  encodeDurableSeal,
+  isDurableRefusal,
+  readDurableRecoveryInventory,
+  resolveDurableWindow,
+  sameDurableBytes,
+} from "./durable-recovery-inventory-reader.js";
+import type {
+  DurableInventoryRow,
+  DurableResolvedWindow,
+} from "./durable-recovery-inventory-reader.js";
 import {
   appendDurableInventoryObservation,
   createDurableRecoveryInventoryRegistrations,
@@ -269,6 +289,85 @@ const populated = async (): Promise<Prepared & { rows: readonly ResourceRow[] }>
   return { ...prepared, rows };
 };
 
+// --------------------------------------------------------------------------
+// Forged durable bytes. Every forgery below is committed into the window's OWN
+// aggregate through the same public store call the production writer uses, and
+// each test pairs its tamper with an honest forgery that MUST be accepted — so
+// a refusal is attributable to the tamper, never to bytes the reader would have
+// rejected as malformed regardless.
+// --------------------------------------------------------------------------
+
+const resolveFor = (
+  store: SqliteEventStore,
+  basis: DurableInventoryBasis,
+): DurableResolvedWindow => {
+  const resolved = resolveDurableWindow(store, PROJECT_ID, basis, WINDOW);
+  if (isDurableRefusal(resolved)) throw new Error(`resolve refused: ${resolved.upstream.code}`);
+  return resolved;
+};
+
+const forgeEvent = (
+  store: SqliteEventStore,
+  resolved: DurableResolvedWindow,
+  eventType: string,
+  bytes: Uint8Array,
+  commandId: string,
+): void => {
+  const response = store.commitExpectedVersionDecision({
+    commandKind: DURABLE_INVENTORY_COMMAND_KIND,
+    committedResultBytes: bytes,
+    correlationId: writeRequest.correlationId,
+    decidedAt: writeRequest.decidedAt,
+    events: [
+      {
+        domainSchemaVersion: DURABLE_RECOVERY_INVENTORY_SCHEMA_VERSION,
+        eventId: `${commandId}:${eventType}`,
+        eventType,
+        payload: bytes,
+      },
+    ],
+    expectedVersion: resolved.state.version,
+    key: { commandId, principalId: writeRequest.principalId, projectId: PROJECT_ID },
+    requestBytes: bytes,
+    targetAggregateId: resolved.aggregateId,
+  });
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error(`forged commit not applied: ${response.decision.effectDisposition}`);
+  }
+};
+
+/** The seal the production sealer would write, over rows the READER decoded. */
+const honestSeal = (resolved: DurableResolvedWindow): DurableInventorySeal =>
+  Object.freeze({
+    classes: Object.freeze(
+      DURABLE_RECOVERY_INVENTORY_CLASSES.map((named) => {
+        const rowDigests = Object.freeze(
+          resolved.state.rows
+            .filter((row) => row.class === named)
+            .map((row) => row.rowDigest)
+            .sort(),
+        );
+        return Object.freeze({
+          class: named,
+          itemCount: rowDigests.length,
+          negativeProofDigest: rowDigests.length === 0 ? NEGATIVE_PROOF : null,
+          rowDigests,
+          // Keyed by the class itself: a reordered class list must not silently
+          // hand the resource population the integration source proof.
+          sourceProofDigest: named === "RESOURCE" ? RESOURCE_PROOF : INTEGRATION_PROOF,
+          truth: "COMPLETE" as const,
+        });
+      }),
+    ),
+    scopeDigest: resolved.scopeDigest,
+    windowEndInclusive: WINDOW.endInclusive,
+    windowStartExclusive: WINDOW.startExclusive,
+  });
+
+/** `digestOf` is the body the stored digest was taken over — the tamper vector. */
+const sealBytes = (seal: DurableInventorySeal, digestOf: DurableInventorySeal = seal): Uint8Array =>
+  encodeDurableSeal(seal, durableInventoryDigest(durableSealBody(digestOf)));
+
 describe("durable recovery inventory - generated population", () => {
   it("covers every scheduler acquisition state from real public transitions", () => {
     const rows = generatedResourceRows();
@@ -493,6 +592,97 @@ describe("durable recovery inventory - window and incarnation binding", () => {
     expect(unanchored.upstream.code).toBe("RECOVERY_ANCHOR_UNAVAILABLE");
     expect(unanchored.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
   });
+
+  /**
+   * Project identity is the STORE's, read from `getHealth`, and a caller naming
+   * another project is refused on both the read and the write path. Without
+   * this the caller's own project id would silently address a second window
+   * inside a store that never belonged to it.
+   */
+  it("refuses a caller project the store's own health does not name", async () => {
+    const { binding, store } = await populated();
+    const basis = basisFor(binding);
+    expect(sealDurableInventoryWindow(store, writeRequest, basis, WINDOW, COVERAGE).ok).toBe(true);
+    // Control: the store's own project reads exactly this window and window id.
+    expect(readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW).ok).toBe(true);
+
+    const foreign = `${PROJECT_ID}-other`;
+    const read = readDurableRecoveryInventory(store, foreign, basis, WINDOW);
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error("unreachable");
+    expect(read.upstream.code).toBe("RECOVERY_INVENTORY_INPUT_INVALID");
+    expect(read.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+
+    const appended = appendDurableInventoryObservation(
+      store, { ...writeRequest, projectId: foreign }, basis, WINDOW,
+      integration("attempt-9", "target-c", "intent-c", pos(73)),
+    );
+    expect(appended.ok).toBe(false);
+    if (appended.ok) throw new Error("unreachable");
+    expect(appended.upstream.code).toBe("RECOVERY_INVENTORY_INPUT_INVALID");
+    expect(appended.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+  });
+
+  /**
+   * The window's address must move when ANY scope field moves. A field dropped
+   * from the digest body cannot be seen end to end — two stores never share one
+   * file — so injectivity is asserted against the production digest itself.
+   */
+  it("addresses a window by every scope field, project identity included", () => {
+    const scope: DurableInventorySelectedScope = Object.freeze({
+      anchorBindingDigest: hex("a11"),
+      incarnationRef: "recovery-incarnation-1",
+      keyEpochRef: "recovery-key-epoch-1",
+      projectId: PROJECT_ID,
+    });
+    const basis: DurableInventoryBasis = Object.freeze({
+      backupCursor: BACKUP_CURSOR,
+      backupGenerationDigest: hex("badc0ffe"),
+      projectTag: PROJECT_TAG,
+    });
+    const digest = durableInventoryScopeDigest(scope, basis, WINDOW);
+    const moved = (field: string, value: string): readonly [string, string] => [field, value];
+    const perturbed: readonly (readonly [string, string])[] = Object.freeze([
+      moved("projectId", durableInventoryScopeDigest(
+        { ...scope, projectId: `${PROJECT_ID}-other` }, basis, WINDOW)),
+      moved("anchorBindingDigest", durableInventoryScopeDigest(
+        { ...scope, anchorBindingDigest: hex("b22") }, basis, WINDOW)),
+      moved("incarnationRef", durableInventoryScopeDigest(
+        { ...scope, incarnationRef: "recovery-incarnation-2" }, basis, WINDOW)),
+      moved("keyEpochRef", durableInventoryScopeDigest(
+        { ...scope, keyEpochRef: "recovery-key-epoch-2" }, basis, WINDOW)),
+      moved("projectTag", durableInventoryScopeDigest(
+        scope, { ...basis, projectTag: `${PROJECT_TAG}-other` }, WINDOW)),
+      moved("backupCursor", durableInventoryScopeDigest(
+        scope, { ...basis, backupCursor: pos(43) }, WINDOW)),
+      moved("backupGenerationDigest", durableInventoryScopeDigest(
+        scope, { ...basis, backupGenerationDigest: hex("f00d") }, WINDOW)),
+      moved("windowStartExclusive", durableInventoryScopeDigest(
+        scope, basis, { ...WINDOW, startExclusive: pos(43) })),
+      moved("windowEndInclusive", durableInventoryScopeDigest(
+        scope, basis, { ...WINDOW, endInclusive: pos(101) })),
+    ]);
+    expect(perturbed).toHaveLength(9);
+    for (const [field, perturbedDigest] of perturbed) {
+      // The field name travels with the value, so a survivor names itself.
+      expect(`${field}:${perturbedDigest}`).not.toBe(`${field}:${digest}`);
+    }
+    expect(new Set([digest, ...perturbed.map(([, value]) => value)]).size).toBe(10);
+  });
+
+  it("hides a sealed window from the same basis under a different project tag", async () => {
+    const { binding, store } = await populated();
+    const basis = basisFor(binding);
+    expect(sealDurableInventoryWindow(store, writeRequest, basis, WINDOW, COVERAGE).ok).toBe(true);
+    expect(readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW).ok).toBe(true);
+
+    const shadow = { ...basis, projectTag: `${PROJECT_TAG}-shadow` };
+    const hidden = readDurableRecoveryInventory(store, PROJECT_ID, shadow, WINDOW);
+    expect(hidden.ok).toBe(false);
+    if (hidden.ok) throw new Error("unreachable");
+    expect(hidden.upstream.code).toBe("RECORD_NOT_FOUND");
+    expect(hidden.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+  });
 });
 
 describe("durable recovery inventory - seal completeness", () => {
@@ -588,6 +778,122 @@ describe("durable recovery inventory - seal completeness", () => {
     expect(again.ok).toBe(false);
     if (again.ok) throw new Error("unreachable");
     expect(again.upstream.code).toBe("RECORD_CONFLICT");
+  });
+});
+
+describe("durable recovery inventory - tampered durable records", () => {
+  it("refuses a seal whose class table moved after its digest was taken", async () => {
+    const control = await populated();
+    const controlBasis = basisFor(control.binding);
+    const controlResolved = resolveFor(control.store, controlBasis);
+    const truthfulControl = honestSeal(controlResolved);
+    forgeEvent(
+      control.store, controlResolved, DURABLE_INVENTORY_SEAL_EVENT_TYPE,
+      sealBytes(truthfulControl), "durable-inventory-seal-forged-honest",
+    );
+    // Control: a seal forged this way, faithful to the stored rows, IS read —
+    // and read as the whole population, so the control cannot pass on an empty
+    // or partial answer.
+    const accepted = readDurableRecoveryInventory(control.store, PROJECT_ID, controlBasis, WINDOW);
+    expect(accepted.ok).toBe(true);
+    if (!accepted.ok) throw new Error(`control refused: ${accepted.upstream.code}`);
+    expect(accepted.observations).toHaveLength(control.rows.length + INTEGRATIONS.length);
+
+    const { binding, store } = await populated();
+    const basis = basisFor(binding);
+    const resolved = resolveFor(store, basis);
+    const truthful = honestSeal(resolved);
+    const [resourceClass, integrationClass] = truthful.classes;
+    if (resourceClass === undefined || integrationClass === undefined) {
+      throw new Error("unreachable");
+    }
+    expect(resourceClass.itemCount).toBeGreaterThan(1);
+    // Internally consistent — count still matches the list, order still sorted,
+    // so only the digest over the ORIGINAL body can still refuse it.
+    const altered: DurableInventorySeal = Object.freeze({
+      ...truthful,
+      classes: Object.freeze([
+        Object.freeze({
+          ...resourceClass,
+          itemCount: resourceClass.itemCount - 1,
+          rowDigests: Object.freeze(resourceClass.rowDigests.slice(1)),
+        }),
+        integrationClass,
+      ]),
+    });
+    forgeEvent(
+      store, resolved, DURABLE_INVENTORY_SEAL_EVENT_TYPE, sealBytes(altered, truthful),
+      "durable-inventory-seal-forged-altered",
+    );
+    const refused = readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+    expect(refused.upstream.code).toBe("RECOVERY_INVENTORY_RECORD_UNREADABLE");
+    expect(refused.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+  });
+
+  it("refuses seal bytes that are a second spelling of one canonical body", async () => {
+    const { binding, store } = await populated();
+    const basis = basisFor(binding);
+    const resolved = resolveFor(store, basis);
+    const canonicalBytes = sealBytes(honestSeal(resolved));
+    const decoded = JSON.parse(new TextDecoder().decode(canonicalBytes)) as Record<string, unknown>;
+    const respelled = encoder.encode(
+      JSON.stringify(Object.fromEntries(Object.entries(decoded).reverse())),
+    );
+    // Same body, same length, same correct seal digest — only the order moved.
+    expect(respelled.length).toBe(canonicalBytes.length);
+    expect(sameDurableBytes(respelled, canonicalBytes)).toBe(false);
+    forgeEvent(
+      store, resolved, DURABLE_INVENTORY_SEAL_EVENT_TYPE, respelled,
+      "durable-inventory-seal-forged-respelled",
+    );
+    const refused = readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+    expect(refused.upstream.code).toBe("RECOVERY_INVENTORY_RECORD_UNREADABLE");
+    expect(refused.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+  });
+
+  it("refuses a row whose observation moved after its digest was taken", async () => {
+    const control = await populated();
+    const controlBasis = basisFor(control.binding);
+    const controlResolved = resolveFor(control.store, controlBasis);
+    const [replayed] = controlResolved.state.rows;
+    if (replayed === undefined) throw new Error("unreachable");
+    forgeEvent(
+      control.store, controlResolved, DURABLE_INVENTORY_ROW_EVENT_TYPE,
+      encodeDurableRow(replayed), "durable-inventory-row-forged-honest",
+    );
+    // Control: untouched bytes decode, and are caught by identity, not by shape.
+    const duplicated = readDurableRecoveryInventory(
+      control.store, PROJECT_ID, controlBasis, WINDOW,
+    );
+    expect(duplicated.ok).toBe(false);
+    if (duplicated.ok) throw new Error("unreachable");
+    expect(duplicated.upstream.code).toBe("RECOVERY_INVENTORY_SUBJECT_DUPLICATE");
+
+    const { binding, store } = await populated();
+    const basis = basisFor(binding);
+    const resolved = resolveFor(store, basis);
+    const [row] = resolved.state.rows;
+    if (row === undefined) throw new Error("unreachable");
+    // `observedPosition` is not part of the row identity and stays inside the
+    // window, so nothing but the row digest can notice it moved.
+    const altered: DurableInventoryRow = Object.freeze({
+      ...row,
+      observation: Object.freeze({ ...row.observation, observedPosition: pos(99) }),
+    });
+    expect(altered.observation.observedPosition).not.toBe(row.observation.observedPosition);
+    forgeEvent(
+      store, resolved, DURABLE_INVENTORY_ROW_EVENT_TYPE, encodeDurableRow(altered),
+      "durable-inventory-row-forged-altered",
+    );
+    const refused = readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+    expect(refused.upstream.code).toBe("RECOVERY_INVENTORY_RECORD_UNREADABLE");
+    expect(refused.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
   });
 });
 
