@@ -29,14 +29,15 @@
     {
       "stepId": "step-2",
       "description": "TDD first: add a focused real-SqliteEventStore suite and extend the real coordination-adapter suite before production code. Seed sequence 1 only through `commitActivationLedgerRecord`; assert the exact sequence-2 grant, sequence-3 PREFLIGHT, and sequence-4 observed chain, same-command byte-identical replay with unchanged counts, different-command idempotency/version conflicts, injected throws at every phase, restart/reopen, and two-connection races with an asserted nonzero race count, exactly one winner per phase, exact target-aggregate event counts and public decision counts, and no event for the failed phase (an already committed earlier fence remains consumed). Pin runner code/layer/leg for every grant and registration refusal. Add nonzero generated context-mutation and hostile-shape sweeps against the production decoder/history reader. Cover binding not-found, query mismatch, terminal intent/attempt, inactive/expired lease, cross-project, duplicate, malformed, unreadable, and incomplete-page cases plus the millisecond/second boundary (deadline millisecond and +1000 ms). In coordination tests seed a real BOUND case and prove every ABSENT/UNKNOWN maps to `COORDINATION_TERMINAL_BINDING_INVALID` at `ADDRESS` with zero mailbox mutation. Capture the initial focused red run using `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/foundation-launch-authority.test.ts src/coordination/coordination-adapter.test.ts`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/foundation-launch-authority.test.ts",
         "apps/daemon/src/coordination/coordination-adapter.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/activation/foundation-launch-authority.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:26:21.279Z"
     },
     {
       "stepId": "step-3",
@@ -125,7 +126,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:47.411Z",
-  "updatedAt": "2026-08-15T13:23:46.890Z",
+  "updatedAt": "2026-08-15T13:26:21.279Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LegacySourceRecord } from "./import-canonical.js";
 import type { ImportProvenance } from "./import-contract.js";
+import { graphFindings } from "./import-reconcile-graph.js";
 import { reconcileImport } from "./import-reconcile.js";
 import type { ReconcileEntry } from "./import-reconcile.js";
 
@@ -161,17 +162,78 @@ const GOLDEN: readonly GoldenCase[] = Object.freeze([
     ],
     name: "cycles and dangling refs from one graph interleave and then sort deterministically",
   },
+  {
+    // The per-node ref sort decides WHICH node discovers the shared cycle target, and the
+    // cycle is deduped on the target alone — so dropping `.sort(byCodeUnit)` on a node's
+    // refs changes the emitted detail and provenance, not merely their position. Written
+    // deliberately out of order so payload order and walk order disagree.
+    adjacency: { a: ["zz", "aa"], aa: ["a"], zz: ["a"] },
+    expected: ["CYCLE tasks/aa.json record aa closes a dependsOn cycle back to a"],
+    name: "a node's refs are walked in sorted order, not payload order",
+  },
 ]);
 
 describe("the dependsOn walk reproduces its captured output exactly", () => {
   it("runs the whole captured corpus, so a sweep that generated nothing cannot pass", () => {
-    expect(GOLDEN.length).toBe(12);
+    expect(GOLDEN.length).toBe(13);
     const total = GOLDEN.reduce((sum, item) => sum + item.expected.length, 0);
-    expect(total).toBe(18);
+    expect(total).toBe(19);
   });
 
   it.each(GOLDEN)("$name", ({ adjacency, expected }) => {
     expect(findingsOf(adjacency)).toEqual(expected);
+  });
+});
+
+/**
+ * RAW EMISSION ORDER, captured while the walk was still recursive.
+ *
+ * `reconcileImport` sorts its findings before returning them, and that sort is a total
+ * order over distinct findings — so it ERASES the sequence the walk emitted. These two
+ * cases go straight at `graphFindings` to pin the interleaving the public surface hides:
+ * a parent suspends mid-loop to walk a child, the child's findings land FIRST, and the
+ * parent's remaining refs are only then considered. A rewrite that pushes plain node ids
+ * onto a stack instead of (id, refs, nextIndex) frames loses exactly this and would pass
+ * every sorted assertion in the file.
+ */
+function rawWalk(adjacency: Adjacency): readonly string[] {
+  return graphFindings(graphEntries(adjacency)).map(
+    (found) => `${found.ambiguityClass} ${found.provenance.sourcePath} ${found.detail}`,
+  );
+}
+
+describe("the walk emits findings in its captured raw order", () => {
+  it("emits a suspended parent's own dangling ref AFTER the child subtree it descended into", () => {
+    const adjacency: Adjacency = { a: ["b", "ghost", "c"], b: ["gone"], c: [] };
+    const raw = rawWalk(adjacency);
+    expect(raw).toEqual([
+      "DANGLING_REF tasks/b.json record b depends on gone, which was not imported",
+      "DANGLING_REF tasks/a.json record a depends on ghost, which was not imported",
+    ]);
+    // Teeth: the public sort reverses this pair, so the raw assertion is not a restatement
+    // of the sorted one and a reordering rewrite cannot hide behind the sort.
+    expect(reconcileGraph(graphEntries(adjacency))).not.toEqual(raw);
+  });
+
+  it("emits a node's own dangling refs in sorted ref order, not payload order", () => {
+    // Both refs belong to ONE node, so the public sort by detail happens to agree with the
+    // walk here — this raw assertion is the only thing pinning the per-node ref sort.
+    expect(rawWalk({ a: ["zz", "aa"] })).toEqual([
+      "DANGLING_REF tasks/a.json record a depends on aa, which was not imported",
+      "DANGLING_REF tasks/a.json record a depends on zz, which was not imported",
+    ]);
+  });
+
+  it("interleaves cycle and dangling findings in discovery order across a mixed graph", () => {
+    const adjacency: Adjacency = { a: ["b", "zz"], b: ["c"], c: ["a", "ghost"], d: ["d"] };
+    const raw = rawWalk(adjacency);
+    expect(raw).toEqual([
+      "CYCLE tasks/c.json record c closes a dependsOn cycle back to a",
+      "DANGLING_REF tasks/c.json record c depends on ghost, which was not imported",
+      "DANGLING_REF tasks/a.json record a depends on zz, which was not imported",
+      "CYCLE tasks/d.json record d closes a dependsOn cycle back to d",
+    ]);
+    expect(reconcileGraph(graphEntries(adjacency))).not.toEqual(raw);
   });
 });
 
@@ -198,11 +260,53 @@ function danglingTail(depth: number): string {
   return `DANGLING_REF tasks/${tail}.json record ${tail} depends on ghost, which was not imported`;
 }
 
+/**
+ * Two nodes per level, each depending on BOTH nodes of the level below. The number of
+ * distinct paths from the top is 2^levels, so a walk that re-entered an already-finished
+ * node would never return; a walk that visits each node once does 2*levels of work.
+ */
+function ladderEntries(levels: number): readonly ReconcileEntry[] {
+  const name = (level: number, side: string): string => `d${String(level).padStart(4, "0")}${side}`;
+  const adjacency: Record<string, readonly string[]> = {};
+  for (let level = 0; level < levels; level += 1) {
+    const below = level === levels - 1
+      ? ["ghost"]
+      : [name(level + 1, "a"), name(level + 1, "b")];
+    adjacency[name(level, "a")] = below;
+    adjacency[name(level, "b")] = below;
+  }
+  return graphEntries(adjacency);
+}
+
 describe("the walk is depth-independent", () => {
   it("reconciles a chain far deeper than the call stack instead of throwing RangeError", () => {
     const entries = chainEntries(20_000);
     expect(entries.length).toBe(20_000);
     expect(reconcileGraph(entries)).toEqual([danglingTail(20_000)]);
+  });
+
+  it("reconciles a chain an order of magnitude deeper again, so depth is not merely tolerated", () => {
+    const entries = chainEntries(200_000);
+    expect(entries.length).toBe(200_000);
+    expect(graphFindings(entries).map((found) => found.detail)).toEqual([
+      "record n00199999 depends on ghost, which was not imported",
+    ]);
+  });
+
+  it("yields the identical result when the deep chain is supplied in reverse insertion order", () => {
+    const entries = chainEntries(20_000);
+    expect(reconcileGraph([...entries].reverse())).toEqual([danglingTail(20_000)]);
+  });
+
+  // Bounded: a walk that lost its visited-state would run 2^60 paths and HANG rather than
+  // fail, and a hang reads as a holding guard. The timeout makes the regression a red test.
+  it("visits a node reachable by many paths exactly once", { timeout: 5_000 }, () => {
+    const entries = ladderEntries(60);
+    expect(entries.length).toBe(120);
+    expect(graphFindings(entries).map((found) => found.detail)).toEqual([
+      "record d0059a depends on ghost, which was not imported",
+      "record d0059b depends on ghost, which was not imported",
+    ]);
   });
 });
 

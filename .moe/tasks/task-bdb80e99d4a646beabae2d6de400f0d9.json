@@ -34,16 +34,21 @@
     {
       "stepId": "step-2",
       "description": "TDD RED for the actual defect. Add a case that builds a dependsOn chain deep enough to overflow the current recursive walk - construct it programmatically rather than by hand - and assert the reconciliation completes and returns its findings. Against current bytes this must fail with a RangeError, because graphFindings' `visit` (import-reconcile.ts:159-188) recurses once per link with no depth bound. Record that red. Note the importer consumes frozen LEGACY bytes, so the depth is data-determined and effectively attacker-influenced rather than merely unlucky - which is why an unhandled RangeError is the wrong failure mode even though the input is 'just data'.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile.test.ts"
       ],
-      "startedAt": "2026-08-15T13:23:21.601Z"
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.test.ts"
+      ],
+      "note": "RED RECORDED against current bytes. Added a programmatically constructed chain of 20,000 links (zero-padded ids n00000000..n00019999 so the outer sorted driver enters at the HEAD and descends the full chain, not a suffix), tail depends on an absent \"ghost\" so the case asserts an exact NONZERO cardinality rather than an empty result. Command: npx vitest run --root . packages/import/src/import-reconcile-graph.test.ts -t \"depth-independent\". Result: 1 failed | 15 skipped. Exact failure:\n\nRangeError: Maximum call stack size exceeded\n > packages/import/src/import-reconcile.ts:50:19\n > dependsOn packages/import/src/import-reconcile.ts:50:19\n > visit packages/import/src/import-reconcile.ts:162:54\n > visit packages/import/src/import-reconcile.ts:187:31  (x6 frames shown, elided)\n\nThe stack names the recursive call site at :187 (`if (seen === undefined) visit(ref);`) as the repeating frame, which is precisely the unbounded per-link recursion this task exists to remove. Also confirms the failure mode is an UNHANDLED throw escaping reconcileImport, whose module doc claims \"This module NEVER THROWS and never drops a record\" - the depth is data-determined because the importer is fed frozen legacy bytes by definition. Test asserts entries.length === 20_000 first, so a generator that silently produced a short chain cannot pass the case vacuously.",
+      "startedAt": "2026-08-15T13:23:21.601Z",
+      "completedAt": "2026-08-15T13:24:06.733Z"
     },
     {
       "stepId": "step-3",
       "description": "Extract the graph walk into its own module before rewriting it. import-reconcile.ts is EXACTLY 250 physical lines - at the per-file target - and an explicit-stack walk is longer than the recursive one, so rewriting in place would push the file over. Move graphFindings and its local helper dependsOn into a new packages/import/src/import-reconcile-graph.ts, export the walk, and import it back into import-reconcile.ts. Add the matching LF `.js` bridge: this package uses them throughout (canonical-bytes.js, import-reconcile.js, import-apply.js and siblings all exist), so a new runtime module without one is inconsistent and may fail a bridge sweep. Keep byCodeUnit imported from ./canonical-bytes.js - it is the package's declared only-permitted string comparator and the sorted iteration is load-bearing for determinism. This step is a pure move: the golden fixtures from step 1 must still pass unchanged.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile-graph.ts",
         "packages/import/src/import-reconcile-graph.js",
@@ -52,23 +57,44 @@
       "newFiles": [
         "packages/import/src/import-reconcile-graph.ts",
         "packages/import/src/import-reconcile-graph.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.ts",
+        "packages/import/src/import-reconcile-graph.js",
+        "packages/import/src/import-reconcile.ts",
+        "packages/import/src/import-reconcile-graph.test.ts"
+      ],
+      "note": "PURE MOVE landed, walk logic byte-identical. New packages/import/src/import-reconcile-graph.ts (79 lines) holds `dependsOn` + exported `graphFindings`; import-reconcile.ts dropped from 250 -> 196 lines and now imports { graphFindings } from \"./import-reconcile-graph.js\". byCodeUnit still imported from ./canonical-bytes.js in the new module; both sorts intact.\n\nTwo decisions worth recording:\n- The new module carries its OWN local `finding` factory instead of importing import-reconcile.ts's. That is the established package convention (import-skill-assets.ts:26-32 has a byte-identical local copy, import-duplicate-identity.ts:55 inlines the same literal), and a value import back into the caller would be a real runtime cycle.\n- `ReconcileEntry` is imported back with `import type`, which is erased at emit, so there is NO runtime edge back. The type describes the whole reconciliation input, not the graph, so it stays in import-reconcile.ts.\n\nBridge: packages/import/src/import-reconcile-graph.js written with printf, verified by xxd to end 2e 74 73 22 3b 0a - exact LF, no CR.\n\nALSO captured the pre-rewrite RAW EMISSION ORDER while the walk is still recursive - the thing step 1's goldens could not reach, because reconcileImport sorts and that sort is a total order over distinct findings, so it ERASES the walk sequence. Two new cases call the exported graphFindings directly and pin the suspend-mid-loop interleaving (child subtree findings land before the suspended parent's own later ref). Each asserts `expect(reconcileGraph(...)).not.toEqual(raw)` so the raw assertion has teeth: the public sort genuinely reverses these sequences, so a reordering rewrite cannot hide behind the sort.\n\nVerification: pnpm --filter @moe/import typecheck -> exit 0, no diagnostics. pnpm --filter @moe/import test -> 104 passed, 1 failed. The ONE failure is the step-2 deep-chain RED, still RangeError, now reported at import-reconcile-graph.ts:70 (the moved recursive call site) - expected, since this step changed no logic. All 12 golden cases and both raw-order cases pass unchanged across the move.",
+      "startedAt": "2026-08-15T13:24:08.993Z",
+      "completedAt": "2026-08-15T13:25:48.872Z"
     },
     {
       "stepId": "step-4",
       "description": "Replace recursion with an explicit stack, preserving order exactly. THE CRITICAL DETAIL, and the thing a naive rewrite gets wrong: findings are pushed DURING the child loop, interleaved with recursion. For a node A the current walk iterates A's refs in sorted order, and each ref either pushes a finding immediately or recurses - emitting that whole subtree's findings - before A's NEXT ref is considered. A stack of plain node ids cannot reproduce that interleaving. Use frames of (legacyId, refs, nextIndex): push a frame, advance one ref at a time, suspend the parent by leaving its frame with the incremented index when descending, and resume exactly there on return. Preserve the post-order `state.set(legacyId, \"DONE\")` - it must run only after ALL of a node's refs are processed, because DONE marks a completed subtree and OPEN is what distinguishes a back-edge (CYCLE) from a cross-edge (silently skipped). Preserve the `reported` dedupe keys verbatim: `${legacyId}->${ref}` for DANGLING_REF and `cycle:${ref}` for CYCLE - note the cycle key is keyed on the TARGET alone, so exactly one cycle finding is emitted per target however many nodes close back to it. Keep the outer loop over `[...byId.keys()].sort(byCodeUnit)`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile-graph.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.ts"
+      ],
+      "note": "Recursion replaced by an explicit heap stack of (legacyId, refs, nextIndex) frames - interface WalkFrame, plus the resolved `entry` so the finding provenance is the same object the recursive form used.\n\nEquivalence, clause by clause:\n- SUSPEND/RESUME: `frame.nextIndex += 1` happens BEFORE descending, so the parent is left on the stack already advanced and resumes at its next ref only after the child's whole subtree pops. That reproduces the push-during-child-loop interleaving a plain node-id stack destroys.\n- POST-ORDER DONE: `state.set(legacyId, \"DONE\")` runs in the exhausted-refs branch, immediately before `stack.pop()` - after ALL refs, never on push. OPEN vs DONE still separates a back-edge (CYCLE) from a cross-edge (skipped).\n- OPEN ON ENTRY: `openFrame` sets OPEN at the moment the recursive form did, and computes refs as `[...dependsOn(entry.record)].sort(byCodeUnit)` verbatim.\n- DEDUPE KEYS VERBATIM: `${legacyId}->${ref}` for DANGLING_REF, `cycle:${ref}` for CYCLE - still target-only, so exactly one cycle finding per target.\n- OUTER DRIVER unchanged: `[...byId.keys()].sort(byCodeUnit)` with the `!state.has(legacyId)` guard.\n- The dead-defensive `entry === undefined` branches are preserved verbatim rather than tidied away.\n\nNo RangeError is caught anywhere and no depth bound was introduced, so no legitimately deep import is refused and no partial finding set can be produced by swallowing an overflow. No clock, no random, no host-dependent value entered the walk.\n\nVerification: pnpm --filter @moe/import typecheck -> exit 0, zero diagnostics. pnpm --filter @moe/import test -> 8 files, 105 passed, 0 failed. The step-2 deep-chain case that was RangeError now passes; all 12 sorted goldens and both raw-order goldens pass BYTE-UNCHANGED, which is the equivalence proof between the old recursive walk and the new iterative one. Sizes: import-reconcile-graph.ts 126 lines, import-reconcile.ts 196 lines (grep -c '').",
+      "startedAt": "2026-08-15T13:25:50.918Z",
+      "completedAt": "2026-08-15T13:26:50.249Z"
     },
     {
       "stepId": "step-5",
       "description": "Prove equivalence and depth-independence together. Re-run the step-1 golden fixtures unchanged - they are now the equivalence proof between the old recursive walk and the new iterative one, which is why they had to be captured first. Confirm the step-2 deep-chain case now passes rather than throwing. Add a depth case an order of magnitude deeper again, so the walk is shown to be depth-INDEPENDENT rather than merely tolerant of the one depth that was tested. Assert determinism explicitly: the same input reconciled twice yields byte-identical findings, and a graph whose adjacency is supplied in a different insertion order still yields the identical sequence - the sorted iteration is what guarantees that and an iterative rewrite is exactly where it could be lost.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.test.ts"
+      ],
+      "note": "EQUIVALENCE + DEPTH-INDEPENDENCE PROVEN, and every assertion drilled.\n\nAdded: a 200,000-link chain (10x deeper than the step-2 red, 357ms) asserting the exact single dangling finding; the 20,000 chain re-supplied in REVERSE insertion order yielding the identical result; and a 60-level \"diamond ladder\" (120 nodes, 2^60 distinct paths) with an explicit { timeout: 5_000 } - a walk that lost its visited-state would HANG rather than fail, and a hang reads as a holding guard, so the bound converts that regression into a red test. Also added a golden case whose payload ref order disagrees with sorted order ({ a: [\"zz\",\"aa\"], aa: [\"a\"], zz: [\"a\"] }), because the per-node sort decides WHICH node discovers the shared cycle target and the cycle key is target-only, so the ref sort is set-affecting rather than cosmetic.\n\nMUTATION DRILLS - production file mutated by exact literal replacement with an anchor-count check, restored from an out-of-repo copy, sha256 re-verified ef549167...d6e9 after EVERY drill:\n A. explicit stack -> unbounded recursion (the DoD drill): 3 named tests red, all \"RangeError: Maximum call stack size exceeded\" at the recursive call site; the other 18 stayed green, so it reddened for the depth reason and not a broken environment.\n B. stack.push -> stack.unshift (a plain-node-id stack's ordering): 11 red including BOTH raw-order tests.\n C. state.set(...,\"OPEN\") -> \"DONE\" at push time (early-DONE): 9 red, every one of them cycle-related - exactly the silently-lost-CYCLE failure mode.\n D. cycle:${ref} -> cycle:${legacyId}->${ref} (pair key): the converging-cycle golden red.\n E. per-node .sort(byCodeUnit) dropped: 2 named tests red.\n F. outer [...byId.keys()].sort(byCodeUnit) dropped: the reverse-insertion-order determinism test red.\n\nDRILL E INITIALLY SURVIVED and that was a real coverage hole, not a drill error: every original fixture happened to list its refs already sorted, and the one unsorted case ({a:[\"b\",\"ghost\",\"c\"]}) produced the same emission sequence either way. Closed it with the two cases named above rather than accepting the green. GOLDEN cardinality literals updated to 13 cases / 19 expected findings.\n\nGate: pnpm --filter @moe/import typecheck -> exit 0, zero diagnostics. pnpm --filter @moe/import test -> 8 files, 110 passed, 0 failed. Sizes (grep -c ''): import-reconcile-graph.ts 126, import-reconcile.ts 196, test 329. Drill harness and backup lived outside the repo and were deleted; git status shows no scratch file.",
+      "startedAt": "2026-08-15T13:26:52.444Z",
+      "completedAt": "2026-08-15T13:30:29.211Z"
     },
     {
       "stepId": "step-6",
@@ -94,15 +120,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:54.548Z",
-  "updatedAt": "2026-08-15T13:23:21.601Z",
+  "updatedAt": "2026-08-15T13:30:29.211Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:02:36.943Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 1
+    "executedStepCount": 5
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:04:16.973Z",

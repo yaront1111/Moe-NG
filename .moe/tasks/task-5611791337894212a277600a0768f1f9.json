@@ -108,7 +108,7 @@
       "completedAt": "2026-08-15T13:17:26.330Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -121,12 +121,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:48:05.310Z",
-  "updatedAt": "2026-08-15T13:18:32.858Z",
+  "updatedAt": "2026-08-15T13:29:42.184Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:53:33.481Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-15T13:29:42.184Z",
+    "wallClockMs": 2168703
   },
   "stepsCompleted": [
     "step-1",
@@ -154,7 +156,8 @@
   },
   "planApprovedAt": "2026-08-15T12:55:12.342Z",
   "contextFetchedBy": [
-    "worker-5dfdc624"
+    "worker-5dfdc624",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T13:08:47.407Z",
   "reviewStartedAt": "2026-08-15T13:18:32.858Z",
@@ -168,5 +171,8 @@
     "tests/integration/release-supply-chain.test.mjs",
     "scripts/release/supply-chain.mjs",
     "scripts/release/release-subject.mjs"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:29:42.184Z",
+  "reviewCompletedAt": "2026-08-15T13:29:42.184Z",
+  "reviewSummary": "APPROVED. Re-ran both gates myself from PowerShell (never Git Bash - MSYS tar): pnpm typecheck:release EXIT=0; node --test tests/integration/release-supply-chain.test.mjs = tests 59, pass 59, fail 0, skipped 0, EXIT=0 (incl. the real 17s release:evidence e2e). Reviewed by base-ref not by commit: git diff b03da5a..HEAD -- the 3 owned paths = 2/6/206 lines; working tree clean for all three so HEAD bytes == gated bytes. Commit 6482e5f carries this task id but NOT its bytes (only foreign packages/store work); the bytes rode in on foreign whole-tree commit 7263d13 - not a rejection reason per project rail.\n\nDoD1 :198 now returns TOOLCHAIN_OBSERVATION_FAILED, :211 frozen-install guard byte-identical. DoD2 release-subject.mjs:29 adds the member beside TOOLCHAIN_IDENTITY_MISMATCH, one line changed, pinned by hand-written 20-member deepEqual + length + isFrozen. DoD3 cleanRoots catches per root and continues to the remaining roots. DoD4 finally untouched; 3-case lifecycle table (literal length asserted) + signal test prove listener counts return to baseline and every root is removed on success/refusal/exception/signal. DoD5 both gates 0.\n\nMY OWN DRILLS (not the worker's), both restored sha256-verified: (A) revert :198 to FROZEN_INSTALL_FAILED = 2 failed, both on the discriminator (actual 'FROZEN_INSTALL_FAILED' / expected 'TOOLCHAIN_OBSERVATION_FAILED'), not an incidental assertion. (B) strip the try/catch = 3 failed incl. the signal-path test; two show raw ERR_FS_EISDIR escaping the finally, the signal one exits [] vs [130]. Refusal table asserts 9 rows AND 9 DISTINCT reasons, so the new code cannot have come from widening a guard.\n\nThe subordinate-fact rail is untested by any assertion, so I checked the gate LOG: the GREEN run's stderr carries 5x \"release temporary cleanup failed: <root>: SystemError [ERR_FS_EISDIR]\". Reported, not silenced. Files still 256/224 by grep -c '' - net 0, no per-file breach. No scratch left."
 }

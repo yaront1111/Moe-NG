@@ -90,8 +90,8 @@
       "completedAt": "2026-08-15T13:09:26.248Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -103,12 +103,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:42.602Z",
-  "updatedAt": "2026-08-15T13:21:02.600Z",
+  "updatedAt": "2026-08-15T13:24:27.244Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:52:02.312Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T13:24:27.244Z",
+    "wallClockMs": 1944932
   },
   "stepsCompleted": [
     "step-1",
@@ -149,5 +151,8 @@
   "filesModified": [
     "packages/scheduler/src/readiness/readiness-projection.test.ts",
     "packages/scheduler/src/readiness/readiness-projection.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:24:27.244Z",
+  "reviewCompletedAt": "2026-08-15T13:24:27.244Z",
+  "reviewSummary": "APPROVED. Verified on HEAD bytes; worktree == HEAD, git status clean for packages/scheduler.\n\nGATES RE-RUN BY ME, FRESH, FOREGROUND:\n- pnpm --filter @moe/scheduler typecheck -> exit 0\n- pnpm --filter @moe/scheduler test -> exit 0, Test Files 43 passed (43), Tests 1324 passed (1324)\n\nDoD1 OK. readiness-projection.ts:158-160 is now edgeA<edgeB?-1:edgeA>edgeB?1:0, matching the byCode form at :151. Scope diff 192360e..HEAD on the production file is ONE hunk, -1/+9; READINESS_LAYERS ordering and the code comparison byte-identical. No drift.\n\nDoD2 OK, grep run by me WITH positive control. localeCompare in packages/scheduler/src excluding tests = exactly one hit, :155, which is the CONVENTION COMMENT, not a call site. Positive control over packages/import/src/canonical-bytes.ts and packages/runner/src/recovery-inventory/ hits 4x, so the zero is proven, not a mistyped pattern.\n\nDoD3 OK, and I DRILLED IT BOTH WAYS rather than reading it.\n- Restored localeCompare into production: RED, 2 failures, both outcome assertions (code-units test, exact-sequence test). Test kills the real defect.\n- Drilled the anti-vacuity guard itself: swapped TIE_EDGE_LOWER to an agreeing pair (dev-edge-Zeta). Guard RED, \"expected 1 not to be 1\". The divergence guard is killable, not decoration - it is the only thing between this fixture and vacuity on a differing-ICU host.\n- Both files restored bit-exact, sha256 confirmed (prod 2957dd0d, test 436b1f84), clean gate re-run green after.\n\nDoD4 OK. Exact sequence pinned as hand-written literal over projectReadiness, not a test-side comparator; 24 permutations with count 24 hand-asserted; fact order reversed too; distinctness via Set size == 6.\n\nDoD5 OK above. Per-file cap 248 lines by grep -c '', under 250.\n\nWorker candor verified independently: frontier.ts:219-221 does pre-sort by edgeKey in code-unit form, so return 0 is an equivalent mutant through this entry point. Disclosed in the doc comment rather than overclaimed."
 }

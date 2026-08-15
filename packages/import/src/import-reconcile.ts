@@ -4,6 +4,7 @@ import type { LegacySourceRecord } from "./import-canonical.js";
 import { AMBIGUITY_OUTCOME, DETERMINISTIC_TIME_SENTINEL } from "./import-contract.js";
 import type { AmbiguityClass, ImportProvenance, ReconciliationFinding } from "./import-contract.js";
 import { duplicateIdentityFindings } from "./import-duplicate-identity.js";
+import { graphFindings } from "./import-reconcile-graph.js";
 import { SKILL_PAYLOAD_KEY, classifySkillAsset, readSkillIdentity } from "./import-skill-assets.js";
 
 /**
@@ -42,12 +43,6 @@ function finding(
   detail: string,
 ): ReconciliationFinding {
   return Object.freeze({ ambiguityClass, detail, outcome: AMBIGUITY_OUTCOME, provenance });
-}
-
-function dependsOn(record: LegacySourceRecord): readonly string[] {
-  const declared = record.payload["dependsOn"];
-  if (!Array.isArray(declared)) return [];
-  return declared.filter((value): value is string => typeof value === "string");
 }
 
 /**
@@ -142,55 +137,6 @@ function skillAmbiguityFindings(entries: readonly ReconcileEntry[]): readonly Re
       entry.provenance,
       `skill ${key} is declared by both ${first.sourcePath} and ${entry.provenance.sourcePath}`,
     ));
-  }
-  return found;
-}
-
-/** Depth-first cycle detection over a graph walked in sorted order, so output is stable. */
-function graphFindings(entries: readonly ReconcileEntry[]): readonly ReconciliationFinding[] {
-  const byId = new Map<string, ReconcileEntry>();
-  for (const entry of entries) {
-    if (!byId.has(entry.record.legacyId)) byId.set(entry.record.legacyId, entry);
-  }
-  const found: ReconciliationFinding[] = [];
-  const state = new Map<string, "DONE" | "OPEN">();
-  const reported = new Set<string>();
-
-  const visit = (legacyId: string): void => {
-    state.set(legacyId, "OPEN");
-    const entry = byId.get(legacyId);
-    for (const ref of entry === undefined ? [] : [...dependsOn(entry.record)].sort(byCodeUnit)) {
-      const target = byId.get(ref);
-      if (target === undefined) {
-        if (entry !== undefined && !reported.has(`${legacyId}->${ref}`)) {
-          reported.add(`${legacyId}->${ref}`);
-          found.push(finding(
-            "DANGLING_REF",
-            entry.provenance,
-            `record ${legacyId} depends on ${ref}, which was not imported`,
-          ));
-        }
-        continue;
-      }
-      const seen = state.get(ref);
-      if (seen === "OPEN") {
-        if (entry !== undefined && !reported.has(`cycle:${ref}`)) {
-          reported.add(`cycle:${ref}`);
-          found.push(finding(
-            "CYCLE",
-            entry.provenance,
-            `record ${legacyId} closes a dependsOn cycle back to ${ref}`,
-          ));
-        }
-        continue;
-      }
-      if (seen === undefined) visit(ref);
-    }
-    state.set(legacyId, "DONE");
-  };
-
-  for (const legacyId of [...byId.keys()].sort(byCodeUnit)) {
-    if (!state.has(legacyId)) visit(legacyId);
   }
   return found;
 }

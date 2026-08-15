@@ -67,24 +67,37 @@
     {
       "stepId": "step-4",
       "description": "Prove the fix reaches the surfaces that depend on it. persistFileDurably is the base primitive of this module: publishFileAtomically calls it to write the staging file and then RENAMES that file into place, so a short write today produces a truncated staging file that is subsequently published atomically as though complete - the atomic publish faithfully publishes truncated bytes. Add a test that drives publishFileAtomically with a short-writing seam and asserts the published path does NOT end up holding truncated content. Also confirm readBackMatches still behaves as before - it is a separate opt-in check the caller must invoke, not an automatic guard, so it does not cover this defect and must not be treated as if it did.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
       ],
-      "startedAt": "2026-08-15T13:23:23.983Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ],
+      "note": "Composition proven at the surface that actually publishes. 9 tests, EXIT=0. Three cases through publishFileAtomically (the real consumer, not a reimplementation): (1) a short-writing seam that cannot complete - publish refuses with the exact {code:\"RECOVERY_ANCHOR_WRITE_INCOMPLETE\", layer:\"RECOVERY_ANCHOR\"}, the target still reads \"PREVIOUS\" byte for byte, no `${target}.staging` survives (the existing finally-rm still runs), and closes === 1. Before the fix this path renamed a 1-byte staging file over PREVIOUS and reported success - the atomicity held while the content was wrong. (2) a payload delivered across [1,2,3] chunks publishes byte for byte, with `attempts.length > 1` asserted so the case cannot silently degrade into a single-write publish wearing a multi-chunk label. (3) readBackMatches CONFIRMED UNCHANGED and confirmed opt-in, asserted rather than claimed: a lying opener that reports the full bytesWritten while writing nothing makes the publish resolve over an empty file, readBackMatches(target, digestBytes(payload)) is false and readBackMatches(target, digestBytes(empty)) is true. That is a fact about the publish having no automatic re-read, not prose - and it marks the honest boundary of this fix: counting bytes catches a SHORT write, never a lying device. readBackMatches itself was not edited.",
+      "startedAt": "2026-08-15T13:23:23.983Z",
+      "completedAt": "2026-08-15T13:24:11.521Z"
     },
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Is sync() still called only AFTER the payload is fully written - a sync between partial writes would flush a truncated file and is the subtlest way to reintroduce the bug. (2) Is the completion loop genuinely bounded, and does it advance the offset correctly so a retry cannot rewrite from zero and duplicate bytes? (3) Is the handle closed on every exit path? (4) Does any OTHER function in this file discard a result it should check - re-read publishFileAtomically, persistDirectoryDurably and clearDirectory with the same eye. (5) Confirm recovery-anchor-fs.ts is at or under 250 physical lines with `grep -c '' ` (it is 128 today, so there is ample headroom; PowerShell Measure-Object -Line undercounts). Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.ts",
         "packages/store/src/recovery-anchor-fs.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-fs.ts",
+        "packages/store/src/recovery-anchor-fs.test.ts",
+        "packages/store/src/recovery-anchor-contracts.ts"
+      ],
+      "note": "GATE (exact chain, && not ;, redirected not piped): `pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test` GATE_EXIT=0, tsc clean, 42 test files / 502 tests passed. Baseline before any bytes: 41 files / 490. Mine adds 1 file / 10 tests; the other +2 are peer work landed meanwhile.\n\nMUTATION DRILLS - all three restored, sha256 verified OK after each (cp from a pre-drill copy, not git checkout, which would revert to HEAD rather than to pre-drill bytes). A: removed the bytesWritten comparison (single unchecked write) -> 7 of 9 red, including the named refusal test and the completion sweep. B: moved sync() INSIDE the completion loop -> 2 red, both syncedAt assertions, so the subtlest reintroduction is caught. C: weakened the bound, `bytesWritten <= 0` -> `< 0` -> 5 red in 3ms.\n\nDRILL C CAUGHT A REAL WEAKNESS IN MY OWN TEST, twice over. First pass it reddened for the WRONG reason: chunkingOpener falls back to \"accept the remainder\" once its schedule ends, so it models a port that stalls ONCE, never one permanently stuck - the loop always completed and the red came from the refusal not firing, not from a spin. Added stalledOpener (always zero progress) plus a named test. Re-drilled: it then span for real and killed the vitest worker with \"FATAL ERROR: Reached heap limit\" at 7.7s - exit 1, but a crashed worker prints NO per-test verdict, and --testTimeout never reported. Fixed by giving the PORT the bound (STALLED_PORT_ATTEMPT_CAP 64, throwing a named \"it is not bounded\" error) rather than relying on the runner. Drill C now reddens cleanly with 5 named failures and no crash.\n\nADVERSARIAL PASS, all five items: (1) sync() is after writeWholePayload returns; the throw exits past it; asserted as syncedAt === [] on failure and [byteLength] on success. (2) Bounded - every iteration must advance >= 1 byte or refuse, so at most payload.byteLength iterations; offset advances to bytes already proven written and each attempt's length is asserted to equal the true remainder, so a retry cannot rewrite from zero. Non-integer/NaN/undefined bytesWritten all fail Number.isInteger and refuse. (3) close() in finally on every path; if openHandle itself throws there is no handle to leak; pre-existing behaviour that a throwing close masks the write error is unchanged. (4) Re-read the whole file: no other function discards a checkable result - publishFileAtomically's rename/sync/close/rm all throw on failure, persistDirectoryDurably's sync returns nothing, readFile does not short-read. (5) grep -c '': recovery-anchor-fs.ts 200 (cap 250). recovery-anchor-contracts.ts is 261, but it was ALREADY 260 at merge-base 7263d13 - I added one string to the reason-code array; pre-existing over-target, under 400, disclosed not caused. recovery-anchor-fs.test.ts is 386 (a test, not production source).\n\nCOMMIT / FOREIGN-COMMIT HAZARD: foreign whole-tree commit 4aa29d5 (task-1fb6e871's hook) swept my in-progress production files. Per project rail I did not amend, reset or re-commit it. Verified the committed bytes ARE my gated bytes: sha256 of `git show HEAD:<path>` MATCHES the working tree for both recovery-anchor-fs.ts and recovery-anchor-contracts.ts. My own commit ada254c carries the remaining test delta by explicit pathspec. QA should review by base-ref diff: `git diff 7263d13..HEAD -- packages/store/src/recovery-anchor-fs.ts packages/store/src/recovery-anchor-contracts.ts packages/store/src/recovery-anchor-fs.test.ts`.\n\nSECOND SITE RE-MEASURED AT HEAD, NOT ASSUMED: backup-generation.ts:45 still discards bytesWritten even after its owner task landed. Routed to task-1fb6e871 as comment-6910e03e with the measured blast radius: BOTH its call sites (:70 sha256 read-back, :174 JSON.parse + verifyBackupGeneration) catch a truncation downstream, so there it degrades to a refusal rather than silent truncation - the opposite of the anchor path, which had no automatic read-back.",
+      "startedAt": "2026-08-15T13:24:14.052Z",
+      "completedAt": "2026-08-15T13:28:40.691Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-06df66bb",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -96,17 +109,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:20.342Z",
-  "updatedAt": "2026-08-15T13:23:23.983Z",
+  "updatedAt": "2026-08-15T13:30:26.638Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:58:27.180Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:59:59.029Z",
@@ -128,5 +143,17 @@
   "contextFetchedBy": [
     "worker-06df66bb"
   ],
-  "workStartedAt": "2026-08-15T13:18:20.592Z"
+  "workStartedAt": "2026-08-15T13:18:20.592Z",
+  "reviewStartedAt": "2026-08-15T13:30:26.638Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  42 passed (42)\n      Tests  502 passed (502)\n   Start at  16:29:57\n   Duration  3.93s (transform 10.29s, setup 0ms, import 18.10s, tests 20.23s, environment 3ms)\n\nGATE_EXIT=0 at HEAD ada254c. Baseline before any bytes written, at merge-base 7263d13: 41 files / 490 tests, exit 0.",
+    "reportedAt": "2026-08-15T13:30:26.638Z"
+  },
+  "filesModified": [
+    "packages/store/src/recovery-anchor-fs.ts",
+    "packages/store/src/recovery-anchor-fs.test.ts",
+    "packages/store/src/recovery-anchor-contracts.ts"
+  ]
 }

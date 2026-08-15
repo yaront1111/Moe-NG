@@ -6,9 +6,11 @@
  * repeat detection — and, in the other direction, byte-identical prose about a different subject
  * is not a repeat. Keying on text would collapse both rules into string equality.
  *
- * Lineage is append-only. A round must advance strictly past the last recorded round; anything
- * else refuses with `FINDING_LINEAGE_APPEND_ONLY` and the caller's lineage — including its
- * digest — is left exactly as it was. Every returned lineage is deep-frozen, so an earlier
+ * Lineage is append-only. A round number is first admitted as a safe non-negative integer —
+ * `FINDING_ROUND_INVALID` otherwise, because a comparison cannot police NaN — and must then
+ * advance strictly past the last recorded round; anything else refuses with
+ * `FINDING_LINEAGE_APPEND_ONLY`. Either way the caller's lineage — including its digest — is
+ * left exactly as it was. Every returned lineage is deep-frozen, so an earlier
  * record cannot be rewritten in place either.
  */
 import { evaluatePolicy } from "@moe/core";
@@ -119,6 +121,18 @@ function inertFinding(finding: ReviewFinding): ReviewFinding {
   };
 }
 
+/**
+ * The ordering comparison below cannot police the round number itself: every comparison against
+ * NaN is false, so `NaN <= lastRound(...)` does not refuse and the append-only guard is bypassed
+ * entirely. Admission therefore runs BEFORE that comparison, and refuses rather than coercing —
+ * `Number(x)` or a `|| 0` fallback would turn a malformed round into round 0 and silently rewrite
+ * lineage history. `isSafeInteger` rather than `isInteger`: past 2^53 increments stop being
+ * representable, so two distinct rounds could compare equal.
+ */
+function admissibleRound(round: number): boolean {
+  return Number.isSafeInteger(round) && round >= 0;
+}
+
 function lastRound(lineage: ReviewLineage): number {
   return lineage.records.reduce(
     (highest, record) => record.round > highest ? record.round : highest,
@@ -136,6 +150,7 @@ export function recordReviewRound(
   round: ReviewRoundInput,
 ): ReviewResult<ReviewRoundOutcome> {
   if (!lineageAttested(lineage)) return refuse("FINDING_LINEAGE_DIGEST_MISMATCH");
+  if (!admissibleRound(round.round)) return refuse("FINDING_ROUND_INVALID");
   if (round.round <= lastRound(lineage)) return refuse("FINDING_LINEAGE_APPEND_ONLY");
   const seen = new Set(lineage.records.map((record) => record.fingerprint));
   const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => ({

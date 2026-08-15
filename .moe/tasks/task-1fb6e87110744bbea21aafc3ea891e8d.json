@@ -97,7 +97,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-50f0d628",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -112,11 +112,17 @@
       "author": "architect-2aea4111",
       "content": "ROUTED FINDING — a second defect in a file you already own, not in the audit register.\n\nWhile planning sibling task-6a31a86fdcd84795a8fae6e5d6978d2c (persistFileDurably short write) I found the IDENTICAL defect in this task's file. Measured at HEAD 192360e:\n\npackages/store/src/backup-generation.ts:37-46\n```\nasync function persistFile(path: string, payload: Uint8Array): Promise<void> {\n  await mkdir(dirname(path), { recursive: true });\n  const handle = await open(path, \"w\");\n  try {\n    await handle.write(payload);     // <-- bytesWritten never checked\n    await handle.sync();\n  } finally {\n    await handle.close();\n  }\n}\n```\n\nFileHandle.write resolves with {bytesWritten, buffer} and may write fewer bytes than requested. The return type is Promise<void>, so a partial write is indistinguishable from a complete one. This is byte-for-byte the same body as recovery-anchor-fs.ts:23-31, which the audit DID record as item 3 — the register named only one of the two copies.\n\nWhy it lands on you rather than on the sibling task: backup-generation.ts is YOUR owned path. Two tasks editing one file in this shared worktree is exactly the collision the epic rails warn about, so I did not widen the sibling task to reach in here.\n\nWhy it matters for your task specifically: persistFile is what writes the staged manifest at backup-generation.ts:168-171, immediately before the publish you are making crash-safe. A truncated manifest written there would be renamed into finalPath by your new publish path and then pass the post-rename fsync — your atomicity work would faithfully publish truncated bytes. Fixing the publish window without this leaves a hole in the same sequence.\n\nSuggested handling: fix it inside your task and note it in your completion, or decline it in writing so it is not silently dropped. The sibling task's plan carries the matching fix for recovery-anchor-fs.ts, including the sharp part — sync() must run only AFTER the payload is fully written, since a sync between partial writes flushes a truncated file and produces false durable evidence while looking more careful than the original.\n\nNot blocking your plan; the approved plan stands. This is one extra line to fix in a function you are already reading.",
       "timestamp": "2026-08-15T13:00:15.278Z"
+    },
+    {
+      "id": "comment-6910e03e8fe64fb7b14653a9fbab1e45",
+      "author": "worker-06df66bb",
+      "content": "Routed finding from task-6a31a86f (persistFileDurably short-write fix). RE-MEASURED AT HEAD 4aa29d5, i.e. AFTER your task's commits landed - still open.\n\npackages/store/src/backup-generation.ts:41-50 `persistFile` has the identical defect I just fixed in recovery-anchor-fs.ts: line 45 is `await handle.write(payload);` and the resolved {bytesWritten} is discarded. Node's FileHandle.write is permitted to write FEWER bytes than requested, so a partial write is indistinguishable from a complete one. I did not touch it - backup-generation.ts is your owned path and two tasks editing one file in a shared worktree is a collision.\n\nBLAST RADIUS, measured rather than assumed - it is SMALLER than in my module, and this is the part worth knowing before anyone schedules it. Both call sites are followed by a mandatory read-back that would catch a truncation:\n- :70 copyDeclaredObject - `const reread = await readFile(destination)` then a sha256 compare against entry.digest, refusing DURABILITY_FAULT on mismatch.\n- :174 the manifest - published, then `JSON.parse(await readFile(manifestPath, \"utf8\"))` and verifyBackupGeneration, which a truncated manifest fails.\nSo a short write there degrades to a refusal, not to silent truncation. That is the opposite of my module, where publishFileAtomically has NO automatic read-back and renames the truncated staging file into place as though complete.\n\nConclusion: real, worth closing, but correctly classified as low and NOT a hidden-corruption hole the way the anchor one was. If you want the same fix, the shape that passed here is: loop `handle.write(payload, written, expected - written)` so the buffer offset advances to the bytes already proven written; refuse when bytesWritten is non-integer, <= 0, or > remaining (that guard is also what BOUNDS the loop - every iteration must advance, so it runs at most payload.byteLength times); keep sync() strictly AFTER the payload is fully written, since flushing between partial writes is the subtlest way to reintroduce the bug. See packages/store/src/recovery-anchor-fs.ts:69-83 and recovery-anchor-fs.test.ts for the seam and the drills.",
+      "timestamp": "2026-08-15T13:28:14.947Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:45:50.059Z",
-  "updatedAt": "2026-08-15T13:23:01.120Z",
+  "updatedAt": "2026-08-15T13:30:16.133Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:55:16.606Z",
     "plannedStepCount": 5,
@@ -148,7 +154,8 @@
   },
   "planApprovedAt": "2026-08-15T12:56:45.674Z",
   "contextFetchedBy": [
-    "worker-86bbe9fd"
+    "worker-86bbe9fd",
+    "qa-50f0d628"
   ],
   "workStartedAt": "2026-08-15T13:12:35.306Z",
   "reviewStartedAt": "2026-08-15T13:23:01.120Z",

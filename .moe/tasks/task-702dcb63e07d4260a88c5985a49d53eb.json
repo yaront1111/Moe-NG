@@ -20,46 +20,71 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST. Add a focused test for recordReviewRound that passes an attested lineage and a round whose `round` is NaN, and assert it is REFUSED. Against current bytes this fails: packages/review/src/review-findings.ts:139 is `if (round.round <= lastRound(lineage)) return refuse(\"FINDING_LINEAGE_APPEND_ONLY\");`, and every comparison against NaN is false, so the guard does not fire and the round is accepted and appended. Cover the same shape for Infinity, -Infinity, a non-integer such as 1.5, a negative, and a non-number value. Record the red. There is no review-findings.test.ts today - recordReviewRound is exercised only indirectly through review-flow.test.ts - so add a dedicated file; the absence of direct coverage is part of why this survived.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-findings.test.ts"
       ],
       "newFiles": [
         "packages/review/src/review-findings.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/review/src/review-findings.test.ts"
+      ],
+      "note": "RED recorded. New packages/review/src/review-findings.test.ts (first direct test file for recordReviewRound). 8 admission cases: NaN, +Infinity, -Infinity, 1.5, -3, 2**53, \"2\", plus a no-append assertion for NaN. Fresh run: `Test Files 1 failed (1) / Tests 8 failed (8)`. The NaN case fails at `expect(result.ok).toBe(false)` with \"expected true to be false\" — the round is ACCEPTED today, exactly the defect: `NaN <= lastRound(lineage)` at review-findings.ts:139 is false so the append-only guard never fires. Cases that ARE caught by `<=` today (-3, -Infinity) fail on the code assertion instead, reporting FINDING_LINEAGE_APPEND_ONLY. Verified no directory/bridge scan test enumerates packages/review/src (grep for readdir/glob/.test.ts in runtime-entrypoint.test.ts: zero hits), so adding a test file breaks no sweep.",
+      "startedAt": "2026-08-15T13:25:25.393Z",
+      "completedAt": "2026-08-15T13:26:00.779Z"
     },
     {
       "stepId": "step-2",
       "description": "Add the new reason code to the frozen vocabulary. packages/review/src/review-contract.ts:65-83 REVIEW_REASON_CODES is a frozen 17-member array that is ALPHABETICALLY ORDERED - insert the new member in its correct alphabetical position rather than appending, so the list stays scannable. A name in the FINDING_ family reads naturally, e.g. FINDING_ROUND_INVALID, which also sorts between FINDING_LINEAGE_DIGEST_MISMATCH and PACKAGE_BINDING_AMBIGUOUS. It MUST be its own code and not a reuse of FINDING_LINEAGE_APPEND_ONLY: a malformed round number and a genuinely out-of-order round are different facts, and collapsing them would tell an operator the lineage was appended out of order when in fact the input was not a number. I MEASURED that adding a member is safe: the only consumers outside this package are apps/daemon/src/review/review-lineage.test.ts:158 and review-services.test.ts:162, both `expect(REVIEW_REASON_CODES).toContain(outcome.code)` - a membership check, not a length pin - so no sibling sweep breaks.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/review/src/review-contract.ts"
+      ],
+      "note": "Added \"FINDING_ROUND_INVALID\" to REVIEW_REASON_CODES in its correct alphabetical slot — between FINDING_LINEAGE_DIGEST_MISMATCH and PACKAGE_BINDING_AMBIGUOUS, not appended. Its own code, NOT a reuse of FINDING_LINEAGE_APPEND_ONLY: a malformed round number and a genuinely out-of-order round are different facts and an operator reading APPEND_ONLY for a non-number would be told the wrong cause. Verified mechanically rather than by eye: extracted the members and ran `diff <(members) <(LC_ALL=C sort members)` — no diff, and count=18 (was 17). Re-confirmed the consumer measurement myself with a repo-wide grep for REVIEW_REASON_CODES: exactly two external call sites, apps/daemon/src/review/review-lineage.test.ts:158 and review-services.test.ts:162, both `expect(REVIEW_REASON_CODES).toContain(outcome.code)` — a membership check, so no sibling sweep is length-pinned and none breaks.",
+      "startedAt": "2026-08-15T13:26:03.237Z",
+      "completedAt": "2026-08-15T13:26:19.043Z"
     },
     {
       "stepId": "step-3",
       "description": "Admit the round number BEFORE the ordering comparison. In recordReviewRound (review-findings.ts:134-140), insert the admission after the existing lineageAttested check and BEFORE `if (round.round <= lastRound(lineage))`. ORDER IS THE WHOLE POINT: a guard placed after the ordering comparison inherits the same NaN blindness it was written to fix, because the comparison has already been bypassed by then. Require a safe non-negative integer - Number.isSafeInteger plus a non-negative bound - and refuse with the new code. Do NOT coerce: Number(x), `|| 0` or `?? 0` would turn a malformed round into round 0 and silently rewrite lineage history rather than refusing it. Leave the existing lineageAttested check first, since a lineage that does not attest must refuse before anything about the incoming round is considered.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-findings.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/review/src/review-findings.ts"
+      ],
+      "note": "Added `admissibleRound(round)` = `Number.isSafeInteger(round) && round >= 0` and wired it at review-findings.ts:153. Order verified on the FINAL bytes by grep, not by intent: :152 lineageAttested -> :153 admissibleRound -> :154 `round.round <= lastRound(lineage)`. Admission sits strictly between the attestation gate and the ordering comparison, which is the whole point — placed after :154 it would inherit the same NaN blindness. isSafeInteger over isInteger because past 2^53 increments stop being representable and two distinct rounds could compare equal; it also refuses a non-number without coercing (unlike parseInt). No coercion anywhere on the path: grep for `Number(|parseInt|parseFloat|+round|?? 0||| 0` returns one hit and it is inside the doc comment explaining why coercion is forbidden. Also corrected the file header, which claimed a bad round \"refuses with FINDING_LINEAGE_APPEND_ONLY\" — now names both gates. Fresh: typecheck exit 0; `pnpm --filter @moe/review test` = Test Files 4 passed (4), Tests 99 passed (99). File is 235 physical lines by `grep -c ''` (PowerShell Measure-Object undercounts), under the 250 target.",
+      "startedAt": "2026-08-15T13:26:21.583Z",
+      "completedAt": "2026-08-15T13:26:55.499Z"
     },
     {
       "stepId": "step-4",
       "description": "Prove the existing guard still works and the new one did not replace it. Assert that a well-formed but NON-INCREASING round - equal to or lower than the current highest - still refuses with FINDING_LINEAGE_APPEND_ONLY exactly as today, so this change ADDS a guard rather than substituting one. Assert that a well-formed increasing round is still accepted and routed exactly as before, including the existing fingerprint-repeat escalation - the same fingerprint twice routes REJECT_PLAN, fresh findings route REJECT_IMPLEMENTATION - so the routing behavior is untouched. Assert every refusal by its exact code AND its layer: refuse() (review-findings.ts:74-76) stamps layer \"FINDINGS\" on all of them, and two guards can now answer here, so a test asserting only ok:false would stay green if the wrong guard started answering first.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/review/src/review-findings.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/review/src/review-findings.test.ts"
+      ],
+      "note": "Added 7 tests in two describes proving the guard was ADDED, not substituted. Append-only preserved: a repeated round (1 after 1), an out-of-order earlier round (3 after 5), and round 0 against an empty lineage each still refuse with FINDING_LINEAGE_APPEND_ONLY and layer FINDINGS — round 0 is the sharp one, since it is a WELL-FORMED non-negative safe integer, so it proves admission did not swallow a case that belongs to the ordering guard. Layer ordering also pinned: a non-attesting lineage carrying a NaN round still refuses FINDING_LINEAGE_DIGEST_MISMATCH, so the attestation gate still answers first and admission did not jump ahead of it. Routing untouched: an increasing round appends and yields rounds [1,2] with a changed digest; the same fingerprint twice still routes REJECT_PLAN with 1 repeatFingerprint; fresh findings still route REJECT_IMPLEMENTATION with an empty repeatFingerprints. Every refusal assertion pins exact code AND layer — three guards can answer here now, so ok:false alone would stay green if the wrong one answered. Fresh: typecheck exit 0; Test Files 4 passed (4), Tests 106 passed (106), up from 99.",
+      "startedAt": "2026-08-15T13:26:57.837Z",
+      "completedAt": "2026-08-15T13:27:40.596Z"
     },
     {
       "stepId": "step-5",
       "description": "Sweep the numeric shapes with an exact non-zero cardinality and run the drill. Build a case table of rejected numeric shapes - NaN, Infinity, -Infinity, a non-integer, a negative, a non-number, and a value beyond safe-integer range - assert its exact length with a hand-written literal, and assert each refuses with the new exact code. Then run the mutation drill: remove the integer admission and confirm the NaN case specifically goes RED. The drill must redden on the NaN case, not merely on some case: every other rejected shape is ALSO caught by the ordering comparison once admission is gone (Infinity <= lastRound is false but -Infinity, negatives and non-integers behave ordinarily under <=), so NaN is the only shape that proves the new guard is doing work the old one could not. Confirm the drill applied by printing the replaced line range and chaining with &&, restore with Edit rather than git checkout, and hash-check back to the pre-drill bytes.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/review/src/review-findings.ts",
         "packages/review/src/review-findings.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:27:42.894Z"
     },
     {
       "stepId": "step-6",
@@ -73,7 +98,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-86bbe9fd",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,13 +110,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:47:08.778Z",
-  "updatedAt": "2026-08-15T13:05:54.378Z",
+  "updatedAt": "2026-08-15T13:27:42.894Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:04:22.863Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 4
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:05:52.332Z",
   "planningNotes": {
@@ -108,5 +139,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-15T13:05:54.378Z"
+  "planApprovedAt": "2026-08-15T13:05:54.378Z",
+  "contextFetchedBy": [
+    "worker-86bbe9fd"
+  ],
+  "workStartedAt": "2026-08-15T13:25:25.393Z"
 }
