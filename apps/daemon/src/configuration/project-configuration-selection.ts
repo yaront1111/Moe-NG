@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { PROJECT_CONFIGURATION_SCHEMA_VERSION, isLogicalRef } from "@moe/contracts";
+import { MAX_JSON_BODY_BYTES, PROJECT_CONFIGURATION_SCHEMA_VERSION, isBoundedText, isLogicalRef } from "@moe/contracts";
 import type { ProjectConfigurationManifest } from "@moe/contracts";
 import { decodeProjectConfigurationManifestBytes } from "@moe/core";
 import { DurableStoreError } from "@moe/store";
-import type { CommandDecisionRecord, CommandDecisionResponse, CommandReceipt,
-  CommitExpectedVersionDecisionInput, CursorPage, StoredEvent } from "@moe/store";
+import type { CommandDecisionRecord, CommandDecisionResponse, CommandReceipt, CommitExpectedVersionDecisionInput, CursorPage, StoredEvent } from "@moe/store";
 export const PROJECT_CONFIGURATION_SELECTION_CODES = Object.freeze(["PROJECT_CONFIGURATION_ABSENT", "PROJECT_CONFIGURATION_STALE", "PROJECT_CONFIGURATION_CONFLICT", "PROJECT_CONFIGURATION_UNREADABLE"] as const);
 export const PROJECT_CONFIGURATION_SELECTION_LAYER = "PROJECT_CONFIGURATION_SELECTION" as const;
 export type ProjectConfigurationSelectionCode = (typeof PROJECT_CONFIGURATION_SELECTION_CODES)[number];
@@ -17,18 +16,14 @@ export interface ProjectConfigurationSelectionUnknown {
 export interface CurrentProjectConfiguration {
   readonly authority: "DAEMON_VERIFIED"; readonly evidence: "DURABLE";
   readonly manifest: ProjectConfigurationManifest; readonly manifestBytes: Uint8Array;
-  readonly ok: true; readonly outcome: "CURRENT"; readonly selectionVersion: number;
-}
-export interface SelectedProjectConfiguration extends Omit<CurrentProjectConfiguration, "outcome"> {
-  readonly outcome: "SELECTED";
-}
+  readonly ok: true; readonly outcome: "CURRENT"; readonly selectionVersion: number }
+export interface SelectedProjectConfiguration extends Omit<CurrentProjectConfiguration, "outcome"> { readonly outcome: "SELECTED" }
 export type ReadCurrentProjectConfigurationResult = CurrentProjectConfiguration | ProjectConfigurationSelectionUnknown;
 export type SelectProjectConfigurationResult = SelectedProjectConfiguration | ProjectConfigurationSelectionUnknown;
 export interface ProjectConfigurationStore {
   commitExpectedVersionDecision(input: CommitExpectedVersionDecisionInput): CommandDecisionResponse;
-  getAggregateVersion(aggregateId: string): number;
+  getAggregateVersion(aggregateId: string): number; getCommandReceipt(commandId: string): CommandReceipt | null;
   getCommandDecision(key: Readonly<{ commandId: string; principalId: string; projectId: string }>): CommandDecisionRecord | null;
-  getCommandReceipt(commandId: string): CommandReceipt | null;
   readAggregateEvents(aggregateId: string, after: number, limit: number): CursorPage<StoredEvent, number>;
 }
 const EVENT_TYPE = "ProjectConfigurationSelected", COMMAND_KIND = "project-configuration.select";
@@ -42,39 +37,49 @@ const RECEIPT_KEYS = ["aggregateId", "commandId", "committedAt", "currentVersion
 const SELECT_KEYS = ["projectId", "commandId", "correlationId", "decidedAt", "principalId", "expectedVersion", "manifestBytes"] as const;
 const RESPONSE_KEYS = ["decision", "disposition", "historical", "requiresAffordanceRefresh"] as const;
 const ENCODER = new TextEncoder();
+const TYPED_ARRAY = Object.getPrototypeOf(Uint8Array.prototype) as object, BYTE_LENGTH = Object.getOwnPropertyDescriptor(TYPED_ARRAY, "byteLength")!.get!, BUFFER = Object.getOwnPropertyDescriptor(TYPED_ARRAY, "buffer")!.get!;
 function exactRecord(value: unknown, keys: readonly string[]): Record<string, unknown> | null {
-  if (value === null || typeof value !== "object") return null;
-  const own = Reflect.ownKeys(value);
-  if (own.length !== keys.length || own.some((key) => typeof key !== "string" || !keys.includes(key))) {
-    return null;
-  }
-  const copy: Record<string, unknown> = {};
-  for (const key of keys) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
-    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-    copy[key] = descriptor.value;
-  }
-  return copy;
+  try {
+    if (value === null || typeof value !== "object") return null;
+    const own = Reflect.ownKeys(value);
+    if (own.length !== keys.length || own.some((key) => typeof key !== "string" || !keys.includes(key))) {
+      return null;
+    }
+    const copy: Record<string, unknown> = {};
+    for (const key of keys) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+      copy[key] = descriptor.value;
+    }
+    return copy;
+  } catch { return null; }
 }
 function exactArray(value: unknown): readonly unknown[] | null {
-  if (!Array.isArray(value)) return null;
-  const length = Reflect.getOwnPropertyDescriptor(value, "length")?.value;
-  if (typeof length !== "number" || !Number.isSafeInteger(length)
-    || length < 0 || Reflect.ownKeys(value).length !== length + 1) {
-    return null;
-  }
-  const copy: unknown[] = [];
-  for (let index = 0; index < length; index += 1) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(value, String(index));
-    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-    copy.push(descriptor.value);
-  }
-  return copy;
+  try {
+    if (!Array.isArray(value)) return null;
+    const length = Reflect.getOwnPropertyDescriptor(value, "length")?.value;
+    if (typeof length !== "number" || !Number.isSafeInteger(length)
+      || length < 0 || Reflect.ownKeys(value).length !== length + 1) {
+      return null;
+    }
+    const copy: unknown[] = [];
+    for (let index = 0; index < length; index += 1) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(value, String(index));
+      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
+      copy.push(descriptor.value);
+    }
+    return copy;
+  } catch { return null; }
 }
 function copyBytes(value: unknown): Uint8Array | null {
-  if (!ArrayBuffer.isView(value) || !(value instanceof Uint8Array)) return null;
-  if (typeof SharedArrayBuffer !== "undefined" && value.buffer instanceof SharedArrayBuffer) return null;
-  return new Uint8Array(value);
+  try {
+    if (!ArrayBuffer.isView(value) || !(value instanceof Uint8Array)) return null;
+    const length = Reflect.apply(BYTE_LENGTH, value, []) as number;
+    const buffer = Reflect.apply(BUFFER, value, []) as ArrayBufferLike;
+    if (length > MAX_JSON_BODY_BYTES
+      || (typeof SharedArrayBuffer !== "undefined" && buffer instanceof SharedArrayBuffer)) return null;
+    return new Uint8Array(value);
+  } catch { return null; }
 }
 function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
@@ -119,8 +124,8 @@ function validateDecision(
 ): { readonly decision: Record<string, unknown>; readonly version: number } | "MISSING" | null {
   const event = tail.event;
   const trace = exactRecord(event.decisionTrace, TRACE_KEYS);
-  if (trace === null || trace.projectId !== projectId || trace.commandKind !== COMMAND_KIND
-    || typeof trace.commandId !== "string" || typeof trace.principalId !== "string") return null;
+  if (trace === null || trace.projectId !== projectId || trace.commandKind !== COMMAND_KIND || !isBoundedText(trace.commandId) || !isBoundedText(trace.principalId)
+    || typeof event.eventId !== "string" || typeof event.requestSha256 !== "string" || !HEX64.test(event.requestSha256) || typeof trace.requestSha256 !== "string" || !HEX64.test(trace.requestSha256)) return null;
   const loaded = store.getCommandDecision({ commandId: trace.commandId,
     principalId: trace.principalId, projectId });
   if (loaded === null) return "MISSING";
@@ -131,6 +136,7 @@ function validateDecision(
   const version = event.aggregateSequence;
   if (decision === null || key === null || events === null || result === null
     || typeof version !== "number" || !Number.isSafeInteger(version) || version < 1
+    || typeof decision.decisionId !== "string"
     || decision.effectDisposition !== "EFFECTS_COMMITTED"
     || decision.resultCode !== "EFFECTS_COMMITTED" || decision.targetAggregateId !== id
     || decision.currentVersion !== version || decision.previousVersion !== version - 1
@@ -138,14 +144,14 @@ function validateDecision(
     || key.principalId !== trace.principalId || key.projectId !== projectId
     || events.length !== 1 || events[0] !== event.eventId || decision.requestSha256 !== trace.requestSha256
     || !sameBytes(result, tail.payload)
-    || event.commandId !== `moe-internal:decision-effect:${String(decision.decisionId)}`) return null;
+    || event.commandId !== `moe-internal:decision-effect:${decision.decisionId}`) return null;
   return { decision, version: version as number };
 }
 function validReceipt(
   store: ProjectConfigurationStore, tail: StableEvent, id: string, version: number,
 ): "MISSING" | boolean {
   const event = tail.event;
-  const loaded = store.getCommandReceipt(String(event.commandId));
+  const loaded = store.getCommandReceipt(event.commandId as string);
   if (loaded === null) return "MISSING";
   const receipt = exactRecord(loaded, RECEIPT_KEYS);
   const eventIds = receipt === null ? null : exactArray(receipt.eventIds);
@@ -195,10 +201,7 @@ export function readCurrentProjectConfiguration(
     return storeRefusal(error);
   }
 }
-/**
- * Current means the latest decision-backed event at one stable aggregate tail.
- * `settingsDigest` is a currentness expectation; its own preimage excludes it by manifest shape.
- */
+/** Current is the latest stable decision-backed tail; settingsDigest is outside its own preimage. */
 export function selectProjectConfiguration(
   store: ProjectConfigurationStore, input: unknown,
 ): SelectProjectConfigurationResult {
@@ -206,8 +209,8 @@ export function selectProjectConfiguration(
     const request = exactRecord(input, SELECT_KEYS);
     const bytes = request === null ? null : copyBytes(request.manifestBytes);
     if (request === null || bytes === null || !isLogicalRef(request.projectId)
-      || !isLogicalRef(request.commandId) || !isLogicalRef(request.correlationId)
-      || !isLogicalRef(request.principalId) || typeof request.decidedAt !== "string"
+      || !isBoundedText(request.commandId) || !isBoundedText(request.correlationId)
+      || !isBoundedText(request.principalId) || typeof request.decidedAt !== "string"
       || !Number.isFinite(Date.parse(request.decidedAt)) || typeof request.expectedVersion !== "number"
       || !Number.isSafeInteger(request.expectedVersion) || request.expectedVersion < 0) {
       return refuse("PROJECT_CONFIGURATION_UNREADABLE");
@@ -218,7 +221,7 @@ export function selectProjectConfiguration(
     if (decoded.manifest.projectId !== request.projectId) return refuse("PROJECT_CONFIGURATION_CONFLICT");
     const id = aggregateId(request.projectId);
     const eventId = `project-configuration-selected:${createHash("sha256")
-      .update(`${request.projectId}\0${request.commandId}`).digest("hex")}`;
+      .update(`${request.projectId}\0${request.principalId}\0${request.commandId}`).digest("hex")}`;
     const requestBytes = ENCODER.encode(JSON.stringify({ ...request, manifestBytes: [...bytes] }));
     const response = exactRecord(store.commitExpectedVersionDecision({ commandKind: COMMAND_KIND,
       committedResultBytes: bytes, correlationId: request.correlationId, decidedAt: request.decidedAt,
@@ -227,15 +230,18 @@ export function selectProjectConfiguration(
       key: { commandId: request.commandId, principalId: request.principalId,
         projectId: request.projectId }, requestBytes, targetAggregateId: id }), RESPONSE_KEYS);
     const decision = response === null ? null : exactRecord(response.decision, DECISION_KEYS);
-    if (response === null || decision === null) return refuse("PROJECT_CONFIGURATION_CONFLICT");
-    if (decision.resultCode === "EXPECTED_VERSION_CONFLICT") return refuse(
-      "PROJECT_CONFIGURATION_STALE", { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" });
+    if (response === null || decision === null
+      || (response.disposition !== "DECIDED" && response.disposition !== "REPLAYED")) return refuse("PROJECT_CONFIGURATION_CONFLICT");
+    if (decision.resultCode === "EXPECTED_VERSION_CONFLICT") return decision.effectDisposition === "NO_BUSINESS_EFFECT" ? refuse(
+      "PROJECT_CONFIGURATION_STALE", { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" }) : refuse("PROJECT_CONFIGURATION_CONFLICT");
     if (decision.resultCode !== "EFFECTS_COMMITTED") return refuse("PROJECT_CONFIGURATION_CONFLICT");
     const current = readCurrentProjectConfiguration(store, { projectId: request.projectId,
       expectedSettingsDigest: decoded.manifest.settingsDigest });
     return current.ok ? Object.freeze({ ...current, outcome: "SELECTED" as const }) : current;
   } catch (error) {
     if (!(error instanceof DurableStoreError)) return storeRefusal(error);
+    if (error.code === "EXPECTED_VERSION_CONFLICT") return refuse("PROJECT_CONFIGURATION_STALE",
+      { code: error.code, layer: "DURABLE_STORE" });
     const conflicts = ["COMMAND_ID_CONFLICT", "DURABLE_ID_CONFLICT", "IDEMPOTENCY_CONFLICT",
       "PROJECT_SCOPE_MISMATCH"];
     return refuse(conflicts.includes(error.code) ? "PROJECT_CONFIGURATION_CONFLICT"

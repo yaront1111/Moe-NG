@@ -331,6 +331,31 @@ describe("project configuration durable selection", () => {
       "PROJECT_CONFIGURATION_CONFLICT",
     );
   });
+
+  it("rejects a stale decision whose effect disposition claims an effect", () => {
+    const fixture = manifestBytes();
+    const port: Parameters<typeof selectProjectConfiguration>[0] = {
+      commitExpectedVersionDecision: (input) => {
+        const response = store.commitExpectedVersionDecision(input);
+        return {
+          ...response,
+          decision: {
+            ...response.decision,
+            effectDisposition: "EFFECTS_COMMITTED",
+            resultCode: "EXPECTED_VERSION_CONFLICT",
+          },
+        } as unknown as typeof response;
+      },
+      getAggregateVersion: (id) => store.getAggregateVersion(id),
+      getCommandDecision: (key) => store.getCommandDecision(key),
+      getCommandReceipt: (id) => store.getCommandReceipt(id),
+      readAggregateEvents: (id, after, limit) => store.readAggregateEvents(id, after, limit),
+    };
+    expectUnknown(
+      selectProjectConfiguration(port, selectionRequest(fixture.bytes)),
+      "PROJECT_CONFIGURATION_CONFLICT",
+    );
+  });
 });
 
 interface CapturedRecords {
@@ -445,6 +470,7 @@ describe("project configuration current-read integrity", () => {
     const event = records.event;
     const decision = records.decision;
     const receipt = records.receipt;
+    const numericEventId = 7 as unknown as string;
 
     const cases: readonly {
       readonly name: string;
@@ -466,6 +492,16 @@ describe("project configuration current-read integrity", () => {
       { name: "result bytes", port: portFor(records, { decision: { ...decision, resultBytes: Uint8Array.of(1) } }), code: "PROJECT_CONFIGURATION_CONFLICT" },
       { name: "receipt missing", port: portFor(records, { receipt: null }), code: "PROJECT_CONFIGURATION_UNREADABLE" },
       { name: "receipt request digest", port: portFor(records, { receipt: { ...receipt, requestSha256: hex("b") } }), code: "PROJECT_CONFIGURATION_CONFLICT" },
+      { name: "nonhex digests", port: portFor(records, {
+        decision: { ...decision, requestSha256: "trace-digest" },
+        page: { ...records.page, items: [{ ...event, requestSha256: "event-digest", decisionTrace: { ...trace, requestSha256: "trace-digest" } }] },
+        receipt: { ...receipt, requestSha256: "event-digest" },
+      }), code: "PROJECT_CONFIGURATION_CONFLICT" },
+      { name: "event id type", port: portFor(records, {
+        decision: { ...decision, businessEventIds: [numericEventId] },
+        page: { ...records.page, items: [{ ...event, eventId: numericEventId }] },
+        receipt: { ...receipt, eventIds: [numericEventId] },
+      }), code: "PROJECT_CONFIGURATION_CONFLICT" },
       {
         name: "codec bytes",
         port: portFor(records, {
@@ -477,7 +513,7 @@ describe("project configuration current-read integrity", () => {
       },
     ];
 
-    expect(cases).toHaveLength(15);
+    expect(cases).toHaveLength(17);
     expect(cases.length).toBeGreaterThan(0);
     for (const forged of cases) {
       const result = readCurrentProjectConfiguration(forged.port, currentRequest(records));
