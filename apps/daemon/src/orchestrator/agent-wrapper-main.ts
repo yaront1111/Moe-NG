@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -75,11 +75,17 @@ function claudeSpawner(storeEnv: Readonly<Record<string, string>>) {
       });
       child.stdin?.write(request.mission);
       child.stdin?.end();
+      // The config file carries the agent's credential; it must not outlive the
+      // agent it was minted for. Both exit paths remove it; a missing file is fine.
+      const finish = (): void => {
+        rmSync(mcpConfigPath, { force: true });
+        resolve();
+      };
       child.on("exit", (code) => {
         process.stdout.write(`[wrapper] ${request.workItemId} agent exited ${String(code)}\n`);
-        resolve();
+        finish();
       });
-      child.on("error", () => resolve());
+      child.on("error", finish);
     });
   };
 }
