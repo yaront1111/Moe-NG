@@ -618,6 +618,45 @@ describe("coordination mailbox durability", () => {
     });
   });
 
+  it("a racing duplicate reports the WINNER's durable stamps, not its own", () => {
+    // The race: both senders read no receipt, the winner commits, the loser's
+    // commit answers REPLAYED. The loser must echo the durable message — the
+    // winner's sentAt/expiresAt — because DEDUPLICATED is a claim about what
+    // is durably stored, not about the losing request.
+    let raceReads = 0; // while positive, the loser sees the PRE-WINNER state
+    const harness = openHarness((store) => Object.freeze({
+      commit: store.commit.bind(store),
+      getAggregateVersion: (aggregateId: string) => {
+        const version = store.getAggregateVersion(aggregateId);
+        // Only the MESSAGE aggregate is racing; the ack cursor reads stay true.
+        if (raceReads > 0 && aggregateId.startsWith("moe-coordination-mailbox:")) { raceReads -= 1; return version - 1; }
+        return version;
+      },
+      getCommandReceipt: (commandId: string) => {
+        if (raceReads > 0) return null;
+        return store.getCommandReceipt(commandId);
+      },
+      readAggregateEvents: store.readAggregateEvents.bind(store),
+    }) as unknown as CoordinationEventStore);
+    try {
+      const firstRaw = send(harness, draft("EVENT"));
+      if (firstRaw.outcome === "REFUSED") throw new Error(`first: ${JSON.stringify(firstRaw)}`);
+      const first: CoordinationAccepted = stored(firstRaw);
+      expect(first.outcome).toBe("ACCEPTED");
+      harness.controls.now = NOW + 5_000;
+      raceReads = 2; // the loser's receipt AND version reads happened before the winner landed
+      const loserRaw = send(harness, draft("EVENT"));
+      if (loserRaw.outcome === "REFUSED") throw new Error(`loser: ${JSON.stringify(loserRaw)}`);
+      const loser: CoordinationAccepted = stored(loserRaw);
+      expect(loser.outcome).toBe("DEDUPLICATED");
+      expect(loser.sentAt).toBe(first.sentAt);
+      expect(loser.expiresAt).toBe(first.expiresAt);
+      expect(loser.sequence).toBe(first.sequence);
+    } finally {
+      harness.store.close();
+    }
+  });
+
   it("maps a reused message id with different bytes to an idempotency conflict", () => {
     withHarness((harness) => {
       expect(send(harness, draft("EVENT")).outcome).toBe("ACCEPTED");

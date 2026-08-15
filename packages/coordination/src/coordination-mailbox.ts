@@ -119,10 +119,29 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
         const receipt = store.getCommandReceipt(commandId);
         return receipt === null ? outcome : replayed(mailbox, receipt, eventId, input.digest);
       }
+      if (outcome.disposition === "REPLAYED") {
+        // The RACE arm of deduplication: this sender read no receipt, but the
+        // commit found one — another sender landed the same message first.
+        // DEDUPLICATED is a claim about what is durably stored, so the answer
+        // carries the WINNER's stamps read back from the ledger, never this
+        // loser's own freshly minted sentAt/expiresAt.
+        if (!outcome.eventIds.includes(eventId)) {
+          return refuse(
+            "COORDINATION_IDEMPOTENCY_CONFLICT", "STORE",
+            "the message id was reused for different canonical bytes",
+          );
+        }
+        const entry = reader.entryAt(mailbox, outcome.currentVersion);
+        if (entry === null || entry.stamp.digest !== input.digest) return corruptRecord();
+        return Object.freeze({
+          digest: entry.stamp.digest, expiresAt: entry.stamp.expiresAt,
+          messageId: entry.stamp.messageId, outcome: "DEDUPLICATED" as const,
+          sentAt: entry.stamp.sentAt, sequence: entry.event.aggregateSequence,
+        });
+      }
       return Object.freeze({
         digest: stamp.digest, expiresAt: stamp.expiresAt, messageId: stamp.messageId,
-        outcome: outcome.disposition === "REPLAYED"
-          ? ("DEDUPLICATED" as const) : ("ACCEPTED" as const),
+        outcome: "ACCEPTED" as const,
         sentAt: stamp.sentAt, sequence: outcome.currentVersion,
       });
     }
