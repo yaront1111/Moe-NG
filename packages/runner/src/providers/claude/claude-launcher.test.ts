@@ -77,6 +77,46 @@ describe("Windows Claude launcher", () => {
     if (afterRelease.ok) await afterRelease.lease.release();
   });
 
+  it("reclaims a lock whose recorded holder process is dead", async () => {
+    // A crash between open("wx") and release leaves the file behind; without
+    // holder liveness the identity is locked out until a human deletes it.
+    const identity = `launcher-stale-${process.pid}-${Date.now()}`;
+    const first = await acquireWindowsLaunchLock(identity);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.code);
+    // Simulate holder death: the file survives, the recorded PID does not. A
+    // PID from the ephemeral range that is not alive right now.
+    const deadPid = ((): number => {
+      for (let candidate = 40_000_000; ; candidate += 1) {
+        try { process.kill(candidate, 0); } catch { return candidate; }
+      }
+    })();
+    const { writeFile } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const { createHash } = await import("node:crypto");
+    const path = join(tmpdir(), "moe-claude-launch-locks",
+      `${createHash("sha256").update(identity).digest("hex")}.lock`);
+    await writeFile(path, String(deadPid), "utf8");
+    const reclaimed = await acquireWindowsLaunchLock(identity);
+    expect(reclaimed.ok).toBe(true);
+    if (reclaimed.ok) await reclaimed.lease.release();
+    // first.lease.release() must stay safe even though the file moved on.
+    await first.lease.release().catch(() => undefined);
+  });
+
+  it("keeps the conflict when the recorded holder is still alive", async () => {
+    const identity = `launcher-alive-${process.pid}-${Date.now()}`;
+    const first = await acquireWindowsLaunchLock(identity);
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error(first.code);
+    try {
+      // The real holder (this process) is alive, so the conflict stands.
+      const duplicate = await acquireWindowsLaunchLock(identity);
+      expect(duplicate).toMatchObject({ ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT" });
+    } finally { await first.lease.release(); }
+  });
+
   it("refuses a non-Windows host before reading the request or calling a port", async () => {
     const counter: TrapCounter = { fired: 0 };
     const log: string[] = [];

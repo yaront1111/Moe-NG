@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdir, open, unlink } from "node:fs/promises";
+import { readFile, mkdir, open, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deepFreeze } from "../../canonical.js";
@@ -90,19 +90,50 @@ async function containedAsync<T>(
   } catch { return MALFORMED; }
 }
 const LOCK_ROOT = join(tmpdir(), "moe-claude-launch-locks");
+
+/**
+ * The recorded holder is dead only when the PID parses AND the signal-0 probe
+ * says no such process. An unreadable or malformed lock file keeps the
+ * conflict — fail closed; a live-but-unowned PID also keeps it (PID reuse can
+ * make a dead holder look alive, which delays reclaim but never breaks mutual
+ * exclusion — the unsafe direction would be reclaiming a live holder's lock).
+ */
+async function holderIsDead(path: string): Promise<boolean> {
+  let recorded: string;
+  try { recorded = await readFile(path, "utf8"); } catch { return false; }
+  if (!/^\d{1,10}$/u.test(recorded.trim())) return false;
+  const pid = Number(recorded.trim());
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try { process.kill(pid, 0); return false; } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
 export async function acquireWindowsLaunchLock(lockIdentity: string): Promise<ClaudeLaunchLockResult> {
   const path = join(LOCK_ROOT, `${createHash("sha256").update(lockIdentity).digest("hex")}.lock`);
   let handle;
-  try {
-    await mkdir(LOCK_ROOT, { recursive: true });
-    handle = await open(path, "wx", 0o600);
-  } catch (error) {
-    const conflict = (error as NodeJS.ErrnoException).code === "EEXIST";
-    return deepFreeze({ ok: false, code: conflict ? "LAUNCH_LOCK_IDENTITY_CONFLICT" :
-      "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
-      message: conflict ? "the OS-exclusive launch lock is already held" :
-        "the OS-exclusive launch lock could not be acquired" });
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await mkdir(LOCK_ROOT, { recursive: true });
+      handle = await open(path, "wx", 0o600);
+      break;
+    } catch (error) {
+      const conflict = (error as NodeJS.ErrnoException).code === "EEXIST";
+      // ONE reclaim attempt: a crash between open and release leaves the file
+      // behind forever, so a conflict whose recorded holder is provably dead
+      // is removed and retried exactly once. Every other failure stands.
+      if (conflict && attempt === 0 && await holderIsDead(path)) {
+        try { await unlink(path); } catch { /* the next open answers */ }
+        continue;
+      }
+      return deepFreeze({ ok: false, code: conflict ? "LAUNCH_LOCK_IDENTITY_CONFLICT" :
+        "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
+        message: conflict ? "the OS-exclusive launch lock is already held" :
+          "the OS-exclusive launch lock could not be acquired" });
+    }
   }
+  // Record the holder so a LATER acquirer can judge liveness after a crash.
+  try { await handle.write(String(process.pid), 0, "utf8"); } catch { /* advisory */ }
   let released = false;
   const lease: ClaudeLaunchLockLease = Object.freeze({ release: async (): Promise<void> => {
     if (released) return;
