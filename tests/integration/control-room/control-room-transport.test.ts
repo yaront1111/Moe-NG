@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { startDaemon } from "../../../apps/daemon/src/daemon-entry.js";
 import type {
@@ -35,6 +35,23 @@ import type { ControlRoomClientSurface } from "../../../packages/control-room-cl
  * faithful rather than merely responsive.
  */
 const CSRF = "integration-csrf-token";
+
+/**
+ * Every page frame carries ONE `DAEMON_WALL_CLOCK` reading stamped at encode time.
+ * The equality below compares two independent encodes of the same page inside ONE
+ * process (the daemon is started in-process and the transport is a loopback round
+ * trip), so pinning `Date` makes both readings identical without dropping the field
+ * from the comparison — a transport that stopped carrying the reading still fails.
+ *
+ * `toFake: ["Date"]` is load-bearing: the test awaits a REAL HTTP round trip, so
+ * faking timers wholesale would hang the socket rather than fail the assertion.
+ */
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const READ_REQUEST: EventReadRequest = Object.freeze({
   limit: 3,
