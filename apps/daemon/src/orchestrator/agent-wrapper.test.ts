@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { SqliteEventStore } from "@moe/store";
-import { createAgentWrapper } from "./agent-wrapper.js";
+import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 /**
@@ -80,6 +80,17 @@ describe("createAgentWrapper", () => {
     expect(request.mission).toContain(request.workItemId);
     expect(request.mission).toContain("work_release");
     expect(request.credential).toMatch(/^secret-/u);
+  });
+
+  it("tells a code-node agent the exact work_release payload, so it need not guess", () => {
+    // Live run 2026-08-15: a coding agent added a `reason` field to work_release and
+    // was refused INPUT_INVALID because this mission, unlike the chain mission, never
+    // stated the payload shape. The refusal is correct; the omission was ours.
+    const text = codeMission("node.deliver@node-1", "node-1", "2026-01-01T00:00:00.000Z", {
+      instructions: "do it", test: "node test.mjs", title: "T", workspace: "D:/ws",
+    }, { accept: null, submit: null });
+    expect(text).toContain('work_release with payload {"workItemId": "node.deliver@node-1"}');
+    expect(text).toContain("no other fields");
   });
 
   it("does not double-staff: the next pass sees the claims and spawns nothing", () => {

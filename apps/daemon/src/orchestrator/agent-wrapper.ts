@@ -88,7 +88,8 @@ function digestOf(payload: JsonObject): string {
   return createHash("sha256").update(encoder.encode(JSON.stringify(payload))).digest("hex");
 }
 
-function codeMission(
+/** Exported for its text contract: the agent learns the release payload shape from here. */
+export function codeMission(
   workItemId: string, nodeRef: string, expiresAt: string, brief: NodeMission,
   hints: { accept: JsonObject | null; submit: JsonObject | null },
 ): string {
@@ -103,7 +104,8 @@ function codeMission(
     `"${nodeRef}"; call review_submit with EXACTLY that offer's commandId and`,
     "expectedVersion, round = expectedVersion + 1, and empty findings if your test run",
     "was clean.",
-    `2) finish with work_release for "${workItemId}".`,
+    `2) finish with work_release with payload {"workItemId": "${workItemId}"} and no`,
+    "other fields.",
     "Do NOT call integration_accept_output — acceptance is EARNED from the daemon's own",
     "verifier run, never from your report. The daemon will verify your submission and",
     "either accept it or record a verifier-test-failed round for the next attempt.",
