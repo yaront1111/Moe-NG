@@ -1,8 +1,5 @@
 #!/usr/bin/env node
-import { DatabaseSync } from "node:sqlite";
-
 import { readBootstrapCredential } from "@moe/mcp";
-import { SqliteEventStore } from "@moe/store";
 
 import {
   createStoreDependencies,
@@ -30,25 +27,22 @@ import {
  * - MOE_MCP_HTTP_HOST — optional; defaults to 127.0.0.1. The host itself refuses a
  *   non-loopback bind, so this cannot widen exposure by configuration.
  *
- * The event-source store is a second read handle on the same file, the sanctioned pattern the
- * stdio entry and backup capture both use.
+ * Reads go through the provider's own subscription seam, exactly as the stdio entry does.
  */
 
 async function main(): Promise<void> {
   const credential = readBootstrapCredential();
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
-  const eventSource = SqliteEventStore.open(config.storePath);
-  const database = new DatabaseSync(config.storePath);
-  database.exec("PRAGMA busy_timeout = 5000;");
+  const subscriptions = provider.subscriptions?.();
+  if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
     credential,
-    database,
     deps: provider.provide(),
     port: readHttpPort(process.env),
-    store: eventSource,
+    subscriptions,
     ...(process.env[MCP_HTTP_HOST_ENV] === undefined
       ? {}
       : { host: process.env[MCP_HTTP_HOST_ENV] }),

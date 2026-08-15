@@ -1,11 +1,9 @@
-import type { DatabaseSync } from "node:sqlite";
-
 import { createRuntimeError } from "@moe/contracts";
-import type { SqliteEventStore } from "@moe/store";
-import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import type { StdioDispatchPort } from "@moe/mcp";
 
 import type { AffordancePort } from "./http/affordance-contract.js";
+import { readEventPage } from "./http/event-stream.js";
+import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
@@ -18,8 +16,10 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
  * compatibility, bounded decode, registry, authorize, payload shape, durable
  * decision — and the daemon's answer returns as bytes. Queries serve the one
  * read surface that exists (`events.read` over the committed subscription
- * seam); every other query kind refuses with the registry's stable
- * INPUT_INVALID rather than inventing an empty result.
+ * seam) through the SAME wire encoder the HTTP listener uses, so an agent and
+ * the control room read one frame shape — bigint positions as strings, seam
+ * observations attached; every other query kind refuses with the registry's
+ * stable INPUT_INVALID rather than inventing an empty result.
  */
 
 export interface McpDispatchPortConfig {
@@ -27,9 +27,9 @@ export interface McpDispatchPortConfig {
   readonly affordances?: AffordancePort | undefined;
   /** The transport credential this port presents to the adapter, held in closure. */
   readonly credential: string;
-  readonly database: DatabaseSync;
   readonly deps: CommandAdapterDeps;
-  readonly store: SqliteEventStore;
+  /** The daemon's committed subscription seam — the provider's, folded on read. */
+  readonly subscriptions: SubscriptionPort;
 }
 
 const encoder = new TextEncoder();
@@ -95,7 +95,7 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
         return queryRefusal();
       }
       const limit = request["limit"];
-      return bytesOf(readSubscriptionPage(config.store, config.database, {
+      return bytesOf(readEventPage(config.subscriptions, {
         projection,
         subscriberId,
         ...(typeof limit === "number" ? { limit } : {}),

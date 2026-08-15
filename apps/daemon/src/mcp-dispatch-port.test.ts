@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import { SqliteEventStore } from "@moe/store";
@@ -27,19 +26,16 @@ const provider = createStoreDependencies({
 const setupStore = SqliteEventStore.openForProject(storePath, PROJECT);
 installTestRecoveryBinding(setupStore);
 setupStore.close();
-const eventSource = SqliteEventStore.open(storePath);
-const database = new DatabaseSync(storePath);
+const subscriptions = provider.subscriptions?.();
+if (subscriptions === undefined) throw new Error("provider serves no subscription port");
 
 const port = createMcpDispatchPort({
   credential: CREDENTIAL,
-  database,
   deps: provider.provide(),
-  store: eventSource,
+  subscriptions,
 });
 
 afterAll(() => {
-  database.close();
-  eventSource.close();
   provider.close();
   rmSync(directory, { force: true, recursive: true });
 });
@@ -85,20 +81,48 @@ describe("createMcpDispatchPort", () => {
     });
   });
 
-  it("serves events.read from the committed subscription seam", () => {
-    // Fresh store, no generation published by this port: the honest refusal.
+  it("serves events.read as the SAME wire frame the HTTP listener serves, bigint and all", () => {
+    // The committed ProjectRegistered above must come back as a serialisable PAGE.
+    // The store's globalPosition is a bigint; the raw store page cannot cross
+    // JSON.stringify, so a port that skipped the wire encoder answered every
+    // successful read with UNKNOWN_ERROR — measured live on 2026-08-15.
     const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
       correlationId: "corr-q1",
-      payload: { projection: "moe.board", subscriberId: "control-room-1" },
+      payload: { limit: 10, projection: "moe.board", subscriberId: "control-room-1" },
       queryKind: "events.read",
       schemaVersion: "moe-runtime-query/1",
       sessionCredential: CREDENTIAL,
     }))));
-    expect(answer).toMatchObject({
-      code: "SUBSCRIPTION_GENERATION_MISSING",
-      layer: "STATE",
-      outcome: "REFUSED",
-    });
+    expect(answer).toMatchObject({ outcome: "PAGE" });
+    const events = answer["events"] as readonly Record<string, unknown>[];
+    expect(events.map((event) => event["eventType"])).toContain("ProjectRegistered");
+    for (const event of events) {
+      expect(typeof event["globalPosition"]).toBe("string");
+      expect(event["seamObservation"]).toMatchObject({ observer: "DAEMON_SEAM" });
+    }
+    expect(typeof answer["checkpoint"]).toBe("string");
+  });
+
+  it("refuses an unregistered subscriber with the seam's own code, verbatim", () => {
+    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q1b",
+      payload: { projection: "moe.board", subscriberId: "nobody" },
+      queryKind: "events.read",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toMatchObject({ code: "SUBSCRIPTION_NOT_REGISTERED", outcome: "REFUSED" });
+  });
+
+  it("refuses an out-of-bounds page limit before touching the port", () => {
+    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q1c",
+      payload: { limit: 0, projection: "moe.board", subscriberId: "control-room-1" },
+      queryKind: "events.read",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toMatchObject({ code: "EVENT_STREAM_LIMIT_INVALID", outcome: "REFUSED" });
   });
 
   it("refuses every other query kind with the stable INPUT_INVALID", () => {

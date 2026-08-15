@@ -1,7 +1,6 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
@@ -86,15 +85,14 @@ async function withHarness(run: (harness: Harness) => Promise<void>): Promise<vo
     storePath,
   });
   const eventSource = SqliteEventStore.open(storePath);
-  const database = new DatabaseSync(storePath);
-  database.exec("PRAGMA busy_timeout = 5000;");
+  const subscriptions = provider.subscriptions?.();
+  if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
   const host = createMcpHttpHost({
     affordances: provider.affordances?.(),
     credential: CREDENTIAL,
-    database,
     deps: provider.provide(),
     enableJsonResponse: true,
-    store: eventSource,
+    subscriptions,
   });
   const decisionCount = (): number => {
     let cursor = 0n;
@@ -110,7 +108,6 @@ async function withHarness(run: (harness: Harness) => Promise<void>): Promise<vo
     await run({ decisionCount, host });
   } finally {
     await within("host.stop during teardown", host.stop()).catch(() => undefined);
-    database.close();
     eventSource.close();
     provider.close();
     rmSync(directory, { force: true, recursive: true });
@@ -299,13 +296,13 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
       })));
       expect(response.status).toBe(200);
       const text = await within("tools/call body", response.text());
-      // THE DAEMON'S OWN ANSWER, verbatim. A fresh store has no cursor generation, so the real
-      // readSubscriptionPage refuses — and it refuses with ITS code at ITS layer, which is the
-      // point: SUBSCRIPTION_GENERATION_MISSING / STATE is produced by the production read model
-      // over the production store and by nothing else. A host wired to a canned success, or to
+      // THE DAEMON'S OWN ANSWER, verbatim. The provider's subscription seam publishes its
+      // baseline, so the refusal a fresh store gives an unknown subscriber is the read
+      // model's own: SUBSCRIPTION_NOT_REGISTERED / STATE, produced by the production
+      // subscription store and by nothing else. A host wired to a canned success, or to
       // any stub, cannot forge this pair (drill D6 removes the real call and requires red).
       // Asserting the exact code and layer rather than merely "not ok" is epic rail 6.
-      expect(text).toContain("SUBSCRIPTION_GENERATION_MISSING");
+      expect(text).toContain("SUBSCRIPTION_NOT_REGISTERED");
       expect(text).toContain('\\"layer\\":\\"STATE\\"');
       expect(text).toContain('\\"outcome\\":\\"REFUSED\\"');
       // The credential rode in on this request and must not ride out on the answer.
@@ -384,14 +381,13 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
         projectId: PROJECT,
         storePath,
       });
-      const eventSource = SqliteEventStore.open(storePath);
-      const database = new DatabaseSync(storePath);
+      const subscriptions = provider.subscriptions?.();
+      if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
       const offHost = createMcpHttpHost({
         credential: CREDENTIAL,
-        database,
         deps: provider.provide(),
         host: "0.0.0.0",
-        store: eventSource,
+        subscriptions,
       });
       try {
         expect(await within("non-loopback start", offHost.start())).toEqual({
@@ -400,8 +396,6 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
         });
       } finally {
         await within("off-host stop", offHost.stop()).catch(() => undefined);
-        database.close();
-        eventSource.close();
         provider.close();
         rmSync(directory, { force: true, recursive: true });
       }

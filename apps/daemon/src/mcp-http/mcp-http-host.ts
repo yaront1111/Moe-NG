@@ -1,12 +1,11 @@
 import { createServer } from "node:http";
 import type { Server } from "node:http";
-import type { DatabaseSync } from "node:sqlite";
 
 import { createHttpMcpAdapter } from "@moe/mcp";
 import type { HttpMcpAdapter } from "@moe/mcp";
-import type { SqliteEventStore } from "@moe/store";
 
 import type { AffordancePort } from "../http/affordance-contract.js";
+import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
@@ -30,13 +29,13 @@ import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
   readonly credential: string;
-  readonly database: DatabaseSync;
   readonly deps: CommandAdapterDeps;
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
   readonly host?: string;
   readonly port?: number;
-  readonly store: SqliteEventStore;
+  /** The daemon's committed subscription seam, handed through to the dispatch port. */
+  readonly subscriptions: SubscriptionPort;
 }
 
 export type McpHttpStartResult =
@@ -127,9 +126,8 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
         credential: options.credential,
-        database: options.database,
         deps: options.deps,
-        store: options.store,
+        subscriptions: options.subscriptions,
       }),
       ...(options.enableJsonResponse === undefined
         ? {}

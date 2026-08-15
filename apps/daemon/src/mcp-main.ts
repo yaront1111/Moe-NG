@@ -1,12 +1,9 @@
 #!/usr/bin/env node
-import { DatabaseSync } from "node:sqlite";
-
 import {
   connectStdioTransport,
   createStdioMcpServer,
   readBootstrapCredential,
 } from "@moe/mcp";
-import { SqliteEventStore } from "@moe/store";
 
 import {
   createStoreDependencies,
@@ -27,25 +24,23 @@ import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
  * - MOE_SESSION_CREDENTIAL — THIS agent's credential: the operator secret, or
  *   a session credential minted via session.open with scoped capabilities.
  *
- * The event-source store is a second read handle on the same file (the
- * provider hides its own; backup capture uses the same sanctioned pattern).
+ * Reads go through the provider's own subscription seam, so an agent's
+ * events_read folds and encodes exactly as the daemon's /events/read does.
  */
 async function main(): Promise<void> {
   const credential = readBootstrapCredential();
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
-  const eventSource = SqliteEventStore.open(config.storePath);
-  const database = new DatabaseSync(config.storePath);
-  database.exec("PRAGMA busy_timeout = 5000;");
+  const subscriptions = provider.subscriptions?.();
+  if (subscriptions === undefined) throw new Error("provider serves no subscription seam");
 
   const server = createStdioMcpServer({
     credential,
     port: createMcpDispatchPort({
       affordances: provider.affordances?.(),
       credential,
-      database,
       deps: provider.provide(),
-      store: eventSource,
+      subscriptions,
     }),
     serverName: "moe-next",
   });
