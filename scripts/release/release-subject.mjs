@@ -8,6 +8,9 @@ import {
   buildDistributionContainer,
   publicKeyHex,
 } from "../../tools/packaging/distribution-build.ts";
+import {
+  DISTRIBUTION_INVENTORY,
+} from "../../tools/packaging/distribution-inventory.ts";
 import { startDistribution } from "../../tools/packaging/distribution-startup.ts";
 
 /** @typedef {import("../../tools/packaging/distribution-build.ts").DistributionBuildInput["componentKind"]} ComponentKind */
@@ -30,25 +33,17 @@ export const RELEASE_REFUSAL_REASONS = Object.freeze([
   "EVIDENCE_WRITE_INTERRUPTED",
 ]);
 
-const CLAUDE_ASSETS = Object.freeze([
-  "claude-cancel-reconcile.ts", "claude-capabilities.ts", "claude-observation.ts",
-  "claude-probe.ts", "claude-render.ts", "claude-runtime-pin-closure.ts",
-  "claude-runtime-pin-copy.ts", "claude-runtime-pin-fs.ts", "claude-runtime-pin.ts",
-  "claude-stream-anomalies.ts", "claude-stream.ts",
-].map((name) => `packages/runner/src/providers/claude/${name}`));
-const CODEX_ASSETS = Object.freeze([
-  "codex-cancel-reconcile.ts", "codex-capabilities.ts", "codex-observation.ts",
-  "codex-probe.ts", "codex-render-skills.ts", "codex-render.ts",
-  "codex-stream-anomalies.ts", "codex-stream.ts",
-].map((name) => `packages/runner/src/providers/codex/${name}`));
-
-export const RELEASE_COMPONENTS = Object.freeze([
-  Object.freeze({ assets: Object.freeze(["apps/daemon/src/index.ts"]), componentId: "daemon", componentKind: "DAEMON" }),
-  Object.freeze({ assets: Object.freeze(["apps/control-room/index.html"]), componentId: "control-room", componentKind: "CONTROL_ROOM" }),
-  Object.freeze({ assets: Object.freeze(["packages/mcp/src/index.ts"]), componentId: "mcp-bridge", componentKind: "MCP_BRIDGE" }),
-  Object.freeze({ assets: CLAUDE_ASSETS, componentId: "provider-claude", componentKind: "PROVIDER_ADAPTER" }),
-  Object.freeze({ assets: CODEX_ASSETS, componentId: "provider-codex", componentKind: "PROVIDER_ADAPTER" }),
-]);
+/**
+ * The shipped subject is NOT declared here. It is one production-owned list in
+ * tools/packaging/distribution-inventory.ts, consumed by this script and by the
+ * distribution integration suite alike. A second list maintained here is what let this
+ * script ship five components while the suite asserted six.
+ *
+ * Re-exported under the existing name because supply-chain.mjs and the release
+ * integration tests already import `RELEASE_COMPONENTS`; the binding is the same object,
+ * not a copy, so `selectedComponents` below still byte-compares against the one authority.
+ */
+export const RELEASE_COMPONENTS = DISTRIBUTION_INVENTORY;
 export const RELEASE_TEMPLATES = Object.freeze(["AGENTS.md", "CLAUDE.md", ".codex/agent-instructions.md"]);
 
 const CONTRACT = Object.freeze({

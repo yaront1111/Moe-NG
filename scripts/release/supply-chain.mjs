@@ -6,9 +6,10 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
-import { RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
+import { RELEASE_COMPONENTS, RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
 const exec = promisify(execFile); const PNPM_ENTRY = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
+const RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length;
 const SBOM_IGNORES = Object.freeze(["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]); const SBOM_ROOT_TOKEN = "<SOURCE_ROOT>";
 const sha256 = (/** @type {string | Uint8Array} */ value) => createHash("sha256").update(value).digest("hex");
 /** @returns {string} */ function canonical(/** @type {unknown} */ value) {
@@ -213,7 +214,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
       if (canonical(before) !== canonical(after)) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
       const subject = await ports.buildSubject({ privateKey, signingKeyId: "ephemeral-release-verification", source, sourceRoot: root });
       if (!subject.ok) return subject;
-      if (subject.componentCount !== 5 || subject.templateCount !== 3) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
+      if (subject.componentCount !== RELEASE_COMPONENT_COUNT || subject.templateCount !== 3) return releaseRefusal("RELEASE_INVENTORY_EMPTY");
       const sbomRun = await ports.generateSbom({ sourceRoot: root });
       if (sbomRun.exitCode !== 0) return releaseRefusal("SBOM_GENERATION_FAILED");
       const sbomValue = parseJson(sbomRun); if (sbomComponentCount(sbomValue) === 0) return releaseRefusal("SBOM_REPORT_INVALID");
@@ -228,7 +229,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
     if (!firstBuild || !secondBuild || canonical(firstBuild.containers) !== canonical(secondBuild.containers)
       || firstBuild.sbomNormalizedDigest !== secondBuild.sbomNormalizedDigest) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
     const evidence = freeze({ audit: { ...parsed.audit, digest: sha256(firstAudit.stdout) }, buildCount: 2, builds,
-      componentCount: 5, doctor: { missingSymbol: "@moe/daemon.collectDoctorVersionReport", reason: "DOCTOR_COMPATIBILITY_UNAVAILABLE", status: "UNKNOWN" },
+      componentCount: RELEASE_COMPONENT_COUNT, doctor: { missingSymbol: "@moe/daemon.collectDoctorVersionReport", reason: "DOCTOR_COMPATIBILITY_UNAVAILABLE", status: "UNKNOWN" },
       licenses: { ...parsed.licenses, digest: sha256(firstLicenses.stdout) }, operation: "RECORDED",
       os: [{ platform: "win32", status: "PASS" }, { deferredTaskId: "task-e87a735386f643fe92c0eeff09bc4275", platform: "linux", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }, { deferredTaskId: "task-e94b2055e281489ea9e97820919f6856", platform: "darwin", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }],
       publicationAuthorized: false, releaseVerdict: "UNKNOWN", sbom: { ...parsed.sbom, digest: sha256(firstSbom.stdout), normalizedPointers: SBOM_IGNORES, normalizedSourceRootToken: SBOM_ROOT_TOKEN }, source, templateCount: 3, tools });

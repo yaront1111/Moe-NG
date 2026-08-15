@@ -6,12 +6,15 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
+import { RELEASE_COMPONENTS } from "../../scripts/release/release-subject.mjs";
+
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SOURCE_SHA = execFileSync("git", ["rev-parse", "HEAD"], {
   cwd: REPO_ROOT,
   encoding: "utf8",
 }).trim();
 const temporary = [];
+const COMPONENT_IDS = Object.freeze(RELEASE_COMPONENTS.map((entry) => entry.componentId));
 
 const temp = () => {
   const path = mkdtempSync(join(tmpdir(), "moe-release-test-"));
@@ -49,21 +52,21 @@ describe("release distribution subject", () => {
   test("builds the exact non-empty shipped inventory through production admission", async () => {
     const { RELEASE_COMPONENTS, RELEASE_TEMPLATES } = await loadSubject();
     const { privateKey } = generateKeyPairSync("ed25519");
-    assert.equal(RELEASE_COMPONENTS.length, 5);
+    assert.equal(RELEASE_COMPONENTS.length, 6);
     assert.equal(RELEASE_TEMPLATES.length, 3);
     assert.equal(RELEASE_COMPONENTS.every((entry) => entry.assets.length > 0), true);
 
     const first = await buildSubject({ privateKey });
     assert.equal(first.ok, true);
     const second = await buildSubject({ privateKey });
-    assert.equal(first.componentCount, 5);
+    assert.equal(first.componentCount, 6);
     assert.equal(first.templateCount, 3);
     assert.equal(first.verificationKeyUse, "EPHEMERAL_VERIFICATION_ONLY");
     assert.equal(Object.hasOwn(first, "verificationPrivateKey"), false);
     assert.match(first.receipt.verificationKey.publicKeyHex, /^[0-9a-f]{64}$/u);
-    assert.equal(first.containers.length, 5);
-    assert.equal(first.receipt.admittedComponentIds.length, 5);
-    assert.equal(first.receipt.compatibleComponentIds.length, 5);
+    assert.equal(first.containers.length, 6);
+    assert.equal(first.receipt.admittedComponentIds.length, 6);
+    assert.equal(first.receipt.compatibleComponentIds.length, 6);
     assert.deepEqual(
       second.containers.map((entry) => entry.containerBytes),
       first.containers.map((entry) => entry.containerBytes),
@@ -139,8 +142,8 @@ function fakePorts(overrides = {}) {
   return {
     archiveSource: spy(async ({ destination }) => ({ destination, ok: true })),
     buildSubject: spy(async ({ buildIndex }) => ({
-      componentCount: 5,
-      containers: ["daemon", "control-room", "mcp-bridge", "provider-claude", "provider-codex"]
+      componentCount: COMPONENT_IDS.length,
+      containers: COMPONENT_IDS
         .map((componentId) => ({
           assetDigests: [`asset-${componentId}`],
           componentId,
@@ -151,8 +154,8 @@ function fakePorts(overrides = {}) {
         })),
       ok: true,
       receipt: {
-        admittedComponentIds: ["control-room", "daemon", "mcp-bridge", "provider-claude", "provider-codex"],
-        compatibleComponentIds: ["control-room", "daemon", "mcp-bridge", "provider-claude", "provider-codex"],
+        admittedComponentIds: COMPONENT_IDS,
+        compatibleComponentIds: COMPONENT_IDS,
         launchReceipts: [{ componentId: "daemon", physicallyLaunched: false }],
         verificationKey: { keyId: "ephemeral-release-test", publicKeyHex: "ab".repeat(32) },
       },
@@ -226,7 +229,7 @@ describe("release supply-chain evidence", () => {
     const result = await runSupply();
     assert.equal(result.ok, true);
     assert.equal(result.evidence.buildCount, 2);
-    assert.equal(result.evidence.componentCount, 5);
+    assert.equal(result.evidence.componentCount, 6);
     assert.equal(result.evidence.templateCount, 3);
     assert.deepEqual(result.evidence.source, { objectFormat: "sha1", sourceSha: SOURCE_SHA });
     assert.equal(result.evidence.operation, "RECORDED");
@@ -267,6 +270,18 @@ describe("release supply-chain evidence", () => {
       result.evidence.builds[0].sourceDigests.lockAfter);
   });
 
+  test("refuses a stale five-component subject at the release supply-chain layer", async () => {
+    const ports = fakePorts();
+    const acceptedSubject = ports.buildSubject;
+    ports.buildSubject = spy(async (request) => ({
+      ...await acceptedSubject(request),
+      componentCount: 5,
+    }));
+    const result = await runSupplyWithPorts(ports);
+    expectReleaseRefusal(result, "RELEASE_INVENTORY_EMPTY");
+    assert.equal(ports.buildSubject.calls.length, 1);
+  });
+
   test("admits the orchestrator argument through the real subject builder", async () => {
     const { RELEASE_COMPONENTS, RELEASE_TEMPLATES, buildReleaseSubject } = await loadSubject();
     const owned = [...RELEASE_COMPONENTS.flatMap((entry) => entry.assets), ...RELEASE_TEMPLATES];
@@ -284,10 +299,10 @@ describe("release supply-chain evidence", () => {
     });
     assert.equal(result.reason, undefined);
     assert.equal(result.ok, true);
-    assert.equal(result.evidence.componentCount, 5);
+    assert.equal(result.evidence.componentCount, 6);
     assert.equal(result.evidence.templateCount, 3);
     assert.equal(result.evidence.builds.length, 2);
-    assert.equal(result.evidence.builds[0].containers.length, 5);
+    assert.equal(result.evidence.builds[0].containers.length, 6);
     assert.equal(result.evidence.builds[0].verificationKeyUse, "EPHEMERAL_VERIFICATION_ONLY");
     assert.deepEqual(result.evidence.builds[0].containers, result.evidence.builds[1].containers);
   });
@@ -736,7 +751,7 @@ describe("release package command", () => {
         timeout: 840_000, windowsHide: true,
       });
     const record = JSON.parse(stdout.trim().split(/\r?\n/u).at(-1));
-    assert.equal(record.componentCount, 5);
+    assert.equal(record.componentCount, 6);
     assert.equal(record.reportCount, 3);
     assert.equal(record.sourceSha, SOURCE_SHA);
     assert.equal(record.operation, "RECORDED");

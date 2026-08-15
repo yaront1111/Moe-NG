@@ -257,7 +257,9 @@ describe("hand-reviewed distribution inventory", () => {
     // A duplicate id would build two containers under one name; the startup gate refuses
     // that with COMPONENT_DUPLICATE (asserted below), but the inventory should never
     // reach it in the first place.
-    expect(new Set(INVENTORY.map((entry) => entry.componentId)).size).toBe(6);
+    const ids = INVENTORY.map((entry) => entry.componentId);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.length).toBe(6);
   });
 
   test("every shipped component carries exactly its hand-transcribed asset set", () => {
@@ -715,6 +717,199 @@ describe("production startup admission", () => {
   });
 });
 
+describe("the shipped JetBrains adapter fails closed at the startup layer", () => {
+  const JETBRAINS_INDEX = 5;
+
+  test("the canonical inventory places the JetBrains adapter where these drills expect it", () => {
+    expect(INVENTORY[JETBRAINS_INDEX]!.componentId).toBe("ide-adapter-jetbrains");
+  });
+
+  test("omitting the JetBrains adapter is refused as COMPONENT_SET_INCOMPLETE", () => {
+    const without = allContainers().filter((_container, index) => index !== JETBRAINS_INDEX);
+    expect(without.length).toBe(5);
+    const launched: string[] = [];
+    const result = startDistribution(
+      { containers: without, expectation: expectation(), trustedPublicKeys: trustedKeys() },
+      (componentId) => launched.push(componentId),
+    );
+    expectRefusal(result, "COMPONENT_SET_INCOMPLETE");
+    expect(result).toMatchObject({ refusedBy: "DISTRIBUTION_STARTUP" });
+    expect(launched).toEqual([]);
+  });
+
+  test("shipping the JetBrains adapter twice is refused as COMPONENT_DUPLICATE", () => {
+    const containers = allContainers();
+    const launched: string[] = [];
+    const result = startDistribution(
+      {
+        containers: [...containers, containers[JETBRAINS_INDEX]!],
+        expectation: expectation(),
+        trustedPublicKeys: trustedKeys(),
+      },
+      (componentId) => launched.push(componentId),
+    );
+    expectRefusal(result, "COMPONENT_DUPLICATE");
+    expect(result).toMatchObject({ refusedBy: "DISTRIBUTION_STARTUP" });
+    expect(launched).toEqual([]);
+  });
+
+  test("a drifted JetBrains asset byte is refused as ASSET_DIGEST_MISMATCH", () => {
+    const containers = [...allContainers()];
+    const parsed = JSON.parse(new TextDecoder().decode(containers[JETBRAINS_INDEX]!)) as {
+      assets: Record<string, string>;
+    };
+    const keys = Object.keys(parsed.assets).sort();
+    expect(keys.length).toBe(12);
+    parsed.assets[keys[0]!] = Buffer.from("drifted").toString("base64");
+    containers[JETBRAINS_INDEX] = new TextEncoder().encode(JSON.stringify(parsed));
+    const launched: string[] = [];
+    const result = startDistribution(
+      { containers, expectation: expectation(), trustedPublicKeys: trustedKeys() },
+      (componentId) => launched.push(componentId),
+    );
+    expectRefusal(result, "ASSET_DIGEST_MISMATCH");
+    expect(result).toMatchObject({ refusedBy: "DISTRIBUTION_STARTUP" });
+    expect(launched).toEqual([]);
+  });
+});
+
+describe("the release subject consumes the one canonical inventory", () => {
+  const RELEASE_KEY = generateKeyPairSync("ed25519").privateKey;
+  const SHIPPED_IDS = [
+    "control-room", "daemon", "ide-adapter-jetbrains", "mcp-bridge", "provider-claude",
+    "provider-codex",
+  ];
+
+  type DraftComponent = {
+    assets: string[];
+    componentId: string;
+    componentKind: string;
+  };
+
+  /** A structural deep copy, which is exactly what the release guard byte-compares. */
+  const clone = (): DraftComponent[] =>
+    JSON.parse(JSON.stringify(RELEASE_COMPONENTS)) as DraftComponent[];
+
+  const subject = (components?: unknown): Record<string, unknown> => {
+    const base = {
+      privateKey: RELEASE_KEY,
+      signingKeyId: KEY_ID,
+      source: { objectFormat: "sha256", sourceSha: SOURCE_SHA },
+      sourceRoot: REPO_ROOT,
+    };
+    return buildReleaseSubject(
+      components === undefined ? base : { ...base, components },
+    ) as Record<string, unknown>;
+  };
+
+  /**
+   * The release layer's own stable refusal, distinct from the distribution layer's
+   * DISTRIBUTION_MISMATCH asserted by `expectRefusal`. Pinning `refusedBy` is what
+   * records WHICH layer answered: if the distribution gate started refusing these
+   * first, the reason would still be a refusal but the layer would change.
+   */
+  const expectReleaseRefusal = (result: Record<string, unknown>, reason: string): void => {
+    expect(result).toMatchObject({
+      code: "RELEASE_SUPPLY_CHAIN_REFUSED",
+      ok: false,
+      reason,
+      refusedBy: "RELEASE_SUPPLY_CHAIN",
+    });
+  };
+
+  test("the release inventory IS the canonical inventory, not a copy of it", () => {
+    expect(RELEASE_COMPONENTS).toBe(DISTRIBUTION_INVENTORY);
+  });
+
+  test("the accepted subject binds all six components to one source sha and contract", () => {
+    const result = subject();
+    expect(result.ok).toBe(true);
+    if (result.ok !== true) return;
+    expect(result.componentCount).toBe(6);
+
+    const containers = result.containers as ReadonlyArray<{
+      readonly componentId: string;
+      readonly containerDigest: string;
+      readonly manifestBytes: Uint8Array;
+      readonly manifestDigest: string;
+    }>;
+    expect(containers.length).toBe(6);
+    expect(containers.map((entry) => entry.componentId).sort()).toEqual(SHIPPED_IDS);
+    // Six distinct components must produce six distinct manifests and containers; a
+    // collision would mean one component's bytes were bound twice under two names.
+    expect(new Set(containers.map((entry) => entry.manifestDigest)).size).toBe(6);
+    expect(new Set(containers.map((entry) => entry.containerDigest)).size).toBe(6);
+
+    const manifests = containers.map((entry) => JSON.parse(
+      new TextDecoder().decode(entry.manifestBytes),
+    ) as {
+      apiCompatibilityRange: unknown;
+      buildToolVersions: unknown;
+      contractSchemaHash: string;
+      source: unknown;
+    });
+    expect(manifests.length).toBe(6);
+    for (const manifest of manifests) {
+      expect(manifest.source).toEqual({ objectFormat: "sha256", sourceSha: SOURCE_SHA });
+      expect(manifest.contractSchemaHash).toBe(SCHEMA_HASH);
+      expect(manifest.apiCompatibilityRange).toEqual({ ...PINS });
+      expect(manifest.buildToolVersions).toEqual({ ...BUILD_TOOLS });
+    }
+
+    const receipt = result.receipt as {
+      readonly admittedComponentIds: readonly string[];
+      readonly compatibleComponentIds: readonly string[];
+    };
+    expect([...receipt.admittedComponentIds].sort()).toEqual(SHIPPED_IDS);
+    expect([...receipt.compatibleComponentIds].sort()).toEqual(SHIPPED_IDS);
+  });
+
+  test("an exact structural copy of the canonical inventory is accepted", () => {
+    // The positive control. Without it every refusal below would still pass against a
+    // guard that had degenerated into refusing all caller-supplied inventories.
+    const copy = clone();
+    expect(copy).not.toBe(RELEASE_COMPONENTS);
+    expect(copy.length).toBe(6);
+    const result = subject(copy);
+    expect(result.ok).toBe(true);
+    expect(result.componentCount).toBe(6);
+  });
+
+  test("a caller-supplied inventory omitting the JetBrains adapter is refused", () => {
+    const omitted = clone().filter((entry) => entry.componentId !== "ide-adapter-jetbrains");
+    expect(omitted.length).toBe(5);
+    expectReleaseRefusal(subject(omitted), "RELEASE_INPUT_INVALID");
+  });
+
+  test("a caller-supplied inventory duplicating a component is refused", () => {
+    const duplicated = clone();
+    duplicated.push(JSON.parse(JSON.stringify(duplicated[5])) as DraftComponent);
+    expect(duplicated.length).toBe(7);
+    expect(duplicated[6]!.componentId).toBe("ide-adapter-jetbrains");
+    expectReleaseRefusal(subject(duplicated), "RELEASE_INPUT_INVALID");
+  });
+
+  test("a caller-supplied inventory with a drifted asset set is refused", () => {
+    const drifted = clone();
+    const jetbrains = drifted.find((entry) => entry.componentId === "ide-adapter-jetbrains");
+    expect(jetbrains?.assets.length).toBe(12);
+    jetbrains!.assets = jetbrains!.assets.slice(0, 11);
+    // Same six components, same ids, same kinds — one asset short.
+    expect(drifted.length).toBe(6);
+    expectReleaseRefusal(subject(drifted), "RELEASE_INPUT_INVALID");
+  });
+
+  test("a caller-supplied inventory that is merely REORDERED is refused", () => {
+    // The drill a length check or a set comparison would survive: same six entries,
+    // same assets, different order. Order is part of the subject.
+    const reordered = clone().reverse();
+    expect(reordered.length).toBe(6);
+    expect(reordered.map((entry) => entry.componentId).sort()).toEqual(SHIPPED_IDS);
+    expect(reordered[0]!.componentId).not.toBe(RELEASE_COMPONENTS[0]!.componentId);
+    expectReleaseRefusal(subject(reordered), "RELEASE_INPUT_INVALID");
+  });
+});
+
 describe("IDE_ADAPTER packaging contract", () => {
   test("packages and admits a labelled fixture distinct from the shipped adapter", () => {
     const FIXTURE_BYTES = new TextEncoder().encode("// contract fixture, not a shipped adapter\n");
@@ -792,11 +987,12 @@ describe("raw Node loadability", () => {
   // not prove these modules load outside it. Only a real Node process does.
   const modules = [
     "tools/packaging/distribution-build.ts",
+    "tools/packaging/distribution-inventory.ts",
     "tools/packaging/distribution-startup.ts",
   ] as const;
 
-  test("both tooling modules import under plain Node with real bindings", () => {
-    expect(modules.length).toBe(2);
+  test("every tooling module imports under plain Node with real bindings", () => {
+    expect(modules.length).toBe(3);
     for (const relative of modules) {
       const script =
         `const m = await import(${JSON.stringify(`./${relative}`)});` +
