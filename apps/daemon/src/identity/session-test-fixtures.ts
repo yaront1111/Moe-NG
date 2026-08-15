@@ -99,8 +99,12 @@ export function envelope(
   };
 }
 
-export function send(store: SqliteEventStore, request: Envelope): SessionOutcome {
-  return runSessionCommand(store, encoder.encode(JSON.stringify(request)));
+export function send(
+  store: SqliteEventStore, request: Envelope, reservedPrincipalId?: string,
+): SessionOutcome {
+  return runSessionCommand(
+    store, encoder.encode(JSON.stringify(request)), undefined, reservedPrincipalId,
+  );
 }
 
 export function openPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {

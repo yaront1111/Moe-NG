@@ -315,7 +315,7 @@ describe("createDaemonCommandPorts", () => {
   // held over the other suites would keep the shared file locked on Windows.
   beforeAll(() => {
     portStore = SqliteEventStore.openForProject(join(portDirectory, "store.db"), PROJECT);
-    ports = createDaemonCommandPorts({ clock: CLOCK, projectId: PROJECT, store: portStore });
+    ports = createDaemonCommandPorts({ clock: CLOCK, operatorPrincipalId: "operator-local", projectId: PROJECT, store: portStore });
   });
 
   afterAll(() => {

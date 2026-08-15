@@ -56,6 +56,8 @@ export type SessionOutcome = SessionAccepted | SessionRefused;
 export interface HandlerContext {
   readonly ledger: SessionLedger;
   readonly request: SessionRequest;
+  /** A principal-id namespace a session id may NOT collide with (the operator). */
+  readonly reservedPrincipalId?: string;
   readonly store: SqliteEventStore;
 }
 

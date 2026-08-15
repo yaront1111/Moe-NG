@@ -64,6 +64,12 @@ const openSession: CommandHandler = (context): SessionOutcome => {
   if (sessionId === null || capabilities === null) {
     return refuse(request.kind, "SESSION_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+  // The working principal of a session IS its id (see session-authenticator), so a
+  // session id equal to a reserved principal would let a caller mint a credential
+  // that authenticates AS that principal. Refuse before any durable effect.
+  if (context.reservedPrincipalId !== undefined && sessionId === context.reservedPrincipalId) {
+    return refuse(request.kind, "SESSION_ID_RESERVED", "DAEMON_INGRESS");
+  }
   const credentialSha256 = request.payload["credentialSha256"];
   if (!isCredentialSha256(credentialSha256)) {
     return refuse(request.kind, "SESSION_CREDENTIAL_HASH_INVALID", "DAEMON_INGRESS");
@@ -197,6 +203,7 @@ export function runSessionCommand(
   store: SqliteEventStore,
   input: unknown,
   handlers: HandlerTable = SESSION_HANDLERS,
+  reservedPrincipalId?: string,
 ): SessionOutcome {
   const decoded = decodeSessionRequestBytes(input);
   if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
@@ -211,6 +218,8 @@ export function runSessionCommand(
   }
 
   const ledger = readSessionLedger(store, request.projectId);
-  const context: HandlerContext = { ledger, request, store };
+  const context: HandlerContext = reservedPrincipalId === undefined
+    ? { ledger, request, store }
+    : { ledger, request, reservedPrincipalId, store };
   return handler(context);
 }

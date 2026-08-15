@@ -157,6 +157,8 @@ function refusal(
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
+  /** The operator principal id: a session id may not collide with it. */
+  readonly operatorPrincipalId: string;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
@@ -173,7 +175,7 @@ export interface DaemonCommandPorts {
  * refused by the seam's allow-list rather than trusted.
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
-  const { clock, projectId, store } = options;
+  const { clock, operatorPrincipalId, projectId, store } = options;
 
   const requestOf = (
     kind: string,
@@ -213,7 +215,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (review) return decisionOf(runReviewCommand(store, bytes));
-      if (session) return decisionOf(runSessionCommand(store, bytes));
+      if (session) {
+        return decisionOf(runSessionCommand(store, bytes, undefined, operatorPrincipalId));
+      }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
       return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
     };

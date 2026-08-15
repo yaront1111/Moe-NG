@@ -107,7 +107,7 @@ export function createStoreDependencies(
   let subscriptionDatabase: DatabaseSync | null = null;
 
   const { decisions, registry } = createDaemonCommandPorts({
-    clock, projectId: config.projectId, store,
+    clock, operatorPrincipalId: config.principalId, projectId: config.projectId, store,
   });
 
   const authenticator = createSessionAuthenticator(store, {
