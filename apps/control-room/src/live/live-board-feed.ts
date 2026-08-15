@@ -139,7 +139,14 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
     let next: SurfaceFrame;
     try {
       const response = await post("{}");
-      next = frameOfSurface(await response.json());
+      // Delivery and readability are different failures: once the daemon has
+      // answered, a body that fails to parse is an UNREADABLE answer over a
+      // working transport, not a disconnection.
+      try {
+        next = frameOfSurface(await response.json());
+      } catch {
+        next = frame("CONNECTED", "UNREADABLE", "LIVE_SURFACE_UNREADABLE");
+      }
     } catch {
       next = frame("DISCONNECTED", "UNDELIVERED", "TRANSPORT_REQUEST_FAILED");
     }

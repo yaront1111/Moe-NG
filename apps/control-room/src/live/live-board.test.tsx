@@ -92,6 +92,45 @@ describe("frameOfSurface", () => {
 });
 
 describe("createBoardFeed", () => {
+  it("reports a DELIVERED answer whose body is not JSON as unreadable, not disconnected", async () => {
+    // The daemon answered — the transport worked. Labelling a parse failure
+    // DISCONNECTED/UNDELIVERED would send an operator to debug a network that
+    // is fine instead of the answer that is malformed.
+    const frames: SurfaceFrame[] = [];
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      post: () => Promise.resolve(new Response("<html>proxy error page</html>", { status: 200 })),
+      schedule: () => () => undefined,
+    });
+    feed.start();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    feed.stop();
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      connection: "CONNECTED", detail: "LIVE_SURFACE_UNREADABLE", outcome: "UNREADABLE",
+    });
+  });
+
+  it("keeps DISCONNECTED for a request that never delivered", async () => {
+    const frames: SurfaceFrame[] = [];
+    const feed = createBoardFeed({
+      headers: {},
+      intervalMs: 60_000,
+      onFrame: (frame) => frames.push(frame),
+      post: () => Promise.reject(new Error("ECONNREFUSED")),
+      schedule: () => () => undefined,
+    });
+    feed.start();
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve(); await Promise.resolve();
+    feed.stop();
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({
+      connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
+    });
+  });
+
   it("suppresses an in-flight poll across stop and restart instead of reviving it", async () => {
     const answers: Array<(response: Response) => void> = [];
     const frames: SurfaceFrame[] = [];
