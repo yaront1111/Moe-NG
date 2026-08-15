@@ -20,18 +20,25 @@
     {
       "stepId": "step-1",
       "description": "CAPTURE GOLDEN OUTPUT FIRST, before changing anything. The risk in this task is not the overflow fix, it is silently changing the finding ORDER. In packages/import/src/import-reconcile.test.ts, add cases over a corpus of graphs - a plain chain, a diamond, a self-cycle, a mutual cycle, a longer cycle, several dangling refs, a node with multiple refs where some recurse and some dangle, and disconnected components - and assert the EXACT finding sequence the CURRENT recursive implementation produces, kind and message, in order. These are golden fixtures: they must pass against current bytes before any production edit. Assert an exact non-zero case count with a hand-written literal. Without this, an iterative rewrite that reorders findings passes every existing test and silently changes what the importer reports.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-reconcile.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-reconcile-graph.test.ts"
+      ],
+      "note": "Golden fixtures captured against CURRENT recursive bytes and green on the first run (no expectation was adjusted to fit output; all 12 expected sequences were hand-derived from import-reconcile.ts:159-194 before running). Corpus: plain chain, chain with dangling tail, diamond (cross-edge silent), self-cycle, mutual cycle, 3-node cycle, converging cycle (target-keyed dedupe -> exactly 1 finding), cycle nested under an entry node (the early-DONE detector), multiple dangling refs, a node whose refs both recurse and dangle (the suspend-mid-loop interleaving), disconnected components, and a combined cycles+dangling graph. Each asserts class + provenance sourcePath + exact detail text, in order. Sweep guarded: hand-written literals GOLDEN.length === 12 and total expected findings === 18; verbose run confirms 12 it.each cases actually generated (15 tests in the file). Also pinned: reverse insertion order yields the identical sequence, and the same input reconciled twice is byte-identical. DEVIATION (plan said add to import-reconcile.test.ts): put them in a NEW file packages/import/src/import-reconcile-graph.test.ts instead - import-reconcile.test.ts is already 248 lines and the corpus is ~190, and the new file is the natural home for the module extracted in step 3. Verified packages/import/src has no readdir/frozen-file-list guard that a new file would redden (source-manifest.test.ts scans temp trees only). Result: pnpm --filter @moe/import test -> 8 files, 102 tests passed.",
+      "startedAt": "2026-08-15T13:21:40.298Z",
+      "completedAt": "2026-08-15T13:23:19.489Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED for the actual defect. Add a case that builds a dependsOn chain deep enough to overflow the current recursive walk - construct it programmatically rather than by hand - and assert the reconciliation completes and returns its findings. Against current bytes this must fail with a RangeError, because graphFindings' `visit` (import-reconcile.ts:159-188) recurses once per link with no depth bound. Record that red. Note the importer consumes frozen LEGACY bytes, so the depth is data-determined and effectively attacker-influenced rather than merely unlucky - which is why an unhandled RangeError is the wrong failure mode even though the input is 'just data'.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/import/src/import-reconcile.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:23:21.601Z"
     },
     {
       "stepId": "step-3",
@@ -75,7 +82,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5dfdc624",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -87,13 +94,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:54.548Z",
-  "updatedAt": "2026-08-15T13:04:19.029Z",
+  "updatedAt": "2026-08-15T13:23:21.601Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T13:02:36.943Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:04:16.973Z",
   "planningNotes": {
@@ -110,5 +120,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-15T13:04:19.029Z"
+  "planApprovedAt": "2026-08-15T13:04:19.029Z",
+  "contextFetchedBy": [
+    "worker-5dfdc624"
+  ],
+  "workStartedAt": "2026-08-15T13:21:40.298Z"
 }

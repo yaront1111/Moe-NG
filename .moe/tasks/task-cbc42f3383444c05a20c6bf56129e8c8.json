@@ -195,8 +195,8 @@
       "completedAt": "2026-08-15T13:14:31.854Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-50f0d628",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -215,12 +215,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:09.437Z",
-  "updatedAt": "2026-08-15T13:16:21.499Z",
+  "updatedAt": "2026-08-15T13:19:49.314Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T11:08:23.604Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-15T13:19:49.314Z",
+    "wallClockMs": 7885710
   },
   "contextFetchedBy": [
     "architect-2aea4111",
@@ -287,5 +289,8 @@
     "packages/runner/src/index-surface.test.ts",
     "packages/runner/src/runtime-entrypoint.test.ts",
     "packages/runner/src/providers/telemetry/telemetry.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T13:19:49.314Z",
+  "reviewCompletedAt": "2026-08-15T13:19:49.314Z",
+  "reviewSummary": "GATE RE-RUN BY QA, fresh: `pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner test` -> tsc no diagnostics; `Test Files 60 passed (60)` / `Tests 2014 passed (2014)`; EXIT=0. Identical to task.verification — no mismatch.\n\nBYTES: all 8 telemetry files resolve at HEAD (git ls-tree); `git status --porcelain packages/runner/` empty, so committed == gated. Files first swept in by foreign whole-tree commits (def640a/e6597e4), b03da5a carries refinements — rail-5 hazard, verified by content not commit label. 7263d13 touches ZERO packages/runner paths.\n\nPER-FILE CAP (grep -c ''): contracts 234, parser 248, wrapper 250 — all <=250. Lifecycle 249 / port-results 250 UNCHANGED (last touched by 94d487b). Bridges: 3x LF single-line, od -c verified.\n\nDoD1 quantity is a discriminated union, coverage a separate closed class. DoD2 parser admits ONLY through landed frameStream/analyzeStream + CLAUDE_ACCEPTED_SCHEMA_VERSIONS; ANOMALY_REFUSALS asserted exhaustive against CLAUDE_STREAM_ANOMALIES by name. DoD3 declared/observedModel never merge; declaredCeiling paired with an `achieved` unsupported by construction. DoD4 tables assert hand-written lengths (6/10/3/6/4) AND toEqual the frozen vocabulary by name. DoD5 plain-Node child probe reads 8 published names + 0 helper leaks, with matching positive control. Consumers task-159f4c21 + task-6cbff010 recorded.\n\nMY OWN DRILLS (not the worker's): (A) `?? 0` at the readCount choke point -> 6 red, `expected 'COMPLETE' to be 'UNKNOWN'` — reddens on the coverage CLASS. (B) truncation guard disabled -> 5 red on exact code (`TELEMETRY_CAPTURE_UNDECODABLE` vs `TELEMETRY_CAPTURE_TRUNCATED`) and the infrastructure arm. Both restored by sha256 hash-check to pre-drill bytes; tree re-verified clean and green (334 passed).\n\nNo @moe/scheduler import. No scratch/probe files."
 }

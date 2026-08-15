@@ -20,38 +20,58 @@
     {
       "stepId": "step-1",
       "description": "TDD RED FIRST. Add a focused test for persistFileDurably that injects a write which reports FEWER bytesWritten than the payload length, and assert the call does not report success. Today packages/store/src/recovery-anchor-fs.ts:23-31 is `await handle.write(payload); await handle.sync();` inside a try/finally, and the function's return type is `Promise<void>` - so the resolved {bytesWritten} is discarded and a partial write is indistinguishable from a complete one. Inject by substituting the open/write seam rather than by writing to a real device that happens to short-write, which is not reproducible. Record the red. NOTE FOR THE TEST'S SHAPE: this module throws rather than returning refusal objects - every function here is `Promise<void>` or `Promise<T|null>` and callers map exceptions (recovery-anchor-install.ts:79 and :110 are the catch sites). So the assertion is on the thrown failure and, at the caller level, on the exact stable code that catch maps to; do not change these primitives to return refusal objects, which would ripple through five call sites for no gain.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
       ],
       "newFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
       ],
-      "startedAt": "2026-08-15T13:18:20.592Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-fs.ts",
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ],
+      "note": "RED recorded on the defect, not on a missing symbol. Added the substitutable write seam (DurableWriteHandle / DurableWriteOpener, default openForTruncatingWrite = open(path,\"w\")) as PLUMBING ONLY - persistFileDurably still does a single unchecked handle.write, so the red is behavioural. New packages/store/src/recovery-anchor-fs.test.ts injects an opener wrapping a REAL FileHandle that truncates each write to a schedule ([1,0] = accept one byte, then no progress). Result: `pnpm vitest run --root . packages/store/src/recovery-anchor-fs.test.ts` EXIT=1, \"Error: expected the durable write to refuse, but it reported success\" - the primitive resolved after writing 1 of 7 bytes. CORRECTION TO THE PLAN'S PREMISE, verified by grep: recovery-anchor-install.ts:79 and :110 are READ-path catches (readStoredAnchor -> RECOVERY_ANCHOR_UNREADABLE, readSlotManifest -> null). No caller anywhere catches a WRITE throw - installRecoveryAnchor returns runInstall(...) uncaught (recovery-anchor.ts:136). So DoD 2's exact code+layer cannot be supplied by an existing caller catch; it must ride on the thrown error itself. Baseline gate BEFORE any bytes written: typecheck exit 0, test 41 files/490 tests exit 0 at HEAD 7263d13.",
+      "startedAt": "2026-08-15T13:18:20.592Z",
+      "completedAt": "2026-08-15T13:20:58.791Z"
     },
     {
       "stepId": "step-2",
       "description": "Prove the full write in persistFileDurably. Compare the resolved bytesWritten against payload.byteLength and either continue writing the remainder from the correct offset until the payload is fully written, or fail. Prefer completing the remainder in a BOUNDED loop - a short write is a legitimate POSIX outcome rather than an error - but bound the iterations so a write port that repeatedly reports zero progress terminates instead of spinning forever. If the payload cannot be fully written, throw so the existing caller catch maps it to the existing durability refusal. Keep the existing shape otherwise: mkdir first, open with \"w\", sync AFTER the write completes (a sync of a partial write is exactly the false evidence this fixes), and close in the `finally` on every path including the new failure. The module's own header already states the principle this extends - 'A write that was never flushed is not evidence' - and a write that was never finished is not evidence either.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-fs.ts",
+        "packages/store/src/recovery-anchor-contracts.ts"
+      ],
+      "note": "Full write now proven. writeWholePayload() loops `handle.write(payload, written, expected - written)` - buffer offset advances to the bytes already PROVEN written, so a retry completes the remainder instead of rewriting from zero. BOUND: the loop only ever advances. bytesWritten that is non-integer, <= 0, or > remaining throws RecoveryAnchorWriteIncompleteError, so `written` strictly increases every iteration and the loop runs at most payload.byteLength times - a zero-progress port terminates on its first such chunk rather than spinning. No separate attempt counter, because with those guards it would be an unreachable branch (dead code) rather than a real bound. SYNC PLACEMENT: handle.sync() stays AFTER writeWholePayload returns, so a partial file is never flushed; the failure path throws past the sync entirely and only the `finally { await handle.close() }` runs. Stable failure: no caller catches a write throw (verified in step 1), so the code rides on the error - code \"RECOVERY_ANCHOR_WRITE_INCOMPLETE\", layer RECOVERY_ANCHOR_LAYER. Added that code to RECOVERY_ANCHOR_REASON_CODES rather than reusing RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN, which verifySlot already returns from 3 branches - reusing it would let an earlier guard answer a test aimed at this one. Safe to add: grep shows the union has exactly one consumer (a type re-export at index.ts:106), no exhaustive switch, and the vocabulary test pins only prefix/uniqueness/non-empty, not a count. Seam forwarded through publishFileAtomically. Results: focused test EXIT=0 (1 passed), pnpm --filter @moe/store typecheck TC_EXIT=0 - the real FileHandle structurally satisfies DurableWriteHandle, so the default opener needs no cast. recovery-anchor-fs.ts is 200 lines by `grep -c ''` (cap 250).",
+      "startedAt": "2026-08-15T13:21:01.351Z",
+      "completedAt": "2026-08-15T13:21:44.550Z"
     },
     {
       "stepId": "step-3",
       "description": "Cover the boundary cases and the descriptor discipline. Assert: a zero-length payload succeeds without a spurious failure; a payload delivered in several short writes is fully written and the final file content matches the payload byte for byte; a write port reporting zero progress terminates with a failure rather than looping; and the handle is CLOSED on the new failure path, so the fix does not trade a silent truncation for a descriptor leak. Verify closure by observing the seam, not by inference. Assert an exact non-zero case count with a hand-written literal so a case removed later fails the count rather than shrinking coverage silently.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor-fs.test.ts"
+      ],
+      "note": "Boundaries + descriptor discipline covered. 6 tests, EXIT=0. FAILURE PATH (4 named tests, all asserting the exact pair {code:\"RECOVERY_ANCHOR_WRITE_INCOMPLETE\", layer:\"RECOVERY_ANCHOR\"}, never merely \"threw\"): (a) short write that cannot complete; (b) zero-progress port terminates with EXACTLY ONE attempt - `expect(observed.attempts.length).toBe(1)` and the attempt itself pinned to {accepted:0,length:7,offset:0}, so termination is asserted as a cardinality rather than inferred from the suite not hanging; (c) a port over-reporting bytesWritten > offered is refused too (synthetic opener - a real handle cannot lie); (d) descriptor discipline observed AT THE SEAM, not inferred: closes === 1 and syncedAt === [] on the refusal path, so the fix neither leaks a descriptor nor flushes a truncated file. COMPLETION SWEEP: COMPLETION_PAYLOADS (0,1,7,16 bytes) x COMPLETION_SCHEDULES ([1],[1,2,3],[3,1],[]) = generated cases. Cardinality is HAND-WRITTEN and pinned three ways so a silently-empty or silently-shrunk sweep fails instead of passing: EXPECTED_CASES 16, EXPECTED_EMPTY_PAYLOAD_CASES 4, EXPECTED_MULTI_CHUNK_CASES 6 (the last counted at runtime and compared, so a table that degenerated to single-write deliveries reddens - without it every assertion in the sweep is satisfiable while testing nothing about completing a short write). Per case: content equals the payload byte for byte; syncedAt === [payload.byteLength] (exactly one flush, only at full size); closes === 1; each attempt's offset equals the bytes already proven written and its length equals the true remainder, so a retry cannot rewrite from zero; zero-length payload issues 0 write calls and still succeeds. Sizes by `grep -c ''`: recovery-anchor-fs.ts 200 (cap 250), recovery-anchor-fs.test.ts 262 (test file).",
+      "startedAt": "2026-08-15T13:21:46.976Z",
+      "completedAt": "2026-08-15T13:23:21.368Z"
     },
     {
       "stepId": "step-4",
       "description": "Prove the fix reaches the surfaces that depend on it. persistFileDurably is the base primitive of this module: publishFileAtomically calls it to write the staging file and then RENAMES that file into place, so a short write today produces a truncated staging file that is subsequently published atomically as though complete - the atomic publish faithfully publishes truncated bytes. Add a test that drives publishFileAtomically with a short-writing seam and asserts the published path does NOT end up holding truncated content. Also confirm readBackMatches still behaves as before - it is a separate opt-in check the caller must invoke, not an automatic guard, so it does not cover this defect and must not be treated as if it did.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/store/src/recovery-anchor-fs.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T13:23:23.983Z"
     },
     {
       "stepId": "step-5",
@@ -76,13 +96,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:20.342Z",
-  "updatedAt": "2026-08-15T13:18:20.592Z",
+  "updatedAt": "2026-08-15T13:23:23.983Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:58:27.180Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:59:59.029Z",
   "planningNotes": {

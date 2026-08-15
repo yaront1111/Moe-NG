@@ -80,16 +80,24 @@
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line rather than the final exit code. Then review as an attacker: (1) Is there ANY remaining instant at which neither finalPath nor the aside holds a complete generation - walk the sequence step by step rather than reasoning from the happy path. (2) On Windows, can an open handle produce EBUSY on the aside removal, and does that failure replace the successful result? `force: true` suppresses ENOENT, NOT EBUSY - this is the same trap the release supply-chain code has. (3) Can two concurrent publishes to the same destination interleave their asides and destroy each other? (4) Does the recovery path ever restore an aside whose manifest does not verify? (5) Confirm backup-generation.ts is at or under 250 physical lines using `grep -c ''` - it is 208 today, so there is headroom, and PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only, never a bare git commit, since the index is shared with live peers.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/backup-generation.ts",
         "packages/store/src/backup-generation.test.ts"
       ],
-      "startedAt": "2026-08-15T13:18:15.485Z"
+      "modifiedFiles": [
+        "packages/store/src/backup-generation-publish.ts",
+        "packages/store/src/backup-generation.test.ts",
+        "packages/store/src/backup-generation.ts",
+        "packages/store/src/backup-generation-publish.js"
+      ],
+      "note": "GATE: (pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test) EXIT=0 - 42 files, 493 tests passed, && not ; so no leg is masked. ADVERSARIAL REVIEW, all 5 questions answered. (1) Window walk, instant by instant with a previous generation P present: rename(final->aside) leaves aside=P complete; between the renames aside=P complete AND staging complete; rename(staging->final) leaves final=new + aside=P; rm(aside) leaves final=new. A complete generation exists at every instant under a known name. HONEST LIMIT, stated not glossed: finalPath ITSELF is briefly absent between the two renames - continuous presence of finalPath is the pointer-indirection design the architect rejected and routed as a separate task. (2) EBUSY: the post-publish aside removal is .catch(()=>undefined), so a held handle cannot turn a landed publish into a failure; force:true suppresses ENOENT, not EBUSY. The rm INSIDE recovery is deliberately not swallowed - a stuck aside blocks the next publish because Windows cannot rename onto an existing directory, so DURABILITY_FAULT is honest and finalPath stays intact. (3) Concurrency: walked the interleavings. No ordering destroys data - worst case one publisher refuses while the other's complete generation sits at finalPath, and a leftover aside is resolved on the next run. The pre-existing shared-name race on ${dest}.staging (both publishers rm/mkdir it, and the finally deletes it) is UNCHANGED by this task; a real fix needs a destination lock and is out of scope. (4) Recovery never restores an unverifiable aside - gated by generationIsComplete and drilled. (5) grep -c '': backup-generation.ts 213, backup-generation-publish.ts 120, both under 250. FOUND AND FIXED IN REVIEW: JSON.parse(\"null\") and '\"x\"' parse cleanly, so carried.keyId was a TypeError escaping a function whose contract is to ANSWER; it would have surfaced as the catch-all refusal and hidden which check answered. Null-tolerant cast + test. MUTATION DRILLS, 5 applied, each red on the intended assertion, each restored with sha256 equal to base 57cc6c9b...: D1 remove restore-on-failure -> \"keeps a complete generation resolvable\" red (\"no manifest at ...\\generation\\manifest.json\"); D2 drop finalPath completeness guard -> \"half-populated generation\" red (published instead of refusing); D3 drop aside completeness guard -> \"aside is not a complete generation\" red (published instead of refusing); D4 drop the declared-object existence loop -> \"declared bytes are missing\" red; D5 revert the null-tolerant cast -> \"hostile manifest\" red with the exact TypeError. COMMIT: a462cf4 by explicit pathspec (backup-generation-publish.ts, backup-generation.test.ts). Foreign whole-tree commit 6482e5f (task-5611791337894212a277600a0768f1f9) had already swept backup-generation.ts, backup-generation-publish.js and an earlier revision of the publish module - epic rail 3 known hazard, not amended, not reset. QA should review by base-ref diff: git diff e6597e4..HEAD -- packages/store/src/backup-generation.ts packages/store/src/backup-generation-publish.ts packages/store/src/backup-generation-publish.js packages/store/src/backup-generation.test.ts. DISCLOSED, not fixed: a caller whose destinationPath equals another destination's ${path}.previous collides; .staging already had that exact shape before this task and guarding it needs a contract change.",
+      "startedAt": "2026-08-15T13:18:15.485Z",
+      "completedAt": "2026-08-15T13:22:25.035Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-86bbe9fd",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,18 +116,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:45:50.059Z",
-  "updatedAt": "2026-08-15T13:18:15.485Z",
+  "updatedAt": "2026-08-15T13:23:01.120Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:55:16.606Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:56:43.626Z",
@@ -141,5 +150,18 @@
   "contextFetchedBy": [
     "worker-86bbe9fd"
   ],
-  "workStartedAt": "2026-08-15T13:12:35.306Z"
+  "workStartedAt": "2026-08-15T13:12:35.306Z",
+  "reviewStartedAt": "2026-08-15T13:23:01.120Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/store/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  42 passed (42)\n      Tests  493 passed (493)\n   Start at  16:21:49\n   Duration  3.82s (transform 10.56s, setup 0ms, import 17.81s, tests 19.44s, environment 3ms)\n\nGATE EXIT=0",
+    "reportedAt": "2026-08-15T13:23:01.120Z"
+  },
+  "filesModified": [
+    "packages/store/src/backup-generation.test.ts",
+    "packages/store/src/backup-generation-publish.ts",
+    "packages/store/src/backup-generation-publish.js",
+    "packages/store/src/backup-generation.ts"
+  ]
 }

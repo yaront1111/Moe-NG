@@ -20,8 +20,11 @@
     {
       "stepId": "step-1",
       "description": "Before editing, capture the task base/merge-base and the repo-wide failing-path baseline required by the project rail; inspect `git status --porcelain` and confirm all proposed activation/coordination paths are clean while preserving foreign `.moe` and runner telemetry WIP. Reconfirm df298's unchanged `readActivationLedgerRecord`/`deriveActivationAggregateId`/commit surface, c819's bare-root `createClaudeLauncher` authority types, daemon manifest plus lock importer edges, and a temporary in-daemon BARE-specifier compiled probe (delete it in the same command). Record physical line counts with `(Get-Content -LiteralPath <path>).Count`; do not edit the read-only design or existing 244/236-line activation contracts/codec.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE CAPTURED, NO EDITS WRITTEN. This is the measurement step; the whole point is that it runs BEFORE any byte of mine exists, so attribution later is arithmetic rather than argument.\n\nTASK BASE: 6482e5f161010a8ddd497b358c2afff3d9a7e5b4 at claim. HEAD had already moved to a462cf4 by the end of this step — peers are committing continuously, so I record both rather than one.\n\nOWNED PATHS CLEAN AT START: `git status --porcelain -- apps/daemon/src/activation apps/daemon/src/coordination` returned EMPTY. Every later change under those paths is therefore mine by construction, which is the cheapest possible attribution proof and the reason this ran first.\n\nFOREIGN WIP PRESENT, TO BE PRESERVED (all outside my eight owned paths): packages/store/src/backup-generation-publish.ts (M), backup-generation.test.ts (M), recovery-anchor-contracts.ts (M), recovery-anchor-fs.ts (M), recovery-anchor-fs.test.ts (??), plus .moe board churn. Peers are live in @moe/store.\n\nREPO-WIDE FAILING-PATH BASELINE, each leg run separately with its own exit code — never `;`-chained, because a chained run reports the last command's status and can mask a red:\n  pnpm typecheck ................ EXIT 0\n  pnpm --filter @moe/daemon test . EXIT 0 — 76 files, 1631 tests\n  pnpm --filter @moe/runner test . EXIT 0 — 60 files, 2014 tests\n  pnpm test (root) .............. EXIT 1 — 1 failed | 6234 passed | 1 skipped (6236), Test Files 1 failed | 263 passed\n  pnpm test:meta (verify:foundation leg) .. EXIT 0 — 32 files, 661 tests\n  pnpm test:store (verify:store leg) ...... EXIT 0 — 42 files, 498 tests\n\nTHE ONE BASELINE RED, VERBATIM, PRE-EXISTING AND NOT MINE:\n  FAIL tests/integration/control-room/control-room-transport.test.ts > transports a committed read whose payload EQUALS the in-process handler's\n  AssertionError: expected { checkpoint: '10', ...(4) } to deeply equal { checkpoint: '10', ...(4) }\n        \"seamObservation\": { \"reading\": { \"known\": true,\n  -           \"value\": \"2026-08-15T13:22:21.606Z\",\n  +           \"value\": \"2026-08-15T13:22:21.597Z\",\nIt is a whole-payload equality assertion over a field carrying a WALL-CLOCK reading; the two values differ by 9ms. That is a nondeterministic-field flake, not a logic failure. I re-ran the file alone and it failed again (1 failed | 3 passed), so it is reproducible right now rather than a one-off scheduling artifact. The path is committed and clean in git status, so it is not a peer's uncommitted WIP either. Baseline failing-path set = { tests/integration/control-room/control-room-transport.test.ts }, which does not intersect any of my eight owned paths.\n\nDEPENDENCY SURFACES RECONFIRMED ON DISK, per the block's own \"consume without duplication\" instruction:\n- df298 strict reader: activation-ledger-reader.ts exports readActivationLedgerRecord, importing decodeActivationLedgerRecord, ACTIVATION_LEDGER_EVENT_TYPE, activationLedgerUnknown and deriveActivationAggregateId. Its six documented agreements (exactly-one event, exact type, digest-first decode, self-derived aggregate equality, eventId === grantId, both successor versions +1) are intact and I will invoke it rather than restate any of it.\n- c819 published launcher overlay: claude-surface.ts:81 exports createClaudeLauncher; :124 type ClaudeLauncherAuthority; :128 type ClaudeRegistrationCommit — all from the bare root.\n\nDEPENDENCY EDGE VERIFIED THE WAY THE RAIL DEMANDS, not by a root-barrel grep. apps/daemon/package.json declares @moe/coordination, @moe/runner, @moe/scheduler and @moe/store as workspace deps. I wrote a temporary apps/daemon/src/activation/edge-probe.ts importing through BARE specifiers only — CoordinationEffectQuery, parseLeaseRecord, SqliteEventStore, StoredEvent, createClaudeLauncher, ClaudeLauncherAuthority, ClaudeRegistrationCommit — ran `pnpm --filter @moe/daemon typecheck` (EXIT 0) and deleted the probe IN THE SAME COMMAND; a follow-up ls confirms 0 matches for edge-probe. No probe file remains.\n\nLINE CENSUS, measured with `grep -c ''` (PowerShell Measure-Object -Line undercounts blank lines; the plan's `(Get-Content).Count` is accurate but I used the tool I can prove):\n  activation-ledger-contracts.ts 244 | codec.ts 236 | commit.ts 210 | reader.ts 71 | coordination-adapter.ts 242\nThese match the plan's figures exactly, so the plan was measured against current bytes and its size constraints hold: contracts and codec have no headroom and must not be touched, reader.ts has room to grow to 250, coordination-adapter.ts has 8 lines of headroom.\n\nUNRELATED CHECK WORTH RECORDING: a stale editor snapshot suggested my earlier scheduler deliverable (task-07a9a00a) had been reverted to localeCompare. Measured rather than believed — working tree and HEAD both carry the fix, sha256 2957dd0d6c4e579e5b1a2403228fa6c30f2598942c5f61afeab545c26fba9b95 matching the value I recorded when that task completed, and 0 localeCompare call sites. No revert; the snapshot was stale. Noting it because a real revert here would have been invisible to that task's ",
+      "startedAt": "2026-08-15T13:21:28.170Z",
+      "completedAt": "2026-08-15T13:23:46.890Z"
     },
     {
       "stepId": "step-2",
@@ -110,7 +113,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-40286572",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,7 +125,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:34:47.411Z",
-  "updatedAt": "2026-08-15T13:16:24.560Z",
+  "updatedAt": "2026-08-15T13:23:46.890Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
@@ -130,15 +133,19 @@
   "metrics": {
     "firstClaimAt": "2026-08-15T12:40:26.844Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-4eca9b79"
+    "architect-4eca9b79",
+    "worker-40286572"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T13:16:22.507Z",
   "planningNotes": {
@@ -156,5 +163,6 @@
   "budget": {
     "wallClockMs": 7200000
   },
-  "planApprovedAt": "2026-08-15T13:16:24.560Z"
+  "planApprovedAt": "2026-08-15T13:16:24.560Z",
+  "workStartedAt": "2026-08-15T13:21:28.170Z"
 }

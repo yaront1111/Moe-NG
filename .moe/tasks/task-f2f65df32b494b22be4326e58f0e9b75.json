@@ -82,17 +82,26 @@
     {
       "stepId": "step-5",
       "description": "Verification then adversarial review. Run on FRESH output pasted into complete_task: pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test. Read every summary line, not the final exit code. Then review as an attacker: (1) Is `state === \"PREPARED\" && currentSlot === targetSlot` genuinely unreachable before the switch - trace every writer of currentSlot and confirm no other path can produce that pair, because the whole fix rests on that pair being an unambiguous signature. (2) Can the new arm be reached with a record from a DIFFERENT command, and does preparedIdentity still stop it? (3) Does the marker-only path leave the single-shot guarantee intact - can it be used to install twice? (4) If the marker write itself fails, does the caller get an exact refusal rather than a partially-completed claim? (5) Confirm recovery-anchor.ts (198 lines) and recovery-anchor-install.ts (263 lines) - the latter is ALREADY above the 250 target, so the marker-only helper must not grow it further; if it would, split rather than exceed. Measure with `grep -c ''`, since PowerShell Measure-Object -Line undercounts. Then git status --porcelain and commit by explicit pathspec only.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/recovery-anchor.ts",
         "packages/store/src/recovery-anchor-install.ts",
         "packages/store/src/recovery-anchor.test.ts"
       ],
-      "startedAt": "2026-08-15T13:18:23.172Z"
+      "modifiedFiles": [
+        "packages/store/src/recovery-anchor.ts",
+        "packages/store/src/recovery-anchor-install.ts",
+        "packages/store/src/recovery-anchor-marker.ts",
+        "packages/store/src/recovery-anchor-marker.js",
+        "packages/store/src/recovery-anchor.test.ts"
+      ],
+      "note": "GATES GREEN, FRESH: pnpm --filter @moe/store typecheck exit 0; pnpm --filter @moe/store test exit 0, Test Files 41 passed (41), Tests 490 passed (490). Zero failed, zero skipped.\n\nTHE FOREIGN RED I DISCLOSED AT STEP 3 IS GONE, and I re-ran rather than carrying the disclosure forward. backup-generation.test.ts \"keeps a complete generation resolvable when the publish is interrupted\" was red mid-task because a peer on task-1fb6e871 was RED-first in the shared worktree; they have since gone green. The owned-package leg is now exit 0 on its own terms, so global rail 3 needs no path-attribution arithmetic here — there is no failing set to intersect. Worth stating plainly: had I taken the step-3 snapshot as final I would have filed a disclosure for a red that no longer exists.\n\nMY BYTES WERE SWEPT INTO FOREIGN COMMITS AGAIN — TWO OF THEM. `git status --porcelain` over my paths is EMPTY and HEAD moved e6597e4 -> 6482e5f mid-step. `git log -S` locates the pieces: the settledInstall arm landed in 7263d13 \"feat(task-cbc42f3383444c05a20c6bf56129e8c8): Claude structured result telemetry parser\", and the rest rode 6482e5f \"feat(task-5611791337894212a277600a0768f1f9): Supply-chain failures must report their own reason\". Neither label is this task. Per global rail 5 I did not amend, reset, or create a claiming commit, so step 5's \"commit by explicit pathspec\" was not executed — there was nothing left to stage.\n\nWHAT QA SHOULD REVIEW: git diff e6597e4..HEAD -- <owned paths>\n  recovery-anchor-install.ts |   5 +-\n  recovery-anchor-marker.js  |   1 +\n  recovery-anchor-marker.ts  |  36 +++\n  recovery-anchor.test.ts    | 202 +++\n  recovery-anchor.ts         |  16 +-\n  5 files, 255 insertions, 5 deletions\nBoth new files ARE in the tree at HEAD (git ls-tree confirms recovery-anchor-marker.ts AND its .js bridge) — an untracked deliverable passes every habitual check, so I resolved them at HEAD rather than trusting the working tree.\n\nDRILL CONTAMINATION RULED OUT, and this mattered more here than usual: I ran THREE drills on recovery-anchor.ts, and a foreign whole-tree commit landed while I was doing it. `git show HEAD:packages/store/src/recovery-anchor.ts | sha256sum` is 0d98641c4cdec18e76f3eaef6a7ccb2e46b9df80efd718e78da03b766b9fae99 — byte-identical to the pristine pre-drill copy. Belt and braces on the two mutants specifically: the real guard `if (stored.currentSlot !== stored.targetSlot) return null;` appears exactly 1 time at HEAD, and drill B's signature `if (stored.state !== \"INSTALLED\") return null;` appears 0 times. Gated bytes == committed bytes.\n\nADVERSARIAL REVIEW, all five:\n(1) THE PAIR IS UNREACHABLE PRE-SWITCH. Traced in step 1 and unchanged: RECOVERY_BINDING_SLOTS is exactly [\"ACTIVE\",\"PENDING\"]; selectInactiveSlot returns the opposite member so it can never return its argument; every prepared record is built with target = selectInactiveSlot(current); resealAnchorRecord has exactly two production call sites, both in runInstall (:256 switch, :260 marker). The remaining currentSlot mentions in recovery-anchor.ts are reads in discard/inspect. One producer, one consumer.\n(2) A DIFFERENT COMMAND CANNOT REACH THE ARM. preparedIdentity is checked BEFORE the state split, so it gates both arms. Not asserted — proven: drill C scoped the identity check back to the INSTALLED arm alone and \"refuses a different command's fence over the post-switch window\" went red with `expected true to be false`, i.e. the intruder was handed a completed install.\n(3) SINGLE-SHOT INTACT. After markInstalled the state is INSTALLED, so the new arm is unreachable for that identity and further calls take the INSTALLED arm and return without writing (proven by the unchanged mtimeMs in the third-call test). A genuinely new command still goes through detectFenceReuse and installs into the now-inactive slot, which is the intended second install. The marker-only path never chooses a slot and never writes into one — it carries currentSlot through untouched.\n(4) A FAILED MARKER WRITE CANNOT PRODUCE A FALSE CLAIM. publishFileAtomically returns Promise<void> and throws on failure; nothing on this path catches it, so the {ok:true, outcome:\"INSTALLED\"} object is constructed only AFTER the await resolves. A failed marker write therefore propagates as a throw and no partially-completed claim is ever returned. This is not new behaviour I introduced: runInstall's own marker write was unguarded in exactly the same way before this change, so the resume path and the install path fail identically. Returning a typed refusal here instead would be a behaviour change to the install path too, and is outside this task's scope.\n(5) LINE BUDGET, measured with grep -c '' (PowerShell Measure-Object -Line undercounts and was not used):\n  recovery-anchor.ts        198 -> 210  (under target)\n  recovery-anchor-install.ts 263 -> 262  (it SHRANK; the plan's constraint was that it must not grow)\n  recovery-anchor-marker.ts       36     (new)\n  recovery-anchor.test.ts   712 -> 914\nNo pro",
+      "startedAt": "2026-08-15T13:18:23.172Z",
+      "completedAt": "2026-08-15T13:19:41.874Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-40286572",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -104,18 +113,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T12:46:01.896Z",
-  "updatedAt": "2026-08-15T13:18:23.172Z",
+  "updatedAt": "2026-08-15T13:20:44.242Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T12:56:49.280Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T12:58:21.569Z",
@@ -137,5 +147,19 @@
   "contextFetchedBy": [
     "worker-40286572"
   ],
-  "workStartedAt": "2026-08-15T13:11:01.078Z"
+  "workStartedAt": "2026-08-15T13:11:01.078Z",
+  "reviewStartedAt": "2026-08-15T13:20:44.242Z",
+  "verification": {
+    "command": "pnpm --filter @moe/store typecheck && pnpm --filter @moe/store test",
+    "exitCode": 0,
+    "outputTail": "packages/store typecheck$ tsc --project tsconfig.json\npackages/store typecheck: Done\n\n Test Files  41 passed (41)\n      Tests  490 passed (490)",
+    "reportedAt": "2026-08-15T13:20:44.242Z"
+  },
+  "filesModified": [
+    "packages/store/src/recovery-anchor.test.ts",
+    "packages/store/src/recovery-anchor.ts",
+    "packages/store/src/recovery-anchor-install.ts",
+    "packages/store/src/recovery-anchor-marker.ts",
+    "packages/store/src/recovery-anchor-marker.js"
+  ]
 }
