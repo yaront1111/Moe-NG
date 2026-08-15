@@ -22,7 +22,15 @@ export interface AgentSpawnerOptions {
   readonly command?: string;
   readonly log?: (line: string) => void;
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
+  /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
+  readonly timeoutMs?: number;
+  /** Platform override for the kill strategy (win32 needs a tree kill). */
+  readonly platform?: NodeJS.Platform;
 }
+
+/** Default agent lifetime: the claim TTL, so a hung agent frees its slot no later
+ *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
+const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 
 const CHAIN_TOOLS = "mcp__moe-next,mcp__moe-next__*";
 const CODING_TOOLS = `${CHAIN_TOOLS},Edit,Write,Read,Glob,Grep,Bash`;
@@ -38,6 +46,10 @@ export function claudeSpawner(
   const command = options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude";
   const spawn = options.spawn ?? nodeSpawn;
   const log = options.log ?? ((line: string): void => { process.stdout.write(`${line}\n`); });
+  const envTimeout = Number(process.env["MOE_AGENT_TIMEOUT_MS"] ?? "");
+  const timeoutMs = options.timeoutMs
+    ?? (Number.isSafeInteger(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_AGENT_TIMEOUT_MS);
+  const platform = options.platform ?? process.platform;
   return (request: SpawnRequest): Promise<void> => {
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Absolute entry path: MCP server configs carry no working directory, and
@@ -72,12 +84,37 @@ export function claudeSpawner(
       });
       child.stdin?.write(request.mission);
       child.stdin?.end();
+      // A hung agent must not hold its maxAgents slot forever: kill its process
+      // tree after the lifetime bound (on win32 the child is cmd.exe, so a plain
+      // kill would orphan the real agent). The claim's own reap horizon frees the
+      // work item; this frees the wrapper slot and the credentialed config file.
+      const killTree = (): void => {
+        if (platform === "win32" && child.pid !== undefined) {
+          try { spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" }); }
+          catch { child.kill(); }
+        } else {
+          child.kill();
+        }
+      };
       // The config file carries the agent's credential; it must not outlive the
       // agent it was minted for. Both exit paths remove it; a missing file is fine.
+      let settled = false;
       const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
         rmSync(mcpConfigPath, { force: true });
         resolve();
       };
+      const timer = setTimeout(() => {
+        // Free the slot on the deadline whether or not the kill lands: waiting
+        // for the process to actually exit is the very hang this bound exists
+        // to break. Kill is best-effort cleanup; a later exit is a no-op finish.
+        log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
+        killTree();
+        finish();
+      }, timeoutMs);
+      if (typeof timer.unref === "function") timer.unref();
       child.on("exit", (code) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         finish();

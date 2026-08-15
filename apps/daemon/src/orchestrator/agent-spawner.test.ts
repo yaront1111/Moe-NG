@@ -115,6 +115,42 @@ describe("claudeSpawner", () => {
     await done;
   });
 
+  it("kills a hung agent after its lifetime bound and resolves, freeing the slot", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const killed: string[] = [];
+    const spawner = claudeSpawner(STORE_ENV, {
+      command: "claude", log: (l) => killed.push(l), spawn,
+      platform: "linux", timeoutMs: 20,
+    });
+    // The agent process never emits exit or error: only the timeout frees it.
+    const done = spawner(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    const originalKill = (child.emitter as unknown as { kill?: () => void });
+    let killCalls = 0;
+    originalKill.kill = () => { killCalls += 1; };
+    await done; // resolves via the timeout, not an exit event
+    expect(killCalls).toBe(1);
+    expect(killed.some((l) => /exceeded 20ms; killing/u.test(l))).toBe(true);
+    // The credentialed config file is gone even though the agent never exited.
+    expect(existsSync(configPathOf(child))).toBe(false);
+  });
+
+  it("does not kill an agent that exits before its lifetime bound", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const spawner = claudeSpawner(STORE_ENV, {
+      command: "claude", log: () => undefined, spawn, platform: "linux", timeoutMs: 10_000,
+    });
+    const done = spawner(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    let killCalls = 0;
+    (child.emitter as unknown as { kill?: () => void }).kill = () => { killCalls += 1; };
+    child.emitter.emit("exit", 0);
+    await done;
+    expect(killCalls).toBe(0);
+  });
+
   it("removes the config file on the error path too", async () => {
     const { calls, spawn } = fakeSpawn();
     const spawner = claudeSpawner(STORE_ENV, { command: "claude", log: () => undefined, spawn });
