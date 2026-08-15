@@ -12,7 +12,10 @@
  * record here treats it as proof that an activation was committed.
  */
 
-import type { StoredEvent } from "@moe/store";
+import { validateActivationCommit } from "@moe/runner";
+import { parseLeaseRecord } from "@moe/scheduler";
+import type { LeaseRecord } from "@moe/scheduler";
+import type { CursorPage, StoreHealth, StoredEvent } from "@moe/store";
 
 import { decodeActivationLedgerRecord } from "./activation-ledger-codec.js";
 import {
@@ -20,7 +23,20 @@ import {
   activationLedgerUnknown,
   deriveActivationAggregateId,
 } from "./activation-ledger-contracts.js";
-import type { ActivationLedgerDecodeResult } from "./activation-ledger-contracts.js";
+import type {
+  ActivationLedgerDecodeResult,
+  ActivationLedgerRecord,
+} from "./activation-ledger-contracts.js";
+import {
+  FOUNDATION_TRANSITION_EVENT_TYPES,
+  decodeFoundationTransition,
+  foundationBindingAbsent,
+  foundationBindingUnknown,
+} from "./foundation-activation-transition.js";
+import type {
+  FoundationBindingResult,
+  FoundationTransition,
+} from "./foundation-activation-transition.js";
 
 /**
  * Answers with the record only when EVERY one of these agrees:

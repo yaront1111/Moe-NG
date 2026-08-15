@@ -50,7 +50,7 @@ const ATTEMPT_ID = "attempt-1";
 const AGGREGATE = "effect-aggregate-1";
 const IDEMPOTENCY = "idem-key-1";
 const DEADLINE_SECONDS = 2_000;
-export const DERIVED = deriveActivationAggregateId(AGGREGATE, IDEMPOTENCY);
+const DERIVED = deriveActivationAggregateId(AGGREGATE, IDEMPOTENCY);
 
 function digestOf(value: string): string {
   return createHash("sha256").update(value).digest("hex");
@@ -94,9 +94,9 @@ function activationCommit(): ActivationCommit {
   return outcome.commit;
 }
 
-export const COMMIT = activationCommit();
+const COMMIT = activationCommit();
 
-export function ledgerRecord(
+function ledgerRecord(
   overrides: Partial<ActivationLedgerRecord> = {},
 ): ActivationLedgerRecord {
   return {
@@ -162,7 +162,7 @@ function withStore<T>(databasePath: string, run: (store: SqliteEventStore) => T)
 }
 
 /** Seeds sequence 1 through df298's own commit adapter. Never hand-written bytes. */
-export function seedActivation(
+function seedActivation(
   store: SqliteEventStore, record: ActivationLedgerRecord = ledgerRecord(),
 ): void {
   const committed = commitActivationLedgerRecord(store, {
@@ -180,7 +180,7 @@ interface AuthorityOverrides {
   readonly projectId?: string;
 }
 
-export function authorityOver(
+function authorityOver(
   store: SqliteEventStore, overrides: AuthorityOverrides = {},
 ): ReturnType<typeof createFoundationLauncherAuthority> {
   return createFoundationLauncherAuthority({
@@ -241,8 +241,14 @@ function decisionCount(store: SqliteEventStore): number {
   return store.readCommandDecisionsAfter(0n, 100).items.length;
 }
 
-function publicEventCount(store: SqliteEventStore): number {
-  return store.readEventsAfter(0n, 100).items.length;
+/**
+ * How many events of a type exist STORE-WIDE, not just on the activation
+ * aggregate. A refused expected-version decision legitimately appends its own
+ * audit event, so a raw global count is not the invariant; "exactly one grant
+ * was consumed anywhere" is.
+ */
+function publicEventCount(store: SqliteEventStore, eventType: string): number {
+  return store.readEventsAfter(0n, 100).items.filter((event) => event.eventType === eventType).length;
 }
 
 describe("foundation durable grant consumption", () => {
@@ -463,11 +469,12 @@ describe("foundation durable launch registration", () => {
     });
   });
 
-  it("refuses PROCESS_OBSERVED before its PREFLIGHT reservation exists", () => {
+  it("refuses PROCESS_OBSERVED before its PREFLIGHT reservation exists, without deciding", () => {
     withDirectory("register-order", (directory) => {
       const databasePath = join(directory, "store.sqlite");
       withStore(databasePath, (store) => {
         consumed(store);
+        const decisions = decisionCount(store);
         const refused = authorityOver(store).commitProcessRegistration({
           claim: CLAIM, phase: "STARTED", prior: null, registration: startedRegistration(),
         });
@@ -476,6 +483,10 @@ describe("foundation durable launch registration", () => {
           leg: "PROCESS_OBSERVE",
         });
         expect(store.readEvents(DERIVED)).toHaveLength(2);
+        // The ordering guard must refuse BEFORE the store is asked. The durable
+        // CAS would refuse this too, with the same code, so the only thing that
+        // separates the two is whether a command decision was spent at all.
+        expect(decisionCount(store)).toBe(decisions);
       });
     });
   });
@@ -513,6 +524,28 @@ describe("foundation durable launch registration", () => {
           .toStrictEqual({
             code: "LAUNCH_LOCK_MALFORMED", kind: "REFUSED", layer: "LAUNCH_LOCK", leg: null,
           });
+        expect(store.readEvents(DERIVED)).toHaveLength(2);
+      });
+    });
+  });
+
+  it("refuses a registration whose fields are accessors rather than data", () => {
+    withDirectory("register-accessor", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        consumed(store);
+        // A getter would run the caller's code inside a guard whose whole job is
+        // to refuse, and could answer differently on a second read.
+        const hostile = Object.defineProperty({ ...preflightRegistration() }, "processIdentity", {
+          configurable: true, enumerable: true, get: () => `pending:${WRAPPER}`,
+        });
+        expect(refusalOf(authorityOver(store).commitProcessRegistration({
+          claim: CLAIM, phase: "PREFLIGHT", prior: null,
+          registration: hostile as ClaudeRegistrationCommit["registration"],
+        }))).toStrictEqual({
+          code: "LAUNCH_LOCK_MALFORMED", kind: "REFUSED", layer: "LAUNCH_LOCK",
+          leg: "PREFLIGHT_REGISTER",
+        });
         expect(store.readEvents(DERIVED)).toHaveLength(2);
       });
     });
@@ -598,6 +631,30 @@ describe("foundation activation history fold", () => {
           "GRANT_CONSUMED", "PREFLIGHT_REGISTERED",
         ]);
         expect(history.history.record.effectIntent.intentId).toBe(INTENT_ID);
+      });
+    });
+  });
+
+  it("refuses a history whose sequences are not contiguous", () => {
+    withDirectory("fold-sequence", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        authorityOver(store).consumeGrantDurably(COMMIT.grant, WRAPPER);
+        const events = store.readEvents(DERIVED);
+        const [initial, consumedEvent] = events;
+        if (initial === undefined || consumedEvent === undefined) throw new Error("seed failed");
+        // The TAG order is still exactly right; only the sequence numbering lies.
+        // Without the contiguity check the tag walk alone would admit this.
+        const drifted = [initial, { ...consumedEvent, aggregateSequence: 3 }];
+        const refused = readFoundationActivationHistory(DERIVED, drifted, PROJECT_ID);
+        expect(refused.ok).toBe(false);
+        if (refused.ok) return;
+        expect(refused.result.status).toBe("UNKNOWN");
+        expect(refused.result.status === "BOUND" ? null : refused.result.code)
+          .toBe("FOUNDATION_BINDING_EVIDENCE_MALFORMED");
+        expect(refused.result.status === "BOUND" ? null : refused.result.layer)
+          .toBe(FOUNDATION_ACTIVATION_BINDING_LAYER);
       });
     });
   });
@@ -731,6 +788,17 @@ describe("current effect/session binding", () => {
           readEventsAfter: () => ({ hasMore: true, items: [], nextCursor: 0n }),
         } as unknown as SqliteEventStore;
         expect(codeOf(readCurrentEffectSessionBinding(stuck, PROJECT_ID, INTENT_ID, SESSION, 0)))
+          .toBe("UNKNOWN:FOUNDATION_BINDING_SCAN_INCOMPLETE");
+        // A page that DOES carry items but never advances its cursor is the
+        // never-ending walk: it would spin forever, or worse, answer ABSENT.
+        const stalled = {
+          getHealth: () => store.getHealth(),
+          readEvents: (aggregateId: string) => store.readEvents(aggregateId),
+          readEventsAfter: (after: bigint) => ({
+            hasMore: true, items: store.readEventsAfter(after, 100).items, nextCursor: after,
+          }),
+        } as unknown as SqliteEventStore;
+        expect(codeOf(readCurrentEffectSessionBinding(stalled, PROJECT_ID, INTENT_ID, SESSION, 0)))
           .toBe("UNKNOWN:FOUNDATION_BINDING_SCAN_INCOMPLETE");
         const thrower = {
           getHealth: () => store.getHealth(),
@@ -933,7 +1001,9 @@ describe("foundation grant fence under a real two-connection race", () => {
           expect(eventTypes(reopened)).toStrictEqual([
             "EffectActivationCommitted", FOUNDATION_TRANSITION_EVENT_TYPES.GRANT_CONSUMED,
           ]);
-          expect(publicEventCount(reopened)).toBe(2);
+          expect(publicEventCount(reopened, FOUNDATION_TRANSITION_EVENT_TYPES.GRANT_CONSUMED))
+            .toBe(1);
+          expect(publicEventCount(reopened, "EffectActivationCommitted")).toBe(1);
           expect(reopened.getAggregateVersion(DERIVED)).toBe(2);
         });
       } finally {

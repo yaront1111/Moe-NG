@@ -881,8 +881,11 @@ describe("daemon coordination adapter answers the effect port from the ledger", 
       envelopeOf("EVENT", "message-bound-effect", pair.coderAddress, terminalAddress),
       [terminal.sessionId],
     ));
+    // The mailbox endpoint is gated by the same port, so a bound terminal can
+    // now read, and the envelope the coder sent is actually there.
     const delivered = readAs(state, terminal, terminalAddress);
-    expect(delivered.outcome).toBe("READ");
+    expect(delivered.outcome).toBe("PAGE");
+    expect(delivered.outcome === "PAGE" ? delivered.items.length : 0).toBe(1);
 
     // A different session asking about the same effect is refused, and the
     // answer carries no internal binding reason at all.

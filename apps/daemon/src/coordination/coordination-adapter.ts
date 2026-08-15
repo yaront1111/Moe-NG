@@ -24,6 +24,7 @@ import type {
 } from "@moe/coordination";
 import type { SqliteEventStore } from "@moe/store";
 
+import { readCurrentEffectSessionBinding } from "../activation/activation-ledger-reader.js";
 import type {
   SessionAuthorityCode, SessionAuthorityLayer, SessionAuthorityService,
 } from "../identity/session-authority-contracts.js";
@@ -46,19 +47,11 @@ const PRESENTATION_KEYS = [
 const MAILBOX_ENDPOINTS = ["ACKNOWLEDGE", "READ", "REPLAY"] as const;
 const MAX_TARGETS = 32;
 
-/**
- * The only effect answer this daemon can honestly give. No committed effect-session binding
- * ledger exists here yet — task-6cbff01023b14b26a78fc5e3eb1dd8a9 (durable attempt dispatch)
- * is the surface that will carry one — and the recipient ledger cannot stand in for it: the
- * recipient resolver already tests the address's `effectId`, so an effect port derived from
- * the same fold could never refuse anything the recipient gate had not already refused.
- * Answering the frozen negative keeps unverifiable evidence UNKNOWN and refuses every
- * effect-wrapper address at COORDINATION_TERMINAL_BINDING_INVALID instead of granting
- * terminal authority no record attests. Re-point this at that ledger when it lands.
- */
-const NO_EFFECT_BINDING = Object.freeze({
-  bound: false as const, effectId: null, sessionId: null,
-});
+/** The one non-positive effect answer. Every ABSENT, UNKNOWN and thrown outcome collapses to
+ *  exactly this record — no code, no layer, no aggregate id — so a refusal cannot become a
+ *  probe: a caller learns it holds no binding, never why, and nothing about anyone else's
+ *  effect. `isBoundEffect` refuses it, so the service answers TERMINAL_BINDING_INVALID. */
+const NO_EFFECT_BINDING = Object.freeze({ bound: false as const, effectId: null, sessionId: null });
 
 export interface CoordinationAdapterOptions {
   readonly clock: () => number;
@@ -216,7 +209,22 @@ export function createCoordinationAdapter(
     }
   }
 
-  const resolveEffectBinding: CoordinationEffectBindingPort = () => NO_EFFECT_BINDING;
+  /** The durable binding, read from THIS adapter's own store. There is deliberately no
+   *  injectable positive resolver: a caller able to supply one could name a terminal binding
+   *  into existence. The positive is rebuilt from COMMITTED values — intentId from the intent,
+   *  sessionId from the lease owner — so the query is only ever an equality test. */
+  const resolveEffectBinding: CoordinationEffectBindingPort = (query) => {
+    try {
+      const binding = readCurrentEffectSessionBinding(
+        store, projectId, query.effectId, query.sessionId, query.now,
+      );
+      return binding.status === "BOUND" ? Object.freeze({
+        bound: true as const, effectId: binding.effectId, sessionId: binding.sessionId,
+      }) : NO_EFFECT_BINDING;
+    } catch {
+      return NO_EFFECT_BINDING;
+    }
+  };
 
   const service = createCoordinationService({
     authenticate,
