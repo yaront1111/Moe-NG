@@ -150,9 +150,15 @@ export function adapterFail(
     return refuse(`resource state ${located.row.state} cannot accept a failure report`);
   }
   const rows = located.rows.map((row) => {
+    // A sibling that cannot be fenced and might be physically acquired must not
+    // be RELEASED on another resource's failure: a PENDING external acquisition
+    // may already have completed at the adapter, and freeing capacity that is
+    // still held is a fail-open double-acquire. Fenceable siblings are safe to
+    // release because the fence invalidates any stale acquisition.
+    const acquiring = row.state === "ACTIVE" || row.state === "PENDING_ACQUIRE";
     const uncertain = row.resourceId === located.row.resourceId
       ? disposition === "UNKNOWN"
-      : row.state === "ACTIVE" && !row.fenceable;
+      : acquiring && !row.fenceable;
     const state: AcquisitionState = uncertain ? "QUARANTINED" : "RELEASED";
     return { ...row, state };
   });

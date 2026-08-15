@@ -142,6 +142,41 @@ describe("adapter fencing before a resource becomes ACTIVE (design 753)", () => 
     expect(result.value.rows.map((row) => row.state)).toEqual(["RELEASED", "QUARANTINED"]);
   });
 
+  it("quarantines a still-PENDING external non-fenceable sibling rather than releasing it", () => {
+    // res-a is external + non-fenceable, so it stays PENDING_ACQUIRE: its
+    // physical acquisition may already have happened at the adapter and cannot
+    // be fenced. Releasing it on a sibling's failure would free capacity that
+    // is still physically held — a fail-open double-acquire. It must QUARANTINE.
+    const rows = reservedRows({
+      declaredResources: [
+        declared({ resourceId: "res-a", external: true, fenceable: false }),
+        declared({ resourceId: "res-b", external: true, fenceable: true }),
+      ],
+      capacitySnapshot: { "res-a": 4, "res-b": 2 },
+    });
+    expect(rows.map((row) => row.state)).toEqual(["PENDING_ACQUIRE", "PENDING_ACQUIRE"]);
+    const result = adapterFail(rows, "res-b", 5, "FAILED");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // res-a QUARANTINED (uncertain, non-fenceable), res-b RELEASED (FAILED).
+    expect(result.value.rows.map((row) => row.state)).toEqual(["QUARANTINED", "RELEASED"]);
+    expect(result.value.held).toBe(true);
+  });
+
+  it("still RELEASES a still-PENDING external FENCEABLE sibling: the fence proves it free", () => {
+    const rows = reservedRows({
+      declaredResources: [
+        declared({ resourceId: "res-a", external: true, fenceable: true }),
+        declared({ resourceId: "res-b", external: true, fenceable: true }),
+      ],
+      capacitySnapshot: { "res-a": 4, "res-b": 2 },
+    });
+    const result = adapterFail(rows, "res-b", 5, "FAILED");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.rows.map((row) => row.state)).toEqual(["RELEASED", "RELEASED"]);
+  });
+
   it("quarantines a confirmed row whose adapter cannot fence stale use", () => {
     const rows = reservedRows({
       declaredResources: [
