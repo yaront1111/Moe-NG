@@ -31,7 +31,13 @@ dispatch and drag.
 Reading the ledger by hand (what the live board does):
 
 ```
-curl -X POST http://127.0.0.1:39123/events/read   -H "content-type: application/json"   -H "origin: http://127.0.0.1:39123"   -H "x-moe-csrf: <dev-token>"   -H "x-moe-session-credential: $MOE_DAEMON_CREDENTIAL"   -H "x-moe-protocol-version: moe-runtime-command/1+moe-runtime-query/1+moe-runtime-error-registry/1"   -d '{"limit":50,"projection":"moe.board","subscriberId":"control-room-1"}'
+curl -X POST http://127.0.0.1:39123/events/read \
+  -H "content-type: application/json" \
+  -H "origin: http://127.0.0.1:39123" \
+  -H "x-moe-csrf: <dev-token>" \
+  -H "x-moe-session-credential: $MOE_DAEMON_CREDENTIAL" \
+  -H "x-moe-protocol-version: moe-runtime-command/1+moe-runtime-query/1+moe-runtime-error-registry/1" \
+  -d '{"limit":50,"projection":"moe.board","subscriberId":"control-room-1"}'
 ```
 
 `subscriberId` must name a durable subscription; the store provider registers
