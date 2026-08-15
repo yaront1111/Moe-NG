@@ -10,7 +10,11 @@
  *
  *   replay        the command-decision key — the store returns the ORIGINAL
  *                 decision with a REPLAYED disposition and runs apply only on
- *                 EFFECTS_COMMITTED, so a replay cannot re-execute anything;
+ *                 EFFECTS_COMMITTED, so a replay cannot re-execute anything.
+ *                 The store's replay identity does NOT cover the events array,
+ *                 so a replay is answered by reading the derived aggregate back
+ *                 (`answerReplayed`) rather than by echoing the caller's record;
+ *                 that read is this module's only other store call;
  *   conflict      the aggregate-head primary key with expectedVersion ALWAYS 0 —
  *                 a distinct command targeting a pair that already activated
  *                 observes version 1 and is rejected;
@@ -29,7 +33,7 @@
  */
 
 import { DurableStoreError } from "@moe/store";
-import type { CommandDecisionResponse } from "@moe/store";
+import type { CommandDecisionResponse, StoredEvent } from "@moe/store";
 
 import { encodeActivationLedgerRecord } from "./activation-ledger-codec.js";
 import {
@@ -42,6 +46,7 @@ import type {
   ActivationLedgerCommitResult,
   ActivationLedgerStore,
 } from "./activation-ledger-contracts.js";
+import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
 
 const COMMAND_KIND = "activation.commit";
 
@@ -98,6 +103,60 @@ function refuseDecided(response: CommandDecisionResponse): ActivationLedgerCommi
   );
 }
 
+/**
+ * Answers a REPLAYED disposition from the DURABLE bytes.
+ *
+ * The store's replay identity — `identifyExpectedVersionRequest` — hashes only
+ * the identity version, projectId, principalId, commandId, commandKind,
+ * targetAggregateId, expectedVersion and requestBytes. The `events` array is
+ * NOT in it. This adapter pins commandKind and expectedVersion constant and
+ * derives targetAggregateId from `effectIntent.{aggregateId,idempotencyKey}`
+ * alone, so every other field of the record — lease, slot, reservation, view,
+ * attempt, GRANT ID, both predecessor versions, the activation digest — can
+ * drift while the store still, correctly, reports a replay.
+ *
+ * Returning the caller's own record on that path would hand back authority for
+ * an activation nobody ever committed. So the durable event is read back and
+ * re-verified through the SAME production reader a recovery caller would use,
+ * and the answer is the record THOSE bytes carry:
+ *
+ *   - the reader refuses     -> its UNKNOWN is propagated verbatim; unverifiable
+ *                               evidence never becomes an ok result;
+ *   - candidate disagrees    -> REPLAY_DIVERGED, this ledger's own refusal, with
+ *                               no storeCode because no store call refused;
+ *   - they agree             -> ok, carrying the DECODED record, not the input.
+ *
+ * The comparison is over the canonical digest rather than field by field: the
+ * encoding is deterministic, so one digest covers all twelve fields and cannot
+ * silently omit the one that drifted.
+ */
+function answerReplayed(
+  store: ActivationLedgerStore,
+  aggregateId: string,
+  candidateDigest: string,
+): ActivationLedgerCommitResult {
+  let events: readonly StoredEvent[];
+  try {
+    events = store.readEvents(aggregateId);
+  } catch (error) {
+    return refuseThrown(error);
+  }
+  const durable = readActivationLedgerRecord(aggregateId, events);
+  if (!durable.ok) return durable;
+  const sealed = encodeActivationLedgerRecord(durable.record);
+  if (!sealed.ok) return sealed;
+  if (sealed.digest !== candidateDigest) {
+    return activationLedgerRefusal("REFUSED", "ACTIVATION_LEDGER_REPLAY_DIVERGED", null);
+  }
+  return Object.freeze({
+    aggregateId,
+    digest: sealed.digest,
+    disposition: "REPLAYED" as const,
+    ok: true as const,
+    record: sealed.record,
+  });
+}
+
 export function commitActivationLedgerRecord(
   store: ActivationLedgerStore,
   input: ActivationLedgerCommitInput,
@@ -135,10 +194,16 @@ export function commitActivationLedgerRecord(
   }
   const refused = refuseDecided(response);
   if (refused !== null) return refused;
+  if (response.disposition === "REPLAYED") {
+    return answerReplayed(store, aggregateId, encoded.digest);
+  }
+  // COMMITTED: the store just wrote `encoded.bytes` verbatim, so the validated
+  // record IS the durable record and re-reading it would prove nothing the
+  // append did not already prove.
   return Object.freeze({
     aggregateId,
     digest: encoded.digest,
-    disposition: response.disposition === "REPLAYED" ? ("REPLAYED" as const) : ("COMMITTED" as const),
+    disposition: "COMMITTED" as const,
     ok: true as const,
     record,
   });

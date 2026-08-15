@@ -26,14 +26,23 @@ import { digestOf, encodedBytes, record } from "./activation-ledger-fixtures.js"
 describe("deriveActivationAggregateId", () => {
   /**
    * Chosen to collide under a naive join. ('a','bc') vs ('ab','c') collide under
-   * bare concatenation; the separator-bearing rows collide under a separator
-   * with no length prefix; the empty-component rows collide under both.
+   * bare concatenation; the empty-component rows collide under that too.
+   *
+   * THE SEPARATOR-BEARING ROWS MUST CARRY THE PRODUCTION SEPARATOR, which is
+   * `|`. Rows smuggling only `:` are not a separator test at all: dropping the
+   * length prefixes while keeping `|` leaves every one of them distinct, so the
+   * table stays green against a derivation whose framing has been removed. The
+   * ("a|b","c") / ("a","b|c") pair is the one that closes it — both join to
+   * `a|b|c` the moment the lengths go — and the `1:`-prefixed rows do the same
+   * job for a scheme that keeps `|` but drops only the numeric prefix.
    */
   const COLLIDING_PAIRS: readonly (readonly [string, string])[] = [
     ["a", "bc"],
     ["ab", "c"],
     ["abc", ""],
     ["", "abc"],
+    ["a|b", "c"],
+    ["a", "b|c"],
     ["a:b", "c"],
     ["a", "b:c"],
     ["a b", "c"],
@@ -43,11 +52,25 @@ describe("deriveActivationAggregateId", () => {
   ];
 
   it("derives a distinct aggregate id for every pair a naive join would collide", () => {
-    expect(COLLIDING_PAIRS.length).toBe(10);
+    expect(COLLIDING_PAIRS.length).toBe(12);
     const derived = COLLIDING_PAIRS.map(([aggregateId, key]) =>
       deriveActivationAggregateId(aggregateId, key),
     );
     expect(new Set(derived).size).toBe(COLLIDING_PAIRS.length);
+  });
+
+  /**
+   * Guards the table itself. A collision table that collides under nothing is a
+   * transcript: it passes against a derivation with the framing torn out, and
+   * the assertion above quietly stops discriminating. This pins the premise —
+   * these rows DO collide once the length prefixes go, separately for the bare
+   * join and for the separator-only join that keeps `|`.
+   */
+  it("holds rows that genuinely collide once the length framing is removed", () => {
+    const bare = COLLIDING_PAIRS.map(([aggregateId, key]) => `${aggregateId}${key}`);
+    expect(new Set(bare).size).toBeLessThan(COLLIDING_PAIRS.length);
+    const separatorOnly = COLLIDING_PAIRS.map(([aggregateId, key]) => `${aggregateId}|${key}`);
+    expect(new Set(separatorOnly).size).toBeLessThan(COLLIDING_PAIRS.length);
   });
 
   it("derives an identical aggregate id for identical inputs across calls", () => {

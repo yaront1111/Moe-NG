@@ -51,6 +51,16 @@ export const ACTIVATION_LEDGER_LAYER = "ACTIVATION_LEDGER" as const;
  * Closed refusal vocabulary. Ordered by the stage that raises it: shape, bytes,
  * evidence, cross-check, then commit. Nothing outside this module may add a
  * code, so a refusal cannot be invented at a call site.
+ *
+ * ACTIVATION_LEDGER_REPLAY_DIVERGED is the commit stage's own cross-check and
+ * is deliberately NOT folded into IDEMPOTENCY_CONFLICT. The store's replay
+ * identity (`store-digests.ts` `identifyExpectedVersionRequest`) hashes only
+ * version, projectId, principalId, commandId, commandKind, targetAggregateId,
+ * expectedVersion and requestBytes — the `events` array is outside it. So a
+ * second call under the same key with the same request bytes but a DIFFERENT
+ * record replays cleanly at the store while describing an activation that was
+ * never written. That is this ledger refusing, not the store, and it must be
+ * separately assertable from a store-raised conflict.
  */
 export const ACTIVATION_LEDGER_CODES = Object.freeze([
   "ACTIVATION_LEDGER_RECORD_MALFORMED",
@@ -64,6 +74,7 @@ export const ACTIVATION_LEDGER_CODES = Object.freeze([
   "ACTIVATION_LEDGER_AGGREGATE_MISMATCH",
   "ACTIVATION_LEDGER_EVENT_ID_MISMATCH",
   "ACTIVATION_LEDGER_VERSION_MISMATCH",
+  "ACTIVATION_LEDGER_REPLAY_DIVERGED",
   "ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT",
   "ACTIVATION_LEDGER_GRANT_ID_CONFLICT",
   "ACTIVATION_LEDGER_IDEMPOTENCY_CONFLICT",
@@ -177,6 +188,14 @@ export interface ActivationLedgerCommitInput {
   readonly requestBytes: Uint8Array;
 }
 
+/**
+ * On COMMITTED, `record` and `digest` describe the bytes this call just wrote.
+ * On REPLAYED they describe the bytes ALREADY IN THE STORE, resolved by reading
+ * the derived aggregate back through the production reader — never the caller's
+ * input echoed. The caller's own record is only ever a candidate; a replay whose
+ * candidate disagrees with the durable bytes refuses REPLAY_DIVERGED instead of
+ * handing back authority for an activation nobody committed.
+ */
 export type ActivationLedgerCommitResult =
   | {
       readonly ok: true;

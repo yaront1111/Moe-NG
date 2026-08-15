@@ -114,24 +114,83 @@ describe("activation ledger commit adapter", () => {
     });
   });
 
-  it("replays the same command without a second event or a second decision", () => {
+  it("replays the same command by resolving the DURABLE record, not by echoing the caller", () => {
     withDirectory("replay", (directory) => {
       const databasePath = join(directory, "store.sqlite");
       withStore(databasePath, (store) => {
         const first = commitActivationLedgerRecord(store, input());
-        const second = commitActivationLedgerRecord(store, input());
+        const replayInput = input();
+        const spy = spyOn(store);
+        const second = commitActivationLedgerRecord(spy, replayInput);
         expect(first.ok && second.ok).toBe(true);
         if (!first.ok || !second.ok) return;
         expect(first.disposition).toBe("COMMITTED");
         expect(second.disposition).toBe("REPLAYED");
         expect(second.record).toEqual(first.record);
         expect(second.digest).toBe(first.digest);
+        // `toEqual` alone cannot tell a durable answer from a transcript here,
+        // because the caller handed in an equal record. These two can:
+        //   - the adapter READ the derived aggregate back, so readEvents is on
+        //     the call list and only on the replay path;
+        //   - the returned record is a DIFFERENT object from the one passed in,
+        //     because it was decoded out of the stored payload.
+        expect(spy.calls).toEqual(["commitExpectedVersionDecision", "readEvents"]);
+        expect(second.record).not.toBe(replayInput.record);
       });
 
       withStore(databasePath, (reopened) => {
         expect(reopened.readEvents(DERIVED)).toHaveLength(1);
         // The aggregate advanced exactly once. A replay that re-ran the append
         // would leave version 2 here even if the decision reported REPLAYED.
+        expect(reopened.getAggregateVersion(DERIVED)).toBe(1);
+      });
+    });
+  });
+
+  /**
+   * The hole a same-input replay test can never see.
+   *
+   * The store's replay identity (`identifyExpectedVersionRequest`) hashes only
+   * version, projectId, principalId, commandId, commandKind, targetAggregateId,
+   * expectedVersion and requestBytes. The `events` array is OUTSIDE it. So a
+   * second call under the same key with byte-identical requestBytes replays
+   * cleanly at the store while carrying a completely different activation — and
+   * an adapter that answers a replay from its own input would hand back
+   * authority for a grant that was never written.
+   *
+   * grantId is the sharpest field to drift: it is the durable event id, so the
+   * durable answer and the candidate answer cannot be confused for each other.
+   * Drifting `idempotencyKey` instead would change the DERIVED AGGREGATE and be
+   * refused a whole layer earlier, by the store, as IDEMPOTENCY_CONFLICT — which
+   * is why that variant proves nothing about this branch.
+   */
+  it("refuses a replay whose candidate drifted outside the store's request identity", () => {
+    withDirectory("replay-drift", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        expect(commitActivationLedgerRecord(store, input()).ok).toBe(true);
+        const drifted = commitActivationLedgerRecord(
+          store,
+          input({
+            record: record({ grant: { ...record().grant, grantId: "grant-NEVER-COMMITTED" } }),
+          }),
+        );
+        expect(drifted.ok).toBe(false);
+        if (drifted.ok) return;
+        // THIS ledger refused, at the commit stage, after reading the durable
+        // bytes back — not the store. `storeCode` null is what says so: every
+        // store-raised refusal in this suite carries its upstream code.
+        expect(drifted.code).toBe("ACTIVATION_LEDGER_REPLAY_DIVERGED");
+        expect(drifted.layer).toBe(ACTIVATION_LEDGER_LAYER);
+        expect(drifted.outcome).toBe("REFUSED");
+        expect(drifted.storeCode).toBeNull();
+      });
+
+      withStore(databasePath, (reopened) => {
+        // The durable grant is still the first one, and nothing was appended.
+        const events = reopened.readEvents(DERIVED);
+        expect(events).toHaveLength(1);
+        expect(events[0]?.eventId).toBe(GRANT_ID);
         expect(reopened.getAggregateVersion(DERIVED)).toBe(1);
       });
     });
