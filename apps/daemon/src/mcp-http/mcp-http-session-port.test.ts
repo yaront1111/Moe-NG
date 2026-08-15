@@ -270,7 +270,7 @@ describe("mcp-http session port — daemon verdicts mapped onto the MCP two-arm 
     }
   });
 
-  it("binds and closes transport sessions idempotently without touching the store", () => {
+  it("binding and closing a transport session mints no durable session", () => {
     const store = openStore();
     try {
       openDefaultSession(store);
@@ -281,11 +281,8 @@ describe("mcp-http session port — daemon verdicts mapped onto the MCP two-arm 
 
       port.bindSession("mcp-transport-1", verdict);
       port.bindSession("mcp-transport-1", verdict);
-      expect(port.boundSessionIds()).toEqual(["mcp-transport-1"]);
-
       port.closeSession("mcp-transport-1");
       port.closeSession("mcp-transport-1");
-      expect(port.boundSessionIds()).toEqual([]);
 
       // Binding a transport session must never mint a durable session: that is session.open's job.
       expect(decisionCount(store)).toBe(before);

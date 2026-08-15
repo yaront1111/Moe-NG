@@ -58,18 +58,10 @@ function isForwardable(code: string): code is RefusalCode {
 }
 
 export interface McpHttpSessionPort extends HttpSessionPort {
-  /**
-   * Transport session ids currently bound, in bind order. Real production surface: the host
-   * closes outstanding sessions on shutdown and cannot do that without asking.
-   */
-  boundSessionIds(): readonly string[];
   validateBearer(credential: string): Verdict;
 }
 
 export function createMcpHttpSessionPort(authenticator: Authenticator): McpHttpSessionPort {
-  // Transport-level ids only. This map is in-process routing state, never durable identity.
-  const bound = new Map<string, Accepted>();
-
   const validateBearer = (credential: string): Verdict => {
     // Re-run on EVERY call. No memoisation, by contract: revalidating each time is what makes a
     // rotated, closed or revoked credential die on the very next request rather than at some
@@ -97,18 +89,17 @@ export function createMcpHttpSessionPort(authenticator: Authenticator): McpHttpS
   };
 
   return Object.freeze({
-    bindSession(mcpSessionId: string, verdict: Accepted): void {
-      // Idempotent: re-binding the same transport id replaces one map entry, never appends.
-      bound.set(mcpSessionId, verdict);
-    },
-    boundSessionIds(): readonly string[] {
-      return Object.freeze([...bound.keys()]);
-    },
-    closeSession(mcpSessionId: string): void {
-      // Exactly-once by construction: Map.delete on an absent key is a no-op, so a second close
-      // is harmless and no counter can drift.
-      bound.delete(mcpSessionId);
-    },
+    // NO-OP BY DESIGN, and that is the whole routing decision this file makes: the daemon keeps
+    // NO transport-session state. The adapter's own registry is the sole routing authority, and
+    // it releases each entry in that registry through `closeDaemonSession` when `close()` sweeps
+    // at shutdown. A second copy here would be a second release path over the same sessions.
+    // Durable session identity is minted and reaped by the session.open / session.close commands
+    // — never at the transport. Both hooks stay because `HttpSessionPort` requires them and
+    // `bindDaemonSession` calls `bindSession` for its accept-or-throw before it registers;
+    // returning normally IS the accept, and the Map write these bodies replaced could not fail,
+    // so no caller loses a rejection it used to get.
+    bindSession(_mcpSessionId: string, _verdict: Accepted): void {},
+    closeSession(_mcpSessionId: string): void {},
     validateBearer,
   });
 }
