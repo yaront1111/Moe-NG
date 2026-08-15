@@ -104,6 +104,38 @@ async function refusalOf(operation: Promise<unknown>): Promise<Record<string, un
   throw new Error("expected the durable write to refuse, but it reported success");
 }
 
+/** Far above the ONE attempt a bounded loop makes, far below what exhausts memory. */
+const STALLED_PORT_ATTEMPT_CAP = 64;
+
+/**
+ * NEVER makes progress, on any attempt. `chunkingOpener` falls back to "accept
+ * the remainder" once its schedule runs out, so it models a port that stalls
+ * ONCE; only this one models a port that is permanently stuck — the shape an
+ * unbounded completion loop would spin on forever.
+ */
+function stalledOpener(recorded: WriteRecorder): DurableWriteOpener {
+  return async (_path: string) => ({
+    close: async () => {
+      recorded.closes += 1;
+    },
+    sync: async () => {
+      recorded.syncedAt.push(-1);
+    },
+    write: async (_data: Uint8Array, offset: number, length: number) => {
+      // The PORT carries the bound, not the test runner. An unbounded
+      // production loop would otherwise spin until the worker dies of memory
+      // exhaustion, and a crashed worker reports no per-test verdict at all.
+      if (recorded.attempts.length >= STALLED_PORT_ATTEMPT_CAP) {
+        throw new Error(
+          `the completion loop retried a stalled port ${String(STALLED_PORT_ATTEMPT_CAP)} times; it is not bounded`,
+        );
+      }
+      recorded.attempts.push({ accepted: 0, length, offset });
+      return { bytesWritten: 0 };
+    },
+  });
+}
+
 /** Reports MORE bytes than it was offered; a real handle cannot, so it is synthesised. */
 function overReportingOpener(recorded: WriteRecorder): DurableWriteOpener {
   return async (_path: string) => ({
@@ -153,6 +185,22 @@ describe("persistFileDurably short writes", () => {
     // zero-progress port is refused on its first chunk rather than retried.
     expect(observed.attempts.length).toBe(1);
     expect(observed.attempts[0]).toEqual({ accepted: 0, length: 7, offset: 0 });
+  });
+
+  it("terminates on a PERMANENTLY stalled port rather than retrying forever", async () => {
+    const path = join(temporaryDirectory("stuck"), "payload.bin");
+    const observed = recorder();
+
+    expect(
+      await refusalOf(persistFileDurably(path, encoder.encode("SEVEN__"), stalledOpener(observed))),
+    ).toEqual(WRITE_INCOMPLETE);
+
+    // The bound is "a chunk must ADVANCE", so a port that never advances is
+    // refused on its FIRST chunk. Weakening that guard makes this case spin,
+    // and this assertion is what turns the spin into a failure.
+    expect(observed.attempts.length).toBe(1);
+    expect(observed.closes).toBe(1);
+    expect(observed.syncedAt).toEqual([]);
   });
 
   it("refuses a port claiming MORE bytes written than it was offered", async () => {
