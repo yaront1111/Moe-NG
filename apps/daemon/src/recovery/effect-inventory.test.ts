@@ -167,8 +167,8 @@ const expectUnknown = (
   expect(result.upstream).toEqual({ code, layer });
   expect(result.truth).toBe("UNKNOWN");
   expect(result.authority).toBe("NONE");
-  expect(result.record?.truth).toBe("UNKNOWN");
-  expect(result.recordDigest).toMatch(/^[0-9a-f]{64}$/u);
+  expect("record" in result ? result.record?.truth : null).toBe("UNKNOWN");
+  expect("recordDigest" in result ? result.recordDigest : null).toMatch(/^[0-9a-f]{64}$/u);
 };
 
 describe("effect inventory frozen cardinality", () => {
