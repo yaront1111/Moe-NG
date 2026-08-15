@@ -9,6 +9,7 @@ import {
   LEGACY_SCHEMA_MANIFEST_VERSION,
   SCHEMA_V2_MANIFEST_VERSION,
   SCHEMA_V3_MANIFEST_VERSION,
+  SCHEMA_V4_MANIFEST_VERSION,
   SCHEMA_VERSION,
 } from "./store-internals.js";
 import {
@@ -20,6 +21,7 @@ import {
   SCHEMA_V1_OBJECT_SQL,
   SCHEMA_V2_OBJECT_SQL,
   SCHEMA_V3_OBJECT_SQL,
+  SCHEMA_V4_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
 import { readScalar } from "./store-rows.js";
 
@@ -27,7 +29,7 @@ function validateMigrationSource(
   database: DatabaseSync,
   manifest: Readonly<Record<string, string>>,
   manifestVersion: string,
-  schemaVersion: 1 | 2 | 3,
+  schemaVersion: 1 | 2 | 3 | 4,
 ): void {
   validateExactSchemaObjects(database, manifest, schemaVersion);
   validateSchemaManifestMetadata(database, manifestVersion);
@@ -125,15 +127,30 @@ function migrateV2ToV3(database: DatabaseSync): void {
 }
 
 /**
- * Purely additive, and the only leg that accepts a POPULATED source. The
- * earlier legs refuse durable history because they rebuild domain_events and
- * cannot reconcile the rows they would rewrite; this one creates one new table
- * and touches nothing that already exists, so an upgrade in place is provable
- * rather than hoped for.
+ * Purely additive: creates one new table and touches nothing that already
+ * exists, so an upgrade in place is provable rather than hoped for. The earlier
+ * legs refuse durable history because they rebuild domain_events and cannot
+ * reconcile the rows they would rewrite. This is no longer the only
+ * populated-safe leg — v4->v5 below is additive on the same terms — so it must
+ * stamp the FROZEN v4 identity and stop at 4, letting the next leg advance.
  */
 function migrateV3ToV4(database: DatabaseSync): void {
   validateMigrationSource(database, SCHEMA_V3_OBJECT_SQL, SCHEMA_V3_MANIFEST_VERSION, 3);
-  database.exec(`${SCHEMA_OBJECT_SQL.recovery_bindings};`);
+  database.exec(`${SCHEMA_V4_OBJECT_SQL.recovery_bindings};`);
+  database
+    .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+    .run(SCHEMA_V4_MANIFEST_VERSION, "schema_manifest_version");
+  database.exec("PRAGMA user_version = 4;");
+}
+
+/**
+ * Additive index creation. A populated v4 store keeps every durable row,
+ * position, sequence and opaque byte: creating an index rewrites no table, so
+ * this leg never needs to decode a payload or reconcile history.
+ */
+function migrateV4ToV5(database: DatabaseSync): void {
+  validateMigrationSource(database, SCHEMA_V4_OBJECT_SQL, SCHEMA_V4_MANIFEST_VERSION, 4);
+  database.exec(`${SCHEMA_OBJECT_SQL.domain_events_event_type_position};`);
   database
     .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
     .run(SQLITE_SCHEMA_MANIFEST_VERSION, "schema_manifest_version");
@@ -164,7 +181,10 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
     installFreshSchema(database);
     return;
   }
-  if (currentVersion !== 1 && currentVersion !== 2 && currentVersion !== 3) {
+  if (
+    currentVersion !== 1 && currentVersion !== 2
+    && currentVersion !== 3 && currentVersion !== 4
+  ) {
     throw new DurableStoreError(
       "DATABASE_IDENTITY_MISMATCH",
       `schema version ${currentVersion} is not a recognized migration source`,
@@ -172,5 +192,6 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
   }
   if (currentVersion === 1) migrateV1ToV2(database);
   if (currentVersion <= 2) migrateV2ToV3(database);
-  migrateV3ToV4(database);
+  if (currentVersion <= 3) migrateV3ToV4(database);
+  migrateV4ToV5(database);
 }

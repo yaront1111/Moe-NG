@@ -235,7 +235,16 @@ export const SCHEMA_V3_OBJECT_SQL = Object.freeze({
 });
 
 /** v4 is v3 plus the recovery binding rows; no v3 object is redefined. */
-export const SCHEMA_OBJECT_SQL = Object.freeze({
+export const SCHEMA_V4_OBJECT_SQL = Object.freeze({
   ...SCHEMA_V3_OBJECT_SQL,
   ...SCHEMA_V4_RECOVERY_OBJECT_SQL,
+});
+
+/** v5 is v4 plus one composite index; no v4 object is redefined. */
+export const SCHEMA_OBJECT_SQL = Object.freeze({
+  ...SCHEMA_V4_OBJECT_SQL,
+  domain_events_event_type_position: `
+    CREATE INDEX domain_events_event_type_position
+      ON domain_events(event_type, global_position)
+  `,
 });

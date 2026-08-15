@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  DurableStoreError,
   SQLITE_APPLICATION_ID,
   SQLITE_SCHEMA_MANIFEST_VERSION,
   SqliteEventStore,
@@ -60,6 +61,25 @@ function openAndClose(path: string, projectId?: string): void {
   store.close();
 }
 
+/**
+ * Captures the durable failure rather than regex-matching a message. The CODE is
+ * the stable contract; the message is retained only to attribute WHICH layer
+ * refused, because more than one layer can answer on these paths.
+ */
+function captureDurableFailure(
+  run: () => void,
+): { readonly code: string; readonly message: string } {
+  let caught: unknown;
+  try {
+    run();
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(DurableStoreError);
+  const failure = caught as DurableStoreError;
+  return { code: failure.code, message: failure.message };
+}
+
 function schemaDump(path: string): string {
   openAndClose(path);
   const database = new DatabaseSync(path);
@@ -85,16 +105,16 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/4" });
-      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
-      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(15);
+      ).toEqual({ value: "moe-sqlite-schema/5" });
+      expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/5");
+      expect(Object.keys(schemaManifest.SCHEMA_OBJECT_SQL)).toHaveLength(16);
       validateSchema(database);
-      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 4);
+      validateExactSchemaObjects(database, schemaManifest.SCHEMA_OBJECT_SQL, 5);
 
       const domainSql = schemaManifest.SCHEMA_OBJECT_SQL.domain_events;
       expect(domainSql).toContain("global_position INTEGER PRIMARY KEY AUTOINCREMENT");
@@ -124,7 +144,7 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path);
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       validateSchema(migrated);
     } finally {
       migrated.close();
@@ -143,17 +163,18 @@ describe("SQLite schema v3 migration", () => {
     openAndClose(path, "project-1");
     const migrated = new DatabaseSync(path);
     try {
-      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(migrated.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(migrated.prepare("SELECT project_id FROM store_project_binding").get()).toEqual({
         project_id: "project-1",
       });
-      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 4);
+      validateExactSchemaObjects(migrated, schemaManifest.SCHEMA_OBJECT_SQL, 5);
     } finally {
       migrated.close();
     }
   });
 
   it("refuses populated v1 and v2 databases without migrating them", () => {
+    const observed: { readonly code: string; readonly version: number }[] = [];
     for (const version of [1, 2] as const) {
       const path = databasePath(`v${version}-populated`);
       const database = new DatabaseSync(path);
@@ -167,7 +188,7 @@ describe("SQLite schema v3 migration", () => {
         database.close();
       }
 
-      expect(() => openAndClose(path)).toThrowError(/STORE_MIGRATION_REQUIRED/u);
+      observed.push({ code: captureDurableFailure(() => openAndClose(path)).code, version });
       const verification = new DatabaseSync(path);
       try {
         expect(verification.prepare("PRAGMA user_version").get()).toEqual({
@@ -177,19 +198,64 @@ describe("SQLite schema v3 migration", () => {
         verification.close();
       }
     }
+
+    expect(observed).toEqual([
+      { code: "STORE_MIGRATION_REQUIRED", version: 1 },
+      { code: "STORE_MIGRATION_REQUIRED", version: 2 },
+    ]);
   });
 
-  it("refuses a newer schema version", () => {
-    const path = databasePath("too-new");
-    openAndClose(path);
-    const tamper = new DatabaseSync(path);
-    try {
-      tamper.exec("PRAGMA user_version = 5");
-    } finally {
-      tamper.close();
-    }
+  /**
+   * Three rejections a bare "it threw" would blur into one. Only the future
+   * version is a schema judgement; the two identity mismatches come from
+   * DIFFERENT layers — bootstrap's fresh-database probe answers first when the
+   * version is missing, while migrateLocked owns the unrecognized-source branch.
+   * With 1-4 all recognized and 5 current, a negative stamp is the only value
+   * that still reaches that branch, so this is what keeps it non-vacuous.
+   */
+  it("refuses every schema version outside the recognized migration range", () => {
+    const cases = [
+      { code: "STORE_SCHEMA_INVALID", label: "future",
+        layer: "newer than supported version", stamped: 6 },
+      { code: "DATABASE_IDENTITY_MISMATCH", label: "no-committed-version",
+        layer: "has no committed schema version", stamped: 0 },
+      { code: "DATABASE_IDENTITY_MISMATCH", label: "unrecognized-source",
+        layer: "is not a recognized migration source", stamped: -1 },
+    ] as const;
 
-    expect(() => openAndClose(path)).toThrowError(/STORE_SCHEMA_INVALID/u);
+    const observed = cases.map((testCase) => {
+      const path = databasePath(testCase.label);
+      openAndClose(path);
+      const tamper = new DatabaseSync(path);
+      try {
+        tamper.exec(`PRAGMA user_version = ${testCase.stamped};`);
+      } finally {
+        tamper.close();
+      }
+
+      const failure = captureDurableFailure(() => openAndClose(path));
+      const retained = new DatabaseSync(path);
+      try {
+        expect(retained.prepare("PRAGMA user_version").get(), testCase.label).toEqual({
+          user_version: testCase.stamped,
+        });
+      } finally {
+        retained.close();
+      }
+      return {
+        attributedLayer: failure.message.includes(testCase.layer),
+        code: failure.code,
+        label: testCase.label,
+      };
+    });
+
+    expect(observed).toEqual([
+      { attributedLayer: true, code: "STORE_SCHEMA_INVALID", label: "future" },
+      { attributedLayer: true, code: "DATABASE_IDENTITY_MISMATCH",
+        label: "no-committed-version" },
+      { attributedLayer: true, code: "DATABASE_IDENTITY_MISMATCH",
+        label: "unrecognized-source" },
+    ]);
   });
 
   it("creates deterministic schema bytes", () => {

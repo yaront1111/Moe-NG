@@ -6,16 +6,27 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DurableStoreError, SQLITE_SCHEMA_MANIFEST_VERSION, SqliteEventStore } from "./index.js";
+import type { CommitExpectedVersionDecisionInput } from "./index.js";
+import { proposedDecision } from "./command-decision-test-helpers.js";
 import {
   validateExactSchemaObjects,
   validateSchemaManifestMetadata,
 } from "./sqlite-schema-conformance.js";
 import { validateSchema } from "./sqlite-schema-integrity.js";
-import { SCHEMA_OBJECT_SQL, SCHEMA_V3_OBJECT_SQL } from "./sqlite-schema-manifest.js";
-import { SCHEMA_V3_MANIFEST_VERSION, SCHEMA_VERSION } from "./store-internals.js";
+import {
+  SCHEMA_OBJECT_SQL,
+  SCHEMA_V3_OBJECT_SQL,
+  SCHEMA_V4_OBJECT_SQL,
+} from "./sqlite-schema-manifest.js";
+import {
+  SCHEMA_V3_MANIFEST_VERSION,
+  SCHEMA_V4_MANIFEST_VERSION,
+  SCHEMA_VERSION,
+} from "./store-internals.js";
 
 const encoder = new TextEncoder();
 const PROJECT_ID = "schema-v4-project";
+const EVENT_TYPE_INDEX = "domain_events_event_type_position";
 
 /** Hand-written: the v3 table set the migration must carry forward untouched. */
 const V3_TABLES: readonly string[] = [
@@ -70,6 +81,7 @@ function commitOneEvent(path: string): { readonly eventId: string; readonly payl
 function rewindToV3(path: string): void {
   const database = new DatabaseSync(path);
   try {
+    database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
     database.exec("DROP TABLE recovery_bindings;");
     database
       .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
@@ -85,6 +97,17 @@ function rewindToV3(path: string): void {
   }
 }
 
+function captureSchemaCode(run: () => unknown): string {
+  let caught: unknown;
+  try {
+    run();
+  } catch (error) {
+    caught = error;
+  }
+  expect(caught).toBeInstanceOf(DurableStoreError);
+  return (caught as DurableStoreError).code;
+}
+
 function expectSchemaRefusal(run: () => unknown, detail: string): void {
   let caught: unknown;
   try {
@@ -98,11 +121,16 @@ function expectSchemaRefusal(run: () => unknown, detail: string): void {
 
 describe("SQLite schema v4 recovery binding migration", () => {
   it("installs the exact v4 manifest and keeps every v3 object", () => {
-    expect(SCHEMA_VERSION).toBe(4);
-    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
+    expect(SCHEMA_VERSION).toBe(5);
+    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/5");
+    expect(SCHEMA_V4_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
     expect(SCHEMA_V3_MANIFEST_VERSION).toBe("moe-sqlite-schema/3");
     expect(Object.keys(SCHEMA_V3_OBJECT_SQL)).toHaveLength(14);
-    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(15);
+    expect(Object.keys(SCHEMA_V4_OBJECT_SQL)).toHaveLength(15);
+    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(16);
+    expect(
+      Object.keys(SCHEMA_OBJECT_SQL).filter((name) => !(name in SCHEMA_V4_OBJECT_SQL)),
+    ).toEqual([EVENT_TYPE_INDEX]);
     for (const table of V3_TABLES) {
       expect(SCHEMA_V3_OBJECT_SQL, table).toHaveProperty(table);
       expect(SCHEMA_OBJECT_SQL, table).toHaveProperty(table);
@@ -115,16 +143,16 @@ describe("SQLite schema v4 recovery binding migration", () => {
     store.close();
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/4" });
+      ).toEqual({ value: "moe-sqlite-schema/5" });
       expect(database.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 4);
+      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 5);
       validateSchema(database);
     } finally {
       database.close();
@@ -140,7 +168,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       database.exec("CREATE TABLE recovery_grants (grant_id TEXT PRIMARY KEY NOT NULL) STRICT");
       expectSchemaRefusal(() => validateSchema(database), "conformance still rejects extra tables");
       expectSchemaRefusal(
-        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 4),
+        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 5),
         "exact object validation still rejects extra tables",
       );
     } finally {
@@ -203,12 +231,12 @@ describe("SQLite schema v4 recovery binding migration", () => {
 
     const after = new DatabaseSync(path);
     try {
-      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 4 });
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
       expect(
         after
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/4" });
+      ).toEqual({ value: "moe-sqlite-schema/5" });
       expect(after.prepare("SELECT * FROM domain_events ORDER BY global_position").all()).toEqual(
         priorEventRow,
       );
@@ -221,7 +249,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       expect(after.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 4);
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 5);
       validateSchema(after);
     } finally {
       after.close();
@@ -256,5 +284,293 @@ describe("SQLite schema v4 recovery binding migration", () => {
     } finally {
       reopened.close();
     }
+  });
+});
+
+const TARGET_EVENT_TYPE = "recovery.probe";
+
+/**
+ * The predicate the v5 index exists to serve. Design line 959 requires the event
+ * API to support type filters; without the index this is a full table scan.
+ */
+const TYPE_POSITION_QUERY = `
+  SELECT event_id
+  FROM domain_events
+  WHERE event_type = ? AND global_position > ?
+  ORDER BY global_position
+`;
+
+/** Every durable table whose bytes an additive migration must leave alone. */
+const DURABLE_TABLES: readonly string[] = [
+  "aggregate_heads", "command_decisions", "command_receipt_scopes", "command_receipts",
+  "cursor_generations", "domain_events", "event_subscriptions", "inbox_receipts",
+  "outbox_messages", "projections", "recovery_bindings", "store_project_binding",
+];
+
+interface AtomicDecisionStore {
+  commitExpectedVersionDecisionWithApply(
+    input: CommitExpectedVersionDecisionInput,
+    apply: (context: { readonly database: DatabaseSync }) => void,
+  ): unknown;
+}
+
+/**
+ * Seeds every durable category through the PUBLIC production surface — one
+ * decision carrying three events (two of the target type, one other) plus an
+ * outbox message, the projection/cursor/inbox/subscription rows written inside
+ * the production apply transaction, and one installed recovery binding. A
+ * hand-assembled fixture would not prove the migration faces real ledger bytes.
+ */
+function writeProductionFixture(path: string): void {
+  const store = SqliteEventStore.openForProject(path, PROJECT_ID);
+  try {
+    (store as unknown as AtomicDecisionStore).commitExpectedVersionDecisionWithApply(
+      proposedDecision({
+        events: [
+          {
+            eventId: "event-1",
+            eventType: TARGET_EVENT_TYPE,
+            outbox: [
+              { messageId: "message-1", payload: encoder.encode("wire-1"), topic: "recovery.events" },
+            ],
+            payload: encoder.encode("payload-1"),
+          },
+          { eventId: "event-2", eventType: "other.kind", payload: encoder.encode("payload-2") },
+          { eventId: "event-3", eventType: TARGET_EVENT_TYPE, payload: encoder.encode("payload-3") },
+        ],
+        key: { commandId: "command-1", principalId: "principal-1", projectId: PROJECT_ID },
+      }),
+      ({ database }) => {
+        database
+          .prepare(`
+            INSERT INTO projections (projection_name, last_applied_position, state_digest)
+            VALUES (?, ?, ?)
+          `)
+          .run("recovery-view", "3", "a1".repeat(32));
+        database
+          .prepare("INSERT INTO cursor_generations (generation, created_at, reason) VALUES (?, ?, ?)")
+          .run(1, "2026-08-16T00:00:00.000Z", "bootstrap");
+        database
+          .prepare(`
+            INSERT INTO inbox_receipts (consumer_id, message_id, receipt_digest) VALUES (?, ?, ?)
+          `)
+          .run("consumer-1", "message-1", "b2".repeat(32));
+        database
+          .prepare(`
+            INSERT INTO event_subscriptions (subscriber_id, filter_json, created_at) VALUES (?, ?, ?)
+          `)
+          .run("subscriber-1", '{"eventType":"recovery.probe"}', "2026-08-16T00:00:00.000Z");
+      },
+    );
+    const installed = store.installRecoveryBinding({
+      bindingCodecVersion: "moe-recovery-binding/1",
+      incarnationRef: "9f".repeat(32),
+      installedAt: "2026-08-16T00:30:00.000Z",
+      keyEpochRef: "8e".repeat(32),
+      payload: encoder.encode("pre-migration-binding"),
+      slot: "ACTIVE",
+    });
+    expect(installed.ok, "recovery binding fixture must install").toBe(true);
+  } finally {
+    store.close();
+  }
+}
+
+function rowCounts(path: string): Record<string, number> {
+  const database = new DatabaseSync(path);
+  try {
+    const counts: Record<string, number> = {};
+    for (const table of DURABLE_TABLES) {
+      counts[table] = Number(
+        (database.prepare(`SELECT count(*) AS value FROM ${table}`).get() as { value: number })
+          .value,
+      );
+    }
+    return counts;
+  } finally {
+    database.close();
+  }
+}
+
+/**
+ * store_metadata is deliberately excluded: the manifest stamp is the ONE row the
+ * migration is allowed to change, so folding it in here would hide a rewrite of
+ * anything else behind an expected difference.
+ */
+function snapshotDurableRows(path: string): Record<string, readonly unknown[]> {
+  const database = new DatabaseSync(path);
+  try {
+    const snapshot: Record<string, readonly unknown[]> = {};
+    for (const table of DURABLE_TABLES) {
+      snapshot[table] = database.prepare(`SELECT * FROM ${table} ORDER BY rowid`).all();
+    }
+    snapshot["sqlite_sequence"] = database
+      .prepare("SELECT name, seq FROM sqlite_sequence ORDER BY name")
+      .all();
+    return snapshot;
+  } finally {
+    database.close();
+  }
+}
+
+/** Rewinds a v5 file to a genuine v4 file by dropping ONLY the new index. */
+function rewindToV4(path: string): void {
+  const database = new DatabaseSync(path);
+  try {
+    database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
+    database
+      .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+      .run(SCHEMA_V4_MANIFEST_VERSION, "schema_manifest_version");
+    database.exec("PRAGMA user_version = 4;");
+    validateExactSchemaObjects(database, SCHEMA_V4_OBJECT_SQL, 4);
+    validateSchemaManifestMetadata(database, SCHEMA_V4_MANIFEST_VERSION);
+  } finally {
+    database.close();
+  }
+}
+
+describe("SQLite schema v5 event-type index migration", () => {
+  it("serves the filtered ordered read from the named index, not a scan", () => {
+    const path = databasePath("index-plan");
+    writeProductionFixture(path);
+
+    const database = new DatabaseSync(path);
+    try {
+      expect(
+        database
+          .prepare(`
+            SELECT name FROM sqlite_schema
+            WHERE type = 'index' AND tbl_name = 'domain_events' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name
+          `)
+          .all()
+          .map((row) => String((row as { name: unknown }).name)),
+      ).toEqual([EVENT_TYPE_INDEX]);
+
+      // Column ORDER, not just membership: a reversed index keeps the same name.
+      expect(
+        database
+          .prepare(`PRAGMA index_info(${EVENT_TYPE_INDEX})`)
+          .all()
+          .map((row) => String((row as { name: unknown }).name)),
+      ).toEqual(["event_type", "global_position"]);
+
+      const plan = database.prepare(`EXPLAIN QUERY PLAN ${TYPE_POSITION_QUERY}`).all();
+      expect(plan).toHaveLength(1);
+      const detail = String((plan[0] as { detail: unknown }).detail);
+      expect(detail).toContain(EVENT_TYPE_INDEX);
+      expect(detail).toContain("(event_type=? AND global_position>?)");
+      expect(detail).not.toContain("SCAN ");
+      expect(detail).not.toContain("USE TEMP B-TREE");
+
+      // The plan is only evidence if the query it describes returns the right rows.
+      const idsAfter = (position: number): readonly string[] =>
+        database
+          .prepare(TYPE_POSITION_QUERY)
+          .all(TARGET_EVENT_TYPE, position)
+          .map((row) => String((row as { event_id: unknown }).event_id));
+      expect(idsAfter(0)).toEqual(["event-1", "event-3"]);
+      expect(idsAfter(1)).toEqual(["event-3"]);
+    } finally {
+      database.close();
+    }
+  });
+
+  it("migrates a POPULATED v4 database additively and rewrites no durable row", () => {
+    const path = databasePath("populated-v4");
+    writeProductionFixture(path);
+
+    // Prove every asserted category is actually seeded; an empty snapshot
+    // would compare equal to itself and prove nothing.
+    expect(rowCounts(path)).toEqual({
+      aggregate_heads: 1, command_decisions: 1, command_receipt_scopes: 1, command_receipts: 1,
+      cursor_generations: 1, domain_events: 3, event_subscriptions: 1, inbox_receipts: 1,
+      outbox_messages: 1, projections: 1, recovery_bindings: 1, store_project_binding: 1,
+    });
+
+    rewindToV4(path);
+    const before = snapshotDurableRows(path);
+    expect(
+      before["domain_events"]?.map((row) => Number((row as { global_position: unknown }).global_position)),
+    ).toEqual([1, 2, 3]);
+    expect(before["sqlite_sequence"]).toEqual([
+      { name: "command_decisions", seq: 1 },
+      { name: "domain_events", seq: 3 },
+      { name: "outbox_messages", seq: 1 },
+    ]);
+
+    const migrated = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      expect(migrated.readEvents("goal-1")).toHaveLength(3);
+      expect(migrated.getAggregateVersion("goal-1")).toBe(3);
+      expect(migrated.readRecoveryBinding("ACTIVE").outcome).toBe("FOUND");
+    } finally {
+      migrated.close();
+    }
+
+    // A second reopen: the migrated file must be stable, not merely openable once.
+    SqliteEventStore.openForProject(path, PROJECT_ID).close();
+
+    expect(snapshotDurableRows(path)).toEqual(before);
+
+    const after = new DatabaseSync(path);
+    try {
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
+      expect(
+        after
+          .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
+          .get(),
+      ).toEqual({ value: "moe-sqlite-schema/5" });
+      expect(
+        after
+          .prepare(`PRAGMA index_info(${EVENT_TYPE_INDEX})`)
+          .all()
+          .map((row) => String((row as { name: unknown }).name)),
+      ).toEqual(["event_type", "global_position"]);
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 5);
+      validateSchema(after);
+    } finally {
+      after.close();
+    }
+  });
+
+  it("fails closed when the v5 index is missing, renamed, or column-reversed", () => {
+    const cases = [
+      { label: "missing", rebuild: null },
+      {
+        label: "renamed",
+        rebuild: `CREATE INDEX domain_events_type_lookup
+      ON domain_events(event_type, global_position)`,
+      },
+      {
+        label: "reversed",
+        rebuild: `CREATE INDEX ${EVENT_TYPE_INDEX}
+      ON domain_events(global_position, event_type)`,
+      },
+    ] as const;
+
+    const observed = cases.map((testCase) => {
+      const path = databasePath(`tamper-${testCase.label}`);
+      SqliteEventStore.openForProject(path, PROJECT_ID).close();
+      const tamper = new DatabaseSync(path);
+      try {
+        tamper.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
+        if (testCase.rebuild !== null) tamper.exec(`${testCase.rebuild};`);
+      } finally {
+        tamper.close();
+      }
+      return {
+        code: captureSchemaCode(() =>
+          SqliteEventStore.openForProject(path, PROJECT_ID).close(),
+        ),
+        label: testCase.label,
+      };
+    });
+
+    expect(observed).toEqual([
+      { code: "STORE_SCHEMA_INVALID", label: "missing" },
+      { code: "STORE_SCHEMA_INVALID", label: "renamed" },
+      { code: "STORE_SCHEMA_INVALID", label: "reversed" },
+    ]);
   });
 });
