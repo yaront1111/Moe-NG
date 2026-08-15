@@ -80,10 +80,11 @@ describe("supersession accepted decision", () => {
     ]);
     expect(Object.isFrozen(SUPERSESSION_DISPOSITION_KINDS)).toBe(true);
     expect(SUPERSESSION_KERNEL_LAYER).toBe("SUPERSESSION_KERNEL");
-    // 61 + the 8 expansion preparation/approval values published by task-a1e7f75e.
+    // 61 + the 8 expansion preparation/approval values published by task-a1e7f75e
+    // + the 6 project-configuration codec values published by task-bcea7056.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(69);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(75);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

@@ -39,12 +39,22 @@ import type {
   ExpansionPreparedFacts, ExpansionResourceReservationFacts,
 } from "@moe/core";
 import type { ApprovalDecisionRecord, PolicyEvaluationInput } from "@moe/core";
+import type {
+  ProjectConfigurationCodecCode, ProjectConfigurationCodecLayer,
+  ProjectConfigurationCodecRefusal, ProjectConfigurationManifestCreateResult,
+  ProjectConfigurationManifestDecodeResult, ProjectConfigurationManifestEncodeResult,
+} from "@moe/core";
+import {
+  PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
+} from "@moe/contracts";
+import type { ProjectConfigurationSettings } from "@moe/contracts";
 
 type ExportKind = "array" | "function" | "record" | "string";
 /**
  * Hand-transcribed: 20 pre-existing vocabulary values + 5 transition records +
  * 3 obligation/layer strings + 33 pre-existing functions + the 8 expansion
- * preparation and approval values published by this task.
+ * preparation and approval values + the 6 project-configuration codec values
+ * (2 frozen vocabularies, 1 domain tag, 3 functions) published by task-bcea7056.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["APPROVAL_ACTOR_KINDS", "array"], ["APPROVAL_COMMAND_KINDS", "array"],
@@ -65,14 +75,21 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["POLICY_OUTCOMES", "array"], ["POLICY_OUTCOME_DOMINANCE", "array"],
   ["POLICY_REASON_CODES", "array"], ["POLICY_RISK_TIERS", "array"],
   ["POLICY_RULE_EFFECTS", "array"], ["PRINCIPAL_KINDS", "array"],
-  ["PROJECT_COMMAND_KINDS", "array"], ["PROJECT_TRANSITIONS", "record"],
+  ["PROJECT_COMMAND_KINDS", "array"],
+  ["PROJECT_CONFIGURATION_CODEC_CODES", "array"],
+  ["PROJECT_CONFIGURATION_CODEC_LAYERS", "array"],
+  ["PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN", "string"],
+  ["PROJECT_TRANSITIONS", "record"],
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["createCredential", "function"], ["createPrincipal", "function"],
-  ["createSession", "function"], ["decideSupersession", "function"],
+  ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
+  ["decideSupersession", "function"],
+  ["decodeProjectConfigurationManifestBytes", "function"],
+  ["encodeProjectConfigurationManifest", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["inspectPlanningExpansionContract", "function"], ["isCurrentGeneration", "function"],
   ["isSessionUsableAt", "function"], ["matchCapability", "function"],
@@ -88,7 +105,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(69);
+  expect(EXPECTED_EXPORTS.length).toBe(75);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -296,6 +313,65 @@ it("publishes the core expansion vocabularies as frozen closed sets", () => {
   }
 });
 
+/**
+ * Typed as the PUBLISHED contract shape rather than cast into it, for the same
+ * reason as the expansion fixture above: a cast would assert the shape instead
+ * of checking it against what the codec actually accepts.
+ */
+const configurationSettings = (): ProjectConfigurationSettings => ({
+  isolation: { hostContainment: "NOT_CLAIMED", workspace: "PER_ATTEMPT_WORKTREE" },
+  limits: PROJECT_CONFIGURATION_LIMIT_KEYS.map((key, index) => ({ key, value: index + 1 })),
+  network: { daemonExposure: "LOOPBACK_ONLY", providerEgress: "EGRESS_ALLOWLISTED" },
+  orchestrationSource: { objectFormat: "sha256", sourceSha: hex("2") },
+  policy: {
+    acceptanceGate: "MANUAL_HUMAN_APPROVAL", autoApprovalOptInDigest: null,
+    evaluatorVersion: "policy-evaluator-v1", expansionGate: "MANUAL_HUMAN_APPROVAL",
+    planningGate: "MANUAL_HUMAN_APPROVAL", policyRevisionId: "policy-revision-7", revision: 3,
+  },
+  schemaVersions: {
+    commandSchemaVersion: "moe-command/1", errorSchemaVersion: "moe-error/1",
+    querySchemaVersion: "moe-query/1",
+  },
+  selection: {
+    modelRef: "model-1", profileRef: "profile-1", providerRef: "provider-1",
+    reasoningEffortRef: "effort-1", runtimeRef: "runtime-1", snapshotRef: "snapshot-1",
+    structuredOutputSchemaRef: "schema-1",
+  },
+});
+
+it("round-trips a project configuration manifest through the root", () => {
+  const created: ProjectConfigurationManifestCreateResult =
+    core.createProjectConfigurationManifest("project-root", configurationSettings());
+  if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+  const encoded: ProjectConfigurationManifestEncodeResult =
+    core.encodeProjectConfigurationManifest(created.manifest);
+  if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+  const decoded: ProjectConfigurationManifestDecodeResult =
+    core.decodeProjectConfigurationManifestBytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+
+  expect(created.manifest.settingsDigest).toMatch(/^[0-9a-f]{64}$/u);
+  expect(decoded.manifest.settingsDigest).toBe(created.manifest.settingsDigest);
+  expect(decoded.manifest.schemaVersion).toBe(PROJECT_CONFIGURATION_SCHEMA_VERSION);
+  expect(decoded.manifest.projectId).toBe("project-root");
+});
+
+it("refuses undecodable configuration bytes from the root, naming code and layer", () => {
+  const result = core.decodeProjectConfigurationManifestBytes(new TextEncoder().encode("{"));
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: ProjectConfigurationCodecRefusal = result;
+  const code: ProjectConfigurationCodecCode = "PROJECT_CONFIGURATION_BYTES_INVALID";
+  const layer: ProjectConfigurationCodecLayer = "PROJECT_CONFIGURATION_CODEC";
+  expect([refusal.code, refusal.layer, refusal.upstream]).toEqual([code, layer, null]);
+  expect(core.PROJECT_CONFIGURATION_CODEC_CODES).toContain(code);
+  expect(core.PROJECT_CONFIGURATION_CODEC_LAYERS).toContain(layer);
+  expect(Object.isFrozen(core.PROJECT_CONFIGURATION_CODEC_CODES)).toBe(true);
+  expect(Object.isFrozen(core.PROJECT_CONFIGURATION_CODEC_LAYERS)).toBe(true);
+  expect(core.PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN)
+    .toBe("moe-project-configuration-settings/1");
+});
+
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CHILD_TIMEOUT_MS = 30_000;
@@ -332,6 +408,10 @@ try {
     reducePlanningRun: typeof ns.reducePlanningRun,
     preparationLayers: [...(ns.EXPANSION_PREPARATION_LAYERS ?? [])],
     approvalComponents: [...(ns.EXPANSION_APPROVAL_COMPONENTS ?? [])],
+    createProjectConfigurationManifest: typeof ns.createProjectConfigurationManifest,
+    encodeProjectConfigurationManifest: typeof ns.encodeProjectConfigurationManifest,
+    decodeProjectConfigurationManifestBytes: typeof ns.decodeProjectConfigurationManifestBytes,
+    codecCodes: [...(ns.PROJECT_CONFIGURATION_CODEC_CODES ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -356,12 +436,19 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 69,
+    namedExportCount: 75,
     undefinedBindingCount: 0,
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",
     reducePlanningRun: "function",
+    createProjectConfigurationManifest: "function",
+    encodeProjectConfigurationManifest: "function",
+    decodeProjectConfigurationManifestBytes: "function",
+    codecCodes: [
+      "PROJECT_CONFIGURATION_BYTES_INVALID", "PROJECT_CONFIGURATION_DUPLICATE_KEY",
+      "PROJECT_CONFIGURATION_NONCANONICAL", "PROJECT_CONFIGURATION_DIGEST_MISMATCH",
+    ],
     preparationLayers: [
       "BUDGET", "EVIDENCE", "FENCE", "FUNDING", "INPUT", "LIFECYCLE", "POLICY", "RESOURCE",
       "SUPERSESSION_KERNEL",

@@ -1,60 +1,41 @@
 export {
-  PROJECT_COMMAND_KINDS,
-  PROJECT_TRANSITIONS,
-  reduceProject,
+  PROJECT_COMMAND_KINDS, PROJECT_TRANSITIONS, reduceProject,
 } from "./project/project-reducer.js";
 export type {
-  ProjectAcceptedResult,
-  ProjectActivateCommand,
-  ProjectActivationWitness,
-  ProjectBindRepositoryCommand,
-  ProjectCommand,
-  ProjectCommandKind,
-  ProjectEvent,
-  ProjectLifecycle,
-  ProjectReducerResult,
-  ProjectRegisterCommand,
-  ProjectRejectedResult,
-  ProjectState,
-  RecoveryCompleteCommand,
-  RecoveryCompletionWitness,
-  RepositoryObservation,
-  RestoreQuiesceCommand,
-  RestoreQuiesceWitness,
+  ProjectAcceptedResult, ProjectActivateCommand, ProjectActivationWitness,
+  ProjectBindRepositoryCommand, ProjectCommand, ProjectCommandKind, ProjectEvent,
+  ProjectLifecycle, ProjectReducerResult, ProjectRegisterCommand, ProjectRejectedResult,
+  ProjectState, RecoveryCompleteCommand, RecoveryCompletionWitness, RepositoryObservation,
+  RestoreQuiesceCommand, RestoreQuiesceWitness,
 } from "./project/project-contract.js";
 
+/**
+ * The content-addressed project configuration codec. `settingsDigest` is derived
+ * from a domain-separated SHA-256 over the canonical settings bytes, so every
+ * consumer that decodes these bytes agrees on the same authority or refuses.
+ */
 export {
-  GOAL_COMMAND_KINDS,
-  GOAL_TRANSITIONS,
-  reduceGoal,
+  PROJECT_CONFIGURATION_CODEC_CODES, PROJECT_CONFIGURATION_CODEC_LAYERS,
+  PROJECT_CONFIGURATION_SETTINGS_DIGEST_DOMAIN, createProjectConfigurationManifest,
+  decodeProjectConfigurationManifestBytes, encodeProjectConfigurationManifest,
+} from "./configuration/project-configuration-manifest.js";
+export type {
+  ProjectConfigurationCodecCode, ProjectConfigurationCodecLayer,
+  ProjectConfigurationCodecRefusal, ProjectConfigurationManifestCreateResult,
+  ProjectConfigurationManifestDecodeResult, ProjectConfigurationManifestEncodeResult,
+} from "./configuration/project-configuration-manifest.js";
+
+export {
+  GOAL_COMMAND_KINDS, GOAL_TRANSITIONS, reduceGoal,
 } from "./goal/goal-reducer.js";
 export type {
-  AcceptanceClosureWitness,
-  CancellationAuthorizationWitness,
-  GoalAcceptedResult,
-  GoalActivateInitialGraphCommand,
-  GoalCancelCommand,
-  GoalCloseCommand,
-  GoalCommand,
-  GoalCommandKind,
-  GoalCreateCommand,
-  GoalEvent,
-  GoalLifecycle,
-  GoalPauseCommand,
-  GoalQualificationInvalidatedCommand,
-  GoalRecoveryFacets,
-  GoalReducerResult,
-  GoalRejectedResult,
-  GoalReopenAsRevisionCommand,
-  GoalResumeCommand,
-  GoalSchedulingControl,
-  GoalState,
-  GoalSuccessorData,
-  InitialGraphActivationWitness,
-  ProjectReadyWitness,
-  QualificationInvalidationWitness,
-  ReopenAuthorizationWitness,
-  ZeroAuthorityWitness,
+  AcceptanceClosureWitness, CancellationAuthorizationWitness, GoalAcceptedResult,
+  GoalActivateInitialGraphCommand, GoalCancelCommand, GoalCloseCommand, GoalCommand,
+  GoalCommandKind, GoalCreateCommand, GoalEvent, GoalLifecycle, GoalPauseCommand,
+  GoalQualificationInvalidatedCommand, GoalRecoveryFacets, GoalReducerResult,
+  GoalRejectedResult, GoalReopenAsRevisionCommand, GoalResumeCommand, GoalSchedulingControl,
+  GoalState, GoalSuccessorData, InitialGraphActivationWitness, ProjectReadyWitness,
+  QualificationInvalidationWitness, ReopenAuthorizationWitness, ZeroAuthorityWitness,
 } from "./goal/goal-contract.js";
 
 export {
