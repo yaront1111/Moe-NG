@@ -20,24 +20,18 @@
     {
       "stepId": "step-1",
       "description": "RED — create the focused Vitest suite and a real-Sqlite harness, then write contract-first failing cases. Specify `FoundationAttemptDispatchRequest` as an exact record containing only `graphSnapshot`, a server-assembled `activationRequestBytes`, frozen `{nodeKey, attemptAggregateId, sessionId}` binding, sealed input manifest, and an authority-free Claude launch template (runtime request, argv/cwd/environment/limits/selection/bootstrap digest only). Pin the closed Foundation code/layer vocabulary, exact-key rejection (including smuggled grant/effect/attempt/prior/registration/fresh-runtime fields), bounded/frozen snapshots, dispatch-record encode/decode digest round-trip, tamper/hostile-value UNKNOWN behavior, and a positive generated-case count. Run only this file and record an expected missing-behavior RED rather than treating zero discovered tests as evidence.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Reopen RED added the QA-named hostile reflection cases against the production decodeFoundationAttemptRequest surface: one revoked proxy and one ownKeys-throwing proxy, exact nonzero cardinality 2, exact FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT expectation. Focused daemon Vitest executed 1 file/17 tests and failed exactly this test (1 failed, 16 passed) because production threw and the captured value was {threw:true}; this is the intended missing-behavior RED. Re-measured existing task production at 359/294 lines and recorded Moe scope expansion for focused codec/store modules.",
-      "startedAt": "2026-08-15T22:07:09.547Z",
-      "completedAt": "2026-08-15T22:10:50.365Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "GREEN — implement the compact contracts/codec module and its exact one-line NodeNext bridge. Define the schema/event versions, `DAEMON_FOUNDATION_ATTEMPT` layer, stable request/graph/binding/reservation/replay/capture/manifest/commit/read codes, dispatch-reservation and immutable attempt-record shapes, success/refusal/read outcomes, and deterministic length-framed aggregate/command identities. Snapshot hostile inputs before access, copy only declared bounded fields, hash canonical persisted bytes, deep-freeze all public answers, and distinguish advisory terminal/session observations from the activation's durable authority. Keep the TypeScript source <=250 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
@@ -46,36 +40,21 @@
       "newFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.test.ts",
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-codec.ts",
-        "apps/daemon/src/work/foundation-attempt-codec.js"
-      ],
-      "note": "GREEN: extracted hostile-safe request/payload codec into the Moe-declared focused foundation-attempt-codec.ts plus exact one-line bridge. Reflection, prototype, key enumeration, descriptor, and value-copy failures are contained; activation bytes are copied, declared fields are bounded/frozen, canonical payload digests remain deterministic, and contracts re-export the existing public surface. Focused daemon typecheck exit 0; focused Vitest executed 1 file/17 tests, all passed including revoked/throwing proxy exact refusal. Production sizes: contracts 189, codec 181, codec bridge 1; git diff --check clean.",
-      "startedAt": "2026-08-15T22:10:53.974Z",
-      "completedAt": "2026-08-15T22:13:08.275Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "RED — add orchestration tests before the service exists. Using a real SqliteEventStore and production activation/manifest primitives, prove: validateGraphSnapshot admits exactly one execution-bearing node and the requested node/attempt/session binding matches the durable activation; the EffectActivationCommitted row and a unique dispatch reservation are visible before the launch port is called; the launch request contains the store-decoded effect/attempt/UNUSED grant and admitted claim, always `priorRegistration:null`/`duplicateDelivery:null`, and no caller-selected authority; result capture runs only after a PROVEN launch observation and the persisted/read-back record contains byte-identical input/result manifests, PROCESS_OBSERVED registration identity, runtime/activation/observation/stdout/stderr digests, effect/session identity, and `advisoryOnly:true`. Inject real SQLite transaction aborts separately at activation and reservation commits, assert the injection fired, exact code+layer, zero launcher/capture calls, and the applicable raw event/decision residue. Generate at least one valid >1-execution-node graph and assert `FOUNDATION_ATTEMPT_MULTI_NODE_UNSUPPORTED` at `DAEMON_FOUNDATION_ATTEMPT`, zero activation/claim/resource/budget/dispatch rows, and zero launch. Add a cross-platform production-default control that forces trusted launch option `platform:\"linux\"` and observes the real runner's exact UNSUPPORTED refusal, while success-path tests replace only the physical launch/result-capture boundaries.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.test.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Reopen RED added two QA probes against production orchestration: cross-session binding must refuse FOUNDATION_ATTEMPT_BINDING_MISMATCH@DAEMON_FOUNDATION_ATTEMPT before any activation event, and a fulfilled {kind:OBSERVED,truthClass:PROVEN} missing runner observation/registration must refuse FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT, skip capture, and persist only SUSPECT/null-manifest facts. Focused daemon Vitest executed 1 file/18 tests and failed exactly both cases (2 failed, 16 passed): current code leaves one EffectActivationCommitted row before the binding refusal and upgrades the malformed launcher shape to an ok advisory record.",
-      "startedAt": "2026-08-15T22:13:12.826Z",
-      "completedAt": "2026-08-15T22:14:48.329Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "GREEN — implement `createFoundationAttemptService` plus `readFoundationAttemptRecord` and the exact one-line bridge. Validate/snapshot the request and sealed input manifest first; call public `validateGraphSnapshot`, require exactly one execution-bearing node, and bind its node key plus activation attempt aggregate/session before any write. Delegate activation unchanged to `runEffectActivateCommand`, preserve every delegated refusal code/refusedBy layer, decode the COMMITTED/REPLAYED activation from durable result bytes, and commit an expected-version-0 dispatch reservation; only a fresh COMMITTED reservation may launch. The default path must construct `createFoundationClaudeLauncher` with the activation aggregate/key, build the Claude request from the durable effect/attempt/grant and admitted claim (never a pending prior), and let the runner freshly observe/pin runtime. Contain launcher/capture failures and hostile fulfilled values. For a PROVEN observation, invoke the daemon-owned result-capture port, combine it with the service-owned sealed input manifest through bare-root `buildResultManifest`, then expected-version-append one immutable advisory record containing the full manifests and exact registration/runtime/raw-evidence identities. Re-read and byte/digest-check ambiguous/replayed writes rather than echoing a candidate. Keep the TypeScript source <=250 physical lines.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js",
@@ -85,87 +64,49 @@
       "newFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-store.ts",
-        "apps/daemon/src/work/foundation-attempt-store.js",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "GREEN: added a no-write pre-activation relation fence that derives the activation aggregate from the decoded effect identity, checks the carried attempt aggregate and lease owner session, and returns exact FOUNDATION_ATTEMPT_BINDING_MISMATCH@DAEMON_FOUNDATION_ATTEMPT before runEffectActivateCommand. Launcher/capture fulfilled values are now snapshotted under containment; PROVEN is admitted only with safe observation/registration records and required observation/process identities, so malformed PROVEN-shaped output persists SUSPECT/null-manifest and skips capture. Extracted expected-version reservation/final readback into foundation-attempt-store.ts plus one-line bridge. Focused daemon typecheck exit 0; focused Vitest 1 file/18 tests all passed. Production sizes: service 248, store 62, contracts 189, codec 181; all bridges one line; diff-check clean.",
-      "startedAt": "2026-08-15T22:14:54.324Z",
-      "completedAt": "2026-08-15T22:17:44.302Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "TDD recovery/concurrency hardening — add each case RED, then minimally refine the service. Gate the winning launch promise and issue concurrent identical deliveries: assert one activation, one dispatch reservation, one PROCESS_OBSERVED registration (PREFLIGHT is not process authority), one final record, exactly one launcher invocation, and one capture; the loser must adopt the byte-identical final durable record or return exact `FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS`/SUSPECT before launch. Replay after completion must answer from stored bytes even when a caller candidate drifts; changed command/manifest/binding bytes must refuse without overwrite. Cover restart windows with reservation-only, grant-consumed-only, PREFLIGHT-only, PROCESS_OBSERVED-without-result, result-capture throw/malformed result, UNKNOWN/cancelled launch observation, and ambiguous final commit: persist or read an honest UNKNOWN/SUSPECT advisory bound to the current effect/session/process facts, never turn it into a result manifest, never feed pending registration back as prior, and never silently relaunch. Assert raw event-type and decision counts and exact code/layer for every refusal; generated crash cases must assert a positive case count.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-codec.ts",
-        "apps/daemon/src/work/foundation-attempt-codec.js",
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-store.ts",
-        "apps/daemon/src/work/foundation-attempt-store.js",
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Hardened replay/recovery with a full dispatch identity digest (activation request, binding, graph, sealed input manifest, and launch template), exact FOUNDATION_ATTEMPT_REPLAY_MISMATCH@DAEMON_FOUNDATION_ATTEMPT refusal, and no overwrite/relaunch on drift. Added pre-activation unverifiable-binding refusal before any authority write and contained hostile fulfilled launcher/capture proxies with exact local codes. Fresh isolated ext4 run: daemon typecheck exit 0; focused service suite Test Files 1 passed, Tests 22 passed.",
-      "startedAt": "2026-08-15T22:17:48.690Z",
-      "completedAt": "2026-08-15T22:23:48.217Z"
+      ]
     },
     {
       "stepId": "step-6",
       "description": "Adversarial self-review — read the complete five-file diff as an attacker and check concurrent double delivery, replay identity, null/empty/huge/proxy inputs, cross-project/session/attempt drift, PREFLIGHT-vs-STARTED confusion, activation/result commit ambiguity, port throw/rejection/thenable behavior, manifest substitution, secret/message echo, Windows/Linux path handling, frozen output and cleanup. Run byte-restored mutation drills against production: allow a second execution-bearing node, let a REPLAYED reservation launch, or answer replay from candidate bytes; require the named production-surface tests to go red on the exact code/layer/count assertion, confirm each mutation actually applied, then restore hashes exactly. Remove every probe/artifact and keep only owned paths.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts",
-        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
-      ],
-      "note": "Adversarial review closed the reopen gap: FoundationAttemptDeps.runtimePorts (caller/test-composed clock/facts/fs) is GONE. dispatch() now calls bare-root createClaudeRuntimePinRequest(request.launchTemplate.runtime) BEFORE any authority write and keeps the runner's own code + RUNTIME layer; launchRequestBody forwards that hydrated pin request whole, so no template field can re-layer a minted capability. RED first: 3 new production-surface cases (quote-digest drift, control-char installedRoot, sweep of 2 non-single-EXECUTABLE closures with a positive generated count) plus a deps-level hostile capability set that must never be touched — 9 tests red before the change, 25 green after. Byte-restored mutation drills, each verified applied and each restored by md5: (1) bearing.length>1 -> >99 reddened the multi-node case; (2) REPLAYED-reservation gate disabled reddened the concurrent-delivery case; (3) hydration refusal bypassed reddened exactly the 3 new runtime cases. Windows suite re-founded on the shipped observer: the old fake-facts fixture is deleted, and the fake claude.exe now refuses CLAUDE_RUNTIME_OBSERVATION_INVALID@RUNTIME — a code only reachable AFTER a real broker child ran and its stdout was read — with pinRoot/marker absent, SUSPECT advisory persisted, replay answered from stored bytes and cwd drift refused REPLAY_MISMATCH. Production line counts: contracts 215, codec 194, store 155, service 249. NOTE: foundation-attempt-windows.test.ts received edits at 11:37Z that I did not author (concurrent writer in the shared worktree); I preserved them and built on top.",
-      "startedAt": "2026-08-15T22:23:57.955Z",
-      "completedAt": "2026-08-16T11:41:20.237Z"
+      ]
     },
     {
       "stepId": "step-7",
       "description": "Verification — from a fresh foreground shell run exactly: `pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store && git diff --check && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-contracts.ts)\" -le 250 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-service.ts)\" -le 250 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-contracts.js)\" -eq 1 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-service.js)\" -eq 1`. Record positive `Test Files`/test counts for both filtered suites (no `No projects matched`, `No test files found`, or zero-test output). Compare repo-wide failing paths at the task merge-base with HEAD under the path-attributed baseline rail; owned-package legs must exit 0 and any foreign red must be quoted verbatim with an empty new-owned-path intersection. Confirm `git status --porcelain` has no staged foreign path, then commit only the five explicit owned paths with `git commit -- <five paths>` and verify `git show --stat` contains nothing else.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/daemon/src/work/foundation-attempt-service.ts",
-        "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ],
-      "note": "Fresh foreground chain, CHAIN_EXIT=0: `pnpm --filter @moe/runner test` (66 files / 2216 passed, 1 skipped) && `pnpm --filter @moe/daemon typecheck` (Done) && focused daemon suite `src/work/foundation-attempt-service.test.ts` (1 file / 25 tests passed) && `pnpm typecheck` (18 projects Done) && `pnpm verify:foundation` (32 files / 661 passed). `git diff --check` clean. Line counts: contracts.ts 215, service.ts 249, codec.ts 194, store.ts 155; all four .js bridges exactly 1 line.\n\nFOREIGN RED, quoted and attributed (path-attributed baseline rail; NONE intersects this task's owned paths, and my owned paths do not appear in any failing set):\n- `pnpm --filter @moe/daemon test` -> 3 files / 5 tests failed: activation-ledger-reader.test.ts \"reads a number of events bounded by the MATCHES, not by the stream\" + \"ignores an activation committed past the captured horizon\"; foundation-launch-authority.test.ts \"answers from the real store without reading the whole global stream\" + \"bounds a continuously advancing scan to the captured horizon\" — the released O(n) effect-binding task's deliberately-red repros. Third: foundation-attempt-windows.test.ts \"launches the installed Claude once and adopts replay\", which asserts `toMatchObject({code:\"DIAGNOSTIC\", ok:true})` — a peer's live diagnostic probe; actual production answer is CLAUDE_RUNTIME_OBSERVATION_CHANGED@RUNTIME against the really installed Claude.\n- `pnpm test` / `pnpm verify:store` -> 1 failed: packages/store/src/recovery-anchor.test.ts \"publishes exactly the anchor surface a restore controller composes\" (a withheld symbol leaked onto the @moe/store root by another task). 6645 passed elsewhere.\nAn earlier daemon run showed 30 failures across 10 files; re-run gave 5/3 — the extra 25 were concurrent-writer interference, and index-surface/runtime-entrypoint pass in isolation (113 tests).\n\nCOMMIT: nothing left to commit. A foreign whole-tree commit b55b9f0 feat(task-9aca4b05...) swept this task's bytes (contracts.ts, service.ts, service.test.ts, windows.test.ts). Per project rail I did not amend, reset or claim it. QA should review `git diff 0f19e06..HEAD -- apps/daemon/src/work/foundation-attempt-*` (contracts +14/-, service +24/-, service.test +150/-, windows.test 217 changed). Working tree for every owned path is byte-identical to HEAD (`git diff --quiet HEAD` exit 0).",
-      "startedAt": "2026-08-16T11:46:27.043Z",
-      "completedAt": "2026-08-16T11:47:49.061Z"
+      ]
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "PLANNING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 1,
-  "reopenReason": "Governor cascade 09:48Z: BOTH missing production capabilities from the adversarial-review block are now landed and QA-approved DONE. Capability 1 (server-owned runtimePorts hydrator): ff589abd → 32eddfd3 (observeInstalledClaudeRuntime) → 75ee4a84 (pin-request hydration from host capabilities) all DONE — replace the caller/test-composed runtimePorts with the bare-root hydrator per the chain's landed surfaces. Capability 2 (nonblocking native control polling with real Windows proof): 7ba898f5 (fd0/polling half) AND d7b352e1 (settle re-founding; launcher natural-exit PROVEN child-driven at ~1.06s) both DONE. Resume the remaining steps of the 7-step plan (5 banked). Re-measure every consumed symbol on committed bytes first (stale-by-default); the WIP and exact evidence preserved in the Serena handoff cited by the old blockedReason. Downstream on this task: 44d48→8f930→5e43a→49ed1, a9fd9, e62e3→expansion chain, 22cfc, 97554 — the largest remaining cascade on the board.",
+  "reopenCount": 2,
+  "reopenReason": "Re-verified round 2 at HEAD 66ae6ef over `git diff 0f19e06..HEAD -- apps/daemon/src/work/foundation-attempt-*`. All five round-1 issues are FIXED and must NOT be redone: (1) the whole-launch deps seam is gone — service.ts:233 builds the real createFoundationClaudeLauncher, and test:569 proves a caller-supplied `launch` is never invoked (forgedCalls 0) while the real launcher refuses CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER; (2) identifyFoundationDispatch (codec:178) binds activation digest + binding + graph + input manifest + launch template, and a changed cwd refuses FOUNDATION_ATTEMPT_REPLAY_MISMATCH with no overwrite (test:703); (3) preActivationBindingMatches runs at service.ts:188 BEFORE runEffectActivateCommand, with zero events asserted on both aggregates (test:518/536); (4) revoked and ownKeys-throwing proxies are contained to FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT with an explicit case count of 2 (test:424); (5) line counts are contracts 215 / service 249 / codec 194 / store 155, four 1-line bridges.\n\nGates I re-ran myself: `pnpm --filter @moe/runner test` = 66 files / 2216 passed, exit 0. Focused suite `vitest run --root . --config package.json src/work/foundation-attempt` = 2 files / 28 tests passed, exit 0. Full `pnpm --filter @moe/daemon test` = 2 failed files / 98 passed; both are the peer bounded-scan repros (activation-ledger-reader.test.ts, foundation-launch-authority.test.ts), neither an owned path. Daemon and repo typecheck fail only on untracked peer file src/activation/activation-run-commit.test.ts (absent at merge-base 0f19e06). Foreign red, not attributed to this task.\n\nRejected on DoD 2 only. Its persistence half — \"persists immutable process registration, raw evidence digests, and result-manifest identity\" — has zero executed evidence: capture() and the PROVEN branch of attemptRecordBody are dead in every test. This is closable WITHOUT any withheld runner authority; see the issues.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -252,13 +193,8 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-16T11:52:11.392Z",
+  "updatedAt": "2026-08-16T11:55:58.845Z",
   "contextFetchedBy": [
-    "governor-a627169a",
-    "worker-827a27f6",
-    "architect-09b5f32a",
-    "architect-d9dccf21",
-    "worker-5678886b",
     "qa-c7cedba3"
   ],
   "metrics": {
@@ -266,8 +202,8 @@
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
     "executedStepCount": 14,
-    "rejectCount": 1,
-    "reopenCount": 1
+    "rejectCount": 2,
+    "reopenCount": 2
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -311,15 +247,7 @@
       "reason": "Explicit handoff is complete; user requested more planning, so free architect capacity while this task remains blocked on production dependencies."
     }
   ],
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5",
-    "step-6",
-    "step-7"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [
     {
       "item": "A single authenticated request against a real SqliteEventStore claims one node and commits attempt/effect/grant activation atomically before the first physical launch; injected commit failure proves zero launch.",
@@ -345,6 +273,11 @@
       "item": "Runner, daemon, and repo-wide gates exit 0, and all production modules stay below 250 physical lines.",
       "rejectedAt": "2026-08-15T21:51:11.966Z",
       "rejectedBy": "qa-7d1f37bd"
+    },
+    {
+      "item": "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity.",
+      "rejectedAt": "2026-08-16T11:55:11.216Z",
+      "rejectedBy": "qa-c7cedba3"
     }
   ],
   "planSubmittedAt": "2026-08-15T20:43:12.123Z",
@@ -384,49 +317,61 @@
     "apps/daemon/src/work/foundation-attempt-store.js",
     "apps/daemon/src/work/foundation-attempt-windows.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T21:51:11.966Z",
+  "reviewCompletedAt": "2026-08-16T11:55:11.216Z",
   "rejectionDetails": {
     "failedDodItems": [
-      "A single authenticated request against a real SqliteEventStore claims one node and commits attempt/effect/grant activation atomically before the first physical launch; injected commit failure proves zero launch.",
-      "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity.",
-      "Duplicate/replayed delivery leaves exactly one authoritative claim, one activation, and one process registration; it adopts or refuses before launch, asserted by raw durable row counts and launcher invocation count.",
-      "Crash/cancel/unknown launch outcomes persist honest SUSPECT/UNKNOWN or release facts and never silently relaunch; terminal/session events remain advisory and bind the current effect/session identity.",
-      "Runner, daemon, and repo-wide gates exit 0, and all production modules stay below 250 physical lines."
+      "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity."
     ],
     "issues": [
       {
-        "type": "security",
+        "type": "missing_feature",
         "file": "apps/daemon/src/work/foundation-attempt-service.ts",
-        "line": 281,
-        "description": "The optional whole-launch port bypasses @moe/runner authority, and interpretation checks only kind/truthClass. QA supplied `{kind:'OBSERVED',truthClass:'PROVEN'}` with no observation/registration; dispatch returned ok:true and persisted PROVEN. The suite itself hand-forges OBSERVED_RESULT. Remove/narrow this authority seam or decode via shipped runner production authority; acceptance must exercise real grant consumption and PREFLIGHT/STARTED persistence, not a fabricated launcher verdict."
+        "line": 121,
+        "description": "capture() never runs in any test: captureResult is asserted toHaveLength(0) at test 512/647/679/696/715/786 and throws in the Windows case. Nothing asserts a stored record with non-null resultManifest, registration/observation digests or stdout/stderrSha256, so buildResultManifest({inputManifest: input as never}) at :136 is unverified; a shape mismatch would silently persist UNKNOWN for every real PROVEN launch."
       },
       {
-        "type": "security",
-        "file": "apps/daemon/src/work/foundation-attempt-service.ts",
-        "line": 257,
-        "description": "The reservation identity omits the sealed input manifest, graph and launch template; `requestDigest` hashes only activation bytes. QA completed one dispatch, changed only launchTemplate.cwd, and replay returned ok:true for the old stored record. Step 5 explicitly required changed command/manifest/binding bytes to refuse. Bind a canonical full dispatch digest into reservation/final bytes and test exact mismatch code/layer, no overwrite, and one launch."
-      },
-      {
-        "type": "security",
-        "file": "apps/daemon/src/work/foundation-attempt-service.ts",
-        "line": 247,
-        "description": "Binding is checked only after `runEffectActivateCommand` writes. QA sent a foreign session binding: the service returned FOUNDATION_ATTEMPT_BINDING_MISMATCH but left one EffectActivationCommitted row. This contradicts the plan's before-any-write binding fence and the step-6 claim. Cross-check decoded activation aggregate/session/node before activation, then assert exact code/layer and zero activation/dispatch/launch residue."
-      },
-      {
-        "type": "security",
-        "file": "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "line": 131,
-        "description": "Malformed inputs do not fail closed. QA calls with a revoked proxy and a proxy whose ownKeys throws escaped as TypeError/Error from Array.isArray/Object.keys. Similar launcher/capture fulfilled-value inspection occurs after `contained`. Contain all reflection/interpretation and return FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT (or the exact owning code/layer) for revoked, throwing and hostile proxies; add mutation-resistant tests."
+        "type": "missing_feature",
+        "file": "apps/daemon/src/work/foundation-attempt-store.ts",
+        "line": 99,
+        "description": "Fix for the above needs no withheld runner authority: durableObservedFixture already builds the GRANT_CONSUMED/PREFLIGHT/PROCESS_OBSERVED tail through production authority, and readDurableFoundationObservation already validates the pair. Move the record compose+commit step here as production the service calls, drive it from that fixture plus the real captureAnswer(), assert the read-back bytes carry manifest/registration identity and raw digests, and mutation-drill one field."
       },
       {
         "type": "other",
         "file": "apps/daemon/src/work/foundation-attempt-contracts.ts",
-        "line": 359,
-        "description": "Explicit DoD 6 and the approved step-7 shell gate require every production module <=250 physical lines. Actual counts are contracts.ts 359 and service.ts 294; the 400 split threshold does not waive this task-specific DoD. Split focused responsibilities into additional production modules/bridges and have ownership expanded through Moe rather than declaring the failed gate complete."
+        "line": 55,
+        "description": "The closed vocabulary declares FOUNDATION_ATTEMPT_RESULT_MANIFEST_INVALID, FOUNDATION_ATTEMPT_DISPATCH_SUSPECT and FOUNDATION_ATTEMPT_INPUT_MANIFEST_INVALID; grep across service/store/codec/contracts finds zero producers and zero occurrences in either test file. A code no layer can emit cannot fail closed. Produce and pin each with an exact code+layer test, or drop it from the closed list."
       }
     ]
   },
   "rejectionHistory": [
+    {
+      "reason": "Re-verified round 2 at HEAD 66ae6ef over `git diff 0f19e06..HEAD -- apps/daemon/src/work/foundation-attempt-*`. All five round-1 issues are FIXED and must NOT be redone: (1) the whole-launch deps seam is gone — service.ts:233 builds the real createFoundationClaudeLauncher, and test:569 proves a caller-supplied `launch` is never invoked (forgedCalls 0) while the real launcher refuses CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER; (2) identifyFoundationDispatch (codec:178) binds activation digest + binding + graph + input manifest + launch template, and a changed cwd refuses FOUNDATION_ATTEMPT_REPLAY_MISMATCH with no overwrite (test:703); (3) preActivationBindingMatches runs at service.ts:188 BEFORE runEffectActivateCommand, with zero events asserted on both aggregates (test:518/536); (4) revoked and ownKeys-throwing proxies are contained to FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT with an explicit case count of 2 (test:424); (5) line counts are contracts 215 / service 249 / codec 194 / store 155, four 1-line bridges.\n\nGates I re-ran myself: `pnpm --filter @moe/runner test` = 66 files / 2216 passed, exit 0. Focused suite `vitest run --root . --config package.json src/work/foundation-attempt` = 2 files / 28 tests passed, exit 0. Full `pnpm --filter @moe/daemon test` = 2 failed files / 98 passed; both are the peer bounded-scan repros (activation-ledger-reader.test.ts, foundation-launch-authority.test.ts), neither an owned path. Daemon and repo typecheck fail only on untracked peer file src/activation/activation-run-commit.test.ts (absent at merge-base 0f19e06). Foreign red, not attributed to this task.\n\nRejected on DoD 2 only. Its persistence half — \"persists immutable process registration, raw evidence digests, and result-manifest identity\" — has zero executed evidence: capture() and the PROVEN branch of attemptRecordBody are dead in every test. This is closable WITHOUT any withheld runner authority; see the issues.",
+      "rejectedAt": "2026-08-16T11:55:11.216Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/work/foundation-attempt-service.ts",
+          "line": 121,
+          "description": "capture() never runs in any test: captureResult is asserted toHaveLength(0) at test 512/647/679/696/715/786 and throws in the Windows case. Nothing asserts a stored record with non-null resultManifest, registration/observation digests or stdout/stderrSha256, so buildResultManifest({inputManifest: input as never}) at :136 is unverified; a shape mismatch would silently persist UNKNOWN for every real PROVEN launch."
+        },
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/work/foundation-attempt-store.ts",
+          "line": 99,
+          "description": "Fix for the above needs no withheld runner authority: durableObservedFixture already builds the GRANT_CONSUMED/PREFLIGHT/PROCESS_OBSERVED tail through production authority, and readDurableFoundationObservation already validates the pair. Move the record compose+commit step here as production the service calls, drive it from that fixture plus the real captureAnswer(), assert the read-back bytes carry manifest/registration identity and raw digests, and mutation-drill one field."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/work/foundation-attempt-contracts.ts",
+          "line": 55,
+          "description": "The closed vocabulary declares FOUNDATION_ATTEMPT_RESULT_MANIFEST_INVALID, FOUNDATION_ATTEMPT_DISPATCH_SUSPECT and FOUNDATION_ATTEMPT_INPUT_MANIFEST_INVALID; grep across service/store/codec/contracts finds zero producers and zero occurrences in either test file. A code no layer can emit cannot fail closed. Produce and pin each with an exact code+layer test, or drop it from the closed list."
+        }
+      ]
+    },
     {
       "reason": "Rejected on DoD 1/2/3/5/6 and task/epic rails. The reported focused gate was re-run and did execute 1 file/16 tests with exit 0, but adversarial probes against committed 5e72476 exposed authority, replay, ordering, and fail-closed gaps. The successful test path is mock-backed, a malformed PROVEN-shaped launcher answer is upgraded to PROVEN, changed request bytes replay as success, cross-session refusal writes activation first, and hostile proxies throw. Both production TS files also fail the explicit DoD below-250 gate. The worker also disclosed that production preceded the first RED runs; on reopen, add the named failing cases first, then minimally fix and rerun the full planned gate.",
       "rejectedAt": "2026-08-15T21:51:11.966Z",

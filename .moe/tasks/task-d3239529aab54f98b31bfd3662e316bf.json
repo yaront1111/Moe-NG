@@ -88,25 +88,39 @@
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS — prove the decision and the replay answer are load-bearing. Run each alone, revert before the next. (1) THE REPLAY-ECHO DRILL: switch the replay answer to echo the caller's record instead of the durable one; the changed-byte replay case from step 3 MUST redden. If it stays green, that assertion is comparing the caller's bytes with the caller's bytes and the idempotence claim is vacuous — strengthen the test before completing, and report that finding either way. (2) Commit on `ok:false` by synthesising an identity; the malformed-ref case must redden on the empty-aggregate assertion — proving the uncommittable arm is enforced rather than merely intended. (3) Skip the commit for blind handoffs; the blind-handoff cases must redden — proving the DECISION is implemented, since the natural over-correction to \"do not write falsehoods\" is to write nothing. (4) Make a blind record present a non-UNKNOWN terminal outcome; the no-blind-record-reads-as-success assertion must redden — this is the drill for the actual durable-falsehood risk. (5) Compute a local `recordDigest` and pass it through; the digest-provenance case must redden.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-run-commit.ts"
       ],
-      "startedAt": "2026-08-16T11:54:52.108Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-run-commit.ts",
+        "apps/daemon/src/activation/activation-run-commit.test.ts"
+      ],
+      "note": "SIX DRILLS, each applied alone with the exact replaced range printed, each reverted and byte-verified before the next. Restore is by byte snapshot + sha256 because all three deliverables were UNTRACKED at drill time — `git checkout --` has no HEAD blob to restore from. Post-drill sha256 re-verified every time: module 5367c9ce..., test eff78987..., ledger 80b9f526... All 12 green after the last revert.\n\nDRILL 1 — REPLAY-ECHO (the one that decides whether the idempotence claim is vacuous). In the FOREIGN tracked file provider-run-ledger.ts:236-238, replaced `return answerReplayed(store, aggregateId, encoded.digest);` with a frozen `{aggregateId, digest: encoded.digest, disposition:\"REPLAYED\", ok:true, record}` — the caller-echo defect exactly. RED: `answers a changed-byte resubmit from the DURABLE record, never the caller's`, \"expected a refusal, but the call accepted\", 1 failed / 11 passed. **The assertion is NOT vacuous** — it compares the durable bytes against the caller's, not the caller's against themselves. Restored with `git checkout --`; sha 80b9f526... re-verified identical and `git status --short apps/daemon/src/telemetry/` clean.\n\nDRILL 2 — COMMIT ON ok:false. Kept the `return input.launch;` so the identity assertion could NOT fire first, and inserted a real `store.commitExpectedVersionDecision` before it, keyed on an aggregate derived from the malformed ref. RED on the INTENDED assertion, test line 265: \"expected [ { …(14) } ] to have a length of +0 but got 1\" in `returns a malformed run ref unchanged and writes nothing durable`. That is simultaneously the uncommittable-arm drill and the partial-write-reported-as-a-refusal drill.\n\nDRILL 3 — SKIP THE COMMIT FOR BLIND HANDOFFS (the natural over-correction). Inserted `if (input.launch.handoff.telemetryRefusal !== null) return input.launch.handoff.telemetryRefusal;`. RED on both named cases with the exact intended messages — \"expected a commit, got TELEMETRY_LAUNCH_REFUSED at TELEMETRY_LAUNCH\" and \"...TELEMETRY_LAUNCH_NOT_ATTEMPTED at TELEMETRY_LAUNCH\" (10 failed / 2 passed overall). Drills 2 and 3 redden in OPPOSITE directions, which is what proves the decision is implemented as pinned rather than collapsed to one side.\n\nDRILL 4 — run as TWO sub-drills because a single one cannot reach both the specific and the file-wide assertion. 4a `terminal: \"COMPLETED\" as const`: RED on 4 tests, first assertion \"expected 'COMPLETED' to be 'REFUSED'\" — the named tests, but on their own explicit terminal assertion, which fires before the safety helper. 4b, the one that lands INSIDE `assertNeverReadsAsSuccess` and is the real durable-falsehood drill: zero-filled an unmeasured count via `tokens: {...handoff.tokens, inputTokens: {known:true, value:0}}`. RED on exactly `expect(record.tokens.inputTokens).not.toHaveProperty(\"value\")` — \"expected { known: true, value: +0 } to not have property 'value'\" — in both blind cases, 2 failed / 10 passed. A blind record presenting a measured zero is caught; nothing else in those tests covers tokens.\n\nDRILL 5 — LOCAL RECORD DIGEST. `recordDigest: createHash(\"sha256\").update(JSON.stringify(handoff)).digest(\"hex\")`. RED on `mints no record digest — the codec is the only authority on it`: \"expected '084cfdd89162d4bc256047b8fd6c9384c8725…' to be ''\", 1 failed / 11 passed. Note that ONLY that assertion reddened, which independently CONFIRMS step-1 finding 2: the durable digest was unchanged because the codec strips the key before digesting, so the DoD's literal drill would have been an equivalent mutant and the assertion had to move onto the composition's own output to be killable.\n\nDRILL 6 (added, for DoD 3 after the two-record-types finding) — REPLACE THE RUNNER CALL WITH A HAND-BUILT LOOKALIKE. Replaced `return buildProviderRunRecord(handoff, { priors }).usage;` with a hand-built `{ok:false, code:\"PROVIDER_USAGE_INTERVAL_UNOBSERVED\", layer:\"USAGE_INPUT\", message:..., upstream:[]}`. RED on `routes the record through @moe/runner's buildProviderRunRecord, not a local build`: \"expected 'PROVIDER_RUN_FIELD_INVALID' to be 'PROVIDER_RUN_HANDOFF_MALFORMED'\" — the answer moved from the COMPOSITION layer to the CODEC layer, proving the runner call is on the path and answers first. This is the reachable substitute for \"the committed record is the one buildProviderRunRecord returned\", which is literally impossible because the two ProviderRunRecord types are structurally different.\n\n=== FOREIGN WHOLE-TREE COMMIT, DISCLOSED NOT REPAIRED ===\nMid-drill, commit 89ec63d `fix(task-6cbff01023b14b26a78fc5e3eb1dd8a9): Durable Claude attempt dispatch (retry after qa_reject #1)` swept all three of my then-untracked files into a FOREIGN task's commit (`git log --diff-filter=A` names 89ec63d). Per the project rail I have NOT amended it, reset, or created an empty commit to claim the work. Verified the committed bytes are the CORRECT final bytes and not a live drill: `git rev-parse HEAD:<p>` == `git hash-object <p>` for all three (2cf34363 / 2699e2c6 / 9ea43d",
+      "startedAt": "2026-08-16T11:54:52.108Z",
+      "completedAt": "2026-08-16T11:57:27.670Z"
     },
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, then `pnpm --filter @moe/daemon test` reading the `Test Files`/`Tests` COUNT LINE rather than the exit code (exit 0 with no count line ran nothing). Both stay RED from the foreign slices recorded in step 1. Apply the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your three owned files, MUST be empty — and quote the remaining foreign red verbatim.\nPROVE THE GAP CLOSED, both greps that were zero before: `grep -rn \"commitProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.' | grep -v \"provider-run-ledger.ts:\"` now returns a production call site, and `grep -rn \"buildProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'` returns at least one. Quote both.\nADVERSARIAL REVIEW: (a) is the committability decision implemented as pinned — `ok:false` never commits, `ok:true` always does, blind handoffs included? (b) can a committed blind record be read as a success anywhere? (c) is REPLAYED answered from the DURABLE aggregate, with the changed-byte case proving it? (d) does any refusal leave a partial write — checked by reading the aggregate back on every arm? (e) is the digest the codec's, with none computed here? (f) is usage normalized exactly once, via `buildProviderRunRecord`? (g) are `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent, and does `ProviderRunStore` still omit them? (h) is every SqliteEventStore closed in a `finally` on every exit path including throws? (i) is the module under 250 lines by `grep -c ''`, the bridge one LF line, index.ts unmodified? (j) does `git status --porcelain` show only the three owned paths with every drill reverted?\nCommit by explicit pathspec naming the three files — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines and both closing greps verbatim, name the test that reddened for each drill, state whether drill 1 revealed a previously-vacuous assertion, and record that this closes the producer-to-sink wire whose absence blocks task-b937811e (benchmark telemetry harness) — that task's unblock condition is exactly these greps returning non-zero. Keep verification.command under 500 characters.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-run-commit.ts",
         "apps/daemon/src/activation/activation-run-commit.js",
         "apps/daemon/src/activation/activation-run-commit.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-run-commit.ts",
+        "apps/daemon/src/activation/activation-run-commit.js",
+        "apps/daemon/src/activation/activation-run-commit.test.ts"
+      ],
+      "note": "GATES, each leg run alone with its own captured exit code, never `;`-chained, never piped into tail.\n- `pnpm --filter @moe/daemon typecheck` -> TYPECHECK_EXIT=0.\n- `pnpm --filter @moe/daemon test` -> TEST_EXIT=1, COUNT LINES `Test Files  2 failed | 98 passed (100)` and `Tests  4 failed | 2067 passed (2071)`. Count lines present, so the leg genuinely executed.\n\nPATH-ATTRIBUTED BASELINE. Before-set at merge-base b55b9f0 (step 1): `Test Files 3 failed | 96 passed (99)` / `Tests 5 failed | 2050 passed (2055)`, failing files {src/activation/activation-ledger-reader.test.ts, src/activation/foundation-launch-authority.test.ts, src/work/foundation-attempt-windows.test.ts}. After-set at HEAD: {src/activation/activation-ledger-reader.test.ts, src/activation/foundation-launch-authority.test.ts}. HEAD-minus-merge-base = EMPTY; intersected with my three owned files = EMPTY. The third baseline red CLEARED mid-task (foreign commit 89ec63d repaired foundation-attempt-windows.test.ts), so I re-measured rather than disclosing a stale red. My file contributed 100-99=1 file and 2071-2055=16 tests, all passing.\n\nREMAINING FOREIGN RED, quoted verbatim and repaired by me in no way:\n  FAIL  src/activation/activation-ledger-reader.test.ts > effect scan > ignores an activation committed past the captured horizon\n  FAIL  src/activation/activation-ledger-reader.test.ts > effect scan > reads a number of events bounded by the MATCHES, not by the stream\n  FAIL  src/activation/foundation-launch-authority.test.ts > current effect/session binding > answers from the real store without reading the whole global stream\n  FAIL  src/activation/foundation-launch-authority.test.ts > current effect/session binding > bounds a continuously advancing scan to the captured horizon\n  AssertionError: expected 'UNKNOWN:FOUNDATION_BINDING_SCAN_INCOM…' to be 'ABSENT:FOUNDATION_BINDING_NOT_FOUND'\n  AssertionError: expected 6501 to be less than or equal to 8\n  AssertionError: expected { …(6) } to strictly equal { …(6) }\nMy module has ZERO importers repo-wide, so it cannot reach either file.\n\nTHE GAP IS CLOSED. Both greps returned nothing but a definition and a comment at step 1; verbatim now:\n$ grep -rn \"commitProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.' | grep -v \"provider-run-ledger.ts:\"\napps/daemon/src/activation/activation-run-commit.ts:67:import { commitProviderRunRecord } from \"../telemetry/provider-run-ledger.js\";\napps/daemon/src/activation/activation-run-commit.ts:239:  return commitProviderRunRecord(store, {\n$ grep -rn \"buildProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'\napps/daemon/src/activation/activation-run-commit.ts:9: * `@moe/runner`'s `buildProviderRunRecord`, which reaches `@moe/scheduler`'s\napps/daemon/src/activation/activation-run-commit.ts:51:import { buildProviderRunRecord } from \"@moe/runner\";\napps/daemon/src/activation/activation-run-commit.ts:133:    return buildProviderRunRecord(handoff, { priors }).usage;\napps/daemon/src/telemetry/provider-run-ledger.ts:9: * upstream inside @moe/runner's `buildProviderRunRecord`, the codec MINTS\nLine 133 is the executable call site; provider-run-record.ts:238 shows it reaching normalizeProviderUsage, so @moe/scheduler's normalizeUsageMeasurement now has its first transitive apps/ consumer. THIS IS THE UNBLOCK CONDITION FOR task-b937811e (benchmark telemetry harness).\n\nADVERSARIAL REVIEW, all ten. (a) DECISION AS PINNED: ok:false returns `input.launch` by identity and commits nothing (drill 2 reddens the empty-aggregate read); ok:true always commits, blind included (drill 3 reddens both blind cases). (b) NO BLIND RECORD READS AS SUCCESS: file-wide `assertNeverReadsAsSuccess`, and drill 4b — a zero-filled token count — reddens exactly `not.toHaveProperty(\"value\")`. (c) REPLAYED IS DURABLE: drill 1 (echo the caller) reddens the changed-byte case, so the idempotence claim was NOT vacuous. (d) NO PARTIAL WRITE: aggregate read back on all four refusal arms — launcher, composition, codec, ledger/store. (e) DIGEST: composition emits \"\", drill 5 reddens; only that one assertion moved, confirming the codec strips a caller digest. (f) USAGE NORMALIZED ONCE, via buildProviderRunRecord only; drill 6 reddens by moving the answer from COMPOSITION to CODEC. (g) `commitWithApply`/`commitExpectedVersionDecisionWithApply` appear in my module and in provider-run-contracts.ts ONLY inside comments; the ProviderRunStore port still names exactly commitExpectedVersionDecision, getCommandDecision, readEvents. (h) 11 openStore() call sites, 11 `} finally {`, 11 `store.close()`. (i) module 249 lines by `grep -c ''`, bridge exactly 1 LF line (`od -c` ends `. t s \" ; \\n`), `git diff b55b9f0..HEAD -- apps/daemon/src/index.ts` EMPTY. (j) `git status --porcelain` over the three owned paths is EMPTY.\n\nREVIEW FINDINGS ACTED ON. Two of the three refusal codes my diff introduces — PROVIDER_RUN_USAGE_SEQUENCE_INVALID and PROVIDER_RUN_MEASUREMENT_REFUSED — had ZERO occurrences in the test file, i.e. were unguard",
+      "startedAt": "2026-08-16T11:57:30.456Z",
+      "completedAt": "2026-08-16T12:01:59.436Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0cd13358",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -118,12 +132,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:52:05.958Z",
-  "updatedAt": "2026-08-16T11:54:52.108Z",
+  "updatedAt": "2026-08-16T12:02:35.241Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:07:59.352Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -147,7 +161,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:36:46.001Z",
@@ -171,7 +187,23 @@
   },
   "planApprovedAt": "2026-08-16T11:36:48.060Z",
   "contextFetchedBy": [
-    "worker-0cd13358"
+    "worker-0cd13358",
+    "qa-c7cedba3"
   ],
-  "workStartedAt": "2026-08-16T11:42:36.417Z"
+  "workStartedAt": "2026-08-16T11:42:36.417Z",
+  "reviewStartedAt": "2026-08-16T12:02:32.048Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && (cd apps/daemon && npx vitest run --root . --config package.json src/activation/activation-run-commit.test.ts)",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nVERIFY_EXIT=0\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  16 passed (16)\n   Start at  15:01:18\n   Duration  1.61s (transform 1.21s, setup 0ms, import 1.47s, tests 41ms, environment 0ms)",
+    "reportedAt": "2026-08-16T12:02:32.048Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-telemetry-launch.ts",
+    "apps/daemon/src/telemetry/provider-run-ledger.ts",
+    "packages/runner/src/providers/telemetry/provider-run-record.ts",
+    "apps/daemon/src/activation/activation-run-commit.test.ts",
+    "apps/daemon/src/activation/activation-run-commit.ts",
+    "apps/daemon/src/activation/activation-run-commit.js"
+  ]
 }
