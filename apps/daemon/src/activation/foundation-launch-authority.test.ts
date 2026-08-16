@@ -1011,6 +1011,15 @@ describe("current effect/session binding", () => {
           { horizon: 2n, name: "premature end", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: 1n } },
           { horizon: 1n, name: "cursor mismatch", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: null } },
           { horizon: 1n, name: "hasMore at horizon", page: { hasMore: true, items: [noiseAt(1n)], nextCursor: 1n } },
+          // EVERY OTHER SHAPE CHECK PASSES ON THESE TWO. The item count, the
+          // cursor and hasMore all agree with the horizon, so only the per-item
+          // position comparison can refuse them: the first hides a skipped
+          // position behind a correct-looking count, the second reads one event
+          // past the horizon it captured. Without them both halves of that
+          // comparison are surviving mutants - dropping either leaves the five
+          // cases above green while the scan silently judges the wrong events.
+          { horizon: 2n, name: "positions mislabelled", page: { hasMore: false, items: [noiseAt(2n), noiseAt(3n)], nextCursor: 2n } },
+          { horizon: 1n, name: "overshoots horizon", page: { hasMore: false, items: [noiseAt(1n), noiseAt(2n)], nextCursor: 2n } },
         ] as const;
         for (const hostile of cases) {
           let reads = 0;
@@ -1026,7 +1035,7 @@ describe("current effect/session binding", () => {
           );
           expectBindingUnknown(answer, "FOUNDATION_BINDING_SCAN_INCOMPLETE");
         }
-        expect(cases).toHaveLength(5);
+        expect(cases).toHaveLength(7);
       });
     });
   });

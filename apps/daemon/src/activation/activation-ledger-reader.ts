@@ -104,7 +104,7 @@ export function readActivationLedgerRecord(
 const TRANSITION_ORDER = Object.freeze([
   "GRANT_CONSUMED", "PREFLIGHT_REGISTERED", "PROCESS_OBSERVED",
 ] as const);
-const SCAN_PAGE_SIZE = 100, MAX_QUERY_CHARS = 400;
+const SCAN_PAGE_SIZE = 100, SCAN_PAGE_LIMIT = BigInt(SCAN_PAGE_SIZE), MAX_QUERY_CHARS = 400;
 const LEASE_FIELDS = Object.freeze([
   "leaseId", "kind", "ownerSessionRef", "leaseToken", "epoch", "state", "serverWallDeadline",
   "bootId", "monotonicObservation", "authorityHashRef", "version",
@@ -123,6 +123,7 @@ export type FoundationHistoryResult =
  *  absent BY CONSTRUCTION: a reader that cannot name a write cannot perform one. */
 export interface FoundationBindingStore {
   getHealth(): StoreHealth;
+  readEventHorizon(): bigint;
   readEvents(aggregateId: string): readonly StoredEvent[];
   readEventsAfter(afterGlobalPosition: bigint, limit?: number): CursorPage<StoredEvent, bigint>;
 }
@@ -220,6 +221,29 @@ interface ScanOutcome {
 }
 
 /**
+ * Reads the end of the stream ONCE, before any page.
+ *
+ * The horizon is what makes the walk finite. `readEventsAfter` takes a fresh
+ * snapshot per page, so a concurrent writer can keep answering `hasMore` with a
+ * strictly advancing cursor forever; a scan that trusts `hasMore` alone has no
+ * termination proof at all, only a well-behaved store. Capturing the far end
+ * first turns "walk until the store says stop" into "walk to a value the store
+ * can no longer move".
+ */
+function captureHorizon(store: FoundationBindingStore): bigint | UnknownCode {
+  let horizon: unknown;
+  try {
+    horizon = store.readEventHorizon();
+  } catch {
+    return "FOUNDATION_BINDING_EVIDENCE_UNREADABLE";
+  }
+  // An unreadable horizon is a store failure; a horizon that is not a
+  // nonnegative bigint is evidence about nothing, and neither may become ABSENT.
+  if (typeof horizon !== "bigint" || horizon < 0n) return "FOUNDATION_BINDING_SCAN_INCOMPLETE";
+  return horizon;
+}
+
+/**
  * A restart-safe completeness proof, not a lookup table.
  *
  * `CoordinationEffectQuery` carries an effectId but not the idempotency key the
@@ -228,43 +252,59 @@ interface ScanOutcome {
  * match is UNIQUE. Every page must make progress and every candidate must read;
  * a truncated, non-monotonic, thrown, or ambiguous scan is UNKNOWN, never the
  * ABSENT a caller would act on.
+ *
+ * BOUNDED BY THE CAPTURED HORIZON, NOT BY A PAGE COUNT. A fixed page cap bounds
+ * TOTAL PROJECT EVENTS, past which every lookup for every effect refuses forever
+ * - a refusal indistinguishable from a real authority answer. The horizon bounds
+ * the WALK instead: `global_position` is contiguous from 1 by the store's own
+ * integrity rule, so exactly `horizon` events must be read, each at exactly the
+ * next position, and the last page must say it is the last. Growth past H is not
+ * this answer's business; the scan neither reads it nor pretends it is absent.
  */
 function scanForEffect(store: FoundationBindingStore, effectId: string): ScanOutcome {
   const no = (code: UnknownCode): ScanOutcome =>
     ({ aggregateId: null, refusal: foundationBindingUnknown(code) });
+  const horizon = captureHorizon(store);
+  if (typeof horizon !== "bigint") return no(horizon);
   let cursor = 0n;
   let found: string | null = null;
-  // UNBOUNDED BY PAGE COUNT, deliberately: a page cap is not a termination
-  // guarantee. The two guards below already end this loop on any store that
-  // stalls, lies or fails to advance, and on the FIRST bad page rather than
-  // after N good ones. A cap adds no safety a correct store needs; it only caps
-  // TOTAL PROJECT EVENTS, past which every lookup for every effect refuses
-  // SCAN_INCOMPLETE forever - indistinguishable from a real authority answer.
-  for (;;) {
+  while (cursor < horizon) {
+    const remaining = horizon - cursor;
     let read: CursorPage<StoredEvent, bigint>;
     try {
-      read = store.readEventsAfter(cursor, SCAN_PAGE_SIZE);
+      read = store.readEventsAfter(
+        cursor, Number(remaining < SCAN_PAGE_LIMIT ? remaining : SCAN_PAGE_LIMIT),
+      );
     } catch {
       return no("FOUNDATION_BINDING_EVIDENCE_UNREADABLE");
     }
-    if (read.hasMore && read.items.length === 0) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    let position = cursor;
     for (const event of read.items) {
+      position += 1n;
+      // Contiguity IS the completeness proof: a skipped position is an event
+      // this scan never judged, and one past H is evidence outside the horizon.
+      if (event.globalPosition !== position || position > horizon) {
+        return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+      }
       if (event.eventType !== ACTIVATION_LEDGER_EVENT_TYPE) continue;
       const candidate = readActivationLedgerRecord(event.aggregateId, [event]);
       if (!candidate.ok) return no("FOUNDATION_BINDING_EVIDENCE_MALFORMED");
       if (candidate.record.effectIntent.intentId !== effectId) continue;
+      // STILL NO EARLY RETURN ON A HIT: the walk runs to H even once a match is
+      // held, because the answer is not "one matched" but "exactly one did".
       if (found !== null && found !== event.aggregateId) {
         return no("FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS");
       }
       found = event.aggregateId;
     }
-    // STILL NO EARLY RETURN ON A HIT: the only success exit is the end of the
-    // stream, because the answer is not "one matched" but "exactly one did".
-    if (!read.hasMore) return { aggregateId: found, refusal: null };
-    const next = read.nextCursor;
-    if (next === null || next <= cursor) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
-    cursor = next;
+    if (position === cursor) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    if (read.nextCursor !== position) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    // Below H the store must still have more; AT H it must say it is done. Both
+    // directions are refusals: the stream disagreed with the end it just named.
+    if (read.hasMore !== (position < horizon)) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    cursor = position;
   }
+  return { aggregateId: found, refusal: null };
 }
 
 /**
