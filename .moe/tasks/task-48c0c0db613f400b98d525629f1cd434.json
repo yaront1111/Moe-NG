@@ -122,7 +122,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -131,10 +131,17 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 109.9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1a3c8ea93152403a850f42e8ea6c2349",
+      "author": "worker-5678886b",
+      "content": "RESUME-SESSION RE-VERIFICATION (task was already in REVIEW; nothing re-completed, nothing edited). Gates re-run FRESH at HEAD 30e16c9 — two corrections to the completion note, both in QA's favour.\n\n1) THE TYPECHECK RED DISCLOSED AT COMPLETION HAS CLEARED. `pnpm --filter @moe/daemon typecheck` -> EXIT 0. The four errors quoted in step 6 came from a peer's then-absent `planning/approval-policy-settings.ts`; that file now exists on disk. Do not grade against the stale red.\n\n2) THE FOREIGN TEST RED MOVED, AND IT IS STILL NOT MINE. `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 1 failed | 101 passed (102)` / `Tests 2 failed | 2094 passed (2096)`, both failures in `src/http/affordance-read.test.ts` (\"blocks a clean submitted node on daemon verification\", \"offers only agent-authored review submission for an approved, unaccepted node\"). Attribution: `affordance-read.test.ts:14` imports `../planning/approval-policy-settings.js`, still an UNTRACKED peer module. Across three full runs in ~8 minutes the failing set was planning-services.test.ts (7 failed), then 4 files/20 failed, then affordance-read (2 failed) — peers writing mid-run.\n\nPATH ATTRIBUTION, decisive rather than circumstantial: `grep -rn \"in-flight-attempts\" --include=*.ts --include=*.js apps/daemon/src packages | grep -v \"src/work/in-flight-attempts\"` returns ZERO. This module has no importers, so my diff cannot redden any foreign test. `git diff --numstat cf272f6..HEAD` over owned paths = three NEW files (169 / 1 / 381 insertions, 0 deletions). HEAD failing paths ∩ owned paths = EMPTY.\n\nOWNED TESTS, GREEN AND PROVABLY EXECUTED: `cd apps/daemon && npx vitest run --root . --config package.json src/work/in-flight-attempts.test.ts` -> EXIT 0, `Test Files 1 passed (1)` / `Tests 12 passed (12)`.\n\nGATE-SHAPE GOTCHA FOR QA, worth knowing before you re-run anything: `pnpm --filter @moe/daemon test src/work/in-flight-attempts.test.ts` does NOT narrow — the package script already passes `src` as a positional filter, so all 102 files ran. Only the `cd apps/daemon && npx vitest run --root .` form scopes. Separately, `--exclude` on that suite is not stable right now: excluding the one failing peer file produced MORE failures (4 files / 20 tests) than the unfiltered run, because peers are writing between runs.\n\n`git status --porcelain` shows no owned path dirty — all five step-5 drills are reverted and none reached the commit.",
+      "timestamp": "2026-08-16T12:36:25.560Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:26:32.125Z",
-  "updatedAt": "2026-08-16T12:33:40.829Z",
+  "updatedAt": "2026-08-16T12:36:25.561Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T11:32:18.604Z",
     "plannedStepCount": 6,
@@ -172,7 +179,8 @@
   },
   "planApprovedAt": "2026-08-16T11:34:34.919Z",
   "contextFetchedBy": [
-    "worker-5678886b"
+    "worker-5678886b",
+    "qa-c7cedba3"
   ],
   "workStartedAt": "2026-08-16T12:17:06.985Z",
   "reviewStartedAt": "2026-08-16T12:33:40.829Z",

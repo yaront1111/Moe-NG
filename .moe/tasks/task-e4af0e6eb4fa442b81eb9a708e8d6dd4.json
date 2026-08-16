@@ -80,20 +80,27 @@
     {
       "stepId": "step-5",
       "description": "REPLACE THE POLICY SOURCE, AND DELETE THE OLD ONE. In `planning-services.ts` (221 lines):\n(1) Source the policy from the loader at :192-194, replacing `policy: approvalPolicy(request.payload)`.\n(2) DELETE `DEFAULT_APPROVAL_POLICY` (:134-137) and the `approvalPolicy(payload)` helper (:139-146) outright. Do not keep either as a fallback. A payload-sourced or defaulted policy must become UNREPRESENTABLE in this handler, not merely unreachable — the current unreachability depends on an allow-list in a different file, and this task's whole point is that authority should not rest on a distant guard.\n(3) BOUND THE DELAY WHERE THE TIMER LIVES, per the contract's explicit instruction. `delayMs` is a safe non-negative integer, wider than `setTimeout`; a value above 2**31-1 clamps to 1ms and inverts \"effectively never\" into \"immediately\". Clamp or refuse at this consumer, and say which in a comment.\nThe handler must keep failing closed on every existing arm — do not let the loader's refusal path change which layer answers an unrelated refusal. `APPROVAL_AUTHORITY_CODES` and `APPROVAL_AUTHORITY_LAYERS` (approval-authority.ts:34,46) are unchanged and every existing refusal keeps its exact code and layer.\nMeasure the file after editing with `grep -c ''`; deleting two blocks and adding one call should shrink it, but confirm rather than assume.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts"
       ],
-      "startedAt": "2026-08-16T12:33:17.224Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/http/affordance-read.test.ts"
+      ],
+      "note": "POLICY SOURCE REPLACED AND THE OLD ONE DELETED. apps/daemon/src/planning/planning-services.ts is now 214 lines by `grep -c ''` (was 221 — it shrank, as predicted).\n\n(1) The call site reads `policy: readApprovalPolicySettings(process.env)`.\n(2) DELETED OUTRIGHT, not disabled: `DEFAULT_APPROVAL_POLICY` and `approvalPolicy(payload)`, plus the now-unused `ApprovalPolicy` type import. Verified gone in production: `grep -rn \"DEFAULT_APPROVAL_POLICY\\|approvalPolicy(\" --include=*.ts apps packages | grep -v \"\\.test\\.ts\"` -> no hits. A payload-sourced or defaulted policy is now UNREPRESENTABLE at the handler; the guarantee no longer rests on the registry allow-list in a different file.\n(3) The delay bound was already at this consumer — `approvalDelayDisposition` (approval-gate.ts:104-107, MAX_TIMER_DELAY_MS = 2**31-1) — so no new mechanism was added. A comment now states WHICH it does: it REFUSES rather than clamps, because above 2**31-1 a timer would clamp to 1ms and invert the most conservative configuration into an immediate proceed.\nEvery existing refusal keeps its exact code and layer; APPROVAL_AUTHORITY_CODES / APPROVAL_AUTHORITY_LAYERS untouched; packages/core/** untouched.\n\nFORCED SCOPE ADDITION, disclosed: apps/daemon/src/http/affordance-read.test.ts (+9 test-tier lines). My diff — not a foreign slice — reddened it: that suite composes PLANNING_HANDLERS directly, does not import bootstrap-test-fixtures, and drives an approval.decide, so once the handler stopped defaulting its setup threw \"approval.decide: APPROVAL_HUMAN_REVIEW_REQUIRED (APPROVAL_POLICY)\" and 2 tests failed. It now STATES its settings the same way the shared fixture does. Fixing it was mandatory: an own-diff red is never excused by the path-attributed baseline.\n\nGATES, each run separately with its own exit code:\n1) `pnpm --filter @moe/daemon typecheck` EXIT=0 — clean, no output.\n2) `pnpm --filter @moe/daemon test` EXIT=0 — COUNT LINES: \"Test Files  102 passed (102)\" / \"Tests  2096 passed (2096)\".\n\nBASELINE NOTE, re-measured rather than assumed: the step-1 foreign red (src/work/in-flight-attempts.test.ts, TS2307 on a missing './in-flight-attempts.js') CLEARED mid-task — a peer landed the module. Both legs are now fully green, so there is no foreign red left to disclose and the step-1 red must not be quoted as if it still stood.",
+      "startedAt": "2026-08-16T12:33:17.224Z",
+      "completedAt": "2026-08-16T12:35:23.726Z"
     },
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove the fail-closed direction is real and not incidental. Run each alone, revert before the next. (1) RESTORE `DEFAULT_APPROVAL_POLICY` as the fallback when settings are unreadable; the step-3(a) regression test MUST redden — this is the drill for the live defect, and if it stays green the regression test never exercised the defect at all. (2) Make the loader default a missing delay to any number while keeping `PROCEED_WITHOUT_HUMAN`; the SPEED-without-delay case must redden — proving the contract's \"cannot be constructed without naming its delay\" is enforced here rather than assumed from the type. (3) Remove the consumer-side delay bound and pass `delayMs` straight to the timer; the 2**31-1 case must redden — and note it must redden on the INVERSION (an immediate proceed), not merely on a wrong number. (4) Re-add a payload read for `approvalPolicy`; the no-policy-from-payload case must redden at the HANDLER, proving the guarantee does not depend on the registry allow-list. (5) Make one loader refusal answer `PROCEED_WITHOUT_HUMAN`; the whole-set property assertion must redden — proving that property is a real sweep and not a list of hand-picked cases.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or compile error. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-policy-settings.ts",
         "apps/daemon/src/planning/planning-services.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T12:35:41.685Z"
     },
     {
       "stepId": "step-7",
@@ -121,12 +128,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-16T12:33:17.224Z",
+  "updatedAt": "2026-08-16T12:35:41.685Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:43:56.252Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
@@ -164,7 +171,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:40:17.052Z",

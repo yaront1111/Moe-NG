@@ -20,11 +20,12 @@
     {
       "stepId": "step-1",
       "description": "PHASE 0 — ADDRESS THE REJECTION, AND DO NOT REDO THE FIVE FIXED ISSUES. This task was rejected twice; round 2 is narrow and its scope is the whole of this plan.\nRE-VERIFIED FIXED by QA at HEAD 66ae6ef, all off-limits: (1) the whole-launch deps seam is gone — service.ts:233 builds the real `createFoundationClaudeLauncher` and test:569 proves a caller-supplied `launch` is never invoked; (2) `identifyFoundationDispatch` (codec:178) binds activation digest + binding + graph + input manifest + launch template, changed cwd refuses `FOUNDATION_ATTEMPT_REPLAY_MISMATCH` with no overwrite (test:703); (3) `preActivationBindingMatches` runs at service.ts:188 BEFORE `runEffectActivateCommand`, zero events asserted on both aggregates (test:518/536); (4) revoked and ownKeys-throwing proxies contain to `FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT` with an explicit case count of 2 (test:424); (5) line counts contracts 215 / service 249 / codec 194 / store 155, four 1-line bridges. Touch none of it except as this plan directs.\nTHE REMAINING DEFECT, confirmed on current bytes (HEAD 1ba0ce1, counts still 215/249/194/155): DoD 2's persistence half has ZERO executed evidence. `capture()` (service.ts:121-152) calls `settle()` (:103-117) with `truthClass: \"PROVEN\"` and a built `resultManifest`; `settle` composes `attemptRecordBody`, encodes, commits `RECORDED` and reads back. That entire branch is dead: `captureResult` is asserted `toHaveLength(0)` at test 512/647/679/696/715/786 and throws in the Windows case.\nWHY IT IS DEAD, so the fix aims at the right thing: `capture()` is reached only when `readDurableFoundationObservation` (store.ts:73) returns non-null, and that validator demands an OBSERVED/PROVEN launch result plus a 3-transition history (GRANT_CONSUMED → PREFLIGHT_REGISTERED → PROCESS_OBSERVED) with matching digests. The real launcher refuses `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER` in tests, so the result is never OBSERVED and `observed` is always null. Making the launcher return OBSERVED is NOT the fix and would need withheld authority.\nTHE FIX NEEDS NONE OF THAT, and QA named the path: `durableObservedFixture` (service.test.ts:305) already builds that 3-transition tail through production authority, and `captureAnswer()` (test:255) is a real capture shape. Move the record compose+commit into the STORE as production the service calls, then drive it directly from the fixture plus the real `captureAnswer()`.\nLINE BUDGET MAKES THIS THE RIGHT SHAPE ANYWAY: service.ts is at 249 of a 250 target — one line of headroom — while store.ts is at 155. The move relieves the cap rather than fighting it.\nGATES, each run separately with its own exit code — never `;`-chained, never piped into tail. Record the before-set. QA's own re-runs: `pnpm --filter @moe/runner test` = 66 files / 2216 passed exit 0; focused `vitest run --root . --config package.json src/work/foundation-attempt` = 2 files / 28 tests exit 0; full `pnpm --filter @moe/daemon test` = 2 failed files / 98 passed, both peer bounded-scan repros (activation-ledger-reader.test.ts, foundation-launch-authority.test.ts) and neither an owned path. Daemon/repo typecheck fail only on untracked peer `src/activation/activation-run-commit.test.ts`. All foreign — disclose, repair none.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-store.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T12:34:49.788Z"
     },
     {
       "stepId": "step-2",
@@ -83,7 +84,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -174,9 +175,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-16T12:19:23.765Z",
+  "updatedAt": "2026-08-16T12:34:49.788Z",
   "contextFetchedBy": [
-    "qa-c7cedba3"
+    "qa-c7cedba3",
+    "worker-5678886b"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z",

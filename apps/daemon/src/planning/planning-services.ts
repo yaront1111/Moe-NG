@@ -183,6 +183,10 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
     policy: readApprovalPolicySettings(process.env),
   });
   if (!authority.ok) return refuse(request.kind, authority.code, authority.layer);
+  // The delay is bounded HERE, where a timer would live, and it REFUSES rather than clamps:
+  // `delayMs` is a safe non-negative integer, wider than `setTimeout` accepts, and above
+  // 2**31-1 a timer would clamp it to 1ms — turning the most conservative configuration a
+  // board can write into an immediate proceed. Refusing keeps that inversion unreachable.
   if (approvalDelayDisposition(authority.delayMs) !== "IMMEDIATE") {
     return refuse(request.kind, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }

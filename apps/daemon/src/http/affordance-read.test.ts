@@ -7,6 +7,11 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
+import {
+  APPROVAL_MODE_ENV_KEY,
+  SPEED_APPROVAL_MODE,
+  SPEED_MODE_DELAY_ENV_KEY,
+} from "../planning/approval-policy-settings.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -16,6 +21,12 @@ import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import { DEFAULT_SESSION_SUBJECT, createAffordancePort } from "./affordance-read.js";
+
+// This suite drives an `approval.decide` through the production handler, which sources its
+// policy from the daemon's approval settings and refuses when they state nothing. So the
+// settings are stated here, delay included, rather than inherited from a default.
+process.env[APPROVAL_MODE_ENV_KEY] ??= SPEED_APPROVAL_MODE;
+process.env[SPEED_MODE_DELAY_ENV_KEY] ??= "0";
 
 const PROJECT = "proj-affordance";
 const directory = mkdtempSync(join(tmpdir(), "moe-affordance-"));

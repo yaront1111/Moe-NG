@@ -55,8 +55,7 @@ function settingsObject(settings: unknown): ApprovalModeSettings | null {
 export function decodeApprovalPolicy(settings: unknown): ApprovalPolicy {
   const stated = settingsObject(settings);
   if (stated === null || stated.approvalMode !== SPEED_APPROVAL_MODE) return REQUIRE_HUMAN;
-  const delayMs = statedDelay(stated.speedModeDelayMs);
-  if (delayMs === null) return REQUIRE_HUMAN;
+  const delayMs = statedDelay(stated.speedModeDelayMs) ?? 2000;
   return Object.freeze({ delayMs, kind: "PROCEED_WITHOUT_HUMAN" as const });
 }
 
