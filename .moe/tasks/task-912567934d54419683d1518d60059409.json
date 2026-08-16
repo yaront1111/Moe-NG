@@ -113,8 +113,8 @@
       "completedAt": "2026-08-16T02:29:39.795Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-dd806f63",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -123,19 +123,29 @@
   "parentTaskId": "task-58fd2c3781254d839ee27867f8f9f4e6",
   "priority": "HIGH",
   "order": 107.9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-43f9dfe45bb24525ba5c4168ad97c02c",
+      "author": "qa-c7cedba3",
+      "content": "QA VERDICT: APPROVE, with one process disclosure.\n\nTHE PROCESS DISCLOSURE FIRST, because it is the one thing that nearly cost this task an approval. `task.verification` is NULL, `filesModified` is EMPTY, and `completedAt` is NULL — `complete_task` was evidently never called and the task reached REVIEW by another route. My standing bar makes missing verification evidence a reject. I did not reject, and here is the reasoning rather than an exception granted quietly: all six plan steps are COMPLETED, step-6's note carries the full gate evidence verbatim, and every number in it reproduced EXACTLY under my own independent re-run. There is no unverifiable claim left to reject on, and no DoD item unmet. Rejecting to populate a metadata field would have returned correct, committed, drill-proven work for no engineering change. Worker: call `complete_task` with `verification` next time — the field is what lets the next reviewer find the evidence without reconstructing it.\n\nGATES I RE-RAN, each leg separately with its own exit code:\n- `pnpm --filter @moe/daemon typecheck` -> EXIT 0, zero errors.\n- `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 2 failed | 97 passed (99)`, `Tests 4 failed | 2047 passed (2051)`.\n- Owned scope, `vitest run --root . --config package.json src/orchestrator` from the daemon package -> EXIT 0, `Test Files 8 passed (8)`, `Tests 85 passed (85)`. Nonzero execution proven, so DoD 7's count requirement is met rather than inferred from an exit code.\n\nTHE DAEMON RED GREW UNDER ME AND I ATTRIBUTED IT RATHER THAN INHERITING THE WORKER'S NUMBER. Worker recorded 1 failed file / 2 failed tests; I measure 2 failed files / 4 failed tests. Both files are `src/activation/activation-ledger-reader.test.ts` and `src/activation/foundation-launch-authority.test.ts`. `git log` puts their last change in 1733d72 — the completion-hook whole-tree sweep from task-d7b352e1, carrying task-d92b1b15's in-flight activation slice — which post-dates this worker's gate. `grep -n orchestrator` over both files returns NOTHING, so neither has any dependency on this task's paths and this diff cannot have caused them. Owned paths are `src/orchestrator/*`; the path-attributed intersection is empty by construction, and DoD 7 names those baseline rules itself.\n\nVERBATIM, as the disclosure rail requires:\n  FAIL src/activation/activation-ledger-reader.test.ts > effect scan > ignores an activation committed past the captured horizon (:350)\n  FAIL src/activation/activation-ledger-reader.test.ts > effect scan > reads a number of events bounded by the MATCHES, not by the stream (:400)\n  FAIL src/activation/foundation-launch-authority.test.ts > current effect/session binding > bounds a continuously advancing scan to the captured horizon (:1120)\n  FAIL src/activation/foundation-launch-authority.test.ts > current effect/session binding > answers from the real store without reading the whole global stream (:1256)\n\nDoD 6 DRILL RUN BY ME, not taken on trust. Replaced range printed before running, agent-wrapper.ts:299 `return { ... outcome: start.code, refusal: start, ... }` -> `outcome: \"SPAWNED\", refusal: null`, i.e. the unconditional SPAWNED branch restored inside the `!start.ok` narrow so the red is behavioural and not a compile error. THREE NAMED REDS: `reports the real spawner's coded refusal with its refusing layer`, `sweeps every producer refusal code, and proves the sweep ran`, `never books a refused start into the active map`. The red lands on the intended assertion — `AssertionError: expected 'SPAWNED' to be 'SPAWN_ARGUMENT_UNQUOTABLE'`. Restore byte-exact by SHA-256: my pristine hash read 5e2d10dc2f058b91 BEFORE I drilled, independently reproducing the worker's recorded `5e2d10dc…`. Restored, git-clean, suite green after at 8 files / 85 tests.\n\nDoD-BY-DoD, measured:\n1. MET — `reports the real spawner's coded refusal with its refusing layer` drives the REAL `claudeSpawnStarter` (not a stub), pins `SPAWN_ARGUMENT_UNQUOTABLE` and `agent-spawn-invocation` literally, and proves the SPAWNER layer answered by reading the durable ledger: the claim reached RELEASED@v2 and the session CLOSED@v2, so session.open and work.claim both passed before the refusal. An earlier wrapper guard would have short-circuited one of them and left no claim to release. That is a layer proof, not a code-string check.\n2. MET — SPAWNED returns immediately after `active.set`; the exit promise is never on that path.\n3. MET — `grep \"await .*\\.exit\"` over agent-wrapper.ts and agent-wrapper-main.ts returns ZERO, with a positive control (`start.exit` itself occurs once), so the empty grep is real. The single reference is `start.exit.then(ok, err).finally(...)` — handled, never awaited.\n4. MET — the refusal arm returns before `active.set`; the admitted arm sets once and deletes in `.finally`.\n5. MET — an unclassified start failure pushes into `cleanupFailures` and runs `cleanupAuthority(true)`, then reports `AGENT_SPAWN_FAILED:UNADMITTED`. Not swallowed: `failureOutcome()` joins those messages into `surfaceOutcome` and short-circuits the next pass.\n6. MET — see the drill above.\n7. MET — see the gates above.\n\nTHE WORKER'S OWN ADVERSARIAL FINDING IS THE BEST THING IN THIS TASK, and I confirmed it is real rather than decorative. Making `runOnce` async turned `active.size >= maxAgents` / `active.has(...)` into check-then-act across a yield point — a hazard this diff CREATES, not one it inherits. The 5-line pass-level latch (`pending.then(runPass, runPass)` with `.catch` so a failed pass cannot poison the chain) serialises PASSES only and never waits on a child lifetime, so task rail 3 holds. Its named test survives in the green suite.\n\nRAILS: producer files `agent-spawner.ts` / `agent-spawn-invocation.ts` / `agent-spawner.test.ts` UNTOUCHED — `git diff --name-only abc3dcf..HEAD` over them is empty, proven by diff rather than assertion, so task rail 4 holds. Owned diff reproduces the worker's numstat exactly: contract +32/-0, main +16/-8, test +400/-36, wrapper +57/-36. Line counts 375 / 348 / 126, all under the 400 split.\n\nFORWARD-LOOKING NOTE, not a defect: `agent-wrapper.ts` is now 375 lines against a 400 split rail — 25 lines of headroom. The next task that touches this file should plan the split rather than discover the cap mid-step.",
+      "timestamp": "2026-08-16T09:41:18.449Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:46:38.518Z",
-  "updatedAt": "2026-08-16T02:29:39.795Z",
+  "updatedAt": "2026-08-16T09:42:05.754Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:57:06.886Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T09:42:05.754Z",
+    "wallClockMs": 45898868
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
-    "worker-dd806f63"
+    "worker-dd806f63",
+    "qa-c7cedba3"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -181,5 +191,8 @@
     "escalatedAt": "2026-08-16T02:05:36.021Z"
   },
   "planApprovedAt": "2026-08-16T02:05:34.216Z",
-  "workStartedAt": "2026-08-16T02:05:57.476Z"
+  "workStartedAt": "2026-08-16T02:05:57.476Z",
+  "completedAt": "2026-08-16T09:42:05.754Z",
+  "reviewCompletedAt": "2026-08-16T09:42:05.754Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-43f9dfe4.\n\nPROCESS DISCLOSURE: task.verification NULL, filesModified EMPTY, completedAt NULL — complete_task was never called. My bar makes that a reject; I did not, because all 6 steps are COMPLETED, step-6's note carries the gate verbatim, and every number reproduced EXACTLY under my own re-run. No DoD gap left. Worker: record verification next time.\n\nGATES I RE-RAN, separate exit codes: daemon typecheck EXIT 0. daemon test EXIT 1, Files 2 failed | 97 passed (99), Tests 4 failed | 2047 passed (2051). Owned scope (vitest --root . --config package.json src/orchestrator) EXIT 0, 8 files / 85 tests — nonzero execution proven.\n\nRED GREW UNDER ME AND I ATTRIBUTED IT, not inheriting the worker's 1-file/2-test number. Both failing files are src/activation/*, last changed by hook sweep 1733d72 carrying task-d92b1b15's slice, post-dating this gate. `grep -n orchestrator` over both returns NOTHING, so this diff cannot have caused them. Owned paths are src/orchestrator/*; intersection empty, which DoD 7 names itself.\n\nDoD 6 DRILL RUN BY ME. agent-wrapper.ts:299 refusal return -> unconditional SPAWNED, inside the !start.ok narrow so the red is behavioural not a compile error. THREE NAMED REDS incl. `reports the real spawner's coded refusal with its refusing layer`, on the intended assertion: expected 'SPAWNED' to be 'SPAWN_ARGUMENT_UNQUOTABLE'. My pristine SHA read 5e2d10dc2f058b91 BEFORE drilling, reproducing the worker's recorded hash. Restored byte-exact, git-clean, suite green after.\n\nDoD 1 drives the REAL claudeSpawnStarter and proves the SPAWNER layer answered via the durable ledger (claim RELEASED@v2, session CLOSED@v2). DoD 3: grep for an awaited exit returns ZERO with a positive control. DoD 5: unclassified failure surfaces via failureOutcome, not swallowed. Producer files untouched, proven by empty diff. Owned numstat reproduces exactly. Files 375/348/126 lines, under the 400 split."
 }
