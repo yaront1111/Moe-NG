@@ -132,8 +132,8 @@
       "completedAt": "2026-08-16T12:44:35.658Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -145,12 +145,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-16T12:46:00.034Z",
+  "updatedAt": "2026-08-16T12:50:13.602Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:43:56.252Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T12:50:13.602Z",
+    "wallClockMs": 57977350
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
@@ -233,5 +235,8 @@
     "apps/daemon/src/planning/approval-policy-settings.js",
     "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
     "apps/daemon/src/http/affordance-read.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T12:50:13.602Z",
+  "reviewCompletedAt": "2026-08-16T12:50:13.602Z",
+  "reviewSummary": "APPROVED. Judged by base-ref diff 3e52753..HEAD over the 7 owned paths; git diff HEAD over them is EMPTY, so committed bytes are the gated bytes.\n\nGATES RE-RUN BY ME, separately:\n- pnpm --filter @moe/daemon typecheck -> EXIT=0.\n- task.verification re-run verbatim -> \"Test Files 12 passed (12)\" / \"Tests 206 passed (206)\", EXIT=0 (count line present).\n- pnpm --filter @moe/daemon test -> \"Test Files 102 passed (102)\" / \"Tests 2101 passed (2101)\", EXIT=0. The foreign red the worker disclosed (src/work/foundation-attempt-service.test.ts) has since CLEARED.\n\nDoD:\n1. Reachable, not export-only: planning-services.ts:183 readApprovalPolicySettings(process.env). DEFAULT_APPROVAL_POLICY and approvalPolicy(payload) GONE; only surviving grep hit is prose in a test doc comment.\n2. Absent/empty/malformed delay refused literally as APPROVAL_HUMAN_REVIEW_REQUIRED + layer APPROVAL_POLICY; success representable in the same suite (explicit zero delay -> ok, EXECUTION_ENABLED).\n3. Gated sweep asserts decoded kinds == APPROVAL_POLICY_KINDS and Set size == vocabulary size (2, nonzero), each refused with APPROVAL_HUMAN_AUTHORITY_REQUIRED / HUMAN_AUTHORITY_GATE.\n4. No project-wide switch: gated unit still refused under SPEED+\"0\", the most permissive settings expressible. The fixtures' module-level process.env writes have ZERO production reach - bootstrap-test-fixtures.ts and restore-test-harness.ts are imported only by *.test.ts; index.ts never reaches them.\n5. DRILLS RUN BY ME. (A) decoder defaults an absent delay to 2000: 5 named tests red incl. the code+layer arm via its expectUnstatedPolicy branch pin; the worker's disclosure of where the red lands is accurate. (B) payload-sourced policy re-added at the handler: both payload-ignored arms red, in both directions. Restored byte-exact, sha256 ccbf2cce / 5326edf8.\n\nCaps: 82 / 214 / 221 lines by grep -c ''. packages/core untouched. Bridge one LF line."
 }

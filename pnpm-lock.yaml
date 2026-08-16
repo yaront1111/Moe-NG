@@ -121,6 +121,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/store
 
+  packages/benchmark: {}
+
   packages/context: {}
 
   packages/contracts: {}
