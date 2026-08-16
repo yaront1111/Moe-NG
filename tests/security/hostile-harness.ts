@@ -1,19 +1,15 @@
 /**
  * HOSTILE PROBE HARNESS — shared machinery for the security lane's boundary slices.
  *
- * NOT a `*.security.ts` file, deliberately: the lane executes every `*.security.ts`, so
- * that suffix would collect this as a suite with no cases, and `passWithNoTests: false`
- * would turn its emptiness into a lane failure. This module is imported, never collected.
+ * NOT a `*.security.ts` file, deliberately: the lane collects that suffix, so this would
+ * become a suite with no cases and `passWithNoTests: false` would fail on its emptiness.
  *
- * THIS HARNESS HOLDS NO AUTHORITY. It drives probes, bounds them, and compares a refusal
- * against what the CALLER declared. It never decides whether a boundary was right to
- * refuse, never reimplements a codec, digest or admission rule, and never derives an
- * expected code or layer for itself. If a change here starts computing what a correct
- * answer would be, that change belongs in production.
- *
- * Two failure modes it exists to prevent: a HANG reports no verdict at all (and the lane
- * runs `fileParallelism: false`, so one unbounded wait stalls every file after it), and a
- * LAYER-BLIND refusal assertion stays green once a different layer starts answering.
+ * IT HOLDS NO AUTHORITY: it drives probes, bounds them, and compares a refusal against
+ * what the CALLER declared. It never judges whether a refusal was correct, never derives
+ * an expected code or layer, and never reimplements a codec, digest or admission rule.
+ * Two failure modes it prevents: a HANG reports no verdict at all (the lane runs
+ * `fileParallelism: false`, so one unbounded wait stalls every file after it), and a
+ * LAYER-BLIND assertion stays green the moment a different layer starts answering.
  */
 
 import { mkdtempSync, realpathSync, rmSync } from "node:fs";
@@ -43,23 +39,18 @@ export interface HostileBound {
   readonly label: string;
 }
 
-/**
- * `setTimeout` holds its delay in a signed 32-bit int and CLAMPS anything larger to 1ms.
- * A caller widening a bound "to be safe" past this would get the TIGHTEST possible bound
- * instead of the loosest — silently, and backwards. Refused rather than clamped.
- */
+/** `setTimeout` clamps a wider delay to 1ms, so widening a bound past this would silently
+ * yield the TIGHTEST bound instead of the loosest. Refused by `requireBound`, not clamped. */
 export const MAX_BOUND_MS = 2_147_483_647;
 
-function requireBound(bound: HostileBound): void {
-  if (typeof bound.label !== "string" || bound.label.trim() === "") {
+function requireBound({ timeoutMs, label }: HostileBound): void {
+  if (typeof label !== "string" || label.trim() === "") {
     throw new HostileHarnessMisuseError("bound.label must be a non-empty string");
   }
-  const { timeoutMs } = bound;
-  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
-    throw new HostileHarnessMisuseError(`bound.timeoutMs must be a positive integer, got ${String(timeoutMs)}`);
-  }
-  if (timeoutMs > MAX_BOUND_MS) {
-    throw new HostileHarnessMisuseError(`bound.timeoutMs ${timeoutMs} exceeds MAX_BOUND_MS ${MAX_BOUND_MS}; setTimeout would clamp it to 1ms`);
+  if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_BOUND_MS) {
+    throw new HostileHarnessMisuseError(
+      `bound.timeoutMs must be an integer in 1..${MAX_BOUND_MS}, got ${String(timeoutMs)}`,
+    );
   }
 }
 
@@ -119,14 +110,10 @@ export interface RaceOutcome<A, B> {
   readonly firstSettled: RaceSide;
 }
 
-/**
- * Run two legs CONCURRENTLY under one bound and record which settled first.
- *
- * BOTH outcomes are REPORTED rather than propagated: in hostile probing a leg that
- * refuses has still settled and is usually the interesting one, and propagating the first
- * rejection would discard the other leg AND hide the settle order — the single fact this
- * driver exists to establish. The bound still governs the pair.
- */
+/** Run two legs CONCURRENTLY under one bound, recording which settled first. BOTH outcomes
+ * are REPORTED, not propagated: a refusing leg has still settled and is usually the
+ * interesting one, and propagating its rejection would discard the other leg AND hide the
+ * settle order — the one fact this driver exists to establish. */
 export async function probeRacing<A, B>(
   bound: HostileBound,
   left: () => Promise<A>,
@@ -159,11 +146,9 @@ export async function probeRacing<A, B>(
 const activeRoots = new Set<string>();
 
 /**
- * A fresh per-case temp directory, registered for cleanup.
- *
- * The path is realpath'd because on macOS `os.tmpdir()` is the symlink `/var/...` whose
- * real location is `/private/var/...`; a containment check run against the unresolved
- * form reads a perfectly legitimate root as a path escape.
+ * A fresh per-case temp root, registered for cleanup. Realpath'd because macOS `tmpdir()`
+ * is the symlink `/var/...` over `/private/var/...`, and a containment check on the
+ * unresolved form reads a legitimate root as a path escape.
  */
 export function hostileRoot(label: string): string {
   if (typeof label !== "string" || label.trim() === "") {
@@ -175,10 +160,7 @@ export function hostileRoot(label: string): string {
   return created;
 }
 
-/**
- * Remove every registered root. Safe to call twice, and never throws: a cleanup that
- * throws on one root would skip the rest and leak them all. Call from `afterAll`.
- */
+/** Remove every registered root — safe twice, never throws (one throw would leak the rest). */
 export function cleanupHostileRoots(): readonly string[] {
   const removed: string[] = [];
   for (const root of activeRoots) {
@@ -214,24 +196,15 @@ export async function withHostileRoot<T>(
 export interface RefusalExpectation {
   /** The stable reason code the caller expects. */
   readonly code: string;
-  /**
-   * The answering layer constant. NON-OPTIONAL by design: where more than one layer can
-   * refuse, a code-only assertion stays green the moment a different layer answers first.
-   */
+  /** The answering layer constant. NON-OPTIONAL by design: where more than one layer can
+   * refuse, a code-only assertion stays green the moment a different layer answers first. */
   readonly layer: string;
 }
 
-interface ObservedRefusal {
-  readonly code: string;
-  readonly layer: string;
-}
-
-/**
- * Read the code and layer off a refusal. Field aliases are accepted because production
- * uses both spellings, but nothing here interprets the values — no defaulting, no
- * inference, and a shape carrying neither field is an error rather than a pass.
- */
-function readRefusal(actual: unknown): ObservedRefusal {
+/** Read code and layer off a refusal. Both spellings production uses are accepted, but
+ * nothing here interprets the values — no defaulting, no inference, and a shape carrying
+ * neither field is an error rather than a pass. */
+function readRefusal(actual: unknown): RefusalExpectation {
   if (typeof actual !== "object" || actual === null) {
     throw new HostileHarnessMisuseError(`expected a refusal object, got ${typeof actual}`);
   }
@@ -247,14 +220,10 @@ function readRefusal(actual: unknown): ObservedRefusal {
   return { code, layer };
 }
 
-/**
- * Assert a refusal by BOTH its stable code and its answering layer.
- *
- * The layer is required twice over: the type makes a code-only call a compile error, and
- * the runtime check below rejects one that reaches here through a cast. Five sibling
- * slices consume this helper, and a helper that tolerates the weak form will be used in
- * the weak form by all five.
- */
+/** Assert a refusal by BOTH its stable code and its answering layer. The layer is required
+ * twice over: the type makes a code-only call a compile error, and the runtime check below
+ * rejects one arriving through a cast. Five sibling slices consume this helper, and one
+ * tolerating the weak form would be used in the weak form by all five. */
 export function assertRefusedWith(actual: unknown, expected: RefusalExpectation): void {
   if (typeof expected !== "object" || expected === null) {
     throw new HostileHarnessMisuseError("expected must be { code, layer }");
