@@ -94,8 +94,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5678886b",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,10 +114,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-16T14:03:29.651Z",
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "updatedAt": "2026-08-16T14:20:39.423Z",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-16T14:18:07.514Z",
+  "blockedReason": "BLOCKED — approved route structurally unbuildable. Re-measured MYSELF at HEAD d7f6b6e (prior session: 8151ade). Full evidence in my #general post.\n\nW1 NO NEW KIND. `foundation.dispatch` absent from RUNTIME_COMMAND_KINDS (0 hits). runtime-envelope.ts:142 isCommandKind refusal precedes the http-adapter.ts:196 registry read. Union closed for M5 (human 11:54Z). New entry unreachable.\n\nW2 NO EXISTING KIND CARRIES IT — kills the plan's effect.activate route. Swept the WHOLE wired table: daemon-command-registry.ts:96-119 PAYLOAD_KEYS has graphSnapshot 0, launchTemplate 0, inputManifest 0, binding 0. EFFECT_ACTIVATE_PAYLOAD_KEYS = 6 {activation,budget,effect,lease,liveClaims,slot}, count-then-membership at activation-ingress-contracts.ts:179-180. FOUNDATION_ATTEMPT_REQUEST_KEYS = 5 {activationRequestBytes,binding,graphSnapshot,inputManifest,launchTemplate}, exactKeys at foundation-attempt-codec.ts:76. Disjoint; neither tolerates an extra key.\n\nW3 NO DURABLE READER, and DoD 2 forbids the caller as source. graphSnapshot: ZERO functions repo-wide return GraphSnapshot; no graph file in packages/store/src; no graph.* kind wired; the only use is validateGraphSnapshot(request.graphSnapshot) at foundation-attempt-contracts.ts:155 — a CALLER snapshot. launchTemplate: ZERO producers in packages/ or adapters/. inputManifest: only durable read is a DIFFERENT aggregate (evidence/foundation-verification-store.ts:154,165).\n\nW4 DoD 3 \"low-risk\" not representable: GraphNode = {nodeKey, executionBearing} (scheduler/graph-model.ts:29-32). Zero/one/many selection is ALREADY dispatch's (admitSingleExecutionNode, contracts.ts:152-166) — an ingress selector = the second-validator defect.\n\nSTALE RAIL: rail 2 + step 5 say daemon-store-dependencies.ts is 397/400. It is 194 by `grep -c ''`.\n\nNEED ONE OF: (a) lift M5 union freeze (human ruling); (b) a preceding task building the 3 missing readers — all in this task's \"NOT in scope\"; (c) re-cut DoD. Wrote zero production files.",
   "contextFetchedBy": [
     "architect-4eca9b79",
     "architect-94dd1835",
@@ -132,6 +132,15 @@
     "executedStepCount": 2
   },
   "priorHandoffs": [
+    {
+      "whatIsDone": "Full structural re-measurement of the approved route, done at HEAD d7f6b6e (three commits newer than the 8151ade the first probe used). Four independent walls documented with file:line evidence and grep counts, recorded in blockedReason and in the #general post msg-036c73cc. Also corrected a stale rail: task rail 2 and plan step 5 both claim daemon-store-dependencies.ts sits at 397 of a hard 400 ('three lines of headroom'); it is 194 lines by `grep -c ''`. Deliberately zero production files written — narrowing the DoD to whatever compiles would ship an ingress that takes graph/launch/manifest authority from the caller, which DoD 2 forbids and which df29871b was already QA-rejected for.",
+      "whatRemains": "An architect/human decision, not worker execution. One of: (a) lift the M5 RUNTIME_COMMAND_KINDS union freeze so a foundation.dispatch kind + payload allow-list can exist (human ruling, contracts expansion); (b) schedule a PRECEDING task for the three missing durable readers (graph snapshot projection, launch-template producer, attempt input-manifest reader) — note all three sit inside this task's explicit 'NOT in scope' list, so this task cannot absorb them; (c) re-cut the DoD to what ingress can legally own today, which after W4 is authentication + capability + allow-list only, since node selection already belongs to dispatch (admitSingleExecutionNode).",
+      "pitfalls": "Do NOT re-serve this to a worker unchanged — the walls are structural and any worker re-derives them or ships the second-validator defect step 2 warns about. Re-measure at current HEAD before acting: this premise already survived one HEAD move, but a block premise goes stale silently. The plan's own fallback route (ride effect.activate) is dead: EFFECT_ACTIVATE_PAYLOAD_KEYS is exactly 6 and enforced key-count-then-membership at activation-ingress-contracts.ts:179-180, while FOUNDATION_ATTEMPT_REQUEST_KEYS is exactly 5 under exactKeys at foundation-attempt-codec.ts:76 — disjoint sets, neither tolerates an extra key. Shared worktree: tests/security/scheduler-activation-{boundaries.security,hostile-cases}.ts are untracked PEER work, not part of this task; a `git stash -u` here destroys them.",
+      "openQuestions": "Which of (a)/(b)/(c)? (a) needs a human ruling because the M5 union was frozen by human decision at 11:54Z. If (c), confirm the re-cut DoD explicitly drops the 'low-risk node selection' clause — DoD 3's 'low-risk' is not representable at all: GraphNode is exactly {nodeKey, executionBearing} (packages/scheduler/src/graph-model.ts:29-32) and riskTier is approval-only.",
+      "releasedAt": "2026-08-16T14:20:39.421Z",
+      "releasedBy": "worker-5678886b",
+      "reason": "Explicit handoff to architect: task is BLOCKED pending a replan decision (a/b/c), not pending worker effort. Releasing so the assignment does not park this worker while a CRITICAL task is claimable."
+    },
     {
       "whatIsDone": "Re-read the governor cycle-resolution comment, confirmed 9cba is DONE while e337 is still in flight and 6cb is blocked, and reported this ingress task BLOCKED in the decided upstream order.",
       "whatRemains": "After e337 and then 6cb are QA-approved DONE, re-probe the committed registry/public host and exact durable dispatch result/read/replay APIs, then plan authenticated ingress.",

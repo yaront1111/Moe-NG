@@ -14,12 +14,13 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND CONFIRM THE GAP — it is real, precisely measured by whoever filed this, and it is the direct consequence of an asymmetry task-75ee4a84 created on purpose. Re-verify at current HEAD (measured at 81a9f30).\n`claude-surface.ts` states the asymmetry and its reason verbatim: \"WITHHELD, and the asymmetry is the whole deliverable: `createNodeClaudeRuntimeFs`, `RUNTIME_PIN_CHUNK_BYTES`, `observeInstalledClaudeRuntime`, `probeClaudeRuntime`, `ClaudeRuntimeFsPort`, `ClaudeRuntimeFactsPort` and `ClaudeRuntimeObservationRefused` all stay internal. Publishing any one of them would re-open the injectable seam this factory exists to close — `observeInstalledClaudeRuntime` most of all, because it takes an `executablePath` and a consumer holding it could point the host observer at a binary no quote ever committed to.\"\nThat reasoning is CORRECT and must survive this task. What it left missing is the other half: nothing public can produce the `quotedObservation` the factory validates against, so no consumer can reach a PROVEN launch.\nWHY A SELF-ASSEMBLED QUOTE CANNOT WORK, and the measurement that proves it is not a bug to route around: `factsDigest` (claude-runtime-pin.ts:130-141) compares exactly `reportedVersion`, `adapterCapabilitySchemaDigest` and `platformIdentity{os,arch,osVersion}` — with the comment \"Compares only what the runtime IS, so pinned paths may legitimately differ.\" The version and the capability digest can only come from an observation the runner made itself, which is why the filer's real-Windows run refused a quote whose closure hash and paths were all TRUE with `CLAUDE_RUNTIME_OBSERVATION_CHANGED@RUNTIME`. Reproduce that refusal yourself before building; it is the spec.\nNO EXISTING PUBLIC RESOLUTION: `claude-launch-selection.ts` is about launch flags, model and reasoning effort, is not published from the surface, and resolves no executable. So discovery is genuinely new.\nGATES, each separate with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/runner typecheck` and `pnpm --filter @moe/runner test`, recording count lines and every failing file as your before-set.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/surface/claude-surface.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/providers/claude/claude-host-runtime.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T14:51:08.631Z"
     },
     {
       "stepId": "step-2",
@@ -74,7 +75,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -86,7 +87,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T11:51:54.479Z",
-  "updatedAt": "2026-08-16T13:17:12.756Z",
+  "updatedAt": "2026-08-16T14:51:08.631Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T13:14:36.418Z",
     "plannedStepCount": 6,
@@ -112,7 +113,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T14:50:18.381Z",
+    "escalatedAt": "2026-08-16T14:50:18.381Z"
   },
-  "planApprovedAt": "2026-08-16T13:17:12.756Z"
+  "planApprovedAt": "2026-08-16T13:17:12.756Z",
+  "contextFetchedBy": [
+    "worker-5678886b"
+  ],
+  "workStartedAt": "2026-08-16T14:51:08.631Z"
 }

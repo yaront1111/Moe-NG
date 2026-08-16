@@ -111,8 +111,8 @@
       "completedAt": "2026-08-16T14:02:59.757Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-9f145232",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -124,7 +124,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:02.653Z",
-  "updatedAt": "2026-08-16T14:02:59.757Z",
+  "updatedAt": "2026-08-16T14:35:22.606Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -133,7 +133,9 @@
     "firstClaimAt": "2026-08-16T12:59:29.245Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T14:35:22.606Z",
+    "wallClockMs": 5753361
   },
   "stepsCompleted": [
     "step-1",
@@ -161,11 +163,29 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T14:28:07.879Z"
   },
   "planApprovedAt": "2026-08-16T13:01:29.290Z",
   "contextFetchedBy": [
-    "worker-9f145232"
+    "worker-9f145232",
+    "qa-ce3ba361"
   ],
-  "workStartedAt": "2026-08-16T13:02:37.004Z"
+  "workStartedAt": "2026-08-16T13:02:37.004Z",
+  "reviewStartedAt": "2026-08-16T14:06:38.828Z",
+  "verification": {
+    "command": "pnpm test:security",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/tests/security\nTest Files  8 passed (8)\nTests  349 passed (349)\nStart at 17:06:16\nDuration 8.25s (transform 2.00s, setup 0ms, import 2.98s, tests 4.55s, environment 0ms)\n$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts",
+    "reportedAt": "2026-08-16T14:06:38.828Z"
+  },
+  "filesModified": [
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/hostile-harness.ts",
+    "tests/security/durable-store-boundaries.security.ts",
+    "tests/security/durable-store-boundary-scenarios.ts"
+  ],
+  "completedAt": "2026-08-16T14:35:22.606Z",
+  "reviewCompletedAt": "2026-08-16T14:35:22.606Z",
+  "reviewSummary": "APPROVED. Owned files at HEAD d7f6b6e: durable-store-boundaries.security.ts (252 lines), durable-store-boundary-scenarios.ts (329). Roster/harness untouched.\n\nDoD 1: roster bound BOTH directions — toHaveLength(14) plus sorted equality vs BOUNDARY_ROSTER filtered on axis \"durable-store\". I re-derived that subset myself: exactly 14. ACTIVATION_LEDGER_LAYER is tagged scheduler-activation, PROVIDER_RUN_LEDGER_LAYERS runtime-provider, so dropping the description's 7-constant list for the roster was correct per rail 1. it.each asserts BEFORE/AFTER/RACE count > 0 per constant.\n\nDoD 2, drilled hard: the note credits decision-ledger-transaction.ts:129, but a throw-probe there left the suite GREEN (103 passed) — unreachable, since the preflight at commitDecision:86 routes replays to decision-ledger-replay.ts:33. Drilling the branch that ACTUALLY answers (echo caller resultBytes) reddens ALL 14 named CHANGED-BYTE REPLAY tests. Met; note names the wrong file.\n\nDoD 3: assertRefusedWith pins code+layer; the upstream check is conditional so I drilled it — flipping production RECORD_NOT_FOUND -> RECORD_UNREADABLE in recovery-inventory-ledger.ts reddens 4 named tests while the boundary's own code is unchanged. The two vocabularies are not collapsed.\n\nDoD 4: every case asserts durableRecords == preexistingRecords and durableComplete, plus a whole-slice invariant over 28 refusals + 14 races.\nDoD 5: real SqliteEventStore; every open closes in finally.\nDoD 6: baseline 48 tests / exit 1; now 452. Owned-path failing delta EMPTY.\n\nDISCLOSED: `pnpm test:security` exits 1 right now entirely from a peer's UNTRACKED scheduler-activation-*.ts (4 tsc errors, 4 failures). Post-dates the worker's green 349/349 run, not an owned path. The tsc leg hides the count line, so I ran vitest alone: 8 files pass, only the peer file fails. All drills restored from recorded blobs; owned suite re-run green 103/103."
 }

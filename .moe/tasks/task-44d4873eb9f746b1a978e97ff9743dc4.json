@@ -147,8 +147,8 @@
       "completedAt": "2026-08-16T13:55:28.311Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-ce3ba361",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,12 +167,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-16T13:57:18.681Z",
+  "updatedAt": "2026-08-16T14:27:09.440Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:08.863Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T14:27:09.440Z",
+    "wallClockMs": 605040577
   },
   "contextFetchedBy": [
     "architect-db2146e3",
@@ -260,5 +262,8 @@
     "apps/daemon/src/evidence/foundation-verification-service.js",
     "apps/daemon/src/evidence/foundation-verification-store.ts",
     "apps/daemon/src/evidence/foundation-verification-store.js"
-  ]
+  ],
+  "completedAt": "2026-08-16T14:27:09.440Z",
+  "reviewCompletedAt": "2026-08-16T14:27:09.440Z",
+  "reviewSummary": "APPROVED at HEAD d7f6b6e, not the worker's 6e25dd8 — two commits landed after review opened, so I re-verified on current bytes.\n\nGATES, mine, each separate with own exit code: runner test EXIT=0 (66 files / 2216 passed|1 skipped); daemon typecheck EXIT=0 (0 \"error TS\"); daemon test EXIT=0 (103 files / 2124 passed); repo-wide typecheck EXIT=0. Worker's field said 2122; the +2 are d7f6b6e's new cases.\n\nHISTORY: foreign commit 5988463 (task-2259196) DELETED the ACTIVATED commitPhase block and left verificationReceiptBody missing the required candidateRoot — that commit does not typecheck and breaks DoD 2. d7f6b6e repaired both. Not this task's defect; 6e25dd8 was exactly 6 owned paths.\n\nDRILLS, mine at HEAD (worker's predate the last two commits, so the re-landed DoD 2 block had never been drilled). Each alone, hash-confirmed applied, restored from blob c32c7c1, tree byte-identical after:\n1. delete ACTIVATED block -> 3 red, \"expected ['FoundationVerificationRefused'] to include 'FoundationVerificationActivated'\". DoD 2 binds.\n2. drop candidateRoot replay clause -> 1 red, \"refuses a replay that varies ONLY the candidate root\"; production returned PROVEN_RECEIPT for an unverified root. DoD 4 not tautological.\n3. RECEIPT_UNCOMMITTED -> AMBIGUOUS -> 1 red on the exact code.\n4. collapse FAILED -> PASSED -> 2 red incl. property \"never mints an authoritative PASSING receipt for any non-green run\" (asserts scenarios.length > 0). DoD 3 binds.\n\nDoD 1: request is 5 identity fields via exactKeys — manifest/observation/recipe/receipt unrepresentable. DoD 5: answerFromEvent re-encodes and sameBytes-compares against event.payload, refuses UNREADABLE.\n\nRe-audited all 11 codes + 4 layers: each has >=1 producer and >=1 test. No orphans.\n\nRAILS: 0 deep imports, 0 commitWithApply, producers untouched, no probe files, bridges 1 LF line. Production 249/193/183 lines, all <250. Per-file cap is the rail; no per-task LOC budget exists."
 }
