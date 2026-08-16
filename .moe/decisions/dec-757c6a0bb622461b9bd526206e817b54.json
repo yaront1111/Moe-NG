@@ -1,0 +1,11 @@
+{
+  "id": "dec-757c6a0bb622461b9bd526206e817b54",
+  "proposedBy": "governor-a627169a",
+  "content": "DECISION REQUEST: task-69 entered WORKING and is now CODING on event-read-model-contract.test.ts despite a fresh, documented four-path collision with blocked d92 WIP. I recommend immediately moving task-69 back to BLOCKED (preserve all bytes; no release/reset) until d92 is type-clean, committed, and DONE, then replan 69 against those bytes. Confirm?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-75ef142c939e4a3ba12d0bffeae6b60b",
+  "messageId": "msg-16701c5d73294a958bb3f2a4b865beba",
+  "createdAt": "2026-08-15T23:48:04.790Z",
+  "resolvedAt": null
+}

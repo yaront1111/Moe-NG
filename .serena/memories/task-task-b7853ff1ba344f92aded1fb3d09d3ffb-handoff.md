@@ -1,16 +1,34 @@
-# task-b7853ff1ba344f92aded1fb3d09d3ffb — blocked planning handoff
+# Architect handoff — task-b7853ff1ba344f92aded1fb3d09d3ffb
 
-Status: BLOCKED on prerequisite `task-c690a7a0c5a14daaa088acbc32e26815`.
+## Status
+Five-step/two-file plan approved and handed to WORKING.
 
-Fresh measurement at committed HEAD `ee284416bfd8d6f4672afb039f455b150d363dbb`:
-- `task-f6ef0a45f52c45c7bb54f250170aa223` is DONE and `apps/daemon/src/index.ts:174-175` exports `collectDoctorVersionReport` plus `DoctorVersionReport` from the bare `@moe/daemon` root.
-- `task-c690a7a0c5a14daaa088acbc32e26815` is still BLOCKED.
-- `git show HEAD:package.json` has no `dependencies` object and no `@moe/daemon` entry.
-- The `.` importer in `git show HEAD:pnpm-lock.yaml` has no `@moe/daemon` entry.
-- A temporary in-root `.mts` probe importing `collectDoctorVersionReport` from `@moe/daemon` failed with TS2307 (`./node_modules/.bin/tsc`, exit 1) and was deleted in the same command.
-- Plain Node `import("@moe/daemon")` failed with `ERR_MODULE_NOT_FOUND` (exit 1).
-- Current working tree has foreign WIP in `pnpm-lock.yaml` and `apps/daemon/package.json`; b785's owned paths (`scripts/release/supply-chain.mjs`, `tests/integration/release-supply-chain.test.mjs`) are clean.
+## Verified prerequisites at planning HEAD 4d0a49fb8791b458565863377d7002a48a1a9bd8
+- Owned release paths were clean.
+- Root package.json declares `@moe/daemon: workspace:*`.
+- Root pnpm-lock importer links `@moe/daemon` to `apps/daemon`.
+- Bare daemon root exports zero-arg async `collectDoctorVersionReport` plus `DoctorVersionReport`.
+- Trap-cleaned strict root TypeScript probe passed.
+- Pinned Linux Node 24.16 plain-Node bare import/call passed with v1, 18 components, frozen report.
+- Focused baseline: release typecheck exit 0; Node release integration 60/60 pass.
+- `scripts/release/supply-chain.mjs` still has the obsolete doctor placeholder and is a pre-existing 264 lines.
+- A later foreign edit made daemon index dirty only for event acknowledgement exports; doctor exports remain. Do not touch it.
 
-The remaining b785 production gap is still real: `scripts/release/supply-chain.mjs` emits the obsolete `missingSymbol: "@moe/daemon.collectDoctorVersionReport"` / `DOCTOR_COMPATIBILITY_UNAVAILABLE` placeholder. However, the task explicitly may not edit package.json/pnpm-lock.yaml and its rail says not to start until c690 is DONE. A plan now would violate the global cross-package dependency rail or require a forbidden deep import.
+## Approved design
+Import collector only from bare `@moe/daemon`, add it to frozen `SYSTEM_PORTS`, and call exactly once after existing tool identity checks but before keys/temp roots/signals/publication. Snapshot with structuredClone, validate/canonicalise the v1 envelope/cardinalities, then recursively freeze. Do not reinterpret nested Doctor ObservedValue/pin/component semantics; preserve every code/layer UNKNOWN. Throw, rejected promise, refusal, invalid version/envelope, or noncanonical value maps to exact `RELEASE_SUPPLY_CHAIN_REFUSED / TOOLCHAIN_OBSERVATION_FAILED / RELEASE_SUPPLY_CHAIN` and zero archive/build/publication.
 
-Re-promote only after c690 is DONE and all three edge checks pass: committed root manifest dependency, committed root lock importer link, and temporary compiled + plain-Node probes from the repository root importing the bare `@moe/daemon` specifier. Then plan only the two owned files, preserving releaseVerdict UNKNOWN and publicationAuthorized false.
+Keep release component count derived from the canonical six-entry inventory; doctor componentCount remains separate. Preserve releaseVerdict UNKNOWN, publicationAuthorized false, reportCount 3, distribution/SBOM/OS authority.
+
+## Required tests
+- Full exact coded-UNKNOWN fixture through zero-arg spy, deep frozen.
+- Real SYSTEM_PORTS case omitting only fake collector, proving actual bare-root call.
+- Three-case generated failure matrix with exact cardinality and zero effects.
+- Refusal site sweep becomes 10 sites / 9 distinct reasons.
+- Mutation A restores the former placeholder and must red the real-port test.
+- Mutation B breaks failure mapping and must red exact reason/layer/zero-publication assertions.
+- Out-of-repo backups, EXIT restore, SHA equality, no residue.
+
+## Exact completion gate
+`export PATH=/home/sysadmin/.npm/_npx/32bdabe214bd28ec/node_modules/node/bin:/tmp/moe-node2416-bin:$PATH; export pnpm_config_verify_deps_before_run=; pnpm typecheck:release && pnpm test:integration`
+
+Require exit 0 plus nonzero Vitest and Node test-count lines. Run repo-wide typecheck/test before/after for path-attributed baseline. Commit only the two explicit owned paths.

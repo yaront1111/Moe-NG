@@ -108,7 +108,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human directed additional unblocking. Steps 1-4 are complete, the two-path aggregate-id implementation and four-test/mutation evidence are committed/banked, and the recorded block is only a transient daemon final-gate wait. Resume at step 5: first remeasure the two owned paths and stop on any collision; otherwise run the exact daemon typecheck/test fresh. Do not touch d92 reader/commit/test paths or active human review WIP.",
   "createdBy": "WORKER",
   "parentTaskId": "task-df29871bfc2441659efb3f763ddb23db",
   "priority": "HIGH",
@@ -116,7 +116,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:45:32.402Z",
-  "updatedAt": "2026-08-15T22:35:46.201Z",
+  "updatedAt": "2026-08-16T00:09:13.476Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:45:59.442Z",
     "plannedStepCount": 6,
@@ -125,7 +125,9 @@
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
-    "worker-83e6139a"
+    "worker-83e6139a",
+    "governor-a627169a",
+    "worker-5d4e2d6f"
   ],
   "stepsCompleted": [
     "step-1",
@@ -150,15 +152,26 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T23:55:33.350Z",
+    "escalatedAt": "2026-08-15T23:55:33.350Z"
   },
   "planApprovedAt": "2026-08-15T21:55:33.995Z",
   "workStartedAt": "2026-08-15T21:58:06.953Z",
-  "blockedReason": "Implementation and focused acceptance are complete, but the plan's exact final command is currently blocked by foreign daemon orchestrator WIP. Fresh `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` exited 1 in the first leg, so the test leg did not run. Exact foreign TS errors: agent-spawner.test.ts:393/405 expects missing close/activeCount; untracked agent-wrapper-main.test.ts:30/31/60/61 expects missing shutdownWrapperRuntime and :83/84 expects missing createWrapperStopSignal; verifier-process-runner.test.ts:126/155/187/217/241 passes missing killGraceMs and :249/251/257 expects missing close/activeCount. None intersects owned paths. The separately executed daemon suite proved nonvacuous (94 files, 1964 tests) but was foreign-red with 23 failures in graph-preview/index/runtime-entrypoint and the same orchestrator files; our focused owned suite is freshly green at 1 file/4 tests. Repo-wide HEAD gates: typecheck initially exit 0 before the foreign WIP moved; test exit 1 with 12 foreign failures (268/273 files, 6492/6507 passed); foundation and store later stopped at the newly introduced foreign orchestrator type errors; daemon test exit 1 with 23 foreign failures (87/94 files, 1941/1964 passed). Failing-path intersection with activation-ledger-contracts.ts and activation-ledger-aggregate-id.test.ts is empty.\n\nA foreign whole-tree completion commit 6ca5da0 for task-d92b1b15a5b048e49671ed34990fa4a1 swept both owned files byte-exact while this task was in progress. Per rail, I did not amend/reset/recommit. Review surface is `git diff f4966b534ee5e9f9671668795d5dd1e844f0521b..HEAD -- apps/daemon/src/activation/activation-ledger-contracts.ts apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts`; owned paths are clean and hashes are bd568cf7... and 61ee9dbc....",
+  "blockedReason": "Human-directed unblocking retry completed on clean, byte-identical owned paths at HEAD 4d0a49f. Exact Node 24.16 command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`: typecheck exit 0; daemon tests executed non-vacuously (97 files, 1,986 tests) but exit 1 with 6 failures, all foreign. Exact paths/failures: graph-preview-request.test.ts package-root child timed out (`status:null`); runtime-entrypoint.test.ts reports missing `.js` bridge for untracked `http/event-stream-ack-contract.ts`; activation/foundation-launch-authority.test.ts has 3 deliberate d92 TDD reds (`ABSENT` vs expected `UNKNOWN`, moving-scan watchdog timeout); untracked review/verifier-receipt-ledger.test.ts expects VERIFIER_RECEIPT_STALE but foreign production commits. Failing-path intersection with owned activation-ledger-contracts.ts / activation-ledger-aggregate-id.test.ts is empty. Owned hashes remain bd568cf7... / 61ee9dbc..., status clean, production 241 lines. Task requires the daemon package leg itself to exit 0, so foreign-red attribution cannot satisfy completion. Shared-tree rails forbid touching those paths; resume step 5 after WIP settles.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T22:34:09.680Z",
+  "blockedAt": "2026-08-16T00:04:22.403Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Reclaimed the banked task, read prior handoff/context, remeasured both owned paths clean and byte-exact (bd568cf7 / 61ee9dbc; production 241 lines), and ran the exact Node 24.16 daemon gate fresh. Typecheck passed; tests executed 97 files / 1,986 tests.",
+      "whatRemains": "Resume step 5 only after the raw daemon test package is green. Rerun `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` fresh; on exit 0 complete step 5, run final adversarial review step 6, and complete without amending/resetting/recommitting the foreign whole-tree commit.",
+      "pitfalls": "Current 6 failures are all foreign: graph-preview child timeout; missing bridge for untracked http/event-stream-ack-contract.ts; three d92 horizon/finite-scan TDD reds in foundation-launch-authority.test.ts; verifier-receipt stale-source red in untracked review WIP. Do not touch d92, HTTP ACK, review, or graph-preview paths. Owned bytes live in foreign commit 6ca5da0; review via f4966b5..HEAD over only the two owned paths.",
+      "openQuestions": "When will the event-stream bridge, d92 finite-horizon implementation, verifier-receipt stale-source guard, and environment-speed graph-preview lane all be green simultaneously?",
+      "releasedAt": "2026-08-16T00:09:13.474Z",
+      "releasedBy": "worker-5d4e2d6f",
+      "reason": "Explicit governor-requested handoff after the human-directed raw daemon gate retry remained foreign-red."
+    },
     {
       "whatIsDone": "Steps 1-4 complete: production overflow hashing landed, exact four-test acceptance green, both required mutation drills red and byte-exact restored. Repo-wide/head path intersection with owned files is empty. Foreign commit 6ca5da0 swept the owned bytes.",
       "whatRemains": "Resume step 5 after foreign orchestrator WIP settles; rerun exact `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` fresh. If green, complete step 5, run step 6 adversarial review, and complete task without amending/recommitting the foreign whole-tree commit.",

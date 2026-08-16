@@ -7,6 +7,7 @@ export {
 export type {
   ControlRoomTransport,
   DaemonAnswer,
+  EventAcknowledgeRequest,
   EventPageRequest,
   FetchLike,
   SendResult,

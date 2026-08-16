@@ -1,3 +1,8 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import { expect, it } from "vitest";
 
 import {
@@ -9,6 +14,10 @@ import {
   SqliteEventStore,
 } from "./index.js";
 import type { CommitResult, DurableStoreErrorCode } from "./index.js";
+import {
+  EVENT_TYPE_PAGE_CANDIDATE_QUERY,
+  EVENT_TYPE_PAGE_MATERIALIZE_QUERY,
+} from "./event-read-query.js";
 
 const AGGREGATE = "goal-contract";
 const COMMAND_ID = "command-contract";
@@ -25,6 +34,12 @@ const BAD_ID = "must be well-formed, non-empty, at most 512 UTF-8 bytes, and con
 const BAD_SEQ = "afterAggregateSequence must be a non-negative safe integer";
 const BAD_GLOBAL = "afterGlobalPosition must be a non-negative SQLite-range bigint";
 const BAD_OUTBOX = "afterOutboxPosition must be a non-negative SQLite-range bigint";
+const MIXED_TYPES = ["goal.alpha", "goal.beta", "goal.gamma"] as const;
+const ALPHA = MIXED_TYPES[0];
+const MIXED_COUNT = 27;
+const BAD_TYPE = `eventType ${BAD_ID}`;
+const TINY_BYTES = "the next record does not fit within 1 decoded bytes";
+const EVENT_TYPE_INDEX = "domain_events_event_type_position";
 
 function seed(store: SqliteEventStore): CommitResult {
   return store.commit({
@@ -48,6 +63,31 @@ function seed(store: SqliteEventStore): CommitResult {
     })),
     expectedVersion: 0,
   });
+}
+
+// Interleaved so matching rows are never adjacent in global_position: alpha
+// lands at 4, 7, 10 ... and the trailing beta/gamma rows outlive the last match.
+function seedMixed(store: SqliteEventStore): void {
+  store.commit({
+    aggregateId: "goal-mixed",
+    commandBytes: new Uint8Array([5]),
+    commandId: "command-mixed",
+    committedAt: COMMITTED_AT,
+    events: Array.from({ length: MIXED_COUNT }, (_unused, index) => ({
+      eventId: `event-mixed-${index}`,
+      eventType: MIXED_TYPES[index % MIXED_TYPES.length]!,
+      payload: new Uint8Array([index]),
+    })),
+    expectedVersion: 0,
+  });
+}
+
+function typeTally(store: SqliteEventStore): Record<string, number> {
+  const tally: Record<string, number> = {};
+  for (const event of store.readEventsAfter(0n, 1_000).items) {
+    tally[event.eventType] = (tally[event.eventType] ?? 0) + 1;
+  }
+  return tally;
 }
 
 function expectedEvent(index: number, requestSha256: string): unknown {
@@ -101,6 +141,38 @@ function withStore(run: (store: SqliteEventStore, committed: CommitResult) => vo
     store.close();
   }
 }
+
+it("reports the exact event horizon and observes a later append", () => {
+  const empty = SqliteEventStore.openEphemeralForProjectTest("project-empty-horizon");
+  try {
+    expect(empty.readEventHorizon()).toBe(0n);
+  } finally {
+    empty.close();
+  }
+  expectDurableError(
+    () => empty.readEventHorizon(),
+    "STORE_CLOSED",
+    "the SQLite event store is closed",
+  );
+  withStore((store) => {
+    expect(INDEXES).toHaveLength(3);
+    expect(INDEXES.length).toBeGreaterThan(0);
+    expect(store.readEventHorizon()).toBe(3n);
+    store.commit({
+      aggregateId: AGGREGATE,
+      commandBytes: new Uint8Array([8, 8]),
+      commandId: "command-contract-append",
+      committedAt: COMMITTED_AT,
+      events: [{
+        eventId: "event-contract-append",
+        eventType: "goal.contract-appended",
+        payload: new Uint8Array([8]),
+      }],
+      expectedVersion: 3,
+    });
+    expect(store.readEventHorizon()).toBe(4n);
+  });
+});
 
 it("normalizes every event, outbox, receipt, and aggregate-version read", () => {
   withStore((store, committed) => {
@@ -190,6 +262,92 @@ it("freezes envelopes while returning detached mutable record snapshots", () => 
   });
 });
 
+it("pages only exact event-type matches across an interleaved ledger", () => {
+  withStore((store) => {
+    seedMixed(store);
+    expect(typeTally(store)).toStrictEqual({
+      "goal.alpha": 9,
+      "goal.beta": 9,
+      "goal.contract-1": 1,
+      "goal.contract-2": 1,
+      "goal.contract-3": 1,
+      "goal.gamma": 9,
+    });
+    const walked: string[] = [];
+    const counts: number[] = [];
+    let cursor: bigint | null = 0n;
+    let hasMore = true;
+    while (hasMore) {
+      const page = store.readEventsByTypeAfter(ALPHA, cursor!, 4);
+      expect(page.items.map((event) => event.eventType))
+        .toStrictEqual(page.items.map(() => ALPHA));
+      expect(page.items.map((event) => event.globalPosition))
+        .toStrictEqual(page.items.map((_unused, index) =>
+          BigInt(4 + 3 * (walked.length + index))));
+      walked.push(...page.items.map((event) => event.eventId));
+      counts.push(page.items.length);
+      hasMore = page.hasMore;
+      cursor = page.nextCursor;
+    }
+    expect(counts).toStrictEqual([4, 4, 1]);
+    expect(walked).toStrictEqual(
+      Array.from({ length: 9 }, (_unused, index) => `event-mixed-${index * 3}`),
+    );
+    expect(new Set(walked).size).toBe(9);
+    // hasMore is computed over the FILTERED stream: two unfiltered rows still
+    // follow position 28, and the walk must terminate anyway.
+    expect(cursor).toBe(28n);
+    expect(store.readEventsAfter(28n, 10).items).toHaveLength(2);
+    expect(store.readEventsByTypeAfter(ALPHA, 28n, 10)).toStrictEqual({
+      hasMore: false,
+      items: [],
+      nextCursor: null,
+    });
+  });
+});
+
+it("returns an honest empty page for an unknown type and refuses an oversized match", () => {
+  withStore((store) => {
+    seedMixed(store);
+    const empty = { hasMore: false, items: [], nextCursor: null };
+    expect(store.readEventsByTypeAfter("goal.absent", 0n, 10)).toStrictEqual(empty);
+    // A matching first row is what the decoded-byte budget refuses; an unknown
+    // type produces no candidate at all, so the same budget stays silent.
+    expect(store.readEventsByTypeAfter("goal.absent", 0n, 10, 1)).toStrictEqual(empty);
+    expectDurableError(
+      () => store.readEventsByTypeAfter(ALPHA, 0n, 10, 1),
+      EXCEEDED,
+      TINY_BYTES,
+    );
+  });
+});
+
+it("serves both event-type page phases from the composite index", () => {
+  const directory = mkdtempSync(join(tmpdir(), "moe-store-type-plan-"));
+  try {
+    const path = join(directory, "events.sqlite");
+    SqliteEventStore.open(path).close();
+    const database = new DatabaseSync(path);
+    try {
+      for (const query of [EVENT_TYPE_PAGE_CANDIDATE_QUERY, EVENT_TYPE_PAGE_MATERIALIZE_QUERY]) {
+        const plan = database
+          .prepare(`EXPLAIN QUERY PLAN ${query}`)
+          .all()
+          .map((row) => String((row as { detail: unknown }).detail))
+          .join("\n");
+        expect(plan).toContain(`SEARCH events USING INDEX ${EVENT_TYPE_INDEX}`);
+        expect(plan).toContain("event_type=?");
+        expect(plan).not.toContain("SCAN ");
+        expect(plan).not.toContain("USE TEMP B-TREE");
+      }
+    } finally {
+      database.close();
+    }
+  } finally {
+    rmSync(directory, { force: true, recursive: true });
+  }
+});
+
 type Read = (store: SqliteEventStore) => unknown;
 type InvalidRead = readonly [string, Read, DurableStoreErrorCode, string];
 
@@ -216,6 +374,21 @@ const INVALID_READS: readonly InvalidRead[] = [
     EXCEEDED, BIG_BYTES],
   ["oversized global bytes", (s) => s.readEventsAfter(0n, 10, OVER_BYTES), EXCEEDED, BIG_BYTES],
   ["oversized outbox bytes", (s) => s.readPendingOutboxPage(0n, 10, OVER_BYTES), EXCEEDED,
+    BIG_BYTES],
+  ["empty event type", (s) => s.readEventsByTypeAfter("", 0n), INVALID, BAD_TYPE],
+  ["NUL event type", (s) => s.readEventsByTypeAfter("goal.\u0000alpha", 0n), INVALID, BAD_TYPE],
+  ["oversized event type", (s) => s.readEventsByTypeAfter("g".repeat(513), 0n), INVALID, BAD_TYPE],
+  ["ill-formed event type", (s) => s.readEventsByTypeAfter("goal.\uD800", 0n), INVALID, BAD_TYPE],
+  ["non-string event type",
+    (s) => s.readEventsByTypeAfter(7 as unknown as string, 0n), INVALID, BAD_TYPE],
+  // eventType is validated first, so a valid type proves the cursor layer refused.
+  ["negative type cursor", (s) => s.readEventsByTypeAfter(ALPHA, -1n, 0, 0), INVALID, BAD_GLOBAL],
+  ["non-bigint type cursor",
+    (s) => s.readEventsByTypeAfter(ALPHA, 0 as unknown as bigint), INVALID, BAD_GLOBAL],
+  ["zero type limit", (s) => s.readEventsByTypeAfter(ALPHA, 0n, 0, 0), INVALID, BAD_LIMIT],
+  ["1001 type limit", (s) => s.readEventsByTypeAfter(ALPHA, 0n, 1_001), EXCEEDED, BIG_LIMIT],
+  ["zero type bytes", (s) => s.readEventsByTypeAfter(ALPHA, 0n, 10, 0), INVALID, BAD_BYTES],
+  ["oversized type bytes", (s) => s.readEventsByTypeAfter(ALPHA, 0n, 10, OVER_BYTES), EXCEEDED,
     BIG_BYTES],
 ];
 

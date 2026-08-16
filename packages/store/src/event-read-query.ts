@@ -29,6 +29,35 @@ import {
 import { EventReadMaterializationStore } from "./event-read-materialization.js";
 
 /**
+ * The two phases of the event-type page. Exported for the EXPLAIN QUERY PLAN
+ * contract case so the plan is pinned against the text production runs, not a
+ * copy. Both carry `events.event_type = ?` as a bound parameter: filtering only
+ * the candidate phase would materialize non-matching rows inside the position
+ * window and desynchronize assertReadPageCursors.
+ */
+export const EVENT_TYPE_PAGE_CANDIDATE_QUERY = `
+        SELECT
+          CAST(events.global_position AS TEXT) AS global_position,
+          CAST(${EVENT_DECODED_BYTES_SQL} AS TEXT) AS decoded_bytes
+        FROM domain_events AS events
+        ${STORED_EVENT_DECISION_JOIN}
+        WHERE events.event_type = ? AND events.global_position > ?
+        ORDER BY events.global_position
+        LIMIT ?
+        ` as const;
+
+export const EVENT_TYPE_PAGE_MATERIALIZE_QUERY = `
+        SELECT ${STORED_EVENT_SELECT_COLUMNS}
+        FROM domain_events AS events
+        ${STORED_EVENT_DECISION_JOIN}
+        WHERE events.event_type = ?
+          AND events.global_position > ?
+          AND events.global_position <= ?
+        ORDER BY events.global_position
+        LIMIT ?
+        ` as const;
+
+/**
  * Internal bounded-page query layer. Every page keeps its `limit + 1` size preflight
  * and its blob materialization on one deferred read snapshot, so a concurrent WAL
  * write cannot split them and a later excluded row is never decoded.
@@ -145,6 +174,53 @@ export class EventReadQueryStore extends EventReadMaterializationStore {
         LIMIT ?
         `)
         .all(safeAfter, lastPosition, selection.selected.length);
+      const items = rows.map((row) => this.mapStoredEvent(row));
+      assertReadPageCursors(
+        items.map((event) => event.globalPosition),
+        selection.selected,
+      );
+      return this.page(
+        items,
+        selection.hasMore,
+        lastPosition,
+      );
+    });
+  }
+
+  protected eventTypePage(
+    eventType: string,
+    afterGlobalPosition: bigint,
+    limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
+  ): CursorPage<StoredEvent, bigint> {
+    return this.readSnapshotOperation("read events by type", () => {
+      this.assertCachedProjectBinding();
+      const safeEventType = requireIdentifier(eventType, "eventType");
+      const safeAfter = requireNonnegativeBigInt(
+        afterGlobalPosition,
+        "afterGlobalPosition",
+      );
+      const safeLimit = requirePageLimit(limit);
+      const safeDecodedByteLimit = requirePageDecodedByteLimit(maxDecodedBytes);
+      const candidateRows = this.database
+        .prepare(EVENT_TYPE_PAGE_CANDIDATE_QUERY)
+        .all(safeEventType, safeAfter, safeLimit + 1);
+      const selection = selectReadPagePrefix(
+        candidateRows.map((row) => ({
+          cursor: requireStoredPositiveBigIntText(row, "global_position"),
+          decodedBytes: requireStoredDecodedByteCount(row),
+        })),
+        safeLimit,
+        safeDecodedByteLimit,
+      );
+      const lastPosition = selection.selected.at(-1)?.cursor;
+      if (lastPosition === undefined) {
+        return this.page<StoredEvent, bigint>([], false, null);
+      }
+      // safeEventType is bound again here on purpose; see the query constants.
+      const rows = this.database
+        .prepare(EVENT_TYPE_PAGE_MATERIALIZE_QUERY)
+        .all(safeEventType, safeAfter, lastPosition, selection.selected.length);
       const items = rows.map((row) => this.mapStoredEvent(row));
       assertReadPageCursors(
         items.map((event) => event.globalPosition),

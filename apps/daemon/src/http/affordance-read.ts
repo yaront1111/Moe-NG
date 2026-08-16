@@ -194,14 +194,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           }));
           continue;
         }
-        const latestVerifierFailure = review.lineage.records
-          .filter((record) => record.finding.ruleId === VERIFIER_FAILURE_RULE)
-          .reduce((latest, record) => Math.max(latest, record.round), 0);
-        const awaitingVerify = review.version > 0 && latestVerifierFailure !== review.version;
+        const latestRound = review.rounds[review.rounds.length - 1];
+        // Aggregate versions also advance for the daemon's internal receipt,
+        // so they cannot be compared with review round numbers. A clean latest
+        // round remains blocked until the daemon consumes its receipt; an
+        // unreadable ledger must never be staffed as writable work.
+        const awaitingVerify = review.unreadable || latestRound?.routing.route === "ACCEPT";
         offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
-        offers.push(offer(
-          "integration.accept_output", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION,
-        ));
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
           missing: awaitingVerify ? ["verification"] : [],

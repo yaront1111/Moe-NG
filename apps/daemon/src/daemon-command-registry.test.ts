@@ -59,7 +59,7 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["budgetAccountRef", "goalId", "planningRunRef", "witness"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "integration.accept_output", layer: INGRESS,
-    payloadKeys: ["calibration", "packageItems", "policy", "proof", "reviewer", "subjectRef"] },
+    payloadKeys: ["receiptId", "subjectRef"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
@@ -316,6 +316,13 @@ describe("server-injected request fields", () => {
   it("commits with the daemon's own project, clock and kind, never the caller's", () => {
     const seated = stream?.readPage({ projection: "moe.board", subscriberId: "control-room-1" });
     expect(seated).toMatchObject({ outcome: "PAGE" });
+    if (seated?.outcome !== "PAGE" || seated.nextCursor === null) {
+      throw new Error("expected an acknowledgeable initial page");
+    }
+    expect(stream?.acknowledge({
+      cursor: seated.nextCursor,
+      subscriberId: "control-room-1",
+    })).toMatchObject({ outcome: "ACKNOWLEDGED" });
 
     expect(send("cmd-register-1", "project.register", { owner: "operator-local" })).toMatchObject({
       decision: { commandId: "cmd-register-1", disposition: "DECIDED",
@@ -408,6 +415,15 @@ describe("createDaemonCommandPorts", () => {
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
+  });
+
+  it("refuses an operator id that collides with the reserved verifier service", () => {
+    expect(() => createDaemonCommandPorts({
+      clock: CLOCK,
+      operatorPrincipalId: "daemon:node-verifier",
+      projectId: PROJECT,
+      store: portStore,
+    })).toThrow("OPERATOR_PRINCIPAL_RESERVED");
   });
 
   it("passes a committed decision through unchanged", () => {

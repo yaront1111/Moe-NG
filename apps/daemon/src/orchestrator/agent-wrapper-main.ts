@@ -235,6 +235,9 @@ async function main(): Promise<void> {
       projectId: config.projectId,
       runTest: verifierRunner,
       store: verifierStore,
+      // No production authority provider is shipped yet. Refuse a green test
+      // rather than manufacture calibration, package or policy facts in-process.
+      verificationAuthority: () => null,
     });
 
     // Agents connect to this trusted parent over loopback. The host retains store/operator

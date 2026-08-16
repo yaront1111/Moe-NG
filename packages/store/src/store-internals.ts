@@ -5,11 +5,12 @@ import type {
   CommitExpectedVersionDecisionInput,
 } from "./store-contracts.js";
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 export const LEGACY_SCHEMA_MANIFEST_VERSION = "moe-sqlite-schema/1" as const;
 export const SCHEMA_V2_MANIFEST_VERSION = "moe-sqlite-schema/2" as const;
 export const SCHEMA_V3_MANIFEST_VERSION = "moe-sqlite-schema/3" as const;
 export const SCHEMA_V4_MANIFEST_VERSION = "moe-sqlite-schema/4" as const;
+export const SCHEMA_V5_MANIFEST_VERSION = "moe-sqlite-schema/5" as const;
 export const EMPTY_BYTES = new Uint8Array();
 export const PENDING_EFFECT_SHA256 = "0".repeat(64);
 export const INTERNAL_IDENTIFIER_PREFIX = "moe-internal:" as const;

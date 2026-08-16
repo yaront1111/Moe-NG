@@ -339,6 +339,10 @@ export class SqliteEventStore {
     return this.#core.readEvents(aggregateId);
   }
 
+  public readEventHorizon(): bigint {
+    return this.#core.readEventHorizon();
+  }
+
   public readEventsAfter(
     afterGlobalPosition: bigint,
     limit = 100,

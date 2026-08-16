@@ -1,9 +1,10 @@
 import type { JsonValue } from "@moe/contracts";
-import { REVIEW_ESCALATION_ROUND_LIMIT, buildReviewPackage, qualifyReviewAcceptance } from "@moe/review";
-import type { ReviewPackageItemInput } from "@moe/review";
+import { REVIEW_ESCALATION_ROUND_LIMIT, qualifyReviewAcceptance } from "@moe/review";
+import type { ReviewerIndependenceInput } from "@moe/review";
 
-import { commitAccepted, payloadArray, payloadObject, payloadRef, refuse, refuseFromKernel } from "./review-ledger.js";
+import { commitAccepted, payloadRef, refuse, refuseFromKernel } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
+import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "./verifier-receipt-ledger.js";
 
 /**
  * Explicit escalation (DoD 4) and the acceptance gate (DoD 6).
@@ -20,21 +21,15 @@ import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
  * composition's job and refuses under the daemon's own layer.
  */
 
-/** A package item list is required for acceptance: it is what binds the evidence being accepted. */
-function acceptanceItems(values: readonly JsonValue[]): readonly ReviewPackageItemInput[] | undefined {
-  const parsed: ReviewPackageItemInput[] = [];
-  for (const value of values) {
-    if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
-    const item = value as Record<string, JsonValue>;
-    const digest = item["digest"];
-    const kind = item["kind"];
-    const locator = item["locator"];
-    if (typeof digest !== "string" || typeof kind !== "string" || typeof locator !== "string") {
-      return undefined;
-    }
-    parsed.push({ digest, kind, locator });
-  }
-  return parsed;
+function reviewerFor(subjectRef: string, authors: readonly string[]): ReviewerIndependenceInput {
+  return {
+    authors,
+    authorshipResolved: true,
+    leaseHistory: [],
+    leaseHistoryResolved: true,
+    reviewer: NODE_VERIFIER_PRINCIPAL_ID,
+    subjectRef,
+  };
 }
 
 /**
@@ -79,45 +74,67 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
  */
 export const acceptOutput: CommandHandler = (context): ReviewOutcome => {
   const { ledger, request, store } = context;
-  const calibration = payloadObject(request.payload, "calibration");
-  const itemValues = payloadArray(request.payload, "packageItems");
-  const policy = payloadObject(request.payload, "policy");
-  const proof = payloadRef(request.payload, "proof");
-  const reviewer = payloadObject(request.payload, "reviewer");
+  const payloadKeys = Object.keys(request.payload);
+  const receiptId = payloadRef(request.payload, "receiptId");
   const subjectRef = payloadRef(request.payload, "subjectRef");
-  if (calibration === null || itemValues === null || policy === null || proof === null
-    || reviewer === null || subjectRef === null) {
+  if (payloadKeys.length !== 2 || !payloadKeys.includes("receiptId")
+    || !payloadKeys.includes("subjectRef") || receiptId === null || subjectRef === null) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
-  const items = acceptanceItems(itemValues);
-  if (items === undefined) {
-    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
-  }
-  const built = buildReviewPackage(items);
-  if (!built.ok) return refuseFromKernel(request.kind, built.code, built.layer);
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
+  }
+  if (ledger.accepted !== undefined) {
+    return refuse(request.kind, "REVIEW_ALREADY_ACCEPTED", "DAEMON_PREREQUISITE");
   }
   if (request.expectedVersion !== ledger.version) {
     return refuse(request.kind, "REVIEW_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
+  const loaded = readVerifierReceipt(store, request.projectId, receiptId);
+  if (!loaded.ok) {
+    return refuse(
+      request.kind,
+      loaded.code === "VERIFIER_RECEIPT_NOT_FOUND"
+        ? "REVIEW_VERIFIER_RECEIPT_NOT_FOUND"
+        : "REVIEW_VERIFIER_RECEIPT_INVALID",
+      "DAEMON_PREREQUISITE",
+    );
+  }
+  const latest = ledger.rounds[ledger.rounds.length - 1];
+  const authors = [...new Set(ledger.rounds.map((round) => round.principalId))].sort();
+  if (loaded.receipt.subjectRef !== subjectRef || loaded.receipt.projectId !== request.projectId
+    || loaded.decision.currentVersion !== ledger.version || latest === undefined
+    || latest.routing.route !== "ACCEPT"
+    || loaded.receipt.source.aggregateVersion !== latest.aggregateVersion
+    || loaded.receipt.source.decisionId !== latest.decisionId
+    || loaded.receipt.source.resultSha256 !== latest.resultSha256
+    || loaded.receipt.source.authors.length !== authors.length
+    || loaded.receipt.source.authors.some((author, index) => author !== authors[index])) {
+    return refuse(request.kind, "REVIEW_VERIFIER_RECEIPT_STALE", "DAEMON_PREREQUISITE");
+  }
   const qualified = qualifyReviewAcceptance({
-    calibration: calibration as never,
+    calibration: loaded.receipt.calibration,
     lineage: ledger.lineage,
-    policy: policy as never,
-    proof: proof as never,
-    reviewInputDigest: built.value.reviewInputDigest,
-    reviewer: reviewer as never,
+    policy: loaded.receipt.policy,
+    proof: loaded.receipt.proof,
+    reviewInputDigest: loaded.receipt.reviewInputDigest,
+    reviewer: reviewerFor(subjectRef, authors),
   });
   if (!qualified.ok) return refuseFromKernel(request.kind, qualified.code, qualified.layer);
   return commitAccepted(store, request, {
     aggregateId: subjectRef,
     eventPayload: {
-      reviewInputDigest: built.value.reviewInputDigest,
+      reviewInputDigest: loaded.receipt.reviewInputDigest,
       subjectRef,
+      verifierReceiptId: receiptId,
+      verifierReceiptSha256: loaded.receiptSha256,
     },
     eventType: "ReviewOutputAccepted",
     expectedVersion: ledger.version,
-    result: qualified.value as unknown as JsonValue,
+    result: {
+      ...qualified.value,
+      verifierReceiptId: receiptId,
+      verifierReceiptSha256: loaded.receiptSha256,
+    } as unknown as JsonValue,
   });
 };

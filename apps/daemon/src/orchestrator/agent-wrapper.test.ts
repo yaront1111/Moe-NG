@@ -410,8 +410,16 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("cleans the durable claim and session when spawnAgent throws synchronously", async () => {
-    const harness = isolatedHarness("proj-wrapper-sync-spawn-throw");
+  it.each([
+    ["synchronous spawn throw", "sync-spawn-throw", "SYNC_SPAWN_FAILURE",
+      (): Promise<void> => { throw new Error("SYNC_SPAWN_FAILURE"); }],
+    ["rejected child exit", "rejected-child-exit", "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
+      async (): Promise<void> => { throw new Error("AGENT_PROCESS_FAILED:EXIT_NONZERO:1"); }],
+  ] as const)("surfaces a %s after cleaning the claim and session", async (
+    _case, projectSuffix, failureMessage, spawnAgent,
+  ) => {
+    const projectId = `proj-wrapper-${projectSuffix}`;
+    const harness = isolatedHarness(projectId);
     try {
       let suffix = 0;
       const throwing = createAgentWrapper({
@@ -422,7 +430,7 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `throw-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: () => { throw new Error("SYNC_SPAWN_FAILURE"); },
+        spawnAgent,
       });
 
       const report = throwing.runOnce();
@@ -430,16 +438,18 @@ describe("createAgentWrapper", () => {
       if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
         throw new Error("no session spawned");
       }
-      await throwing.settle();
+      await expect(throwing.settle()).rejects.toThrowError(failureMessage);
+      expect(throwing.runOnce()).toEqual({
+        active: 0,
+        spawned: [],
+        surfaceOutcome: failureMessage,
+      });
 
-      const reader = SqliteEventStore.openForProject(
-        harness.storePath,
-        "proj-wrapper-sync-spawn-throw",
-      );
+      const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
       try {
-        expect(readSessionLedger(reader, "proj-wrapper-sync-spawn-throw").sessions
+        expect(readSessionLedger(reader, projectId).sessions
           .get(staffed.sessionId)).toMatchObject({ status: "CLOSED", version: 2 });
-        expect(readWorkClaimLedger(reader, "proj-wrapper-sync-spawn-throw").claims
+        expect(readWorkClaimLedger(reader, projectId).claims
           .get(staffed.workItemId)).toMatchObject({ status: "RELEASED", version: 2 });
       } finally {
         reader.close();

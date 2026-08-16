@@ -5,7 +5,7 @@ import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
-import { readEventPage } from "./event-stream.js";
+import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import { authenticateHttpRequest, handleCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
 import {
@@ -17,6 +17,7 @@ import {
   originOf,
   protocolVersionOf,
   readBoundedBody,
+  readEventAcknowledgeRequest,
   readEventRequest,
   refuse,
   statusFor,
@@ -65,6 +66,7 @@ export interface StartListenerOptions {
 
 const COMMAND_PATH = "/command";
 const EVENT_PAGE_PATH = "/events/read";
+const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 const AFFORDANCE_PATH = "/affordances/read";
 
 function reply(response: ServerResponse, status: number, body: unknown): void {
@@ -124,6 +126,33 @@ function serveEventPage(
   // layer. Minting an HTTP status per frame would be the translation table the
   // seam is forbidden to hold.
   reply(response, 200, readEventPage(options.subscriptions, eventRequest));
+}
+
+function serveEventAcknowledge(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const access = authenticateHttpRequest(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  if (!access.ok) {
+    reply(response, access.httpStatus, access);
+    return;
+  }
+  if (options.subscriptions === undefined) {
+    refuseRequest(response, "LISTENER_STREAM_UNAVAILABLE");
+    return;
+  }
+  const eventRequest = readEventAcknowledgeRequest(body);
+  if (eventRequest === null) {
+    refuseRequest(response, "LISTENER_STREAM_REQUEST_INVALID");
+    return;
+  }
+  reply(response, 200, acknowledgeEventPage(options.subscriptions, eventRequest));
 }
 
 function serveAffordances(
@@ -192,7 +221,8 @@ async function serve(
   const path = (request.url ?? "").split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
 
-  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== AFFORDANCE_PATH
+  if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== EVENT_ACKNOWLEDGE_PATH
+    && path !== AFFORDANCE_PATH
     && path !== DOCUMENT_DOSSIER_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
@@ -214,6 +244,7 @@ async function serve(
 
   if (path === COMMAND_PATH) serveCommand(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
+  else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);
 }

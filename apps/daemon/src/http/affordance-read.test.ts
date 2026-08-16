@@ -10,6 +10,8 @@ import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
+import { runReviewCommand } from "../review/review-services.js";
+import { packageItems } from "../review/review-test-fixtures.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
@@ -173,7 +175,7 @@ describe("code node steps", () => {
     expect(nodeSurface().steps.some((step) => step.kind === "node.deliver")).toBe(false);
   });
 
-  it("offers the review pair for an approved, unaccepted node", () => {
+  it("offers only agent-authored review submission for an approved, unaccepted node", () => {
     commitBootstrap("provider.probe", {
       observation: {
         providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
@@ -276,7 +278,33 @@ describe("code node steps", () => {
       .filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind);
     expect(kinds).toContain("review.submit");
-    expect(kinds).toContain("integration.accept_output");
+    expect(kinds).not.toContain("integration.accept_output");
+  });
+
+  it("blocks a clean submitted node on daemon verification", () => {
+    const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
+      commandId: "cmd-affordance-clean-round",
+      correlationId: "corr-affordance-review",
+      decidedAt: "2026-08-09T12:10:00.000Z",
+      expectedVersion: 0,
+      kind: "review.submit",
+      payload: {
+        findings: [], packageItems: packageItems(), round: 1, subjectRef: "node-code-1",
+      },
+      principalId: "sess-agent-affordance",
+      projectId: PROJECT,
+      schemaVersion: "moe-review-command/1",
+    })));
+    expect(outcome.ok).toBe(true);
+
+    const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(node).toMatchObject({
+      aggregateId: "node-code-1", missing: ["verification"], status: "BLOCKED", version: 1,
+    });
+    const kinds = nodeSurface().nextAllowedCommands
+      .filter((entry) => entry.targetAggregateId === "node-code-1")
+      .map((entry) => entry.commandKind);
+    expect(kinds).toEqual(["review.submit"]);
   });
 });
 

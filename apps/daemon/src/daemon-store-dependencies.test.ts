@@ -197,6 +197,11 @@ describe("createStoreDependencies", () => {
     expect(page).toMatchObject({ outcome: "PAGE" });
     if (page?.outcome !== "PAGE") throw new Error("unreachable");
     expect(page.events.map((event) => event.eventType)).toContain("SessionOpened");
+    if (page.nextCursor === null) throw new Error("expected a durable page offer");
+    expect(port?.acknowledge({ cursor: page.nextCursor, subscriberId: "control-room-1" }))
+      .toEqual({ cursor: page.nextCursor, outcome: "ACKNOWLEDGED" });
+    expect(port?.readPage({ projection: "moe.board", subscriberId: "control-room-1" }))
+      .toMatchObject({ events: [], nextCursor: null, outcome: "PAGE" });
 
     // The freshly opened session credential authenticates and carries goal.write:
     // goal.create passes AUTHENTICATE and AUTHORIZE, then refuses on the missing

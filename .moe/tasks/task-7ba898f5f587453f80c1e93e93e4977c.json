@@ -15,9 +15,104 @@
     "Keep each production source <=250 physical lines and the plan <=10 affected files.",
     "The positive proof must use the real Windows broker/launcher boundary; a scripted ByteChannel test alone cannot certify the defect."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-d9dccf21",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Preflight and preserve the shared tree before writing. Re-read the claimed defect at the then-current HEAD, record the task merge-base, and run the repo-wide baseline legs (pnpm typecheck, pnpm test, pnpm verify:foundation, pnpm verify:store) with their exact exit codes/failing paths for the required baseline-vs-HEAD attribution. Confirm the ten owned paths below are clean/absent as expected and preserve every foreign path, especially the unrelated Claude runtime-source work. Re-run `rg \"impl ByteChannel\"` and the source line counts rather than trusting this plan if HEAD moved. The implementation is allowed exactly these ten paths; Cargo.lock is deliberately not owned and must remain byte-identical. This is also the reproduction record: on real Windows build the current release broker and run the new public-launcher scenario once before production changes, capturing the old bounded failure (`CLAUDE_LAUNCH_STREAM_ERROR` at layer `OUTPUT`, or its watchdog timeout), not a mock result.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Read-only preflight at immutable start HEAD/merge-base 4d0a49fb8791b458565863377d7002a48a1a9bd8. All 10 owned paths and native/Cargo.lock were clean; polling.rs and claude-launcher.windows.test.ts were absent as expected. Cargo.lock SHA-256 0758aefc4a985a2455f0642e386022df5dbc81a73f40daa27aa9446f477c8f1a. Measured ByteChannel impls: production PipeChannel plus frame_sweep/session/idempotence/containment; poll_read and Win32_System_Pipes absent. LOC: Cargo 57, frames 223, boundary 173, watch 148. Separate repo baselines under Node 24.16/pnpm 11.0.8: pnpm typecheck exit 1 at foreign apps/control-room/src/live/live-event-feed.test.ts:202 TS2349; pnpm test exit 1 with 21 failed/256 passed files and 53 failed/6259 passed/250 skipped tests, no owned-path failure; verify:foundation exit 1 on same foreign control-room TS2349; verify:store exit 1 on foreign in-flight store missing readEventsByTypeAfter/encodedCursor symbols. Exact logs /tmp/task7ba-baseline-*.log. Fresh real Windows 10.0.26200 disposable-copy reproduction: release broker build exit 0; Rust broker all-targets 89 tests passed. Bare @moe/runner launchClaude, no options/deps override, copied Node provider remained alive 160ms and emitted nonempty stdout/stderr; pre-fix 700ms scenario completed at 1250ms as OBSERVED/UNKNOWN with exact CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT and complete:false captures (1 test executed, exit 1). Shared repo untouched. Audit found two literal plan corrections raised to architects: CANCEL has zero payload, so fragment its header and separately cover partial payload; REFUSED wire carries no ProtocolStage, so correlate emitted reason with the production stage mapping/direct polling error rather than inventing a field.",
+      "startedAt": "2026-08-15T23:44:05.124Z",
+      "completedAt": "2026-08-15T23:54:12.367Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED first. In session.rs, extend the scripted channel model and add named post-LAUNCH cases before implementing the new contract: (1) two silent-open PENDING polls interleaved with 50ms child-wait slices followed by Signalled must end Natural with exactly one COMPLETED frame, exact wait/poll counts, zero post-launch control bytes consumed, zero REFUSED frames, and zero terminate calls; (2) a CANCEL split across header/payload with Pending gaps must remain Cancelled, with every wait <=50ms and exactly-once containment unwind; (3) actual EOF both before and after a partial frame must be ControlEnded with ChannelEnded diagnostics and no protocol refusal; (4) a complete wrong-version frame must refuse at Protocol/VersionMismatch/Framing, and the existing duplicate launch must remain Protocol/DuplicateLaunch/Control; (5) poll syscall error 1234 must be ControlRefused with literal RefusalLayer::Protocol (wire 2), ProtocolReason::ChannelFailed (ordinal 3), ProtocolStage::Framing, OS code 1234, and terminate/reap exactly once. Any case table must assert its hand-written, nonzero exact cardinality. Create the Windows conformance test in RED too: its one-case table has an exact cardinality guard and its named case is `stays alive beyond the control poll slice`; on the pre-fix broker it must fail within its own short watchdog rather than hang for 30 minutes.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ],
+      "note": "TDD RED only; no production bytes changed. session.rs now records wait slices and a scripted Pending/Bytes/End/Error poll contract, with six named post-LAUNCH proofs. Fresh real Windows `cargo test ... -p moe-windows-job-broker --test session -- --nocapture` executed 35 tests and exited 101: 29 passed, exactly the six new tests failed for the missing production polling behavior (poll count remained 0, silent-open ended instead of Natural, partial payload became a complete duplicate, poll error became EOF). Existing duplicate-launch test now also pins the production Control stage. The approved architect correction is applied: zero-payload CANCEL is fragmented across its six-byte header; partial-payload Pending/EOF uses a separate legal nonzero-payload frame. Session wire asserts exact Protocol layer/reason/code and correlates the same production reason to Framing without inventing a wire field. Added claude-launcher.windows.test.ts with an exact one-case catalogue and a named bare-root `launchClaude(request)` call with no options/deps. Fresh disposable real-Windows pre-fix reproduction executed one conformance case and exited 1: copied Node provider reported 160ms (>50), but the production result was OBSERVED/UNKNOWN with exact CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT and both nonempty captures complete:false, rather than the asserted PROVEN result. Its own watchdog bounds the test; shared repo and foreign runtime-source WIP were untouched.",
+      "startedAt": "2026-08-15T23:54:21.323Z",
+      "completedAt": "2026-08-16T00:10:23.123Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the minimum nonblocking byte/framing contract without a fail-open default. Add required `ByteChannel::poll_read(&mut self, &mut [u8]) -> Result<core::task::Poll<usize>, u32>`: Pending means silent/open, Ready(0) means real EOF, Ready(n>0) means exactly n bytes were consumed. Keep blocking `read` only for the initial LAUNCH and other already-bounded phases. Add private child module frames/polling.rs with a stateful frame accumulator retained across wait slices; it incrementally fills the fixed six-byte header and then the already-bounded payload, returns Pending without losing partial bytes, maps Ready(0) at any incomplete stage to the existing FrameTruncated path, maps syscall errors through ProtocolError::channel, rejects a channel reporting more bytes than offered, and never allocates from the declared length until the shared version/cap validator has accepted it. Factor that header validation once in frames.rs so blocking and polled decoding cannot disagree; preserve zero-length payloads and every existing reason/stage. Use `core::task::Poll` so no new root vocabulary/lib.rs edit is needed. Update all four non-production ByteChannel implementors explicitly—frame_sweep, session, idempotence, containment—rather than adding a default that could silently block a future production channel. Keep frames.rs and the new child each <=250 physical lines.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/frames.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ],
+      "newFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs"
+      ],
+      "startedAt": "2026-08-16T00:11:55.069Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Wire the real single-threaded Windows boundary and watch loop. Add the exact pinned windows-sys `Win32_System_Pipes` feature only (Cargo.lock must not change). In boundary.rs—and nowhere else—call `PeekNamedPipe` with `lpTotalBytesAvail`: success/zero is Poll::Pending; success/nonzero performs `ReadFile` for at most min(total available, caller-buffer length), so it cannot wait for more bytes; ERROR_BROKEN_PIPE is Poll::Ready(0), preserving real EOF; every other GetLastError value is returned verbatim. No other reader exists in the broker, so bytes observed available cannot be stolen between peek and bounded read. In watch.rs, retain one accumulator for the entire post-LAUNCH loop, wait in the existing <=50ms slices, and poll control after each nonterminal slice: Pending continues, a complete frame goes through the existing AcceptState, EOF keeps ControlEnded, and a polling error uses the existing exact protocol refusal/unwind. Keep shutdown-first, timeout, CANCEL, abandoned-wait, natural completion, and exactly-once Job containment ordering unchanged. Replace the obsolete known-blocking comment with the new partial-frame/nonblocking invariant; add no new protocol code/version and no unsafe/Win32 call outside boundary.rs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+        "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
+        "packages/runner/src/platform/windows/native/broker/src/watch.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Finish the positive proof through the published production surface, not a boundary seam. In claude-launcher.windows.test.ts import `launchClaude` from bare `@moe/runner` and call `await launchClaude(request)` with no second argument and no deps override. On Windows, create a temporary installed/pin root, copy the real `process.execPath` to installed/claude.exe, hash/realpath the actual bytes, build the runtime quote with production observation/pinning builders and Node runtime filesystem, create a valid production activation/claim/dated-model HIGH selection, and launch Node with `-e` script bytes that write distinctive nonempty stdout and stderr, remain alive about 150ms, report their own elapsed time, and exit 0 naturally. Assert literal OBSERVED/ok:true/PROVEN with null code and layer; observation PROVEN with null reasonCode/reasonLayer; EXITED/0; exact nonempty decoded stdout/stderr, matching byteLength and SHA-256, complete:true and truncated:false; provider-reported elapsed >50ms (use a conservative >=100ms assertion) and total completion below the configured ~3s watchdog. Clean temp roots and lock state in finally. Off-Windows skipping is allowed only for ordinary cross-platform package runs; the certified Windows gate hard-asserts win32/x64 and must show this named case executed. Do not add a provider fixture binary, launcher dependency-injection seam, local launcher authority, or TS production change. Retain and run the existing real windows-boundary smoke unchanged for close/cancel/timeout and parent+grandchild Job containment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial self-review and mutation drill, after implementation and before the final gate. Review partial header/payload, zero-length payload, huge declared length, EOF after a prefix, poll Ready(n)>buffer, syscall failure, immediate and fragmented CANCEL, duplicate/malformed control, timeout boundary, shutdown ordering, repeated cleanup, and the single-reader assumption; confirm every production source is <=250 lines and no scratch/generated evidence remains. Back up each mutated file outside the repo and record SHA-256. First mutate the production PipeChannel zero-available arm from Pending into an unconditional blocking read: the named Rust pending test must turn red and the real public-launcher watchdog must turn red with timeout or exact old `CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT`. Then mutate/discard accumulator state on Pending: the fragmented-CANCEL/partial-EOF tests must turn red. Then weaken poll-error mapping: the named assertion on Protocol/ChannelFailed/Framing/code 1234 must turn red. Restore after each mutation, prove every hash is byte-exact, and rerun the named green cases. Do not use git checkout/reset/stash for restoration.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
+        "packages/runner/src/platform/windows/native/broker/src/watch.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Single final verification/QA gate. First rerun the four repo-wide legs recorded in step 1 at HEAD and report the merge-base vs HEAD failing-path delta exactly; completion is allowed only when the delta intersected with these ten owned paths is empty, and any foreign red is quoted verbatim. Then run this exact foreground completion command from D:/projexts/moe-next (through WSL bash); its own runner/Rust/real-Windows legs must all exit 0 and show positive test counts, never `No projects matched`, zero tests, or skipped certified cases:\n\n`bash -lc 'set -euo pipefail; export NO_COLOR=1 FORCE_COLOR=0 pnpm_config_verify_deps_before_run=; L=/tmp/task-7ba-runner.log; W=/tmp/task-7ba-windows.log; rm -f \"$L\" \"$W\"; pnpm --filter @moe/runner typecheck; set +e; pnpm --filter @moe/runner test >\"$L\" 2>&1; ls=$?; set -e; cat \"$L\"; test \"$ls\" -eq 0; grep -Eq \"Test Files[[:space:]]+[1-9][0-9]* passed\" \"$L\"; grep -Eq \"Tests[[:space:]]+[1-9][0-9]* passed\" \"$L\"; WIN=/mnt/d/tmp/moe-task-7ba-win; rm -rf \"$WIN\"; mkdir -p \"$WIN\"; trap '\"'\"'rm -rf \"$WIN\"'\"'\"' EXIT; tar --exclude=.git --exclude=.moe --exclude=.serena --exclude=node_modules --exclude=dist -cf - . | tar -xf - -C \"$WIN\"; set +e; /init /mnt/c/Windows/System32/cmd.exe /d /s /c \"cd /d D:\\\\tmp\\\\moe-task-7ba-win && set CI=true&& set pnpm_config_verify_deps_before_run=false&& pnpm install --frozen-lockfile --ignore-scripts && cargo fmt --all --manifest-path packages\\\\runner\\\\src\\\\platform\\\\windows\\\\native\\\\Cargo.toml -- --check && cargo test --locked --manifest-path packages\\\\runner\\\\src\\\\platform\\\\windows\\\\native\\\\Cargo.toml --target-dir dist\\\\windows-job-native -p moe-windows-job-broker && cargo build --locked --release --manifest-path packages\\\\runner\\\\src\\\\platform\\\\windows\\\\native\\\\Cargo.toml --target-dir dist\\\\windows-job-native -p moe-windows-job-broker --bins && pnpm --filter @moe/runner typecheck && pnpm --filter @moe/runner exec vitest run --root ../.. packages/runner/src/providers/claude/claude-launcher.windows.test.ts packages/runner/src/platform/windows/windows-boundary.smoke.test.ts --reporter=verbose\" >\"$W\" 2>&1; ws=$?; set -e; tr -d \"\\r\" <\"$W\"; test \"$ws\" -eq 0; grep -Eq \"test result: ok\\\\. [1-9][0-9]* passed\" \"$W\"; grep -q \"stays alive beyond the control poll slice\" \"$W\"; grep -q \"kills parent and detached grandchild through close\" \"$W\"; grep -q \"kills parent and detached grandchild through cancel\" \"$W\"; grep -q \"kills parent and detached grandchild through timeout\" \"$W\"; grep -Eq \"Test Files[[:space:]]+2 passed\" \"$W\"; grep -Eq \"Tests[[:space:]]+[1-9][0-9]* passed\" \"$W\"; for f in packages/runner/src/platform/windows/native/broker/src/frames.rs packages/runner/src/platform/windows/native/broker/src/frames/polling.rs packages/runner/src/platform/windows/native/broker/src/boundary.rs packages/runner/src/platform/windows/native/broker/src/watch.rs; do test \"$(wc -l < \"$f\")\" -le 250; done; git diff --exit-code -- packages/runner/src/platform/windows/native/Cargo.lock; git diff --check'`\n\nInspect git status, unstage foreign entries without touching their bytes, commit only the ten explicit owned pathspecs (never a whole-tree commit), and verify git show --stat/byte identity. Submit the fresh command output and repo-wide path-attribution evidence to moe.complete_task; QA should rerun the named pending/error/fragmented-control tests and both real Windows cases.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+        "packages/runner/src/platform/windows/native/broker/src/frames.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs",
+        "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
+        "packages/runner/src/platform/windows/native/broker/src/watch.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs",
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-dd806f63",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -29,11 +124,37 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T23:23:57.874Z",
-  "updatedAt": "2026-08-15T23:26:29.028Z",
+  "updatedAt": "2026-08-16T00:16:10.683Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T23:26:22.137Z"
+    "firstClaimAt": "2026-08-15T23:26:22.137Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
-    "architect-d9dccf21"
-  ]
+    "architect-d9dccf21",
+    "governor-a627169a",
+    "worker-618633fa",
+    "worker-dd806f63"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T23:43:09.506Z",
+  "planningNotes": {
+    "approachesConsidered": "Selected a required incremental `poll_read -> core::task::Poll<usize>` contract plus a stateful frame accumulator. Rejected a TypeScript onCompleted/control-close change because the measured deadlock occurs before any COMPLETED frame. Rejected a default ByteChannel implementation because default-Ready can block future production channels and default-Pending silently disables CANCEL. Rejected stateless `PeekNamedPipe bytes>0 => Ready => read_frame`: one header byte or a partial payload would still enter synchronous ReadFile and block, while never consuming partial bytes can also misclassify EOF. Rejected overlapped I/O and a reader thread because the inherited synchronous handles and new concurrency/ownership surface are unnecessary here. Rejected a custom public readiness enum/lib.rs edit: core::task::Poll expresses Pending/Ready(0)/Ready(n) without widening the crate root. Rejected a mock-backed launcher proof or new helper binary; copying the real Node executable yields a harmless >50ms provider through the shipped public launcher and actual release broker.",
+    "codebaseInsights": "Fresh measurement at HEAD 4d0a49fb8791b458565863377d7002a48a1a9bd8: watch.rs still contains the explicit lines 23-43 known limitation and unconditionally calls synchronous read_frame after the first 50ms slice; there is no poll/PeekNamedPipe surface. Line counts are boundary.rs 173, frames.rs 223, watch.rs 148, lib.rs 111, broker Cargo.toml 57. `rg \"impl ByteChannel\"` found exactly PipeChannel plus four integration-test implementations (session.rs, frame_sweep.rs, idempotence.rs, containment.rs), which explains the four compiler-required compatibility edits. windows-sys is exactly =0.61.2; its local source gates PeekNamedPipe behind Win32_System_Pipes, absent from the broker manifest, while Cargo.lock does not encode features. Microsoft PeekNamedPipe documentation was checked: anonymous pipes are supported, lpTotalBytesAvail is the total readable byte count, lpBytesLeftThisMessage—not total available—is zero for anonymous/byte pipes, and it returns immediately in a single-threaded application; this broker is single-threaded. Real Windows is reachable through /init (Windows 10.0.26200, Node 24.16.0, Rust/Cargo 1.96.0); the fresh broker baseline executed 89 Rust tests with nonzero counts and release build exit 0. `packages/runner/package.json` resolves as @moe/runner under packages/* and its test/typecheck scripts are real. The acceptance capability is the bare-root `launchClaude` production path shipped by DONE task-acf73253a204435aba590894799814f2 (Windows Claude launch wrapper), backed by the Job boundary shipped by DONE task-4d1f8ba54cb6476c930c46b413f882aa; grep/blame confirms both are on disk and `launchClaude` defaults to openWindowsProcessBoundary. This task is the explicit prerequisite for blocked consumer task-6cbff01023b14b26a78fc5e3eb1dd8a9. The ten exact owned paths are clean/absent at measurement except for unrelated foreign runtime-source work outside those exact paths, which must be preserved.",
+    "risks": "Partial frames are the principal hidden liveness risk: any-byte readiness alone is insufficient, so accumulator state must survive Pending and EOF must remain distinct. Peek-to-read is sound only because the broker has one thread and one reader; document and test that assumption, and let the real Windows watchdog catch regression. Preserve stable mappings: silent/open Pending has no refusal; real EOF/partial EOF is FrameTruncated -> ChannelEnded/ControlEnded; readiness syscall failure is Protocol/ChannelFailed/Framing with the literal OS code; malformed and duplicate frames keep their existing reasons/stages. The task is at the exact ten-file cap, so do not add a fixture, bridge, lockfile, lib.rs edit, or TS production change. Windows-native node_modules differ from WSL, hence the final gate uses a disposable plain copy (never a worktree) and native frozen install. Keep all four changed/new production Rust files <=250, Cargo.lock byte-clean, Win32/unsafe additions in boundary.rs only, and restore mutations from out-of-repo hashes rather than Git operations."
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-16T00:16:10.410Z"
+  },
+  "planApprovedAt": "2026-08-15T23:43:11.788Z",
+  "workStartedAt": "2026-08-15T23:44:05.124Z"
 }

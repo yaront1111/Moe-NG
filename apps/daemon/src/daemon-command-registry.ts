@@ -24,6 +24,7 @@ import { createRecoveryCompletionAuthority }
 import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
+import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
 import { WORK_CLAIM_SCHEMA_VERSION, type WorkClaimCommandKind }
   from "./work/work-claim-contracts.js";
 import { runWorkClaimCommand, type WorkClaimOutcome } from "./work/work-claim-services.js";
@@ -100,9 +101,7 @@ const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
-    "integration.accept_output": [
-      "calibration", "packageItems", "policy", "proof", "reviewer", "subjectRef",
-    ],
+    "integration.accept_output": ["receiptId", "subjectRef"],
     "plan.propose": ["commands", "runId"],
     "policy.install": ["slice"], "policy.validate": ["input"],
     "project.activate": ["witness"], "project.bind_repository": ["observation"],
@@ -196,6 +195,9 @@ export interface DaemonCommandPorts {
  */
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
+  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
+    throw new Error("OPERATOR_PRINCIPAL_RESERVED");
+  }
   const authorityClock = (): number => Date.parse(clock());
   const recoveryAuthority = createRecoveryCompletionAuthority({
     clock: authorityClock,
@@ -257,7 +259,12 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       }
       if (review) return decisionOf(runReviewCommand(store, bytes));
       if (session) {
-        return decisionOf(runSessionCommand(store, bytes, undefined, operatorPrincipalId));
+        return decisionOf(runSessionCommand(
+          store,
+          bytes,
+          undefined,
+          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID],
+        ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
       return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));

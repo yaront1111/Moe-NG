@@ -29,13 +29,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:58:07.943Z",
-  "updatedAt": "2026-08-15T23:20:28.152Z",
+  "updatedAt": "2026-08-15T23:27:54.073Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:02:24.368Z"
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "governor-a627169a"
   ],
   "blockedReason": "Committed-disk remeasurement blocks an honest daemon plan. At HEAD the store has only aggregate/global paging and schema v4 has no `(event_type, global_position)` index; task-d20ffd0775b4420bb2318c79019b4127 must add the populated-safe generic index, then task-69c2c9e7ee084afea16c2b2ff935f459 must expose the bounded public root query. The daemon reader surface this task consumes is also still foreign uncommitted WIP in task-d92b1b15a5b048e49671ed34990fa4a1. Planning against either absent surface would violate the stale-dependency rail. Once those tasks are DONE, remeasure the bare @moe/store dependency edge and the committed d92 ambiguity behavior, then plan the final daemon consumer/performance hardening.",
   "blockedResourceId": null,

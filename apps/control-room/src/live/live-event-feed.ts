@@ -67,7 +67,7 @@ export interface LiveFeedOptions {
   /** Injectable for tests; production uses setTimeout. */
   readonly schedule?: ((run: () => void, delayMs: number) => () => void) | undefined;
   readonly subscriberId: string;
-  readonly transport: Pick<ControlRoomTransport, "readEventPage">;
+  readonly transport: Pick<ControlRoomTransport, "acknowledgeEventPage" | "readEventPage">;
 }
 
 export interface LiveFeed {
@@ -146,6 +146,35 @@ function frameOf(response: unknown): ShapedFrame {
   return frame("CONNECTED", "UNREADABLE", "LIVE_FRAME_UNREADABLE");
 }
 
+interface ShapedDelivery {
+  readonly cursor: { readonly generation: number; readonly position: string } | null;
+  readonly value: ShapedFrame;
+}
+
+function cursorOf(response: unknown): ShapedDelivery {
+  const value = frameOf(response);
+  if (!isRecord(response) || response["outcome"] !== "PAGE") {
+    return { cursor: null, value };
+  }
+  const candidate = response["nextCursor"];
+  if (candidate === null || candidate === undefined) {
+    const hasEvents = Array.isArray(response["events"]) && response["events"].length > 0;
+    return hasEvents
+      ? { cursor: null, value: frame("CONNECTED", "UNREADABLE", "LIVE_FRAME_UNREADABLE") }
+      : { cursor: null, value };
+  }
+  if (!isRecord(candidate)) {
+    return { cursor: null, value: frame("CONNECTED", "UNREADABLE", "LIVE_FRAME_UNREADABLE") };
+  }
+  const generation = candidate["generation"];
+  const position = candidate["position"];
+  if (!Number.isSafeInteger(generation) || (generation as number) < 1
+    || typeof position !== "string" || !/^(0|[1-9]\d*)$/u.test(position)) {
+    return { cursor: null, value: frame("CONNECTED", "UNREADABLE", "LIVE_FRAME_UNREADABLE") };
+  }
+  return { cursor: { generation: generation as number, position }, value };
+}
+
 export function createLiveEventFeed(options: LiveFeedOptions): LiveFeed {
   const schedule = options.schedule
     ?? ((run: () => void, delayMs: number): (() => void) => {
@@ -168,12 +197,20 @@ export function createLiveEventFeed(options: LiveFeedOptions): LiveFeed {
     // control room's own observation of receipt, not a reading of the daemon's.
     const receivedAt = readClientClock(options.clock);
     if (!running || run !== generation) return;
+    const shaped = result.delivered
+      ? cursorOf(result.response)
+      : { cursor: null, value: frame("DISCONNECTED", "UNDELIVERED", result.code) };
     options.onFrame(Object.freeze({
-      ...(result.delivered
-        ? frameOf(result.response)
-        : frame("DISCONNECTED", "UNDELIVERED", result.code)),
+      ...shaped.value,
       receivedAt,
     }));
+    if (shaped.cursor !== null) {
+      await options.transport.acknowledgeEventPage({
+        presentedCursor: shaped.cursor,
+        subscriberId: options.subscriberId,
+      });
+    }
+    if (!running || run !== generation) return;
     if (run === generation) cancel = schedule(() => { void poll(run); }, options.intervalMs);
   };
 

@@ -96,8 +96,8 @@
       "completedAt": "2026-08-15T23:25:41.144Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-7d1f37bd",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -109,12 +109,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:51:02.604Z",
-  "updatedAt": "2026-08-15T23:26:58.023Z",
+  "updatedAt": "2026-08-15T23:28:51.594Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:13:10.854Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-15T23:28:51.594Z",
+    "wallClockMs": 11740740
   },
   "contextFetchedBy": [
     "architect-94dd1835",
@@ -182,5 +184,8 @@
     "package.json",
     "pnpm-lock.yaml",
     "tests/fault/cross-host/production-surfaces.fault.ts"
-  ]
+  ],
+  "completedAt": "2026-08-15T23:28:51.594Z",
+  "reviewCompletedAt": "2026-08-15T23:28:51.594Z",
+  "reviewSummary": "Reviewed commit 5839518 and current owned bytes: exactly package.json, root lock importer, and production-surfaces.fault.ts (+177/-0); current HEAD matches, diff-check clean, root scripts/unrelated lock importers unchanged, test source 166 lines.\nVerified root dependencies are workspace:* with lock links to apps/daemon and packages/runner. Durable fault-lane test uses only bare @moe roots for PLATFORM_BOUNDARIES, both OS observers, and collectDoctorVersionReport; it literally names consumer task-01c5f96ec1e247dc846fd628c929974a and grants no host authority.\nTest assertions are non-vacuous: exact 4-symbol names/kinds, exact ordered 7-name frozen production catalogue, 7 unique/nonempty inspected cases, distinct callable shapes, and explicit deep/relative-import policing.\nFresh QA run in a committed-current-HEAD ext4 snapshot: `pnpm install --frozen-lockfile && pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/production-surfaces.fault.ts` EXIT 0; install covered all 19 projects; focused test 1 file/4 tests.\nAlso recreated and deleted an in-root compiled probe: fault tsc and plain Node both observed the exact seven names and three callables. Independent root `node --experimental-strip-types --input-type=module` bare imports passed the same assertions; no probe residue remained."
 }

@@ -66,7 +66,7 @@ export function resolveLiveSetup(env: LiveEnv, compatReport: unknown): LiveSetup
     } as const);
   }
   // Origin is empty on purpose: requests stay same-origin and the dev server
-  // proxies /command, /events/read and /affordances/read to the daemon.
+  // proxies /command, /events/read, /events/ack and /affordances/read to the daemon.
   const transport = createControlRoomTransport({
     csrfToken: csrf,
     origin: "",

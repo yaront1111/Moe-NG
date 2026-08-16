@@ -9,6 +9,7 @@ import type {
   StoredEvent,
 } from "./store-contracts.js";
 import { limitExceeded, requireIdentifier } from "./store-input.js";
+import { requireRowString, requireStoredPositiveBigIntText } from "./store-rows.js";
 import { EventReadQueryStore } from "./event-read-query.js";
 
 export { RECEIPT_OUTBOX_QUERY } from "./event-read-materialization.js";
@@ -41,6 +42,18 @@ export class EventReadModelStore extends EventReadQueryStore {
         eventIds: Object.freeze([...receipt.eventIds]),
         outboxMessageIds: Object.freeze([...receipt.outboxMessageIds]),
       });
+    });
+  }
+
+  public readEventHorizon(): bigint {
+    return this.readSnapshotOperation("read event horizon", () => {
+      this.assertCachedProjectBinding();
+      const row = this.database.prepare(
+        "SELECT CAST(COALESCE(MAX(global_position), 0) AS TEXT) AS event_horizon FROM domain_events",
+      ).get() ?? {};
+      return requireRowString(row, "event_horizon") === "0"
+        ? 0n
+        : requireStoredPositiveBigIntText(row, "event_horizon");
     });
   }
 

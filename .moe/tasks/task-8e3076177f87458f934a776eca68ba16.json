@@ -125,7 +125,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "GOVERNOR UNBLOCK, MEASURED — the block's own clear condition is met. governor-8466bf0e at 20:16Z, human-directed policy: unblock where the condition has lifted, block only where we must.\n\nThe block said, verbatim: \"TO CLEAR: re-run the task's four-leg chain once the daemon quiesces. Nothing needs redoing.\" It was never a defect — code complete and committed in 9d60091 (6 files, 568 insertions, all under apps/daemon/src/telemetry/), steps 1-6 done, and step 7's gate was being reddened by three concurrent peers mid-refactor inside @moe/daemon.\n\nMEASURED NOW, not read off a status field:\n1. All SEVEN peer files the block named as the moving red are CLEAN at HEAD 18f0964 — project-configuration-selection.test.ts, mcp-dispatch-port.test.ts, mcp-http-host.test.ts, mcp-http-main.ts, index-surface.test.ts, recovery-completion.test.ts, recovery-completion-digest.js. Each was ' M' or '??' when the block was filed; their owners have since committed.\n2. `pnpm --filter @moe/daemon typecheck` => EXIT=0. That is the exact leg that was red across all nine of the worker's measurements (TS2353, TS6133, TS2305 x8, TS2307).\n3. This task's own deliverable is intact and committed: `git ls-tree -r HEAD -- apps/daemon/src/telemetry/` = 6 tracked files, `git status --porcelain` on that path = empty.\n\nRestored to WORKING rather than PLANNING deliberately: steps 1-6 are COMPLETED and the plan is sound. Only step 7 (the gate run) remains. Flipping to PLANNING would discard a finished plan for no reason.\n\nWHOEVER CLAIMS THIS: run the four-leg chain yourself and let YOUR run be the evidence — my typecheck measurement does not substitute for the run that gates complete_task. If a leg goes red, attribute before you fix: the prior worker proved by grep that no failing path was under apps/daemon/src/telemetry/** (positive control: 9 hits in its own module). A red your own diff did not cause is a peer-churn problem to report, not yours to repair. Do NOT narrow the gate to src/telemetry to get green - the prior worker explicitly refused that and was right.\n\nDownstream, all waiting on this: task-fc658104 (codec, being coded RIGHT NOW by worker-682e25b5), task-ea27beb6 (compose), task-1a7ff170 (ledger), task-6cbff010 (dispatch).",
+  "reopenReason": "Fresh read-only audit at HEAD 4d0a49f: daemon typecheck now exits 0 and owned telemetry paths are clean, but the exact raw daemon test gate still exits 1 (2 files/4 tests): missing runtime bridge in runtime-entrypoint.test.ts and three active d92 horizon/watchdog failures in foundation-launch-authority.test.ts. Task is unassigned; park rather than waste a worker. Re-unblock only after those foreign paths are green, then rerun all four named legs.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T22:55:56.324Z",
+  "updatedAt": "2026-08-15T23:58:22.572Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
@@ -167,7 +167,8 @@
     "worker-618633fa",
     "architect-09b5f32a",
     "governor-a627169a",
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "worker-827a27f6"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -203,10 +204,10 @@
   },
   "planApprovedAt": "2026-08-15T17:59:25.756Z",
   "workStartedAt": "2026-08-15T17:59:58.379Z",
-  "blockedReason": "Governor-a627169a ruled to re-block: the required owned-package leg `pnpm --filter @moe/daemon test` is not exit 0 at committed HEAD f4966b5, despite the owned telemetry delta being green. Fresh merge-base daemon: exit 0, 80 files/1675 tests. Fresh HEAD committed-byte daemon: exit 1, 2 failed | 90 passed files and 3 failed | 1918 passed tests. Exact foreign failures: `src/runtime-entrypoint.test.ts` reports missing bridge `orchestrator/verifier-process-runner.ts`; `src/goals/j1-command-path.test.ts` has two `goal.close` cases refused with stable code `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`. No failing path intersects apps/daemon/src/telemetry/**. Focused telemetry tests pass 2 files/28 tests; daemon typecheck exit 0; scheduler passes 43 files/1326 tests. Runner Linux red is baseline-only with empty owned delta. The bounded aggregate-id fix and strengthened reason-layer test are committed byte-for-byte inside foreign whole-tree commit f4966b5 (the completion-hook hazard); per rail I did not amend/reset/recommit. QA review base-ref diff is recorded in Serena task handoff. Raw daemon gate must quiesce before completion; I will not fabricate exit 0 or edit foreign paths.",
+  "blockedReason": "Fresh read-only audit at HEAD 4d0a49f: daemon typecheck now exits 0 and owned telemetry paths are clean, but the exact raw daemon test gate still exits 1 (2 files/4 tests): missing runtime bridge in runtime-entrypoint.test.ts and three active d92 horizon/watchdog failures in foundation-launch-authority.test.ts. Task is unassigned; park rather than waste a worker. Re-unblock only after those foreign paths are green, then rerun all four named legs.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:50:36.177Z",
+  "blockedAt": "2026-08-15T23:58:22.572Z",
   "priorHandoffs": [
     {
       "whatIsDone": "All task-owned implementation and adversarial repair are complete. Original contract commit 9d60091; bounded aggregate-id fix and strengthened refusal assertions are committed in foreign whole-tree commit f4966b5. Focused telemetry: 2 files/28 tests green; daemon typecheck green; scheduler 43 files/1326 tests green; runner owned failing-path delta empty. Serena handoff `task-task-8e3076177f87458f934a776eca68ba16-handoff` contains hashes, mutation evidence, consumers and QA diff.",

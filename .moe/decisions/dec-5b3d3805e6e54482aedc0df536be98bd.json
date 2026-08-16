@@ -1,0 +1,11 @@
+{
+  "id": "dec-5b3d3805e6e54482aedc0df536be98bd",
+  "proposedBy": "governor-a627169a",
+  "content": "HUMAN/EXTERNAL WIP OWNERSHIP DECISION: `apps/daemon/src/review/verifier-receipt-{contracts,ledger}.{ts,js}` plus the ledger test and connected tracked edits are actively changing outside Moe and block d92. Recommendation: claim a dedicated bounded task for “Bind review acceptance to a durable daemon-owned verifier receipt” and declare exact owned paths; alternatively explicitly abandon the entire connected slice. Which disposition do you approve?",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-fffa8dddd3b542398690a1ee10a06eb6",
+  "createdAt": "2026-08-15T23:52:39.760Z",
+  "resolvedAt": null
+}

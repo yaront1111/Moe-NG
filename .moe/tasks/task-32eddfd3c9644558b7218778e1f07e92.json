@@ -43,14 +43,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:55:50.647Z",
-  "updatedAt": "2026-08-15T23:23:29.148Z",
+  "updatedAt": "2026-08-16T00:11:09.931Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:56:58.019Z"
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
     "architect-d9dccf21",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "governor-a627169a"
   ],
   "blockedReason": "Blocked on task-ff589abd7dd84ee197a9abee729bef78: current runner APIs cannot stream a newly discovered digest only after the existing path/reparse/containment checks. Planning around it would either read an unvalidated path or duplicate runtime-pin authority.",
   "blockedResourceId": null,

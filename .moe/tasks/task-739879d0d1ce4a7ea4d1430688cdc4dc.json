@@ -204,13 +204,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:15.684Z",
-  "updatedAt": "2026-08-15T18:41:31.573Z",
+  "updatedAt": "2026-08-15T23:51:13.268Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8c9073cd",
     "worker-4addc779",
     "qa-b2df68b9",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "governor-a627169a",
+    "architect-09b5f32a"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T11:40:33.980Z",

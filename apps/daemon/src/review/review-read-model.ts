@@ -19,8 +19,12 @@ import type { DeltaNodeClassification } from "./review-contracts.js";
  */
 
 export interface ReviewRoundRecord {
+  readonly aggregateVersion: number;
+  readonly decisionId: string;
   readonly lineage: ReviewLineage;
+  readonly principalId: string;
   readonly reviewInputDigest: string;
+  readonly resultSha256: string;
   readonly round: number;
   readonly routing: ReviewRouting;
 }
@@ -35,6 +39,8 @@ export interface AcceptanceRecord {
   readonly policyDecision: string;
   readonly reviewInputDigest: string;
   readonly reviewerCalibrationDigest: string;
+  readonly verifierReceiptId: string;
+  readonly verifierReceiptSha256: string;
 }
 
 export interface ReviewLedger {
@@ -135,17 +141,34 @@ function parseAcceptance(result: JsonValue): AcceptanceRecord | undefined {
   if (!isPlainJsonObject(result)) return undefined;
   if (!isRef(result["policyDecision"]) || !isRef(result["reviewInputDigest"])) return undefined;
   if (!isRef(result["reviewerCalibrationDigest"])) return undefined;
+  if (!isRef(result["verifierReceiptId"]) || !isRef(result["verifierReceiptSha256"])) {
+    return undefined;
+  }
   return result as unknown as AcceptanceRecord;
 }
 
-function parseRound(result: JsonValue): ReviewRoundRecord | undefined {
+function parseRound(
+  result: JsonValue,
+  storeFacts: Readonly<{
+    aggregateVersion: number;
+    decisionId: string;
+    principalId: string;
+    resultSha256: string;
+  }>,
+): ReviewRoundRecord | undefined {
   if (!isPlainJsonObject(result)) return undefined;
   const lineage = parseLineage(result["lineage"]);
   const routing = parseRouting(result["routing"]);
   const round = result["round"];
   if (lineage === undefined || routing === undefined) return undefined;
   if (typeof round !== "number" || !isRef(result["reviewInputDigest"])) return undefined;
-  return { lineage, reviewInputDigest: result["reviewInputDigest"], round, routing };
+  return {
+    ...storeFacts,
+    lineage,
+    reviewInputDigest: result["reviewInputDigest"],
+    round,
+    routing,
+  };
 }
 
 /**
@@ -189,7 +212,12 @@ export function readReviewLedger(
         continue;
       }
       if (decision.commandKind !== "review.submit") continue;
-      const round = parseRound(decodeResult(decision.resultBytes));
+      const round = parseRound(decodeResult(decision.resultBytes), {
+        aggregateVersion: decision.currentVersion,
+        decisionId: decision.decisionId,
+        principalId: decision.key.principalId,
+        resultSha256: decision.resultSha256,
+      });
       if (round === undefined) unreadable = true;
       else rounds.push(round);
     }

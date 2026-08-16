@@ -293,8 +293,15 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       spawned = Promise.reject(error);
     }
     const exit = spawned
-      .catch(() => undefined)
-      .then(() => { cleanupFailures.push(...cleanupAuthority(true)); })
+      .then(
+        () => { cleanupFailures.push(...cleanupAuthority(true)); },
+        (error: unknown) => {
+          cleanupFailures.push(
+            error instanceof Error ? error : new Error("AGENT_PROCESS_FAILED:UNKNOWN"),
+            ...cleanupAuthority(true),
+          );
+        },
+      )
       .finally(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
     return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };

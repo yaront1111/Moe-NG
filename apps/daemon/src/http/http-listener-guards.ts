@@ -155,3 +155,28 @@ export function readEventRequest(
   if (limit !== undefined && typeof limit !== "number") return null;
   return limit === undefined ? { projection, subscriberId } : { limit, projection, subscriberId };
 }
+
+export function readEventAcknowledgeRequest(body: Uint8Array): {
+  readonly presentedCursor: { readonly generation: number; readonly position: string };
+  readonly subscriberId: string;
+} | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const draft = parsed as Record<string, unknown>;
+  const cursor = draft["presentedCursor"];
+  if (typeof draft["subscriberId"] !== "string"
+    || typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) return null;
+  const fields = cursor as Record<string, unknown>;
+  if (typeof fields["generation"] !== "number" || typeof fields["position"] !== "string") {
+    return null;
+  }
+  return {
+    presentedCursor: { generation: fields["generation"], position: fields["position"] },
+    subscriberId: draft["subscriberId"],
+  };
+}

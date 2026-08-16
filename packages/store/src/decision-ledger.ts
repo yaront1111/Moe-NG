@@ -68,6 +68,7 @@ export interface DecisionLedgerCore {
     maxDecodedBytes?: number,
   ) => CursorPage<CommandDecisionRecord, bigint>;
   readonly readEvents: (aggregateId: string) => readonly StoredEvent[];
+  readonly readEventHorizon: () => bigint;
   readonly readEventsAfter: (
     afterGlobalPosition: bigint,
     limit?: number,
@@ -132,6 +133,7 @@ export function createDecisionLedgerCore(
       maxDecodedBytes?: number,
     ) => ledger.readCommandDecisionsAfter(afterDecisionPosition, limit, maxDecodedBytes),
     readEvents: (aggregateId: string) => ledger.readEvents(aggregateId),
+    readEventHorizon: () => ledger.readEventHorizon(),
     readEventsAfter: (
       afterGlobalPosition: bigint,
       limit?: number,

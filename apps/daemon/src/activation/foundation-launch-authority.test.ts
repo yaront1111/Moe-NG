@@ -700,6 +700,16 @@ describe("current effect/session binding", () => {
     return result.status === "BOUND" ? "BOUND" : `${result.status}:${result.code}`;
   }
 
+  function expectBindingUnknown(
+    answer: ReturnType<typeof readCurrentEffectSessionBinding>,
+    code: "FOUNDATION_BINDING_EVIDENCE_UNREADABLE" | "FOUNDATION_BINDING_SCAN_INCOMPLETE",
+  ): void {
+    expect(answer.status).toBe("UNKNOWN");
+    if (answer.status === "BOUND") throw new Error("expected UNKNOWN binding answer");
+    expect(answer.code).toBe(code);
+    expect(answer.layer).toBe(FOUNDATION_ACTIVATION_BINDING_LAYER);
+  }
+
   /**
    * THE NUMBER IS WRITTEN OUT ON PURPOSE.
    *
@@ -781,6 +791,62 @@ describe("current effect/session binding", () => {
       requestBytes: new TextEncoder().encode("second-activation-request"),
     });
     if (!committed.ok) throw new Error(`second seed refused: ${committed.code}`);
+  }
+
+  interface MovingScanResult {
+    readonly code?: string;
+    readonly horizonReads?: number;
+    readonly kind: "RESULT" | "WATCHDOG_TIMEOUT";
+    readonly layer?: string;
+    readonly pageReads?: number;
+    readonly status?: string;
+  }
+
+  async function runMovingScanWatchdog(): Promise<MovingScanResult> {
+    const readerUrl = pathToFileURL(join(import.meta.dirname, "activation-ledger-reader.ts")).href;
+    const script = `
+      import { parentPort } from "node:worker_threads";
+      import { readCurrentEffectSessionBinding } from ${JSON.stringify(readerUrl)};
+      let horizonReads = 0;
+      let pageReads = 0;
+      const answer = readCurrentEffectSessionBinding({
+        getHealth: () => ({ projectId: ${JSON.stringify(PROJECT_ID)} }),
+        readEventHorizon: () => { horizonReads += 1; return 3n; },
+        readEvents: () => [],
+        readEventsAfter: (after) => {
+          pageReads += 1;
+          const globalPosition = after + 1n;
+          return { hasMore: true, items: [{
+            eventType: ${JSON.stringify(NOISE_EVENT_TYPE)}, globalPosition,
+          }], nextCursor: globalPosition };
+        },
+      }, ${JSON.stringify(PROJECT_ID)}, "absent-effect", ${JSON.stringify(SESSION)}, 0);
+      parentPort.postMessage({
+        code: answer.code, horizonReads, kind: "RESULT", layer: answer.layer,
+        pageReads, status: answer.status,
+      });
+    `;
+    const worker = new Worker(new URL(`data:text/javascript,${encodeURIComponent(script)}`), {
+      execArgv: ["--experimental-strip-types"],
+    });
+    return await new Promise<MovingScanResult>((resolve, reject) => {
+      let settled = false;
+      const finish = (result: MovingScanResult): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(watchdog);
+        void worker.terminate();
+        resolve(result);
+      };
+      const watchdog = setTimeout(() => finish({ kind: "WATCHDOG_TIMEOUT" }), 2_000);
+      worker.once("message", (message: MovingScanResult) => finish(message));
+      worker.once("error", (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(watchdog);
+        reject(error);
+      });
+    });
   }
 
   it("answers BOUND from the committed intent and the lease owner session", () => {
@@ -869,6 +935,7 @@ describe("current effect/session binding", () => {
         seedActivation(store);
         const stuck = {
           getHealth: () => store.getHealth(),
+          readEventHorizon: () => 1n,
           readEvents: (aggregateId: string) => store.readEvents(aggregateId),
           readEventsAfter: () => ({ hasMore: true, items: [], nextCursor: 0n }),
         } as unknown as SqliteEventStore;
@@ -878,6 +945,7 @@ describe("current effect/session binding", () => {
         // never-ending walk: it would spin forever, or worse, answer ABSENT.
         const stalled = {
           getHealth: () => store.getHealth(),
+          readEventHorizon: () => 1n,
           readEvents: (aggregateId: string) => store.readEvents(aggregateId),
           readEventsAfter: (after: bigint) => ({
             hasMore: true, items: store.readEventsAfter(after, 100).items, nextCursor: after,
@@ -887,6 +955,7 @@ describe("current effect/session binding", () => {
           .toBe("UNKNOWN:FOUNDATION_BINDING_SCAN_INCOMPLETE");
         const thrower = {
           getHealth: () => store.getHealth(),
+          readEventHorizon: () => 1n,
           readEvents: (aggregateId: string) => store.readEvents(aggregateId),
           readEventsAfter: () => { throw new Error("injected read failure"); },
         } as unknown as SqliteEventStore;
@@ -895,6 +964,83 @@ describe("current effect/session binding", () => {
       });
     });
   });
+
+  it("fails closed for unreadable and invalid event horizons", () => {
+    withDirectory("scan-horizon", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        const page = store.readEventsAfter(0n, 100);
+        const over = (readEventHorizon: () => unknown) => ({
+          getHealth: () => store.getHealth(),
+          readEventHorizon,
+          readEvents: (aggregateId: string) => store.readEvents(aggregateId),
+          readEventsAfter: () => page,
+        }) as unknown as SqliteEventStore;
+        const unreadable = readCurrentEffectSessionBinding(
+          over(() => { throw new Error("injected horizon failure"); }),
+          PROJECT_ID, "absent-effect", SESSION, 0,
+        );
+        expectBindingUnknown(unreadable, "FOUNDATION_BINDING_EVIDENCE_UNREADABLE");
+        const invalidHorizons: readonly unknown[] = [-1n, 1, Number.NaN, null];
+        let cases = 0;
+        for (const horizon of invalidHorizons) {
+          cases += 1;
+          const answer = readCurrentEffectSessionBinding(
+            over(() => horizon), PROJECT_ID, "absent-effect", SESSION, 0,
+          );
+          expectBindingUnknown(answer, "FOUNDATION_BINDING_SCAN_INCOMPLETE");
+        }
+        expect(cases).toBe(4);
+      });
+    });
+  });
+
+  it("refuses every hostile page shape inside the captured event horizon", () => {
+    withDirectory("scan-page-shapes", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        const stored = store.readEvents(DERIVED)[0]!;
+        const noiseAt = (globalPosition: bigint): StoredEvent => ({
+          ...stored, eventType: NOISE_EVENT_TYPE, globalPosition,
+        });
+        const cases = [
+          { horizon: 2n, name: "gap", page: { hasMore: false, items: [noiseAt(2n)], nextCursor: 2n } },
+          { horizon: 1n, name: "past horizon", page: { hasMore: false, items: [noiseAt(2n)], nextCursor: 2n } },
+          { horizon: 2n, name: "premature end", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: 1n } },
+          { horizon: 1n, name: "cursor mismatch", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: null } },
+          { horizon: 1n, name: "hasMore at horizon", page: { hasMore: true, items: [noiseAt(1n)], nextCursor: 1n } },
+        ] as const;
+        for (const hostile of cases) {
+          let reads = 0;
+          const fake = {
+            getHealth: () => store.getHealth(),
+            readEventHorizon: () => hostile.horizon,
+            readEvents: (aggregateId: string) => store.readEvents(aggregateId),
+            readEventsAfter: () => reads++ === 0
+              ? hostile.page : { hasMore: false, items: [], nextCursor: null },
+          } as unknown as SqliteEventStore;
+          const answer = readCurrentEffectSessionBinding(
+            fake, PROJECT_ID, "absent-effect", SESSION, 0,
+          );
+          expectBindingUnknown(answer, "FOUNDATION_BINDING_SCAN_INCOMPLETE");
+        }
+        expect(cases).toHaveLength(5);
+      });
+    });
+  });
+
+  it("bounds a continuously advancing scan to the captured horizon", async () => {
+    expect(await runMovingScanWatchdog()).toStrictEqual({
+      code: "FOUNDATION_BINDING_SCAN_INCOMPLETE",
+      horizonReads: 1,
+      kind: "RESULT",
+      layer: FOUNDATION_ACTIVATION_BINDING_LAYER,
+      pageReads: 3,
+      status: "UNKNOWN",
+    });
+  }, 10_000);
 
   /**
    * DEFECT 2's reproduction, and the reason it is a time bomb rather than an

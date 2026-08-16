@@ -3,11 +3,12 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { readReviewLedger } from "./review-ledger.js";
 import {
-  AUTHOR,
+  NODE_VERIFIER_PRINCIPAL_ID,
+  recordVerifierReceipt,
+} from "./verifier-receipt-ledger.js";
+import {
   PROJECT_ID,
-  REVIEWER,
   SUBJECT_REF,
-  acceptancePayload,
   calibration,
   closeStores,
   decisionCount,
@@ -16,8 +17,8 @@ import {
   escalationPayload,
   finding,
   openStore,
+  packageItems,
   policyInput,
-  reviewerFacts,
   send,
   submit,
   submitPayload,
@@ -55,12 +56,56 @@ function escalate(
 function accept(
   store: ReturnType<typeof openStore>,
   expectedVersion: number,
+  receiptId: string,
   overrides: Record<string, unknown> = {},
+  commandId = "cmd-accept",
 ): ReturnType<typeof send> {
   return send(
     store,
-    envelope("integration.accept_output", expectedVersion, acceptancePayload(overrides), "cmd-accept"),
+    envelope("integration.accept_output", expectedVersion, {
+      receiptId,
+      subjectRef: SUBJECT_REF,
+      ...overrides,
+    }, commandId),
   );
+}
+
+function cleanRound(store: ReturnType<typeof openStore>): void {
+  const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+  const round = ledger.lineage.highestRound + 1;
+  const outcome = send(store, envelope(
+    "review.submit",
+    ledger.version,
+    submitPayload(round, []),
+    `cmd-clean-${String(round)}`,
+  ));
+  if (!outcome.ok) throw new Error(outcome.code);
+}
+
+function issueReceipt(
+  store: ReturnType<typeof openStore>,
+  overrides: Partial<{
+    calibration: ReturnType<typeof calibration>;
+    policy: ReturnType<typeof policyInput>;
+  }> = {},
+) {
+  const outcome = recordVerifierReceipt(store, {
+    authority: {
+      calibration: overrides.calibration ?? calibration(),
+      packageItems: packageItems().filter((item) => item.kind !== "DAEMON_RECEIPT"),
+      policy: overrides.policy ?? policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID }),
+    },
+    decidedAt: "2026-08-16T00:00:00.000Z",
+    execution: {
+      byteCount: 2,
+      outputSha256: "a".repeat(64),
+      test: "pnpm test",
+      workspace: "/workspace",
+    },
+    projectId: PROJECT_ID,
+    subjectRef: SUBJECT_REF,
+  });
+  return outcome;
 }
 
 describe("the three-round counter is durable and escalation is explicit (DoD 4)", () => {
@@ -140,144 +185,135 @@ describe("the three-round counter is durable and escalation is explicit (DoD 4)"
   });
 });
 
-describe("acceptance is qualified by @moe/review and commits nothing when refused (DoD 6)", () => {
-  it("qualifies a clean acceptance and records it durably", () => {
+describe("acceptance consumes one exact daemon verifier receipt (DoD 6)", () => {
+  it("qualifies a clean receipt and records its durable identity", () => {
     const store = openStore();
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
 
-    const outcome = accept(store, 0);
+    const outcome = accept(store, receipt.decision.currentVersion, receipt.receipt.receiptId);
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-    if (!outcome.ok) throw new Error("expected acceptance");
-    expect(outcome.authority).toBe("DURABLE_DECISION");
     const accepted = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).accepted;
     expect(accepted?.policyDecision).toBe("ALLOW");
-    expect(accepted?.reviewInputDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(accepted?.reviewInputDigest).toBe(receipt.receipt.reviewInputDigest);
+    expect(accepted?.verifierReceiptId).toBe(receipt.receipt.receiptId);
+    expect(accepted?.verifierReceiptSha256).toBe(receipt.decision.resultSha256);
   });
 
-  const REFUSALS = [
-    {
-      code: "REVIEWER_IS_AUTHOR",
-      layer: "ELIGIBILITY",
-      name: "a reviewer who authored the subject",
-      overrides: { reviewer: reviewerFacts({ authors: [AUTHOR, REVIEWER] }) },
-    },
-    {
-      code: "REVIEWER_HELD_MUTATING_LEASE",
-      layer: "ELIGIBILITY",
-      name: "a reviewer who held a mutating lease over the subject",
-      overrides: {
-        reviewer: reviewerFacts({
-          leaseHistory: [{ kind: "MUTATING", principal: REVIEWER, subjectRef: SUBJECT_REF }],
-        }),
-      },
-    },
-    {
-      code: "UNKNOWN_REVIEWER_INDEPENDENCE",
-      layer: "ELIGIBILITY",
-      name: "an independence fact that could not be resolved",
-      overrides: { reviewer: reviewerFacts({ authorshipResolved: false }) },
-    },
-    {
-      code: "REVIEWER_CALIBRATION_STALE",
-      layer: "ELIGIBILITY",
-      name: "a reviewer whose calibration is stale",
-      overrides: { calibration: calibration({ staleness: "STALE" }) },
-    },
-    {
-      code: "REVIEWER_CALIBRATION_UNPROVEN",
-      layer: "ELIGIBILITY",
-      name: "a reviewer whose calibration was never proven",
-      overrides: { calibration: calibration({ sentinelPassed: false }) },
-    },
-    // PROOF_FAILED and PROOF_UNKNOWN are SEPARATE fixtures on purpose: "we checked and it
-    // failed" and "we could not tell" are different facts, and only one of them might later
-    // become provable. A single "not passed" fixture would collapse them.
-    {
-      code: "PROOF_FAILED",
-      layer: "ACCEPTANCE",
-      name: "proof that was checked and failed",
-      overrides: { proof: "FAILED" },
-    },
-    {
-      code: "PROOF_UNKNOWN",
-      layer: "ACCEPTANCE",
-      name: "proof that could not be determined",
-      overrides: { proof: "UNKNOWN" },
-    },
-  ] as const;
-
-  it("declares every acceptance refusal case it sweeps", () => {
-    expect(REFUSALS).toHaveLength(7);
-    expect(new Set(REFUSALS.map((entry) => entry.code)).size).toBe(7);
-  });
-
-  it.each(REFUSALS.map((entry) => [entry.name, entry] as const))(
-    "refuses %s and commits nothing",
-    (_name, entry) => {
-      const store = openStore();
-      const before = decisionCount(store);
-
-      const outcome = accept(store, 0, entry.overrides);
-
-      expect(outcome.ok).toBe(false);
-      if (outcome.ok) throw new Error("expected refusal");
-      expect(outcome.code).toBe(entry.code);
-      expect(outcome.refusedBy).toBe("REVIEW_KERNEL");
-      expect(outcome.kernelLayer).toBe(entry.layer);
-      expect(outcome.authority).toBe("NONE");
-      // Read the store back. A handler that mutated and then refused would pass every
-      // assertion above this line.
-      expect(decisionCount(store)).toBe(before);
-      expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).accepted).toBeUndefined();
-    },
-  );
-
-  it("refuses when the core's policy verdict is not ALLOW, and commits nothing", () => {
+  it("refuses a missing receipt and commits nothing", () => {
     const store = openStore();
+    cleanRound(store);
     const before = decisionCount(store);
 
-    // No classified fact, so `evaluatePolicy` cannot derive a risk tier and answers HOLD_UNKNOWN.
-    // Unclassified risk must never auto-approve, and the review layer must not talk past that.
-    const outcome = accept(store, 0, { policy: policyInput({ facts: [] }) });
+    const outcome = accept(store, 1, "f".repeat(64));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("ACCEPTANCE_POLICY_REFUSED");
-    expect(outcome.refusedBy).toBe("REVIEW_KERNEL");
-    expect(outcome.kernelLayer).toBe("ACCEPTANCE");
+    expect(outcome.code).toBe("REVIEW_VERIFIER_RECEIPT_NOT_FOUND");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
     expect(decisionCount(store)).toBe(before);
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).accepted).toBeUndefined();
   });
 
-  it("never auto-accepts a subject that has reached the round cap", () => {
+  it("rejects the former caller-authored authority fields at ingress", () => {
     const store = openStore();
-    driveRounds(store, REVIEW_ESCALATION_ROUND_LIMIT);
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
     const before = decisionCount(store);
 
-    const outcome = accept(store, REVIEW_ESCALATION_ROUND_LIMIT);
+    const outcome = accept(store, receipt.decision.currentVersion, receipt.receipt.receiptId, {
+      calibration: calibration(),
+      packageItems: packageItems(),
+      policy: policyInput(),
+      proof: "PASSED",
+      reviewer: { reviewer: "caller" },
+    });
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.code).toBe("REVIEW_ROUND_CAP_REACHED");
-    expect(outcome.refusedBy).toBe("REVIEW_KERNEL");
-    expect(outcome.kernelLayer).toBe("FINDINGS");
+    expect(outcome.code).toBe("REVIEW_PAYLOAD_INVALID");
     expect(decisionCount(store)).toBe(before);
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).accepted).toBeUndefined();
   });
 
-  it("qualifies an acceptance against the lineage that is actually stored", () => {
+  it("refuses a receipt after a newer clean round wins the aggregate", () => {
+    const store = openStore();
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
+    cleanRound(store);
+    const before = decisionCount(store);
+
+    const outcome = accept(store, 3, receipt.receipt.receiptId);
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_VERIFIER_RECEIPT_STALE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("refuses a receipt selected for a different subject", () => {
+    const store = openStore();
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
+    const before = decisionCount(store);
+
+    const outcome = accept(store, 0, receipt.receipt.receiptId, {
+      subjectRef: "node-other",
+    });
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_VERIFIER_RECEIPT_STALE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("consumes one receipt at most once across different accept command ids", () => {
+    const store = openStore();
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
+    expect(accept(store, 2, receipt.receipt.receiptId, {}, "cmd-accept-first").ok).toBe(true);
+    const before = decisionCount(store);
+
+    const second = accept(store, 3, receipt.receipt.receiptId, {}, "cmd-accept-second");
+
+    expect(second.ok).toBe(false);
+    if (second.ok) throw new Error("expected refusal");
+    expect(second.code).toBe("REVIEW_ALREADY_ACCEPTED");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("qualifies against the lineage durably recorded before the clean source", () => {
     const store = openStore();
     expect(submit(store, 1).ok).toBe(true);
+    cleanRound(store);
+    const receipt = issueReceipt(store);
+    if (!receipt.ok) throw new Error(receipt.code);
 
-    // One unsuccessful round is below the cap, so the acceptance is qualified — but it is
-    // qualified against the DURABLE lineage, not an empty one handed in by the caller.
-    const outcome = accept(store, 1);
+    const outcome = accept(store, 3, receipt.receipt.receiptId);
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
     expect(ledger.lineage.unsuccessfulRounds).toBe(1);
     expect(ledger.accepted).toBeDefined();
-    // The earlier round survives the acceptance untouched.
-    expect(ledger.rounds).toHaveLength(1);
+    expect(ledger.rounds).toHaveLength(2);
+  });
+
+  it("does not mint a receipt from stale calibration or a non-ALLOW policy", () => {
+    for (const invalid of [
+      { calibration: calibration({ staleness: "STALE" }) },
+      { policy: policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID, facts: [] }) },
+    ]) {
+      const store = openStore();
+      cleanRound(store);
+      const before = decisionCount(store);
+      const receipt = issueReceipt(store, invalid);
+      expect(receipt).toEqual({ code: "VERIFIER_AUTHORITY_REFUSED", ok: false });
+      expect(decisionCount(store)).toBe(before);
+      store.close();
+    }
   });
 });

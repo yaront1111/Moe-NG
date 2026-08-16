@@ -24,10 +24,7 @@ import {
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { runReviewCommand } from "../review/review-services.js";
-import {
-  acceptancePayload as reviewAcceptancePayload,
-  reviewerFacts,
-} from "../review/review-test-fixtures.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 
 /**
  * Durability behaviour of the nine bootstrap services: the command-driven sequence (DoD 1),
@@ -49,19 +46,14 @@ const encoder = new TextEncoder();
  * row that no real review command could produce.
  */
 function acceptReviewedNode(store: SqliteEventStore, nodeRef: string): void {
+  const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
     commandId: `cmd-bootstrap-review-accept-${nodeRef}`,
     correlationId: "corr-bootstrap-review",
     decidedAt: "2026-08-08T00:00:00.000Z",
-    expectedVersion: 0,
+    expectedVersion: receipt.currentVersion,
     kind: "integration.accept_output",
-    payload: reviewAcceptancePayload({
-      reviewer: reviewerFacts({
-        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef: nodeRef }],
-        subjectRef: nodeRef,
-      }),
-      subjectRef: nodeRef,
-    }),
+    payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
     principalId: "reviewer-1",
     projectId: PROJECT_ID,
     schemaVersion: REVIEW_SCHEMA_VERSION,

@@ -37,13 +37,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-15T18:31:36.149Z",
+  "updatedAt": "2026-08-15T23:30:29.657Z",
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-15T18:31:30.175Z",
   "blockedReason": "The task's own hard-dependency condition remains false. Registry extraction task-9cba79a1 is DONE, but task-e33747f982e0452a9f9d784fd1cb914d is still WORKING (not QA-approved DONE) and its apparent effect.activate changes are/just were foreign in-flight bytes; upstream task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED awaiting that committed activation path. A committed-HEAD grep for Foundation attempt dispatch/read APIs remains empty, so there is no production service for this ingress to delegate to. Governor comment-55c9ce72 already fixes the direction: e337 -> 6cb -> this task. Planning now would invent the dispatch authority or consume foreign work. Re-promote only after e337 and 6cb are both QA-approved DONE, then probe the registry/public host and stored-dispatch reader with deliberately disagreeing caller/stored replay values before naming symbols. Do not manufacture ACTIVE provider slots or reimplement registry/authentication.",
   "contextFetchedBy": [
     "architect-4eca9b79",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "governor-a627169a"
   ],
   "blockedResourceId": null,
   "metrics": {

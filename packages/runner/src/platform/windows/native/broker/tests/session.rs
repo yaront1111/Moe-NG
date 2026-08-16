@@ -30,12 +30,13 @@
 //! is not the one required. Collapsing those two would let a refusal migrate
 //! between them with the suite still green.
 
+use core::task::Poll;
 use std::cell::{Cell, RefCell};
 
 use moe_windows_job_broker::{
-    ByteChannel, Completed, Completion, Inbound, Outbound, Outcome, Precondition, ProtocolReason,
-    RefusalLayer, Session, ShutdownSignal, Stopped, Unobserved, Wiring, FRAME_HEADER_BYTES,
-    PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
+    ByteChannel, Completed, Completion, DiagnosticNote, Inbound, Outbound, Outcome, Precondition,
+    ProtocolReason, ProtocolStage, RefusalLayer, Session, ShutdownSignal, Stopped, Unobserved,
+    Wiring, FRAME_HEADER_BYTES, PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
 };
 use moe_windows_job_core::{
     CreatedProcess, NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit,
@@ -96,6 +97,7 @@ struct ScriptedCalls {
     /// session that waits more often than the test scripted does not silently
     /// run off the end of the queue.
     waits: RefCell<Vec<WaitOutcome>>,
+    wait_timeouts: RefCell<Vec<u32>>,
     exit_code: Cell<u32>,
     /// How many more processes `query_active_processes` reports before reaching
     /// zero, decremented per call.
@@ -114,6 +116,7 @@ impl ScriptedCalls {
             in_job: Cell::new(true),
             prior_suspend_count: Cell::new(1),
             waits: RefCell::new(vec![WaitOutcome::Signalled]),
+            wait_timeouts: RefCell::new(Vec::new()),
             exit_code: Cell::new(SCRIPTED_EXIT_CODE),
             active_remaining: Cell::new(0),
             log: RefCell::new(Vec::new()),
@@ -176,6 +179,10 @@ impl ScriptedCalls {
     /// "exactly once" assertable; "did it terminate" cannot see a double.
     fn count(&self, name: &str) -> usize {
         self.log.borrow().iter().filter(|entry| **entry == name).count()
+    }
+
+    fn observed_wait_timeouts(&self) -> Vec<u32> {
+        self.wait_timeouts.borrow().clone()
     }
 }
 
@@ -279,9 +286,10 @@ impl ProcessCalls for ScriptedCalls {
     fn wait_for_process(
         &self,
         _process: RawHandle,
-        _timeout_ms: u32,
+        timeout_ms: u32,
     ) -> Result<WaitOutcome, NativeError> {
         self.arm(NativeOp::WaitForProcess, "wait")?;
+        self.wait_timeouts.borrow_mut().push(timeout_ms);
         let mut waits = self.waits.borrow_mut();
         // The last entry repeats rather than being consumed: a queue that ran dry
         // would panic and report a harness fault as a production defect.
@@ -316,6 +324,14 @@ impl ProcessCalls for ScriptedCalls {
     }
 }
 
+#[derive(Clone, Copy)]
+enum PollStep {
+    Pending,
+    Bytes(usize),
+    End,
+    Error(u32),
+}
+
 /// A scripted pipe: hands out a prepared byte script, records everything
 /// written, and can be told to end or to fail.
 struct Pipe {
@@ -324,6 +340,10 @@ struct Pipe {
     read_error: Option<u32>,
     write_error: Option<u32>,
     written: Vec<u8>,
+    poll_steps: Vec<PollStep>,
+    poll_at: usize,
+    poll_calls: usize,
+    polled_bytes: usize,
 }
 
 impl Pipe {
@@ -340,7 +360,16 @@ impl Pipe {
             read_error: None,
             write_error: None,
             written: Vec::new(),
+            poll_steps: Vec::new(),
+            poll_at: 0,
+            poll_calls: 0,
+            polled_bytes: 0,
         }
+    }
+
+    fn with_poll_steps(mut self, steps: &[PollStep]) -> Self {
+        self.poll_steps = steps.to_vec();
+        self
     }
 
     /// A provider channel that never reaches EOF: every read yields a byte, so
@@ -371,6 +400,45 @@ impl ByteChannel for Pipe {
         buffer[..take].copy_from_slice(&self.inbound[self.read_at..self.read_at + take]);
         self.read_at += take;
         Ok(take)
+    }
+
+    /// Answers the scripted readiness step, or — with no script — exactly what
+    /// `read` would have answered.
+    ///
+    /// THE UNSCRIPTED FALLBACK IS NOT A CONVENIENCE. Every case written before
+    /// this channel could be Pending assumed fd0 answers immediately, so the
+    /// default has to keep answering immediately; a default of Pending would
+    /// quietly retire those cases into timeouts that still pass.
+    ///
+    /// A script that runs dry PANICS BY NAME rather than falling back, because
+    /// falling back would consume bytes the case never offered and report a
+    /// harness fault as production behaviour.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<Poll<usize>, u32> {
+        self.poll_calls += 1;
+        if self.poll_steps.is_empty() {
+            let taken = self.read(buffer)?;
+            self.polled_bytes += taken;
+            return Ok(Poll::Ready(taken));
+        }
+
+        let Some(step) = self.poll_steps.get(self.poll_at).copied() else {
+            panic!("the poll script ran dry after {} steps", self.poll_at);
+        };
+        self.poll_at += 1;
+        match step {
+            PollStep::Pending => Ok(Poll::Pending),
+            PollStep::End => Ok(Poll::Ready(0)),
+            PollStep::Error(code) => Err(code),
+            PollStep::Bytes(count) => {
+                let take = count
+                    .min(buffer.len())
+                    .min(self.inbound.len() - self.read_at);
+                buffer[..take].copy_from_slice(&self.inbound[self.read_at..self.read_at + take]);
+                self.read_at += take;
+                self.polled_bytes += take;
+                Ok(Poll::Ready(take))
+            }
+        }
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<usize, u32> {
@@ -465,11 +533,50 @@ fn count_of(stream: &[u8], kind: Outbound) -> usize {
     frames_on(stream).iter().filter(|(opcode, _)| *opcode == kind.opcode()).count()
 }
 
+fn only_protocol_refusal(stream: &[u8]) -> (u8, u16, u32) {
+    let frames: Vec<_> = frames_on(stream)
+        .into_iter()
+        .filter(|(opcode, _)| *opcode == Outbound::Refused.opcode())
+        .collect();
+    assert_eq!(
+        frames.len(),
+        1,
+        "the scenario must emit exactly one refusal"
+    );
+    let payload = &frames[0].1;
+    assert_eq!(payload.len(), REFUSED_PAYLOAD_BYTES);
+    (
+        payload[0],
+        u16::from_le_bytes([payload[1], payload[2]]),
+        u32::from_le_bytes([payload[3], payload[4], payload[5], payload[6]]),
+    )
+}
+
+fn assert_channel_ended_diagnostic(stream: &[u8]) {
+    let ended: Vec<_> = frames_on(stream)
+        .into_iter()
+        .filter(|(_, payload)| payload.first() == Some(&DiagnosticNote::ChannelEnded.wire()))
+        .collect();
+    assert_eq!(
+        ended.len(),
+        1,
+        "control EOF must emit exactly one ChannelEnded note"
+    );
+    assert_eq!(
+        ended[0].1,
+        vec![DiagnosticNote::ChannelEnded.wire(), 0, 0, 0, 0]
+    );
+}
+
 /// The wiring one run needs: a control script, and provider channels that have
 /// already reached EOF unless a test says otherwise.
 fn wiring(control: Vec<u8>) -> Wiring<Pipe> {
+    wiring_with_control(Pipe::of(&control))
+}
+
+fn wiring_with_control(control: Pipe) -> Wiring<Pipe> {
     Wiring {
-        control: Pipe::of(&control),
+        control,
         status: Pipe::of(&[]),
         diagnostics: Pipe::of(&[]),
         provider_out: Pipe::ended(),
@@ -892,6 +999,177 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
 }
 
 // ---------------------------------------------------------------------------
+// Post-LAUNCH control polling. These cases drive the production Session while
+// the scripted channel records the polling contract it is expected to use.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn silent_open_control_is_pending_while_a_longer_child_exits_naturally() {
+    let launch = a_launch_frame();
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[
+        WaitOutcome::TimedOut,
+        WaitOutcome::TimedOut,
+        WaitOutcome::Signalled,
+    ]);
+    let control = Pipe::of(&launch).with_poll_steps(&[PollStep::Pending, PollStep::Pending]);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::Natural, _)));
+    assert_eq!(
+        completion(&outcome),
+        Completion::Completed(Completed::Exited(SCRIPTED_EXIT_CODE))
+    );
+    assert_eq!(calls.observed_wait_timeouts(), vec![50, 50, 50]);
+    assert_eq!(wired.control.poll_calls, 2);
+    assert_eq!(wired.control.polled_bytes, 0);
+    assert_eq!(
+        wired.control.read_at,
+        launch.len(),
+        "pending must consume no control bytes"
+    );
+    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 1);
+    assert_eq!(count_of(&wired.status.written, Outbound::Refused), 0);
+    assert_eq!(calls.count("terminate-job"), 0);
+    assert_eq!(calls.count("terminate-process"), 0);
+}
+
+#[test]
+fn fragmented_cancel_header_survives_pending_polls_and_stays_prompt() {
+    let launch = a_launch_frame();
+    let cancel = a_cancel_frame();
+    assert_eq!(
+        cancel.len(),
+        FRAME_HEADER_BYTES,
+        "CANCEL has a zero-length payload"
+    );
+    let mut inbound = launch.clone();
+    inbound.extend_from_slice(&cancel);
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let steps = [
+        PollStep::Bytes(2),
+        PollStep::Pending,
+        PollStep::Bytes(2),
+        PollStep::Pending,
+        PollStep::Bytes(2),
+    ];
+    let control = Pipe::of(&inbound).with_poll_steps(&steps);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::Cancelled, _)));
+    assert_eq!(wired.control.poll_calls, 5);
+    assert_eq!(wired.control.polled_bytes, FRAME_HEADER_BYTES);
+    assert_eq!(wired.control.read_at, launch.len() + cancel.len());
+    let waits = calls.observed_wait_timeouts();
+    assert_eq!(waits, vec![50, 50, 50, 50, 50, 5_000]);
+    assert!(waits[..5].iter().all(|timeout| *timeout <= 50));
+    assert_eq!(count_of(&wired.status.written, Outbound::Refused), 0);
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+#[test]
+fn post_launch_eof_is_control_ended_not_a_protocol_refusal() {
+    let calls = patient_calls();
+    let control = Pipe::of(&a_launch_frame()).with_poll_steps(&[PollStep::End]);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::ControlEnded, _)));
+    assert_eq!(wired.control.poll_calls, 1);
+    assert_eq!(count_of(&wired.status.written, Outbound::Refused), 0);
+    assert_channel_ended_diagnostic(&wired.diagnostics.written);
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+#[test]
+fn partial_payload_then_pending_eof_is_control_ended_not_a_protocol_refusal() {
+    let launch = a_launch_frame();
+    let second = a_launch_frame();
+    assert!(
+        second.len() > FRAME_HEADER_BYTES,
+        "the partial-EOF frame must have a payload"
+    );
+    let mut inbound = launch.clone();
+    inbound.extend_from_slice(&second);
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let steps = [
+        PollStep::Bytes(FRAME_HEADER_BYTES + 1),
+        PollStep::Pending,
+        PollStep::End,
+    ];
+    let control = Pipe::of(&inbound).with_poll_steps(&steps);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::ControlEnded, _)));
+    assert_eq!(wired.control.poll_calls, 3);
+    assert_eq!(wired.control.polled_bytes, FRAME_HEADER_BYTES + 1);
+    assert_eq!(count_of(&wired.status.written, Outbound::Refused), 0);
+    assert_channel_ended_diagnostic(&wired.diagnostics.written);
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+#[test]
+fn wrong_version_after_launch_refuses_at_protocol_framing() {
+    let launch = a_launch_frame();
+    let mut wrong_version = a_cancel_frame();
+    wrong_version[0] = PROTOCOL_VERSION + 1;
+    let mut inbound = launch;
+    inbound.extend_from_slice(&wrong_version);
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let control = Pipe::of(&inbound).with_poll_steps(&[PollStep::Bytes(FRAME_HEADER_BYTES)]);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::ControlRefused, _)));
+    assert_eq!(wired.control.poll_calls, 1);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (
+            RefusalLayer::Protocol.wire(),
+            ProtocolReason::VersionMismatch.ordinal() as u16,
+            0
+        ),
+    );
+    assert_eq!(
+        ProtocolReason::VersionMismatch.stage(),
+        ProtocolStage::Framing
+    );
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+#[test]
+fn poll_failure_after_launch_refuses_with_exact_channel_failure_evidence() {
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let control = Pipe::of(&a_launch_frame()).with_poll_steps(&[PollStep::Error(1_234)]);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::ControlRefused, _)));
+    assert_eq!(wired.control.poll_calls, 1);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (
+            RefusalLayer::Protocol.wire(),
+            ProtocolReason::ChannelFailed.ordinal() as u16,
+            1_234
+        ),
+    );
+    assert_eq!(RefusalLayer::Protocol.wire(), 2);
+    assert_eq!(ProtocolReason::ChannelFailed.ordinal(), 3);
+    assert_eq!(
+        ProtocolReason::ChannelFailed.stage(),
+        ProtocolStage::Framing
+    );
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+// ---------------------------------------------------------------------------
 // DoD 5 — five termination paths, each terminating and reaping EXACTLY ONCE.
 //
 // FIVE SEPARATE TESTS WITH FIVE SEPARATE CALL-COUNT ASSERTIONS, because the DoD
@@ -1000,6 +1278,10 @@ fn malformed_control_after_a_successful_launch_terminates_and_reaps_exactly_once
     assert_eq!(
         u16::from_le_bytes([payload[1], payload[2]]),
         ProtocolReason::DuplicateLaunch.ordinal() as u16
+    );
+    assert_eq!(
+        ProtocolReason::DuplicateLaunch.stage(),
+        ProtocolStage::Control
     );
 }
 

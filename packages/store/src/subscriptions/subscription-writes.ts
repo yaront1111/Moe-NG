@@ -8,8 +8,8 @@ import {
   formatPosition, isReservedSubscriberId, parsePosition, snapshotSubscriberId,
 } from "./subscription-contracts.js";
 import type {
-  AcknowledgeInput, AdvanceGenerationInput, RegisterSubscriptionInput, ReseatInput,
-  SnapshotDoc, SnapshotPublishInput, SubscriptionAckResult, SubscriptionAdvanceResult,
+  AdvanceGenerationInput, RegisterSubscriptionInput, ReseatInput,
+  SnapshotDoc, SnapshotPublishInput, SubscriptionAdvanceResult,
   SubscriptionPublishResult, SubscriptionSeatResult, SubscriptionSeated,
 } from "./subscription-contracts.js";
 import {
@@ -17,9 +17,12 @@ import {
   encodedCursor, inTransaction, loadSnapshot, projectionCheckpoint, requireCurrentGeneration,
   requireDocText, requireGeneration, requireInput, requireSubscriberId, retainedFloor, seat,
 } from "./subscription-internals.js";
+import { clearAllPendingOffers, clearPendingOffer } from "./subscription-offers.js";
+
+export { acknowledge } from "./subscription-acknowledge.js";
 
 /**
- * The five durable subscription writes. Each opens one BEGIN IMMEDIATE, performs every read
+ * The durable subscription write surface. Each operation opens one BEGIN IMMEDIATE and reads
  * its decision depends on inside that transaction, compares-and-sets against the exact bytes
  * it read, and commits — so no decision is ever made from pre-transaction state, and a loser
  * in a two-writer race gets a stable refusal rather than a clobbered baseline.
@@ -58,45 +61,6 @@ export function registerSubscription(
     const text = encodedCursor(input.filter ?? [], generation, position, projection);
     database.prepare(INSERT_DOC).run(subscriberId, text, at);
     return seat("REGISTERED", generation, position, doc);
-  });
-}
-
-export function acknowledge(
-  database: DatabaseSync, input: AcknowledgeInput,
-): SubscriptionAckResult {
-  return inTransaction(database, () => {
-    const subscriberId = requireSubscriberId(input.subscriberId);
-    const position = parsePosition(input.cursor?.position);
-    if (position === null) {
-      deny("SUBSCRIPTION_INPUT_INVALID", "INPUT", "cursor.position must be a decimal position");
-    }
-    const generation = requireCurrentGeneration(database, input.cursor.generation);
-    const text = requireDocText(docRow(database, subscriberId), subscriberId);
-    const doc = decodeSubscriberDoc(text);
-    if (doc === null) {
-      corrupt(`the ${subscriberId} cursor doc is unparseable`);
-    }
-    if (doc.cursor.generation !== generation) {
-      corrupt(`the ${subscriberId} cursor doc is from generation ${doc.cursor.generation}`);
-    }
-    if (position < (parsePosition(doc.cursor.position) ?? 0n)) {
-      deny(
-        "SUBSCRIPTION_CURSOR_REGRESSION", "STATE",
-        `cursor ${formatPosition(position)} is behind the durable cursor ${doc.cursor.position}`,
-      );
-    }
-    if (position > projectionCheckpoint(database, doc.projection)) {
-      deny(
-        "SUBSCRIPTION_INPUT_INVALID", "INPUT",
-        `cursor ${formatPosition(position)} is beyond the ${doc.projection} checkpoint`,
-      );
-    }
-    const next = formatPosition(position);
-    compareAndSet(database, subscriberId, text,
-      encodedCursor(doc.filter, generation, next, doc.projection));
-    return Object.freeze({
-      cursor: Object.freeze({ generation, position: next }), outcome: "ACKNOWLEDGED" as const,
-    });
   });
 }
 
@@ -196,6 +160,7 @@ export function advanceGeneration(
     database
       .prepare("INSERT INTO cursor_generations (generation, created_at, reason) VALUES (?, ?, ?)")
       .run(generation, at, reason);
+    clearAllPendingOffers(database);
     const upsert = database.prepare(UPSERT_DOC);
     for (const [projection, text] of baselines) {
       upsert.run(snapshotSubscriberId(projection), text, at);
@@ -242,6 +207,7 @@ export function reseatToSnapshot(
     requireReachableSnapshot(database, projection, snapshot);
     compareAndSet(database, subscriberId, text,
       encodedCursor(doc?.filter ?? [], generation, snapshot.checkpoint, projection));
+    clearPendingOffer(database, subscriberId);
     return seat("RESEATED", generation, snapshot.checkpoint, snapshot);
   });
 }

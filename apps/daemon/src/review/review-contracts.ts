@@ -74,12 +74,16 @@ export type ReviewIngressRefusalCode = (typeof REVIEW_INGRESS_REFUSAL_CODES)[num
  * is precisely the attack `@moe/review`'s digest attestation exists to stop.
  */
 export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
+  "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_LINEAGE_UNREADABLE",
   "REVIEW_ESCALATION_NOT_REACHED",
   "REVIEW_REPLAN_WITHOUT_ROUND",
   "REVIEW_ESCALATION_REQUIRED",
+  "REVIEW_VERIFIER_RECEIPT_INVALID",
+  "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
+  "REVIEW_VERIFIER_RECEIPT_STALE",
 ] as const);
 
 export type ReviewPrerequisiteRefusalCode = (typeof REVIEW_PREREQUISITE_REFUSAL_CODES)[number];

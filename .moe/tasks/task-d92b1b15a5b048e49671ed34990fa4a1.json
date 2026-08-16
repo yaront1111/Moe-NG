@@ -23,34 +23,50 @@
     {
       "stepId": "step-1",
       "description": "REOPEN PREFLIGHT + TDD RED ON CURRENT BYTES. Record `git rev-parse HEAD`, explicit-path `git status --short`, and the task merge-base; stop/report a collision rather than reset/stash if any of the eight owned paths is dirty. Re-read the already-landed d92 diff instead of reimplementing it: preserve the replay-tail filter/digest cross-check, the true-two-activation ambiguity test, the real file-backed literal 6,500-event BOUND test, and the late-second-match ambiguity test without weakening their literal code/layer assertions. In `event-read-model-contract.test.ts`, first add production-surface tests for an empty store horizon `0n`, the existing three-event seed horizon `3n`, and a fresh call advancing after an append, with exact bigint values/nonzero fixture cardinality. In `foundation-launch-authority.test.ts`, first add failing cases for a thrown/invalid horizon and hostile page shapes (gap, >H, premature end, cursor mismatch, `hasMore` at H), each asserting literal status `UNKNOWN`, code `FOUNDATION_BINDING_SCAN_INCOMPLETE` or `FOUNDATION_BINDING_EVIDENCE_UNREADABLE` as applicable, and layer `FOUNDATION_ACTIVATION_BINDING`; assert the generated hostile-case cardinality literally. Add the mandatory watchdog-isolated moving stream: child/Worker uses the production reader, H=3n exactly once, returns one contiguous noise event per page with `hasMore:true` forever, and must terminate after exactly three page reads with literal UNKNOWN/SCAN_INCOMPLETE/layer; current code must red by watchdog timeout, never hang the Vitest process. Run only these named tests to record genuine RED (missing API/timeout or wrong exact assertion, not zero tests/setup failure).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/event-read-model-contract.test.ts",
         "apps/daemon/src/activation/foundation-launch-authority.test.ts",
         "apps/daemon/src/activation/activation-ledger-commit.test.ts"
       ],
-      "startedAt": "2026-08-15T23:27:01.897Z"
+      "modifiedFiles": [
+        "packages/store/src/event-read-model-contract.test.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts"
+      ],
+      "note": "Reopen preflight at HEAD 4d0a49fb8791b458565863377d7002a48a1a9bd8; task merge-base e9b379681545ed38da88da17c76f477db4f03191. All eight explicit owned paths were clean; no reset/stash. Re-read and preserved landed replay-tail filter/digest, true ambiguity, literal 6,500-event, and late-second-match tests. Added production-surface horizon contract (empty 0n, seeded 3n with literal/nonzero cardinality, fresh append 4n), exact horizon/page hostile cases (4 invalid horizons, 5 page shapes; UNKNOWN code+FOUNDATION_ACTIVATION_BINDING layer), and Worker watchdog (H=3n once, expected three pages). Genuine RED: store named test executed 1/24 and exited 1 at `empty.readEventHorizon is not a function`; daemon three named tests executed 3/33 and exited 1 with ABSENT vs UNKNOWN for horizon/shape cases and WATCHDOG_TIMEOUT for moving stream.",
+      "startedAt": "2026-08-15T23:27:01.897Z",
+      "completedAt": "2026-08-15T23:33:19.257Z"
     },
     {
       "stepId": "step-2",
       "description": "IMPLEMENT THE LOSSLESS PUBLIC STORE HORIZON. Add `EventReadModelStore.readEventHorizon(): bigint` inside `readSnapshotOperation(\"read event horizon\", …)`, call `assertCachedProjectBinding()`, and execute the single scalar query `SELECT CAST(COALESCE(MAX(global_position), 0) AS TEXT) AS event_horizon FROM domain_events`. Parse `\"0\"` as 0n and every nonzero value through the existing canonical positive-bigint durable-row validator so values beyond 2^53 remain exact and malformed durable rows retain stable store corruption semantics. Add the exact `() => bigint` member/delegate to `DecisionLedgerCore`, its frozen `createDecisionLedgerCore` facade, and `SqliteEventStore`; do not alter schema/version/indexes, durable rows, codecs, the root barrel, or manifests. Make the new store contract tests green, including closed/error behavior already supplied by existing read wrappers if touched.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/store/src/event-read-model.ts",
         "packages/store/src/decision-ledger.ts",
         "packages/store/src/sqlite-event-store.ts",
         "packages/store/src/event-read-model-contract.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/store/src/event-read-model.ts",
+        "packages/store/src/decision-ledger.ts",
+        "packages/store/src/sqlite-event-store.ts",
+        "packages/store/src/event-read-model-contract.test.ts"
+      ],
+      "note": "Implemented one-snapshot `readEventHorizon()` with cached project-binding validation and exact TEXT MAX(global_position) query. Empty `\"0\"` maps to 0n; nonzero values use requireStoredPositiveBigIntText. Forwarded exact () => bigint through DecisionLedgerCore/frozen facade and SqliteEventStore. Added closed-handle STORE_CLOSED assertion. Fresh GREEN: focused horizon test 1 passed/23 skipped exit 0; full event-read-model-contract 24/24 exit 0; `pnpm --filter @moe/store typecheck` exit 0. Production line counts: event-read-model 109, decision-ledger 151, sqlite-event-store 372 (<400).",
+      "startedAt": "2026-08-15T23:33:24.081Z",
+      "completedAt": "2026-08-15T23:36:05.028Z"
     },
     {
       "stepId": "step-3",
       "description": "VERIFY THE CROSS-PACKAGE EDGE, THEN IMPLEMENT THE FINITE DAEMON SCAN. Before consuming the new member, record all three required edge facts: (a) `apps/daemon/package.json` has `@moe/store` in dependencies, (b) the `apps/daemon` importer in `pnpm-lock.yaml` links `../../packages/store`, and (c) in one trap-cleaned command create a temporary `.ts` probe under `apps/daemon/src` that imports `SqliteEventStore` from the BARE specifier `@moe/store`, typechecks `const horizon: bigint = store.readEventHorizon()`, runs `pnpm --filter @moe/daemon typecheck` with exit 0, and deletes the probe even on failure; no probe may remain. If any edge fact is absent, stop/report blocked rather than deep-relative import or silently edit an unowned manifest/lockfile. Add `readEventHorizon(): bigint` to `FoundationBindingStore`. In `scanForEffect`, read/validate H exactly once; H=0n is the finite empty result. While cursor<H request at most `min(SCAN_PAGE_SIZE, H-cursor)`, require every globalPosition to be exactly the next contiguous value and <=H, require nextCursor to equal the last returned position and advance, refuse a false `hasMore` before H, and on reaching H require `hasMore === false`. A horizon/page throw returns exact UNKNOWN/EVIDENCE_UNREADABLE/layer; an invalid/negative H, empty/gapped/duplicate/regressing/overshooting page, mismatched cursor, premature end, or terminal `hasMore` returns exact UNKNOWN/SCAN_INCOMPLETE/layer. Continue evaluating every activation through H so the second distinct aggregate remains exact EVIDENCE_AMBIGUOUS; never return on the first hit. Update typed fakes and make the watchdog/shape cases plus unchanged >6,400 and late-second-match tests green.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-reader.ts",
         "apps/daemon/src/activation/foundation-launch-authority.test.ts",
         "packages/store/src/sqlite-event-store.ts"
-      ]
+      ],
+      "startedAt": "2026-08-15T23:36:10.004Z"
     },
     {
       "stepId": "step-4",
@@ -94,8 +110,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-ce29ffa9",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -114,20 +130,25 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:26:53.598Z",
-  "updatedAt": "2026-08-15T23:27:01.897Z",
+  "updatedAt": "2026-08-16T00:18:38.486Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:39:27.693Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8,
+    "executedStepCount": 10,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
     "worker-83e6139a",
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "governor-a627169a",
+    "governor-1a5aca5d"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T23:25:46.405Z",
   "planningNotes": {
@@ -275,5 +296,9 @@
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
-  ]
+  ],
+  "blockedReason": "Step 3 requires the trap-cleaned bare `@moe/store` probe to run exact `pnpm --filter @moe/daemon typecheck` with exit 0 before the daemon consumes readEventHorizon. Facts (a)/(b) are present and the probe itself reached typecheck and was deleted, but the command exits 1 solely on foreign untracked `apps/daemon/src/review/verifier-receipt-ledger.test.ts`: TS2322 at lines 46 and 76 (`Record<string, unknown>` calibration missing ReviewerCalibration fields). The file is outside all eight owned paths; ownership query found no owner and shared-tree rails forbid editing/deleting it. Steps 1-2 are complete; store contract is 24/24 green and store typecheck exit 0. Resume step 3 after the foreign file is type-clean/cleared, rerun the exact probe to exit 0, then implement the finite scan. Detailed handoff appended to Serena memory task-task-d92b1b15a5b048e49671ed34990fa4a1-handoff.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-15T23:39:34.759Z"
 }

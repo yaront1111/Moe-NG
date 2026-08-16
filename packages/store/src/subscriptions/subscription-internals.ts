@@ -118,6 +118,15 @@ export function inTransaction<Result>(
   }, "the subscription write timed out");
 }
 
+/** Joins an explicit caller-owned transaction; otherwise owns and commits an immediate one. */
+export function inTransactionOrExisting<Result>(
+  database: DatabaseSync, run: () => Result,
+): Result | SubscriptionRefused {
+  return database.isTransaction
+    ? refusable(run, "the subscription write timed out")
+    : inTransaction(database, run);
+}
+
 /**
  * Every read that feeds one decision must come from ONE snapshot. Two plain SELECTs can
  * straddle a concurrent advanceGeneration and show a generation from after it beside a

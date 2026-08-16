@@ -173,8 +173,9 @@ describe("readSubscriptionPage cursor gaps", () => {
         commitEvent(harness.store, index);
       }
       setCheckpoint(harness.database, 5n);
+      const issued = paged(read(harness, 1));
       expect(acknowledge(harness.database, {
-        cursor: { generation: 1, position: "1" }, subscriberId: SUBSCRIBER,
+        cursor: issued.nextCursor!, subscriberId: SUBSCRIBER,
       }).outcome).toBe("ACKNOWLEDGED");
       harness.database.prepare("DELETE FROM domain_events WHERE global_position <= 3").run();
 
@@ -220,8 +221,9 @@ describe("readSubscriptionPage cursor gaps", () => {
         commitEvent(harness.store, index);
       }
       setCheckpoint(harness.database, 5n);
+      const issued = paged(read(harness, 5));
       expect(acknowledge(harness.database, {
-        cursor: { generation: 1, position: "5" }, subscriberId: SUBSCRIBER,
+        cursor: issued.nextCursor!, subscriberId: SUBSCRIBER,
       }).outcome).toBe("ACKNOWLEDGED");
       setCheckpoint(harness.database, 3n);
 
@@ -371,8 +373,9 @@ describe("readSubscriptionPage page semantics", () => {
         commitEvent(harness.store, index);
       }
       setCheckpoint(harness.database, 2n);
+      const issued = paged(read(harness, 2));
       expect(acknowledge(harness.database, {
-        cursor: { generation: 1, position: "2" }, subscriberId: SUBSCRIBER,
+        cursor: issued.nextCursor!, subscriberId: SUBSCRIBER,
       }).outcome).toBe("ACKNOWLEDGED");
 
       const page = paged(read(harness));

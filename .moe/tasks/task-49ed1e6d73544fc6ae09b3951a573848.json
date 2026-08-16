@@ -49,14 +49,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-15T18:32:02.514Z",
+  "updatedAt": "2026-08-15T23:30:29.729Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:11.847Z"
   },
   "contextFetchedBy": [
     "architect-db2146e3",
     "governor-7c5e6be6",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "governor-a627169a"
   ],
   "blockedReason": "The sole remaining prerequisite is still absent. Task task-5e43a9e294ef48fdab23817c8c6cfc45 is BLOCKED on the attempt/verification/closure chain, and committed HEAD has no apps/daemon/src/foundation/foundation-surface.{ts,js}; therefore this host cannot name the bounded production command/query/session/coordination surface without deep imports or fake dispatch authority. The @moe/mcp side is already satisfied and must not be rebuilt: its bare root exports createHttpMcpAdapter/HTTP port types and apps/daemon/src/mcp-http/mcp-http-host.ts already composes the real daemon authenticator. Re-promote only after 5e43 is QA-approved DONE and re-probe its bare @moe/daemon surface. Event-read advancement and HTTP session reclamation remain required eventual host tests (not single-page shape checks), but they do not clear this dependency. Do not create a custom transport or duplicate the existing HTTP host.",
   "blockedResourceId": null,

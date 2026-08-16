@@ -68,6 +68,7 @@ export {
   EVENT_STREAM_UNKNOWN_CODES,
   MAX_EVENT_PAGE_SIZE,
   type EventGapFrame,
+  type EventAcknowledgeFrame, type EventAcknowledgeRequest, type EventAcknowledgedFrame,
   type EventPageFrame,
   type EventReadFrame,
   type EventReadRequest,
@@ -81,6 +82,7 @@ export {
   type EventStreamUnknownCode,
   type SeamObserver,
   type StreamCursor,
+  type StreamAcknowledgeRequest, type StreamAcknowledgeResult, type StreamAcknowledged,
   type StreamEvent,
   type StreamGap,
   type StreamPage,
@@ -101,7 +103,7 @@ export {
   type WireUnknownValue,
   type WireValue,
 } from "./http/event-stream-contract.js";
-export { readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
+export { acknowledgeEventPage, readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
 export {
   CONTROL_ROOM_LISTENER_LAYER,
   DAEMON_ENTRY_LAYER,

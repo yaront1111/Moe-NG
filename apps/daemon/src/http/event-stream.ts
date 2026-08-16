@@ -4,6 +4,8 @@ import {
 } from "./event-stream-contract.js";
 import type {
   EventGapFrame,
+  EventAcknowledgeFrame,
+  EventAcknowledgeRequest,
   EventPageFrame,
   EventReadFrame,
   EventReadRequest,
@@ -147,6 +149,19 @@ export function readEventPage(
         subscriberId: request.subscriberId,
       },
   ), observer);
+}
+
+/** Advances only the exact durable page offer the subscriber has already received. */
+export function acknowledgeEventPage(
+  port: SubscriptionPort,
+  request: EventAcknowledgeRequest,
+): EventAcknowledgeFrame {
+  const result = port.acknowledge({
+    cursor: request.presentedCursor,
+    subscriberId: request.subscriberId,
+  });
+  if (result.outcome === "REFUSED") return forward(result);
+  return Object.freeze({ cursor: wireCursor(result.cursor), outcome: "ACKNOWLEDGED" as const });
 }
 
 /**

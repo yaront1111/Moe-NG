@@ -12,6 +12,7 @@ import type {
   GenerationBaseline, SnapshotDoc, SubscriptionAckResult, SubscriptionAdvanceResult,
   SubscriptionCursor, SubscriptionPublishResult, SubscriptionRefused, SubscriptionSeatResult,
 } from "./subscription-contracts.js";
+import { readSubscriptionPage } from "./subscription-read-page.js";
 import {
   acknowledge, advanceGeneration, publishSnapshot, registerSubscription, reseatToSnapshot,
 } from "./subscription-writes.js";
@@ -119,6 +120,16 @@ function register(harness: Harness, subscriberId = SUBSCRIBER): SubscriptionSeat
   return registerSubscription(harness.database, {
     at: AT, filter: [EVENT_TYPE], projection: PROJECTION, subscriberId,
   });
+}
+
+function issuedCursor(harness: Harness, limit: number, database = harness.database): SubscriptionCursor {
+  const result = readSubscriptionPage(harness.store, database, {
+    limit, projection: PROJECTION, subscriberId: SUBSCRIBER,
+  });
+  if (result.outcome !== "PAGE" || result.nextCursor === null) {
+    throw new Error(`expected an issued page cursor, got ${result.outcome}`);
+  }
+  return result.nextCursor;
 }
 
 describe("registerSubscription", () => {
@@ -347,10 +358,11 @@ describe("acknowledge", () => {
       const first = openHarness(path);
       try {
         seed(first);
+        for (let index = 1; index <= 9; index += 1) commitEvent(first.store, index);
         setCheckpoint(first.database, PROJECTION, 9n);
         seated(register(first));
         const result = acknowledge(first.database, {
-          cursor: { generation: 1, position: "6" }, subscriberId: SUBSCRIBER,
+          cursor: issuedCursor(first, 6), subscriberId: SUBSCRIBER,
         });
         expect(result).toEqual({ cursor: { generation: 1, position: "6" }, outcome: "ACKNOWLEDGED" });
       } finally {
@@ -365,7 +377,7 @@ describe("acknowledge", () => {
         expect(regression.code).toBe("SUBSCRIPTION_CURSOR_REGRESSION");
         expect(regression.layer).toBe("STATE");
         expect(acknowledge(second.database, {
-          cursor: { generation: 1, position: "7" }, subscriberId: SUBSCRIBER,
+          cursor: issuedCursor(second, 1), subscriberId: SUBSCRIBER,
         }).outcome).toBe("ACKNOWLEDGED");
       } finally {
         closeHarness(second);
@@ -376,15 +388,17 @@ describe("acknowledge", () => {
   it("refuses a cursor beyond the projection checkpoint", () => {
     withHarness((harness) => {
       seed(harness);
+      for (let index = 1; index <= 3; index += 1) commitEvent(harness.store, index);
       setCheckpoint(harness.database, PROJECTION, 3n);
       seated(register(harness));
+      expect(issuedCursor(harness, 3)).toEqual({ generation: 1, position: "3" });
 
       const result = refused(acknowledge(harness.database, {
         cursor: { generation: 1, position: "4" }, subscriberId: SUBSCRIBER,
       }));
 
-      expect(result.code).toBe("SUBSCRIPTION_INPUT_INVALID");
-      expect(result.layer).toBe("INPUT");
+      expect(result.code).toBe("SUBSCRIPTION_CURSOR_NOT_ISSUED");
+      expect(result.layer).toBe("STATE");
     });
   });
 
@@ -546,13 +560,14 @@ describe("write concurrency", () => {
   it("serializes two independent connections without losing an update", () => {
     withHarness((harness) => {
       seed(harness);
+      for (let index = 1; index <= 9; index += 1) commitEvent(harness.store, index);
       setCheckpoint(harness.database, PROJECTION, 9n);
       seated(register(harness));
       const other = new DatabaseSync(harness.path, { timeout: 5_000 });
 
       try {
         expect(acknowledge(harness.database, {
-          cursor: { generation: 1, position: "5" }, subscriberId: SUBSCRIBER,
+          cursor: issuedCursor(harness, 5), subscriberId: SUBSCRIBER,
         }).outcome).toBe("ACKNOWLEDGED");
 
         const loser = refused(acknowledge(other, {
@@ -562,7 +577,7 @@ describe("write concurrency", () => {
         expect(loser.code).toBe("SUBSCRIPTION_CURSOR_REGRESSION");
         expect(loser.layer).toBe("STATE");
         expect(acknowledge(other, {
-          cursor: { generation: 1, position: "7" }, subscriberId: SUBSCRIBER,
+          cursor: issuedCursor(harness, 2, other), subscriberId: SUBSCRIBER,
         }).outcome).toBe("ACKNOWLEDGED");
         expect(storedDoc(harness.database, SUBSCRIBER)).toContain("\"position\":\"7\"");
       } finally {

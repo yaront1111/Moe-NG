@@ -58,6 +58,11 @@ export interface EventPageRequest {
   readonly subscriberId: string;
 }
 
+export interface EventAcknowledgeRequest {
+  readonly presentedCursor: { readonly generation: number; readonly position: string };
+  readonly subscriberId: string;
+}
+
 export interface TransportRefused {
   readonly code: TransportRefusalCode;
   readonly delivered: false;
@@ -78,6 +83,7 @@ export interface DaemonAnswer {
 export type SendResult = DaemonAnswer | TransportRefused;
 
 export interface ControlRoomTransport {
+  acknowledgeEventPage(request: EventAcknowledgeRequest): Promise<SendResult>;
   readDocumentDossier(): Promise<SendResult>;
   readEventPage(request: EventPageRequest): Promise<SendResult>;
   sendCommand(envelope: RuntimeCommandEnvelope): Promise<SendResult>;
@@ -86,6 +92,7 @@ export interface ControlRoomTransport {
 const COMMAND_PATH = "/command";
 const DOCUMENT_DOSSIER_PATH = "/documents/dossier/read";
 const EVENT_PAGE_PATH = "/events/read";
+const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 
 function refuse(code: TransportRefusalCode): TransportRefused {
   return Object.freeze({ code, delivered: false, layer: CONTROL_ROOM_TRANSPORT_LAYER } as const);
@@ -148,6 +155,8 @@ async function post(
 
 export function createControlRoomTransport(options: TransportOptions): ControlRoomTransport {
   return Object.freeze({
+    acknowledgeEventPage: async (request: EventAcknowledgeRequest) =>
+      await post(options, EVENT_ACKNOWLEDGE_PATH, request),
     readDocumentDossier: async () =>
       await post(options, DOCUMENT_DOSSIER_PATH, {}),
     readEventPage: async (request: EventPageRequest) =>

@@ -42,9 +42,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.962Z",
-  "updatedAt": "2026-08-15T20:22:57.629Z",
+  "updatedAt": "2026-08-15T23:30:30.025Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "governor-a627169a"
   ],
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-15T18:31:05.542Z",

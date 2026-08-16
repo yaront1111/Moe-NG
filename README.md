@@ -13,7 +13,7 @@ The full agent loop runs on the durable pipeline and is live-proven end to end
 entry points, environment, and knobs):
 
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`,
-  `/events/read`, `/affordances/read`, `/documents/dossier/read`. Boots
+  `/events/read`, `/events/ack`, `/affordances/read`, `/documents/dossier/read`. Boots
   fail-closed on a fresh SQLite store, mints genesis recovery binding, and
   refuses unauthenticated, cross-origin, stale-protocol, or malformed requests
   with stable reason codes from the runtime error registry.
@@ -56,8 +56,7 @@ authoritative decision can exist.
 
 The current verifier is not an adversarial trust boundary: it runs a shell
 recipe from an agent-modifiable workspace under the wrapper's OS account. The
-live event feed also lacks durable exact-cursor acknowledgement, and the release
-inventory records source subjects rather than runnable daemon/control-room
+release inventory records source subjects rather than runnable daemon/control-room
 artifacts. These are release blockers, not operator configuration issues.
 
 ## Commands

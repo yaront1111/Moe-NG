@@ -6,11 +6,15 @@ import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
+import { collectDoctorVersionReport } from "@moe/daemon";
 import { RELEASE_COMPONENTS, RELEASE_SUPPLY_CHAIN_CODE, RELEASE_SUPPLY_CHAIN_LAYER, buildReleaseSubject, releaseRefusal } from "./release-subject.mjs";
 const exec = promisify(execFile); const PNPM_ENTRY = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
 const MAX_OUTPUT = 16 * 1024 * 1024; const TIMEOUT = 180_000;
 const RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length;
 const SBOM_IGNORES = Object.freeze(["/annotations/timestamp", "/metadata/timestamp", "/serialNumber"]); const INPUT_KEYS = Object.freeze(["evidenceRoot", "platform", "repositoryRoot", "source"]); const SBOM_ROOT_TOKEN = "<SOURCE_ROOT>";
+const DOCTOR_KEYS = Object.freeze(["componentCount", "componentInventory", "components", "declared", "observed", "pins", "reportVersion"]);
+const DOCTOR_OBSERVED_KEYS = Object.freeze(["arch", "node", "platform", "pnpm"]);
+const DOCTOR_DECLARED_KEYS = Object.freeze(["enginesNode", "enginesPnpm", "nodeVersionFile", "packageManager"]);
 const sha256 = (/** @type {string | Uint8Array} */ value) => createHash("sha256").update(value).digest("hex");
 /** @returns {string} */ function canonical(/** @type {unknown} */ value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
@@ -145,9 +149,53 @@ function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, ev
   }
 }
 const SYSTEM_PORTS = Object.freeze({ archiveSource, buildSubject: buildReleaseSubject, frozenInstall,
-  generateAudit, generateLicenses, generateSbom, observeTools, publishEvidence,
+  collectDoctorVersionReport, generateAudit, generateLicenses, generateSbom, observeTools, publishEvidence,
   readSourceFile: (/** @type {string} */ root, /** @type {string} */ path) => readFileSync(join(root, path)),
   resolveSource });
+function jsonTree(/** @type {unknown} */ value, /** @type {Set<object>} */ stack = new Set()) {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+  if (typeof value === "number") return Number.isFinite(value) && !Object.is(value, -0);
+  if (typeof value !== "object" || stack.has(value)) return false;
+  const array = Array.isArray(value); const prototype = Object.getPrototypeOf(value);
+  if (prototype !== (array ? Array.prototype : Object.prototype) && prototype !== null) return false;
+  const keys = Reflect.ownKeys(value); const expected = array ? value.length + 1 : keys.length;
+  if (keys.length !== expected || keys.some((key) => typeof key !== "string")) return false;
+  stack.add(value);
+  try {
+    if (array) {
+      if (!keys.includes("length")) return false;
+      for (let index = 0; index < value.length; index += 1) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+        if (!descriptor?.enumerable || !("value" in descriptor) || !jsonTree(descriptor.value, stack)) return false;
+      }
+      return true;
+    }
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      if (!descriptor?.enumerable || !("value" in descriptor) || !jsonTree(descriptor.value, stack)) return false;
+    }
+    return true;
+  } finally { stack.delete(value); }
+}
+function validDoctorReport(/** @type {unknown} */ value) {
+  if (!jsonTree(value) || !exactRecord(value, DOCTOR_KEYS)) return false;
+  const report = /** @type {Record<string, unknown>} */ (value);
+  if (!exactRecord(report.observed, DOCTOR_OBSERVED_KEYS)
+    || !exactRecord(report.declared, DOCTOR_DECLARED_KEYS)) return false;
+  const count = report.componentCount;
+  return report.reportVersion === "moe-doctor-version-report/1"
+    && Array.isArray(report.pins) && report.pins.length === 4
+    && Array.isArray(report.components) && Number.isSafeInteger(count)
+    && !Object.is(count, -0) && Number(count) >= 0 && count === report.components.length;
+}
+async function observeDoctor(/** @type {() => Promise<unknown>} */ collect) {
+  try {
+    const snapshot = structuredClone(await collect());
+    if (!validDoctorReport(snapshot)) return undefined;
+    canonical(snapshot);
+    return freeze(snapshot);
+  } catch { return undefined; }
+}
 function parseJson(/** @type {{exitCode: number, stdout: string}} */ result) {
   if (result.exitCode !== 0) return undefined;
   try { return JSON.parse(result.stdout); } catch { return undefined; }
@@ -205,6 +253,8 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
   const tools = await ports.observeTools({ repositoryRoot: String(input.repositoryRoot) });
   if (!tools) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   if (tools.node !== "24.16.0" || tools.pnpm !== "11.0.8" || tools.cdxgen !== "12.8.2") return releaseRefusal("TOOLCHAIN_IDENTITY_MISMATCH");
+  const doctor = await observeDoctor(ports.collectDoctorVersionReport);
+  if (!doctor) return releaseRefusal("TOOLCHAIN_OBSERVATION_FAILED");
   const { privateKey } = generateKeyPairSync("ed25519"); const roots = /** @type {string[]} */ ([]);
   const stop = () => { cleanRoots(roots); process.exit(130); };
   process.once("SIGINT", stop); process.once("SIGTERM", stop);
@@ -236,7 +286,7 @@ function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw her
     if (!firstBuild || !secondBuild || canonical(firstBuild.containers) !== canonical(secondBuild.containers)
       || firstBuild.sbomNormalizedDigest !== secondBuild.sbomNormalizedDigest) return releaseRefusal("REPRODUCIBILITY_MISMATCH");
     const evidence = freeze({ audit: { ...parsed.audit, digest: sha256(firstAudit.stdout) }, buildCount: 2, builds,
-      componentCount: RELEASE_COMPONENT_COUNT, doctor: { missingSymbol: "@moe/daemon.collectDoctorVersionReport", reason: "DOCTOR_COMPATIBILITY_UNAVAILABLE", status: "UNKNOWN" },
+      componentCount: RELEASE_COMPONENT_COUNT, doctor,
       licenses: { ...parsed.licenses, digest: sha256(firstLicenses.stdout) }, operation: "RECORDED",
       os: [{ platform: "win32", status: "PASS" }, { deferredTaskId: "task-e87a735386f643fe92c0eeff09bc4275", platform: "linux", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }, { deferredTaskId: "task-e94b2055e281489ea9e97820919f6856", platform: "darwin", reason: "SUPPORTED_OS_EVIDENCE_MISSING", status: "UNKNOWN" }],
       publicationAuthorized: false, releaseVerdict: "UNKNOWN", sbom: { ...parsed.sbom, digest: sha256(firstSbom.stdout), normalizedPointers: SBOM_IGNORES, normalizedSourceRootToken: SBOM_ROOT_TOKEN }, source, templateCount: 3, tools });

@@ -9,6 +9,12 @@ import { handleCommandRequest } from "../http/http-adapter.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import {
+  readVerifierReceipt,
+  recordVerifierReceipt,
+} from "../review/verifier-receipt-ledger.js";
+import type { VerifierAuthorityFacts } from "../review/verifier-receipt-ledger.js";
+import { verifierReceiptId } from "../review/verifier-receipt-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
 
 /**
@@ -52,6 +58,11 @@ export interface NodeVerifierConfig {
   /** Runs the spec's test in its workspace; injectable for tests. */
   readonly runTest: (brief: NodeMission) => Promise<VerifierRunCapture>;
   readonly store: SqliteEventStore;
+  /** Host-owned authority facts. Missing authority refuses before any test or write. */
+  readonly verificationAuthority: (
+    nodeRef: string,
+    brief: NodeMission,
+  ) => VerifierAuthorityFacts | null;
 }
 
 export interface VerifyReport {
@@ -64,70 +75,6 @@ const PACKAGE_ITEM_FILL = (seed: string): string =>
   (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
 
 const encoder = new TextEncoder();
-
-/**
- * The AUTHOR of the submission under review: the principal that committed the
- * latest review.submit for this subject. Read from the decision ledger so the
- * acceptance's reviewer-independence check runs against the real author — the
- * verifier reviews, it never authors.
- */
-function latestSubmitterPrincipal(
-  store: SqliteEventStore, projectId: string, subjectRef: string,
-): string | null {
-  let author: string | null = null;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, 200);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      if (decision.commandKind !== "review.submit") continue;
-      if (decision.targetAggregateId !== subjectRef) continue;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      author = decision.key.principalId;
-    }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
-  }
-  return author;
-}
-
-function acceptancePayload(
-  subjectRef: string, receiptSha256: string, round: number, author: string,
-): JsonObject {
-  return {
-    calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" },
-    packageItems: [
-      { digest: PACKAGE_ITEM_FILL("c1"), kind: "CRITERION", locator: "criterion-1" },
-      // The one REAL binding: the digest of the output the daemon captured.
-      { digest: receiptSha256, kind: "DAEMON_RECEIPT", locator: `verifier:${subjectRef}:round-${String(round)}` },
-      { digest: PACKAGE_ITEM_FILL("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
-      { digest: PACKAGE_ITEM_FILL("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
-      { digest: PACKAGE_ITEM_FILL("b1"), kind: "PLAN_HASH", locator: "plan-1" },
-      { digest: PACKAGE_ITEM_FILL("2b"), kind: "RUBRIC", locator: "rubric-1" },
-      { digest: PACKAGE_ITEM_FILL("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
-    ],
-    policy: {
-      action: "integration.accept_output", actor: "daemon-verifier", callerRiskHint: "R1",
-      decisionDigest: PACKAGE_ITEM_FILL("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-      evaluatorVersion: "daemon-verifier-1",
-      facts: [{ factId: "fact-review-risk", tier: "R1", truthClass: "DAEMON_VERIFIED" }],
-      graphNodeRevisionRefs: [], policyRevisionRef: PACKAGE_ITEM_FILL("a1"),
-      requiredFactIds: [], scope: [],
-      sliceChain: [{
-        autoApprovalOptIns: [{ action: "integration.accept_output", tier: "R1" }],
-        rules: [], sliceRef: PACKAGE_ITEM_FILL("a1"),
-      }],
-      waivers: [],
-    },
-    proof: "PASSED",
-    reviewer: {
-      authors: [author], authorshipResolved: true,
-      leaseHistory: [{ kind: "READ_ONLY", principal: "daemon-verifier", subjectRef }],
-      leaseHistoryResolved: true, reviewer: "daemon-verifier", subjectRef,
-    },
-    subjectRef,
-  };
-}
 
 function failureRoundPayload(
   subjectRef: string, round: number, capture: VerifierRunCapture,
@@ -157,9 +104,10 @@ function failureRoundPayload(
 export function createNodeVerifier(config: NodeVerifierConfig) {
   const dispatch = (
     kind: string, payload: JsonObject, target: string, expectedVersion: number,
+    commandId?: string,
   ): { code: string; ok: boolean } => {
     const envelope = {
-      commandId: `verify-${config.mintId()}`,
+      commandId: commandId ?? `verify-${config.mintId()}`,
       commandKind: kind,
       correlationId: "node-verifier",
       expectedVersion,
@@ -186,30 +134,79 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
     for (const { nodeRef } of config.nodes()) {
       const review = readReviewLedger(config.store, config.projectId, nodeRef);
       if (review.accepted !== undefined || review.unreadable || review.version === 0) continue;
-      const latestFailure = review.lineage.records
-        .filter((record) => record.finding.ruleId === VERIFIER_FAILURE_RULE)
-        .reduce((latest, record) => Math.max(latest, record.round), 0);
-      if (latestFailure === review.version) continue; // awaiting a recode, not a verify
+      const latest = review.rounds[review.rounds.length - 1];
+      if (latest === undefined || latest.routing.route !== "ACCEPT") continue;
       const brief = config.nodeMission(nodeRef);
       if (brief === null) {
         reports.push({ detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" });
         continue;
       }
-      const capture = await config.runTest(brief);
-      if (capture.exitCode === 0) {
-        const author = latestSubmitterPrincipal(config.store, config.projectId, nodeRef)
-          ?? "unknown-author";
+      const receiptId = verifierReceiptId(config.projectId, nodeRef, latest.decisionId);
+      const pending = readVerifierReceipt(config.store, config.projectId, receiptId);
+      if (pending.ok) {
+        if (pending.decision.currentVersion !== review.version) {
+          reports.push({ detail: "stale verifier receipt", nodeRef, outcome: "VERIFIER_RECEIPT_STALE" });
+          continue;
+        }
         const sent = dispatch(
           "integration.accept_output",
-          acceptancePayload(nodeRef, capture.sha256, review.version, author),
-          nodeRef, review.version,
+          { receiptId, subjectRef: nodeRef },
+          nodeRef,
+          review.version,
+          `verify-accept-${receiptId}`,
+        );
+        reports.push({ detail: sent.code, nodeRef, outcome: sent.ok ? "ACCEPTED" : sent.code });
+        continue;
+      }
+      if (pending.code === "VERIFIER_RECEIPT_INVALID") {
+        reports.push({ detail: pending.code, nodeRef, outcome: pending.code });
+        continue;
+      }
+      const authority = config.verificationAuthority(nodeRef, brief);
+      if (authority === null) {
+        reports.push({
+          detail: "host verifier authority unavailable",
+          nodeRef,
+          outcome: "VERIFICATION_AUTHORITY_UNAVAILABLE",
+        });
+        continue;
+      }
+      const capture = await config.runTest(brief);
+      if (capture.exitCode === 0) {
+        const recorded = recordVerifierReceipt(config.store, {
+          authority,
+          decidedAt: new Date().toISOString(),
+          execution: {
+            byteCount: capture.byteCount,
+            outputSha256: capture.sha256,
+            test: brief.test,
+            workspace: brief.workspace,
+          },
+          projectId: config.projectId,
+          source: {
+            aggregateVersion: latest.aggregateVersion,
+            decisionId: latest.decisionId,
+            resultSha256: latest.resultSha256,
+          },
+          subjectRef: nodeRef,
+        });
+        if (!recorded.ok) {
+          reports.push({ detail: recorded.code, nodeRef, outcome: recorded.code });
+          continue;
+        }
+        const sent = dispatch(
+          "integration.accept_output",
+          { receiptId: recorded.receipt.receiptId, subjectRef: nodeRef },
+          nodeRef,
+          recorded.decision.currentVersion,
+          `verify-accept-${recorded.receipt.receiptId}`,
         );
         reports.push({
           detail: sent.code, nodeRef,
           outcome: sent.ok ? "ACCEPTED" : sent.code,
         });
       } else {
-        const round = review.version + 1;
+        const round = review.lineage.highestRound + 1;
         const sent = dispatch(
           "review.submit", failureRoundPayload(nodeRef, round, capture),
           nodeRef, review.version,

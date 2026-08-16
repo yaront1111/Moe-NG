@@ -11,10 +11,7 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
-import {
-  acceptancePayload as reviewAcceptancePayload,
-  reviewerFacts,
-} from "../review/review-test-fixtures.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 
 /**
  * J1's command path, driven end to end through the PUBLISHED `@moe/daemon` root.
@@ -69,6 +66,10 @@ function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcom
  * Production dispatch remains package-root-only; the deep import above supplies request data.
  */
 function acceptReviewedNode(store: SqliteEventStore, nodeRef = "node-1"): void {
+  // The daemon's background verifier is an internal producer. This fixture
+  // seeds that durable fact; acceptance itself still traverses the published,
+  // authenticated package-root command path below.
+  const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
   const ports = daemon.createDaemonCommandPorts({
     clock: () => "2026-08-16T00:00:00.000Z",
     operatorPrincipalId: OPERATOR_PRINCIPAL_ID,
@@ -94,14 +95,8 @@ function acceptReviewedNode(store: SqliteEventStore, nodeRef = "node-1"): void {
       commandId: `cmd-j1-review-accept-${nodeRef}`,
       commandKind: "integration.accept_output",
       correlationId: "corr-j1-review",
-      expectedVersion: 0,
-      payload: reviewAcceptancePayload({
-        reviewer: reviewerFacts({
-          leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef: nodeRef }],
-          subjectRef: nodeRef,
-        }),
-        subjectRef: nodeRef,
-      }),
+      expectedVersion: receipt.currentVersion,
+      payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
       requestDigest: "a".repeat(64),
       schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
       sessionCredential: OPERATOR_CREDENTIAL,

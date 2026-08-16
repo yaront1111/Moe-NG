@@ -16,12 +16,12 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-27b64950",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Restoring architect-8a4a1764's original block. The 11:40Z BLOCKED->PLANNING transition was an unintended side effect of moe.unblock_worker, which flips the TASK out of BLOCKED when a WORKER is unblocked. The human was freeing a stuck worker and did not intend to re-queue this task; confirmed at 11:58Z. Mechanism found by architect-8c9073cd.\n\nTHE BLOCK STANDS ON ITS ORIGINAL EVIDENCE, which I re-verified independently on disk at 11:29Z rather than reading off the block note. What EXISTS is vocabulary: recovery.restore_quiesce and recovery.complete as a contract union (packages/core/src/project/project-contract.ts:11-12); RestoreQuiesceWitness and RecoveryCompletionWitness shapes; two reducer transitions (project-reducer.ts:35-36); shape guards in project-validation.ts; and a command builder in the generated control-room client. What does NOT exist is the controller: nothing mints an incarnation, installs a slot, or advances a key epoch. grep for mintIncarnation/slotInstall/keyEpoch returns only the recoveryIncarnationRef FIELD inside the witness shapes.\n\nA proof planned against this today would certify the shapes, which Clause 2 explicitly forbids: \"a proof that only proves the shapes is worse than no proof — it retires the gap.\" architect-8a4a1764's read was exact and does not need redoing.\n\nRequired output is a prerequisite production task for the restore controller, with the gap measured symbol by symbol. That authoring is in flight — architect-8c9073cd is routing platform and doctor-inventory prerequisites in the same family, and this one belongs beside them.\n\narchitect-f39f0c46 held this task in PLANNING when the flip was reversed; they lose no work, since the hold I posted at 11:57Z asked them to wait before spending a context load on it. Unblock when the restore controller exists and is verifiable by grep or probe, not on a status flip.",
+  "reopenReason": "Governor unblock audit 2026-08-16 00:30Z on the human's \"unblock tasks\" directive. The block's own literal exit condition — \"UNBLOCK WHEN task-cf7fb147 is DONE AND `ls apps/daemon/src/recovery/effect-inventory.ts` succeeds\" — re-measured TRUE: cf7fb147 status DONE (8 steps), effect-inventory.ts present on disk. Five of seven routed prerequisites were already DONE per the prior audit; DoD 3's coordinator has now landed. Planning may proceed; per the standing reason's own warning, the architect must re-measure rather than trust either this note or the old one.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -42,22 +42,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.013Z",
-  "updatedAt": "2026-08-15T18:33:20.570Z",
+  "updatedAt": "2026-08-16T00:29:07.212Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "architect-8a4a1764",
     "architect-f39f0c46",
     "governor-1f3b15b7",
     "governor-7c5e6be6",
-    "architect-7f301fa7"
+    "architect-7f301fa7",
+    "governor-a627169a",
+    "architect-27b64950"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T10:39:13.320Z"
   },
-  "blockedReason": "THE STANDING BLOCK REASON IS FACTUALLY STALE. Correcting it is the value of this pass — do not re-derive the 11:29Z audit.\n\nIt says \"nothing mints an incarnation, installs a slot, or advances a key epoch. grep for mintIncarnation/slotInstall/keyEpoch returns only the recoveryIncarnationRef FIELD.\" Re-measured at HEAD 9d60091: that grep was a FALSE NEGATIVE — those two names never existed here. The real surfaces are landed:\n- mint: `mintGenesisIncarnation` (recovery-incarnation-genesis.ts:104), `createRecoveryIncarnationService` (recovery-incarnation.ts:82)\n- slot: `anchorIncarnation` (recovery-incarnation-anchor.ts:153) plus hasAnchored/readAnchored/readAnchoredGenesis\n- key epoch: 145 non-test hits; readKeyEpochPointer, writeKeyEpochPointer, commitSuccessionRecord\n- controller: runRestoreQuiesce (restore-controller.ts:289), runSnapshottedRestoreQuiesce (:247)\n\nFIVE OF SEVEN prerequisites architect-f39f0c46 routed for this task are DONE: task-5606947a, task-684e6972, task-b6e3dd2a, task-8a01c025, and task-0325dcf7 via its four DONE children. DoD 1 and DoD 2 now have real production authority behind them.\n\nDoD 3 ALONE STILL BLOCKS. \"Missing inventory or artifact/key proof keeps recovery unavailable with UNKNOWN_TRUTH\" needs the inventory/quarantine coordinator, task-cf7fb147bd1c47698cbd65c9535370aa. Its embargo half IS landed (activation-ingress.ts:299 reads the embargo before the four-leg claim, code RECOVERY_RECONCILIATION_REQUIRED) and the UNKNOWN_TRUTH vocabulary exists (recovery-inventory-contract.ts:24-25) — but apps/daemon/src/recovery/effect-inventory.* does not exist, so nothing drives a real missing-inventory condition. Proving DoD 3 now means fabricating it: the mock-backed journey Clause 2 forbids.\n\nI planned task-cf7fb147 this session; its plan is approved, one worker away.\n\nUNBLOCK WHEN task-cf7fb147 is DONE AND `ls apps/daemon/src/recovery/effect-inventory.ts` succeeds. Re-measure; do not trust this reason either.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:32:59.996Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Capability audit at HEAD 9d60091; no plan, no code. CORRECTED THE STANDING BLOCK REASON, which was factually stale: its grep for mintIncarnation/slotInstall was a false negative on names that never existed in this codebase. The restore controller and all its supporting surfaces ARE landed - runRestoreQuiesce/runSnapshottedRestoreQuiesce/verifyRestoreGeneration (restore-controller.ts), mintGenesisIncarnation, createRecoveryIncarnationService, anchorIncarnation, readKeyEpochPointer/writeKeyEpochPointer/commitSuccessionRecord. Five of the seven prerequisites architect-f39f0c46 routed are DONE.",

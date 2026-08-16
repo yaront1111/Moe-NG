@@ -24,10 +24,7 @@ import {
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { readReviewLedger } from "../review/review-ledger.js";
 import { runReviewCommand } from "../review/review-services.js";
-import {
-  acceptancePayload as reviewAcceptancePayload,
-  reviewerFacts,
-} from "../review/review-test-fixtures.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import {
   GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
   GOAL_PREREQUISITE_REFUSAL_CODES,
@@ -67,19 +64,14 @@ function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): voi
 }
 
 function acceptReviewedNode(store: SqliteEventStore, nodeRef: string): void {
+  const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
     commandId: `cmd-review-accept-${nodeRef}`,
     correlationId: "corr-goal-close-review",
     decidedAt: "2026-08-10T00:00:00.000Z",
-    expectedVersion: 0,
+    expectedVersion: receipt.currentVersion,
     kind: "integration.accept_output",
-    payload: reviewAcceptancePayload({
-      reviewer: reviewerFacts({
-        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef: nodeRef }],
-        subjectRef: nodeRef,
-      }),
-      subjectRef: nodeRef,
-    }),
+    payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
     principalId: "reviewer-1",
     projectId: PROJECT_ID,
     schemaVersion: REVIEW_SCHEMA_VERSION,

@@ -246,3 +246,20 @@ it("reads an event page over the same header discipline and returns the frame ve
   if (!result.delivered) throw new Error("expected the daemon's answer to be delivered");
   expect(result.response).toEqual(frame);
 });
+
+it("acknowledges the exact presented event cursor on its own route", async () => {
+  const answer = { cursor: { generation: 3, position: "17" }, outcome: "ACKNOWLEDGED" };
+  const stub = stubFetch(jsonReply(200, answer));
+  const transport = transportWith(stub) as unknown as {
+    acknowledgeEventPage(request: unknown): Promise<unknown>;
+  };
+  const request = {
+    presentedCursor: { generation: 3, position: "17" }, subscriberId: "sub-0001",
+  };
+
+  const result = await transport.acknowledgeEventPage(request);
+
+  expect(stub.calls[0]?.url).toBe(`${ORIGIN}/events/ack`);
+  expect(JSON.parse(stub.calls[0]?.body ?? "null")).toEqual(request);
+  expect(result).toMatchObject({ delivered: true, response: answer });
+});

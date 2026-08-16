@@ -17,6 +17,7 @@ import {
   SCHEMA_OBJECT_SQL,
   SCHEMA_V3_OBJECT_SQL,
   SCHEMA_V4_OBJECT_SQL,
+  SCHEMA_V5_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
 import {
   SCHEMA_V3_MANIFEST_VERSION,
@@ -81,6 +82,7 @@ function commitOneEvent(path: string): { readonly eventId: string; readonly payl
 function rewindToV3(path: string): void {
   const database = new DatabaseSync(path);
   try {
+    database.exec("DROP TABLE subscription_pending_offers;");
     database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
     database.exec("DROP TABLE recovery_bindings;");
     database
@@ -121,16 +123,17 @@ function expectSchemaRefusal(run: () => unknown, detail: string): void {
 
 describe("SQLite schema v4 recovery binding migration", () => {
   it("installs the exact v4 manifest and keeps every v3 object", () => {
-    expect(SCHEMA_VERSION).toBe(5);
-    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/5");
+    expect(SCHEMA_VERSION).toBe(6);
+    expect(SQLITE_SCHEMA_MANIFEST_VERSION).toBe("moe-sqlite-schema/6");
     expect(SCHEMA_V4_MANIFEST_VERSION).toBe("moe-sqlite-schema/4");
     expect(SCHEMA_V3_MANIFEST_VERSION).toBe("moe-sqlite-schema/3");
     expect(Object.keys(SCHEMA_V3_OBJECT_SQL)).toHaveLength(14);
     expect(Object.keys(SCHEMA_V4_OBJECT_SQL)).toHaveLength(15);
-    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(16);
+    expect(Object.keys(SCHEMA_V5_OBJECT_SQL)).toHaveLength(16);
+    expect(Object.keys(SCHEMA_OBJECT_SQL)).toHaveLength(17);
     expect(
       Object.keys(SCHEMA_OBJECT_SQL).filter((name) => !(name in SCHEMA_V4_OBJECT_SQL)),
-    ).toEqual([EVENT_TYPE_INDEX]);
+    ).toEqual([EVENT_TYPE_INDEX, "subscription_pending_offers"]);
     for (const table of V3_TABLES) {
       expect(SCHEMA_V3_OBJECT_SQL, table).toHaveProperty(table);
       expect(SCHEMA_OBJECT_SQL, table).toHaveProperty(table);
@@ -143,16 +146,16 @@ describe("SQLite schema v4 recovery binding migration", () => {
     store.close();
     const database = new DatabaseSync(path);
     try {
-      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
+      expect(database.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
       expect(
         database
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/5" });
+      ).toEqual({ value: "moe-sqlite-schema/6" });
       expect(database.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 5);
+      validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 6);
       validateSchema(database);
     } finally {
       database.close();
@@ -168,7 +171,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       database.exec("CREATE TABLE recovery_grants (grant_id TEXT PRIMARY KEY NOT NULL) STRICT");
       expectSchemaRefusal(() => validateSchema(database), "conformance still rejects extra tables");
       expectSchemaRefusal(
-        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 5),
+        () => validateExactSchemaObjects(database, SCHEMA_OBJECT_SQL, 6),
         "exact object validation still rejects extra tables",
       );
     } finally {
@@ -231,12 +234,12 @@ describe("SQLite schema v4 recovery binding migration", () => {
 
     const after = new DatabaseSync(path);
     try {
-      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
       expect(
         after
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/5" });
+      ).toEqual({ value: "moe-sqlite-schema/6" });
       expect(after.prepare("SELECT * FROM domain_events ORDER BY global_position").all()).toEqual(
         priorEventRow,
       );
@@ -249,7 +252,7 @@ describe("SQLite schema v4 recovery binding migration", () => {
       expect(after.prepare("SELECT count(*) AS value FROM recovery_bindings").get()).toEqual({
         value: 0,
       });
-      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 5);
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 6);
       validateSchema(after);
     } finally {
       after.close();
@@ -417,6 +420,7 @@ function snapshotDurableRows(path: string): Record<string, readonly unknown[]> {
 function rewindToV4(path: string): void {
   const database = new DatabaseSync(path);
   try {
+    database.exec("DROP TABLE subscription_pending_offers;");
     database.exec(`DROP INDEX ${EVENT_TYPE_INDEX};`);
     database
       .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
@@ -515,19 +519,19 @@ describe("SQLite schema v5 event-type index migration", () => {
 
     const after = new DatabaseSync(path);
     try {
-      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 5 });
+      expect(after.prepare("PRAGMA user_version").get()).toEqual({ user_version: 6 });
       expect(
         after
           .prepare("SELECT value FROM store_metadata WHERE key = 'schema_manifest_version'")
           .get(),
-      ).toEqual({ value: "moe-sqlite-schema/5" });
+      ).toEqual({ value: "moe-sqlite-schema/6" });
       expect(
         after
           .prepare(`PRAGMA index_info(${EVENT_TYPE_INDEX})`)
           .all()
           .map((row) => String((row as { name: unknown }).name)),
       ).toEqual(["event_type", "global_position"]);
-      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 5);
+      validateExactSchemaObjects(after, SCHEMA_OBJECT_SQL, 6);
       validateSchema(after);
     } finally {
       after.close();

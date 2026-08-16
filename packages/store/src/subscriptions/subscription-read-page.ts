@@ -9,19 +9,24 @@ import type {
   SubscriptionGapCause, SubscriptionPage, SubscriptionPageRequest, SubscriptionPageResult,
 } from "./subscription-contracts.js";
 import {
-  deny, docRow, inReadSnapshot, loadSnapshot, projectionCheckpoint, refusable, requireDocText,
+  deny, docRow, inTransactionOrExisting, loadSnapshot, projectionCheckpoint, requireDocText,
   requireGeneration, requireInput, requireSubscriberId, retainedFloor,
 } from "./subscription-internals.js";
+import {
+  issuePendingOffer, loadPendingOffer,
+} from "./subscription-offers.js";
+import type { PendingSubscriptionOffer } from "./subscription-offers.js";
 
 /**
- * One bounded page of projection output, read from a durable cursor. Reads are consumption of
- * the relay's durable output — plain SELECTs on the projections and subscription tables — so
- * nothing here imports the relay or the fold. Any condition that makes incremental resumption
+ * One bounded page of projection output, issued from a durable cursor. The first read records
+ * an exact pending offer; retries replay that offer until its cursor is acknowledged. Nothing
+ * here imports the relay or the fold. Any condition that makes incremental resumption
  * unsound is reported as CURSOR_GAP with the baseline snapshot attached, never as a silently
  * repositioned cursor and never as an unbounded replay; the cursor itself is left untouched,
  * because reseatToSnapshot is the only sanctioned repositioning. Every durable read that
  * feeds the decision is taken from one snapshot, so a concurrent generation advance cannot
- * be observed half-applied. `database` and `eventSource` must address the same store.
+ * be observed half-applied. Offer lookup/issuance and cursor inspection share one write
+ * transaction. `database` and `eventSource` must address the same store.
  */
 
 export const DEFAULT_SUBSCRIPTION_PAGE_LIMIT = 100;
@@ -65,19 +70,32 @@ function clampToCheckpoint(
   });
 }
 
-function readClamped(
-  eventSource: SubscriptionEventSource, request: SubscriptionPageRequest, after: bigint,
-  checkpoint: bigint, generation: number,
-): SubscriptionPage {
+interface PageBounds {
+  readonly limit: number;
+  readonly maxDecodedBytes: number | null;
+}
+
+function boundsOf(request: SubscriptionPageRequest): PageBounds {
   const limit = requireInput("limit", () =>
     requirePageLimit(request.limit ?? DEFAULT_SUBSCRIPTION_PAGE_LIMIT));
-  if (request.maxDecodedBytes === undefined) {
-    return clampToCheckpoint(eventSource.readEventsAfter(after, limit), checkpoint, generation);
+  const maxDecodedBytes = request.maxDecodedBytes === undefined
+    ? null
+    : requireInput("maxDecodedBytes", () =>
+      requirePageDecodedByteLimit(request.maxDecodedBytes));
+  return { limit, maxDecodedBytes };
+}
+
+function readClamped(
+  eventSource: SubscriptionEventSource, bounds: PageBounds, after: bigint,
+  checkpoint: bigint, generation: number,
+): SubscriptionPage {
+  if (bounds.maxDecodedBytes === null) {
+    return clampToCheckpoint(
+      eventSource.readEventsAfter(after, bounds.limit), checkpoint, generation,
+    );
   }
-  const maxDecodedBytes = requireInput("maxDecodedBytes", () =>
-    requirePageDecodedByteLimit(request.maxDecodedBytes));
   return clampToCheckpoint(
-    eventSource.readEventsAfter(after, limit, maxDecodedBytes), checkpoint, generation,
+    eventSource.readEventsAfter(after, bounds.limit, bounds.maxDecodedBytes), checkpoint, generation,
   );
 }
 
@@ -122,19 +140,79 @@ function decide(
   return { after: position, checkpoint, generation };
 }
 
+function replay(
+  eventSource: SubscriptionEventSource, plan: ResumePlan, offer: PendingSubscriptionOffer,
+): SubscriptionPage {
+  if (offer.generation !== plan.generation || offer.from !== plan.after) {
+    return deny(
+      "SUBSCRIPTION_STATE_CORRUPT", "STATE",
+      "the pending page offer is not based on the durable subscriber cursor",
+    );
+  }
+  if (offer.checkpoint > plan.checkpoint) {
+    return deny(
+      "SUBSCRIPTION_STATE_CORRUPT", "STATE",
+      "the pending page offer is beyond the durable projection checkpoint",
+    );
+  }
+  const page = readClamped(eventSource, {
+    limit: offer.limit, maxDecodedBytes: offer.maxDecodedBytes,
+  }, offer.from, offer.checkpoint, offer.generation);
+  const issued = page.nextCursor === null ? null : parsePosition(page.nextCursor.position);
+  if (
+    issued !== offer.issued || page.events.length !== offer.eventCount
+    || page.hasMore !== offer.hasMore || page.checkpoint !== offer.checkpoint
+  ) {
+    return deny(
+      "SUBSCRIPTION_STATE_CORRUPT", "STATE",
+      "the durable ledger can no longer reproduce the pending page offer",
+    );
+  }
+  return page;
+}
+
+function issue(
+  eventSource: SubscriptionEventSource, database: DatabaseSync, subscriberId: string,
+  plan: ResumePlan, bounds: PageBounds,
+): SubscriptionPage {
+  const page = readClamped(
+    eventSource, bounds, plan.after, plan.checkpoint, plan.generation,
+  );
+  if (page.nextCursor === null) return page;
+  const issued = parsePosition(page.nextCursor.position);
+  if (issued === null || issued <= plan.after || page.events.length === 0) {
+    return deny("SUBSCRIPTION_STATE_CORRUPT", "STATE", "the issued page cursor is inconsistent");
+  }
+  issuePendingOffer(database, {
+    checkpoint: plan.checkpoint,
+    eventCount: page.events.length,
+    from: plan.after,
+    generation: plan.generation,
+    hasMore: page.hasMore,
+    issued,
+    limit: bounds.limit,
+    maxDecodedBytes: bounds.maxDecodedBytes,
+    subscriberId,
+  });
+  return page;
+}
+
 export function readSubscriptionPage(
   eventSource: SubscriptionEventSource, database: DatabaseSync, request: SubscriptionPageRequest,
 ): SubscriptionPageResult {
-  return refusable((): SubscriptionPageResult => {
+  const result = inTransactionOrExisting(database, (): SubscriptionPageResult => {
     const subscriberId = requireSubscriberId(request.subscriberId);
     const projection = requireInput("projection", () =>
       requireIdentifier(request.projection, "projection"));
-    const decision = inReadSnapshot(database, () => decide(database, subscriberId, projection));
+    const bounds = boundsOf(request);
+    const decision = decide(database, subscriberId, projection);
     if ("outcome" in decision) {
       return decision;
     }
-    return readClamped(
-      eventSource, request, decision.after, decision.checkpoint, decision.generation,
-    );
-  }, "the subscription read timed out");
+    const pending = loadPendingOffer(database, subscriberId);
+    return pending === null
+      ? issue(eventSource, database, subscriberId, decision, bounds)
+      : replay(eventSource, decision, pending);
+  });
+  return result;
 }

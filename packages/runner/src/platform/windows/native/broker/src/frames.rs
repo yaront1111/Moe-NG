@@ -21,14 +21,12 @@
 //!
 //! # THE DECLARED LENGTH IS ATTACKER INPUT
 //!
-//! A peer chooses it. So it is compared against the channel's cap BEFORE any
-//! buffer is sized from it and before a single payload byte is requested. The
-//! bug this file exists to make impossible is `Vec::with_capacity(declared)`
-//! ahead of that comparison: a four-byte header would then commit four
-//! gigabytes. There is no allocation anywhere in [`read_frame`] before the
-//! bound check, and `a_declared_length_near_u32_max_is_refused_before_the_
-//! payload_is_read` pins it by asserting the channel was read exactly to the
-//! end of the header and no further.
+//! A peer chooses it, so it is compared against the channel's cap BEFORE any
+//! buffer is sized from it and before one payload byte is requested. The bug
+//! this file exists to make impossible is `Vec::with_capacity(declared)` ahead
+//! of that comparison: a four-byte header would commit four gigabytes. Neither
+//! decoder allocates before [`validate_header`] answers, and
+//! `a_declared_length_near_u32_max_is_refused_before_the_payload_is_read` pins it.
 //!
 //! # WHY A NEW SEAM RATHER THAN `HandleCalls`
 //!
@@ -36,8 +34,17 @@
 //! no read and no write, so framing cannot go through it; contorting bytes
 //! through a handle-verification call table would be a worse duplication than a
 //! second, narrow trait. [`ByteChannel`] is that trait and nothing more.
+//!
+//! # WHY THERE ARE TWO DECODERS
+//!
+//! [`read_frame`] BLOCKS until its bytes arrive: right for a phase something
+//! else already bounds — the launch handshake — wrong for a loop that must also
+//! keep watching a child. `polling` serves that caller incrementally, through
+//! the same [`validate_header`], so neither can drift on what a header means.
 
 use crate::protocol::{ProtocolError, ProtocolReason, PROTOCOL_VERSION};
+
+pub(crate) mod polling;
 
 /// Version, opcode, and the little-endian `u32` length.
 pub const FRAME_HEADER_BYTES: usize = 6;
@@ -88,16 +95,25 @@ impl ChannelKind {
     }
 }
 
-/// The byte seam. One method per direction, each on a CALLER-OWNED buffer so
-/// nothing here can be handed an allocation sized by a peer.
+/// The byte seam: two ways to read, one to write, each on a CALLER-OWNED buffer
+/// so nothing here can be handed an allocation sized by a peer.
 ///
-/// Both may do less than asked — a short read and a partial write are what a
-/// real pipe does, not errors — and both report the operating system's numeric
-/// code and nothing else on failure.
+/// All three may do less than asked — short reads and partial writes are what a
+/// real pipe does, not errors — and all three report the operating system's
+/// numeric code and nothing else on failure.
 pub trait ByteChannel {
-    /// Reads into `buffer`, returning how many bytes were placed. `Ok(0)` means
-    /// the channel ended.
+    /// Reads into `buffer`, returning how many bytes were placed. `Ok(0)` is the
+    /// channel ending. MAY BLOCK until bytes or an end arrive.
     fn read(&mut self, buffer: &mut [u8]) -> Result<usize, u32>;
+
+    /// Reads what is ALREADY THERE, without waiting. `Pending` is nothing
+    /// readable on a channel that is STILL OPEN — not an end of stream and not a
+    /// refusal; `Ready(0)` is the channel really ending; `Ready(n)` is exactly
+    /// `n` bytes consumed, never more than `buffer.len()`. REQUIRED WITH NO
+    /// DEFAULT: `Ready` would let a future channel silently block a caller that
+    /// promised not to wait, `Pending` would silently disable every instruction.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<core::task::Poll<usize>, u32>;
+
     /// Writes from `bytes`, returning how many were accepted.
     fn write(&mut self, bytes: &[u8]) -> Result<usize, u32>;
 }
@@ -122,19 +138,16 @@ impl RawFrame {
     }
 }
 
-/// Reads exactly one frame, or refuses.
+/// Judges six header bytes: version FIRST, then the declared length against the
+/// channel's cap. The length comes back a `usize` only because this function has
+/// PROVED it inside a compile-time cap.
 ///
-/// Order is the contract: header, then VERSION, then the bound check, then and
-/// only then the payload. A wrong-version frame is refused before its length or
-/// its opcode is looked at, so a future re-layout of this protocol reports a
-/// version mismatch rather than passing for garbage.
-pub fn read_frame<C: ByteChannel>(
-    channel: &mut C,
+/// THE ONE PLACE EITHER DECODER MAY DECIDE WHAT A HEADER MEANS. A second copy of
+/// that order would let them drift, with both suites green.
+pub(crate) fn validate_header(
+    head: &[u8; FRAME_HEADER_BYTES],
     kind: ChannelKind,
-) -> Result<RawFrame, ProtocolError> {
-    let mut head = [0u8; FRAME_HEADER_BYTES];
-    fill(channel, &mut head)?;
-
+) -> Result<(u8, usize), ProtocolError> {
     if head[0] != PROTOCOL_VERSION {
         return Err(ProtocolError::refused(ProtocolReason::VersionMismatch));
     }
@@ -145,13 +158,25 @@ pub fn read_frame<C: ByteChannel>(
     if u64::from(declared) > kind.max_payload() as u64 {
         return Err(ProtocolError::refused(ProtocolReason::LengthOverLimit));
     }
+    Ok((head[1], declared as usize))
+}
+
+/// Reads exactly one frame, or refuses. BLOCKS until the bytes arrive; the
+/// header is judged by [`validate_header`] before a payload byte is requested.
+pub fn read_frame<C: ByteChannel>(
+    channel: &mut C,
+    kind: ChannelKind,
+) -> Result<RawFrame, ProtocolError> {
+    let mut head = [0u8; FRAME_HEADER_BYTES];
+    fill(channel, &mut head)?;
+    let (opcode, declared) = validate_header(&head, kind)?;
 
     // FIRST ALLOCATION IN THIS FUNCTION, and it is reached only once `declared`
     // has been proved no larger than a compile-time constant.
-    let mut payload = vec![0u8; declared as usize];
+    let mut payload = vec![0u8; declared];
     fill(channel, &mut payload)?;
 
-    Ok(RawFrame { opcode: head[1], payload })
+    Ok(RawFrame { opcode, payload })
 }
 
 /// Writes one frame, or refuses without emitting a byte.
@@ -198,6 +223,7 @@ fn fill<C: ByteChannel>(channel: &mut C, buffer: &mut [u8]) -> Result<(), Protoc
         // hostile input. Refused rather than clamped, because clamping would
         // silently drop bytes, and checked rather than trusted, because
         // `filled + got` would otherwise index past the buffer and panic.
+        // `polling` judges the same claim the same way.
         if got > remaining {
             return Err(ProtocolError::channel(0));
         }

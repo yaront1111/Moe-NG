@@ -23,7 +23,7 @@ On Linux, Claude's subprocess credential scrub also requires `bubblewrap`
 subprocess isolation as a startup prerequisite, not as a reason to disable the
 scrub guard.
 
-## Daemon (HTTP: /command, /events/read, /affordances/read)
+## Daemon (HTTP: /command, /events/read, /events/ack, /affordances/read)
 
 ```
 node src/daemon-main.ts --dependencies=src/daemon-store-dependencies.ts \
@@ -49,7 +49,21 @@ curl -X POST http://127.0.0.1:39123/events/read \
 
 `subscriberId` must name a durable subscription; the store provider registers
 `control-room-1` on `moe.board` at startup, any other id is refused with
-`SUBSCRIPTION_NOT_REGISTERED`. The protocol-version value is
+`SUBSCRIPTION_NOT_REGISTERED`. A page with `nextCursor` remains the subscriber's
+durable pending offer until the client presents that exact cursor to `/events/ack`:
+
+```
+curl -X POST http://127.0.0.1:39123/events/ack \
+  -H "content-type: application/json" \
+  -H "origin: http://127.0.0.1:39123" \
+  -H "x-moe-csrf: <dev-token>" \
+  -H "x-moe-session-credential: $MOE_DAEMON_CREDENTIAL" \
+  -H "x-moe-protocol-version: moe-runtime-command/1+moe-runtime-query/1+moe-runtime-error-registry/1" \
+  -d '{"presentedCursor":{"generation":1,"position":"42"},"subscriberId":"control-room-1"}'
+```
+
+A lost read response or reopen replays the pending offer; forged, skipped, or
+already-consumed cursors refuse with `SUBSCRIPTION_CURSOR_NOT_ISSUED`. The protocol-version value is
 `WIRE_PROTOCOL_VERSION` from `apps/daemon/src/http/http-contract.ts`.
 Authentication runs before compatibility or body decoding. `/affordances/read`
 takes `{}` or `{"projectId":"<the bound project>"}` and answers the same

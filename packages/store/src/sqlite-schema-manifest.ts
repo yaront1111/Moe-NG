@@ -1,4 +1,6 @@
-import { MAX_BLOB_BYTES } from "./store-contracts.js";
+import {
+  MAX_BLOB_BYTES, MAX_PAGE_DECODED_BYTES, MAX_PAGE_SIZE,
+} from "./store-contracts.js";
 import { SCHEMA_V4_RECOVERY_OBJECT_SQL } from "./sqlite-schema-recovery-manifest.js";
 
 export const SCHEMA_V1_OBJECT_SQL = Object.freeze({
@@ -241,10 +243,46 @@ export const SCHEMA_V4_OBJECT_SQL = Object.freeze({
 });
 
 /** v5 is v4 plus one composite index; no v4 object is redefined. */
-export const SCHEMA_OBJECT_SQL = Object.freeze({
+export const SCHEMA_V5_OBJECT_SQL = Object.freeze({
   ...SCHEMA_V4_OBJECT_SQL,
   domain_events_event_type_position: `
     CREATE INDEX domain_events_event_type_position
       ON domain_events(event_type, global_position)
+  `,
+});
+
+/** v6 adds the exact, replayable page offer held for each subscriber until acknowledgement. */
+export const SCHEMA_OBJECT_SQL = Object.freeze({
+  ...SCHEMA_V5_OBJECT_SQL,
+  subscription_pending_offers: `
+    CREATE TABLE subscription_pending_offers (
+      subscriber_id TEXT PRIMARY KEY NOT NULL,
+      generation INTEGER NOT NULL CHECK (
+        generation > 0 AND generation <= 9007199254740991
+      ),
+      from_position TEXT NOT NULL CHECK (
+        length(from_position) BETWEEN 1 AND 19 AND from_position NOT GLOB '*[^0-9]*'
+      ),
+      issued_position TEXT NOT NULL CHECK (
+        length(issued_position) BETWEEN 1 AND 19 AND issued_position NOT GLOB '*[^0-9]*'
+      ),
+      checkpoint TEXT NOT NULL CHECK (
+        length(checkpoint) BETWEEN 1 AND 19 AND checkpoint NOT GLOB '*[^0-9]*'
+      ),
+      page_limit INTEGER NOT NULL CHECK (page_limit >= 1 AND page_limit <= ${MAX_PAGE_SIZE}),
+      max_decoded_bytes INTEGER CHECK (
+        max_decoded_bytes IS NULL
+        OR (max_decoded_bytes >= 1 AND max_decoded_bytes <= ${MAX_PAGE_DECODED_BYTES})
+      ),
+      event_count INTEGER NOT NULL CHECK (event_count >= 1 AND event_count <= ${MAX_PAGE_SIZE}),
+      has_more INTEGER NOT NULL CHECK (has_more IN (0, 1)),
+      offer_digest TEXT NOT NULL CHECK (
+        length(offer_digest) = 64 AND offer_digest NOT GLOB '*[^0-9a-f]*'
+      ),
+      FOREIGN KEY (subscriber_id)
+        REFERENCES event_subscriptions(subscriber_id) ON DELETE CASCADE,
+      FOREIGN KEY (generation)
+        REFERENCES cursor_generations(generation) ON DELETE RESTRICT
+    ) STRICT
   `,
 });

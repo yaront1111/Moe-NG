@@ -156,6 +156,36 @@ it("transports a committed read whose payload EQUALS the in-process handler's", 
   });
 });
 
+it("presents and exactly acknowledges an issued page before the next read advances", async () => {
+  await withDaemon(async (_daemon, transport) => {
+    const first = await transport.readEventPage(READ_REQUEST);
+    if (!first.delivered || typeof first.response !== "object" || first.response === null) {
+      throw new Error("expected the first page to be delivered");
+    }
+    const cursor = (first.response as { nextCursor?: unknown }).nextCursor;
+    if (typeof cursor !== "object" || cursor === null) throw new Error("expected an issued cursor");
+
+    const acknowledged = await transport.acknowledgeEventPage({
+      presentedCursor: cursor as { generation: number; position: string },
+      subscriberId: READ_REQUEST.subscriberId,
+    });
+    expect(acknowledged).toMatchObject({
+      delivered: true,
+      response: { cursor, outcome: "ACKNOWLEDGED" },
+      status: 200,
+    });
+
+    const stale = await transport.acknowledgeEventPage({
+      presentedCursor: cursor as { generation: number; position: string },
+      subscriberId: READ_REQUEST.subscriberId,
+    });
+    expect(stale).toMatchObject({
+      delivered: true,
+      response: { code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", layer: "STATE", outcome: "REFUSED" },
+    });
+  });
+});
+
 /** Always the GENERATED builder's envelope, so no hand-rolled shape reaches the daemon. */
 function commandEnvelope(id: string): CommandEnvelope {
   const built = gatedSurface().commands["goal.create"](

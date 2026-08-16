@@ -17,13 +17,75 @@
     "Preserve distribution signature/manifest authority, the canonical inventory, releaseVerdict UNKNOWN, and publicationAuthorized false; this task binds observation evidence only.",
     "Use TDD; every failure test asserts exact code, reason, and refusing layer, generated cases pin a positive literal count, and stage/commit only the two explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Read-only preflight and cross-package edge proof before edits. Re-read current HEAD and exact status for the two owned paths; stop/report a collision if either is dirty, and preserve the unrelated foreign daemon-root WIP. Confirm both prerequisite task statuses, the committed root `dependencies['@moe/daemon']='workspace:*'`, root lock importer link `link:apps/daemon`, installed workspace symlink, bare-root function/type exports, and the exact zero-argument `Promise<DoctorVersionReport>` signature. In one trap-cleaned command create a temporary root `.mts` probe that imports function+type from bare `@moe/daemon`, asserts empty Parameters and Promise return, runs strict NodeNext TypeScript under pinned Node 24.16, deletes the probe, then run a plain Node 24 `--experimental-strip-types` bare import that CALLS the collector and asserts v1 report, positive executed component sweep, and frozen result. No deep import or leftover probe is acceptable. Record pre-edit outputs/failing paths for repo-wide `pnpm typecheck` and `pnpm test` separately for the required later path-attributed comparison, plus the focused 60-test baseline and current 264-line production size.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Preflight completed at HEAD 4d0a49fb8791b458565863377d7002a48a1a9bd8 with both owned paths clean (hashes supply-chain 2339a207…; test e603b735…). Both prerequisites are DONE. Root manifest has @moe/daemon workspace:*, root lock importer links apps/daemon, installed symlink resolves to apps/daemon, root exports runtime collectDoctorVersionReport and type DoctorVersionReport, and the collector signature is exactly zero-arg Promise<DoctorVersionReport>. Trap-cleaned strict NodeNext probe (ES2024/types node) imported function+type from bare @moe/daemon and exited 0; no probe remained. Plain pinned Node 24.16 bare import called the real collector and returned v1, 18 components, frozen=true, exit 0. Focused baseline: typecheck:release exit 0; Node release suite 60/60 pass. Production source is 264 lines. Repo-wide baseline: typecheck exit 1 only at foreign apps/control-room/src/live/live-event-feed.test.ts:202 TS2349; pnpm test exit 1 with 18 foreign failed files, 43 failed/6516 passed/3 skipped, none under the two owned paths (full failing-path set recorded for final delta comparison). No production/test bytes changed.",
+      "startedAt": "2026-08-15T23:43:47.385Z",
+      "completedAt": "2026-08-15T23:51:08.136Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED in `release-supply-chain.test.mjs`. Add one deterministic, complete v1 DoctorVersionReport fixture containing known values plus multiple upstream UNKNOWN arms from both `DOCTOR_VERSION` and `DOCTOR_VERSION_HOST`; make `fakePorts` expose a zero-argument `collectDoctorVersionReport` spy returning a fresh mutable copy. Replace the old placeholder assertion with exact assertions that the port was called once with `[]`, evidence deep-equals every reportVersion/observed/declared/pin/components/componentCount/componentInventory byte, all nested UNKNOWN code+layer pairs survive, the evidence copy is recursively frozen, the doctor count is not substituted for release componentCount 6, and releaseVerdict/publicationAuthorized remain UNKNOWN/false. Add a named production-surface case that omits only the fake doctor port so merged `SYSTEM_PORTS` invokes the real bare-root collector; assert executing-process node/platform, v1, four pins, componentCount equals a positive components length, frozen evidence, and no `missingSymbol`. Add an exact three-case generated matrix (assert literal cardinality 3) for rejected/throwing collector, structured release refusal, and invalid/incompatible report envelope; every case pins `RELEASE_SUPPLY_CHAIN_REFUSED`, reason `TOOLCHAIN_OBSERVATION_FAILED`, `refusedBy: RELEASE_SUPPLY_CHAIN`, exactly one doctor call, and zero archive/build/publication calls. Add the doctor-failure site to the existing generated refusal-site sweep, updating its literal site count to 10 while pinning nine distinct reasons (the tool and doctor observation sites intentionally share one reason). Run the focused Node file/name patterns and require nonzero named tests to fail on the still-present placeholder/missing call—not a setup, import, or zero-test failure.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "modifiedFiles": [
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "TDD RED landed in the owned integration test only. Added a complete builder-faithful v1 doctor fixture with known values plus DOCTOR_VERSION_HOST and DOCTOR_VERSION UNKNOWN arms, default zero-arg spy, exact whole-report/call/frozen/count/authority assertions, a real bare-root system-port journey, a literal 3-case doctor failure matrix asserting RELEASE_SUPPLY_CHAIN_REFUSED + TOOLCHAIN_OBSERVATION_FAILED + RELEASE_SUPPLY_CHAIN and zero archive/build/publish calls, and the 10-site/9-reason refusal sweep pin. Focused name-pattern run executed exactly 6 named tests and failed all 6 for the expected missing production call/placeholder reasons: call args were [] instead of [[]], real reportVersion was undefined, and all four failure paths incorrectly returned ok:true. STEP2_RED_EXIT=1; no setup/import/zero-test failure.",
+      "startedAt": "2026-08-15T23:51:11.898Z",
+      "completedAt": "2026-08-15T23:54:38.955Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Minimum production composition in `supply-chain.mjs`. Import only runtime `collectDoctorVersionReport` from bare `@moe/daemon` (and use a JSDoc bare-root `DoctorVersionReport` type if needed), then add the function unchanged to frozen `SYSTEM_PORTS`. Add a small snapshot boundary that awaits its supplied zero-argument capability once inside a narrow try/catch, `structuredClone`s before freezing, and accepts only a canonicalisable v1 envelope with exact top-level keys, exact observed/declared key groups, four pins, an array of components, and safe nonnegative componentCount exactly equal to components.length; any throw, rejected promise, non-record/refusal, version drift, malformed cardinality, or clone/canonicalisation failure returns no observation. Do not validate/recompute nested ObservedValue, pin, or component semantics: carry them exactly. In `runReleaseSupplyChain`, invoke this boundary immediately after successful existing tool identity checks and before key generation/temp roots/signals; if absent, return existing `releaseRefusal('TOOLCHAIN_OBSERVATION_FAILED')`. Replace only the obsolete placeholder with the frozen snapshot in evidence. Preserve `RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length`, both six-entry/stale-five guards, all distribution/SBOM authority, OS evidence, main's reportCount 3, releaseVerdict UNKNOWN, and publicationAuthorized false. Run the focused Node suite to green and `pnpm typecheck:release` once; no package/lock/daemon edit is allowed.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Minimum production composition is green. supply-chain.mjs now imports collectDoctorVersionReport only from bare @moe/daemon, installs the unchanged zero-arg function in frozen SYSTEM_PORTS, calls it exactly once after tool identity and before key/root/signal/publication work, clones and validates a canonical v1 JSON-tree snapshot (exact top/observed/declared keys, 4 dense pins, dense components, safe nonnegative exact count), recursively freezes it, and maps every throw/rejection/refusal/version/cardinality/canonicalisation failure to TOOLCHAIN_OBSERVATION_FAILED before side effects. Nested doctor values/codes/layers are carried unchanged; the old placeholder alone was replaced. RELEASE_COMPONENT_COUNT remains derived and authority stays UNKNOWN/false. Fresh focused named tests: 6/6 pass. Fresh full Node release file: 65/65 pass, exit 0. Fresh typecheck:release exit 0. Production is 314 lines (<400); git diff --check clean.",
+      "startedAt": "2026-08-15T23:54:43.111Z",
+      "completedAt": "2026-08-15T23:59:34.515Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "Adversarial review and mutation resistance after implementation. Review duplicate/concurrent calls, null/array/proxy/accessor/extra-key/huge/noncanonical reports, mismatched component count, nested UNKNOWN preservation, retained-reference mutation, collector throw before any root/publish, and confirm no input-selected host/version, deep import, second inventory, doctor-derived release verdict, or publication authorization exists. Preserve the real system-port test as the production capability proof, not a fake-only journey. With an out-of-repository backup, pre-mutation SHA-256, EXIT restoration trap, and exactly-one replacement guards: Drill A replaces the real doctor observation with the former missingSymbol/DOCTOR_COMPATIBILITY_UNAVAILABLE placeholder; the named real-port and preservation tests must execute and fail on report fields/call count. Restore and verify the hash. Drill B changes/bypasses the doctor failure mapping so a throw/refusal reaches `EVIDENCE_WRITE_INTERRUPTED` or publication; the generated doctor-failure tests must execute and fail on exact reason/refusedBy or zero-publication assertions. Restore byte-exact, rerun focused tests green, run `git diff --check`, confirm only the two owned paths changed, production remains under 400 lines, and no probe/backup/transcript/evidence file remains. If review changes code, repeat this step.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Adversarial review plus four mutation drills, all restored byte-exact. Review findings: observeDoctor catches throw/rejection next to the call so a failure cannot be relabelled EVIDENCE_WRITE_INTERRUPTED; jsonTree still carries weight after structuredClone (rejects Date/Map/Set/RegExp/typed-array/cyclic/-0/non-finite clones, which structuredClone preserves); the early canonical(snapshot) is deliberate, mapping a canonicalisation failure to TOOLCHAIN_OBSERVATION_FAILED instead of the outer evidence catch; null/array/extra-key/mismatched-count reports are rejected by exactRecord plus the componentCount===components.length check; the port is zero-argument so no caller-selected host identity is possible; import is the bare @moe/daemon root; release componentCount still derives from RELEASE_COMPONENTS and is never substituted by doctor componentCount; releaseVerdict UNKNOWN, publicationAuthorized false, reportCount 3 untouched. One gap found and closed: nothing proved the recorded report was a snapshot rather than an alias of the collector's object, so a new named test \"snapshots the doctor report instead of aliasing the collector's object\" now asserts the retained object is NOT frozen after the run and that post-run mutation of componentCount/observed/pins/components leaves evidence deep-equal to the fixture. Drills (out-of-repo backup at /tmp, EXIT restore trap, exactly-one-replacement guard, SHA-256 compare): A replaced the doctor observation with the former missingSymbol/DOCTOR_COMPATIBILITY_UNAVAILABLE placeholder - 7 tests executed, 7 red, including the real bare-root port test (reportVersion undefined vs moe-doctor-version-report/1), the preservation test (call list [] vs [[]], placeholder vs full report) and all four doctor-failure cases. B bypassed the fail-closed guard so a failed observation reaches publication - 4 red on result.ok true, 3 success tests stayed green. D remapped the refusal to EVIDENCE_WRITE_INTERRUPTED - 4 red exactly on reason 'EVIDENCE_WRITE_INTERRUPTED' vs 'TOOLCHAIN_OBSERVATION_FAILED'. C removed structuredClone - only the new aliasing test red (Object.isFrozen(retained) true vs false), proving it non-vacuous and precisely targeted. Every drill printed RESTORE_BYTE_EXACT=yes against pre-mutation SHA 2b0901b5085d248476660cea43d2fcecac74e781c83281b22f9a1a6151a26021. Post-restore focused run: node --test tests/integration/release-supply-chain.test.mjs exit 0, tests 66 / pass 66 / fail 0. Production is 314 lines (under the 400 split limit); git diff --check exit 0; owned diff is +214/-10 across exactly the two owned paths; all other dirty/untracked entries are foreign; no probe, backup or evidence file remains in the repo (scratch lives in Windows Temp and WSL /tmp; dist/ is gitignored). Environment note: node runtime legs run in WSL Ubuntu-24.04 with a rebuilt /tmp/moe-node2416-bin pnpm shim, but node_modules currently carries only @typescript/typescript-win32-x64, so tsc runs on Windows; Windows pnpm typecheck:release exits 0 and the Windows bare @moe/daemon import now resolves.",
+      "startedAt": "2026-08-15T23:59:39.395Z",
+      "completedAt": "2026-08-16T00:28:41.656Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Single final verification and delivery step. First rerun the same repo-wide `pnpm typecheck` and `pnpm test` legs separately, compare their failing-path sets with the pre-edit baseline, intersect the HEAD-minus-baseline delta with the two owned paths, stop for any owned red, and quote foreign red verbatim without touching it. Then run this exact fresh foreground completion command with no pipe/status masking: `export PATH=/home/sysadmin/.npm/_npx/32bdabe214bd28ec/node_modules/node/bin:/tmp/moe-node2416-bin:$PATH; export pnpm_config_verify_deps_before_run=; pnpm typecheck:release && pnpm test:integration`. Require exit 0 and inspect output for a nonzero Vitest `Test Files`/`Tests` count and a nonzero Node `tests`/`pass` count; no count, zero tests, or only a final-command status is not evidence. Record command/exit/output tail, exact six-component assertions, and production line count. Verify diff/status is restricted to the two owned paths; before commit unstage any foreign entry, commit only by explicit pathspec `git commit -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs`, and confirm `git show --stat` contains only them. If a foreign whole-tree commit captured the bytes, do not amend/reset/recommit; report the base-ref owned-path diff per the global rail.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "startedAt": "2026-08-16T00:28:45.761Z"
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-e47be2a7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human directed additional unblocking. Both literal hard dependencies are now DONE (task-f6ef0a45 and task-c690a7a0), the root bare @moe/daemon manifest/lock edge is committed and QA-approved, and the release owned paths are no longer held by the completed cleanup task. Re-plan against current bytes; preserve all UNKNOWN/publication fail-closed rails.",
   "createdBy": "WORKER",
   "parentTaskId": "task-ec70ba5b904848b496b9bf5d2c2be92f",
   "priority": "HIGH",
@@ -31,18 +93,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:11:50.144Z",
-  "updatedAt": "2026-08-15T22:39:30.658Z",
+  "updatedAt": "2026-08-16T00:28:45.761Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T21:25:32.793Z"
+    "firstClaimAt": "2026-08-15T21:25:32.793Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
-    "governor-a627169a"
+    "governor-a627169a",
+    "worker-83e6139a",
+    "worker-e47be2a7"
   ],
-  "blockedReason": "Prerequisite and explicit task rail are unsatisfied at committed HEAD ee284416bfd8d6f4672afb039f455b150d363dbb. task-f6ef0a45f52c45c7bb54f250170aa223 is DONE, but task-c690a7a0c5a14daaa088acbc32e26815 remains BLOCKED and the required root consumer edge is genuinely absent: `git show HEAD:package.json` has no dependencies object and no @moe/daemon; the root importer in `git show HEAD:pnpm-lock.yaml` contains no @moe/daemon; an in-root `.mts` probe importing `{ collectDoctorVersionReport }` from the bare `@moe/daemon` specifier fails TS2307 with `./node_modules/.bin/tsc` exit 1 and is deleted; plain Node import exits 1 with ERR_MODULE_NOT_FOUND. The public daemon root export itself exists at apps/daemon/src/index.ts:174-175, so the missing piece is exactly the manifest/lock resolution edge owned by c690, not this task. Current working tree also has foreign pnpm-lock.yaml WIP, while b785's two owned paths are clean. Per the global cross-package rail and this task's 'do not start until c690 DONE' rail, submitting a two-file plan now would either invent a deep-relative escape hatch or consume an unresolvable dependency. Re-promote b785 only after c690 is DONE and committed package.json + root lock importer + both bare-root probes pass.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T21:27:55.475Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Loaded planning/exploration/systematic-debugging guidance; remeasured committed daemon export, root manifest/lock edge and compiled/plain-Node probes; reported the valid block; recorded Serena handoff memory with exact evidence and future plan shape.",
@@ -53,5 +120,35 @@
       "releasedBy": "architect-09b5f32a",
       "reason": "Explicit architect handoff after prerequisite-block measurement; user requested planning the newly promoted activation aggregate-id task."
     }
-  ]
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-15T23:43:24.126Z",
+  "planningNotes": {
+    "approachesConsidered": "Chosen: import the zero-argument async collector from the bare `@moe/daemon` root, install it in the existing frozen `SYSTEM_PORTS`, call it exactly once after the existing tool-version gate but before key generation/build roots/publication, snapshot the v1 report into release-owned bytes, and record that frozen snapshot without interpreting nested doctor truth. Rejected: keeping or reshaping the placeholder (proves no host fact), a deep relative daemon import (bypasses the committed workspace edge), caller-supplied host/version fields (forges observation), rebuilding doctor collection/comparison inside the release script (duplicates authority), a direct unseamed call (makes throw/refusal paths untestable), flattening coded nested UNKNOWNs (loses refusing layer), and using doctor evidence to authorize publication (outside scope and an UNKNOWN upgrade).",
+    "codebaseInsights": "Fresh committed measurement at HEAD `4d0a49fb8791b458565863377d7002a48a1a9bd8`: both owned paths, root `package.json`, and `pnpm-lock.yaml` were clean. `git show HEAD:package.json` has root dependency `@moe/daemon: workspace:*`; root lock importer `.` has specifier `workspace:*`, version `link:apps/daemon`; `node_modules/@moe/daemon` links to `apps/daemon`. `apps/daemon/src/index.ts:180-181` exports runtime `collectDoctorVersionReport` and type `DoctorVersionReport`; `doctor-version.node.ts:164` is exactly `collectDoctorVersionReport(): Promise<DoctorVersionReport>`. A trap-deleted strict in-root `.mts` probe imported the function and type from bare `@moe/daemon` and typechecked exit 0. A pinned Linux Node 24.16 plain-Node bare import called it exit 0 and returned `{reportVersion:'moe-doctor-version-report/1', componentCount:18, frozen:true}`; no probe remained. This certifies the capability shipped by task-f6ef0a45 and dependency edge shipped by DONE task-c690a7a0c5a14daaa088acbc32e26815. `DoctorVersionReport` has exact top-level reportVersion/observed/declared/pins/components/componentCount/componentInventory; its production builder deep-freezes it, derives componentCount, and represents absence only as code+layer `ObservedValue` UNKNOWN arms. `supply-chain.mjs:239` still carries the obsolete missingSymbol placeholder; `TOOLCHAIN_OBSERVATION_FAILED` already exists in the frozen release refusal vocabulary. Existing `SYSTEM_PORTS` is merged with the test seam; evidence is recursively frozen, canonicalised, hashed, then handed to the sole `publishEvidence` call. Focused baseline under Node 24.16: `pnpm typecheck:release` exit 0 and `node --test tests/integration/release-supply-chain.test.mjs` reported 60 tests / 60 pass. The production source is a pre-existing 264 lines (above target, below the 400 split limit). A later foreign edit made `apps/daemon/src/index.ts` dirty only for event-acknowledgement exports; the committed and working doctor exports remain present. Never touch that foreign file.",
+    "risks": "The existing `injected` object is a test seam for every system port; production `main` passes none. Keep the doctor port zero-argument and never derive a report or host identity from release input. Clone before freezing so evidence owns a stable snapshot; validate only the v1 envelope/cardinalities and canonicalisability, not nested doctor semantics, then preserve every nested known/UNKNOWN value, code, layer, pin verdict, and component exactly. A rejected promise must be caught next to the doctor call or the outer evidence catch will mislabel it `EVIDENCE_WRITE_INTERRUPTED`. Call before any build root/publisher so failure has zero durable side effects. Keep release inventory `RELEASE_COMPONENT_COUNT = RELEASE_COMPONENTS.length` and literal six-case tests distinct from doctor componentCount. Leave `reportCount: 3`, releaseVerdict UNKNOWN, and publicationAuthorized false unchanged. Default `/usr/bin/node` is 18 and cannot load the TypeScript package export; gates/probes must use the pinned Node 24.16 path. Windows Node cannot traverse the WSL-created package symlink; that is an environment materialisation issue, not a source fallback—never add a deep import. Keep the 264-line production file safely below 400 without unrelated compaction.",
+    "keyFiles": [
+      "scripts/release/supply-chain.mjs",
+      "tests/integration/release-supply-chain.test.mjs",
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/recovery/doctor-version.node.ts",
+      "apps/daemon/src/recovery/doctor-version-contract.ts",
+      "scripts/release/release-subject.mjs",
+      "package.json",
+      "pnpm-lock.yaml"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-15T23:43:26.303Z",
+    "escalatedAt": "2026-08-15T23:43:26.303Z"
+  },
+  "planApprovedAt": "2026-08-15T23:43:26.199Z",
+  "workStartedAt": "2026-08-15T23:43:47.385Z"
 }

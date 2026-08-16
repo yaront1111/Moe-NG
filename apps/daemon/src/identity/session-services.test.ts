@@ -158,17 +158,25 @@ describe("session.open", () => {
     // caller could open a session whose id equals the operator principal, work
     // claimed under it would be attributed to the operator. Reserve that id.
     const store = openStore();
-    const outcome = send(
-      store,
-      envelope("session.open", 0, openPayload({ sessionId: "operator-local" }), "cmd-reserved"),
-      "operator-local",
-    );
-    expect(refusalOf(outcome)).toEqual({ code: "SESSION_ID_RESERVED", refusedBy: "DAEMON_INGRESS" });
+    for (const [sessionId, commandId] of [
+      ["operator-local", "cmd-reserved-operator"],
+      ["daemon:node-verifier", "cmd-reserved-verifier"],
+    ] as const) {
+      const outcome = send(
+        store,
+        envelope("session.open", 0, openPayload({ sessionId }), commandId),
+        ["operator-local", "daemon:node-verifier"],
+      );
+      expect(refusalOf(outcome)).toEqual({
+        code: "SESSION_ID_RESERVED",
+        refusedBy: "DAEMON_INGRESS",
+      });
+    }
     // A different session id under the same reservation still opens.
     const ok = send(
       store,
       envelope("session.open", 0, openPayload({ sessionId: "sess-agent-9" }), "cmd-ok"),
-      "operator-local",
+      ["operator-local", "daemon:node-verifier"],
     );
     expect(ok.ok).toBe(true);
   });

@@ -29,9 +29,10 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.652Z",
-  "updatedAt": "2026-08-15T18:21:20.680Z",
+  "updatedAt": "2026-08-15T23:30:29.954Z",
   "contextFetchedBy": [
-    "architect-da724bb7"
+    "architect-da724bb7",
+    "governor-a627169a"
   ],
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-15T18:21:07.776Z",

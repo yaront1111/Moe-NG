@@ -455,7 +455,30 @@ describe("claudeSpawner", () => {
     expect(killCalls).toBe(0);
   });
 
-  it("removes the config file on the error path too", async () => {
+  it("rejects a natural nonzero child exit with a stable process failure", async () => {
+    const { calls, spawn } = fakeSpawn(4321);
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const done = spawner(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    const configPath = configPathOf(child);
+
+    child.emitter.emit("close", 1, null);
+
+    await expect(done).rejects.toMatchObject({
+      code: "AGENT_PROCESS_FAILED",
+      exitCode: 1,
+      message: "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
+      reason: "EXIT_NONZERO",
+      signal: null,
+    });
+    expect(spawner.activeCount()).toBe(0);
+    expect(existsSync(configPath)).toBe(false);
+  });
+
+  it("rejects a spawn error without a pid and removes the config file", async () => {
     const { calls, spawn } = fakeSpawn();
     const spawner = claudeSpawner(MCP_ORIGIN, {
       command: "claude", log: () => undefined, spawn,
@@ -466,7 +489,14 @@ describe("claudeSpawner", () => {
     const configPath = configPathOf(child);
     expect(existsSync(configPath)).toBe(true);
     child.emitter.emit("error", new Error("ENOENT"));
-    await done;
+    await expect(done).rejects.toMatchObject({
+      code: "AGENT_PROCESS_FAILED",
+      exitCode: null,
+      message: "AGENT_PROCESS_FAILED:SPAWN_ERROR",
+      reason: "SPAWN_ERROR",
+      signal: null,
+    });
+    expect(spawner.activeCount()).toBe(0);
     expect(existsSync(configPath)).toBe(false);
   });
 
@@ -530,9 +560,9 @@ describe("claudeSpawner", () => {
     });
     const req = request();
 
-    // The refusal must arrive as a REJECTION. The wrapper calls
-    // `spawnAgent(...).catch(...)` WITHOUT await (agent-wrapper.ts:226), so a
-    // synchronous throw would escape the poll tick entirely.
+    // The refusal must arrive as a REJECTION. The wrapper observes the returned
+    // promise without awaiting inside the poll tick, so a synchronous throw
+    // would escape that tick entirely.
     let returned: Promise<void> | undefined;
     expect(() => { returned = spawner(req); }).not.toThrow();
     await expect(returned).rejects.toMatchObject({

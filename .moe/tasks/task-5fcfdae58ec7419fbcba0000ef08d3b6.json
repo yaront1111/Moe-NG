@@ -126,7 +126,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Fresh shared daemon audit at HEAD 4d0a49f shows typecheck exit 0 but the exact daemon test leg required by step 7 still exits 1 (2 files/4 tests): missing event-stream runtime bridge and active d92 horizon/watchdog failures. Task remains unassigned and its committed approval-policy bytes are clean; park instead of feeding a worker into known foreign red. Re-unblock when the raw daemon package test is green.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -134,7 +134,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:13:42.384Z",
-  "updatedAt": "2026-08-15T22:38:34.157Z",
+  "updatedAt": "2026-08-15T23:58:53.358Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:14:31.645Z",
     "plannedStepCount": 7,
@@ -145,7 +145,9 @@
     "architect-7f301fa7",
     "worker-83b3c121",
     "worker-83e6139a",
-    "governor-a627169a"
+    "governor-a627169a",
+    "architect-d9dccf21",
+    "worker-827a27f6"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -173,15 +175,26 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-15T23:58:18.397Z",
+    "escalatedAt": "2026-08-15T23:58:18.397Z"
   },
   "planApprovedAt": "2026-08-15T20:18:10.962Z",
   "workStartedAt": "2026-08-15T20:20:17.519Z",
-  "blockedReason": "Implementation is committed at ee28441 and owned focused evidence is green (planning-services 26/26; core 31 files/781 tests). Final exact daemon gates are unverifiable because shared-tree foreign WIP fails them: untracked apps/daemon/src/telemetry/provider-run-codec.test.ts imports absent ./provider-run-codec.js (task-fc658104 is WORKING 2/7, unassigned, file pre-existed this task); current typecheck also reports foreign apps/daemon/src/work/foundation-attempt-service.test.ts(490,5) never-call. Exact daemon test reports the same missing provider module plus foreign goal/recovery/dossier/bridge failures and load-test timeouts. Governor acknowledged this blocker in chat msg-7f22d719b67f4c1da0bb7c4d9d97c67c and instructed preserving foreign files and not fabricating a clean gate. I will not delete, reset, stash, or claim exit 0. Resume by re-running the plan's three exact legs after those files land/clear, then complete step 7/task.",
+  "blockedReason": "Fresh shared daemon audit at HEAD 4d0a49f shows typecheck exit 0 but the exact daemon test leg required by step 7 still exits 1 (2 files/4 tests): missing event-stream runtime bridge and active d92 horizon/watchdog failures. Task remains unassigned and its committed approval-policy bytes are clean; park instead of feeding a worker into known foreign red. Re-unblock when the raw daemon package test is green.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:19:29.276Z",
+  "blockedAt": "2026-08-15T23:58:37.486Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Prior implementation remains complete and clean at ee28441; steps 1-6 complete, step 7 only. Fresh read-only audit at HEAD 4d0a49fb8791 under Node 24.16/pnpm 11: daemon typecheck exit 0. No task byte edited in this resumption.",
+      "whatRemains": "Resume step 7 only after the raw @moe/daemon test package is green. Then rerun daemon typecheck, daemon test, and core test separately with nonzero counts, perform final adversarial review, and complete.",
+      "pitfalls": "Current daemon test executes 97 files/1984 tests but exits 1 with four foreign failures: runtime-entrypoint.test.ts missing http/event-stream-ack-contract.ts bridge; foundation-launch-authority.test.ts has two ABSENT-vs-UNKNOWN horizon cases and one moving-scan watchdog timeout. Do not edit active d92/event-stream/review/provider WIP or recommit ee28441.",
+      "openQuestions": "None in task-owned code; only whether foreign daemon WIP has settled enough for a raw package test exit 0.",
+      "releasedAt": "2026-08-15T23:58:53.356Z",
+      "releasedBy": "worker-827a27f6",
+      "reason": "Task was re-parked by governor during claim after the read-only audit confirmed foreign daemon-test red; explicit handoff to free worker slot."
+    },
     {
       "whatIsDone": "Implementation complete and committed at ee28441 by explicit pathspec. Steps 1-6 complete; step 7 is the only remaining step. Focused real daemon planning handler tests are green 26/26; core exact suite is green 31 files/781 tests. Mutation drills and adversarial fixes are recorded. Serena handoff memory task-task-5fcfdae58ec7419fbcba0000ef08d3b6-handoff exists.",
       "whatRemains": "Re-run the exact plan legs after shared-tree daemon WIP is clean: @moe/daemon typecheck, @moe/daemon test, @moe/core test, each separately with nonzero test counts; complete step 7 and complete_task. Current hard red includes untracked provider-run-codec.test.ts importing absent provider-run-codec.js from task-fc658104.",

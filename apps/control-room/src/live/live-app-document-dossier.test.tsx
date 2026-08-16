@@ -23,6 +23,11 @@ function setupWith(
     sessionCredential: "live-session",
     subscriberId: "control-room-1",
     transport: {
+      acknowledgeEventPage: async () => ({
+        code: "TRANSPORT_REQUEST_FAILED",
+        delivered: false,
+        layer: "CONTROL_ROOM_TRANSPORT",
+      }),
       readDocumentDossier,
       readEventPage: async () => ({
         code: "TRANSPORT_REQUEST_FAILED",

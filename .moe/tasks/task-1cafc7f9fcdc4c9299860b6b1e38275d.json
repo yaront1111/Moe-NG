@@ -160,7 +160,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:26:30.419Z",
-  "updatedAt": "2026-08-09T14:46:48.619Z",
+  "updatedAt": "2026-08-15T23:51:13.178Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T13:45:48.502Z",
     "plannedStepCount": 7,
@@ -172,7 +172,9 @@
   "contextFetchedBy": [
     "architect-d46fcb95",
     "worker-4e85eff4",
-    "qa-b2df68b9"
+    "qa-b2df68b9",
+    "governor-a627169a",
+    "architect-09b5f32a"
   ],
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."

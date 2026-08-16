@@ -140,7 +140,8 @@ it("resolves dossier after the two existing optional factories", async () => {
     },
     provide: fixtureDependencies,
     subscriptions: () => {
-      calls.push("subscriptions"); return { readPage: () => ({}), reseat: () => ({}) } as never;
+      calls.push("subscriptions");
+      return { acknowledge: () => ({}), readPage: () => ({}), reseat: () => ({}) } as never;
     },
   } });
   if (!started.ok) throw new Error(`daemon failed: ${started.code}`);

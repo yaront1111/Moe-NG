@@ -284,7 +284,7 @@ it("never puts a credential in a URL or a log line", async () => {
   );
 });
 
-it.each(["/events/read", "/affordances/read"])(
+it.each(["/events/read", "/events/ack", "/affordances/read"])(
   "authenticates %s before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {
@@ -304,7 +304,7 @@ it.each(["/events/read", "/affordances/read"])(
   },
 );
 
-it.each(["/events/read", "/affordances/read"])(
+it.each(["/events/read", "/events/ack", "/affordances/read"])(
   "checks %s protocol compatibility before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {
@@ -346,6 +346,55 @@ it("refuses a malformed event page body with its own code, naming this layer", a
       );
     },
     { subscriptions: streamPort() },
+  );
+});
+
+it("routes an exact event-page acknowledgement after authentication", async () => {
+  const subscriptions = {
+    ...streamPort(),
+    acknowledge: (request: unknown) => ({
+      cursor: (request as { cursor: unknown }).cursor,
+      outcome: "ACKNOWLEDGED" as const,
+    }),
+  };
+  await withListener(
+    async (listener) => {
+      const reply = await send(listener, {
+        body: JSON.stringify({
+          presentedCursor: { generation: 1, position: "2" }, subscriberId: "control-room-1",
+        }),
+        path: "/events/ack",
+      });
+      expect(reply.status).toBe(200);
+      expect(reply.body).toEqual({
+        cursor: { generation: 1, position: "2" }, outcome: "ACKNOWLEDGED",
+      });
+    },
+    { subscriptions },
+  );
+});
+
+it("refuses a malformed event acknowledgement before touching the subscription port", async () => {
+  let acknowledgements = 0;
+  const subscriptions = {
+    ...streamPort(),
+    acknowledge: () => {
+      acknowledgements += 1;
+      return { code: "unreachable", detail: "unreachable", layer: "STATE", outcome: "REFUSED" as const };
+    },
+  };
+  await withListener(
+    async (listener) => {
+      expectListenerRefusal(
+        await send(listener, {
+          body: JSON.stringify({ presentedCursor: { generation: "1", position: 2 } }),
+          path: "/events/ack",
+        }),
+        "LISTENER_STREAM_REQUEST_INVALID",
+      );
+      expect(acknowledgements).toBe(0);
+    },
+    { subscriptions },
   );
 });
 

@@ -78,6 +78,9 @@ function setupWith(row: unknown): LiveSetup {
     sessionCredential: "live-session",
     subscriberId: "control-room-1",
     transport: {
+      acknowledgeEventPage: async () => ({
+        delivered: true, response: { outcome: "ACKNOWLEDGED" }, status: 200,
+      }),
       readDocumentDossier: async () => ({
         code: "TRANSPORT_REQUEST_FAILED",
         delivered: false,
@@ -88,7 +91,10 @@ function setupWith(row: unknown): LiveSetup {
         answered = true;
         return {
           delivered: true,
-          response: { checkpoint: "9", events: [row], hasMore: false, outcome: "PAGE" },
+          response: {
+            checkpoint: "9", events: [row], hasMore: false,
+            nextCursor: { generation: 1, position: "9" }, outcome: "PAGE",
+          },
           status: 200,
         };
       },

@@ -1,5 +1,7 @@
 import type {
   SeamObserver,
+  StreamAcknowledgeResult,
+  StreamCursor,
   StreamEvent,
   StreamReadResult,
   StreamRefused,
@@ -114,11 +116,27 @@ export function streamPort(options: StreamPortOptions = {}): StreamPortDouble {
     stateDigest: STATE_DIGEST,
   });
   let cursor = 0n;
+  let issued: StreamCursor | null = null;
   let gapPending = options.gap !== undefined;
   let reads = 0;
   let reseats = 0;
 
   return {
+    acknowledge(request): StreamAcknowledgeResult {
+      if (
+        issued === null || request.cursor.generation !== issued.generation
+        || request.cursor.position !== issued.position
+      ) {
+        return Object.freeze({
+          code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", detail: "no matching page offer",
+          layer: "STATE", outcome: "REFUSED",
+        });
+      }
+      cursor = BigInt(issued.position);
+      const acknowledged = issued;
+      issued = null;
+      return Object.freeze({ cursor: acknowledged, outcome: "ACKNOWLEDGED" });
+    },
     readPage(): StreamReadResult {
       reads += 1;
       if (options.refuse === true) return STALE;
@@ -136,13 +154,14 @@ export function streamPort(options: StreamPortOptions = {}): StreamPortDouble {
           index === 0 ? Object.freeze({ ...event, committedAt: "" }) : event)
         : visible;
       const last = events.at(-1);
+      issued = last === undefined
+        ? null
+        : Object.freeze({ generation, position: String(last.globalPosition) });
       return Object.freeze({
         checkpoint: 10n,
         events: Object.freeze(events),
         hasMore: false,
-        nextCursor: last === undefined
-          ? null
-          : Object.freeze({ generation, position: String(last.globalPosition) }),
+        nextCursor: issued,
         outcome: "PAGE",
       });
     },

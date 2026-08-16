@@ -124,7 +124,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-15T22:38:34.098Z",
+  "updatedAt": "2026-08-15T23:54:34.423Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
@@ -186,7 +186,8 @@
   "contextFetchedBy": [
     "worker-682e25b5",
     "worker-83e6139a",
-    "governor-a627169a"
+    "governor-a627169a",
+    "worker-827a27f6"
   ],
   "workStartedAt": "2026-08-15T20:13:25.699Z"
 }

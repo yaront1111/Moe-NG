@@ -3,11 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import type { PolicyEvaluationInput } from "@moe/core";
+import type { ReviewPackageItemInput, ReviewerCalibration } from "@moe/review";
 
 import { REVIEW_SCHEMA_VERSION, decodeReviewRequestBytes } from "./review-contracts.js";
 import { commitAccepted, readReviewLedger } from "./review-ledger.js";
 import { runReviewCommand } from "./review-services.js";
 import type { ReviewOutcome } from "./review-ledger.js";
+import {
+  NODE_VERIFIER_PRINCIPAL_ID,
+  recordVerifierReceipt,
+} from "./verifier-receipt-ledger.js";
 
 /**
  * Request fixtures for the review-flow suites.
@@ -180,7 +186,7 @@ export function finding(
  * A complete, buildable package: the five singleton kinds plus a criterion and a daemon receipt.
  * `buildReviewPackage` refuses anything less, which is what makes "no evidence link" refusable.
  */
-export function packageItems(): readonly Record<string, unknown>[] {
+export function packageItems(): readonly ReviewPackageItemInput[] {
   return [
     { digest: hex64("c1"), kind: "CRITERION", locator: "criterion-1" },
     { digest: hex64("d1"), kind: "DAEMON_RECEIPT", locator: "receipt-1" },
@@ -239,7 +245,9 @@ export function reviewerFacts(overrides: Record<string, unknown> = {}): Record<s
   };
 }
 
-export function calibration(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+export function calibration(
+  overrides: Partial<ReviewerCalibration> = {},
+): ReviewerCalibration {
   return { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT", ...overrides };
 }
 
@@ -255,7 +263,9 @@ export const ACCEPTANCE_ACTION = "integration.accept_output";
  * gate would look enforced while nothing about it had been exercised. Measured, not assumed:
  * this exact input returns `{"decision":"ALLOW","reasonCodes":["ALLOWED_BY_POLICY"]}`.
  */
-export function policyInput(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+export function policyInput(
+  overrides: Partial<PolicyEvaluationInput> = {},
+): PolicyEvaluationInput {
   return {
     action: ACCEPTANCE_ACTION,
     actor: REVIEWER,
@@ -287,6 +297,55 @@ export function acceptancePayload(overrides: Record<string, unknown> = {}): Reco
     reviewer: reviewerFacts(),
     subjectRef: SUBJECT_REF,
     ...overrides,
+  };
+}
+
+/**
+ * Test-only daemon setup: records a real clean review round followed by the
+ * same internal verifier receipt production consumes. It returns selectors;
+ * callers still drive acceptance through whichever public path they claim.
+ */
+export function seedVerifierReceipt(
+  store: SqliteEventStore,
+  subjectRef = SUBJECT_REF,
+  projectId = PROJECT_ID,
+): Readonly<{ readonly currentVersion: number; readonly receiptId: string }> {
+  const ledger = readReviewLedger(store, projectId, subjectRef);
+  const latest = ledger.rounds[ledger.rounds.length - 1];
+  if (latest?.routing.route !== "ACCEPT") {
+    const round = ledger.lineage.highestRound + 1;
+    const clean = runReviewCommand(store, encoder.encode(JSON.stringify({
+      ...envelope(
+        "review.submit",
+        ledger.version,
+        submitPayload(round, [], { subjectRef }),
+        `cmd-verifier-source-${subjectRef}-${String(round)}`,
+      ),
+      principalId: AUTHOR,
+      projectId,
+    })));
+    if (!clean.ok) throw new Error(`clean review setup failed: ${clean.code}`);
+  }
+  const receipt = recordVerifierReceipt(store, {
+    authority: {
+      calibration: calibration(),
+      packageItems: packageItems().filter((item) => item.kind !== "DAEMON_RECEIPT"),
+      policy: policyInput({ actor: NODE_VERIFIER_PRINCIPAL_ID }),
+    },
+    decidedAt: "2026-08-16T00:00:00.000Z",
+    execution: {
+      byteCount: 2,
+      outputSha256: hex64("aa"),
+      test: "pnpm test",
+      workspace: "/fixture-workspace",
+    },
+    projectId,
+    subjectRef,
+  });
+  if (!receipt.ok) throw new Error(`verifier receipt setup failed: ${receipt.code}`);
+  return {
+    currentVersion: receipt.decision.currentVersion,
+    receiptId: receipt.receipt.receiptId,
   };
 }
 

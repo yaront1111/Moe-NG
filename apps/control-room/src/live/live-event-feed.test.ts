@@ -22,6 +22,11 @@ async function oneFrame(
     schedule: immediateOnce(),
     subscriberId: "control-room-1",
     transport: {
+      acknowledgeEventPage: (request) => Promise.resolve({
+        delivered: true as const,
+        response: { cursor: request.presentedCursor, outcome: "ACKNOWLEDGED" },
+        status: 200,
+      }),
       readEventPage: () => Promise.resolve(delivered
         ? { delivered: true as const, response, status: 200 }
         : {
@@ -97,6 +102,9 @@ describe("createLiveEventFeed", () => {
       schedule: () => { scheduled += 1; return () => undefined; },
       subscriberId: "control-room-1",
       transport: {
+        acknowledgeEventPage: () => Promise.resolve({
+          delivered: true as const, response: { outcome: "ACKNOWLEDGED" }, status: 200,
+        }),
         readEventPage: () => new Promise((resolve) => { answers.push(resolve); }),
       },
     });
@@ -119,6 +127,113 @@ describe("createLiveEventFeed", () => {
     expect(frames).toHaveLength(1);
     expect(scheduled).toBe(1);
     feed.stop();
+  });
+
+  it("presents a page before acknowledging its exact cursor", async () => {
+    const order: string[] = [];
+    const feed = createLiveEventFeed({
+      intervalMs: 1,
+      onFrame: () => { order.push("present"); },
+      projection: "moe.board",
+      schedule: immediateOnce(),
+      subscriberId: "control-room-1",
+      transport: {
+        acknowledgeEventPage: async (request: unknown) => {
+          order.push(`ack:${JSON.stringify(request)}`);
+          return {
+            delivered: true as const,
+            response: { cursor: { generation: 1, position: "3" }, outcome: "ACKNOWLEDGED" },
+            status: 200,
+          };
+        },
+        readEventPage: async () => ({
+          delivered: true as const,
+          response: {
+            checkpoint: "3", events: [], hasMore: false,
+            nextCursor: { generation: 1, position: "3" }, outcome: "PAGE",
+          },
+          status: 200,
+        }),
+      } as never,
+    });
+
+    feed.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    feed.stop();
+
+    expect(order).toEqual([
+      "present",
+      "ack:{\"presentedCursor\":{\"generation\":1,\"position\":\"3\"},\"subscriberId\":\"control-room-1\"}",
+    ]);
+  });
+
+  it("does not schedule the next read until acknowledgement settles", async () => {
+    let releaseAck = (): void => { throw new Error("acknowledgement was not requested"); };
+    let scheduled = 0;
+    const frames: LiveFrame[] = [];
+    const feed = createLiveEventFeed({
+      intervalMs: 1,
+      onFrame: (value) => frames.push(value),
+      projection: "moe.board",
+      schedule: () => { scheduled += 1; return () => undefined; },
+      subscriberId: "control-room-1",
+      transport: {
+        acknowledgeEventPage: () => new Promise((resolve) => {
+          releaseAck = () => resolve({
+            delivered: true, response: { outcome: "ACKNOWLEDGED" }, status: 200,
+          });
+        }),
+        readEventPage: async () => ({
+          delivered: true,
+          response: {
+            checkpoint: "3", events: [], hasMore: false,
+            nextCursor: { generation: 1, position: "3" }, outcome: "PAGE",
+          },
+          status: 200,
+        }),
+      },
+    });
+
+    feed.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(frames).toHaveLength(1);
+    expect(scheduled).toBe(0);
+
+    releaseAck();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(scheduled).toBe(1);
+    feed.stop();
+  });
+
+  it("refuses a malformed offered cursor without acknowledging it", async () => {
+    let acknowledgements = 0;
+    const frames: LiveFrame[] = [];
+    const feed = createLiveEventFeed({
+      intervalMs: 1,
+      onFrame: (value) => frames.push(value),
+      projection: "moe.board",
+      schedule: immediateOnce(),
+      subscriberId: "control-room-1",
+      transport: {
+        acknowledgeEventPage: async () => {
+          acknowledgements += 1;
+          return { delivered: true, response: {}, status: 200 };
+        },
+        readEventPage: async () => ({
+          delivered: true,
+          response: {
+            events: [], nextCursor: { generation: 1, position: "03" }, outcome: "PAGE",
+          },
+          status: 200,
+        }),
+      },
+    });
+
+    feed.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    feed.stop();
+    expect(acknowledgements).toBe(0);
+    expect(frames[0]).toMatchObject({ detail: "LIVE_FRAME_UNREADABLE", outcome: "UNREADABLE" });
   });
 });
 
@@ -165,6 +280,7 @@ const OBSERVED_PAGE = {
     },
   }],
   hasMore: false,
+  nextCursor: { generation: 1, position: "3" },
   outcome: "PAGE",
 };
 
@@ -192,6 +308,7 @@ describe("the feed carries command identity and the daemon's own readings", () =
         aggregateId: "session/sess-2", committedAt: "2026-08-09T12:00:00.000Z",
         eventId: "evt-2", eventType: "SessionOpened", globalPosition: "4",
       }],
+      nextCursor: { generation: 1, position: "4" },
       outcome: "PAGE",
     });
     const row = frame.events[0];
@@ -208,6 +325,7 @@ describe("the feed carries command identity and the daemon's own readings", () =
         eventId: "evt-3", eventType: "SessionOpened", globalPosition: "5",
         identity: { commandId: "", principal: { known: true, value: "operator-1" } },
       }],
+      nextCursor: { generation: 1, position: "5" },
       outcome: "PAGE",
     });
     expect(frame.events[0]?.identity).toBeNull();

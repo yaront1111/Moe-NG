@@ -5,7 +5,9 @@ import { DatabaseSync } from "node:sqlite";
 
 import { SqliteEventStore } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
-import { reseatToSnapshot } from "@moe/store/subscriptions/subscription-writes.js";
+import {
+  acknowledge, reseatToSnapshot,
+} from "@moe/store/subscriptions/subscription-writes.js";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
@@ -18,7 +20,7 @@ import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
-import type { StreamPageRequest, StreamReseatRequest,
+import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
 
 /**
@@ -131,6 +133,7 @@ export function createStoreDependencies(
     const baseline = board.ensureBaseline("daemon provider startup");
     if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
     return Object.freeze({
+      acknowledge: (request: StreamAcknowledgeRequest) => acknowledge(database, request),
       readPage: (request: StreamPageRequest) => {
         const folded = board.foldOnce();
         if (folded.outcome !== "FOLDED") return folded;

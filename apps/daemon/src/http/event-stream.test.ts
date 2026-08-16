@@ -14,7 +14,8 @@ import type {
   WireEvent,
   WireValue,
 } from "./event-stream-contract.js";
-import { readEventPage, resumeFromSnapshot } from "./event-stream.js";
+import { acknowledgeEventPage, readEventPage, resumeFromSnapshot } from "./event-stream.js";
+import * as eventStreamModule from "./event-stream.js";
 import {
   LEDGER_EVENTS,
   LEDGER_EVENT_IDS,
@@ -31,6 +32,28 @@ import {
 } from "./event-stream-fixtures.js";
 
 const READ = { projection: PROJECTION, subscriberId: SUBSCRIBER };
+
+it("exports the exact event-page acknowledgement seam", () => {
+  const surface = eventStreamModule as unknown as Readonly<Record<string, unknown>>;
+  expect(typeof surface["acknowledgeEventPage"]).toBe("function");
+});
+
+it("forwards the presented cursor to the port and returns its exact acknowledgement", () => {
+  const port = streamPort();
+  const issued = readEventPage(port, READ);
+  if (issued.outcome !== "PAGE" || issued.nextCursor === null) {
+    throw new Error("expected an issued page cursor");
+  }
+
+  expect(acknowledgeEventPage(port, {
+    presentedCursor: issued.nextCursor, subscriberId: SUBSCRIBER,
+  })).toEqual({ cursor: issued.nextCursor, outcome: "ACKNOWLEDGED" });
+  expect(acknowledgeEventPage(port, {
+    presentedCursor: issued.nextCursor, subscriberId: SUBSCRIBER,
+  })).toMatchObject({
+    code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", layer: "STATE", outcome: "REFUSED",
+  });
+});
 
 it("returns a PAGE frame carrying the next cursor", () => {
   const frame = readEventPage(streamPort(), READ);

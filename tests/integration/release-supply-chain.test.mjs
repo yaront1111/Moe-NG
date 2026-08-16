@@ -128,6 +128,72 @@ function successfulEvidence() {
   };
 }
 
+function doctorReport() {
+  const node = { known: true, value: "v24.16.0" };
+  const pnpm = {
+    known: false,
+    code: "DOCTOR_TOOL_VERSION_UNREADABLE",
+    layer: "DOCTOR_VERSION_HOST",
+  };
+  const nodeVersionFile = { known: true, value: "24.16.0\n" };
+  const packageManager = { known: true, value: "pnpm@11.0.8" };
+  const enginesNode = { known: true, value: "workspace:^24" };
+  const enginesPnpm = {
+    known: false,
+    code: "DOCTOR_DECLARED_PIN_UNREADABLE",
+    layer: "DOCTOR_VERSION_HOST",
+  };
+  return {
+    reportVersion: "moe-doctor-version-report/1",
+    observed: {
+      node,
+      pnpm,
+      platform: { known: true, value: "win32" },
+      arch: { known: true, value: "x64" },
+    },
+    declared: { nodeVersionFile, packageManager, enginesNode, enginesPnpm },
+    pins: [
+      { pin: "NODE_RUNTIME", declared: nodeVersionFile, observed: node, verdict: "SATISFIED" },
+      {
+        pin: "PNPM_TOOL",
+        declared: { known: true, value: "11.0.8" },
+        observed: pnpm,
+        verdict: "UNKNOWN",
+      },
+      {
+        pin: "ENGINES_NODE",
+        declared: {
+          known: false,
+          code: "DOCTOR_PIN_RANGE_UNSUPPORTED",
+          layer: "DOCTOR_VERSION",
+        },
+        observed: node,
+        verdict: "UNKNOWN",
+      },
+      { pin: "ENGINES_PNPM", declared: enginesPnpm, observed: pnpm, verdict: "UNKNOWN" },
+    ],
+    components: [
+      { name: "@moe/daemon", version: { known: true, value: "0.0.0" } },
+      {
+        name: "@moe/unreadable",
+        version: {
+          known: false,
+          code: "DOCTOR_DECLARED_PIN_UNREADABLE",
+          layer: "DOCTOR_VERSION_HOST",
+        },
+      },
+    ],
+    componentCount: 2,
+    componentInventory: { known: true, value: "2" },
+  };
+}
+
+function assertRecursivelyFrozen(value) {
+  if (value === null || typeof value !== "object") return;
+  assert.equal(Object.isFrozen(value), true);
+  for (const nested of Object.values(value)) assertRecursivelyFrozen(nested);
+}
+
 function spy(implementation) {
   const fn = async (...args) => {
     fn.calls.push(args);
@@ -164,6 +230,7 @@ function fakePorts(overrides = {}) {
       verificationKeyUse: "EPHEMERAL_VERIFICATION_ONLY",
       buildIndex,
     })),
+    collectDoctorVersionReport: spy(async () => structuredClone(doctorReport())),
     frozenInstall: spy(async () => ({ exitCode: 0, stderr: "", stdout: "" })),
     generateAudit: spy(async () => ({ exitCode: 0, stderr: "", stdout: evidence.audit })),
     generateLicenses: spy(async () => ({ exitCode: 0, stderr: "", stdout: evidence.licenses })),
@@ -226,7 +293,8 @@ function assertCleanupAttempted(blocked, expectedRoots) {
 
 describe("release supply-chain evidence", () => {
   test("records Windows and keeps unsupported and unavailable evidence UNKNOWN", async () => {
-    const result = await runSupply();
+    const ports = fakePorts();
+    const result = await runSupplyWithPorts(ports);
     assert.equal(result.ok, true);
     assert.equal(result.evidence.buildCount, 2);
     assert.equal(result.evidence.componentCount, 6);
@@ -235,11 +303,22 @@ describe("release supply-chain evidence", () => {
     assert.equal(result.evidence.operation, "RECORDED");
     assert.equal(result.evidence.releaseVerdict, "UNKNOWN");
     assert.equal(result.evidence.publicationAuthorized, false);
-    assert.deepEqual(result.evidence.doctor, {
-      missingSymbol: "@moe/daemon.collectDoctorVersionReport",
-      reason: "DOCTOR_COMPATIBILITY_UNAVAILABLE",
-      status: "UNKNOWN",
+    assert.deepEqual(ports.collectDoctorVersionReport.calls, [[]]);
+    assert.deepEqual(result.evidence.doctor, doctorReport());
+    assert.deepEqual(result.evidence.doctor.observed.pnpm, {
+      known: false,
+      code: "DOCTOR_TOOL_VERSION_UNREADABLE",
+      layer: "DOCTOR_VERSION_HOST",
     });
+    assert.deepEqual(result.evidence.doctor.pins[2].declared, {
+      known: false,
+      code: "DOCTOR_PIN_RANGE_UNSUPPORTED",
+      layer: "DOCTOR_VERSION",
+    });
+    assert.equal(result.evidence.doctor.componentCount, 2);
+    assert.equal(result.evidence.componentCount, 6);
+    assert.equal(Object.hasOwn(result.evidence.doctor, "missingSymbol"), false);
+    assertRecursivelyFrozen(result.evidence.doctor);
     assert.deepEqual(result.evidence.os, [
       { platform: "win32", status: "PASS" },
       {
@@ -269,6 +348,78 @@ describe("release supply-chain evidence", () => {
     assert.equal(result.evidence.builds[0].sourceDigests.lockBefore,
       result.evidence.builds[0].sourceDigests.lockAfter);
   });
+
+  test("records the real bare-root doctor observation from the executing process", async () => {
+    const ports = fakePorts();
+    delete ports.collectDoctorVersionReport;
+    const result = await runSupplyWithPorts(ports);
+    assert.equal(result.ok, true);
+    assert.equal(result.evidence.doctor.reportVersion, "moe-doctor-version-report/1");
+    assert.deepEqual(result.evidence.doctor.observed.node, {
+      known: true,
+      value: process.version,
+    });
+    assert.deepEqual(result.evidence.doctor.observed.platform, {
+      known: true,
+      value: process.platform,
+    });
+    assert.equal(result.evidence.doctor.pins.length, 4);
+    assert.equal(result.evidence.doctor.componentCount > 0, true);
+    assert.equal(result.evidence.doctor.componentCount,
+      result.evidence.doctor.components.length);
+    assert.equal(Object.hasOwn(result.evidence.doctor, "missingSymbol"), false);
+    assertRecursivelyFrozen(result.evidence.doctor);
+  });
+
+  // The collector owns its report; recorded evidence must own an independent snapshot. Mutating the
+  // very object the port returned, after the run, is the only way to tell a copy from an alias.
+  test("snapshots the doctor report instead of aliasing the collector's object", async () => {
+    const retained = doctorReport();
+    const collectDoctorVersionReport = spy(async () => retained);
+    const result = await runSupplyWithPorts(fakePorts({ collectDoctorVersionReport }));
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.evidence.doctor, doctorReport());
+    // An alias would have carried the recorder's deep freeze back to the collector's own object.
+    assert.equal(Object.isFrozen(retained), false);
+
+    retained.componentCount = 99;
+    retained.observed.node.value = "v0.0.0";
+    retained.pins[0].verdict = "VIOLATED";
+    retained.components.push({ name: "@moe/forged", version: { known: true, value: "9.9.9" } });
+
+    assert.deepEqual(result.evidence.doctor, doctorReport());
+    assert.equal(result.evidence.doctor.componentCount, 2);
+    assert.equal(result.evidence.doctor.components.length, 2);
+  });
+
+  const doctorFailureCases = [
+    ["a rejected doctor observation", () => { throw new Error("doctor unavailable"); }],
+    ["a structured doctor refusal", () => ({
+      ok: false,
+      code: "RELEASE_SUPPLY_CHAIN_REFUSED",
+      reason: "TOOLCHAIN_OBSERVATION_FAILED",
+      refusedBy: "RELEASE_SUPPLY_CHAIN",
+    })],
+    ["an incompatible doctor report", () => ({
+      ...doctorReport(),
+      reportVersion: "moe-doctor-version-report/2",
+    })],
+  ];
+  assert.equal(doctorFailureCases.length, 3);
+
+  for (const [label, observation] of doctorFailureCases) {
+    test(`refuses ${label} before evidence publication`, async () => {
+      const collectDoctorVersionReport = spy(async () => observation());
+      const publishEvidence = spy(async () => ({ ok: true, reused: false }));
+      const ports = fakePorts({ collectDoctorVersionReport, publishEvidence });
+      const result = await runSupplyWithPorts(ports);
+      expectReleaseRefusal(result, "TOOLCHAIN_OBSERVATION_FAILED");
+      assert.deepEqual(collectDoctorVersionReport.calls, [[]]);
+      assert.equal(ports.archiveSource.calls.length, 0);
+      assert.equal(ports.buildSubject.calls.length, 0);
+      assert.equal(publishEvidence.calls.length, 0);
+    });
+  }
 
   test("refuses a stale five-component subject at the release supply-chain layer", async () => {
     const ports = fakePorts();
@@ -538,14 +689,17 @@ describe("release supply-chain evidence", () => {
   });
 
   // One row per releaseRefusal site reachable through runReleaseSupplyChain. The hand-written
-  // length plus the distinct-reason count pin that exactly one site changed reason: the new code
-  // cannot have been introduced by widening a guard that already owned one of these cases.
+  // length plus the distinct-reason count pin the intentional duplicate: tool and doctor
+  // observation failures share one stable reason but remain separate production sites.
   let mutatingReads = 0;
   const refusalSites = [
     ["a traversal evidence root", { evidenceRoot: "../escape" }, {}, "OUTPUT_PATH_INVALID"],
     ["malformed source provenance", { source: { objectFormat: "sha1", sourceSha: "bad" } }, {}, "SOURCE_PROVENANCE_INVALID"],
     ["an unsupported host", { platform: "linux" }, {}, "SUPPORTED_OS_EVIDENCE_MISSING"],
     ["an unobservable toolchain", {}, { observeTools: spy(async () => undefined) }, "TOOLCHAIN_OBSERVATION_FAILED"],
+    ["an unavailable doctor observation", {}, {
+      collectDoctorVersionReport: spy(async () => { throw new Error("doctor unavailable"); }),
+    }, "TOOLCHAIN_OBSERVATION_FAILED"],
     ["toolchain identity drift", {}, {
       observeTools: spy(async () => ({ git: "2.51.0", node: "25.0.0", pnpm: "11.0.8", tar: "3.8.1", cdxgen: "12.8.2" })),
     }, "TOOLCHAIN_IDENTITY_MISMATCH"],
@@ -560,7 +714,7 @@ describe("release supply-chain evidence", () => {
       readSourceFile: () => { throw new Error("source unreadable"); },
     }, "EVIDENCE_WRITE_INTERRUPTED"],
   ];
-  assert.equal(refusalSites.length, 9);
+  assert.equal(refusalSites.length, 10);
   assert.equal(new Set(refusalSites.map((entry) => entry[3])).size, 9);
 
   for (const [label, overrides, portOverrides, reason] of refusalSites) {
@@ -718,7 +872,13 @@ describe("release package command", () => {
     const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
     assert.match(source, /realpathSync\(PNPM_ENTRY\)/u);
     assert.match(source, /command\(process\.execPath, \[entry, \.\.\.args\]/u);
-    assert.doesNotMatch(source, /"pnpm(?:\.exe)?"/u);
+    // The doctor observed-key list names a report field, not an executable. Exempt exactly that
+    // one declaration - and assert it is still present verbatim - so the PATH-resolution guard
+    // stays a whole-file scan instead of being narrowed to a call-site pattern.
+    const keyDeclaration =
+      /const DOCTOR_OBSERVED_KEYS = Object\.freeze\(\["arch", "node", "platform", "pnpm"\]\);\n/u;
+    assert.match(source, keyDeclaration);
+    assert.doesNotMatch(source.replace(keyDeclaration, ""), /"pnpm(?:\.exe)?"/u);
   });
 
   test("collects the CycloneDX document from a file, never from stdout", () => {

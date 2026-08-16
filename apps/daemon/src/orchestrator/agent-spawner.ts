@@ -52,6 +52,18 @@ export class AgentProcessContainmentError extends Error {
   }
 }
 
+export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_ERROR";
+
+export class AgentProcessFailureError extends Error {
+  readonly code = "AGENT_PROCESS_FAILED";
+  constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
+    readonly signal: NodeJS.Signals | null) {
+    super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
+      : signal !== null ? `:${signal}` : ""}`);
+    this.name = "AgentProcessFailureError";
+  }
+}
+
 /** Callable spawn boundary plus explicit ownership of every process it starts. */
 export interface AgentSpawner {
   (request: SpawnRequest): Promise<void>;
@@ -151,25 +163,13 @@ export function claudeSpawner(
   const containmentFailures: AgentProcessContainmentError[] = [];
   let closed = false;
   let closing: Promise<void> | undefined;
-  // `async` is load-bearing, not decoration: building the invocation below can
-  // REFUSE, and the wrapper calls this as `spawnAgent(...).catch(...)` without
-  // awaiting. Outside a promise a refusal would escape synchronously and take
-  // the poll tick with it, so every throw here must surface as a rejection.
+  // `async` makes every invocation refusal a rejection rather than escaping the poll tick.
   const spawnAgent = async (request: SpawnRequest): Promise<void> => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
-    // Code-node agents work IN their workspace and get the file/exec tools a
-    // worker needs; chain-step agents keep the MCP-only surface.
+    // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
     const coding = request.workspace !== null;
-    // BEFORE the credential is minted to disk. The mission travels over STDIN:
-    // on Windows the CLI is a .cmd requiring shell resolution, and a shell line
-    // would shred a space-bearing prompt argument. `agentSpawnInvocation` builds
-    // that line itself (argv plus `shell: true` is deprecated, DEP0190) and
-    // quotes the one argument — the config path — that may legitimately carry
-    // whitespace. It REFUSES anything cmd.exe could reinterpret, and a request
-    // that cannot be spawned must never cause a credential to be written at
-    // all: deleting one afterwards would still leave a window, and the refusal
-    // predates every cleanup path below.
+    // Build before writing the credential: Windows shell quoting can refuse the invocation.
     const invocation = agentSpawnInvocation(command, [
       "-p",
       "--bare",
@@ -232,6 +232,16 @@ export function claudeSpawner(
         settled = true;
         cleanup();
         resolve();
+      };
+      const failProcess = (
+        reason: AgentProcessFailureReason,
+        exitCode: number | null,
+        signal: NodeJS.Signals | null,
+      ): void => {
+        if (settled) return;
+        settled = true;
+        cleanup();
+        reject(new AgentProcessFailureError(reason, exitCode, signal));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -320,9 +330,7 @@ export function claudeSpawner(
       const beginTermination = (): void => {
         if (settled || terminating) return;
         terminating = true;
-        // Arm the hard bound before signalling: an injected/test boundary can
-        // report `close` synchronously from killTree(), and finish() must be
-        // able to cancel this timer in that race.
+        // Arm before signalling so a synchronous close can cancel this timer.
         killTimer = setTimeout(() => {
           failContainment(treeKillConfirmed ? "CLOSE_NOT_OBSERVED" : "TREE_KILL_FAILED");
         }, killGraceMs);
@@ -333,22 +341,20 @@ export function claudeSpawner(
       const failInput = (): void => { beginTermination(); };
       timer = setTimeout(() => {
         log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
-        // Prefer observed close, while retaining a hard post-kill bound for a
-        // broken/missing close event after the process tree was signalled.
         beginTermination();
       }, timeoutMs);
       if (typeof timer.unref === "function") timer.unref();
-      child.on("close", (code) => {
+      child.on("close", (code, signal) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         childClosed = true;
         if (terminating) maybeFinishTermination();
-        else finish();
+        else if (code === 0) finish();
+        else failProcess(code === null ? "EXIT_SIGNAL" : "EXIT_NONZERO", code, signal);
       });
       child.on("error", () => {
         if (settled || terminating) return;
-        // A spawn error with no pid proves no owned process exists. Once a pid
-        // exists, an error is not exit evidence and must go through tree death.
-        if (child.pid === undefined) finish();
+        // A missing pid proves no owned process exists; otherwise contain its tree.
+        if (child.pid === undefined) failProcess("SPAWN_ERROR", null, null);
         else beginTermination();
       });
       // A child can exit after spawn() succeeds but before stdin is written.

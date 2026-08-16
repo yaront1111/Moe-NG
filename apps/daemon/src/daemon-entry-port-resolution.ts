@@ -50,7 +50,8 @@ export function resolveOptionalDaemonPorts(
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const subscriptions = subscriptionFactory?.call(provider);
-    if (subscriptions !== undefined && !hasMethods(subscriptions, ["readPage", "reseat"])) {
+    if (subscriptions !== undefined
+      && !hasMethods(subscriptions, ["acknowledge", "readPage", "reseat"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const affordanceFactory = provider.affordances;

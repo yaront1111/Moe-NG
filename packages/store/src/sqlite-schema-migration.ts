@@ -10,6 +10,7 @@ import {
   SCHEMA_V2_MANIFEST_VERSION,
   SCHEMA_V3_MANIFEST_VERSION,
   SCHEMA_V4_MANIFEST_VERSION,
+  SCHEMA_V5_MANIFEST_VERSION,
   SCHEMA_VERSION,
 } from "./store-internals.js";
 import {
@@ -22,6 +23,7 @@ import {
   SCHEMA_V2_OBJECT_SQL,
   SCHEMA_V3_OBJECT_SQL,
   SCHEMA_V4_OBJECT_SQL,
+  SCHEMA_V5_OBJECT_SQL,
 } from "./sqlite-schema-manifest.js";
 import { readScalar } from "./store-rows.js";
 
@@ -29,7 +31,7 @@ function validateMigrationSource(
   database: DatabaseSync,
   manifest: Readonly<Record<string, string>>,
   manifestVersion: string,
-  schemaVersion: 1 | 2 | 3 | 4,
+  schemaVersion: 1 | 2 | 3 | 4 | 5,
 ): void {
   validateExactSchemaObjects(database, manifest, schemaVersion);
   validateSchemaManifestMetadata(database, manifestVersion);
@@ -150,7 +152,17 @@ function migrateV3ToV4(database: DatabaseSync): void {
  */
 function migrateV4ToV5(database: DatabaseSync): void {
   validateMigrationSource(database, SCHEMA_V4_OBJECT_SQL, SCHEMA_V4_MANIFEST_VERSION, 4);
-  database.exec(`${SCHEMA_OBJECT_SQL.domain_events_event_type_position};`);
+  database.exec(`${SCHEMA_V5_OBJECT_SQL.domain_events_event_type_position};`);
+  database
+    .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
+    .run(SCHEMA_V5_MANIFEST_VERSION, "schema_manifest_version");
+  database.exec("PRAGMA user_version = 5;");
+}
+
+/** Additive durable page offers. Existing subscribers start with no issued page. */
+function migrateV5ToV6(database: DatabaseSync): void {
+  validateMigrationSource(database, SCHEMA_V5_OBJECT_SQL, SCHEMA_V5_MANIFEST_VERSION, 5);
+  database.exec(`${SCHEMA_OBJECT_SQL.subscription_pending_offers};`);
   database
     .prepare("UPDATE store_metadata SET value = ? WHERE key = ?")
     .run(SQLITE_SCHEMA_MANIFEST_VERSION, "schema_manifest_version");
@@ -183,7 +195,7 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
   }
   if (
     currentVersion !== 1 && currentVersion !== 2
-    && currentVersion !== 3 && currentVersion !== 4
+    && currentVersion !== 3 && currentVersion !== 4 && currentVersion !== 5
   ) {
     throw new DurableStoreError(
       "DATABASE_IDENTITY_MISMATCH",
@@ -193,5 +205,6 @@ export function migrateLocked(database: DatabaseSync, freshDatabase: boolean): v
   if (currentVersion === 1) migrateV1ToV2(database);
   if (currentVersion <= 2) migrateV2ToV3(database);
   if (currentVersion <= 3) migrateV3ToV4(database);
-  migrateV4ToV5(database);
+  if (currentVersion <= 4) migrateV4ToV5(database);
+  migrateV5ToV6(database);
 }

@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildReviewPackage } from "@moe/review";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
@@ -11,6 +10,10 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { runReviewCommand } from "../review/review-services.js";
+import {
+  NODE_VERIFIER_PRINCIPAL_ID,
+  readVerifierReceipt,
+} from "../review/verifier-receipt-ledger.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
 
@@ -73,7 +76,42 @@ function seedCleanRound(): void {
   if (!outcome.ok) throw new Error(`seed failed: ${outcome.code}`);
 }
 
-function verifier(capture: VerifierRunCapture) {
+const AUTHORITY = {
+  calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" as const },
+  packageItems: [
+    { digest: fill("c1"), kind: "CRITERION", locator: "criterion-1" },
+    { digest: fill("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
+    { digest: fill("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
+    { digest: fill("b1"), kind: "PLAN_HASH", locator: "plan-1" },
+    { digest: fill("2b"), kind: "RUBRIC", locator: "rubric-1" },
+    { digest: fill("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
+  ],
+  policy: {
+    action: "integration.accept_output",
+    actor: NODE_VERIFIER_PRINCIPAL_ID,
+    callerRiskHint: "R1" as const,
+    decisionDigest: fill("d1"),
+    evaluatedAtEpochMs: 1_760_000_000_000,
+    evaluatorVersion: "daemon-verifier-1",
+    facts: [{ factId: "fact-review-risk", tier: "R1" as const, truthClass: "DAEMON_VERIFIED" as const }],
+    graphNodeRevisionRefs: [],
+    policyRevisionRef: fill("a1"),
+    requiredFactIds: [],
+    scope: [],
+    sliceChain: [{
+      autoApprovalOptIns: [{ action: "integration.accept_output", tier: "R1" as const }],
+      rules: [],
+      sliceRef: fill("a1"),
+    }],
+    waivers: [],
+  },
+};
+
+function verifier(
+  capture: VerifierRunCapture,
+  authority: typeof AUTHORITY | null = AUTHORITY,
+  onRun: () => void = () => undefined,
+) {
   return createNodeVerifier({
     deps: provider.provide(),
     mintId: () => `v-${Math.random().toString(36).slice(2, 10)}`,
@@ -83,8 +121,12 @@ function verifier(capture: VerifierRunCapture) {
     nodes: () => [{ nodeRef: NODE }],
     operatorCredential: OPERATOR,
     projectId: PROJECT,
-    runTest: () => Promise.resolve(capture),
+    runTest: () => {
+      onRun();
+      return Promise.resolve(capture);
+    },
     store,
+    verificationAuthority: () => authority,
   });
 }
 
@@ -98,6 +140,20 @@ describe("createNodeVerifier", () => {
     seedCleanRound();
     const output = "assertion failed: expected 5";
     const sha = createHash("sha256").update(output, "utf8").digest("hex");
+    let missingAuthorityRuns = 0;
+    const unavailable = await verifier(
+      { byteCount: output.length, exitCode: 1, output, sha256: sha },
+      null,
+      () => { missingAuthorityRuns += 1; },
+    ).verifyOnce();
+    expect(unavailable).toEqual([{
+      detail: "host verifier authority unavailable",
+      nodeRef: NODE,
+      outcome: "VERIFICATION_AUTHORITY_UNAVAILABLE",
+    }]);
+    expect(missingAuthorityRuns).toBe(0);
+    expect(readReviewLedger(store, PROJECT, NODE).version).toBe(1);
+
     const reports = await verifier({ byteCount: output.length, exitCode: 1, output, sha256: sha }).verifyOnce();
     expect(reports).toEqual([
       { detail: "exit 1", nodeRef: NODE, outcome: "FAILED_ROUND_RECORDED" },
@@ -156,23 +212,18 @@ describe("createNodeVerifier", () => {
     ]);
     const ledger = readReviewLedger(store, PROJECT, NODE);
     expect(ledger.accepted).toBeDefined();
-    // The durable acceptance binds the daemon's own capture digest THROUGH the
-    // package attestation: rebuilding the package with the real capture sha as
-    // the DAEMON_RECEIPT digest must reproduce the stored reviewInputDigest —
-    // so a different run (different output) could not have produced this
-    // acceptance.
-    const round = ledger.version - 1;
-    const rebuilt = buildReviewPackage([
-      { digest: fill("c1"), kind: "CRITERION", locator: "criterion-1" },
-      { digest: greenSha, kind: "DAEMON_RECEIPT", locator: `verifier:${NODE}:round-${String(round)}` },
-      { digest: fill("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
-      { digest: fill("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
-      { digest: fill("b1"), kind: "PLAN_HASH", locator: "plan-1" },
-      { digest: fill("2b"), kind: "RUBRIC", locator: "rubric-1" },
-      { digest: fill("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
-    ] as never);
-    if (!rebuilt.ok) throw new Error(`package rebuild refused: ${rebuilt.code}`);
-    expect(JSON.stringify(ledger.accepted))
-      .toContain(rebuilt.value.reviewInputDigest);
+    const receiptId = ledger.accepted?.verifierReceiptId;
+    if (receiptId === undefined) throw new Error("acceptance omitted receipt id");
+    const receipt = readVerifierReceipt(store, PROJECT, receiptId);
+    expect(receipt.ok, receipt.ok ? "" : receipt.code).toBe(true);
+    if (!receipt.ok) throw new Error(receipt.code);
+    expect(receipt.receipt.execution.outputSha256).toBe(greenSha);
+    expect(receipt.receipt.execution.byteCount).toBe(greenOutput.length);
+    expect(receipt.receipt.packageItems).toContainEqual(expect.objectContaining({
+      digest: receipt.receipt.execution.evidenceSha256,
+      kind: "DAEMON_RECEIPT",
+    }));
+    expect(ledger.accepted?.reviewInputDigest).toBe(receipt.receipt.reviewInputDigest);
+    expect(ledger.accepted?.verifierReceiptSha256).toBe(receipt.receiptSha256);
   });
 });

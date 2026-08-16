@@ -100,10 +100,12 @@ export function envelope(
 }
 
 export function send(
-  store: SqliteEventStore, request: Envelope, reservedPrincipalId?: string,
+  store: SqliteEventStore,
+  request: Envelope,
+  reservedPrincipalIds?: string | readonly string[],
 ): SessionOutcome {
   return runSessionCommand(
-    store, encoder.encode(JSON.stringify(request)), undefined, reservedPrincipalId,
+    store, encoder.encode(JSON.stringify(request)), undefined, reservedPrincipalIds,
   );
 }
 

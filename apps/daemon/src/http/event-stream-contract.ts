@@ -1,6 +1,9 @@
 import { MAX_PAGE_SIZE } from "@moe/store";
 
 import type { WireEventIdentity, WireObservation } from "./event-stream-observation.js";
+import type {
+  StreamAcknowledgeRequest, StreamAcknowledgeResult,
+} from "./event-stream-ack-contract.js";
 
 /**
  * Wire vocabulary for the resumable event stream.
@@ -100,9 +103,15 @@ export interface StreamReseatRequest {
 }
 
 export interface SubscriptionPort {
+  acknowledge(request: StreamAcknowledgeRequest): StreamAcknowledgeResult;
   readPage(request: StreamPageRequest): StreamReadResult;
   reseat(request: StreamReseatRequest): StreamSeatResult;
 }
+
+export type {
+  EventAcknowledgeFrame, EventAcknowledgeRequest, EventAcknowledgedFrame,
+  StreamAcknowledgeRequest, StreamAcknowledgeResult, StreamAcknowledged,
+} from "./event-stream-ack-contract.js";
 
 /** Page size is bounded by the store's own limit rather than a second number. */
 export const MAX_EVENT_PAGE_SIZE = MAX_PAGE_SIZE;

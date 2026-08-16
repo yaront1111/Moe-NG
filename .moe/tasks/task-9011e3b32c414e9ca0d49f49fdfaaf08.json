@@ -183,7 +183,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T10:29:20.635Z",
-  "updatedAt": "2026-08-09T11:46:01.967Z",
+  "updatedAt": "2026-08-15T23:45:42.781Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
@@ -225,7 +225,9 @@
     "worker-023d39fd",
     "worker-4addc779",
     "governor-f70d1157",
-    "qa-58b24ffb"
+    "qa-58b24ffb",
+    "governor-a627169a",
+    "architect-d9dccf21"
   ],
   "workStartedAt": "2026-08-09T10:31:16.655Z",
   "reviewStartedAt": "2026-08-09T11:39:39.355Z",

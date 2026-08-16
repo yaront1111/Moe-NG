@@ -69,6 +69,9 @@ import type {
   DurableDecision,
   DurableAggregate,
   DurableLedger,
+  EventAcknowledgeFrame,
+  EventAcknowledgeRequest,
+  EventAcknowledgedFrame,
   EventGapFrame,
   EventPageFrame,
   EventReadFrame,
@@ -159,6 +162,9 @@ import type {
   StartListenerResult,
   SeamObserver,
   StreamCursor,
+  StreamAcknowledgeRequest,
+  StreamAcknowledgeResult,
+  StreamAcknowledged,
   StreamEvent,
   StreamGap,
   StreamPage,
@@ -276,6 +282,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["WORK_LAYERS", "object"],
   ["WORK_LEGS", "object"],
   ["WORK_SCHEMA_VERSION", "string"],
+  ["acknowledgeEventPage", "function"],
   ["anchorIncarnation", "function"],
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
@@ -332,7 +339,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(84);
+    expect(EXPECTED_EXPORTS.length).toBe(85);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -501,6 +508,12 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<EventStreamRefusalCode>();
     expectTypeOf<StreamReadResult>().toEqualTypeOf<StreamGap | StreamPage | StreamRefused>();
     expectTypeOf<StreamSeatResult>().toEqualTypeOf<StreamRefused | StreamSeated>();
+    expectTypeOf<StreamAcknowledgeResult>()
+      .toEqualTypeOf<StreamAcknowledged | StreamRefused>();
+    expectTypeOf<Parameters<SubscriptionPort["acknowledge"]>>()
+      .toEqualTypeOf<[request: StreamAcknowledgeRequest]>();
+    expectTypeOf<ReturnType<SubscriptionPort["acknowledge"]>>()
+      .toEqualTypeOf<StreamAcknowledgeResult>();
     expectTypeOf<Parameters<SubscriptionPort["readPage"]>>()
       .toEqualTypeOf<[request: StreamPageRequest]>();
     expectTypeOf<ReturnType<SubscriptionPort["readPage"]>>().toEqualTypeOf<StreamReadResult>();
@@ -518,6 +531,12 @@ describe("daemon package-root type closure", () => {
     expectTypeOf<EventReadFrame>()
       .toEqualTypeOf<EventGapFrame | EventPageFrame | EventRefusedFrame>();
     expectTypeOf<EventResumeFrame>().toEqualTypeOf<EventRefusedFrame | EventReseatedFrame>();
+    expectTypeOf<EventAcknowledgeFrame>()
+      .toEqualTypeOf<EventAcknowledgedFrame | StreamRefused>();
+    expectTypeOf<Parameters<typeof daemon.acknowledgeEventPage>>()
+      .toEqualTypeOf<[port: SubscriptionPort, request: EventAcknowledgeRequest]>();
+    expectTypeOf<ReturnType<typeof daemon.acknowledgeEventPage>>()
+      .toEqualTypeOf<EventAcknowledgeFrame>();
     expectTypeOf<Parameters<typeof daemon.readEventPage>>()
       .toEqualTypeOf<
         [port: SubscriptionPort, request: EventReadRequest, observer?: SeamObserver | undefined]

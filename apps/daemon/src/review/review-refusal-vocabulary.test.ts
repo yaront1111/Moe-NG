@@ -17,10 +17,17 @@ import {
   openStore,
   packageItems,
   replanPayload,
+  seedVerifierReceipt,
   send,
   submit,
   submitPayload,
 } from "./review-test-fixtures.js";
+import { readReviewLedger } from "./review-read-model.js";
+import {
+  NODE_VERIFIER_PRINCIPAL_ID,
+  VERIFIER_RECEIPT_COMMAND_KIND,
+  verifierReceiptId,
+} from "./verifier-receipt-contracts.js";
 
 /**
  * The daemon's own refusal vocabulary, driven through the PRODUCTION entry point.
@@ -44,6 +51,7 @@ import {
 const encoder = new TextEncoder();
 
 const EXPECTED_DAEMON_CODES = [
+  "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_COMMAND_UNKNOWN",
   "REVIEW_DELTA_NODES_EMPTY",
@@ -56,6 +64,9 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_PAYLOAD_INVALID",
   "REVIEW_REPLAN_WITHOUT_ROUND",
   "REVIEW_REQUEST_INVALID",
+  "REVIEW_VERIFIER_RECEIPT_INVALID",
+  "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
+  "REVIEW_VERIFIER_RECEIPT_STALE",
 ] as const;
 
 afterEach(closeStores);
@@ -84,6 +95,56 @@ function driveDaemonRefusals(): readonly string[] {
     round: 1,
     routing: { layer: "FINDINGS", reasonCodes: [], repeatFingerprints: [], route: "ACCEPT" },
   }).ok).toBe(true);
+  const missingReceiptStore = openStore();
+  expect(send(missingReceiptStore, envelope(
+    "review.submit", 0, submitPayload(1, []), "cmd-missing-receipt-source",
+  )).ok).toBe(true);
+  const acceptedStore = openStore();
+  const acceptedReceipt = seedVerifierReceipt(acceptedStore);
+  expect(send(acceptedStore, envelope(
+    "integration.accept_output",
+    acceptedReceipt.currentVersion,
+    { receiptId: acceptedReceipt.receiptId, subjectRef: "node-run-1" },
+    "cmd-accepted-first",
+  )).ok).toBe(true);
+  const staleReceiptStore = openStore();
+  const staleReceipt = seedVerifierReceipt(staleReceiptStore);
+  expect(send(staleReceiptStore, envelope(
+    "review.submit",
+    staleReceipt.currentVersion,
+    submitPayload(2, []),
+    "cmd-newer-clean-round",
+  )).ok).toBe(true);
+  const invalidReceiptStore = openStore();
+  expect(send(invalidReceiptStore, envelope(
+    "review.submit", 0, submitPayload(1, []), "cmd-invalid-receipt-source",
+  )).ok).toBe(true);
+  const invalidSource = readReviewLedger(
+    invalidReceiptStore, "project-review-1", "node-run-1",
+  ).rounds[0];
+  if (invalidSource === undefined) throw new Error("invalid receipt setup has no source");
+  const invalidReceiptId = verifierReceiptId(
+    "project-review-1", "node-run-1", invalidSource.decisionId,
+  );
+  invalidReceiptStore.commitExpectedVersionDecision({
+    commandKind: VERIFIER_RECEIPT_COMMAND_KIND,
+    committedResultBytes: encoder.encode("{}"),
+    correlationId: "invalid-receipt",
+    decidedAt: "2026-08-16T00:00:00.000Z",
+    events: [{
+      eventId: `${invalidReceiptId}-bad`,
+      eventType: "VerifierReceiptRecorded",
+      payload: encoder.encode("{}"),
+    }],
+    expectedVersion: 1,
+    key: {
+      commandId: invalidReceiptId,
+      principalId: NODE_VERIFIER_PRINCIPAL_ID,
+      projectId: "project-review-1",
+    },
+    requestBytes: encoder.encode("{}"),
+    targetAggregateId: "node-run-1",
+  });
 
   return [
     daemonCode("undecodable bytes", runReviewCommand(openStore(), encoder.encode("{not json"))),
@@ -122,6 +183,30 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("stored round that does not parse", send(corruptStore, envelope(
       "review.submit", 1, submitPayload(2), "cmd-after-corrupt",
+    ))),
+    daemonCode("accepting a second time", send(acceptedStore, envelope(
+      "integration.accept_output",
+      3,
+      { receiptId: acceptedReceipt.receiptId, subjectRef: "node-run-1" },
+      "cmd-accepted-second",
+    ))),
+    daemonCode("missing verifier receipt", send(missingReceiptStore, envelope(
+      "integration.accept_output",
+      1,
+      { receiptId: "f".repeat(64), subjectRef: "node-run-1" },
+      "cmd-missing-receipt",
+    ))),
+    daemonCode("stale verifier receipt", send(staleReceiptStore, envelope(
+      "integration.accept_output",
+      3,
+      { receiptId: staleReceipt.receiptId, subjectRef: "node-run-1" },
+      "cmd-stale-receipt",
+    ))),
+    daemonCode("malformed verifier receipt", send(invalidReceiptStore, envelope(
+      "integration.accept_output",
+      2,
+      { receiptId: invalidReceiptId, subjectRef: "node-run-1" },
+      "cmd-invalid-receipt",
     ))),
   ];
 }
