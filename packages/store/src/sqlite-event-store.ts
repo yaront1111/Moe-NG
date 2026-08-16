@@ -351,6 +351,15 @@ export class SqliteEventStore {
     return this.#core.readEventsAfter(afterGlobalPosition, limit, maxDecodedBytes);
   }
 
+  public readEventsByTypeAfter(
+    eventType: string,
+    afterGlobalPosition: bigint,
+    limit = 100,
+    maxDecodedBytes?: number,
+  ): CursorPage<StoredEvent, bigint> {
+    return this.#core.readEventsByTypeAfter(eventType, afterGlobalPosition, limit, maxDecodedBytes);
+  }
+
   public readPendingOutbox(limit = 100): readonly PendingOutboxMessage[] {
     return this.#core.readPendingOutbox(limit);
   }

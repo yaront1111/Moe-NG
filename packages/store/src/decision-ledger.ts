@@ -74,6 +74,12 @@ export interface DecisionLedgerCore {
     limit?: number,
     maxDecodedBytes?: number,
   ) => CursorPage<StoredEvent, bigint>;
+  readonly readEventsByTypeAfter: (
+    eventType: string,
+    afterGlobalPosition: bigint,
+    limit?: number,
+    maxDecodedBytes?: number,
+  ) => CursorPage<StoredEvent, bigint>;
   readonly readPendingOutbox: (limit?: number) => readonly PendingOutboxMessage[];
   readonly readRecoveryBinding: (slot: unknown) => RecoveryBindingReadResult;
   readonly readPendingOutboxPage: (
@@ -139,6 +145,12 @@ export function createDecisionLedgerCore(
       limit?: number,
       maxDecodedBytes?: number,
     ) => ledger.readEventsAfter(afterGlobalPosition, limit, maxDecodedBytes),
+    readEventsByTypeAfter: (
+      eventType: string,
+      afterGlobalPosition: bigint,
+      limit?: number,
+      maxDecodedBytes?: number,
+    ) => ledger.readEventsByTypeAfter(eventType, afterGlobalPosition, limit, maxDecodedBytes),
     readPendingOutbox: (limit?: number) => ledger.readPendingOutbox(limit),
     readRecoveryBinding: (slot: unknown) => ledger.readRecoveryBinding(slot),
     readPendingOutboxPage: (

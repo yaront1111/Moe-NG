@@ -89,6 +89,21 @@ export class EventReadModelStore extends EventReadQueryStore {
     return this.globalEventPage(afterGlobalPosition, limit, maxDecodedBytes);
   }
 
+  /**
+   * Exact event-type matches over the same global cursor, so a caller selecting
+   * one type no longer has to decode every event to find it. Deliberately adds
+   * no validation of its own: `eventTypePage` already answers, and a second
+   * layer here would change WHICH layer refuses a bad call.
+   */
+  public readEventsByTypeAfter(
+    eventType: string,
+    afterGlobalPosition: bigint,
+    limit = 100,
+    maxDecodedBytes = MAX_PAGE_DECODED_BYTES,
+  ): CursorPage<StoredEvent, bigint> {
+    return this.eventTypePage(eventType, afterGlobalPosition, limit, maxDecodedBytes);
+  }
+
   public readPendingOutbox(limit = 100): readonly PendingOutboxMessage[] {
     const page = this.readPendingOutboxPage(0n, limit);
     if (page.hasMore) {
