@@ -171,6 +171,12 @@ interface RefusalCase {
   readonly input: unknown;
   readonly code: string;
   readonly layer: string | null;
+  /**
+   * Pinned where more than one ROUTE shares a code. CLAUDE_RUNTIME_OBSERVATION_INVALID
+   * answers both "the probe did not exit cleanly" and "the output is not a version",
+   * so a code-only assertion cannot tell which guard ran.
+   */
+  readonly message?: string | undefined;
 }
 
 /**
@@ -260,19 +266,38 @@ function refusalCases(): readonly RefusalCase[] {
   // proves the parse is conservative rather than "any text is a version".
   const foreign = nativeJoin(root, "foreign.exe");
   copyFileSync(process.execPath, foreign);
-  runtime(
-    "the version output is not the shape this provider reports",
-    { installedRoot: root, executablePath: foreign, versionTimeoutMs: PROBE_TIMEOUT_MS },
-    "CLAUDE_RUNTIME_OBSERVATION_INVALID",
-  );
+  cases.push({
+    name: "the version output is not the shape this provider reports",
+    input: { installedRoot: root, executablePath: foreign, versionTimeoutMs: PROBE_TIMEOUT_MS },
+    code: "CLAUDE_RUNTIME_OBSERVATION_INVALID",
+    layer: RUNTIME_LAYER,
+    message: "installed runtime request probe printed output that is not the version shape this provider reports",
+  });
 
-  // Killed by its own bound before it could print: a clean file, a real launch,
-  // and still no version — which must stay UNKNOWN rather than become a guess.
-  runtime(
-    "the version probe is cut off by its own timeout",
-    { installedRoot: root, executablePath: foreign, versionTimeoutMs: 1 },
-    "CLAUDE_RUNTIME_OBSERVATION_INVALID",
-  );
+  // A REAL nonzero exit, which is a different route to the same code: hostname.exe
+  // is a valid image that rejects `--version` and exits 1 with empty stdout, so the
+  // exit-code guard answers BEFORE the parse ever sees a string.
+  const rejecting = nativeJoin(root, "rejecting.exe");
+  copyFileSync(nativeJoin(process.env["SYSTEMROOT"] ?? "C:\\Windows", "System32", "hostname.exe"), rejecting);
+  cases.push({
+    name: "the version probe does not exit cleanly",
+    input: { installedRoot: root, executablePath: rejecting, versionTimeoutMs: PROBE_TIMEOUT_MS },
+    code: "CLAUDE_RUNTIME_OBSERVATION_INVALID",
+    layer: RUNTIME_LAYER,
+    message: "installed runtime request probe did not exit cleanly, so no version was observed",
+  });
+
+  // Cut short by its own bound. Named for what it PROVES rather than for the
+  // mechanism: the kill leaves no output, so the shape guard is what refuses and
+  // the observation stays unproven. `versionTimeoutMs` is a kill bound, never a
+  // floor — the broker settles on its completed frame.
+  cases.push({
+    name: "a probe cut short by its own bound yields no version",
+    input: { installedRoot: root, executablePath: foreign, versionTimeoutMs: 1 },
+    code: "CLAUDE_RUNTIME_OBSERVATION_INVALID",
+    layer: RUNTIME_LAYER,
+    message: "installed runtime request probe printed output that is not the version shape this provider reports",
+  });
 
   // A real, contained, plain file that simply cannot be READ: every earlier rule
   // passes, the file exists, and the inspection still cannot prove its bytes. An
@@ -305,7 +330,12 @@ const CASES = refusalCases();
 
 it("generated a positive number of fail-closed cases", () => {
   expect(CASES.length, "a sweep that generates zero cases passes while testing nothing").toBeGreaterThan(0);
-  expect(CASES.length).toBe(WIN ? 17 : 9);
+  expect(CASES.length).toBe(WIN ? 18 : 9);
+  // The route pin below is CONDITIONAL on `message` being set, so dropping the
+  // field would disable it in silence rather than redden. Counted here so the
+  // pins have to exist, not merely be honoured where they happen to survive.
+  const pinned = CASES.filter((testCase) => testCase.message !== undefined);
+  expect(pinned.length, "the exact-route message pins vanished").toBe(WIN ? 3 : 0);
 });
 
 for (const [index, testCase] of CASES.entries()) {
@@ -319,6 +349,12 @@ for (const [index, testCase] of CASES.entries()) {
       const expected = WIN ? testCase : PLATFORM_REFUSAL;
       expect(refusal.code, `case ${index} refused with the wrong code`).toBe(expected.code);
       expect(refusal.layer, `case ${index} refused at the wrong layer`).toBe(expected.layer);
+      // Where two ROUTES share a code, the exact message is the only thing that
+      // says which guard answered.
+      if (WIN && testCase.message !== undefined) {
+        expect((result as Record<string, unknown>)["message"], `case ${index} took the wrong route`)
+          .toBe(testCase.message);
+      }
       if (refusal.layer === RUNTIME_LAYER) {
         expect(CLAUDE_RUNTIME_PIN_ERROR_CODES).toContain(refusal.code);
       } else {
@@ -330,41 +366,35 @@ for (const [index, testCase] of CASES.entries()) {
   );
 }
 
-it(
-  "refuses a closure that drifts while the version probe runs",
-  async () => {
-    if (!WIN) {
-      const refusal = refusalOf(await observe()({ installedRoot: "C:\\x", executablePath: "C:\\x\\y.exe" }), "drift");
-      expect(refusal.code).toBe(PLATFORM_REFUSAL.code);
-      expect(refusal.layer).toBe(PLATFORM_REFUSAL.layer);
-      return;
-    }
-    const root = fixtureRoot();
-    const executable = nativeJoin(root, "drifting.exe");
-    copyFileSync(process.execPath, executable);
-    const pending = observe()({
-      installedRoot: root,
-      executablePath: executable,
-      versionTimeoutMs: PROBE_TIMEOUT_MS,
-    });
-    // The probe holds the boundary open for its whole bound, so the swap lands
-    // between the two inspection passes rather than racing them. Renaming a
-    // running image is legal on Windows; deleting it is not.
-    await new Promise((resolve) => {
-      setTimeout(resolve, 750);
-    });
-    renamedAside(executable, nativeJoin(root, "drifted-away.exe"));
-    writeFileSync(executable, "different bytes entirely");
-    const refusal = refusalOf(await pending, "drift");
-    expect(refusal.code).toBe("CLAUDE_RUNTIME_PIN_SOURCE_DRIFT");
-    expect(refusal.layer).toBe(RUNTIME_LAYER);
-  },
-  CASE_TIMEOUT_MS,
-);
-
-function renamedAside(from: string, to: string): void {
-  execFileSync("cmd.exe", ["/c", "move", "/y", from, to], { stdio: "ignore" });
-}
+/*
+ * THE DRIFT ARM HAS NO RUNTIME CASE ON win32, DELIBERATELY. Do not reinvent one.
+ *
+ * Production inspects the closure, probes `--version`, inspects again, and refuses
+ * CLAUDE_RUNTIME_PIN_SOURCE_DRIFT at layer RUNTIME when the two digests differ.
+ * Reaching that branch from a test needs the closure mutated inside the window
+ * between the child's exit and the second inspection's open, and Windows forbids
+ * that interleaving:
+ *   - while the child lives, the OS holds its image MAPPED, so an in-place write is
+ *     refused outright and an image rotation collides with the broker's own open,
+ *     which surfaces as PROCESS_BOUNDARY_BROKER_REFUSED — the environment
+ *     answering, not this guard;
+ *   - since completion became child-driven (abc3dcf), `versionTimeoutMs` is a KILL
+ *     BOUND and never a floor, so that window is sub-millisecond: the whole
+ *     observation measures ~170ms warm against a node.exe copy;
+ *   - and a probe killed by its bound refuses BEFORE the comparison is reached,
+ *     because a non-clean exit is answered above it.
+ * Measured on this host across 8 attempts: 4x PROCESS_BOUNDARY_BROKER_REFUSED,
+ * 3x CLAUDE_RUNTIME_OBSERVATION_INVALID, 0 drifts. A case that needs an
+ * OS-forbidden interleaving is a race, not a test, and bounded retries over a race
+ * cannot be deterministically green.
+ *
+ * The guard is proven load-bearing by an epic-rail-6 mutation drill instead:
+ * inverting `digestsOf(before) !== digestsOf(after)` in claude-host-runtime.ts
+ * makes the conformance leg below refuse CLAUDE_RUNTIME_PIN_SOURCE_DRIFT at layer
+ * RUNTIME rather than observe, which pins the comparison to the live path and to
+ * that exact code and layer. Recorded in the task's completion note.
+ * (Governor ruling 2026-08-16 02:10Z on this task, option (a).)
+ */
 
 it(
   "observes the really installed runtime, or refuses with the host's own stable code",
