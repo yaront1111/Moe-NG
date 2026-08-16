@@ -40,6 +40,7 @@ export const AGENT_STAFFING_REFUSAL_CODES = Object.freeze([
   "AGENT_STAFFING_CLAIM_HELD",
   "AGENT_STAFFING_CHILD_LIVE",
   "AGENT_STAFFING_RECORD_UNREADABLE",
+  "AGENT_STAFFING_LIVENESS_UNKNOWN",
 ] as const);
 
 export type AgentStaffingRefusalCode = (typeof AGENT_STAFFING_REFUSAL_CODES)[number];
@@ -57,6 +58,17 @@ export interface AgentStaffingRefusal {
 export type AgentStaffingDecision = AgentStaffingAdmission | AgentStaffingRefusal;
 
 export interface AgentLiveChildRecord {
+  /**
+   * The SPAWNED CHILD's pid — never the recording wrapper's own. A SIGKILLed
+   * wrapper leaves its detached child alive as an orphan (see the liveness note
+   * on AgentSessionFenceConfig), so the wrapper's pid cannot speak for it.
+   *
+   * `undefined` when the runtime reported no pid. That is recorded as a pid-less
+   * admission, which reads back UNREADABLE and therefore REFUSES: a child we
+   * cannot probe must not be assumed dead. The retire path still clears it, so
+   * this fails closed without wedging the item.
+   */
+  readonly childPid: number | undefined;
   /** The claim aggregate version the admission was granted against. */
   readonly claimAggregateVersion: number;
   readonly sessionId: string;
@@ -70,6 +82,22 @@ export interface AgentSessionFence {
 }
 
 export interface AgentSessionFenceConfig {
+  /**
+   * Liveness of a recorded CHILD pid, injected so this module never touches the
+   * host's pid space and tests never depend on it.
+   *
+   * WHY THE CHILD AND NOT THE WRAPPER. Probing the recording wrapper's own pid
+   * needs no contract change and looks equivalent. It is unsound: agent-spawner
+   * starts the child `detached: true` as a group leader and kills it only by
+   * explicitly running `killProcessGroup`. SIGKILL the wrapper and that line
+   * never runs, so the child SURVIVES — the exact case this fence exists to
+   * catch. "Wrapper dead" would then admit a second agent beside a live orphan.
+   *
+   * PID REUSE FAILS SAFE: a recycled pid reads as alive, so the fence refuses
+   * where it could have admitted. That is recoverable — the retire path frees
+   * the item — whereas the opposite error re-opens the defect.
+   */
+  readonly isProcessAlive: (pid: number) => boolean;
   readonly projectId: string;
   readonly store: SqliteEventStore;
 }
@@ -104,9 +132,32 @@ function errorOf(action: string, cause: unknown): Error {
 }
 
 type LiveFold =
-  | { readonly kind: "LIVE" }
+  | { readonly kind: "LIVE"; readonly childPid: number }
   | { readonly kind: "IDLE" }
   | { readonly kind: "UNREADABLE" };
+
+const decoder = new TextDecoder("utf-8", { fatal: true });
+
+/**
+ * The recorded child's pid, or null when the payload cannot supply one.
+ *
+ * A pid this function cannot vouch for must NOT become "no pid, admit": that is
+ * the fall-through that would quietly disable the probe. Every rejection here
+ * surfaces as UNREADABLE, which refuses.
+ */
+function childPidOf(payload: Uint8Array): number | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decoder.decode(payload));
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null) return null;
+  const pid = (parsed as { childPid?: unknown }).childPid;
+  // Integer and positive: 0 and negatives address process GROUPS, not processes,
+  // and a fractional or NaN pid can never identify one.
+  return typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : null;
+}
 
 /**
  * Folds the staffing log for one item. Append-only and strictly ordered by
@@ -114,20 +165,28 @@ type LiveFold =
  * RETIRED means a child is still live.
  *
  * An unknown event type on this aggregate is UNREADABLE, never ignored — a
- * skipped event is exactly how a fold silently starts admitting.
+ * skipped event is exactly how a fold silently starts admitting. The live
+ * record's pid travels with the verdict so `admit` can probe the CHILD.
  */
 function foldLiveChild(events: readonly StoredEvent[]): LiveFold {
-  let live = false;
+  // `null` = idle; `{childPid: null}` = live but unprobeable. An unreadable pid
+  // is deliberately NOT an early return: a later RETIRED must still be able to
+  // clear it, or one pid-less admission wedges the item forever — the permanent
+  // deadlock this fence must never trade the race for.
+  let live: { readonly childPid: number | null } | null = null;
   const ordered = [...events].sort((a, b) => a.aggregateSequence - b.aggregateSequence);
   for (const event of ordered) {
     if (!STAFFING_EVENT_TYPES.has(event.eventType)) return { kind: "UNREADABLE" };
-    live = event.eventType === ADMITTED;
+    live = event.eventType === ADMITTED ? { childPid: childPidOf(event.payload) } : null;
   }
-  return live ? { kind: "LIVE" } : { kind: "IDLE" };
+  if (live === null) return { kind: "IDLE" };
+  return live.childPid === null
+    ? { kind: "UNREADABLE" }
+    : { childPid: live.childPid, kind: "LIVE" };
 }
 
 export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentSessionFence {
-  const { projectId, store } = config;
+  const { isProcessAlive, projectId, store } = config;
 
   const admit = (workItemId: string, now: string): AgentStaffingDecision => {
     // 1. The durable claim, which fences ordinary contention.
@@ -150,8 +209,22 @@ export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentS
       return refuse("AGENT_STAFFING_RECORD_UNREADABLE");
     }
     if (fold.kind === "UNREADABLE") return refuse("AGENT_STAFFING_RECORD_UNREADABLE");
-    if (fold.kind === "LIVE") return refuse("AGENT_STAFFING_CHILD_LIVE");
-    return ADMIT;
+    if (fold.kind === "IDLE") return ADMIT;
+
+    // 3. The record says LIVE — but a SIGKILLed wrapper runs no exit handler, so
+    // an unretired record is NOT proof the child still exists. Without this
+    // probe the item would be unstaffable forever, which is strictly worse than
+    // the expiry exposure the fence replaces. A record TTL is not a substitute:
+    // a TTL equal to the claim TTL reintroduces that exact expiry defect.
+    let alive: boolean;
+    try {
+      alive = isProcessAlive(fold.childPid);
+    } catch {
+      // "Cannot tell" is not "dead". Distinct code so a probe outage is never
+      // mistaken for ordinary contention or for an unreadable record.
+      return refuse("AGENT_STAFFING_LIVENESS_UNKNOWN");
+    }
+    return alive ? refuse("AGENT_STAFFING_CHILD_LIVE") : ADMIT;
   };
 
   const append = (
@@ -187,6 +260,10 @@ export function createAgentSessionFence(config: AgentSessionFenceConfig): AgentS
     recordLiveChild: (record: AgentLiveChildRecord): readonly Error[] => append(
       "RECORD", record.workItemId,
       {
+        // Written only when it is a real pid. Persisting `undefined`/0/-1 would
+        // hand the probe a value it cannot use while LOOKING probeable; omitting
+        // the key routes it to the UNREADABLE arm, which refuses.
+        ...(typeof record.childPid === "number" ? { childPid: record.childPid } : {}),
         claimAggregateVersion: record.claimAggregateVersion,
         sessionId: record.sessionId,
         workItemId: record.workItemId,

@@ -284,6 +284,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // lifetime handlers are attached — a record written later could be skipped
     // by a child that exits immediately.
     cleanupFailures.push(...gate.record({
+      childPid: start.pid,
       claimAggregateVersion: step.claimAggregateVersion,
       sessionId,
       workItemId,

@@ -78,7 +78,21 @@ export type AgentSpawnStartResult =
     readonly code: SpawnInvocationRefusalCode;
     readonly layer: typeof SPAWN_INVOCATION_LAYER;
   }
-  | { readonly ok: true; readonly exit: Promise<void> };
+  | {
+    readonly ok: true;
+    readonly exit: Promise<void>;
+    /**
+     * The started CHILD's pid, or undefined when the runtime never reported one.
+     *
+     * Surfaced so the durable staffing fence can probe whether that child is
+     * still alive. It must be the child's, never the spawning wrapper's: the
+     * child is detached and outlives a SIGKILLed parent, so the parent's pid
+     * cannot answer for it. `undefined` is a real possibility (an injected or
+     * already-gone child) and callers must fail closed on it rather than
+     * substitute their own.
+     */
+    readonly pid: number | undefined;
+  };
 
 export type AgentSpawnStart = (request: SpawnRequest) => Promise<AgentSpawnStartResult>;
 
@@ -91,7 +105,12 @@ export interface AgentSpawnStarter {
 /** Either the coded refusal, or a live attempt whose two facts stay separate. */
 export type SpawnAttempt =
   | Extract<AgentSpawnStartResult, { readonly ok: false }>
-  | { readonly admitted: Promise<void>; readonly done: Promise<void> };
+  | {
+    readonly admitted: Promise<void>;
+    readonly done: Promise<void>;
+    /** Read AFTER `admitted` settles; the pid does not exist before the spawn. */
+    readonly pid: () => number | undefined;
+  };
 
 /**
  * The refusal arm on its own, so a consumer can report it without restating the

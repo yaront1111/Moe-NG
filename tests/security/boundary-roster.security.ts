@@ -123,6 +123,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
+  { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
   { constant: "DOCTOR_VERSION_LAYERS", file: "apps/daemon/src/recovery/doctor-version-contract.ts", axis: "durable-store" },
   { constant: "DURABLE_INVENTORY_ADAPTER_LAYER", file: "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts", axis: "durable-store" },
@@ -197,8 +198,15 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RECOVERY_INSTALL_TRANSACTION_LAYER", file: "packages/store/src/recovery-install-contracts.ts", axis: "durable-store" },
 ]);
 
-/** The corrected enumeration size. Measured at HEAD abc3dcf; see step 1. */
-const EXPECTED_ROSTER_SIZE = 89;
+/**
+ * The corrected enumeration size. Measured at HEAD abc3dcf; see step 1.
+ *
+ * 89 -> 90 for AGENT_STAFFING_LAYER (task-05b0a693, the wrapper's durable
+ * staffing fence). Declaring an exported layer constant is what this scan
+ * counts, so a boundary must be rostered in the task that declares it — no
+ * package test or repo-wide typecheck can see this gate.
+ */
+const EXPECTED_ROSTER_SIZE = 90;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -206,7 +214,7 @@ const EXPECTED_ROSTER_SIZE = 89;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 33,
+  "apps/daemon": 34,
   "packages/benchmark": 1,
   "packages/runner": 20,
   "packages/core": 10,

@@ -1,9 +1,11 @@
 import { EventEmitter } from "node:events";
+import { readFileSync } from "node:fs";
 
 import { describe, expect, it, vi } from "vitest";
 
 import {
   createWrapperStopSignal,
+  probeProcessAlive,
   shutdownWrapperRuntime,
 } from "./agent-wrapper-main.js";
 
@@ -113,4 +115,76 @@ describe("agent wrapper process lifecycle", () => {
       expect(source.listenerCount("SIGTERM")).toBe(0);
     },
   );
+});
+
+/**
+ * The guard that would have caught QA reject #1.
+ *
+ * The fence shipped fully tested and completely inert: every drill exercised the
+ * gate WITH a fence injected, and nothing asserted that the one production
+ * construction passes one. `createStaffingGate(undefined).admit` returns null,
+ * so an unwired binary admits every pass while the whole suite stays green.
+ * "The guard works" and "the guard is installed" are separate claims and need
+ * separate assertions.
+ */
+describe("wrapper binary staffing wiring", () => {
+  const SOURCE = readFileSync(
+    new URL("./agent-wrapper-main.ts", import.meta.url), "utf8",
+  );
+  const wrapperCall = (source: string): string => {
+    const start = source.indexOf("createAgentWrapper({");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf(["", "    });"].join("\n"), start);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  };
+
+  it("passes a staffingFence in the production createAgentWrapper call", () => {
+    expect(wrapperCall(SOURCE)).toContain("staffingFence:");
+  });
+
+  it("builds that fence from the real store and the real liveness probe", () => {
+    // Pins WHAT is injected, not merely that the key is present: a
+    // `staffingFence: undefined` would satisfy the assertion above while leaving
+    // the binary exactly as unfenced as the rejected version.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("staffingFence: createAgentSessionFence({");
+    expect(call).toContain("isProcessAlive: probeProcessAlive");
+    expect(call).toContain("store: verifierStore");
+    expect(call).not.toContain("staffingFence: undefined");
+  });
+
+  it("scans a slice that can actually fail (positive control)", () => {
+    // Without this, a scan that silently matched nothing would report success.
+    const unwired = SOURCE.replace(/staffingFence: createAgentSessionFence\(\{/, "");
+    expect(() => expect(wrapperCall(unwired)).toContain("staffingFence: createAgentSessionFence({"))
+      .toThrow();
+  });
+
+  it("reads a live pid as alive and a vanished pid as dead", () => {
+    const gone = Object.assign(new Error("no such process"), { code: "ESRCH" });
+    expect(probeProcessAlive(1, () => undefined)).toBe(true);
+    expect(probeProcessAlive(1, () => { throw gone; })).toBe(false);
+  });
+
+  it("reads a foreign-owned pid as ALIVE, never as gone", () => {
+    // EPERM means the process EXISTS under another owner. Treating it as dead
+    // would admit a second agent beside a live child — the defect itself.
+    const denied = Object.assign(new Error("operation not permitted"), { code: "EPERM" });
+    expect(probeProcessAlive(1, () => { throw denied; })).toBe(true);
+  });
+
+  it("propagates an unknown probe failure instead of guessing dead", () => {
+    // The fence turns this into LIVENESS_UNKNOWN. Swallowing it here as `false`
+    // would silently convert "cannot tell" into "safe to staff".
+    const weird = Object.assign(new Error("EIO"), { code: "EIO" });
+    expect(() => probeProcessAlive(1, () => { throw weird; })).toThrow("EIO");
+  });
+
+  it("asks with signal 0 and the pid it was given, delivering nothing", () => {
+    const calls: Array<readonly [number, number]> = [];
+    probeProcessAlive(4242, (pid, signal) => { calls.push([pid, signal]); });
+
+    expect(calls).toStrictEqual([[4242, 0]]);
+  });
 });

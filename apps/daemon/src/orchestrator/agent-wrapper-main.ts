@@ -10,6 +10,7 @@ import {
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
+import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
@@ -21,6 +22,34 @@ import {
 } from "./verifier-process-runner.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
+
+/** The signal-0 probe backing the wrapper's durable staffing fence. */
+export type ProcessSignalProbe = (pid: number, signal: 0) => void;
+
+/**
+ * Is this pid still addressable? `kill(pid, 0)` delivers no signal; it only asks.
+ *
+ * ESRCH means no such process — the staffing record is stale and the item may be
+ * re-staffed. EPERM means the process EXISTS but is owned by someone else, which
+ * is ALIVE and must refuse; reading it as "gone" would admit a second agent
+ * beside a live child, the exact defect the fence closes. Anything else is
+ * propagated so the fence answers LIVENESS_UNKNOWN rather than guessing "dead" —
+ * an unknown probe failure is never evidence of death.
+ */
+export function probeProcessAlive(
+  pid: number,
+  kill: ProcessSignalProbe = (target, signal) => { process.kill(target, signal); },
+): boolean {
+  try {
+    kill(pid, 0);
+    return true;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ESRCH") return false;
+    if (code === "EPERM") return true;
+    throw error;
+  }
+}
 
 interface WrapperSignalSource {
   on(event: "SIGINT" | "SIGTERM", listener: () => void): unknown;
@@ -190,6 +219,13 @@ async function main(): Promise<void> {
       return null;
     };
 
+    // Opened BEFORE the wrapper because the durable staffing fence needs it, and
+    // an unfenced wrapper is the defect this binary exists to close: without a
+    // fence, `createStaffingGate(undefined).admit` returns null and admits every
+    // pass. One handle serves both the fence and the verifier below; the finally
+    // gate already owns closing it.
+    verifierStore = SqliteEventStore.open(config.storePath);
+
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
@@ -205,6 +241,11 @@ async function main(): Promise<void> {
       spawnAgent: (request) => secureSpawn === null
         ? Promise.reject(new Error("MCP_HTTP_HOST_NOT_STARTED"))
         : secureSpawn(request),
+      staffingFence: createAgentSessionFence({
+        isProcessAlive: probeProcessAlive,
+        projectId: config.projectId,
+        store: verifierStore,
+      }),
     });
 
     // Daemon-side verification runs with a reduced environment and bounded
@@ -212,7 +253,6 @@ async function main(): Promise<void> {
     verifierRunner = createVerifierProcessRunner({
       onFatalContainment: () => { stop.request(); },
     });
-    verifierStore = SqliteEventStore.open(config.storePath);
 
     const verifier = createNodeVerifier({
       deps: provider.provide(),

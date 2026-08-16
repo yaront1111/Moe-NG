@@ -91,12 +91,26 @@ function seedClaim(store: SqliteEventStore, expiresAt: string): void {
   expect(outcome).toMatchObject({ ok: true });
 }
 
-function fenceOn(store: SqliteEventStore): ReturnType<typeof createAgentSessionFence> {
-  return createAgentSessionFence({ projectId: PROJECT, store });
+const CHILD_PID = 424242;
+
+/**
+ * Liveness is an INJECTED port, never a real `process.kill(pid, 0)`, so no case
+ * in this file depends on the pid space of the machine running it. `alive`
+ * defaults to true because that is the refusing answer: a helper that defaulted
+ * to "dead" would make every stale case admit by accident.
+ */
+function fenceOn(
+  store: SqliteEventStore,
+  isProcessAlive: (pid: number) => boolean = () => true,
+): ReturnType<typeof createAgentSessionFence> {
+  return createAgentSessionFence({ isProcessAlive, projectId: PROJECT, store });
 }
 
-function recordChild(store: SqliteEventStore, claimAggregateVersion: number): void {
+function recordChild(
+  store: SqliteEventStore, claimAggregateVersion: number, childPid: number = CHILD_PID,
+): void {
   fenceOn(store).recordLiveChild({
+    childPid,
     claimAggregateVersion,
     sessionId: "sess-wrap-first",
     workItemId: ITEM,
@@ -148,13 +162,166 @@ describe("agent session fence", () => {
     expect(AGENT_STAFFING_REFUSAL_CODES).toContain("AGENT_STAFFING_CHILD_LIVE");
   });
 
+  it("probes the CHILD pid it recorded, not the wrapper's own pid", () => {
+    // The unsound cheap fix is to probe the RECORDING WRAPPER's pid and treat a
+    // dead wrapper as a stale record. agent-spawner.ts:234-238 spawns the child
+    // `detached: true` and kills it only via an explicit killProcessGroup, so a
+    // SIGKILLed wrapper leaves the child ALIVE as an orphan. "Wrapper dead" would
+    // then admit a second agent beside a live child — the original defect wearing
+    // a fence. Asserting the exact probed value is what forbids that substitution.
+    const store = openAt(scratchPath("probes-child"));
+    seedClaim(store, CLAIM_EXPIRES);
+    recordChild(store, 1, CHILD_PID);
+    const probed: number[] = [];
+
+    fenceOn(store, (pid) => { probed.push(pid); return true; }).admit(ITEM, AFTER_EXPIRY);
+
+    expect(probed).toStrictEqual([CHILD_PID]);
+    expect(probed).not.toContain(process.pid);
+  });
+
+  it("refuses CHILD_LIVE while the recorded child pid is still alive", () => {
+    const store = openAt(scratchPath("pid-alive"));
+    seedClaim(store, CLAIM_EXPIRES);
+    recordChild(store, 1);
+    const horizon = store.readEventHorizon();
+
+    expect(fenceOn(store, () => true).admit(ITEM, AFTER_EXPIRY)).toMatchObject({
+      code: "AGENT_STAFFING_CHILD_LIVE",
+      layer: AGENT_STAFFING_LAYER,
+      ok: false,
+    });
+    expect(store.readEventHorizon()).toBe(horizon);
+  });
+
+  it("ADMITS once the recorded child pid is dead, so a SIGKILL cannot wedge the item", () => {
+    // The deadlock QA blocked on. SIGKILL runs no exit handler, so the ADMITTED
+    // record is never retired; without this branch the item is unstaffable
+    // FOREVER — strictly worse than the 30-minute claim-expiry exposure it
+    // replaces. A record TTL is NOT an acceptable substitute: a TTL equal to the
+    // claim TTL reintroduces the very expiry defect this fence exists to close.
+    const store = openAt(scratchPath("pid-dead"));
+    seedClaim(store, CLAIM_EXPIRES);
+    recordChild(store, 1);
+
+    expect(fenceOn(store, () => false).admit(ITEM, AFTER_EXPIRY)).toMatchObject({ ok: true });
+  });
+
+  it("refuses LIVENESS_UNKNOWN when the probe throws, rather than admitting", () => {
+    // Fail closed on the probe exactly as on every durable read. A throwing probe
+    // proves nothing about the child, and "cannot tell" must never read as "dead".
+    const store = openAt(scratchPath("pid-throws"));
+    seedClaim(store, CLAIM_EXPIRES);
+    recordChild(store, 1);
+    const horizon = store.readEventHorizon();
+
+    expect(fenceOn(store, () => { throw new Error("EPERM"); }).admit(ITEM, AFTER_EXPIRY))
+      .toMatchObject({
+        code: "AGENT_STAFFING_LIVENESS_UNKNOWN",
+        layer: AGENT_STAFFING_LAYER,
+        ok: false,
+      });
+    expect(store.readEventHorizon()).toBe(horizon);
+  });
+
+  it("refuses RECORD_UNREADABLE when the ADMITTED payload carries no usable pid", () => {
+    // The fold previously inspected event TYPES only and never parsed a payload.
+    // A payload it cannot read must refuse, not fall through to "no pid, admit".
+    const store = openAt(scratchPath("pid-missing"));
+    const aggregateId = `wrapper-staffing/${createHash("sha256").update(ITEM, "utf8")
+      .digest("hex")}`;
+    store.commit({
+      aggregateId,
+      commandBytes: encoder.encode(JSON.stringify({ probe: "pid-less" })),
+      commandId: "stf-pid-less",
+      committedAt: CLAIM_AT,
+      events: [{
+        eventId: "stf-pid-less-e1",
+        eventType: "AgentStaffingAdmitted",
+        payload: encoder.encode(JSON.stringify({ sessionId: "s", workItemId: ITEM })),
+      }],
+      expectedVersion: 0,
+    });
+    const horizon = store.readEventHorizon();
+
+    expect(fenceOn(store, () => false).admit(ITEM, AFTER_EXPIRY)).toMatchObject({
+      code: "AGENT_STAFFING_RECORD_UNREADABLE",
+      layer: AGENT_STAFFING_LAYER,
+      ok: false,
+    });
+    expect(store.readEventHorizon()).toBe(horizon);
+  });
+
+  it("refuses when the child was recorded through PRODUCTION with no pid at all", () => {
+    // The pid-less start, driven through recordLiveChild rather than a
+    // hand-committed row: spawn can report `pid: undefined`, and a child we
+    // cannot probe must NOT be assumed dead. Probe pinned to `false` so the only
+    // thing that can refuse here is the unreadable record itself.
+    // NOT via the recordChild helper: passing `undefined` to a defaulted
+    // parameter re-triggers the DEFAULT, so the helper would silently record a
+    // real pid and this case would pass for the wrong reason.
+    const store = openAt(scratchPath("pid-undefined"));
+    seedClaim(store, CLAIM_EXPIRES);
+    fenceOn(store).recordLiveChild({
+      childPid: undefined,
+      claimAggregateVersion: 1,
+      sessionId: "sess-wrap-first",
+      workItemId: ITEM,
+    });
+    const horizon = store.readEventHorizon();
+
+    expect(fenceOn(store, () => false).admit(ITEM, AFTER_EXPIRY)).toMatchObject({
+      code: "AGENT_STAFFING_RECORD_UNREADABLE",
+      layer: AGENT_STAFFING_LAYER,
+      ok: false,
+    });
+    expect(store.readEventHorizon()).toBe(horizon);
+  });
+
+  it("still retires a pid-less admission, so failing closed cannot wedge the item", () => {
+    // The other half of the fail-closed bargain: refusing forever would be a
+    // permanent deadlock. Retirement must clear a record the probe could never read.
+    const store = openAt(scratchPath("pid-undefined-retire"));
+    seedClaim(store, CLAIM_EXPIRES);
+    const fence = fenceOn(store, () => true);
+    fence.recordLiveChild({
+      childPid: undefined,
+      claimAggregateVersion: 1,
+      sessionId: "sess-wrap-first",
+      workItemId: ITEM,
+    });
+    fence.retireLiveChild(ITEM);
+
+    expect(fence.admit(ITEM, AFTER_EXPIRY)).toMatchObject({ ok: true });
+  });
+
+  it("never probes liveness when the durable claim is still held", () => {
+    // Ordering matters: the claim answers first, so a held item must refuse
+    // CLAIM_HELD without consulting the probe at all. If the probe runs here, a
+    // later "dead child" answer could override live contention.
+    const store = openAt(scratchPath("held-no-probe"));
+    seedClaim(store, CLAIM_EXPIRES);
+    recordChild(store, 1);
+    let probes = 0;
+
+    const decision = fenceOn(store, () => { probes += 1; return false; })
+      .admit(ITEM, BEFORE_EXPIRY);
+
+    expect(decision).toMatchObject({ code: "AGENT_STAFFING_CLAIM_HELD", ok: false });
+    expect(probes).toBe(0);
+  });
+
   it("admits again once the expired claim's child is durably retired", () => {
     // Task rail 2: a genuinely dead predecessor must still be replaceable, or
     // this fence becomes a permanent wedge — worse than the race it closes.
     const store = openAt(scratchPath("retired"));
     seedClaim(store, CLAIM_EXPIRES);
-    const fence = fenceOn(store);
+    // Probe pinned ALIVE so the admission can only come from the RETIRED record.
+    // With a dead probe this case would pass through the stale-reclaim branch and
+    // prove nothing about retirement.
+    const fence = fenceOn(store, () => true);
     fence.recordLiveChild({
+      childPid: CHILD_PID,
       claimAggregateVersion: 1,
       sessionId: "sess-wrap-first",
       workItemId: ITEM,

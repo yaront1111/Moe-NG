@@ -30,6 +30,11 @@ import type { SpawnRequest } from "./agent-wrapper.js";
  * affordance surface rather than off any wrapper state.
  */
 
+/** A stand-in child pid for spawn stubs. Never this process's own: the fence
+ * probes the CHILD, and a stub reusing `process.pid` would read as alive for
+ * the wrong reason and hide a probe aimed at the wrapper. */
+const CHILD_PID = 909090;
+
 const OPERATOR = "wrapper-operator-credential";
 const directory = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
 // Real time base: the provider's session authenticator judges expiry against
@@ -172,7 +177,7 @@ const wrapper = createAgentWrapper({
   // any report these tests read was produced without waiting for a child exit.
   spawnAgent: async (request) => {
     spawned.push(request);
-    return { exit: new Promise<void>(() => undefined), ok: true };
+    return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
   },
 });
 
@@ -282,7 +287,7 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `revoke-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true }),
+        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true, pid: CHILD_PID }),
       });
 
       const report = await finite.runOnce();
@@ -409,7 +414,7 @@ describe("createAgentWrapper", () => {
         // child open.
         spawnAgent: async (request) => {
           spawned = request;
-          return { exit: new Promise<void>(() => undefined), ok: true };
+          return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
         },
       });
 
@@ -435,6 +440,7 @@ describe("createAgentWrapper", () => {
       async (): Promise<AgentSpawnStartResult> => ({
         exit: Promise.reject(new Error("AGENT_PROCESS_FAILED:EXIT_NONZERO:1")),
         ok: true,
+        pid: CHILD_PID,
       })],
   ] as const)("surfaces a %s after cleaning the claim and session", async (
     _case, projectSuffix, failureMessage, spawnAgent,
@@ -515,7 +521,7 @@ describe("createAgentWrapper", () => {
         operatorCredential: OPERATOR,
         spawnAgent: async (spawnedRequest) => {
           request = spawnedRequest;
-          return { exit: Promise.resolve(), ok: true };
+          return { exit: Promise.resolve(), ok: true, pid: CHILD_PID };
         },
       });
 
@@ -564,7 +570,7 @@ describe("createAgentWrapper", () => {
         operatorCredential: OPERATOR,
         spawnAgent: async (spawnedRequest) => {
           request = spawnedRequest;
-          return { exit: Promise.resolve(), ok: true };
+          return { exit: Promise.resolve(), ok: true, pid: CHILD_PID };
         },
       });
 
@@ -608,7 +614,7 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `dual-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true }),
+        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true, pid: CHILD_PID }),
       });
 
       const staffed = (await refusing.runOnce()).spawned[0];
@@ -1008,6 +1014,7 @@ describe("agent spawn admission truth", () => {
         spawnAgent: async () => Object.freeze({
           exit: new Promise<void>((resolve) => { release = resolve; }),
           ok: true as const,
+          pid: CHILD_PID,
         }),
       });
 
@@ -1065,7 +1072,7 @@ describe("agent spawn admission truth", () => {
         spawnAgent: async (request) => {
           requests.push(request.workItemId);
           await held;
-          return { exit: new Promise<void>(() => undefined), ok: true };
+          return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
         },
       });
 
@@ -1171,7 +1178,7 @@ describe("createAgentWrapper — durable staffing fence", () => {
       const spawnAgent = async (request: SpawnRequest): Promise<AgentSpawnStartResult> => {
         spawnCalls.push(request.workItemId);
         // Admitted and held open: the child is still running for the whole test.
-        return { exit: new Promise<void>(() => undefined), ok: true };
+        return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
       };
 
       const firstStore = SqliteEventStore.openForProject(harness.storePath, projectId);
@@ -1183,7 +1190,7 @@ describe("createAgentWrapper — durable staffing fence", () => {
         mintSecret: () => `fencea${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
         operatorCredential: OPERATOR,
         spawnAgent,
-        staffingFence: createAgentSessionFence({ projectId, store: firstStore }),
+        staffingFence: createAgentSessionFence({ isProcessAlive: () => true, projectId, store: firstStore }),
       });
 
       const firstReport = await firstWrapper.runOnce();
@@ -1223,7 +1230,7 @@ describe("createAgentWrapper — durable staffing fence", () => {
         mintSecret: () => `fenceb${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
         operatorCredential: OPERATOR,
         spawnAgent,
-        staffingFence: createAgentSessionFence({ projectId, store: secondStore }),
+        staffingFence: createAgentSessionFence({ isProcessAlive: () => true, projectId, store: secondStore }),
       });
 
       const secondReport = await secondWrapper.runOnce();
@@ -1235,6 +1242,170 @@ describe("createAgentWrapper — durable staffing fence", () => {
       expect(secondReport.spawned).toMatchObject([
         { outcome: "AGENT_STAFFING_CHILD_LIVE", sessionId: null, workItemId: target },
       ]);
+    } finally {
+      store.close();
+      while (stores.length > 0) stores.pop()?.close();
+      harness.dispose();
+    }
+  });
+
+  it("records the pid the SPAWNER reported, never the wrapper's own", async () => {
+    // Found by a SURVIVING mutant: replacing `childPid: start.pid` with
+    // `childPid: process.pid` left all 112 tests green. Every other case here
+    // injects its own probe, so none of them observes WHICH pid was written —
+    // and the fence's own unit test calls recordLiveChild directly, so it proves
+    // the fence, not the wrapper's choice of what to hand it.
+    //
+    // That substitution is the unsound design step 2 rejected: the child is
+    // detached and survives a SIGKILLed wrapper, so recording the wrapper's pid
+    // makes a live orphan read as dead and re-opens the defect. Nothing bound
+    // the wrapper to the spawner's pid until this case.
+    const projectId = "proj-wrapper-fence-pid";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const opening = harness.port.readSurface();
+      if (opening.outcome !== "SURFACE") throw new Error(opening.code);
+      const first = opening.steps.find((step) =>
+        step.status === "READY" && step.claim === null
+        && !step.kind.startsWith("session.")
+        && step.kind !== "approval.decide" && step.kind !== "goal.close");
+      if (first === undefined) throw new Error("no staffable step on the surface");
+      const target = workItemIdFor(first.kind, first.aggregateId);
+
+      // Deliberately not CHILD_PID and not process.pid, so neither a shared
+      // constant nor the ambient process can make this pass by coincidence.
+      const SPAWNED_PID = 777_001;
+      expect(SPAWNED_PID).not.toBe(process.pid);
+
+      const fence = createAgentSessionFence({ isProcessAlive: () => true, projectId, store });
+      let suffix = 0;
+      const wrapper = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `fencep${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => ({
+          exit: new Promise<void>(() => undefined), ok: true, pid: SPAWNED_PID,
+        }),
+        staffingFence: fence,
+      });
+
+      expect((await wrapper.runOnce()).spawned[0]).toMatchObject({ outcome: "SPAWNED" });
+
+      // Read the DURABLE record back through production: a capturing probe on a
+      // fresh fence sees exactly the pid that was persisted. Asked past expiry so
+      // the claim gate is silent and only the live-child record can answer.
+      const probed: number[] = [];
+      const reader = createAgentSessionFence({
+        isProcessAlive: (pid) => { probed.push(pid); return true; }, projectId, store,
+      });
+      reader.admit(target, new Date(NOW + 120_000).toISOString());
+
+      expect(probed).toStrictEqual([SPAWNED_PID]);
+      expect(probed).not.toContain(process.pid);
+    } finally {
+      store.close();
+      harness.dispose();
+    }
+  });
+
+  it("re-staffs after a SIGKILLED wrapper, because the orphaned child probes DEAD", async () => {
+    // The deadlock QA blocked the first attempt on, proven at the WRAPPER level.
+    //
+    // SIGKILL runs no exit handler, so the ADMITTED record is never retired. The
+    // sibling case above proves a LIVE record refuses; without a liveness probe
+    // that refusal is permanent and the item is unstaffable FOREVER — strictly
+    // worse than the 30-minute expiry exposure this fence replaces. Same setup as
+    // the race case, one variable changed: the restarted wrapper's probe answers
+    // DEAD. A record TTL is deliberately NOT the mechanism; a TTL equal to the
+    // claim TTL would reintroduce the very expiry defect the fence closes.
+    const projectId = "proj-wrapper-fence-orphan";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    const stores: SqliteEventStore[] = [];
+    try {
+      const opening = harness.port.readSurface();
+      if (opening.outcome !== "SURFACE") throw new Error(opening.code);
+      const first = opening.steps.find((step) =>
+        step.status === "READY" && step.claim === null
+        && !step.kind.startsWith("session.")
+        && step.kind !== "approval.decide" && step.kind !== "goal.close");
+      if (first === undefined) throw new Error("no staffable step on the surface");
+      const target = workItemIdFor(first.kind, first.aggregateId);
+
+      const soloPort: AffordancePort = {
+        boundProjectId: projectId,
+        readSurface: () => {
+          const surface = harness.port.readSurface();
+          if (surface.outcome !== "SURFACE") return surface;
+          return {
+            ...surface,
+            steps: surface.steps
+              .filter((step) => workItemIdFor(step.kind, step.aggregateId) === target),
+          };
+        },
+      };
+
+      const spawnCalls: string[] = [];
+      const spawnAgent = async (request: SpawnRequest): Promise<AgentSpawnStartResult> => {
+        spawnCalls.push(request.workItemId);
+        return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
+      };
+
+      const firstStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(firstStore);
+      let suffix = 0;
+      const firstWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `orphna${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        staffingFence: createAgentSessionFence({
+          isProcessAlive: () => true, projectId, store: firstStore,
+        }),
+      });
+
+      const firstReport = await firstWrapper.runOnce();
+      expect(firstReport.spawned).toMatchObject([{ outcome: "SPAWNED", workItemId: target }]);
+      const agentSession = firstReport.spawned[0]?.sessionId;
+      if (agentSession === null || agentSession === undefined) throw new Error("no session");
+
+      // The claim goes, the ADMITTED record STAYS — exactly the state a SIGKILL
+      // leaves behind, since no exit handler ever ran to retire it.
+      const claimed = readWorkClaimLedger(store, projectId).claims.get(target);
+      if (claimed === undefined) throw new Error("no durable claim to retire");
+      writeClaim(
+        store, projectId, "work.release", agentSession, target,
+        claimed.version, "orphan-reap",
+      );
+
+      firstStore.close();
+      stores.pop();
+      const secondStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(secondStore);
+      const secondWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW + 120_000,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `orphnb${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        // The ONLY difference from the race case above. If this case and that one
+        // ever agree, the probe has stopped being consulted.
+        staffingFence: createAgentSessionFence({
+          isProcessAlive: () => false, projectId, store: secondStore,
+        }),
+      });
+
+      const secondReport = await secondWrapper.runOnce();
+      expect(secondReport.spawned).toMatchObject([
+        { outcome: "SPAWNED", workItemId: target },
+      ]);
+      // The count, as in the race case: two spawns is the CORRECT answer here,
+      // because the first child is genuinely gone. Asserting the outcome alone
+      // would not distinguish re-staffing from a report that never spawned.
+      expect(spawnCalls).toEqual([target, target]);
     } finally {
       store.close();
       while (stores.length > 0) stores.pop()?.close();
@@ -1264,7 +1435,7 @@ describe("createAgentWrapper — durable staffing fence", () => {
       if (first === undefined) throw new Error("no staffable step on the surface");
       const target = workItemIdFor(first.kind, first.aggregateId);
 
-      const fence = createAgentSessionFence({ projectId, store });
+      const fence = createAgentSessionFence({ isProcessAlive: () => true, projectId, store });
       let killChild: (error: Error) => void = () => undefined;
       const exit = new Promise<void>((_resolve, reject) => { killChild = reject; });
       let suffix = 0;
@@ -1277,7 +1448,7 @@ describe("createAgentWrapper — durable staffing fence", () => {
         // already-rejected promise retires on the first microtask, before any
         // assertion could see the fenced state, and the "while live" check
         // below would then be asserting nothing.
-        spawnAgent: async () => ({ exit, ok: true }),
+        spawnAgent: async () => ({ exit, ok: true, pid: CHILD_PID }),
         staffingFence: fence,
       });
 

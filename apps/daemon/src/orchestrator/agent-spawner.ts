@@ -94,6 +94,9 @@ function spawnRuntime(
     let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
     let terminateOwned: () => void = () => undefined;
     let completedBeforeRegistration = false;
+    // Captured out of the `done` executor's scope so an accepted start can report
+    // the CHILD's pid to the durable staffing fence. Read only after `admitted`.
+    let childPid: number | undefined;
     // Admission is only ever RESOLVED by the child's own `spawn` event. Every
     // settlement reached while it is still pending denies it uncoded, so a start
     // can neither hang nor acquire a stable code it did not earn.
@@ -119,6 +122,7 @@ function spawnRuntime(
         reject(error);
         return;
       }
+      childPid = child.pid;
       // The config file carries the agent's credential; it must not outlive the
       // owned process. Every settlement path removes it; a missing file is fine.
       let settled = false;
@@ -290,7 +294,7 @@ function spawnRuntime(
     });
     owned = { done, terminate: terminateOwned };
     if (!completedBeforeRegistration) active.add(owned);
-    return { admitted, done };
+    return { admitted, done, pid: () => childPid };
   };
 
   // `async` makes every refusal a rejection rather than escaping the poll tick.
@@ -304,7 +308,7 @@ function spawnRuntime(
       void attempt.done.catch(() => undefined);
       throw error;
     }
-    return Object.freeze({ ok: true as const, exit: attempt.done });
+    return Object.freeze({ ok: true as const, exit: attempt.done, pid: attempt.pid() });
   };
 
   const runAgent = async (request: SpawnRequest): Promise<void> => {
