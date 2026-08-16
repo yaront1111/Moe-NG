@@ -92,6 +92,7 @@ export type {
 export {
   RECOVERY_ANCHOR_ALLOWED_OPERATIONS,
   RECOVERY_ANCHOR_CODEC_VERSION,
+  RECOVERY_ANCHOR_FAULT_POINTS,
   RECOVERY_ANCHOR_LAYER,
   RECOVERY_ANCHOR_REASON_CODES,
   RECOVERY_ANCHOR_STATES,
@@ -99,6 +100,7 @@ export {
 export type {
   RecoveryAnchorArtifact,
   RecoveryAnchorDiscardResult,
+  RecoveryAnchorFaultPoint,
   RecoveryAnchorInspectResult,
   RecoveryAnchorInstallResult,
   RecoveryAnchorPayload,
