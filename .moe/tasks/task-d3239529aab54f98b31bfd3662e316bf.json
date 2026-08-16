@@ -1,0 +1,55 @@
+{
+  "id": "task-d3239529aab54f98b31bfd3662e316bf",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Compose and durably commit the provider-run record from the activation path",
+  "description": "Objective: close the last link between the landed telemetry producers and the landed durable sink, giving `buildProviderRunRecord`, `commitProviderRunRecord` and (transitively) `normalizeUsageMeasurement` their FIRST production call sites in apps/.\n\nHARD DEPENDENCY: task-6c0db1f9920841fea295512f602054ee (Emit provider-run telemetry from the daemon activation path) must be DONE — this task consumes the `ClaudeTelemetryHandoff` that task produces. Re-measure it on disk before planning; a DONE status is not proof the symbol is reachable.\n\nMEASURED GAP at HEAD ac09ca9, symbol by symbol. Both ends exist and nothing joins them:\n- PRODUCER, landed and published: `buildProviderRunRecord` (packages/runner/src/providers/telemetry/provider-run-record.ts:210, published at surface/provider-record-surface.ts:24). It internally calls `normalizeProviderUsage` (:238), which calls `@moe/scheduler`'s `normalizeUsageMeasurement` (provider-usage-normalization.ts:208; defined at packages/scheduler/src/budget/budget-measurement.ts:210, published at scheduler/index.ts:115). So one call site here gives the scheduler's measurement authority its first transitive apps/ consumer too.\n- SINK, landed 2026-08-16 by task-1a7ff170ee544a3a8a10962c25e2ca5b: `commitProviderRunRecord` (apps/daemon/src/telemetry/provider-run-ledger.ts:202) and `deriveProviderRunEventId` (:89), over the narrow `ProviderRunStore` port.\n- THE GAP: `grep -rn \"commitProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'` returns ONLY its own definition. Zero callers. `buildProviderRunRecord` has zero apps/ hits. The ledger is a durable sink nothing writes to.\n\nDeliverable: an activation-side composition step that takes the handoff from the prerequisite task, builds the record through `buildProviderRunRecord`, and commits it exactly once through `commitProviderRunRecord`, returning the commit result or an existing stable refusal.\n\nNOT in scope: minting a record digest (the codec owns that — provider-run-codec.ts:156-162), re-normalizing usage (buildProviderRunRecord already does it), new store schema, budget decisions, benchmark harness, corpus, or scoring.\n\nOwned paths: apps/daemon/src/activation/ or apps/daemon/src/telemetry/ (one new module + its .js bridge + its .test.ts). Do NOT publish from apps/daemon/src/index.ts; index-surface.test.ts pins EXPECTED_EXPORTS.length (85 at time of writing — re-measure, do not cite this number).\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code. Daemon gates are red at baseline from foreign in-flight slices; apply the path-attributed baseline over the owned paths.",
+  "definitionOfDone": [
+    "`grep -rn \"commitProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'` returns a production call site OTHER than its own definition, and `grep -rn \"buildProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'` returns at least one — both counts were zero before this task.",
+    "A test against a REAL SqliteEventStore proves one activation produces exactly ONE committed provider-run event; a second identical activation is refused or replayed, asserting the exact stable code AND which layer answered (codec, ledger, or store — all three can refuse).",
+    "The record committed is the one `buildProviderRunRecord` returned, not a locally-composed lookalike: a mutation replacing the runner call with a hand-built object turns a NAMED test red.",
+    "No recordDigest is computed at this call site — the codec mints it; a test asserts the committed digest equals the codec's and a mutation supplying a local digest turns a NAMED test red.",
+    "A refusal at any layer leaves NO durable event: the test reads the aggregate back through the port and asserts it is empty, so a partial write cannot be reported as a refusal.",
+    "Each production source is under 250 physical lines by `grep -c ''`, carries a physical one-line .js bridge, and apps/daemon/src/index.ts is unmodified.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately; the test leg prints a nonzero Test Files/Tests count line, and the HEAD-minus-merge-base failing-path delta intersected with the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume `buildProviderRunRecord` through the BARE specifier `@moe/runner` and `commitProviderRunRecord` through its daemon-local module. Do not reimplement record composition, usage normalization, digest minting, or commit authority — each already has exactly one owner.",
+    "NEVER call `commitWithApply` or `commitExpectedVersionDecisionWithApply`; the narrow `ProviderRunStore` port deliberately cannot name them, because `CommitApply` hands out a raw DatabaseSync and the no-new-schema rail forbids it. Verify the port still omits them.",
+    "Real SqliteEventStore in tests, opened per test and closed in a `finally` on every exit path — a held handle kills the vitest worker.",
+    "Fail closed: an unobservable or refused run produces no durable event and stays UNKNOWN. A partial write reported as a refusal is a defect, not an acceptable outcome.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec — never a bare `git commit`, never `git add -A`."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 110.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T01:52:05.958Z",
+  "updatedAt": "2026-08-16T02:09:16.080Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-16T02:07:59.352Z"
+  },
+  "blockedReason": "Blocked on its declared prerequisite. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:12Z. This task reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASUREMENT, both directions:\n- PRESENT, so NOT the gap: `commitProviderRunRecord` (apps/daemon/src/telemetry/provider-run-ledger.ts:202), `deriveProviderRunEventId` (:89), `ProviderRunCommitInput` (:63), `buildProviderRunRecord` (packages/runner/.../provider-run-record.ts:210). Every symbol this task composes exists.\n- ABSENT: `apps/daemon/src/activation/activation-telemetry-launch.*` — `ls` returns nothing. Owner task-6c0db1f9920841fea295512f602054ee is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS DESPITE THE SYMBOLS EXISTING. `ClaudeTelemetryHandoff` is reachable from @moe/runner today, so a module could be unit-tested against it now. But this task's DoD requires `commitProviderRunRecord` to gain a real production call site, and the only legitimate caller is the activation seam the prerequisite is building. Landing early produces a module nothing imports — the Clause-1 \"exports the symbols is not composition\" failure this chain exists to close — and would force guessing the prerequisite's exported shape, which the stale-by-default rail forbids.\n\nUNBLOCK WHEN task-6c0db1f9 is DONE AND `ls apps/daemon/src/activation/activation-telemetry-launch.ts` succeeds. Run both literally; never on task status alone.\n\nCARRIED FINDING for whoever plans this: `launchClaudeWithTelemetry` returns `ok:true` for REFUSED and NOT-ATTEMPTED launches, both carrying a BLIND handoff with UNKNOWN facts and a populated `telemetryRefusal`; only a malformed run ref reaches the refusal arm. So this task must NOT commit on `ok:true` alone — a blind handoff committed as an observation writes a durable falsehood into the ledger. Decide which handoff states are committable and pin it in the DoD.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:08:57.205Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measurement only at HEAD abc3dcf; no plan submitted, no code written. Confirmed every SYMBOL this task composes already exists (commitProviderRunRecord provider-run-ledger.ts:202, deriveProviderRunEventId :89, ProviderRunCommitInput :63, buildProviderRunRecord provider-run-record.ts:210) and that the one thing missing is the prerequisite MODULE: `ls apps/daemon/src/activation/activation-telemetry-launch.*` returns nothing, and its owner task-6c0db1f9920841fea295512f602054ee is WORKING with an approved 6-step plan rather than DONE. Reported BLOCKED with that measurement.",
+      "whatRemains": "When task-6c0db1f9 is DONE and activation-telemetry-launch.ts is on disk, re-measure its EXPORTED shape (do not guess it), then plan: take the handoff, build the record through buildProviderRunRecord, commit exactly once through commitProviderRunRecord, return the commit result or an existing stable refusal. One new module plus its .js bridge plus its .test.ts, in apps/daemon/src/activation/ or apps/daemon/src/telemetry/.",
+      "pitfalls": "1) THE COMMITTABILITY DECISION IS THE WHOLE TASK, and it is not yet made. `launchClaudeWithTelemetry` returns `ok:true` for a REFUSED launch and for a NOT-ATTEMPTED one, both carrying a BLIND handoff whose facts are UNKNOWN and whose `telemetryRefusal` field is populated; only a malformed run ref reaches the actual refusal arm. Committing on `ok:true` alone would write a durable falsehood into the ledger. Decide explicitly which handoff states are committable, pin it in the DoD, and drill it. 2) Do NOT mint a recordDigest at the call site — the codec owns it (provider-run-codec.ts:156-162). 3) Do NOT re-normalize usage — buildProviderRunRecord already calls normalizeProviderUsage, which is also how @moe/scheduler's normalizeUsageMeasurement gets its first transitive apps/ consumer. 4) NEVER commitWithApply or commitExpectedVersionDecisionWithApply; the narrow ProviderRunStore port deliberately cannot name them. 5) Real SqliteEventStore in tests, closed in a finally on every exit path. 6) A refusal at any layer must leave NO durable event — read the aggregate back and assert it is empty, so a partial write cannot be reported as a refusal.",
+      "openQuestions": "Which handoff states are committable is the open design question and belongs to this task, not the prerequisite. Candidate answer worth testing: commit only when the handoff carries an observed launch, and record a refusal (never a record) for blind handoffs — but that leaves refused runs invisible in the ledger, which may itself be wrong for the benchmark harness downstream (task-b937811e). Resolve it against what the harness needs to distinguish, and say so in the plan.",
+      "releasedAt": "2026-08-16T02:09:16.078Z",
+      "releasedBy": "architect-27b64950",
+      "reason": "Releasing the ASSIGNMENT only so the claim gate can offer other work. Task stays BLOCKED in place on its prerequisite."
+    }
+  ]
+}

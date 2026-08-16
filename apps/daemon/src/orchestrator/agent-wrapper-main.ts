@@ -10,10 +10,10 @@ import {
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
-import { claudeSpawner } from "./agent-spawner.js";
-import type { AgentSpawner } from "./agent-spawner.js";
+import { claudeSpawnStarter } from "./agent-spawner.js";
+import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
-import type { NodeMission, SpawnRequest } from "./agent-wrapper.js";
+import type { NodeMission } from "./agent-wrapper.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import {
   createVerifierProcessRunner,
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
-  let agentSpawner: AgentSpawner | undefined;
+  let agentSpawner: AgentSpawnStarter | undefined;
   let wrapper: ReturnType<typeof createAgentWrapper> | undefined;
   let mcpHost: ReturnType<typeof createMcpHttpHost> | undefined;
   let stop!: WrapperStopSignal;
@@ -190,7 +190,7 @@ async function main(): Promise<void> {
       return null;
     };
 
-    let secureSpawn: ((request: SpawnRequest) => Promise<void>) | null = null;
+    let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
       payloadHint: (kind, target) =>
@@ -250,7 +250,10 @@ async function main(): Promise<void> {
     const mcpStarted = await mcpHost.start();
     if (!mcpStarted.ok) throw new Error(mcpStarted.code);
     if (stop.requested()) return;
-    agentSpawner = claudeSpawner(mcpStarted.origin, {
+    // The admission-shaped boundary, not the lifetime-shaped one: `claudeSpawner`
+    // resolves only when the agent EXITS, so a refused start was indistinguishable
+    // from a running one and the wrapper printed SPAWNED either way.
+    agentSpawner = claudeSpawnStarter(mcpStarted.origin, {
       onFatalContainment: () => { stop.request(); },
     });
     secureSpawn = agentSpawner;
@@ -274,9 +277,14 @@ async function main(): Promise<void> {
           `[verifier] ${verdict.nodeRef}: ${verdict.outcome} (${verdict.detail})\n`,
         );
       }
-      const report = wrapper.runOnce();
+      // Awaits STARTUP ADMISSION only. Every agent's exit stays in flight, so a
+      // staffed run never blocks this loop on a child's lifetime.
+      const report = await wrapper.runOnce();
       for (const entry of report.spawned) {
-        process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}\n`);
+        // Name the refusing layer: two layers can refuse a start, and the code
+        // alone does not say which one answered.
+        const refused = entry.refusal === null ? "" : ` (${entry.refusal.layer})`;
+        process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}${refused}\n`);
       }
       if (report.spawned.length === 0) {
         // Say so: a silent pass reads as a hung wrapper to an operator watching it.

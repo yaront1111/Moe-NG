@@ -1,41 +1,85 @@
-# Benchmark telemetry harness — architect handoff
+# task-b937811e8b72459ea169e5fff1238ce1 — Benchmark telemetry harness
 
-## Outcome
-Blocked `task-b937811e8b72459ea169e5fff1238ce1` after current-byte audit at HEAD `2b15b8f01ee0b4a52deb6bb78e510e0ca60d9c66`. A `packages/benchmark/**`-only implementation would invent missing production observations, and the current verification command is vacuous.
+## Outcome (2026-08-16, HEAD ac09ca9) — Clause-2 architect output delivered, RE-BLOCKED
 
-## Spec measurement
-Pinned file `D:/projexts/moes/docs/plans/2026-08-05-moe-best-tool-benchmark-spec.md` re-hashed to exactly `A62B90436CC0B911FB28526AF7B7E0F2D1370F6F93DB91C26077F6E2956A589C`.
-Key requirements:
-- per-run stop reason, token/step counts, infra class, timestamps, model snapshot, config hashes (spec 327–329, 488–494);
-- model/harness/config triple plus model ID, snapshot/build and effort;
-- distinct trigger→render system latency and render→commit response time, away/focus separately;
-- closed censoring classes: wall-cap administrative censoring, token/step competing event, product cap, agent failure, infra failure/UNKNOWN;
-- distinct cost-class and price-basis enums; UNKNOWN/PARTIAL never become zero/PASS or cross-basis comparison;
-- ProjectConfigurationManifest/settingsDigest/orchestration SHA and reproducibility identities.
-Corpus generation, constants, statistics, competitors, gate verdicts and campaign execution remain downstream/out of scope.
+The governor asked for the ARCHITECT output rather than a third worker conclusion:
+measure the emission gap symbol by symbol, file prerequisite production tasks, re-block
+on their ids. Done. No plan submitted — a plan here would have been a fixture-fed
+harness, which Clause 2 forbids.
 
-## Current production
-Present:
-- @moe/runner root exposes `buildEvidenceReceipt`, `receiptDigestInput`, `runVerifierProcess`, Claude runtime observation and launcher surfaces.
-- evidence/launch records bind source/runtime/effect/stream/exit/timestamps.
-- `apps/control-room/src/performance/timing.ts` has a pure four-phase `evaluateTiming` / `SurfaceTimingReceipt`.
+## The gap is NARROWER than the old five-owner audit
 
-Missing/unfit:
-- no selected model ID, model snapshot/build, reasoning effort, provider token/step/cost, stop/infra class or achieved concurrency record;
-- scheduler budget measurement source/coverage authority exists internally but is not root-exported and has no production provider emitter;
-- no `ProjectConfigurationManifest`, `settingsDigest`, config digest or orchestration SHA symbol;
-- daemon stream exposes only `committedAt`; control-room `evaluateTiming` has zero production call sites and consumes caller-supplied pairs;
-- no durable/live trigger, client receipt, render, human commit, focus/away, demanded decision, free-interaction, attention-switch or recovery-burden observation;
-- named production surfaces such as buildEvidenceReceipt/launchClaude/normalizeUsageMeasurement are not composed into daemon/provider runtime;
-- `packages/benchmark` does not exist. `pnpm --filter @moe/benchmark test` prints “No projects matched” and exits 0; require nonzero package/test execution after creation.
-- New workspace package also needs `pnpm-lock.yaml` importer ownership, absent from current `packages/benchmark/**` scope.
+Producers **and** sink are both landed. Only the wire between them is missing.
 
-## Prerequisites created
-1. `task-159f4c21ef9149e8a65f24735c9c1475` — Provider run identity and usage telemetry.
-2. `task-5dfc98fc3e7f4035a8012bd9ba032de3` — Path-neutral project configuration manifest.
-3. `task-1eeb2dccce204671b442704cd60b38ad` — Live command timing and decision-effort instrumentation.
+**Landed producers, all published, all ZERO non-test apps/ callers:**
+| symbol | defined | published |
+|---|---|---|
+| `launchClaudeWithTelemetry` | claude-telemetry-launch.ts:206 | claude-surface.ts:185 |
+| `parseClaudeResultTelemetry` | claude-result-telemetry.ts:214 | claude-surface.ts:175 |
+| `buildProviderRunRecord` | provider-run-record.ts:210 | provider-record-surface.ts:24 |
+| `normalizeUsageMeasurement` | scheduler/budget/budget-measurement.ts:210 | scheduler/index.ts:115 |
 
-Comment `comment-c6dc9878a00248988ed31bb3c0db70bc` records the audit. Task reported BLOCKED; re-promote only after all three land, re-measure their public consumer edges, and widen ownership for the lockfile importer.
+**Landed sink (NEW — shipped today by task-1a7ff170):** `commitProviderRunRecord` at
+`apps/daemon/src/telemetry/provider-run-ledger.ts:202`, `deriveProviderRunEventId` :89.
 
-## Later plan shape
-Once prerequisites exist, the minimal benchmark package is likely package.json, tsconfig.json, src/index.ts (+ LF index.js), focused contract/codec and record/manifest modules plus focused tests, all production files <=250 target/<400 hard split. Tests must assert exact UNKNOWN code/layer, nonzero enum/case coverage, receipt/config tamper, k vs k_conc, price basis vs cost class, product cap vs censoring, token cap vs wall cap, and PARTIAL/cross-basis fail-closed behavior. Do not add corpus/campaign bytes.
+**The hole, three greps:**
+- `grep -rn "launchClaude" --include=*.ts apps` → **ZERO hits**
+- `grep -rn "commitProviderRunRecord" --include=*.ts apps | grep -v '\.test\.'` → only
+  its own definition. The durable sink has no writer.
+- apps/daemon's single `ClaudeTelemetryHandoff` mention is a **COMMENT** at
+  provider-run-contracts.ts:84. The old audit counted it as "one hit"; it is not a consumer.
+
+## Where emission belongs — NOT the agent spawner
+
+`apps/daemon/src/orchestrator/*` spawns moe's own agent wrappers via `node:child_process`
+(agent-spawn-contract.ts:9) — different concern. The provider-run seam is the
+**ACTIVATION** path: activation-ingress.ts:1 already imports
+`activateEffect`/`applyEffectCommand`/`EffectIntent` from @moe/runner. The ledger's own
+identity confirms it — `deriveProviderRunAggregateId` keys on provider, runRef,
+**effectIntentId, attemptRef**, epoch, which are activation vocabulary.
+
+## Tasks filed
+
+1. **task-6c0db1f9920841fea295512f602054ee** — Emit provider-run telemetry from the
+   daemon activation path (PLANNING). First apps/ call sites for
+   `launchClaudeWithTelemetry` + `parseClaudeResultTelemetry`.
+2. **task-d3239529aab54f98b31bfd3662e316bf** — Compose and durably commit the
+   provider-run record (BACKLOG, depends on 1). First call sites for
+   `buildProviderRunRecord` + `commitProviderRunRecord`.
+
+**Two, not five.** `normalizeUsageMeasurement` needs no task: it is reached transitively
+once task 2 lands, via `buildProviderRunRecord` → `normalizeProviderUsage`
+(provider-run-record.ts:238 → provider-usage-normalization.ts:208).
+
+## Unblock condition (run literally)
+
+Both ids DONE **and** all three return non-zero:
+```
+grep -rn "launchClaudeWithTelemetry" --include=*.ts apps | grep -v '\.test\.'
+grep -rn "buildProviderRunRecord"    --include=*.ts apps | grep -v '\.test\.'
+grep -rn "commitProviderRunRecord"   --include=*.ts apps | grep -v '\.test\.' | grep -v "provider-run-ledger.ts:"
+```
+Never unblock on task status alone, on exports, or on test-only callers.
+
+## Two warnings for the next architect
+
+1. **The old audit's control-room item is STALE.** `grep -rln 'effort|Effort'
+   apps/control-room/src/live/` no longer returns 0 —
+   `live/live-effort-edge.ts`, `performance/effort-admission.ts` and
+   `performance/effort-attribution.ts` all exist. Re-measure before re-filing anything
+   there; that is the "gap claimed present, actually closed" half of the rail.
+2. **The vacuous gate persists.** `packages/benchmark` is still ABSENT, so
+   `pnpm --filter @moe/benchmark test` prints "No projects matched the filters" and
+   EXITS 0. Any DoD written for this harness must require a NONZERO executed-test count
+   from vitest's own summary. See `mem:pnpm-filter-nonexistent-package-exits-0`.
+
+## Still open for whoever plans the harness after unblock
+
+Inherited from architect-7f301fa7, unresolved: freeze the exact stable UNKNOWN
+reason-code/layer vocabulary for the benchmark codec without adding campaign scoring;
+and declare **pnpm-lock.yaml plus the new package.json as owned paths in step 1**, since
+creating packages/benchmark needs a workspace install and the dependency-edge rail
+cannot otherwise be satisfied.
+
+Note: `moe-epic-breakdown` skill is NOT available in this session (Unknown skill) — task
+sizing applied from the project rails directly.

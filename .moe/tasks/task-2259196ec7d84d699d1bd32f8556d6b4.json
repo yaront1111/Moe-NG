@@ -1,0 +1,41 @@
+{
+  "id": "task-2259196ec7d84d699d1bd32f8556d6b4",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Hostile coverage: runtime, provider and platform fault boundaries",
+  "description": "Objective: hostile before/after/race coverage for the RUNTIME-PROVIDER axis of the declared-boundary roster. SPIDR child of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32).\n\nHARD DEPENDENCY: task-9aca4b0524a648f1841237b40d4e345b (Security lane harness and declared-boundary roster) must be DONE — this slice consumes its harness and claims its `runtime-provider` axis tag. Re-measure on disk before planning.\n\nMEASURED BOUNDARY SUBSET at HEAD abc3dcf, listed not guessed:\n- packages/runner/src/platform/platform-contract.ts:21,41 — PLATFORM_BOUNDARIES, PLATFORM_LAYERS\n- packages/runner/src/platform/windows/windows-process-contract.ts:30 — WINDOWS_PROCESS_LAYERS\n- packages/runner/src/providers/claude/claude-launcher-contract.ts:39 — CLAUDE_LAUNCH_LAYERS\n- packages/runner/src/providers/claude/claude-launch-selection.ts:22 — CLAUDE_LAUNCH_SELECTION_LAYER\n- packages/runner/src/providers/claude/claude-render.ts:35 — CLAUDE_RENDER_LAYERS\n- packages/runner/src/providers/claude/claude-runtime-pin-closure.ts:41 — CLAUDE_RUNTIME_PIN_LAYER\n- packages/runner/src/providers/codex/codex-render.ts:12 — CODEX_RENDER_LAYERS\n- packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts:86 — PROVIDER_TELEMETRY_LAYERS\n- packages/runner/src/providers/telemetry/provider-usage-contracts.ts:46 — PROVIDER_USAGE_LAYERS\n- packages/runner/src/evidence/verifier-process-contract.ts:42 — VERIFIER_PROCESS_LAYERS\n- packages/runner/src/evidence/evidence-contract.ts:27 — EVIDENCE_REFUSAL_LAYERS\n- packages/runner/src/artifacts/artifact-contract.ts:79 — ARTIFACT_ENUMERATION_LAYERS\n- packages/runner/src/materialization/materialization-kernel.ts:35 — MATERIALIZATION_REFUSAL_LAYERS\n- packages/runner/src/scope/scope-contract.ts:86 — SCOPE_OBSERVER_LAYERS\n- packages/runner/src/supervisor/effect-kernel.ts:65 — SUPERVISOR_LAYERS\n- packages/runner/src/recovery/recovery-contract.ts:33 — RECOVERY_LAYERS\n- packages/runner/src/recovery-inventory/recovery-inventory-contract.ts:33 — RECOVERY_INVENTORY_LAYERS\n- apps/daemon/src/orchestrator/agent-spawn-invocation.ts:22 — SPAWN_INVOCATION_LAYER\n- apps/daemon/src/recovery/recovery-key-provider-contract.ts:32 — RECOVERY_KEY_PROVIDER_LAYER\n\nDeliverable: hostile schedules — poison provider output, truncated and interleaved streams, a provider that never terminates, a runtime whose closure drifts between observation and use, an unresolvable or swapped executable, resource exhaustion at the process boundary, and a race between cancellation and natural exit — each pinning the exact stable reason code AND the answering layer.\n\nCROSS-PLATFORM: `PLATFORM_BOUNDARIES` covers linux/macos/windows. A case that silently skips on the current host generates zero cases and passes while proving nothing. Every platform case must either execute or assert the platform-unsupported refusal arm — never skip.\n\nNOT in scope: transport, integrity/codec, durable store, or scheduler/activation boundaries; host-malicious sandbox claims; closing the completeness ratchet; anything under tests/fault/**.\n\nOwned paths: tests/security/runtime-provider-boundaries.security.ts (this subset is large — split into at most three sibling files under tests/security/ if any would exceed 400 lines).\n\nVerification: `pnpm test:security` — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "Every constant in the runtime-provider subset has at least one BEFORE, one AFTER and one RACE case, with a positive case count asserted per constant so a boundary generating zero cases reddens.",
+    "Every refusal pins the exact stable reason code AND the answering layer; where a platform layer and a provider layer can both refuse, the fixture is valid at the platform layer so the provider layer is provably the one that answered.",
+    "No platform case SKIPS: on a host where a platform arm cannot execute, the case asserts that platform's stable unsupported refusal instead — asserted for linux, macos and windows arms individually.",
+    "A never-terminating provider case is BOUNDED and reaches its stable refusal rather than hanging; the test itself is bounded, because a hang reports no verdict rather than a red one.",
+    "No hostile case upgrades a truth class to PROVEN or admits provider output as authority; asserted once across the whole slice.",
+    "A mutation removing one closure-drift or stream-integrity check from a covered production boundary turns a NAMED test red, with the drill confirming the red lands on the intended assertion.",
+    "`pnpm test:security` runs with its exit code captured separately and prints a count line strictly above the pre-task baseline; the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume the roster's `runtime-provider` axis tag as the definitive subset; the roster owns the partition.",
+    "Drive the real production boundaries. A mock provider standing in for the process seam proves the mock; test doubles are permitted only for the hostile input and for injected faults the production surface already accepts.",
+    "Never skip a platform arm. A skipped case generates nothing and passes while proving nothing; assert the platform-unsupported refusal instead.",
+    "Fail closed: unobservable provider or runtime state stays UNKNOWN and never gains authority. Provider output is never parsed into authority.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 115.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T02:00:34.185Z",
+  "updatedAt": "2026-08-16T02:13:21.935Z",
+  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's rails say to consume the roster's `runtime-provider` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the tag shape and the helper signature — what the stale-by-default rail forbids. A local substitute would be worse: five siblings share ONE harness, and a per-slice copy is how the layer-blind assertion it exists to prevent gets written five times over.\n\nTHIS SLICE IS THE ONE THE COUNT CORRECTION ACTUALLY MOVES. My original enumeration used a grep pattern demanding ` = ` immediately after the constant name, which misses type-annotated declarations. Two REAL platform boundaries were missed and both belong to THIS axis: `PLATFORM_LINUX_LAYER` (packages/runner/src/platform/linux-facts.ts:41) and `PLATFORM_MACOS_LAYER` (packages/runner/src/platform/macos/macos-facts.ts:45). So this subset is 22, not the 20 in the description, and the corrected roster total is 87, not 85. Take the roster's tag as authority, not your own filed count. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:13:21.935Z"
+}

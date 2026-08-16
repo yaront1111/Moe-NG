@@ -184,7 +184,7 @@
       "completedAt": "2026-08-16T01:41:45.779Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -204,11 +204,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-16T01:42:48.701Z",
+  "updatedAt": "2026-08-16T01:46:05.176Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-5d4e2d6f",
-    "worker-1fe6c848"
+    "worker-1fe6c848",
+    "qa-ce3ba361"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-15T18:02:20.406Z",
@@ -216,7 +217,9 @@
     "plannedDistinctFileCount": 9,
     "executedStepCount": 20,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-16T01:46:05.176Z",
+    "wallClockMs": 27824770
   },
   "blockedFromStatus": null,
   "blockedAt": null,
@@ -319,7 +322,7 @@
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/daemon-command-registry.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T20:40:26.507Z",
+  "reviewCompletedAt": "2026-08-16T01:46:05.176Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 1: bind the exact installed BackupGeneration cursor/RPO",
@@ -403,5 +406,7 @@
       "releasedBy": "worker-5d4e2d6f",
       "reason": "Explicit handoff while task-6cbff010 repairs the foreign J1/root-surface daemon gate; freeing worker for another claimable task."
     }
-  ]
+  ],
+  "completedAt": "2026-08-16T01:46:05.176Z",
+  "reviewSummary": "APPROVED. All four rejected security issues fixed; I drilled the two that matter most.\n\nGATE I RE-RAN: daemon typecheck EXIT=0 and the six owned suites 6 files / 310 tests. No baseline exception needed — the foreign agent-spawner tsc red I measured mid-review cleared when its peer landed, and zero errors ever named an owned path.\n\nISSUE 2 (agents could hold ADMIN at a human gate) FIXED AND DRILLED. The authority calls the shipped sessions.authenticate and feeds grantHumanAuthority the AUTHENTICATED facts.principalKind, never a caller field. MY DRILL: hard-coded `kind: \"HUMAN\"` at authority.ts:170 -> kills exactly \"refuses a real signed AGENT at the human authority gate\" (1 failed | 27 passed). Restored, sha 41c96ffc...246f8.\n\nISSUE 3 (policy/reason/step-up only shape-checked) FIXED AND DRILLED. subjectDigest binds approvalRef, commandId, decisionReason, incarnationRef, keyEpochRef, policyRevisionRef, principalId, projectId, recoveryDigest, stepUpAuthRef, and `presented.requestDigest !== subjectDigest` refuses. MY DRILL: blanking decisionReason in the digest reds 10+ named tests including the happy path — a genuine signed-subject input, not a shape check. Restored, hash verified.\n\nISSUE 4 (replay ignored requestSha256, 1,000-event cap) FIXED. Linear search gone: positional readAggregateEvents(projectId, previousVersion, 1) plus `event.decisionTrace.requestSha256 !== prior.requestSha256`, and the changed-request path re-drives commitExpectedVersionDecision so the STORE's canonical identity raises the conflict instead of a reimplementation. Tests: \"refuses every changed request behind a committed command identity\" and \"replays the exact stored completion after more than one event page\".\n\nISSUE 1 (cursor never checked against the signed generation) FIXED: \"refuses a reconciliation cursor that is not the signed installed restore cursor\".\n\n.js bridges present for digest/authority/replay. Owned paths clean after both drills; each restore hash-verified."
 }

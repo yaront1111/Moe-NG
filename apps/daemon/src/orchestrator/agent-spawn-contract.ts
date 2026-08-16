@@ -92,3 +92,35 @@ export interface AgentSpawnStarter {
 export type SpawnAttempt =
   | Extract<AgentSpawnStartResult, { readonly ok: false }>
   | { readonly admitted: Promise<void>; readonly done: Promise<void> };
+
+/**
+ * The refusal arm on its own, so a consumer can report it without restating the
+ * vocabulary. Derived from `AgentSpawnStartResult` rather than rewritten: a code
+ * this layer never declared is then a compile error at every reporting site,
+ * which is the only thing that makes a refusal assertion capable of failing.
+ */
+export type SpawnStartRefusal = Extract<AgentSpawnStartResult, { readonly ok: false }>;
+
+/**
+ * What the wrapper reports for one staffed item.
+ *
+ * `outcome` is the OPEN board label: besides `"SPAWNED"` it carries command
+ * result codes straight off the adapter (`AUTHENTICATION_FAILED`,
+ * `EXPECTED_VERSION_CONFLICT`, …) and the `AGENT_SETUP_FAILED:*` family, none of
+ * which this file owns a closed vocabulary for. Startup admission is the fact
+ * that IS closed, so it lives in `refusal` — non-null exactly when the spawner
+ * refused the start, and typed to the producer's own union.
+ */
+export interface SpawnReport {
+  readonly kind: string;
+  readonly outcome: string;
+  readonly refusal: SpawnStartRefusal | null;
+  readonly sessionId: string | null;
+  readonly workItemId: string;
+}
+
+export interface RunOnceReport {
+  readonly active: number;
+  readonly spawned: readonly SpawnReport[];
+  readonly surfaceOutcome: string;
+}

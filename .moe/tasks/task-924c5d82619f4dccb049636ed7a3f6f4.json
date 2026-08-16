@@ -1,0 +1,39 @@
+{
+  "id": "task-924c5d82619f4dccb049636ed7a3f6f4",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Hostile coverage: integrity, codec and approval-authority boundaries",
+  "description": "Objective: hostile before/after/race coverage for the INTEGRITY axis of the declared-boundary roster. SPIDR child of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32).\n\nHARD DEPENDENCY: task-9aca4b0524a648f1841237b40d4e345b (Security lane harness and declared-boundary roster) must be DONE — this slice consumes its harness and claims its `integrity` axis tag. Re-measure on disk before planning.\n\nMEASURED BOUNDARY SUBSET at HEAD abc3dcf, listed not guessed:\n- packages/core/src/configuration/project-configuration-manifest.ts:41 — PROJECT_CONFIGURATION_CODEC_LAYERS\n- packages/contracts/src/configuration/project-configuration-contract.ts:68 — PROJECT_CONFIGURATION_REFUSAL_LAYERS\n- apps/daemon/src/configuration/project-configuration-selection.ts:8 — PROJECT_CONFIGURATION_SELECTION_LAYER\n- packages/core/src/planning/approval-authority.ts:46 — APPROVAL_AUTHORITY_LAYERS\n- packages/core/src/expansion/expansion-approval.ts:50 — EXPANSION_APPROVAL_LAYERS\n- packages/core/src/expansion/expansion-planning-hold.ts:17 — EXPANSION_HOLD_LAYERS\n- packages/core/src/expansion/expansion-preparation.ts:45 — EXPANSION_PREPARATION_LAYERS\n- packages/core/src/planning/planning-expansion-validation.ts:40 — PLANNING_EXPANSION_LAYERS\n- packages/core/src/planning/graph-revision-contract.ts:12 — GRAPH_REVISION_LAYER\n- packages/core/src/supersession/supersession-engine.ts:12 — SUPERSESSION_KERNEL_LAYER\n- packages/scheduler/src/supersession/supersession-disposition-contract.ts:32 — SUPERSESSION_DISPOSITION_LAYERS\n- packages/core/src/goal/goal-results.ts:14 — GOAL_LAYER\n- packages/review/src/review-contract.ts:53 — REVIEW_DECISION_LAYERS\n- packages/import/src/import-contract.ts:92 — IMPORT_REFUSAL_LAYERS\n- packages/contracts/src/distribution/distribution-contract.ts:13 — DISTRIBUTION_REFUSAL_LAYERS\n- packages/contracts/src/document-work/document-work-proposal-contract.ts:16 — DOCUMENT_WORK_PROPOSAL_LAYERS\n- apps/daemon/src/documents/document-work-service-contract.ts:24 — DOCUMENT_WORK_SERVICE_LAYERS\n- packages/store/src/recovery-install-contracts.ts:20 — RECOVERY_BINDING_CODEC_LAYER\n\nDeliverable: hostile schedules — corrupted and truncated bytes, re-sealed forgeries, digest/field mismatch, approval presented for a different subject, superseded decision replayed, and a race between two conflicting approvals — each case pinning the exact stable reason code AND the answering layer.\n\nFORGERY MUST RESEAL THROUGH PRODUCTION. A corruption probe that mutates a field without recomputing the digest and re-encoding through the production codec tests the digest check only, never the field check. Every forgery case re-digests and re-encodes so the payload is internally consistent and only the SUBJECT is wrong.\n\nNOT in scope: transport boundaries, durable store faults, runtime/provider faults, scheduler/activation authority, closing the completeness ratchet, or anything under tests/fault/**.\n\nOwned paths: tests/security/integrity-boundaries.security.ts (plus at most one sibling file if the 400-line split applies).\n\nVerification: `pnpm test:security` — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "Every constant in the integrity subset has at least one BEFORE, one AFTER and one RACE case, with a positive case count asserted per constant so a boundary that generated zero cases reddens.",
+    "Every refusal pins the exact stable reason code AND the answering layer; where a codec layer and an authority layer can both refuse, the fixture is valid at the codec layer so the authority layer is provably the one that answered.",
+    "Every forgery case re-digests and re-encodes through the PRODUCTION codec so the payload is internally consistent — a test asserts the forged payload passes the digest check and is refused on the subject, proving the case is not merely a digest-mismatch in disguise.",
+    "No hostile case yields an approval, an admitted revision, or a truth class above UNKNOWN; asserted once across the whole file.",
+    "A mutation that drops one subject-binding check from a covered production boundary turns a NAMED test red, and the drill confirms the red lands on the intended assertion rather than on a digest or shape guard firing earlier.",
+    "`pnpm test:security` runs with its exit code captured separately and prints a count line strictly above the pre-task baseline; the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume the roster's `integrity` axis tag as the definitive subset; the roster owns the partition and re-tagging here creates a silent overlap or gap.",
+    "A forgery probe must reseal through the production codec — recompute the digest and re-encode. A payload whose digest no longer matches only ever tests the digest check.",
+    "Assert against the production surface, never a test helper that reimplements a codec, a digest, or an approval rule.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 113.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T01:59:34.102Z",
+  "updatedAt": "2026-08-16T02:13:02.368Z",
+  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's rails say to consume the roster's `integrity` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the tag shape and the helper signature — what the stale-by-default rail forbids. A local substitute would be worse: five siblings share ONE harness, and a per-slice copy is how the layer-blind assertion it exists to prevent gets written five times over.\n\nALSO NOTE, and re-measure when unblocking: the boundary count in this task's description came from a grep pattern that missed type-annotated constants. The corrected roster is 87, not 85. Take the roster's tag, not the count in your own description. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:13:02.368Z"
+}

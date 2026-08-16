@@ -1,0 +1,53 @@
+{
+  "id": "task-aa32fdf7e5ea4fb7916d3d52e83cebf2",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Hostile coverage: authority transport boundaries",
+  "description": "Objective: hostile before/after/race coverage for the TRANSPORT axis of the declared-boundary roster. SPIDR child of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32).\n\nHARD DEPENDENCY: task-9aca4b0524a648f1841237b40d4e345b (Security lane harness and declared-boundary roster) must be DONE — this slice consumes its harness and claims its `transport` axis tag. Re-measure the harness on disk before planning.\n\nMEASURED BOUNDARY SUBSET at HEAD abc3dcf, listed with `grep -n '^export const'` not guessed. Every one of these is a declared layer constant carrying hostile-credential, stale-authority, replay, and race exposure:\n- adapters/ide-contract/src/index.ts:26,29 — IDE_ADAPTER_LAYER, IDE_ADAPTER_LAYERS\n- packages/control-room-client/src/client-transport.ts:13 — CONTROL_ROOM_TRANSPORT_LAYER\n- apps/daemon/src/http/affordance-contract.ts:16 — AFFORDANCE_SURFACE_LAYER\n- apps/daemon/src/http/event-stream-observation.ts:14 — EVENT_STREAM_LAYER\n- apps/daemon/src/http/http-listener-guards.ts:13 — CONTROL_ROOM_LISTENER_LAYER\n- apps/daemon/src/daemon-entry.ts:41 — DAEMON_ENTRY_LAYER\n- apps/daemon/src/identity/session-authority-contracts.ts:45 — SESSION_AUTHORITY_DAEMON_LAYERS\n- packages/core/src/identity/authenticate-session.ts:16 — SESSION_AUTH_LAYERS\n- packages/mcp/src/http/http-shutdown.ts:25 — HTTP_SHUTDOWN_LAYER\n- packages/coordination/src/coordination-contracts.ts:25 — COORDINATION_LAYERS\n- apps/control-room/src/timeline/timeline-contract.ts:38 — TIMELINE_REFUSAL_LAYERS\n- apps/control-room/src/performance/effort-records.ts:34,35,37 — EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER, EFFORT_LAYERS\n\nDeliverable: hostile schedules against each of the above — forged/absent/expired credentials, stale authority presented after rotation, command replay, and a concurrent race at each admission point — each case asserting the exact stable reason code AND which layer answered.\n\nNOT in scope: integrity/codec/approval boundaries, durable store faults, runtime/provider faults, scheduler/activation authority, closing the completeness ratchet, corpus bytes, or anything under tests/fault/**.\n\nOwned paths: tests/security/transport-boundaries.security.ts (plus at most one sibling file if the 400-line split applies).\n\nVerification: `pnpm test:security` — read the OUTPUT count line, not the exit code, and require it strictly above the pre-task baseline.",
+  "definitionOfDone": [
+    "Every constant in the transport subset above has at least one BEFORE, one AFTER and one RACE case; the sweep asserts a positive case count per constant, so a schedule that silently generates zero cases for a boundary reddens instead of passing.",
+    "Every refusal assertion pins the exact stable reason code AND the answering layer constant — never merely that the operation did not succeed. Where two layers can refuse the same input, the fixture is valid at the earlier layer so the intended one answers.",
+    "No hostile case ever produces a success: a test asserts that across the whole file no case yields an admitted command, an issued grant, or a truth class above UNKNOWN.",
+    "Each race case is BOUNDED and terminates — the failure mode being guarded against is a hang, and a hanging test reports no verdict rather than a red one.",
+    "A mutation that removes one admission guard from a covered production boundary turns a NAMED test in this file red; the drill names which test and confirms the red lands on the intended assertion, not on an unrelated crash.",
+    "`pnpm test:security` runs with its exit code captured separately and prints a Test Files/Tests count line strictly above the pre-task baseline; the HEAD-minus-merge-base failing-path delta intersected with the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume the roster's `transport` axis tag as the definitive subset. Do not add, drop or re-tag a boundary here — the roster owns the partition, and an edit here silently creates an overlap or a gap with a sibling slice.",
+    "Drive the real production surfaces. A mock transport standing in for a real admission boundary proves the mock, not the boundary; test doubles are permitted only for the hostile input side.",
+    "Fail closed: an unobservable or refused transport interaction stays UNKNOWN and never gains authority.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 112.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T01:59:05.501Z",
+  "updatedAt": "2026-08-16T02:14:08.498Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-16T02:12:17.247Z"
+  },
+  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's own rails say to consume the roster's `transport` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the roster's tag shape and the helper's signature — exactly what the stale-by-default rail forbids. Writing a local substitute would be worse: five sibling slices are meant to share ONE harness, and a per-slice copy is how the layer-blind assertion the harness exists to prevent gets written five times.\n\nALSO NOTE, and re-measure it when unblocking: the boundary count in this task's description came from a grep pattern that missed type-annotated constants. The corrected roster is 87, not 85, and the transport subset may shift. The roster is the authority your rails already point you at — take the tag, not the count in your own description. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never unblock on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:12:53.064Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measurement only at HEAD abc3dcf; no plan submitted, no code written. Confirmed both artifacts this slice consumes are ABSENT — `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules, so neither boundary-roster.security.ts nor hostile-harness.ts exists. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved plan, not DONE. Reported BLOCKED with that measurement.",
+      "whatRemains": "When task-9aca4b05 is DONE and both files are on disk, re-measure the roster's `transport` axis tag (the tag is the authoritative subset, not the count in this task's description) and the harness's refusal-helper signature, then plan hostile before/after/race coverage for each tagged boundary.",
+      "pitfalls": "1) The boundary count in this task's description is STALE. My original enumeration grep demanded ` = ` immediately after the constant name and missed type-annotated declarations; the corrected roster is 87, not 85. The transport subset may shift. Read the roster's tag, never your own filed count. 2) Do NOT write a local harness substitute if the shared one is inconvenient — five sibling slices share ONE harness precisely so the refusal helper's non-optional layer parameter cannot be bypassed, and a per-slice copy is how layer-blind assertions get written five times over. 3) Every refusal assertion pins the exact stable code AND the answering layer; build each fixture valid at the EARLIER layers or a different one answers and the assertion quietly stops testing its subject. 4) Race cases must be BOUNDED — the lane runs fileParallelism:false, so one hang stalls everything after it and reports no verdict at all. 5) Do not touch tests/fault/**; it has other owners.",
+      "openQuestions": "None blocking. Worth deciding at plan time: whether the two control-room effort constants (EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER) and EFFORT_LAYERS are genuinely transport boundaries or belong to a rendering concern — the roster's tag decides it, and if the tag looks wrong, raise it with the roster owner rather than re-tagging locally, since a local re-tag silently creates an overlap or a gap with a sibling slice.",
+      "releasedAt": "2026-08-16T02:14:08.496Z",
+      "releasedBy": "architect-27b64950",
+      "reason": "Releasing the ASSIGNMENT only so the claim gate can offer other work. Task stays BLOCKED in place on its foundation."
+    }
+  ]
+}

@@ -85,25 +85,41 @@
     {
       "stepId": "step-5",
       "description": "PERFORM ONE ADVERSARIAL SELF-REVIEW over only the two owned-path diffs. Check that validation is invoked once/request and still precedes credential creation; no structural/error-message lookalike can enter the coded refusal arm; listeners cannot miss a `spawn` followed immediately by exit; pre-spawn error/exit/timeout cannot leave start pending; post-spawn error cannot relabel an accepted start; error+exit and timeout+late-exit settle and clean up once; synchronous spawn and kill failures cannot leak the credential; the accepted result becomes observable while its child is held open; the legacy adapter still waits for bounded lifetime and never converts unknown errors; Windows shell admission is not overstated as Claude readiness; the one-line bridge remains sufficient; no wrapper/root-export/foreign file changed; and `agent-spawner.ts` is below 250 physical lines. Add a focused regression case if any invariant is not already mechanically covered before proceeding.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-spawner.ts",
         "apps/daemon/src/orchestrator/agent-spawner.test.ts"
       ],
-      "startedAt": "2026-08-16T01:42:36.179Z"
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ],
+      "note": "Adversarial review over my own diff, invariant by invariant. Two gaps found and closed with regression cases, so the suite is 27 tests / 24 passing (the 3 pre-existing reds unchanged).\n\nCOVERED ALREADY: validation is invoked exactly once per request (one `agentSpawnInvocation` call site) and still before `writeFileSync`; the coded arm is gated on `instanceof` and the test's spoof error carrying own `code`/`layer` properties is still rejected unchanged; a post-admission failure settles lifetime only and the accepted result stays `ok:true`; the credential is gone after a synchronous spawn throw, after a denied start, and after every settled lifetime, asserted from `readdirSync`/`existsSync` rather than call counts; the accepted result is observable while its child is still held open; the legacy adapter still awaits bounded lifetime and never converts an unknown error.\n\nGAP 1, now covered — \"listeners cannot miss a `spawn` followed immediately by exit\". Nothing asserted it. New case `admits a child that spawns and exits in the same tick` emits both back to back with no await between them; it passes because every listener is attached in the same synchronous block as process creation, which is also why I moved them above the timeout arming in step 3.\n\nGAP 2, now covered — \"pre-spawn error/exit/timeout cannot leave start pending\". The error path was covered; the exit/timeout path was not. New case `denies a start uncoded when the lifetime ends before admission` closes the child without ever emitting `spawn` and asserts the start REJECTS with `AGENT_SPAWN_NOT_ADMITTED` and specifically NOT with `SPAWN_ARGUMENT_UNQUOTABLE`. That pins both halves of the invariant: no hang, and no stable code manufactured for a refusal no layer made.\n\nNOT OVERSTATED: the contract's docblock says Node's `spawn` event admits the SHELL created under `shell: true`, not the readiness of the `claude` command inside it, and that `exit` is bounded lifetime/credential settlement rather than proof the OS process is gone after a timeout.\n\nSCOPE: `git status --porcelain apps/daemon/` shows only this task's four paths plus one foreign untracked peer file I did not create. No wrapper file, no root export, no `agent-spawn-invocation.ts` byte changed. The one-line `.js` bridge for `agent-spawner` is untouched and still sufficient; the two new modules got the same one-line bridge pattern.\n\nLINE RAIL, stated plainly rather than claimed: `agent-spawner.ts` is 362 physical lines. The step asks for below 250; it was 399 at HEAD before I touched it, so 250 was unreachable without relocating the foreign containment machinery. It is under the hard 400 bar and 37 lines smaller than what I inherited.\n\nNEW FOREIGN RED APPEARED MID-TASK and is not mine: `pnpm --filter @moe/daemon exec tsc` now reports `src/telemetry/provider-run-ledger.test.ts(39,8): error TS2307: Cannot find module './provider-run-ledger.js'` and the same at (40,70) — an untracked peer TDD file whose production module does not exist yet. The same command exited 0 earlier in this task, before that file appeared. My four owned paths contribute zero type errors.",
+      "startedAt": "2026-08-16T01:42:36.179Z",
+      "completedAt": "2026-08-16T01:43:49.471Z"
     },
     {
       "stepId": "step-6",
       "description": "RUN THE SINGLE FRESH COMPLETION GATE exactly as specified: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Read both legs' output and exit status: the filter must resolve `@moe/daemon`, typecheck must cover the edited module, and Vitest must print nonzero `Test Files` and `Tests` counts with no `No projects matched`, `No test files found`, or `0 passed`. Apply the path-attributed baseline rule if concurrent foreign work is red: compare merge-base and HEAD failing-path sets, require no new failure intersects the two owned paths, and report foreign failures verbatim; do not fabricate a green completion. Finally confirm only the two explicit owned paths are staged/committed via pathspec and the commit contains no scratch or foreign bytes.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-spawner.ts",
         "apps/daemon/src/orchestrator/agent-spawner.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.js",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.js"
+      ],
+      "note": "Gate run, and a foreign whole-tree commit landed on top of my work mid-step. Both facts below are measured.\n\nGATE, legs captured separately:\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, zero errors. (It was briefly red earlier in this task on a peer's untracked `src/telemetry/provider-run-ledger.test.ts` importing an absent `./provider-run-ledger.js`; that peer has since landed their module and the leg is clean.)\n- `pnpm --filter @moe/daemon test` EXIT 1, `Test Files 1 failed | 97 passed (98)`, `Tests 10 failed | 2007 passed (2017)` — counts nonzero, filter resolved, no `No projects matched`. The 10 failures are all in ONE foreign file, `src/recovery/recovery-completion.test.ts` (task-6f786c58's R3 disaster-recovery slice, which committed while I was gating). A grep of the failure output for `agent-spawn` returns 0 hits: the intersection with my owned paths is EMPTY.\n- The failing-path set churned twice during this step — `src/work/foundation-attempt-windows.test.ts` was the failing file one run earlier and now passes. Peers are landing continuously, which is why the delta is judged by failing PATH NAMES against my owned set rather than by counts.\n\nDoD 3 IS NOW FULLY MET, which required a decision I want on the record. Three pre-existing cases in my owned test file were red at baseline (proven in step 1 by a base probe at HEAD bytes). They assert POSIX argv and POSIX negative-pid group-kill semantics but never pinned `platform`, so on any Windows runner `agentSpawnInvocation` collapses argv into one shell line, `child.args` is `[]`, and the assertions are structurally unreachable. I pinned `platform: \"linux\"` in those three cases and changed nothing else — no assertion was weakened, deleted, or rewritten, and no production byte moved for them. The focused suite is now `Test Files 1 passed (1)`, `Tests 27 passed (27)`, EXIT 0, so \"its pre-existing tests stay green\" is true rather than excused. If the 7ba owner would rather those cases assert win32 behavior, the three-line change is trivially reversible.\n\nFOREIGN WHOLE-TREE COMMIT, per the global rail — not amended, not reset, not recommitted. `e867ee9 fix(task-6f786c58cabf4f85be8ed4135e68a752)` is a 26-file / 1745-insertion whole-tree commit that captured five of my six paths (agent-spawn-contract.ts+.js, agent-spawn-environment.ts+.js, agent-spawner.ts, and most of agent-spawner.test.ts). My own explicit-pathspec commit `ac09ca9` therefore carries only the 11 lines written after that sweep. Every byte is at HEAD and `git diff HEAD` over the six paths is empty, so the committed bytes ARE the gated bytes.\nQA SHOULD REVIEW BY BASE-REF DIFF, not by commit: `git diff 3e4977f3dc71be11618fe5324cbf677777a347c2..HEAD -- apps/daemon/src/orchestrator/agent-spawner.ts apps/daemon/src/orchestrator/agent-spawner.test.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts apps/daemon/src/orchestrator/agent-spawn-contract.js apps/daemon/src/orchestrator/agent-spawn-environment.ts apps/daemon/src/orchestrator/agent-spawn-environment.js` -> `6 files changed, 483 insertions(+), 148 deletions(-)`. That base is `e867ee9^`, and it is provably before my work: `claudeSpawnStarter` occurs 0 times in agent-spawner.ts there and agent-spawn-contract.ts does not exist.\n\nNothing scratch or foreign is in my commit; the staged set was named by explicit six-path pathspec with no `git add -A`.",
+      "startedAt": "2026-08-16T01:43:52.729Z",
+      "completedAt": "2026-08-16T01:46:27.519Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-e47be2a7",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -115,24 +131,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:46:20.297Z",
-  "updatedAt": "2026-08-16T01:42:36.179Z",
+  "updatedAt": "2026-08-16T01:53:03.262Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:51:43.356Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T01:53:03.262Z",
+    "wallClockMs": 18079906
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
     "governor-a627169a",
     "worker-83e6139a",
-    "worker-e47be2a7"
+    "worker-e47be2a7",
+    "qa-c7cedba3"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T21:03:42.677Z",
@@ -167,5 +188,23 @@
       "releasedBy": "worker-83e6139a",
       "reason": "Explicit handoff after mandatory clean-tree premise failed; user requested continuing with safe work rather than overwriting foreign lifecycle WIP."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-16T01:47:15.286Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/orchestrator/agent-spawner.test.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json   (daemon typecheck, 0 errors)\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  1 passed (1)\n      Tests  27 passed (27)\n   Duration  220ms\nFINAL_EXIT=0  (run fresh)\n\nThe plan's named gate, both legs captured separately:\npnpm --filter @moe/daemon typecheck -> EXIT 0, zero errors\npnpm --filter @moe/daemon test -> EXIT 1, Test Files 1 failed | 97 passed (98), Tests 10 failed | 2007 passed (2017). All 10 failures are in ONE foreign file, src/recovery/recovery-completion.test.ts (task-6f786c58); grep of the failure output for 'agent-spawn' returns 0 hits.",
+    "reportedAt": "2026-08-16T01:47:15.286Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.js",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.js",
+    "apps/daemon/src/orchestrator/agent-spawner.ts"
+  ],
+  "completedAt": "2026-08-16T01:53:03.262Z",
+  "reviewCompletedAt": "2026-08-16T01:53:03.262Z",
+  "reviewSummary": "APPROVED. Judged by base-ref diff, not by commit: the deliverable landed in FOREIGN sweep e867ee9 (task-6f786c58, whole-tree); this task's own ac09ca9 carries only 11 post-sweep test lines. Worker disclosed that accurately and named the base; I reproduced it — git diff 3e4977f3..HEAD over the 6 owned paths = 6 files changed, 483 insertions(+), 148 deletions(-) — and the base is provably pre-work (claudeSpawnStarter 0 occurrences, agent-spawn-contract.ts absent).\n\nDoD 1: closed start union; refusal asserted with toStrictEqual on the exact literals SPAWN_ARGUMENT_UNQUOTABLE / agent-spawn-invocation; sweep pins UNQUOTABLE_TOKENS.length=12 with a \"generated no cases\" message and executed===12. DoD 2: the held-open test proves the split — start does not settle before `spawn`, then resolves while exit is still pending; credential on disk during life, gone after close. DoD 4: build-before-write at agent-spawner.ts:66-85; refusal asserts existsSync false AND readdirSync(configDir)===[] — filesystem state, not call counts.\n\nDoD 3 checked for a disguised weakening, CLEARED: the 3 pre-existing cases gained only platform:\"linux\". agent-spawn-invocation.ts is UNTOUCHED in the base-ref diff and collapses argv to args:[] on win32 (line 59), so those child.args assertions were unreachable on a Windows runner at base too. A repair, not a weakening.\n\nDoD 5 DRILL RUN BY ME: collapsed the refusal into an accepted start at agent-spawner.ts:299 -> RED on \"refuses every cmd-unquotable token with the exact code and layer\". Restored via git checkout, diff vs HEAD empty.\n\nDoD 6 LEGS: daemon typecheck EXIT 0; focused suite EXIT 0, 27 passed (27); full daemon test EXIT 0, 98 passed (98), 2017 passed (2017) — green, better than the disclosed EXIT 1.\n\nRails: invocation called once before the credential write; only instanceof SpawnInvocationRefusal enters the coded arm (structural spoof rejected unchanged, tested); agent-spawner.ts 362 lines (was 399), helpers 94/68 with 1-line bridges."
 }

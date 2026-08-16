@@ -1,0 +1,39 @@
+{
+  "id": "task-3b1cbdf9bd39405bb32230552d3ab242",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Close the security completeness ratchet and wire the final gate",
+  "description": "Objective: flip the declared-boundary roster from \"matches the source\" to \"every declared boundary has hostile coverage\", so DoD 1 of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32) becomes a mechanically checked fact rather than a claim. FINAL slice of the SPIDR re-slice.\n\nHARD DEPENDENCIES — all five must be DONE, and re-measured on disk rather than trusted by status:\n- task-9aca4b0524a648f1841237b40d4e345b — roster and harness\n- task-aa32fdf7e5ea4fb7916d3d52e83cebf2 — transport\n- task-924c5d82619f4dccb049636ed7a3f6f4 — integrity\n- task-f643b972a9014c6aa0bf1257dc1892ef — durable store\n- task-2259196ec7d84d699d1bd32f8556d6b4 — runtime/provider\n- task-c994bd0a59f0472da5b106916aa27b37 — scheduler/activation\n\nDeliverable, three parts:\n1. CLOSE THE RATCHET. The roster currently asserts only that its 85 hand-written entries match a live source scan. This task adds the coverage assertion: every roster entry resolves to at least one BEFORE, one AFTER and one RACE case in the sibling slices, and the union of the five axis subsets equals the full 85-member set with no overlap and no gap. A boundary added to the source later, with no coverage, must redden here — that is what stops DoD 1 decaying silently after this epic closes.\n2. WIRE THE FINAL GATE. `pnpm test:security` and `pnpm test:fault` both run as this task's gate. Read the OUTPUT of each, separately, with its own exit code — never `;`-chained, never piped into tail.\n3. RECONCILE WITH tests/fault. `tests/fault/**` has its own owners (tests/fault/disaster-restore/** is task-0c89476b78044024b07c86c0c8986bd0; foundation/ and cross-host/ have theirs). This task does NOT write fault coverage — it records which parent DoD clauses the fault lane already satisfies and which remain, so the parent's completion is honest about the split rather than implying this slice set covered everything.\n\nNOT in scope: adding hostile coverage for any boundary (that belongs to the axis slices — if one is missing coverage, reject it back rather than filling the gap here), corpus bytes, campaign scoring, claim decisions, or editing tests/fault/**.\n\nOwned paths: tests/security/completeness.security.ts, plus the coverage-assertion additions to tests/security/boundary-roster.security.ts.\n\nVerification: `pnpm test:security` and `pnpm test:fault`, each with its own captured exit code and a printed Test Files/Tests count line.",
+  "definitionOfDone": [
+    "Every one of the 85 roster entries resolves to at least one BEFORE, one AFTER and one RACE case across the sibling slices; the assertion names any uncovered boundary by constant name and declaring file, not merely a count.",
+    "The union of the five axis subsets is asserted EQUAL to the full 85-member roster — both directions — with no boundary claimed by two axes and none claimed by zero.",
+    "A boundary constant ADDED to production source with no roster entry and no coverage turns a NAMED test red; a drill proves it, so the ratchet cannot decay silently after this epic closes.",
+    "Removing one axis slice's coverage for a single boundary turns a NAMED test red identifying that exact boundary — proving the coverage resolution reads real cases rather than a static list.",
+    "`pnpm test:security` and `pnpm test:fault` each run with their own captured exit code, neither `;`-chained nor piped, and each prints a Test Files/Tests count line; any foreign red is quoted verbatim and attributed by the path-attributed baseline rather than repaired.",
+    "The completion records, clause by clause, which of the parent task-05ce9b8f DoD items this slice set satisfies and which remain owned by tests/fault/** owners — so the parent closes on measured coverage, never on an implied one."
+  ],
+  "taskRails": [
+    "Do NOT fill a coverage gap here. If an axis slice left a boundary uncovered, that slice is incomplete — report it rather than absorbing the work, or the ratchet ends up policing coverage this task wrote itself.",
+    "The roster stays hand-written and source-compared in both directions. A generated table cannot police its own generator.",
+    "Do not edit tests/fault/** — it has other owners. This task only RECORDS what the fault lane already covers.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 117.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T02:01:35.966Z",
+  "updatedAt": "2026-08-16T02:13:48.040Z",
+  "blockedReason": "Blocked on all six declared dependencies. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:15Z. This slice reached PLANNING far ahead of its chain; blocking rather than planning against six absent surfaces.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. The roster, the harness and all five axis coverage files are ABSENT. Foundation task-9aca4b05 is WORKING; the five axis slices are BLOCKED on it (I blocked them in this same pass).\n\nWHY THIS ONE ESPECIALLY CANNOT BE PLANNED EARLY. Its entire job is to CLOSE the completeness ratchet — to assert that every roster entry resolves to a real before/after/race case in the sibling slices. There are no sibling cases to resolve against, so any assertion written now would either be vacuous or would have to invent the coverage-resolution mechanism it is supposed to police. Worse, this task's own rails forbid it from filling a coverage gap: if a slice is missing a boundary, this task reports it rather than absorbing it. Planning before the slices exist inverts that — everything would look like a gap.\n\nCARRY THIS FORWARD when planning it: the roster size is 87, NOT the 85 stated in this task's description. My original enumeration grep demanded ` = ` immediately after the constant name and missed type-annotated declarations; two real platform boundaries (`PLATFORM_LINUX_LAYER`, `PLATFORM_MACOS_LAYER`) were omitted and two test-support constants must stay excluded. The roster task owns the correction and asserts all four by name. Do not hardcode 85 into the ratchet — read the roster. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN all six ids are DONE AND `ls tests/security/` shows the roster, the harness and all five axis `.security.ts` files. Run it literally; never on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:13:48.040Z"
+}

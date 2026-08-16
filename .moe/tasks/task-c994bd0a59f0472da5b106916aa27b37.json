@@ -1,0 +1,40 @@
+{
+  "id": "task-c994bd0a59f0472da5b106916aa27b37",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Hostile coverage: scheduler and activation authority boundaries",
+  "description": "Objective: hostile before/after/race coverage for the SCHEDULER-ACTIVATION axis of the declared-boundary roster. SPIDR child of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32).\n\nHARD DEPENDENCY: task-9aca4b0524a648f1841237b40d4e345b (Security lane harness and declared-boundary roster) must be DONE — this slice consumes its harness and claims its `scheduler-activation` axis tag. Re-measure on disk before planning.\n\nMEASURED BOUNDARY SUBSET at HEAD abc3dcf, listed not guessed:\n- apps/daemon/src/activation/activation-ingress-contracts.ts:74,75,76 — ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER, ACTIVATION_BUDGET_LAYER\n- apps/daemon/src/activation/foundation-activation-transition.ts:85 — FOUNDATION_ACTIVATION_BINDING_LAYER\n- apps/daemon/src/work/work-kernel.ts:73 — WORK_LAYERS\n- apps/daemon/src/work/foundation-attempt-contracts.ts:36,37 — SCHEDULER_GRAPH_LAYER, RUNNER_WORKSPACE_LAYER\n- packages/scheduler/src/budget/budget-measurement.ts:32 — MEASUREMENT_ISSUE_LAYERS\n- packages/scheduler/src/convergence/breaker-contract.ts:17 — CONVERGENCE_BREAKER_LAYER\n- packages/scheduler/src/expansion/expansion-current-hold.ts:52 — EXPANSION_BINDING_LAYERS\n- packages/scheduler/src/expansion/expansion-receipt.ts:35 — EXPANSION_EVIDENCE_LAYERS\n- packages/scheduler/src/fairness/fairness-contract.ts:30 — FAIRNESS_CONTRACT_LAYERS\n- packages/scheduler/src/readiness/readiness-model.ts:47 — READINESS_LAYERS\n- apps/daemon/src/recovery/recovery-completion-evidence.ts:42,43,44 — CORE_APPROVAL_LAYER, PROJECT_REDUCER_LAYER, DAEMON_INGRESS_LAYER\n\nDeliverable: hostile schedules — a grant consumed twice, a slot claimed concurrently by two attempts, budget exhaustion presented as headroom, a stale readiness verdict replayed after the graph moved, an expansion receipt bound to a superseded revision, a fairness decision raced against a convergence breaker trip, and an activation whose binding no longer matches its transition — each pinning the exact stable reason code AND the answering layer.\n\nTWO-SIDED BUDGET HAZARD: an unmeasured budget and a zero budget are different facts. A case that lets UNKNOWN usage be rendered as zero, or imputed from a sibling attempt, must fail; assert that explicitly rather than assuming the production surface already refuses.\n\nNOT in scope: transport, integrity/codec, durable store, or runtime/provider boundaries; closing the completeness ratchet; anything under tests/fault/**.\n\nOwned paths: tests/security/scheduler-activation-boundaries.security.ts (plus at most one sibling file if the 400-line split applies).\n\nVerification: `pnpm test:security` — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "Every constant in the scheduler-activation subset has at least one BEFORE, one AFTER and one RACE case, with a positive case count asserted per constant so a boundary generating zero cases reddens.",
+    "Every refusal pins the exact stable reason code AND the answering layer; where ingress, slot and budget layers can all refuse the same activation, each fixture is valid at the earlier layers so the intended one provably answers.",
+    "A grant consumed twice and a slot claimed concurrently each yield exactly one admitted activation and one stable refusal — never two admissions, never two refusals — with the durable state read back to prove it.",
+    "An UNKNOWN usage measurement is never rendered as zero and never imputed across attempts; a case drives an unmeasured attempt and asserts the refusal rather than a zero-cost admission.",
+    "A mutation removing one grant-consumption or slot-exclusion check from a covered production boundary turns a NAMED test red, with the drill confirming the red lands on the intended assertion.",
+    "Each race case is BOUNDED and terminates; the test itself is bounded, because the failure mode guarded against is a hang and a hang reports no verdict.",
+    "`pnpm test:security` runs with its exit code captured separately and prints a count line strictly above the pre-task baseline; the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume the roster's `scheduler-activation` axis tag as the definitive subset; the roster owns the partition.",
+    "Fail closed: an unmeasured budget, an unresolved readiness verdict, or an unverifiable binding stays UNKNOWN and never gains authority. A zero cost and an unmeasured cost are different facts and must not collapse.",
+    "Assert against the production surface, never a test helper that reimplements a budget rule, a fairness ordering, or a readiness verdict.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 116.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T02:01:01.224Z",
+  "updatedAt": "2026-08-16T02:13:30.444Z",
+  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's rails say to consume the roster's `scheduler-activation` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the tag shape and the helper signature — what the stale-by-default rail forbids. A local substitute would be worse: five siblings share ONE harness, and a per-slice copy is how the layer-blind assertion it exists to prevent gets written five times over.\n\nALSO NOTE, and re-measure when unblocking: the boundary count in this task's description came from a grep pattern that missed type-annotated constants. The corrected roster is 87, not 85. Take the roster's tag, not the count in your own description. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:13:30.444Z"
+}

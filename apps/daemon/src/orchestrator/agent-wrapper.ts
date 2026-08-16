@@ -10,6 +10,8 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
+import type { AgentSpawnStart, AgentSpawnStartResult, RunOnceReport,
+  SpawnReport } from "./agent-spawn-contract.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -66,21 +68,12 @@ export interface AgentWrapperConfig {
    * daemon's decoder remains the sole payload authority.
    */
   readonly payloadHint?: ((kind: string, target: string | null) => JsonObject | null) | undefined;
-  /** Spawns the agent process; resolves when it exits. Injectable for tests. */
-  readonly spawnAgent: (request: SpawnRequest) => Promise<void>;
-}
-
-export interface SpawnReport {
-  readonly kind: string;
-  readonly outcome: "SPAWNED" | string;
-  readonly sessionId: string | null;
-  readonly workItemId: string;
-}
-
-export interface RunOnceReport {
-  readonly active: number;
-  readonly spawned: readonly SpawnReport[];
-  readonly surfaceOutcome: string;
+  /**
+   * Starts the agent process and resolves on STARTUP ADMISSION — a coded
+   * refusal, or an accepted start whose `exit` is the child's separate lifetime.
+   * Injectable for tests.
+   */
+  readonly spawnAgent: AgentSpawnStart;
 }
 
 const encoder = new TextEncoder();
@@ -182,12 +175,15 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       : { code: result.refusal?.code ?? result.error?.code ?? result.outcome, ok: false };
   };
 
-  const staff = (step: ChainStep): SpawnReport => {
+  /** Every report but the admitted one: the start earned no producer code. */
+  const uncoded = (
+    kind: string, outcome: string, sessionId: string | null, workItemId: string,
+  ): SpawnReport => ({ kind, outcome, refusal: null, sessionId, workItemId });
+
+  const staff = async (step: ChainStep): Promise<SpawnReport> => {
     const workItemId = workItemIdFor(step.kind, step.aggregateId);
     const capabilities = agentCapabilitiesFor(step.kind);
-    if (capabilities === null) {
-      return { kind: step.kind, outcome: "UNWIRED_KIND", sessionId: null, workItemId };
-    }
+    if (capabilities === null) return uncoded(step.kind, "UNWIRED_KIND", null, workItemId);
     // Resolve the coding brief BEFORE any durable step: refusing after the
     // claim would leave a fenced item nobody is working on until expiry.
     let brief: NodeMission | null = null;
@@ -197,11 +193,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       } catch {
         const failure = setupError("node.mission");
         cleanupFailures.push(failure);
-        return { kind: step.kind, outcome: failure.message, sessionId: null, workItemId };
+        return uncoded(step.kind, failure.message, null, workItemId);
       }
-      if (brief === null) {
-        return { kind: step.kind, outcome: "NODE_BRIEF_MISSING", sessionId: null, workItemId };
-      }
+      if (brief === null) return uncoded(step.kind, "NODE_BRIEF_MISSING", null, workItemId);
     }
     let secret: string;
     let sessionId: string;
@@ -214,7 +208,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     } catch {
       const failure = setupError("identity.mint");
       cleanupFailures.push(failure);
-      return { kind: step.kind, outcome: failure.message, sessionId: null, workItemId };
+      return uncoded(step.kind, failure.message, null, workItemId);
     }
 
     const cleanupAuthority = createAgentAuthorityCleanup({
@@ -229,7 +223,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     const failSetup = (action: string, releaseClaim: boolean): SpawnReport => {
       const failure = setupError(action);
       cleanupFailures.push(failure, ...cleanupAuthority(releaseClaim));
-      return { kind: step.kind, outcome: failure.message, sessionId, workItemId };
+      return uncoded(step.kind, failure.message, sessionId, workItemId);
     };
 
     let opened: { code: string; ok: boolean };
@@ -244,7 +238,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return failSetup("session.open", false);
     }
     if (!opened.ok || opened.code !== "EFFECTS_COMMITTED") {
-      return { kind: step.kind, outcome: opened.code, sessionId: null, workItemId };
+      return uncoded(step.kind, opened.code, null, workItemId);
     }
 
     // The AGENT claims, so the fence names the agent: expiry doubles as the
@@ -260,7 +254,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     }
     if (!claimed.ok || claimed.code !== "EFFECTS_COMMITTED") {
       cleanupFailures.push(...cleanupAuthority(false));
-      return { kind: step.kind, outcome: claimed.code, sessionId, workItemId };
+      return uncoded(step.kind, claimed.code, sessionId, workItemId);
     }
 
     let missionText: string;
@@ -284,15 +278,29 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
     };
-    // Preserve synchronous process launch while converting an injected throw
-    // into the same rejected-promise path as a normal spawner failure.
-    let spawned: Promise<void>;
+    // ADMISSION ONLY. A synchronous throw becomes the same rejected path a
+    // failed start takes, so the caller sees one shape either way.
+    let start: AgentSpawnStartResult;
     try {
-      spawned = Promise.resolve(config.spawnAgent(request));
+      start = await config.spawnAgent(request);
     } catch (error) {
-      spawned = Promise.reject(error);
+      // No producer code was earned, so none is invented. The start fails
+      // closed through cleanup instead of being reported as SPAWNED.
+      cleanupFailures.push(
+        error instanceof Error ? error : new Error("AGENT_SPAWN_FAILED:UNKNOWN"),
+        ...cleanupAuthority(true),
+      );
+      return uncoded(step.kind, "AGENT_SPAWN_FAILED:UNADMITTED", sessionId, workItemId);
     }
-    const exit = spawned
+    if (!start.ok) {
+      // The refusal travels verbatim: re-wrapping it into a wrapper-local code
+      // would erase which layer actually answered.
+      cleanupFailures.push(...cleanupAuthority(true));
+      return { kind: step.kind, outcome: start.code, refusal: start, sessionId, workItemId };
+    }
+    // `exit` is the child's LIFETIME. It is handled — an unhandled rejection
+    // would escape the wrapper — but it is never awaited on this path.
+    const exit = start.exit
       .then(
         () => { cleanupFailures.push(...cleanupAuthority(true)); },
         (error: unknown) => {
@@ -304,10 +312,11 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       )
       .finally(() => { active.delete(workItemId); });
     active.set(workItemId, exit);
-    return { kind: step.kind, outcome: "SPAWNED", sessionId, workItemId };
+    return { kind: step.kind, outcome: "SPAWNED", refusal: null, sessionId, workItemId };
   };
 
-  const runOnce = (): RunOnceReport => {
+  // Async ONLY to await startup admission; the child's exit is never awaited here.
+  const runOnce = async (): Promise<RunOnceReport> => {
     const priorFailure = failureOutcome();
     if (priorFailure !== null) {
       return { active: active.size, spawned: [], surfaceOutcome: priorFailure };
@@ -332,7 +341,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       // not board work an agent should be staffed on.
       if (step.kind.startsWith("session.")) continue;
       if (active.has(workItemIdFor(step.kind, step.aggregateId))) continue;
-      spawned.push(staff(step));
+      spawned.push(await staff(step));
       if (failureOutcome() !== null) break;
     }
     return { active: active.size, spawned, surfaceOutcome: failureOutcome() ?? "SURFACE" };

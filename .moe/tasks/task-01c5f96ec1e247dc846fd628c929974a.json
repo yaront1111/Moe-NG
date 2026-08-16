@@ -160,8 +160,8 @@
       "completedAt": "2026-08-16T01:32:04.883Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -216,12 +216,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-16T01:35:45.920Z",
+  "updatedAt": "2026-08-16T01:43:12.832Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-16T01:43:12.832Z",
+    "wallClockMs": 140309577
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -325,5 +327,8 @@
     "tests/fault/cross-host/effect-evidence-verify.js",
     ".github/workflows/cross-host.yml",
     "tests/fault/cross-host/exact-sha-evidence-gate.mjs"
-  ]
+  ],
+  "completedAt": "2026-08-16T01:43:12.832Z",
+  "reviewCompletedAt": "2026-08-16T01:43:12.832Z",
+  "reviewSummary": "APPROVED on re-measured bytes, not the summary.\n\nSURFACE STABLE: the 10 owned evidence files + cross-host.yml are byte-identical 6cd4c17..HEAD 6954a8c, so the CI proof still describes current bytes.\n\nCI RE-VERIFIED via authenticated gh api at exact SHA 6cd4c17: push run 31919185835 — host-evidence-linux, host-evidence-darwin, cross-host-aggregate all success; artifacts cross-host-{linux,darwin,aggregate}-6cd4c17, unexpired, digests 07c8cc98/74faae46/908138d6 — byte-exact to the note. PR run 31919187727 correctly refused: its artifacts bind the ephemeral merge SHA 078bd230, not the git SHA. Stricter than the reopen note, which cited that run.\n\nRECEIPTS: downloaded all three artifacts, recomputed every digest with my own canonicalizer — linux c994ed2c, darwin 15b25599, aggregate bea1c412 all MATCH; caseDigest matches; flipping hostSlot changes the digest.\n\nDoD 1: 7 PLATFORM_BOUNDARIES x 3 schedules = 21 cases per host, executedCaseCount=21 both; driver iterates the PRODUCTION array from @moe/runner; real hosts (linux kernel 6.17.0-1022-azure); CRASH_BEFORE_ACTIVATION stays UNKNOWN:PLATFORM_FACT_ABSENT:PLATFORM_LINUX. DoD 2: all seven bindings present. DoD 5: consumerTaskId task-22cfca91 in receipt AND aggregate, enforced by the verifier.\n\nLEGS: fault tsc EXIT 0; cross-host vitest EXIT 0, 14 passed; pnpm test:fault EXIT 0, 10 passed (10) / 83 passed (83). All 12 CROSS_HOST_ codes appear in the suite; the 14-mutation sweep asserts positive cardinality plus exact code+layer+slot, and reseals.\n\nDRILL: dropped the doctor-os conjunct at effect-evidence-verify.ts:87 -> RED on \"refuses every generated mutation\"; restored byte-identical.\n\nTWO NOTES, neither a DoD failure: (1) leg 3 403'd for me — the gate sends no Authorization header and the unauthenticated budget was 0/60; verified via gh api instead. Add a token. (2) exact-sha-evidence-gate.mjs is tracked at HEAD but was swept in by peer commit ce31a98 (task-7ba); this task's own three commits are owned-paths-only."
 }

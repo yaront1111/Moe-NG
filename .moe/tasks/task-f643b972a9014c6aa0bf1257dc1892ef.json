@@ -1,0 +1,40 @@
+{
+  "id": "task-f643b972a9014c6aa0bf1257dc1892ef",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Hostile coverage: durable store fault boundaries",
+  "description": "Objective: hostile before/after/race coverage for the DURABLE-STORE axis of the declared-boundary roster. SPIDR child of the Security fault matrix (task-05ce9b8f982f448a9cdaa4142a653f32).\n\nHARD DEPENDENCY: task-9aca4b0524a648f1841237b40d4e345b (Security lane harness and declared-boundary roster) must be DONE — this slice consumes its harness and claims its `durable-store` axis tag. Re-measure on disk before planning.\n\nMEASURED BOUNDARY SUBSET at HEAD abc3dcf, listed not guessed:\n- packages/store/src/recovery-anchor-contracts.ts:13 — RECOVERY_ANCHOR_LAYER\n- packages/store/src/recovery-install-contracts.ts:21,22 — RECOVERY_INSTALL_TRANSACTION_LAYER, RECOVERY_INSTALL_LAYERS\n- apps/daemon/src/activation/activation-ledger-contracts.ts:50 — ACTIVATION_LEDGER_LAYER\n- apps/daemon/src/telemetry/provider-run-refusals.ts:25 — PROVIDER_RUN_LEDGER_LAYERS\n- apps/daemon/src/recovery/recovery-completion-evidence.ts:45 — DURABLE_STORE_LAYER\n- apps/daemon/src/recovery/recovery-inventory-contract.ts:26 — RECOVERY_INVENTORY_LEDGER_LAYER\n- apps/daemon/src/recovery/durable-recovery-inventory-contract.ts:26 — DURABLE_INVENTORY_ADAPTER_LAYER\n\nDeliverable: hostile schedules against a REAL SqliteEventStore — expected-version conflict under concurrent writers, command replay with changed bytes, event-id collision, a crash between decision and apply, a corrupted or truncated committed payload, and a read of an aggregate whose head moved mid-page — each pinning the exact stable reason code AND the answering layer.\n\nTHE REPLAY-ECHO HAZARD IS THE ONE THAT SHIPS GREEN HERE. The store's replay identity does NOT cover the events array (see apps/daemon/src/activation/activation-ledger-commit.ts:12-24). A replay answered with the caller's own record makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. The changed-byte replay case is the only one that kills it, and it must be present for every ledger boundary in this subset.\n\nNOT in scope: transport, integrity/codec, runtime/provider, or scheduler/activation boundaries; new store schema; closing the completeness ratchet; anything under tests/fault/**.\n\nOwned paths: tests/security/durable-store-boundaries.security.ts (plus at most one sibling file if the 400-line split applies).\n\nVerification: `pnpm test:security` — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "Every constant in the durable-store subset has at least one BEFORE, one AFTER and one RACE case, with a positive case count asserted per constant so a boundary generating zero cases reddens.",
+    "Every ledger boundary in the subset carries a CHANGED-BYTE REPLAY case proving the replay answer is read back from the durable aggregate, not echoed from the caller; a mutation switching that branch to echo turns a NAMED test red.",
+    "Every refusal pins the exact stable reason code AND the answering layer, preserving the store's own DurableStoreErrorCode verbatim alongside the boundary's code where both exist — never collapsing one into the other.",
+    "A refused or crashed schedule leaves NO partial durable state: each case reads the aggregate back and asserts it is either untouched or exactly one complete record, never a fragment.",
+    "Tests use a REAL SqliteEventStore, opened per test and closed in a `finally` on every exit path including throws; no case leaves a handle into teardown.",
+    "`pnpm test:security` runs with its exit code captured separately and prints a count line strictly above the pre-task baseline; the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Consume the roster's `durable-store` axis tag as the definitive subset; the roster owns the partition.",
+    "NEVER call `commitWithApply` or `commitExpectedVersionDecisionWithApply` — they hand out a raw DatabaseSync and the no-new-schema rail forbids it. The narrow ledger ports deliberately cannot name them; verify they still cannot.",
+    "Real SqliteEventStore only. A fake store reimplements the very replay and conflict semantics under test, so a green against a fake proves the fake.",
+    "A held SQLite handle kills the vitest worker; close in a `finally` on every exit path.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T02:00:02.653Z",
+  "updatedAt": "2026-08-16T02:13:11.331Z",
+  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's rails say to consume the roster's `durable-store` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the tag shape and the helper signature — what the stale-by-default rail forbids. A local substitute would be worse: five siblings share ONE harness, and a per-slice copy is how the layer-blind assertion it exists to prevent gets written five times over.\n\nALSO NOTE, and re-measure when unblocking: the boundary count in this task's description came from a grep pattern that missed type-annotated constants. The corrected roster is 87, not 85. Take the roster's tag, not the count in your own description. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never on task status alone.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T02:13:11.331Z"
+}

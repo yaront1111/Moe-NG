@@ -17,8 +17,81 @@
     "TDD every behavior; exact reason code and layer on every refusal, positive generated-case counts, and mutation drills against the production factory rather than a test helper.",
     "Keep each production source below 250 lines and commit only the five explicit owned paths; preserve foreign work in the shared tree."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE, RE-MEASURE THE LANDED PRODUCER, AND SETTLE THE ONE THING THE DoD DOES NOT NAME. Measured at HEAD abc3dcf; re-confirm on current bytes.\nLANDED (task-32eddfd3, DONE): `packages/runner/src/providers/claude/claude-host-runtime.ts`, 249 lines, exporting `observeInstalledClaudeRuntime(input: unknown): Promise<ObserveInstalledClaudeRuntimeResult>` (:201), `InstalledClaudeRuntimeInput` = `{installedRoot, executablePath, versionTimeoutMs?}` (:31), `ObservedInstalledClaudeRuntime` = `{ok:true, observation, facts, profile}` (:37), and the four-arm result union (:44) — `ObservedInstalledClaudeRuntime | ClaudeRuntimePinFailure | ClaudeFailure<ClaudeObservationErrorCode> | WindowsProcessUnknown`. FOUR authorities can answer; that is why every refusal must pin code AND layer. It is NOT published from the runner root — confirm with a grep — because task-32eddfd3's plan deliberately left that edge to THIS task.\nTHE GAP THE DoD LEAVES OPEN, and the decision this plan makes: the factory's public input is exactly `{quotedObservation, installedRoot, pinRoot}`, but `observeInstalledClaudeRuntime` also needs `executablePath`. DO NOT add it to the public input — that would let a caller name which binary gets observed, which is precisely the runtime authority this task exists to withhold. DERIVE it from `quotedObservation.resolvedRuntimeClosure`: take the single entry whose `kind` is `\"EXECUTABLE\"` (the kinds are EXECUTABLE | LAUNCHER | PACKAGE). Zero such entries, or more than one, is a refusal with an existing stable code — never a pick-the-first. The caller thereby cannot point the observer anywhere the quote has not already committed to.\nCARRY QA'S RAIL FROM 32eddfd3, which it was rejected on once: refusal messages must NOT echo runtime paths, argv, environment values or digests. This consumer inherits that and its tests must assert it — not merely avoid violating it.\nGATES, each run separately with its own exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported): `pnpm --filter @moe/runner typecheck` (measured EXIT 0 earlier this session — if still 0, any later error is yours) and `pnpm --filter @moe/runner test`, recording the `Test Files`/`Tests` count line and every failing file as your before-set.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-host-runtime.ts",
+        "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+        "packages/runner/src/surface/claude-surface.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, PART 1 — the hostile-input sweep, which is the factory's actual job. Create `packages/runner/src/providers/claude/claude-runtime-request.test.ts` against the not-yet-existing factory. The public input must be SERIALIZABLE PLAIN DATA ONLY, so the sweep must cover every way a caller smuggles capability across an authenticated JSON boundary: a function in any field; an extra key beyond the exact three; a missing key; a getter/accessor property; a revoked or live Proxy; a thenable; a prototype-polluted object; `Object.create(null)` vs a plain literal; a non-string path; an oversized path; a path containing NUL.\nAssert a POSITIVE generated-case count — a sweep that silently produces zero cases passes while testing nothing — and assert each case's exact stable reason code AND the answering layer. Note `Array.isArray` throws on a revoked proxy and `types.isProxy` is the safe first question; a case that crashes instead of refusing is a defect, not a pass.\nAlso pin the DERIVATION decision from step 1: a `quotedObservation` whose `resolvedRuntimeClosure` holds ZERO `EXECUTABLE` entries refuses, and one holding TWO refuses — each with its exact code and layer. These two cases are what stop a future implementation quietly picking the first entry.\nAND PIN THE MESSAGE RULE: for every refusal case, assert the message does NOT contain the installedRoot, the pinRoot, the executable path, any argv, any environment value or any digest. Assert it as a property over the whole swept set, not one spot check — the producer was rejected on exactly this and a single example would not have caught it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE FACTORY. Create `claude-runtime-request.ts` plus its one-line `.js` bridge (`export * from \"./claude-runtime-request.ts\";`, LF ending — the bridge guard byte-compares, so CRLF or a trailing blank line lands it in `wrongContent`).\n`createClaudeRuntimePinRequest(input: unknown)` — typed `unknown`, like every other hostile boundary in this package — snapshots the exact three fields into a frozen plain object BEFORE any I/O, so nothing the caller still holds can mutate a validated path afterwards. Then, and only then, mint the capabilities INSIDE the package: `createNodeClaudeRuntimeFs()` for `fs`; a `ClaudeRuntimeFactsPort` whose `observe()` calls `observeInstalledClaudeRuntime({installedRoot, executablePath: <derived from the quote>})` and returns its `.facts`; and the host clock for `clock`. Return the existing `ClaudeRuntimePinRequest` shape, frozen, or an existing refusal — never a new vocabulary.\nTHE OBSERVER'S FOUR REFUSAL ARMS PASS THROUGH UNCHANGED. `ObserveInstalledClaudeRuntimeResult` can be a `ClaudeRuntimePinFailure`, a `ClaudeFailure<ClaudeObservationErrorCode>`, or a `WindowsProcessUnknown`. Return each with its own code and layer intact; re-stamping them into one flat vocabulary would erase which authority answered, and the producer's own header says that is the point. A host observation failure stays UNKNOWN and is never optimistically upgraded.\nNEVER accept or expose `fs`, `facts`, `clock`, a process seam, or a default-dependency override — not as an optional parameter, not as a second overload, not as an exported type a caller could satisfy. That injectability is the defect this task closes.\nKeep the file under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.ts",
+        "packages/runner/src/providers/claude/claude-runtime-request.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.ts",
+        "packages/runner/src/providers/claude/claude-runtime-request.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PUBLISH THE FACTORY, AND PROVE THE WITHHOLDING STILL HOLDS. Add `createClaudeRuntimePinRequest` and the data/result types a consumer genuinely needs to `packages/runner/src/surface/claude-surface.ts` (212 lines — measure after editing; adding an export block moves it toward the 250 target). Follow the file's own documented convention: each export block carries a comment saying WHY the symbols are public and what stays withheld. That file already states the governing principle for this whole seam — \"Consumers READ handoffs; only this package mints them\" — and this factory is the same principle applied to capabilities: the caller supplies data, the package mints the ports.\nUpdate `packages/runner/src/index-surface.test.ts`, which pins the root export list and its exact length. Add the new entries with their kinds; the count is pinned deliberately, so a bare addition without updating the fixture fails, and that failure is the fixture working.\nADD THE NEGATIVE SURFACE ASSERTIONS the DoD requires — these are the real deliverable of this step, because a positive export list cannot prove an absence. Assert the root does NOT publish `createNodeClaudeRuntimeFs`, any raw facts or process port, `CLAUDE_LAUNCHER_DEFAULTS`, or any dependency-composition helper. Assert them BY NAME, so a future barrel edit that re-exports one of them reddens here instead of silently widening the authority surface. Note the root barrel may use `export *`, which a grep cannot see through — assert against the imported namespace object, not against the file's text.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/surface/claude-surface.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "REAL WINDOWS CONFORMANCE AND THE CONSUMER EDGE — DoD 3 and DoD 5. Conformance: pass the factory's result into the production `prepareClaudeRuntimePin` on a real Windows host and assert the round trip: the quoted closure is rehashed and pinned, the quoted digest MATCHES, and the observation/pin binding is FRESHLY DIFFERENT from the quote — both halves, because matching-everything would mean nothing was re-observed and differing-everything would mean the quote was ignored. Then assert each drift arm separately — byte drift, version drift, capability drift, platform drift — each with its exact stable code and layer, and each proving the drift never reaches a launch boundary.\nDo not let this leg skip. On a non-Windows host assert the platform-unsupported refusal arm instead, and assert a POSITIVE executed-case count either way — a leg that silently generates zero cases passes while proving nothing.\nCONSUMER EDGE (DoD 5): apps/daemon declares `\"@moe/runner\": \"workspace:*\"` and pnpm-lock carries the importer — confirm both yourself. Then write a throwaway probe inside apps/daemon importing `createClaudeRuntimePinRequest` from the BARE specifier `@moe/runner`, typecheck it to exit 0, and DELETE it in the same command so no scratch file can reach a commit. A root-barrel grep does not satisfy this rail. Record the exact command and result, and record task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the production consumer — the task that will replace its temporary `FoundationAttemptDeps.runtimePorts` with this factory.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS — against the production factory, never a test helper. Run each alone, revert before the next. (1) Make the factory accept an optional `fs` override and prefer it when present; a NAMED test must redden — this is the exact defect the task closes, so if nothing reddens the hostile sweep never actually tested capability smuggling. (2) Make the executable derivation pick the FIRST `EXECUTABLE` entry instead of requiring exactly one; the two-executable case from step 2 must redden — proving the caller cannot steer the observer by padding the quote. (3) Re-stamp one observer refusal arm into a different vocabulary; a NAMED test must redden on the lost layer, proving the pass-through is asserted rather than assumed. (4) Interpolate the installedRoot into one refusal message; the message property assertion must redden — this is the drill for the rail the producer was rejected on. (5) Remove one negative surface assertion's subject by re-exporting `createNodeClaudeRuntimeFs` from the barrel; the negative surface test must redden, proving it reads the namespace rather than the file text.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not on an unrelated compile error — a signature drill in TypeScript will happily fail to compile for reasons that say nothing about the test. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.ts",
+        "packages/runner/src/surface/claude-surface.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/runner typecheck` must exit 0; `pnpm --filter @moe/runner test` must print a `Test Files`/`Tests` count line strictly above the step-1 baseline (exit 0 with no count line ran nothing) — note the runner suite had one known foreign red earlier this session in `claude-launcher.windows.test.ts`, so confirm whether it is still there and attribute it rather than absorbing it; then `pnpm typecheck` repo-wide with the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your five owned files, MUST be empty.\nADVERSARIAL REVIEW: (a) can any caller-supplied value reach `fs`, `facts`, `clock` or a process seam — through a parameter, an overload, an optional field, or an exported type they could satisfy? (b) is the executable DERIVED from the quote, with zero-and-two both refusing? (c) do all four observer refusal arms pass through with code AND layer intact? (d) does any refusal message contain a path, argv, environment value or digest — asserted as a property over the whole swept set, not one example? (e) does the negative surface test read the imported NAMESPACE rather than file text, so `export *` cannot hide a leak? (f) is the input snapshotted into a frozen plain object BEFORE any I/O? (g) is every production file under 250 physical lines by `grep -c ''`, and is the bridge exactly one line with an LF? (h) was the apps/daemon probe deleted, and does `git status --porcelain` show only the five owned paths with every drill reverted?\nCommit by explicit pathspec naming exactly the five owned files — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines verbatim, quote any foreign red as disclosure, name the test that reddened for each drill, and record task-6cbff01023b14b26a78fc5e3eb1dd8a9 as the production consumer with the bare-specifier probe result. Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.ts",
+        "packages/runner/src/providers/claude/claude-runtime-request.js",
+        "packages/runner/src/providers/claude/claude-runtime-request.test.ts",
+        "packages/runner/src/surface/claude-surface.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,13 +104,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:56:27.313Z",
-  "updatedAt": "2026-08-16T01:42:52.779Z",
+  "updatedAt": "2026-08-16T02:22:48.729Z",
   "metrics": {
-    "firstClaimAt": "2026-08-15T23:04:01.496Z"
+    "firstClaimAt": "2026-08-15T23:04:01.496Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 7
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "architect-27b64950"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -53,5 +129,29 @@
       "releasedBy": "architect-d9dccf21",
       "reason": "Explicit architect handoff after prerequisite absence measurement so planning can continue elsewhere."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T02:22:46.660Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Add `executablePath` to the public factory input. REJECTED, and this is the task's central design decision: it would let an authenticated caller choose which binary the host observer runs, which is precisely the runtime authority the factory exists to withhold. Deriving it from the quoted closure means the caller can only reach a binary the quote already committed to.\n\n2) Pick the first `EXECUTABLE` entry when the closure has several. REJECTED: a caller could then steer the observation by padding the closure, and the ambiguity would be silently resolved rather than refused. Exactly one, or refuse — with the two-entry case pinned as a test and drilled.\n\n3) Accept an optional `fs`/`facts`/`clock` override \"for testability\". REJECTED — it is the defect being closed. task-6cbff010 can currently only succeed by injecting `{fs,facts,clock}` from its own test; reintroducing the seam here would preserve that. Drill 1 exists to catch it.\n\n4) Re-stamp the observer's four refusal arms into one flat factory vocabulary for a simpler consumer API. REJECTED: the producer's header says keeping code AND layer per answering authority is the point, and four authorities can answer here. Flattening erases which one did.\n\n5) Publish the observer itself (`observeInstalledClaudeRuntime`) from the root instead of the factory. REJECTED: the observer takes an `executablePath`, so publishing it re-opens the exact authority hole the factory closes. The factory is the intended public shape; the observer stays internal.\n\n6) Assert the negative surface by grepping the barrel file. REJECTED: the root barrel can re-export via `export *`, which a text grep cannot see through. Assert against the imported namespace object.\n\n7) Skip the real-Windows conformance leg on non-Windows hosts. REJECTED: a skipped leg generates zero cases and passes while proving nothing. Assert the platform-unsupported refusal arm instead, with a positive executed-case count either way.",
+    "codebaseInsights": "RE-MEASURED AT HEAD abc3dcf. I planned the producer (task-32eddfd3) earlier this session, so I can be exact about what landed and about one decision its DoD left open.\n\nPRODUCER, LANDED AND QA-APPROVED: `packages/runner/src/providers/claude/claude-host-runtime.{ts,js,test.ts}`. The .ts is 249 lines — under the 250 cap my plan flagged as the binding constraint, so the worker split correctly. Exports: `observeInstalledClaudeRuntime(input: unknown)` (:201); `InstalledClaudeRuntimeInput` = `{installedRoot, executablePath, versionTimeoutMs?}` (:31); `ObservedInstalledClaudeRuntime` = `{ok:true, observation, facts, profile}` (:37); and the result union (:44) with FOUR arms — `ObservedInstalledClaudeRuntime | ClaudeRuntimePinFailure | ClaudeFailure<ClaudeObservationErrorCode> | WindowsProcessUnknown`. Four authorities can answer, which is why code-and-layer pass-through is not optional here.\n\nNOT PUBLISHED FROM THE RUNNER ROOT — grep confirms. That is deliberate: task-32eddfd3's plan said \"deliberately NOT added to the runner barrel — index.ts is not an owned path and the consumer task owns that edge.\" THIS task owns it, and `claude-surface.ts` plus `index-surface.test.ts` are in its owned paths precisely for that.\n\nTHE DECISION THE DoD LEAVES OPEN, and the reason this plan is more than assembly. The public input is exactly `{quotedObservation, installedRoot, pinRoot}`, but `observeInstalledClaudeRuntime` requires `executablePath`. Adding it to the public input would let a caller choose which binary gets observed — exactly the runtime authority this task exists to withhold. So DERIVE it from `quotedObservation.resolvedRuntimeClosure`, taking the single entry whose `kind` is `\"EXECUTABLE\"` (kinds are EXECUTABLE | LAUNCHER | PACKAGE, from `RUNTIME_CLOSURE_KINDS`). Zero or two such entries refuse. The caller then cannot point the observer anywhere the quote has not already committed to, and cannot steer it by padding the closure.\n\nTARGET CONTRACT: `ClaudeRuntimePinRequest` = `{quotedObservation, installedRoot, pinRoot, fs, facts, clock}` (claude-runtime-pin.ts:52-59). Only the first three are serializable; `ClaudeRuntimeFactsPort` is `{observe: () => Promise<ClaudeRuntimeFacts>}` (:48-50), and `ObservedInstalledClaudeRuntime.facts` is exactly a `ClaudeRuntimeFacts` — so the port is a thin wrapper over the landed observer, not a new authority.\n\nTHE SURFACE FILE ALREADY STATES THIS TASK'S PRINCIPLE. claude-surface.ts (212 lines) documents its withholding: `knownCount`, `readCount`, `readText`, `countCoverage`, `unknownFact`, `telemetryRefusal`, `snapshotRunRef` and `PROVIDER_TELEMETRY_MESSAGES` stay internal because \"every one of them MINTS a fact ... Consumers READ handoffs; only this package mints them.\" This factory is that same principle applied to capabilities: the caller supplies data, the package mints the ports. Write the new export block's comment in that voice.\n\nQA HISTORY WORTH INHERITING: task-32eddfd3 was rejected once on refusal messages echoing runtime paths. That rail binds this consumer too, and the plan asserts it as a PROPERTY over the whole swept set rather than a spot check — a single example would not have caught the original defect either.\n\nGATE BASELINE measured earlier this session: `pnpm --filter @moe/runner typecheck` EXIT 0; `pnpm --filter @moe/runner test` EXIT 1 with one foreign failure, `claude-launcher.windows.test.ts:178` (truthClass PROVEN vs UNKNOWN at layer OUTPUT). Re-measure — task-d7b352e1 is in flight against exactly that.",
+    "risks": "1) THE INJECTABILITY SEAM IS THE WHOLE POINT AND IT IS EASY TO RE-ADD. \"Just an optional fs for tests\" reintroduces exactly the defect. Drill 1 is the guard; if nothing reddens, the hostile sweep never tested capability smuggling and must be strengthened before completion.\n\n2) HOSTILE INPUT CAN CRASH INSTEAD OF REFUSING. A revoked Proxy makes `Array.isArray` THROW; `types.isProxy` is the safe first question. A getter, a thenable, or a prototype-polluted object can each turn a validation into an execution. A case that crashes is a defect, not a pass.\n\n3) FOUR AUTHORITIES CAN REFUSE. Pin code AND layer on every arm, and build each fixture valid at the earlier layers or a different authority answers and the assertion quietly stops testing its subject.\n\n4) THE MESSAGE RULE IS A REJECTION HISTORY, NOT A STYLE NOTE. The producer was rejected on refusal messages echoing runtime paths. Assert it as a property across the whole swept set; one spot check would not have caught the original defect.\n\n5) THE EXPORT-COUNT FIXTURE WILL FAIL, AND THAT IS IT WORKING. `index-surface.test.ts` pins the root export list and its length; a bare addition fails until the fixture is updated. Do not \"fix\" it by loosening the count.\n\n6) `export *` HIDES LEAKS FROM GREP. Negative surface assertions must read the imported namespace, not the file text. Drill 5 proves they do.\n\n7) LINE BUDGET. The new production file must stay under 250; `claude-surface.ts` is at 212 and an export block moves it toward the target. Measure with `grep -c ''`.\n\n8) A KNOWN FOREIGN RED sits in the runner suite (`claude-launcher.windows.test.ts:178`) and task-d7b352e1 is in flight against it. Re-measure, attribute it, disclose it verbatim — do not absorb it and do not narrow a leg to hide it.\n\n9) SHARED WORKTREE. Re-check `git status --porcelain` before committing, commit by explicit five-path pathspec, verify with `git show --stat`, confirm the apps/daemon probe is deleted and every drill reverted — drills 1, 2 and 3 edit production files.\n\n10) DOWNSTREAM: task-6cbff01023b14b26a78fc5e3eb1dd8a9 replaces its temporary `FoundationAttemptDeps.runtimePorts` with this factory once this lands; its other prerequisite chain (task-7ba898f5 plus in-flight task-d7b352e1) is separate. Record the consumer id rather than assuming the edge.",
+    "keyFiles": [
+      "packages/runner/src/providers/claude/claude-host-runtime.ts",
+      "packages/runner/src/providers/claude/claude-runtime-pin.ts",
+      "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts",
+      "packages/runner/src/providers/claude/claude-observation.ts",
+      "packages/runner/src/surface/claude-surface.ts",
+      "packages/runner/src/index-surface.test.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-16T02:22:48.729Z"
 }

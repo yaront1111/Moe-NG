@@ -1,6 +1,8 @@
+import { EventEmitter } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -12,6 +14,11 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { readWorkClaimLedger, runWorkClaimCommand } from "../work/work-claim-services.js";
 import { SqliteEventStore } from "@moe/store";
+import type { AgentSpawnStartResult, SpawnReport,
+  SpawnStartRefusal } from "./agent-spawn-contract.js";
+import { SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
+import type { SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
+import { claudeSpawnStarter } from "./agent-spawner.js";
 import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -159,15 +166,17 @@ const wrapper = createAgentWrapper({
   maxAgents: 2,
   mintSecret: () => `secret-${String(minted += 1).padStart(4, "0")}${"0".repeat(28)}`,
   operatorCredential: OPERATOR,
-  spawnAgent: (request) => {
+  // Admitted, then held open: the agents stay "running" for the whole file, so
+  // any report these tests read was produced without waiting for a child exit.
+  spawnAgent: async (request) => {
     spawned.push(request);
-    return new Promise(() => undefined); // agents stay "running" for the test
+    return { exit: new Promise<void>(() => undefined), ok: true };
   },
 });
 
 describe("createAgentWrapper", () => {
-  it("staffs unclaimed READY steps up to maxAgents, claiming under agent identities", () => {
-    const report = wrapper.runOnce();
+  it("staffs unclaimed READY steps up to maxAgents, claiming under agent identities", async () => {
+    const report = await wrapper.runOnce();
     expect(report.surfaceOutcome).toBe("SURFACE");
     expect(report.spawned).toHaveLength(2);
     expect(report.spawned.every((entry) => entry.outcome === "SPAWNED")).toBe(true);
@@ -214,13 +223,13 @@ describe("createAgentWrapper", () => {
     expect(text).not.toContain("must-not-reach-the-agent");
   });
 
-  it("does not double-staff: the next pass sees the claims and spawns nothing", () => {
-    const report = wrapper.runOnce();
+  it("does not double-staff: the next pass sees the claims and spawns nothing", async () => {
+    const report = await wrapper.runOnce();
     expect(report.spawned).toHaveLength(0);
     expect(report.active).toBe(2);
   });
 
-  it("never staffs the human approval or goal-closure actions", () => {
+  it("never staffs the human approval or goal-closure actions", async () => {
     const forbidden = createAgentWrapper({
       affordances: {
         boundProjectId: "proj-human-actions",
@@ -252,7 +261,7 @@ describe("createAgentWrapper", () => {
       spawnAgent: () => { throw new Error("human-only steps must never spawn"); },
     });
 
-    expect(forbidden.runOnce()).toEqual({
+    expect(await forbidden.runOnce()).toEqual({
       active: 0,
       spawned: [],
       surfaceOutcome: "SURFACE",
@@ -271,10 +280,10 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `revoke-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async () => undefined,
+        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true }),
       });
 
-      const report = finite.runOnce();
+      const report = await finite.runOnce();
       const sessionId = report.spawned[0]?.sessionId;
       if (sessionId === null || sessionId === undefined) throw new Error("no session spawned");
       await finite.settle();
@@ -296,7 +305,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("revokes a newly opened session when the work claim is refused", () => {
+  it("revokes a newly opened session when the work claim is refused", async () => {
     const harness = isolatedHarness("proj-wrapper-claim-refusal");
     try {
       let suffix = 0;
@@ -313,7 +322,7 @@ describe("createAgentWrapper", () => {
         spawnAgent: () => { throw new Error("a refused claim must never spawn"); },
       });
 
-      const report = refusing.runOnce();
+      const report = await refusing.runOnce();
       const sessionId = report.spawned[0]?.sessionId;
       expect(report.spawned[0]?.outcome).toBe("AUTHENTICATION_FAILED");
       if (sessionId === null || sessionId === undefined) throw new Error("no opened session");
@@ -333,7 +342,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("does not spawn when work.claim is durably decided without effects", () => {
+  it("does not spawn when work.claim is durably decided without effects", async () => {
     const projectId = "proj-wrapper-claim-no-effect";
     const harness = isolatedHarness(projectId);
     try {
@@ -346,7 +355,7 @@ describe("createAgentWrapper", () => {
         spawnAgent: () => { throw new Error("a no-effect claim must never spawn"); },
       });
 
-      const report = refusing.runOnce();
+      const report = await refusing.runOnce();
       const refused = report.spawned[0];
       if (refused?.sessionId === null || refused?.sessionId === undefined) {
         throw new Error("no opened session reported");
@@ -367,7 +376,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("claims a READY step at its previously released claim aggregate version", () => {
+  it("claims a READY step at its previously released claim aggregate version", async () => {
     const projectId = "proj-wrapper-reclaim";
     const harness = isolatedHarness(projectId);
     const claimStore = SqliteEventStore.openForProject(harness.storePath, projectId);
@@ -392,13 +401,17 @@ describe("createAgentWrapper", () => {
         deps: harness.isolated.provide(), maxAgents: 1,
         mintSecret: () => `reclaim-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: (request) => {
+        // Admission resolves, lifetime does not: a never-settling promise here
+        // used to mean "agent still running", but it is now the ADMISSION
+        // handle, so returning one would hang the report instead of holding a
+        // child open.
+        spawnAgent: async (request) => {
           spawned = request;
-          return new Promise(() => undefined);
+          return { exit: new Promise<void>(() => undefined), ok: true };
         },
       });
 
-      const report = reclaiming.runOnce();
+      const report = await reclaiming.runOnce();
       expect(report.spawned).toMatchObject([{ outcome: "SPAWNED", workItemId }]);
       expect(spawned?.workItemId).toBe(workItemId);
       expect(readWorkClaimLedger(claimStore, projectId).claims.get(workItemId)).toMatchObject({
@@ -410,11 +423,17 @@ describe("createAgentWrapper", () => {
     }
   });
 
+  // Both halves of the split the start contract makes: a start that never got
+  // admitted, and a start that WAS admitted and then died. Each has to surface
+  // and clean up, and neither may be reported as a healthy SPAWNED agent.
   it.each([
     ["synchronous spawn throw", "sync-spawn-throw", "SYNC_SPAWN_FAILURE",
-      (): Promise<void> => { throw new Error("SYNC_SPAWN_FAILURE"); }],
+      (): Promise<AgentSpawnStartResult> => { throw new Error("SYNC_SPAWN_FAILURE"); }],
     ["rejected child exit", "rejected-child-exit", "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
-      async (): Promise<void> => { throw new Error("AGENT_PROCESS_FAILED:EXIT_NONZERO:1"); }],
+      async (): Promise<AgentSpawnStartResult> => ({
+        exit: Promise.reject(new Error("AGENT_PROCESS_FAILED:EXIT_NONZERO:1")),
+        ok: true,
+      })],
   ] as const)("surfaces a %s after cleaning the claim and session", async (
     _case, projectSuffix, failureMessage, spawnAgent,
   ) => {
@@ -433,13 +452,13 @@ describe("createAgentWrapper", () => {
         spawnAgent,
       });
 
-      const report = throwing.runOnce();
+      const report = await throwing.runOnce();
       const staffed = report.spawned[0];
       if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
         throw new Error("no session spawned");
       }
       await expect(throwing.settle()).rejects.toThrowError(failureMessage);
-      expect(throwing.runOnce()).toEqual({
+      expect(await throwing.runOnce()).toEqual({
         active: 0,
         spawned: [],
         surfaceOutcome: failureMessage,
@@ -492,10 +511,13 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `race-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async (spawnedRequest) => { request = spawnedRequest; },
+        spawnAgent: async (spawnedRequest) => {
+          request = spawnedRequest;
+          return { exit: Promise.resolve(), ok: true };
+        },
       });
 
-      const report = racing.runOnce();
+      const report = await racing.runOnce();
       await racing.settle();
 
       expect(raced).toBe(true);
@@ -538,10 +560,13 @@ describe("createAgentWrapper", () => {
         deps: withReleaseConflict(harness.isolated.provide(), () => true), maxAgents: 1,
         mintSecret: () => `fail-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async (spawnedRequest) => { request = spawnedRequest; },
+        spawnAgent: async (spawnedRequest) => {
+          request = spawnedRequest;
+          return { exit: Promise.resolve(), ok: true };
+        },
       });
 
-      const staffed = refusing.runOnce().spawned[0];
+      const staffed = (await refusing.runOnce()).spawned[0];
       if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
         throw new Error("nothing spawned");
       }
@@ -556,7 +581,7 @@ describe("createAgentWrapper", () => {
         .toMatchObject({ status: "CLOSED", version: 2 });
       expect(settlement).toBe("AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT");
       await expect(refusing.settle()).rejects.toThrow(settlement);
-      expect(refusing.runOnce()).toEqual({
+      expect(await refusing.runOnce()).toEqual({
         active: 0,
         spawned: [],
         surfaceOutcome: settlement,
@@ -581,10 +606,10 @@ describe("createAgentWrapper", () => {
         maxAgents: 1,
         mintSecret: () => `dual-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
         operatorCredential: OPERATOR,
-        spawnAgent: async () => undefined,
+        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true }),
       });
 
-      const staffed = refusing.runOnce().spawned[0];
+      const staffed = (await refusing.runOnce()).spawned[0];
       if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
         throw new Error("nothing spawned");
       }
@@ -603,7 +628,7 @@ describe("createAgentWrapper", () => {
         "AGENT_CLEANUP_FAILED:session.close:EXPECTED_VERSION_CONFLICT" +
         "|AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT",
       );
-      expect(refusing.runOnce().surfaceOutcome).toBe(failure.message);
+      expect((await refusing.runOnce()).surfaceOutcome).toBe(failure.message);
       expect(readWorkClaimLedger(reader, projectId).claims.get(staffed.workItemId))
         .toMatchObject({ status: "OPEN", version: 1 });
       expect(readSessionLedger(reader, projectId).sessions.get(staffed.sessionId))
@@ -614,7 +639,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("closes a minted session when command-id minting fails before claim ownership", () => {
+  it("closes a minted session when command-id minting fails before claim ownership", async () => {
     const projectId = "proj-wrapper-mint-setup-failure";
     const harness = isolatedHarness(projectId);
     try {
@@ -631,7 +656,7 @@ describe("createAgentWrapper", () => {
         spawnAgent: () => { throw new Error("setup failure must never spawn"); },
       });
 
-      const report = failing.runOnce();
+      const report = await failing.runOnce();
       const failed = report.spawned[0];
       if (failed?.sessionId === null || failed?.sessionId === undefined) {
         throw new Error("no minted session reported");
@@ -652,7 +677,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("releases the exact claim and closes the session when payload hints throw", () => {
+  it("releases the exact claim and closes the session when payload hints throw", async () => {
     const projectId = "proj-wrapper-payload-setup-failure";
     const harness = isolatedHarness(projectId);
     try {
@@ -666,7 +691,7 @@ describe("createAgentWrapper", () => {
         spawnAgent: () => { throw new Error("setup failure must never spawn"); },
       });
 
-      const report = failing.runOnce();
+      const report = await failing.runOnce();
       const failed = report.spawned[0];
       if (failed?.sessionId === null || failed?.sessionId === undefined) {
         throw new Error("no claimed session reported");
@@ -687,7 +712,7 @@ describe("createAgentWrapper", () => {
     }
   });
 
-  it("cleans authority when a coding brief accessor throws after the claim", () => {
+  it("cleans authority when a coding brief accessor throws after the claim", async () => {
     const projectId = "proj-wrapper-node-mission-setup-failure";
     const harness = isolatedHarness(projectId);
     const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
@@ -731,7 +756,7 @@ describe("createAgentWrapper", () => {
         spawnAgent: () => { throw new Error("setup failure must never spawn"); },
       });
 
-      const report = failing.runOnce();
+      const report = await failing.runOnce();
       const failed = report.spawned[0];
       if (failed?.sessionId === null || failed?.sessionId === undefined) {
         throw new Error("no claimed session reported");
@@ -746,5 +771,304 @@ describe("createAgentWrapper", () => {
       reader.close();
       harness.dispose();
     }
+  });
+});
+
+/**
+ * Startup admission is a different fact from process lifetime, and the wrapper
+ * used to report neither: it called the lifetime-shaped boundary, discarded the
+ * admission fact, and printed SPAWNED unconditionally. These cases drive the
+ * REAL `claudeSpawnStarter` — never a stand-in for it — because a hand-written
+ * fake of the refusal would assert the fake's vocabulary rather than the
+ * producer's.
+ */
+
+/** The one trigger per producer refusal code. `Record` over the union is the
+ *  sweep's second opinion: a code added or removed upstream stops this
+ *  compiling, which a list derived from the union could never do. */
+const REFUSAL_TRIGGER: Record<SpawnInvocationRefusalCode, string> = {
+  // `&` is in agent-spawn-invocation's UNQUOTABLE set, and the wrapper's session
+  // id reaches cmd.exe as the `--mcp-config` path, so this is a real argument.
+  SPAWN_ARGUMENT_UNQUOTABLE: "&",
+};
+
+/**
+ * A fake OS child for the ADMITTED control. It admits by emitting `spawn` and
+ * then stays alive, so the exit promise is genuinely pending while the report is
+ * read. `taskkill` is answered as well, so `close()` settles instead of ageing
+ * into a containment failure and failing the test for an unrelated reason.
+ */
+function admittingSpawn(): (file: string, args: readonly string[], options: unknown) => never {
+  let agent: EventEmitter | null = null;
+  return ((file: string) => {
+    const emitter = new EventEmitter();
+    const child = Object.assign(emitter, {
+      kill: () => true, pid: 4242, stdin: new PassThrough(), unref: () => undefined,
+    });
+    if (file.includes("taskkill")) {
+      setImmediate(() => {
+        agent?.emit("close", 0, null);
+        emitter.emit("close", 0, null);
+      });
+      return child;
+    }
+    agent = emitter;
+    setImmediate(() => { emitter.emit("spawn"); });
+    return child;
+  }) as never;
+}
+
+/** Whether a promise is still unsettled after the timers have had a turn. */
+async function stillPending(promise: Promise<unknown>): Promise<boolean> {
+  const settled = promise.then(() => "settled" as const, () => "settled" as const);
+  const raced = await Promise.race([
+    settled,
+    new Promise<"pending">((resolve) => { setTimeout(() => { resolve("pending"); }, 25); }),
+  ]);
+  return raced === "pending";
+}
+
+describe("agent spawn admission truth", () => {
+  it("reports the real spawner's coded refusal with its refusing layer", async () => {
+    const projectId = "proj-wrapper-admission-refused";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    // `platform: "win32"` is what makes the cmd.exe quoting path reachable at
+    // all: agent-spawn-invocation returns unquoted on every other platform, so
+    // without it this case can never refuse and would pass while proving nothing.
+    const starter = claudeSpawnStarter("http://127.0.0.1:8099", {
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      log: () => undefined,
+      platform: "win32",
+      spawn: admittingSpawn(),
+    });
+    try {
+      let suffix = 0;
+      const refused = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        // The session id becomes the `--mcp-config` path, so the unquotable
+        // character travels into the argument the spawner refuses.
+        mintSecret: () =>
+          `amp${REFUSAL_TRIGGER.SPAWN_ARGUMENT_UNQUOTABLE}${String(suffix += 1)
+            .padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: starter,
+      });
+
+      const report = await refused.runOnce();
+      const staffed = report.spawned[0];
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
+        throw new Error("nothing staffed");
+      }
+
+      // Both facts, literally: the code AND the layer that answered. A
+      // non-SPAWNED string alone would be satisfied by any wrapper-local guess.
+      expect(staffed.outcome).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
+      expect(staffed.refusal).toEqual({
+        code: "SPAWN_ARGUMENT_UNQUOTABLE",
+        layer: "agent-spawn-invocation",
+        ok: false,
+      });
+      expect(staffed.refusal?.layer).toBe(SPAWN_INVOCATION_LAYER);
+
+      // The refusal came from the SPAWNER, not an earlier wrapper guard: the
+      // durable ledger shows the session was opened and the item really was
+      // claimed under it, so session.open and work.claim both passed before the
+      // spawner answered. A wrapper-side refusal would have short-circuited one
+      // of them and left no claim to release.
+      expect(readWorkClaimLedger(reader, projectId).claims.get(staffed.workItemId))
+        .toMatchObject({ status: "RELEASED", version: 2 });
+      expect(readSessionLedger(reader, projectId).sessions.get(staffed.sessionId))
+        .toMatchObject({ status: "CLOSED", version: 2 });
+    } finally {
+      await starter.close();
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("sweeps every producer refusal code, and proves the sweep ran", async () => {
+    const codes = Object.keys(REFUSAL_TRIGGER) as readonly SpawnInvocationRefusalCode[];
+    // A sweep that silently generates zero cases passes while testing nothing.
+    expect(codes.length).toBeGreaterThan(0);
+    const observed: string[] = [];
+    for (const code of codes) {
+      const projectId = `proj-wrapper-sweep-${code.toLowerCase()}`;
+      const harness = isolatedHarness(projectId);
+      const starter = claudeSpawnStarter("http://127.0.0.1:8099", {
+        environment: { SYSTEMROOT: "C:\\Windows" },
+        log: () => undefined,
+        platform: "win32",
+        spawn: admittingSpawn(),
+      });
+      try {
+        let suffix = 0;
+        const swept = createAgentWrapper({
+          affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+          deps: harness.isolated.provide(), maxAgents: 1,
+          mintSecret: () => `swp${REFUSAL_TRIGGER[code]}${String(suffix += 1)
+            .padStart(4, "0")}${"0".repeat(26)}`,
+          operatorCredential: OPERATOR,
+          spawnAgent: starter,
+        });
+        const staffed = (await swept.runOnce()).spawned[0];
+        expect(staffed?.refusal).toMatchObject({ code, layer: SPAWN_INVOCATION_LAYER });
+        observed.push(staffed?.refusal?.code ?? "NONE");
+      } finally {
+        await starter.close();
+        harness.dispose();
+      }
+    }
+    expect(observed).toEqual([...codes]);
+  });
+
+  it("reports SPAWNED while the admitted child is still running", async () => {
+    const projectId = "proj-wrapper-admission-held";
+    const harness = isolatedHarness(projectId);
+    const starter = claudeSpawnStarter("http://127.0.0.1:8099", {
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      log: () => undefined,
+      platform: "win32",
+      spawn: admittingSpawn(),
+    });
+    let held: Promise<void> | null = null;
+    try {
+      let suffix = 0;
+      const admitted = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `held-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        // Pass-through: the real starter answers, the test only keeps the exit
+        // handle so it can prove the report did not wait for it.
+        spawnAgent: async (request) => {
+          const result = await starter(request);
+          if (result.ok) held = result.exit;
+          return result;
+        },
+      });
+
+      const report = await admitted.runOnce();
+      const staffed = report.spawned[0];
+      expect(staffed?.outcome).toBe("SPAWNED");
+      expect(staffed?.refusal).toBeNull();
+      // The whole point: reporting completed while the child is still alive.
+      if (held === null) throw new Error("no exit handle captured");
+      expect(await stillPending(held)).toBe(true);
+      expect(admitted.activeCount()).toBe(1);
+    } finally {
+      await starter.close();
+      harness.dispose();
+    }
+  });
+
+  it("never books a refused start into the active map", async () => {
+    const projectId = "proj-wrapper-admission-unbooked";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const refusing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `book-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => Object.freeze({
+          code: "SPAWN_ARGUMENT_UNQUOTABLE" as const,
+          layer: SPAWN_INVOCATION_LAYER,
+          ok: false as const,
+        }),
+      });
+
+      const before = refusing.activeCount();
+      const report = await refusing.runOnce();
+      expect(report.spawned[0]?.refusal?.code).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
+      // Exactly the prior value: a refused start owns no slot, so it can neither
+      // consume maxAgents nor make the next pass believe an agent is working.
+      expect(refusing.activeCount()).toBe(before);
+      expect(report.active).toBe(before);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("deletes an admitted start from the active map when its exit settles", async () => {
+    const projectId = "proj-wrapper-admission-settles";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      let release: (() => void) | null = null;
+      const settling = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `settle-${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => Object.freeze({
+          exit: new Promise<void>((resolve) => { release = resolve; }),
+          ok: true as const,
+        }),
+      });
+
+      expect((await settling.runOnce()).spawned[0]?.outcome).toBe("SPAWNED");
+      expect(settling.activeCount()).toBe(1);
+      if (release === null) throw new Error("no exit resolver captured");
+      (release as () => void)();
+      await settling.settle();
+      expect(settling.activeCount()).toBe(0);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("never reports SPAWNED for an unclassified start failure", async () => {
+    const projectId = "proj-wrapper-admission-unclassified";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const failing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `uncl-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        // No stable code was earned, so this must fail closed rather than be
+        // relabelled into the producer's vocabulary or reported as SPAWNED.
+        spawnAgent: async () => { throw new Error("UNCLASSIFIED_START_FAILURE"); },
+      });
+
+      const staffed = (await failing.runOnce()).spawned[0];
+      expect(staffed?.outcome).not.toBe("SPAWNED");
+      expect(staffed?.refusal).toBeNull();
+      expect(failing.activeCount()).toBe(0);
+      await expect(failing.settle()).rejects.toThrowError("UNCLASSIFIED_START_FAILURE");
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("cannot represent a refusal code outside the producer's vocabulary", () => {
+    // The runtime assertions below can never fail; the compiler is the assertion.
+    // `@ts-expect-error` FAILS `pnpm --filter @moe/daemon typecheck` if the
+    // marked line ever starts compiling, so widening the refusal type back to a
+    // loose string reddens the gate instead of passing silently.
+    //
+    // Both the alias AND the field the report actually promises are pinned. A
+    // drill proved that is not redundant: widening only `SpawnReport["refusal"]`
+    // left an alias-only assertion completely green, so the guard would have
+    // detached from the surface a caller reads while still looking present.
+    type Reported = NonNullable<SpawnReport["refusal"]>;
+    const real: SpawnStartRefusal = {
+      code: "SPAWN_ARGUMENT_UNQUOTABLE", layer: SPAWN_INVOCATION_LAYER, ok: false,
+    };
+    const foreignAlias: SpawnStartRefusal = {
+      // @ts-expect-error a code outside SpawnInvocationRefusalCode is unrepresentable
+      code: "SPAWN_CODE_THE_PRODUCER_NEVER_DECLARED", layer: SPAWN_INVOCATION_LAYER, ok: false,
+    };
+    const foreignReported: Reported = {
+      // @ts-expect-error the REPORT's own refusal field is closed to the same union
+      code: "SPAWN_CODE_THE_PRODUCER_NEVER_DECLARED", layer: SPAWN_INVOCATION_LAYER, ok: false,
+    };
+    expect(real.code).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
+    expect(foreignAlias.layer).toBe("agent-spawn-invocation");
+    expect(foreignReported.layer).toBe("agent-spawn-invocation");
   });
 });
