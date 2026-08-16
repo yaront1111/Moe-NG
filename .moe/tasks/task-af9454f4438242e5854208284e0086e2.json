@@ -18,7 +18,7 @@
     "Exact codes and layers on every refusal path, positive generated counts on any sweep, target <=250 physical lines per production source and split before 400. The new module needs its committed .js bridge in the same commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,8 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:29:48.018Z",
-  "updatedAt": "2026-08-16T22:39:18.670Z",
+  "updatedAt": "2026-08-16T22:53:36.517Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:48:40.130Z"
+  },
+  "blockedReason": "Fresh measurement shows AF cannot safely write a standalone binding. There is no attempt-level RELEASED transaction or handoff record/ref; current work.release releases only an advisory claim. Design section 12.4 requires release + exact checkpoint/handoff atomically or none. `receiptRef` must be the nested byte-verified EvidenceReceipt.sha256 from readStoredReceipt, bound to the same attempt/graph/lease/effect—not verificationId or the daemon row digest. The handoff must be recomputed with public @moe/context.createReleaseHandoff from durable contextManifestDigest, journalDigest, graphReference, leaseReference and receiptRef, but daemon has no @moe/context edge and no production context/journal records. Filed task-203a5ca7 for the exact attempt context manifest and task-04dd5a0a for attempt journal authority; notified task-740924b7's architect that 740 must define the stable handoff ref and atomic release writer/reader. Re-plan AF only after task-740924b7, task-203a5ca7 and task-04dd5a0a are DONE.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:53:28.956Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured receipt/handoff meanings, notified task-740 architect of atomic release requirements, filed task-203a5ca7 (exact context manifest) and task-04dd5a0a (attempt journal), and blocked AF on them plus task-740.",
+      "whatRemains": "After prerequisites, add @moe/context edge and plan one module/bridge/test to verify nested receipt sha, recompute createReleaseHandoff, compare the release transaction's stored binding, and expose strict readback.",
+      "pitfalls": "receiptRef is nested EvidenceReceipt.sha256, not verificationId or row digest; never trust the stored handoff digest without recomputation; no separate pre/post release write.",
+      "openQuestions": "task-740 must freeze the stable handoff ref naming rule; do not infer ref=digest unless its contract says so.",
+      "releasedAt": "2026-08-16T22:53:36.516Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit measured prerequisite handoff; continuing user-requested plan-all sweep."
+    }
   ]
 }

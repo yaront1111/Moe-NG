@@ -19,7 +19,7 @@
     "Real SqliteEventStore in tests, closed in a `finally` on every exit path. Target <=250 physical lines per production source; commit only owned paths by explicit pathspec."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,8 +32,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:05:06.503Z",
-  "updatedAt": "2026-08-16T22:39:18.453Z",
+  "updatedAt": "2026-08-16T22:48:28.876Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:45:40.917Z"
+  },
+  "blockedReason": "Fresh measurement at HEAD a42ae2f: although safe_boundary.observe is in the frozen union and envelope-reachable, no handler can derive a trusted safe-boundary fact. `launchActivationProviderRun` -> `commitActivationProviderRun` -> `commitProviderRunRecord` has zero non-test call sites and no strict project+attempt reader; FoundationAttemptRecorded strips exit, and activation PROCESS_OBSERVED is registration, not termination. `intakeProcessObservation` only classifies facts supplied by the physical launcher and is not a post-hoc host observer. The production attempt release path is also absent while task-740924b7 remains PLANNING. Filed task-00e4827d to compose/index the real physical provider-run observation. Re-plan safe_boundary.observe only after task-740924b7 and task-00e4827d are DONE; otherwise the registry would authenticate caller-minted safety.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:48:22.368Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Verified frozen kind reachability but no trusted observation source. Filed task-00e4827d for production provider-run composition and indexed project+attempt reader; blocked on it plus task-740924b7.",
+      "whatRemains": "After prerequisites, plan durable safe-boundary record/handler against the real provider-run observation, with authentication before payload and exact false/UNKNOWN behavior.",
+      "pitfalls": "PROCESS_OBSERVED is registration, FoundationAttemptRecorded strips exit, and intakeProcessObservation is a classifier—not a host observer.",
+      "openQuestions": "Exact capability and payload allow-list must be measured from the eventual system-runner composition; do not guess now.",
+      "releasedAt": "2026-08-16T22:48:28.875Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit prerequisite handoff; continuing user-requested plan-all sweep."
+    }
   ]
 }

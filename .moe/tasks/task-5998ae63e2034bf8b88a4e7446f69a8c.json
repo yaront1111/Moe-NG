@@ -1,0 +1,35 @@
+{
+  "id": "task-5998ae63e2034bf8b88a4e7446f69a8c",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist durable per-attempt resource authority",
+  "description": "Prerequisite for task-6d40078159e84d92b3293d7b366cf727. Current measurement at HEAD a42ae2f: @moe/scheduler ResourceRow reducers are pure; daemon has no durable current resource writer/reader or attempt-to-resource membership. ClaimSuccessors and ActivationLedgerRecord discard ResourceRow[], and recovery inventory is only a recovery-window snapshot, not live release authority. Deliverable: one focused daemon persistence/application module that binds the complete ResourceRow set to project/attempt/effect at claim or activation, records RELEASED/QUARANTINED transitions only through production @moe/scheduler reducers, and exposes a strict complete current reader. Consumer: task-6d40078159e84d92b3293d7b366cf727.",
+  "definitionOfDone": [
+    "The production claim/activation path durably binds the complete ResourceRow membership to projectId, attemptRef and effect intent; a later resource cannot disappear merely because its row is undecodable or nonterminal.",
+    "State transitions are persisted only from accepted public @moe/scheduler resource-reducer results, preserving RELEASED versus QUARANTINED; caller row lists, refs or states never become authority.",
+    "A current per-attempt reader canonical-byte-checks and replays the bound set, returning every member exactly once; ABSENT, UNREADABLE, MALFORMED and AMBIGUOUS are distinct stable codes with exact layers and grant no terminal authority.",
+    "Real-Sqlite tests cover multiple resources, one undecodable row, one nonterminal row, replay/conflicting bytes, ordering, foreign-project binding, zero residue, and one accepted production-writer control; failure assertions pin code and layer.",
+    "Raw event/decision counts prove exact replay is idempotent and conflicting bytes do not overwrite the original set; a generated hostile sweep asserts a nonzero case count.",
+    "Completion names task-6d40078159e84d92b3293d7b366cf727 as consumer and records its exact reader edge; daemon typecheck/test execute separately with nonzero test-count output."
+  ],
+  "taskRails": [
+    "Use public @moe/scheduler resource reducers after verifying manifest, lock importer and compiled bare-specifier dependency edge; do not reimplement their transitions.",
+    "Recovery inventory is not current scheduler resource authority and must not be repurposed. No caller list/ref/state gains authority.",
+    "Membership must be complete and bounded; missing, duplicate, undecodable or foreign-project rows are UNKNOWN/refused, never skipped.",
+    "Use real SqliteEventStore, TDD exact codes/layers, target <=250 lines per production source, and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6d40078159e84d92b3293d7b366cf727",
+  "priority": "CRITICAL",
+  "order": 78.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:45:16.838Z",
+  "updatedAt": "2026-08-16T22:45:16.838Z"
+}

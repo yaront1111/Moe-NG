@@ -18,7 +18,7 @@
     "Preserve foreign work; commit only the explicit owned paths by pathspec."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,12 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:35.966Z",
-  "updatedAt": "2026-08-16T22:39:19.100Z",
-  "blockedReason": null,
+  "updatedAt": "2026-08-16T22:58:43.047Z",
+  "blockedReason": "Fresh foreground `pnpm test:security` at HEAD 54ad5e8 executed 9 files / 462 tests and is RED: live scan finds 92 boundaries against the 89-entry roster. Exact missing paths are GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts, AGENT_STAFFING_LAYER@apps/daemon/src/orchestrator/agent-session-fence.ts, and GRAPH_CONTENT_LAYERS@packages/scheduler/src/graph-content.ts. This task's rail forbids filling axis gaps here. Filed task-a46d4f99 for the valid goal prerequisite boundary. AGENT_STAFFING_LAYER belongs to still-WORKING task-05b0a693 and its owner was notified. GRAPH_CONTENT_LAYERS came from retracted/BLOCKED task-77e8cb44 and must not be ratified until human decision dec-64b2391 and corrected production bytes. `git log -- <path>` also proves task-8f9305b9's whole-tree commit captured the latter two foreign paths. Re-plan the final ratchet only after those three boundaries have stable owner coverage and test:security is non-vacuously green.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:58:35.024Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:54:00.239Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Ran fresh security gate (9 files/462 tests) and identified all three unrostered boundaries; filed task-a46d4f99 for GOAL_PREREQUISITE_LAYER, notified task-05b owner for AGENT_STAFFING_LAYER, and escalated GRAPH_CONTENT_LAYERS as invalid retracted task-77 bytes captured by a foreign commit.",
+      "whatRemains": "After all three boundaries are stable and covered, add completeness.security.ts plus coverage assertions in boundary-roster.security.ts and run security/fault separately.",
+      "pitfalls": "Do not absorb axis gaps in the final ratchet; do not treat the current 4-failure security output as baseline green; do not amend the foreign whole-tree commit.",
+      "openQuestions": "Human graph-content authority decision dec-64b2391 must resolve before that boundary can be covered.",
+      "releasedAt": "2026-08-16T22:58:43.045Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit handoff after fresh final-gate precondition failure; continuing plan-all sweep."
+    }
   ]
 }

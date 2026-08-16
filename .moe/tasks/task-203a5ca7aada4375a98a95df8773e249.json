@@ -1,0 +1,35 @@
+{
+  "id": "task-203a5ca7aada4375a98a95df8773e249",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist the exact Foundation attempt context manifest",
+  "description": "Prerequisite for task-af9454f4438242e5854208284e0086e2. Current measurement at HEAD a42ae2f: @moe/context exports renderContext/digestContextManifest/createReleaseHandoff, but apps/daemon has no @moe/context manifest edge and no production attempt contextManifestDigest. A release handoff cannot hash a caller digest or reconstruct one after launch. Deliverable: on the real Foundation attempt/context assembly path, record the exact rendered context manifest and digest immediately before provider invocation, bound to durable project/session/node/attempt, current graph/configuration and sealed input manifest; expose strict readback. Hard-depend on task-a3e8a02d's server-derived attempt input/launch authority. Consumer: task-af9454f4438242e5854208284e0086e2.",
+  "definitionOfDone": [
+    "The production Foundation launch/context path uses public `@moe/context` rendering and `digestContextManifest` over the exact bytes delivered, then durably records the manifest/digest before any provider effect; it does not hash caller argv, a ref string, or reconstructed bytes.",
+    "The record binds projectId, sessionId, nodeKey, attemptRef, current graph revision/hash/epoch, configuration digest and sealed input-manifest digest, and a strict reader rejects any cross-binding mismatch.",
+    "Absent, stale, foreign, malformed, noncanonical, ambiguous and unreadable context records return distinct stable codes with exact layers; no UNKNOWN value is replaced by a fabricated digest.",
+    "Exact replay returns the original bytes with unchanged raw event/decision counts; conflicting context bytes under one identity refuse before provider invocation and leave zero partial launch/record residue.",
+    "Real-Sqlite tests drive the production pre-launch call site, assert exact code/layer, positive hostile-case counts, one accepted control and a mutation where hashing a reference instead of delivered bytes reddens a named assertion.",
+    "apps/daemon package.json and pnpm-lock declare @moe/context and a compiled bare-root import probe typechecks; completion names task-af9454f4438242e5854208284e0086e2 as consumer and daemon tests report nonzero counts."
+  ],
+  "taskRails": [
+    "Hard-depend on task-a3e8a02ddb864c689ac66de7b66bfceb; do not reconstruct context until that task owns the server-derived launch/input bytes.",
+    "Use only public @moe/context roots and verify manifest, lock importer and compiled bare-specifier edge; no deep imports or local digest implementation.",
+    "No caller context bytes/digest/ref become authority and no provider launch occurs before the durable context decision.",
+    "TDD exact codes/layers, real SqliteEventStore, target <=250 lines per production source, explicit owned-path commits."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-af9454f4438242e5854208284e0086e2",
+  "priority": "CRITICAL",
+  "order": 80.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:53:18.945Z",
+  "updatedAt": "2026-08-16T22:53:18.945Z"
+}

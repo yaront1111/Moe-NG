@@ -24,13 +24,9 @@
         "apps/daemon/src/goals/goal-close-prerequisite.ts",
         "apps/daemon/src/goals/goal-services.test.ts"
       ],
-      "modifiedFiles": [
-        "apps/daemon/src/goals/goal-close-prerequisite.ts",
-        "apps/daemon/src/goals/goal-services.test.ts"
-      ],
-      "note": "Appended 7 codes to GOAL_PREREQUISITE_REFUSAL_CODES (never reordered), added GOAL_PREREQUISITE_LAYER, exported enabledScope as readApprovedNodeScope. bootstrap-ledger.ts needed no edit (DAEMON_PREREQUISITE already in SERVICE_REFUSED_BY:33-42). Vocabulary test restates all 8 by hand. Focused run: Test Files 1 passed, Tests 19 passed.",
-      "startedAt": "2026-08-16T22:14:47.676Z",
-      "completedAt": "2026-08-16T22:17:44.432Z"
+      "note": "RETRY AFTER qa_reject #1. Steps were reset to PENDING on reopen, but the deliverable is already on disk and committed at 54ad5e8; QA verified DoD 1, 3, 4 and DoD 5's gate half PASS. I am recording each step against its measured state rather than redoing landed work.\n\nStep 1 verified complete on disk, not re-done: `goal-close-prerequisite.ts` carries the extended frozen vocabulary in place — GOAL_CLOSE_AUTHORITY_REMAINS, GOAL_CLOSE_RESULT_DIGEST_MISMATCH, GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED, GOAL_CLOSE_REVIEW_PACKAGE_STALE, GOAL_CLOSE_VERIFICATION_NOT_PASSED, GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT/AMBIGUOUS/UNREADABLE, plus GOAL_PREREQUISITE_LAYER and readApprovedNodeScope, all imported by goal-qualification.ts:40-49. No second vocabulary was started. Unchanged by this retry.",
+      "startedAt": "2026-08-16T23:02:16.114Z",
+      "completedAt": "2026-08-16T23:02:23.624Z"
     },
     {
       "stepId": "step-2",
@@ -42,13 +38,9 @@
       "newFiles": [
         "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
       ],
-      "modifiedFiles": [
-        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
-        "apps/daemon/src/goals/goal-qualification.test.ts"
-      ],
-      "note": "goal-closure-test-fixtures.ts (test-only, no .js bridge). seedVerifiedNode drives the full real chain (activation ingress -> launcher authority -> recordProvenFoundationAttempt -> sealRecipe -> verify through the SHIPPED node launcher, a real child process) and throws unless the verdict matches. Every identity is nodeRef-derived (lease/token/session/lock/wrapper/slot/resource/intent) so two nodes in one store cannot share a grant and adopt each other's run. Deviation from the step text: seedReadyProject is NOT called - every caller drives bootstrapSequence first, so it would only replay. Also exports approveNodes, seedProvenAttempt and seedReviewAcceptance (lifted from j1-command-path.test.ts:68-109). Smoke: Test Files 1 passed, Tests 1 passed - a real PASSED receipt whose receipt.graphIdentity is the node ref.",
-      "startedAt": "2026-08-16T22:17:47.295Z",
-      "completedAt": "2026-08-16T22:21:53.642Z"
+      "note": "Verified complete on disk, unchanged by this retry. `goal-closure-test-fixtures.ts` (459 lines, test-only, correctly NO `.js` bridge — `review-test-fixtures.ts` has none either) exports `seedVerifiedNode`, `seedProvenAttempt`, `seedReviewAcceptance`, `approveNodes` and `cleanupGoalClosureFixtures`. `seedVerifiedNode` drives the real chain end to end — activation ingress, launcher authority GRANT_CONSUMED/PREFLIGHT/STARTED, `recordProvenFoundationAttempt`, `sealRecipe`, then a REAL child process — and throws unless the verdict matches, so a fixture that produced no receipt cannot leave later assertions inspecting an empty store. No mock launcher anywhere.\n\nONE ADDITION THIS RETRY MAKES USE OF, worth naming for QA: `seedProvenAttempt` is exported separately from `seedVerifiedNode`, i.e. a durable attempt record and activation WITHOUT a verification receipt. That is what makes the new digest and activation-identity cases constructible — they need a node whose record and activation are real while the receipt naming them is planted. No fixture change was required; the retry only consumes an export that already existed.",
+      "startedAt": "2026-08-16T23:02:27.094Z",
+      "completedAt": "2026-08-16T23:02:36.998Z"
     },
     {
       "stepId": "step-3",
@@ -61,12 +53,11 @@
         "apps/daemon/src/goals/goal-qualification.test.ts"
       ],
       "modifiedFiles": [
-        "apps/daemon/src/goals/goal-qualification.test.ts",
-        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+        "apps/daemon/src/goals/goal-qualification.test.ts"
       ],
-      "note": "goal-qualification.test.ts holds the 5 evidence arms, each pinning the exact code AND layer DAEMON_PREREQUISITE, each snapshotting the store and re-reading goal aggregate + decisionCount + goal event count afterwards. Every arm seeds everything else valid so no earlier guard can answer: ABSENT seeds review acceptance for BOTH nodes and verifies only one; AMBIGUOUS drives two REAL verifications of one node; UNREADABLE plants the same receipt re-serialised non-canonically under its own verification id (only the byte compare in readStoredReceipt can catch it); NOT_PASSED runs a real verifier exiting 3; RESULT_DIGEST_MISMATCH appends a second RECORDED event so the record no longer reads back. Written as five separate cases, not a sweep, so no generated-count assertion applies. RED confirmed: \"Cannot find module './goal-qualification.js'\", Test Files 1 failed.",
-      "startedAt": "2026-08-16T22:21:55.690Z",
-      "completedAt": "2026-08-16T22:23:15.698Z"
+      "note": "THIS IS THE STEP THE REJECTION LANDED ON. Arms 1-4 were already correct and are untouched. Arm 5 was the defect, and it is now two arms.\n\nWHAT WAS WRONG (QA's measurement, reproduced): the RESULT_DIGEST_MISMATCH case seeded a SECOND RECORDED event on the dispatch aggregate, which makes `readFoundationAttemptRecord` answer AMBIGUOUS. `verifiedResultHolds` is `stored.ok && stored.digest === receipt.recordDigest`, so the `ok` clause refused and the digest comparison beside it was never evaluated. The enumerated DoD 2 arm \"mismatched result hash\" was therefore never exercised, and QA's mutant — replacing the whole expression with `stored.ok` — kept all 2170 daemon tests green. Global rail 1 exactly: an earlier layer answers first and the assertion detaches from its subject.\n\nWHAT I DID, both arms kept because both durable states are real:\n- The original case stays as the RECORD-UNREADABLE arm, retitled \"when the verified result no longer reads back\" and now ASSERTING its own precondition, `readFoundationAttemptRecord(...).ok === false`, so it can never again be mistaken for the digest arm.\n- A new arm reaches the digest clause: `seedProvenAttempt` gives node-1 a real record and activation, a real PASSED receipt is seeded for the OUT-OF-SCOPE node-src purely as a template, and `plantReceipt` commits one canonical receipt naming node-1 with `recordDigest` set to \"f\"*64. It asserts `stored.ok === true` AND `stored.digest !== \"f\".repeat(64)` before acting, so the ok clause provably cannot answer and only the comparison can.\n\nWHY PLANTING IS NECESSARY AND NOT A CHEAT: a receipt the real chain mints carries the record's own digest BY CONSTRUCTION, so this guard is unreachable from any honest seed — which is precisely why it was unguarded. The planted bytes still go through `encodeFoundationPayload`, so `readStoredReceipt`'s decode/re-encode byte compare accepts the row exactly as it accepts a real one; nothing is mocked and no production surface is bypassed.\n\nALSO ADDED HERE, closing QA's informational survivor (a): \"indexes the stored row a receipt points at, never the bytes that pointed at it\". A decoy row is committed to its OWN aggregate while its `verificationId` field names another verification, so the scanned bytes claim node-1 while the row they point at is the real out-of-scope node-src receipt. Reading the scanned value would admit evidence for a node nothing verified; reading the stored row leaves node-1 with none, so the answer is RECEIPT_ABSENT. This makes the module's headline claim — \"THE SCANNED BYTES ARE NEVER THE ANSWER\" — falsifiable for the first time. `commitRawReceipt` gained one optional target-aggregate parameter to express it.\n\nDRILLED, not asserted: mutant `stored.ok && stored.digest === receipt.recordDigest` -> `stored.ok` now fails exactly \"refuses RESULT_DIGEST_MISMATCH when the receipt claims a digest the record does not hold\" (1 failed / 16 passed). Mutant `receiptFrom(stored.row)` -> `receiptFrom(scanned.value)` now fails exactly the decoy test (1 failed / 17 passed). Both reverted, both files sha256-verified back to their committed bytes.",
+      "startedAt": "2026-08-16T23:02:40.727Z",
+      "completedAt": "2026-08-16T23:02:59.729Z"
     },
     {
       "stepId": "step-4",
@@ -78,9 +69,9 @@
       "modifiedFiles": [
         "apps/daemon/src/goals/goal-qualification.test.ts"
       ],
-      "note": "Added arms 6-9 plus the positive arm. DEVIATION, measured and forced: the step text's second REVIEW_PACKAGE_STALE sub-case (\"latest round's reviewInputDigest differs from the accepted one\") is not a real condition - review-acceptance.ts:120,127 records the VERIFIER RECEIPT's reviewInputDigest, which is structurally never a round's (recordVerifierReceipt swaps the DAEMON_RECEIPT package item, verifier-receipt-ledger.ts:197-228), so that comparison would refuse every closure. The honest durable equivalent is used instead: the accepted verifier receipt's source must still be the LATEST review round, the exact comparison acceptOutput itself made at acceptance time. Both stale sub-cases and both authority sub-cases share one code, so each pins the EXACT message via expectRefusedExactly. Positive arm recomputes all four refs by restating the length-framed hash scheme by hand (only the version tag is imported).",
-      "startedAt": "2026-08-16T22:23:18.261Z",
-      "completedAt": "2026-08-16T22:24:52.500Z"
+      "note": "THE OTHER TWO REJECTED ITEMS LIVE HERE. Arms 6, 8, the re-plan and later-round staleness arms, and the positive arm were all correct and are untouched. Two guard-pairs were unreachable and are now reached clause by clause.\n\nDEFECT A — the review cross-check's two operands CO-VARIED. `stageAcceptance` hardcodes `reviewInputDigest: \"b\".repeat(64)` among its defaults, and the test overrode only `verifierReceiptId`/`verifierReceiptSha256`. So the staged acceptance disagreed with the real receipt on BOTH fields at once, and `if (verifier.receiptSha256 !== accepted.verifierReceiptSha256 || verifier.receipt.reviewInputDigest !== accepted.reviewInputDigest)` would refuse with EITHER clause deleted. The comment claiming \"only the sha256 is wrong\" was false. Now two cases, one clause each, each passing the REAL value through for the field it is not testing and asserting that precondition after staging: \"when only the acceptance's receipt sha256 disagrees\" and \"when only the acceptance's review input digest disagrees\".\n\nDEFECT B — the zero-authority identity comparisons were never evaluated. The existing case blurs the activation history, which only makes `readsBackAs` null, so the `account.readsBackAs === null` clause answered and both identity comparisons deleted green despite the asserted message naming them. Three clauses share one message here, which is exactly what hid it. The blur case is KEPT as the null arm, with a comment stating it reaches only that clause, and two new cases reach the identity clauses with `readsBackAs` non-null: node-1 gets a real record and activation via `seedProvenAttempt`, a receipt is planted naming node-1 with the correct `recordDigest` and correct sibling identity but a wrong `leaseIdentity` (and its mirror with a wrong `effectIdentity`), and each asserts the live identity differs from the planted one before acting.\n\nDRILLED, four mutants, each killed by exactly its intended test and each reverted with sha256 verification:\n- delete the lease clause (goal-qualification.ts:159) -> fails only \"refuses AUTHORITY_REMAINS when the activation reads back as a different lease\" (1 failed / 16 passed)\n- delete the effect clause (:160) -> fails only \"...as a different effect\" (1 failed / 16 passed)\n- delete the receipt-sha256 clause (:113) -> fails only \"when only the acceptance's receipt sha256 disagrees\" (1 failed / 16 passed)\n- delete the reviewInputDigest clause (:114) -> fails only \"when only the acceptance's review input digest disagrees\" (1 failed / 16 passed)\nBefore this retry, all four of those deletions left the suite fully green.\n\nNote for QA on the accounting: the planted-receipt cases seed their template from an out-of-scope node (`node-src`), whose own activation carries `nodeKey: \"node-src\"` and is therefore skipped by `zeroAuthority`'s `byNode` lookup rather than interfering — the only account that reaches the identity clauses is node-1's own.",
+      "startedAt": "2026-08-16T23:03:02.459Z",
+      "completedAt": "2026-08-16T23:03:20.283Z"
     },
     {
       "stepId": "step-5",
@@ -96,18 +87,9 @@
         "apps/daemon/src/goals/goal-qualification-reads.ts",
         "apps/daemon/src/goals/goal-qualification-reads.js"
       ],
-      "modifiedFiles": [
-        "apps/daemon/src/goals/goal-qualification.ts",
-        "apps/daemon/src/goals/goal-qualification.js",
-        "apps/daemon/src/goals/goal-qualification-reads.ts",
-        "apps/daemon/src/goals/goal-qualification-reads.js",
-        "apps/daemon/src/goals/goal-close-prerequisite.ts",
-        "apps/daemon/src/goals/goal-qualification.test.ts",
-        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
-      ],
-      "note": "Landed goal-qualification.ts (239 lines) + goal-qualification-reads.ts (184) and both .js bridges; goal-close-prerequisite.ts (121) now yields {approvalRef, scope}. Split taken up front as pre-authorised - one file would have crossed 250. Scanned receipt bytes are used ONLY to take verificationId and to skip out-of-scope rows; every fact comes from readStoredReceipt's byte-compared re-read. Two production additions beyond the step text, both bound to durable state and both pinned by their own test: the acceptance must AGREE with the receipt it names (sha256 + reviewInputDigest), and a durable re-plan refuses rather than letting noPendingDraftOrSupersession be asserted away. FIXTURE DEFECT FOUND AND FIXED: labels must be unique per PROCESS, not per store - runVerifierProcess's module-level run registry is keyed by grantId, so the second test reusing label \"node-1\" refused GRANT_ALREADY_CONSUMED against a fresh store. Gates: pnpm --filter @moe/daemon typecheck exit 0; focused suite Test Files 1 passed, Tests 13 passed.",
-      "startedAt": "2026-08-16T22:24:54.925Z",
-      "completedAt": "2026-08-16T22:29:33.363Z"
+      "note": "Verified complete on disk and DELIBERATELY UNCHANGED by this retry. `goal-qualification.ts` is 248 lines, `goal-qualification-reads.ts` 197 (the plan's named split, taken because one file would have crossed the cap), and both carry their one-line `.js` bridges. QA verified DoD 1, 3 and 4 against this code and passed them.\n\nI changed ZERO production bytes, and that is the correct response to this rejection rather than a shortcut. Every one of QA's five findings was that a TEST never reached a guard — the guards themselves were present and correct, which is exactly why deleting them left the suite green. Editing production to \"fix\" a coverage defect would have been the wrong repair and would have put DoD 1/3/4 back at risk. Both files were sha256-verified back to their committed bytes after every drill: `goal-qualification-reads.ts` b38d7e4a56171f3b73a53e1d7d4bae3b91e41298aba1ed60409997bed38aa50b, `goal-qualification.ts` 476a9c0602c1f91bbdc908fdf5c00bd418c6aa735858a2b56f10b9c392db23a0.\n\nThe algorithm the plan specifies is present as specified: durable scope read, receipts indexed by scanning only for `verificationId` and then RE-READ through `readStoredReceipt`, per-node evidence checks, review checks against `readReviewLedger` + `readVerifierReceipt`, activation accounting against the receipt's lease and effect, and version-tagged length-framed derived refs with `truthClass: \"DAEMON_VERIFIED\"`. Six mutants across these two files are now killed by the suite where before this retry five of them survived.",
+      "startedAt": "2026-08-16T23:03:23.196Z",
+      "completedAt": "2026-08-16T23:03:37.510Z"
     },
     {
       "stepId": "step-6",
@@ -117,14 +99,9 @@
         "apps/daemon/src/goals/goal-services.ts",
         "apps/daemon/src/goals/goal-services.test.ts"
       ],
-      "modifiedFiles": [
-        "apps/daemon/src/goals/goal-services.ts",
-        "apps/daemon/src/goals/goal-close-prerequisite.ts",
-        "apps/daemon/src/goals/goal-services.test.ts"
-      ],
-      "note": "closeGoal now calls qualifyGoalClosure and hands reduceGoal the DERIVED witnesses; the payload objects are read at ingress and never again. Comment block rewritten to say the values are declared and inert instead of \"evidence-bound BY CONSTRUCTION\". hasDurableGoalCloseReviewAcceptance deleted - the composer supersedes it and dead code would be a second answer to one question. goal-services.test.ts: local approveNodes/acceptReviewedNode replaced by the shared fixtures; the two cases that let the CORE refuse a payload witness are replaced by the two DoD-1 proofs, both directions - garbage refs plus truthClass AGENT_REPORTED/SELF_REPORTED still CLOSE (a handler that forwarded the payload would redden here on validClosure), and perfectly-shaped refs still REFUSE at DAEMON_PREREQUISITE with no durable record. Ingress cases unchanged and still green. Gates: typecheck exit 0; Test Files 1 passed, Tests 20 passed.",
-      "startedAt": "2026-08-16T22:29:35.760Z",
-      "completedAt": "2026-08-16T22:32:45.737Z"
+      "note": "Verified complete on disk, unchanged by this retry. `closeGoal` calls `qualifyGoalClosure` and refuses at `DAEMON_PREREQUISITE` with the exact code, committing nothing; on success it builds the `GoalCommand` from the DERIVED witnesses so the request payload's objects never reach `reduceGoal`.\n\nThis is the wiring QA explicitly PASSED as DoD 1, including the both-directions proof the DoD's first item demands: a payload carrying garbage refs and `truthClass: \"AGENT_REPORTED\"` still closes when the durable records hold, and a perfectly-shaped payload refuses when they are absent. That pair is what makes \"request payload refs/truth labels alone cannot satisfy closure\" a measured fact rather than a claim, and it is untouched here — nothing in the rejection touched this step.\n\nNo production or test bytes changed in step 6 during this retry; `goal-services.ts` and `goal-services.test.ts` are byte-identical to 54ad5e8.",
+      "startedAt": "2026-08-16T23:03:40.660Z",
+      "completedAt": "2026-08-16T23:03:48.702Z"
     },
     {
       "stepId": "step-7",
@@ -133,12 +110,9 @@
       "affectedFiles": [
         "apps/daemon/src/goals/j1-command-path.test.ts"
       ],
-      "modifiedFiles": [
-        "apps/daemon/src/goals/j1-command-path.test.ts"
-      ],
-      "note": "j1-command-path.test.ts: local acceptReviewedNode deleted for the shared seedReviewAcceptance, and seedVerifiedNode added at both goal.close sites. The three-human-action assertions and the per-kind replay sweep are UNMODIFIED in what they assert (only the loop turned async) and both stay green - DoD 3 and DoD 4's one-durable-row half. Added the byte-identity half DoD 4 needed: the acceptance decision's resultSha256 and the FoundationVerificationReceipted event payloads are captured as bytes before goal.close and compared after, with a non-vacuity guard that both lists are non-empty so a stale event-type literal cannot pass as \"nothing changed\". VERIFIED not assumed: envelope(\"goal.close\", 2, ...) still holds - the seeding writes only to activation/dispatch/verification/node aggregates, and both the journey and the sweep pass unchanged. Gates: typecheck exit 0; src/goals - Test Files 3 passed, Tests 49 passed.",
-      "startedAt": "2026-08-16T22:32:48.161Z",
-      "completedAt": "2026-08-16T22:34:18.752Z"
+      "note": "Verified complete on disk, unchanged by this retry. `j1-command-path.test.ts` seeds through the shared `seedReviewAcceptance` + `seedVerifiedNode`, and the two assertions that ARE the DoD are intact and unweakened: the three-human-action set (DoD 3, \"no extra human command is introduced\") and the per-kind replay sweep with one durable closure row (DoD 4), plus the byte-identity half — the accept_output and FoundationVerificationReceipted decision rows are captured before `goal.close` and asserted equal after.\n\nQA verified DoD 3 and DoD 4 against this suite and passed both. Nothing in the rejection touched this step and I did not modify it; weakening either assertion would itself have been a rejection, so leaving it alone was the requirement, not the convenience.\n\nWhole-suite evidence that it is still honest after my changes: the full daemon run is 107 files / 2175 tests green UNEXCLUDED, so the J1 journey passes alongside the new cases rather than being skipped or narrowed.",
+      "startedAt": "2026-08-16T23:03:51.514Z",
+      "completedAt": "2026-08-16T23:03:59.848Z"
     },
     {
       "stepId": "step-8",
@@ -150,21 +124,19 @@
         "apps/daemon/src/goals/goal-qualification.test.ts"
       ],
       "modifiedFiles": [
-        "apps/daemon/src/goals/goal-qualification-reads.ts",
-        "apps/daemon/src/goals/goal-qualification.ts",
-        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+        "apps/daemon/src/goals/goal-qualification.test.ts"
       ],
-      "note": "GATE. pnpm --filter @moe/daemon typecheck exit 0. Full plan gate run: daemon test EXIT=1, \"Tests 1 failed | 2169 passed (2170)\", sole failing FILE across 5 runs = src/orchestrator/agent-wrapper.test.ts (a peer's UNCOMMITTED work). Attribution: the failing test name is absent from `git show HEAD:...` and present only in the working tree; my diff touches zero files under src/orchestrator; the identical command was EXIT 0 at 01:35 with my full production diff in place. Repo-wide pnpm typecheck red only on packages/core/src/planning/graph-revision-replay.ts:236 - an UNTRACKED peer file. Delta minus baseline, intersected with owned paths, is EMPTY.\nDRILLS, each restored by content hash (4f5838df.../bd1e8fc7... verified): (i) index trusts scanned bytes instead of readStoredReceipt -> reddens ONLY \"refuses RECEIPT_UNREADABLE when a durable receipt's bytes are not canonical\"; (ii) verifiedResultHolds stops reading the attempt record -> reddens ONLY \"refuses RESULT_DIGEST_MISMATCH when the verified result moved after the receipt\"; (iii) closureWitness forwards the payload -> reddens ONLY \"closes on durable records even when the payload's witnesses are garbage\". No drill hung; none hit the wrong test.\nADVERSARIAL REVIEW, three real fixes landed: scan() now refuses a non-advancing cursor (an unbounded loop would hang rather than refuse); receiptFrom() rejects a row missing ANY bound field (textOf's \"\" would have been hashed into a ref as if it were a value) and coerces obligations through ?? null (JSON.stringify(undefined) is not a string and threw one frame later under the wrong code). Checked and safe: concurrent second close (goal CAS + tested), empty scope (null -> REVIEW_ACCEPTANCE_REQUIRED, tested), node with zero activations (RECEIPT_ABSENT first, tested), empty graphIdentity (skipped as out of scope, node then reads ABSENT). Documented not fixed: read-then-write is not one transaction across aggregates - append-only records make the failure mode STALE, never forged; a durable read fence belongs to the store. Per-file: 98/125/197/248 production lines, all under 250.\nCommitted 87b3d5b by explicit pathspec, 11 owned paths, verified with git show --stat.",
-      "startedAt": "2026-08-16T22:34:21.539Z",
-      "completedAt": "2026-08-16T22:41:25.706Z"
+      "note": "GATES, run separately and read by OUTPUT not exit code:\n- `pnpm --filter @moe/daemon typecheck` — exit 0.\n- `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src` — `Test Files 107 passed (107)` / `Tests 2175 passed (2175)`, exit 0. The count line is present, so the leg demonstrably executed rather than matching no package. Run UNEXCLUDED: the `--exclude '**/orchestrator/agent-wrapper.test.ts'` the prior attempt needed is gone, matching QA's measurement that both peer reds have cleared. QA's baseline was 107 / 2170; the +5 are this retry's new cases.\n- `pnpm typecheck` — exit 0 repo-wide, every package Done including apps/daemon and packages/core. NO foreign red to disclose this time. Worth naming because the prior attempt had to quote one: its `packages/core typecheck: src/planning/graph-revision-replay.ts(236,46) TS2345` disclosure was MY untracked file mid-flight on task-ee27ed7c; it is fixed and committed, so that red is gone rather than merely excluded.\n\nALL THREE NAMED DRILLS RUN, each proven applied by grep before running, each reverted with sha256 verification (`goal-qualification.ts` 476a9c06…, `goal-qualification-reads.ts` b38d7e4a…, `goal-services.ts` verified back to its committed bytes):\n(i) Index trusts the SCANNED bytes — `readStoredReceipt` and its `!stored.ok` branch removed, `receiptFrom(scanned.value)`. Reddens 2: \"refuses RECEIPT_UNREADABLE when a durable receipt's bytes are not canonical\" (the case the plan named) AND the new decoy case. 2 failed / 16 passed.\n(ii) Digest comparison neutralised — `stored.ok && stored.digest === receipt.recordDigest` -> `stored.ok`. Reddens exactly \"refuses RESULT_DIGEST_MISMATCH when the receipt claims a digest the record does not hold\". 1 failed / 16 passed. THIS IS THE MUTANT QA REPORTED AS SURVIVING ALL 2170 TESTS; it is now killed.\n(iii) Derived witness replaced by the forwarded payload — `closureWitness: qualified.closureWitness` -> `closureWitness: declaredClosure` in `goal-services.ts`. Reddens exactly \"closes on durable records even when the payload's witnesses are garbage\". 1 failed / 19 passed. That is DoD 1's composition proof holding.\nPlus three more beyond the plan's list, all previously surviving: the activation lease clause, the activation effect clause, and the review sha256 / reviewInputDigest clauses (four deletions, four distinct kills). Base probe after every restore: 107 / 2175 green, so each red was caused by its mutant.\n\nADVERSARIAL REVIEW of the named cases:\n- Concurrent second close: unchanged and still bounded by the goal's expected-version CAS; the module's header records honestly that read and write are not one transaction and that the residual exposure is a STALE derivation, not a forged one.\n- Empty approved scope: `readApprovedNodeScope` null refuses REVIEW_ACCEPTANCE_REQUIRED; an empty node list would compose over an empty `bound`, which is why the positive arm asserts the refs recomputed from seeded bytes rather than merely `ok`.\n- A node in scope with zero activations: `zeroAuthority` iterates ACCOUNTS, not nodes, so zero activations is vacuously fine — correct, since the guard's subject is authority that OUTLIVES the goal, and its count still enters `zeroAuthorityProofRef`.\n- A receipt whose `graphIdentity` is the empty string: `receiptFrom` returns null on ANY empty bound field and the caller refuses RECEIPT_UNREADABLE, which is why `textOf`'s \"\"-for-missing cannot become a witness over blanks.\n- Line counts: production untouched at 248 and 197, both under target. The test file is now 726 lines — disclosed, not hidden. The 250/400 cap is per PRODUCTION file by both the epic rail and the global rail, this is a test file, and the daemon has no mechanical size sweep (the 250-line one is scoped to packages/core/src/planning). I kept it as one file so QA can re-run the drills where they left them; splitting it is a reasonable call if QA disagrees.\n\nCOMMIT 438acdb, by explicit pathspec, `git show --stat` confirms exactly one file: `apps/daemon/src/goals/goal-qualification.test.ts`, +214/-10. `git status --porcelain -- apps/daemon/src/goals/` is empty, so nothing of mine is uncommitted and no production byte moved.",
+      "startedAt": "2026-08-16T23:05:00.246Z",
+      "completedAt": "2026-08-16T23:05:25.614Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": "Governor cascade 15:04Z: the hard dependency is QA-approved DONE — task-44d4873e (Durable verification receipt dispatch) landed at 6e25dd8 with the verification receipt service (contracts 247 / service 186 / store split with LF bridges, FAILED-vs-UNKNOWN distinction pinned, replay reading durable bytes back). Architect: re-measure the landed receipt/dispatch surfaces on committed bytes before naming symbols (grep the EvidenceReceipt family fresh — the old premise's empty greps are obsolete). Downstream: 5e43a unblocks when this lands, then 49ed1.",
+  "reopenCount": 1,
+  "reopenReason": "Strong work — DoD 1, 3, 4 and DoD 5's gate half all verified and PASS. Rejecting on DoD 2 and DoD 5's drill half, measured by mutation drill at 54ad5e8 against a clean tree.\n\nDoD 5 requires \"the worker mutation-drills the durable read\". No drill is recorded in task.verification, in comments, or in the handoff note — and drilling it myself shows the central durable read is unguarded. Replacing the digest binding in verifiedResultHolds (goal-qualification-reads.ts:155), `stored.ok && stored.digest === receipt.recordDigest` -> `stored.ok`, leaves ALL 2170 daemon tests green.\n\nRoot cause: the RESULT_DIGEST_MISMATCH test (goal-qualification.test.ts:325) never reaches the digest comparison. appendSecondAttemptRecord (:106) appends a 2nd RECORDED event to the DISPATCH aggregate, so readStoredFoundationAttempt hits `found.length > 1` -> AMBIGUOUS -> stored.ok===false. The ok clause refuses; DoD 2's enumerated \"mismatched result hash\" arm is never exercised. That is global rail 1 exactly — an earlier layer answers first and the assertion has detached from its subject.\n\nTwo more survivors in guards whose own tests name them:\n- zeroAuthority lease/effect readback (goal-qualification.ts:158-160): blurActivationHistory only makes readsBackAs null, so the null clause answers; both identity comparisons delete green despite the asserted message naming them.\n- reviewClosure acceptance<->receipt cross-check (goal-qualification.ts:113-114): stageAcceptance hardcodes reviewInputDigest \"b\"*64 while the test overrides only verifierReceiptSha256, so both operands are wrong at once and either clause deletes green.\n\nNOT counted against you: the latest-round resultSha256 survivor is a plausible equivalent mutant (a real later round moves decisionId too).\n\nGates I re-ran at HEAD all exit 0: daemon typecheck, full daemon suite UNEXCLUDED (107 files / 2170 tests), pnpm typecheck. Both peer reds you attributed have since cleared — the --exclude is no longer needed.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -185,24 +157,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-16T22:42:20.785Z",
+  "updatedAt": "2026-08-16T23:09:46.758Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:47.761Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 16,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-08-16T23:09:46.757Z",
+    "wallClockMs": 636358996
   },
   "contextFetchedBy": [
-    "architect-d46fcb95",
-    "governor-1f3b15b7",
-    "governor-7c5e6be6",
-    "architect-94dd1835",
-    "worker-618633fa",
-    "architect-09b5f32a",
-    "governor-a627169a",
-    "architect-d9dccf21",
-    "architect-77071474",
-    "worker-0b2f9c35"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -241,7 +209,18 @@
     "step-7",
     "step-8"
   ],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "Missing receipt, non-passing/UNKNOWN receipt, mismatched result hash, absent ReviewOutputAccepted, stale review package, or remaining authority each refuse with a distinct stable daemon-prerequisite code/layer and commit nothing.",
+      "rejectedAt": "2026-08-16T22:53:14.225Z",
+      "rejectedBy": "qa-12cda609"
+    },
+    {
+      "item": "Focused daemon and repo typecheck gates exit 0; the worker mutation-drills the durable read rather than a request-field check.",
+      "rejectedAt": "2026-08-16T22:53:14.225Z",
+      "rejectedBy": "qa-12cda609"
+    }
+  ],
   "planSubmittedAt": "2026-08-16T22:14:28.861Z",
   "planningNotes": {
     "approachesConsidered": "TWO FORKS WERE PUT TO THE HUMAN IN THE REPL AND BOTH WERE DECIDED; do not re-open them.\n\nFORK 1 - what happens to the payload witnesses. Considered (a) derive-and-replace and (b) declare-and-cross-check (the `expectedRecordDigest` / CANDIDATE_STALE pattern from foundation-verification-contracts.ts:146). HUMAN CHOSE (a): the composer derives both witnesses from durable bytes and hands THOSE to `reduceGoal`; the payload keys stay required at ingress for wire compatibility and are inert. (b) was rejected because it needs a seventh payload-mismatch code that DoD 2 does not enumerate, and because every fixture would have to compute derived hashes. The inert-field smell is answered by a test in both directions, not by a comment: garbage payload refs + real durable records -> CLOSES; perfect payload refs + no durable records -> REFUSES.\n\nFORK 2 - what 'remaining authority' means. Design line 278 demands proof of zero live planning/execution/review/qualification leases, attempts, processes, effects, resources, provider slots, funding holds, fences and reconciliation items. NONE of those has a durable terminal record: the activation ledger writes `EffectActivationCommitted` plus exactly three transitions (GRANT_CONSUMED, PREFLIGHT_REGISTERED, PROCESS_OBSERVED) and no release event exists anywhere in apps/daemon, and `LeaseRecord.state` is frozen at ACTIVE by event immutability so it carries no liveness signal. Considered reporting blocked for a prerequisite that lands release records. HUMAN CHOSE the accounted-for-activations measure: every durable activation whose attempt record carries a `nodeKey` in the approved scope must be named by that node's PASSED evidence receipt (`leaseIdentity`, `effectIdentity`); anything unaccounted or unreadable refuses. It is an honest subset of design 278, measurable on committed bytes today, and it fails closed.\n\nAlso considered and rejected: a second frozen refusal vocabulary in the new module. The existing `GOAL_PREREQUISITE_REFUSAL_CODES` in goal-close-prerequisite.ts is the right home and is already asserted by goal-services.test.ts:174, so it ratchets for free.",
@@ -267,12 +246,12 @@
   },
   "planApprovedAt": "2026-08-16T22:14:30.935Z",
   "workStartedAt": "2026-08-16T22:14:47.676Z",
-  "reviewStartedAt": "2026-08-16T22:42:18.147Z",
+  "reviewStartedAt": "2026-08-16T23:05:56.318Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src --exclude '**/orchestrator/agent-wrapper.test.ts'   [plan gate; the excluded file is a PEER's uncommitted red, attribution in summary]",
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  106 passed (106)\n      Tests  2140 passed (2140)\n\nFOREIGN RED, verbatim, from the unexcluded run of the same gate:\n FAIL  src/orchestrator/agent-wrapper.test.ts > createAgentWrapper - durable staffing fence > refuses a second wrapper's pass while the first child is live, and spawns ONCE\n Test Files  1 failed | 106 passed (107)\n      Tests  1 failed | 2169 passed (2170)\nand from pnpm typecheck:\npackages/core typecheck: src/planning/graph-revision-replay.ts(236,46): error TS2345: Argument of type '\"ACTIVE\" | \"APPROVED\" | \"DRAFT\" | \"PENDING_APPROVAL\" | \"REJECTED\" | \"SUPERSEDED\"' is not assignable to parameter of type 'never'.\nBoth paths are peer-owned (one uncommitted, one untracked); neither is in this task's owned paths.",
-    "reportedAt": "2026-08-16T22:42:18.147Z"
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  107 passed (107)\n      Tests  2175 passed (2175)\n   Start at  02:04:49\n   Duration  6.26s\n\nSUITE_EXIT=0\n\nRun UNEXCLUDED. pnpm typecheck also exit 0 repo-wide, no foreign red.",
+    "reportedAt": "2026-08-16T23:05:56.318Z"
   },
   "filesModified": [
     "apps/daemon/src/goals/goal-close-prerequisite.ts",
@@ -281,10 +260,91 @@
     "apps/daemon/src/goals/goal-qualification.test.ts",
     "apps/daemon/src/goals/goal-qualification.ts",
     "apps/daemon/src/goals/goal-qualification.js",
-    "apps/daemon/src/goals/goal-qualification-reads.ts",
-    "apps/daemon/src/goals/goal-qualification-reads.js",
     "apps/daemon/src/goals/goal-services.ts",
-    "apps/daemon/src/goals/j1-command-path.test.ts",
-    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
-  ]
+    "apps/daemon/src/goals/j1-command-path.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-16T23:09:46.757Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Missing receipt, non-passing/UNKNOWN receipt, mismatched result hash, absent ReviewOutputAccepted, stale review package, or remaining authority each refuse with a distinct stable daemon-prerequisite code/layer and commit nothing.",
+      "Focused daemon and repo typecheck gates exit 0; the worker mutation-drills the durable read rather than a request-field check."
+    ],
+    "issues": [
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/goals/goal-qualification-reads.ts",
+        "line": 155,
+        "description": "Surviving mutant on the exact durable read DoD 5 requires drilled. Replacing `return stored.ok && stored.digest === receipt.recordDigest;` with `return stored.ok;` keeps all 2170 daemon tests green (verified twice, full unexcluded suite). Nothing guards the digest binding, so a regression dropping it ships green. Fix: add a case reaching the digest clause with stored.ok===true, then re-drill and confirm it reddens."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+        "line": 325,
+        "description": "'refuses RESULT_DIGEST_MISMATCH when the verified result moved after the receipt' produces no digest mismatch. appendSecondAttemptRecord (:106) writes a 2nd RECORDED event to deriveDispatchAggregateId(...), so readStoredFoundationAttempt returns AMBIGUOUS and stored.ok is false; the refusal never consults the digest. Fix: leave exactly one canonical RECORDED event and plant a receipt whose recordDigest differs, so only the digest clause can refuse."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+        "line": 448,
+        "description": "This test asserts the message 'a durable activation does not read back as its receipt's lease and effect', but blurActivationHistory only breaks readFoundationActivationHistory, so `account.readsBackAs === null` answers first. Both the leaseIdentity and effectIdentity comparisons (goal-qualification.ts:159-160) delete green. Fix: seed an activation that reads back OK but whose lease/effect identity differs from the receipt's, covering each clause separately."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+        "line": 373,
+        "description": "Two operands co-vary, so neither clause of the cross-check is proven. stageAcceptance (:145) hardcodes reviewInputDigest='b'.repeat(64) while this test overrides only verifierReceiptId/verifierReceiptSha256, so the acceptance disagrees with the real receipt on BOTH fields; dropping either clause at goal-qualification.ts:113-114 leaves the suite green. The comment 'only the sha256 ... is wrong' is false. Fix: pass the real reviewInputDigest through, add the mirror case."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/goals/goal-qualification-reads.ts",
+        "line": 135,
+        "description": "Two further survivors, lower severity, reported so you decide with evidence rather than rediscover them. (a) `receiptFrom(stored.row)` -> `receiptFrom(scanned.value)` survives, so the headline claim 'THE SCANNED BYTES ARE NEVER THE ANSWER' has no test that fails when violated. (b) receiptFrom's all-fields-present guard (:69) -> `return bound;` survives. Both reachable by planting a row whose stored bytes differ from the scanned payload."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "Strong work — DoD 1, 3, 4 and DoD 5's gate half all verified and PASS. Rejecting on DoD 2 and DoD 5's drill half, measured by mutation drill at 54ad5e8 against a clean tree.\n\nDoD 5 requires \"the worker mutation-drills the durable read\". No drill is recorded in task.verification, in comments, or in the handoff note — and drilling it myself shows the central durable read is unguarded. Replacing the digest binding in verifiedResultHolds (goal-qualification-reads.ts:155), `stored.ok && stored.digest === receipt.recordDigest` -> `stored.ok`, leaves ALL 2170 daemon tests green.\n\nRoot cause: the RESULT_DIGEST_MISMATCH test (goal-qualification.test.ts:325) never reaches the digest comparison. appendSecondAttemptRecord (:106) appends a 2nd RECORDED event to the DISPATCH aggregate, so readStoredFoundationAttempt hits `found.length > 1` -> AMBIGUOUS -> stored.ok===false. The ok clause refuses; DoD 2's enumerated \"mismatched result hash\" arm is never exercised. That is global rail 1 exactly — an earlier layer answers first and the assertion has detached from its subject.\n\nTwo more survivors in guards whose own tests name them:\n- zeroAuthority lease/effect readback (goal-qualification.ts:158-160): blurActivationHistory only makes readsBackAs null, so the null clause answers; both identity comparisons delete green despite the asserted message naming them.\n- reviewClosure acceptance<->receipt cross-check (goal-qualification.ts:113-114): stageAcceptance hardcodes reviewInputDigest \"b\"*64 while the test overrides only verifierReceiptSha256, so both operands are wrong at once and either clause deletes green.\n\nNOT counted against you: the latest-round resultSha256 survivor is a plausible equivalent mutant (a real later round moves decisionId too).\n\nGates I re-ran at HEAD all exit 0: daemon typecheck, full daemon suite UNEXCLUDED (107 files / 2170 tests), pnpm typecheck. Both peer reds you attributed have since cleared — the --exclude is no longer needed.",
+      "rejectedAt": "2026-08-16T22:53:14.225Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Missing receipt, non-passing/UNKNOWN receipt, mismatched result hash, absent ReviewOutputAccepted, stale review package, or remaining authority each refuse with a distinct stable daemon-prerequisite code/layer and commit nothing.",
+        "Focused daemon and repo typecheck gates exit 0; the worker mutation-drills the durable read rather than a request-field check."
+      ],
+      "issues": [
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/goals/goal-qualification-reads.ts",
+          "line": 155,
+          "description": "Surviving mutant on the exact durable read DoD 5 requires drilled. Replacing `return stored.ok && stored.digest === receipt.recordDigest;` with `return stored.ok;` keeps all 2170 daemon tests green (verified twice, full unexcluded suite). Nothing guards the digest binding, so a regression dropping it ships green. Fix: add a case reaching the digest clause with stored.ok===true, then re-drill and confirm it reddens."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+          "line": 325,
+          "description": "'refuses RESULT_DIGEST_MISMATCH when the verified result moved after the receipt' produces no digest mismatch. appendSecondAttemptRecord (:106) writes a 2nd RECORDED event to deriveDispatchAggregateId(...), so readStoredFoundationAttempt returns AMBIGUOUS and stored.ok is false; the refusal never consults the digest. Fix: leave exactly one canonical RECORDED event and plant a receipt whose recordDigest differs, so only the digest clause can refuse."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+          "line": 448,
+          "description": "This test asserts the message 'a durable activation does not read back as its receipt's lease and effect', but blurActivationHistory only breaks readFoundationActivationHistory, so `account.readsBackAs === null` answers first. Both the leaseIdentity and effectIdentity comparisons (goal-qualification.ts:159-160) delete green. Fix: seed an activation that reads back OK but whose lease/effect identity differs from the receipt's, covering each clause separately."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/goals/goal-qualification.test.ts",
+          "line": 373,
+          "description": "Two operands co-vary, so neither clause of the cross-check is proven. stageAcceptance (:145) hardcodes reviewInputDigest='b'.repeat(64) while this test overrides only verifierReceiptId/verifierReceiptSha256, so the acceptance disagrees with the real receipt on BOTH fields; dropping either clause at goal-qualification.ts:113-114 leaves the suite green. The comment 'only the sha256 ... is wrong' is false. Fix: pass the real reviewInputDigest through, add the mirror case."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/goals/goal-qualification-reads.ts",
+          "line": 135,
+          "description": "Two further survivors, lower severity, reported so you decide with evidence rather than rediscover them. (a) `receiptFrom(stored.row)` -> `receiptFrom(scanned.value)` survives, so the headline claim 'THE SCANNED BYTES ARE NEVER THE ANSWER' has no test that fails when violated. (b) receiptFrom's all-fields-present guard (:69) -> `return bound;` survives. Both reachable by planting a row whose stored bytes differ from the scanned payload."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-08-16T23:09:46.757Z",
+  "reviewSummary": "APPROVED on retry 438acdb. Re-swept every finding myself rather than trusting the fix note; all now KILLED: M1 digest binding, M3 scanned-vs-stored row, M7a AND M7b (each cross-check clause separately), M9a AND M9b (each identity clause separately), plus M4/M6/M8 still killed = 9 of 11.\n\nThe M1 kill is load-bearing: it removes ONLY `stored.digest === receipt.recordDigest` and leaves `stored.ok`, so the RESULT_DIGEST_MISMATCH test reddening proves the fixture now reaches the digest clause with stored.ok true. DoD 2's \"mismatched result hash\" arm is genuinely exercised.\n\nTwo survivors remain, both ones I designated non-blocking when I rejected: receiptFrom's all-fields-present guard (filed \"other / you decide with evidence\" - you decided, documented the reasoning, and disclosed it rather than hiding it) and the latest-round resultSha256 clause (excluded as an equivalent mutant). Neither is an enumerated DoD 2 condition.\n\nDoD 5's drill half is now satisfied and recorded: 7 mutants, each grepped to prove it APPLIED before running, each killed by its intended test, each restored from an out-of-repo byte copy with sha256sum -c and a base probe after restore. Correct discipline for a shared worktree.\n\nDiff: +214/-10 in one test file, ZERO production bytes - right call, since the findings were unreachable guards, not wrong guards.\n\nGates: src/goals 3 files / 54 tests exit 0 under me. Your recorded run at 23:05Z was UNEXCLUDED 107 files / 2175 tests exit 0 with repo typecheck 0. The package now reads red in my tree, and I attribute that entirely to a peer's later uncommitted work on task-05b0a693: all 15 typecheck errors are in src/orchestrator (zero in src/goals), 4 orchestrator files are modified in the tree, and the offending `childPid`/`isProcessAlive` members do not exist at HEAD."
 }

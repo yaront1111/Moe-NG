@@ -1,0 +1,35 @@
+{
+  "id": "task-a6775ac56d714da388e6b28343eb806e",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: persist canonical import shadow facts",
+  "description": "Objective: repair the irreversible information loss in legacy import events before any daemon shadow reader is built. Version and canonically encode the full derived ImportedClaim/LegacyLink facts and provenance needed by moe-shadow-projection/1 into each committed legacy import event, then expose a strict public decoder. Current import-apply event payloads contain only record.payload; eventId is non-invertible and command bytes contain only counts/manifest digests, so no reader can recover claimId, sourcePath, status, or link endpoints today.",
+  "definitionOfDone": [
+    "A public versioned import-event codec canonically encodes the exact derived claim plus all evidence-only links and provenance needed by moe-shadow-projection/1; the event declares its domainSchemaVersion and contains no executable/activation affordance.",
+    "applyImport derives those facts once through its existing production claim/link logic, persists the codec bytes atomically in the same import commit, and returns facts byte-equivalent to the stored representation rather than a caller/result echo.",
+    "The decoder is descriptor-safe, bounded, rejects unknown/missing/noncanonical/schema-conflicting bytes with distinct stable IMPORT codes and layer, and returns deeply frozen deterministically ordered facts.",
+    "Replay of identical source bytes produces byte-identical event ids/payloads/command decisions and unchanged raw counts; same decision identity with different encoded facts refuses before any partial import.",
+    "Focused codec/apply tests use the real production encoder/decoder, assert exact code/layer and positive hostile-case counts plus one accepted claim-and-link control; because this changes durable wire bytes, @moe/import, migration, store, and repository regression gates are run and attributed."
+  ],
+  "taskRails": [
+    "Do not infer lost legacyId/sourcePath/provenance from eventId, eventType, counts, or command result; encode the authoritative derived facts at the producer.",
+    "Imported claims remain HISTORICAL/SUSPENDED only and links evidenceOnly:true; no ACTIVE, hard edge, mutation, or cutover authority may be representable.",
+    "Own at most packages/import/src/import-event-codec.ts, its exact LF .js bridge, import-apply.ts, import-apply.test.ts, and index.ts; target <=250 lines per production file and split before 400.",
+    "Use TDD exact code/layer assertions, positive generated counts, and mutation drills against the production encoder/decoder; stage/commit only explicit paths.",
+    "Name task-80fce1d1d625453098bd526d61c5ddb8 as the production reader consumer."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-80fce1d1d625453098bd526d61c5ddb8",
+  "priority": "HIGH",
+  "order": 12.01,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:03:29.357Z",
+  "updatedAt": "2026-08-16T23:03:29.357Z"
+}

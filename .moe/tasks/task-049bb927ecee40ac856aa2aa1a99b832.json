@@ -1,0 +1,36 @@
+{
+  "id": "task-049bb927ecee40ac856aa2aa1a99b832",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: projection and copied-project shadow matrix",
+  "description": "Objective: exercise the shipped legacy importer, task-80fce1d1d625453098bd526d61c5ddb8's real daemon shadow adapter, and public compareShadowProjections over a copied-project corpus. Produce exact PASS/FAIL/UNKNOWN advisory outcomes while proving the source copy and durable current store remain byte-for-byte untouched.",
+  "definitionOfDone": [
+    "A nonempty copied-project corpus is read through the production legacy importer and compared with the production daemon shadow adapter at one captured store horizon; the test never constructs the current ShadowProjection itself.",
+    "Generated matched, changed, absent-current, absent-legacy, unmapped-field, malformed, and unreadable cases assert a positive case count plus the exact mismatch kind/disposition or stable refusal code/layer; one full exact-match control yields zero mismatches.",
+    "Every case records the checkout source commit and canonical fixture manifest digest, and repeated runs over unchanged bytes produce identical ordered comparison bytes.",
+    "Before/after SHA-256, file-size, and mtime inventories for the copied corpus plus raw SQLite event/decision counts and database bytes/mtime are identical, including every refusal arm.",
+    "Focused integration tests execute with nonzero test counts on Windows and use native temp/path handling that is portable to Linux and macOS."
+  ],
+  "taskRails": [
+    "Use only public package roots and the real production surface under test; no test helper may reimplement a projection, provider decision, transport handshake, or host adapter.",
+    "Every refusal/failure arm asserts the exact stable reason code and refusing layer; generated matrices assert a positive case count and include an accepted control so refusal-only suites cannot pass.",
+    "All fixtures and results are advisory/read-only: no imported state may activate, mutate durable authority, select a best tool, or perform cutover.",
+    "Use TDD and mutation-drill the production surface so a named assertion reddens; keep owned files focused and stage/commit only explicit paths.",
+    "Hard-depend on task-80fce1d1d625453098bd526d61c5ddb8; missing LINK/BLOCKER authority must remain UNKNOWN/refused, never filled by fixture assumptions.",
+    "Own only the projection matrix test and at most two focused fixture/helper files under tests/integration/portability."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "priority": "HIGH",
+  "order": 12.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:02:35.974Z",
+  "updatedAt": "2026-08-16T23:02:35.974Z"
+}

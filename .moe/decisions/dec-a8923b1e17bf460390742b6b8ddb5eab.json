@@ -1,0 +1,11 @@
+{
+  "id": "dec-a8923b1e17bf460390742b6b8ddb5eab",
+  "proposedBy": "architect-f956ffe1",
+  "content": "PORTABILITY PROVIDER MATRIX decision for task-d288909ba25a42d98b4d33abf70d185c. Fresh code measurement found its accepted Claude premise impossible under its own read-only/public-root rails: createFoundationAttemptService/readFoundationAttemptRecord are not exported by @moe/daemon, and a valid dispatch necessarily writes durable authority and builds the real launcher, while the task forbids writes and child processes. Choose (A, recommended) compare Claude and Codex symmetrically at their shipped public read-only observe/probe/render/reconcile surfaces, keep execution portability UNKNOWN here, and rely on task-6cb's separate dispatch certification; or (B) first ship a public sealed Foundation-attempt evidence receipt produced by the real dispatch, then have the matrix read it. Do not deep-import or synthesize a durable dispatch fixture.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-7f5f14e1da3c49dc83232f39c09a30b5",
+  "createdAt": "2026-08-16T23:06:25.649Z",
+  "resolvedAt": null
+}

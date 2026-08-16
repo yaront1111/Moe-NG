@@ -1,0 +1,34 @@
+{
+  "id": "task-1e44b9b9d50e4cbab57a09d0105fdade",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: wire the daemon importer dependency edge",
+  "description": "Objective: land only the workspace dependency edge required for the daemon shadow reader, without mixing manifest/lock changes into its four-file production slice. Declare @moe/import for apps/daemon, refresh the importer lock entry, and prove the public bare specifier resolves from compiled daemon code.",
+  "definitionOfDone": [
+    "apps/daemon/package.json declares @moe/import as a workspace dependency and pnpm-lock.yaml contains the matching apps/daemon importer link to packages/import.",
+    "A temporary TypeScript probe located inside apps/daemon imports the required ShadowProjection types, decoder, and compareShadowProjections from the public bare @moe/import specifier and typechecks exit 0; the probe is deleted in the same command.",
+    "A negative control using a nonexistent bare specifier fails typecheck, proving the positive probe did not pass vacuously, and the normal daemon typecheck remains exit 0.",
+    "A plain-Node compiled import from the daemon package context resolves @moe/import without tsconfig paths, deep relative imports, or source-loader flags.",
+    "Only the two manifest/lock paths are committed, and no production call site or generated probe/scratch file remains; task-80fce1d1d625453098bd526d61c5ddb8 is recorded as the immediate consumer."
+  ],
+  "taskRails": [
+    "Public package root only; no tsconfig paths, TypeScript project references, deep imports, root package workaround, or dependency reversal.",
+    "Run pnpm install only as needed to update the workspace lock importer; preserve unrelated lockfile/worktree changes and commit explicit owned paths.",
+    "The verification output must prove the @moe/daemon filter matched and executed; exit 0 with no compiler/test output is not evidence.",
+    "Do not implement the reader or edit @moe/import production sources in this task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-80fce1d1d625453098bd526d61c5ddb8",
+  "priority": "HIGH",
+  "order": 12.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:03:29.565Z",
+  "updatedAt": "2026-08-16T23:03:29.565Z"
+}

@@ -1,0 +1,42 @@
+{
+  "id": "task-80fce1d1d625453098bd526d61c5ddb8",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: expose the daemon shadow projection adapter",
+  "description": "Objective: land the missing production new-side adapter that task-22cfca91c5134b24aaf3e5734444fb93 needs to compare copied legacy state against the daemon without a test helper inventing current truth. Add the real apps/daemon -> @moe/import dependency edge, capture one durable store horizon, derive the versioned read-only CLAIM/LINK/BLOCKER ShadowProjection only from shipped daemon readers/events, and fail closed wherever a semantic current fact is absent or unverifiable. This is a pure read adapter; it must never mutate or activate anything.",
+  "definitionOfDone": [
+    "apps/daemon/package.json declares @moe/import in dependencies, pnpm-lock.yaml carries the apps/daemon importer link, and a compiled probe inside apps/daemon imports the public bare @moe/import root and typechecks before the probe is deleted.",
+    "A focused production adapter captures one SqliteEventStore horizon and returns a deeply frozen moe-shadow-projection/1 value whose CLAIM, LINK, and BLOCKER entities are derived only from real daemon durable readers/events; unavailable semantics refuse with an exact stable code and layer rather than being fabricated from BoardProjection counts or caller bytes.",
+    "The adapter canonicalizes entity ids, fields, and ordering so unchanged durable bytes serialize identically; malformed, ambiguous, horizon-drifted, unsupported, and unreadable evidence each fail closed with their exact code/layer and no partial projection.",
+    "The production consumer invokes public compareShadowProjections with the adapter result; neither the test nor @moe/import reimplements the daemon mapping, and all comparison results remain advisory-only with no command affordance.",
+    "Real SqliteEventStore tests assert one accepted nonempty CLAIM control, explicit behavior for unavailable LINK/BLOCKER facts, a positive hostile/refusal case count, exact reason code/layer, and unchanged raw event/decision counts plus database bytes/mtime across every read."
+  ],
+  "taskRails": [
+    "Do not add a dependency from @moe/import toward apps/daemon or @moe/store; dependency direction is apps/daemon -> @moe/import through public roots only.",
+    "Do not manufacture LINK/BLOCKER agreement from aggregate/byType counts, test fixtures, or unknown event payloads; missing semantic authority remains UNKNOWN/refused.",
+    "No store writes, activation, importer mutation, cutover, or best-tool decision. Name task-22cfca91c5134b24aaf3e5734444fb93 as the consumer edge.",
+    "Use TDD; every refusal test asserts exact stable reason code and refusing layer, generated matrices assert nonzero cases, and a mutation of the production mapper must redden a named assertion.",
+    "Keep each production source <=250 physical lines and split before 400; exact one-line LF .js bridges where root-reachable; stage/commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "priority": "HIGH",
+  "order": 12.1,
+  "comments": [
+    {
+      "id": "comment-21254b2588d04fceabaf6dcb490900b0",
+      "author": "architect-f956ffe1",
+      "content": "REMEASURED PREREQUISITES: current import events persist only canonicalPayload(record.payload); they irreversibly omit legacyId/sourcePath/provenance and cannot support this reader. Hard-depend first on task-a6775ac56d714da388e6b28343eb806e (versioned canonical import shadow facts) and task-1e44b9b9d50e4cbab57a09d0105fdade (daemon @moe/import manifest/lock edge). This task then owns only import-shadow-reader.ts, its LF bridge, its test, and daemon index export (4 files). Do not infer missing fields from eventId/type/counts/command result.",
+      "timestamp": "2026-08-16T23:07:03.627Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:01:28.873Z",
+  "updatedAt": "2026-08-16T23:07:03.627Z"
+}

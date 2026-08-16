@@ -16,7 +16,7 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -60,7 +60,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-16T22:39:18.885Z",
+  "updatedAt": "2026-08-16T23:07:39.036Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -75,11 +75,20 @@
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": null,
+  "blockedReason": "Fresh probes overturn the monolithic acceptance premise. Current legacy import events omit non-invertible claim/link provenance, so a production current ShadowProjection cannot be reconstructed; daemon/root/JetBrains public dependency and entrypoint edges are absent; the provider slice has an unresolved read-only Claude subject contradiction; and the existing exact-SHA receipt predates Foundation dispatch. The task is SPIDR-split into the named codec, edge, reader, projection, provider, and transport prerequisites. Reopen this parent only after they are DONE and the provider decision is resolved. This parent then owns the final cross-host workflow extension, exact-final-SHA Linux/Darwin/aggregate receipt, standalone nonzero pnpm test:integration and pnpm test:migration gates, and whole-slice adversarial read-only audit.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T23:07:25.237Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the importer, daemon/root dependency edges, provider surfaces, transport/JetBrains entrypoints, and exact-SHA receipt. Filed task-a6775ac56d714da388e6b28343eb806e, task-1e44b9b9d50e4cbab57a09d0105fdade, task-80fce1d1d625453098bd526d61c5ddb8, task-049bb927ecee40ac856aa2aa1a99b832, task-f33028b5374044bfa84deb5ed979277b, and task-efe5465f9b16426dab617944b9fa57d2. Kept task-d288909ba25a42d98b4d33abf70d185c pending human decision dec-a8923b1e17bf460390742b6b8ddb5eab.",
+      "whatRemains": "Complete prerequisites. Then plan this parent as the final hardening slice: extend the cross-host workflow/evidence contract to run portability integration+migration on Linux/Darwin, bind every matrix/fixture to the exact final SHA, obtain the external run, run exact-sha-evidence-gate, standalone pnpm test:integration and pnpm test:migration with nonzero counts, and perform whole-slice read-only/adversarial audit.",
+      "pitfalls": "Do not infer lost import facts from eventId/type/counts/command echo. Do not reuse 6cd4c17 cross-host evidence; task-6cb landed later. JetBrains has no MCP command translation, so only stdio-vs-HTTP owns command identity. No deep imports or test-built current projection.",
+      "openQuestions": "Human must choose dec-a8923b1e17bf460390742b6b8ddb5eab: symmetric public read-only Claude/Codex surfaces (recommended) or a new sealed Foundation-dispatch receipt.",
+      "releasedAt": "2026-08-16T23:07:39.034Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after SPIDR decomposition; parent remains blocked until prerequisites and human provider-scope decision resolve."
+    },
     {
       "whatIsDone": "Re-measurement at HEAD 826c123; no plan submitted, no code written. Read worker-df297022's claimer caveats (msg-57f3e34b) as instructed and measured all seven prerequisites: 2159fa19, 159be643, 69d32b1d, 9fff3d42, 45d12ec and 01c5f96 are DONE, task-6cbff010 is BLOCKED. The 01c5 cascade cleared only ONE clause of architect-94dd1835's two-clause block, which named both 01c5 and 6cb. Re-blocked on 6cb and recorded four settled measurements in comment-000e67fdda934dc4aa4acf8bdab30496 so the next architect derives none of them again.",
       "whatRemains": "Land task-6cbff010 (its own chain: 7ba898f5 DONE on the fd0 half, d7b352e1 settle half in flight, 75ee4a84 pin-request hydration planned), then re-run the seven status checks literally and plan the shadow gate: create tests/integration/portability/**, pin the evidence SHA, and drive the matrix.",

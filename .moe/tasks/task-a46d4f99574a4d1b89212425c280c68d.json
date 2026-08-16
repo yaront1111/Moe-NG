@@ -1,0 +1,34 @@
+{
+  "id": "task-a46d4f99574a4d1b89212425c280c68d",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Cover GOAL_PREREQUISITE_LAYER in the scheduler-activation security axis",
+  "description": "Prerequisite for final ratchet task-3b1cbdf9. Fresh `pnpm test:security` at HEAD 54ad5e8 executed 9 files/462 tests and found the valid committed `GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts` absent from the 89-entry roster/cases (live scan is 92 only because two other in-flight/invalid boundaries also exist). Deliverable: add this boundary to the hand-written roster as scheduler-activation and add real production-surface BEFORE/AFTER/RACE hostile cases over goal closure prerequisite qualification. Do not cover AGENT_STAFFING_LAYER (task-05b owner) or GRAPH_CONTENT_LAYERS (blocked task-77).",
+  "definitionOfDone": [
+    "The hand-written boundary roster includes exactly `GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts` on the scheduler-activation axis, with the roster/source comparison still bidirectional and non-vacuous.",
+    "The scheduler-activation hostile case source exposes at least one BEFORE, one AFTER and one RACE case for this constant, each driving the real goal prerequisite/qualification production surface rather than a helper reimplementation.",
+    "Every refusal asserts the exact stable code and `GOAL_PREREQUISITE_LAYER`; where another guard can answer, the case proves this layer answered and asserts zero goal-close mutation/residue.",
+    "At least one accepted production control proves qualifying durable prerequisites can pass, and the whole-slice invariant derives admission from that returned value rather than assuming all inputs refuse.",
+    "Mutation drills removing the prerequisite guard and detaching one arm from the production result each turn a named test red; generated case/arm counts are asserted positive.",
+    "`pnpm test:security` executes with nonzero Test Files/Tests counts; failures solely for still-foreign AGENT_STAFFING_LAYER or unresolved GRAPH_CONTENT_LAYERS are quoted, never repaired or called green."
+  ],
+  "taskRails": [
+    "Own only GOAL_PREREQUISITE_LAYER coverage. Do not absorb staffing or graph-content boundaries and do not edit production code.",
+    "Keep the roster hand-written/source-compared; the coverage cases must exercise the production goal qualification surface and pin exact code plus layer.",
+    "Preserve foreign work and commit only explicit tests/security paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-3b1cbdf9bd39405bb32230552d3ab242",
+  "priority": "HIGH",
+  "order": 117.85,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:57:50.708Z",
+  "updatedAt": "2026-08-16T22:57:50.708Z"
+}

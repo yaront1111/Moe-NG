@@ -33,8 +33,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:03:57.516Z",
-  "updatedAt": "2026-08-16T22:31:53.405Z",
+  "updatedAt": "2026-08-16T22:42:47.260Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:31:53.405Z"
-  }
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ]
 }

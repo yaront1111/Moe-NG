@@ -1,0 +1,35 @@
+{
+  "id": "task-efe5465f9b16426dab617944b9fa57d2",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: daemon transport and JetBrains host matrix",
+  "description": "Objective: exercise two distinct shipped boundaries without inventing a JetBrains MCP transport. Compare semantically equivalent commands through the installed daemon stdio and HTTP executables, and separately certify the public JetBrains host's distribution compatibility plus daemon-endpoint/control-room handoff outcomes.",
+  "definitionOfDone": [
+    "After task-f33028b5374044bfa84deb5ed979277b, the matrix drives the installed moe-mcp-stdio and moe-mcp-http executables plus public @moe/jetbrains-adapter/host; no direct registry/handler or source-relative host import is used, and the generated subject-by-case count is positive.",
+    "Semantically equivalent authenticated stdio and HTTP commands/queries preserve the same command-decision identity and produce byte-equivalent results after framing is removed; each has one accepted control and exact malformed envelope, auth/capability, unsupported method/version, truncation/disconnect, and replay-conflict codes/stages/layers.",
+    "JetBrains cases exercise only its real distribution discovery/compatibility, daemon probe/start, endpoint/control-room open, reconnect, and uninstall semantics; accepted and hostile cases assert exact DISTRIBUTION_MISMATCH or IDE-layer outcomes, while any MCP command translation is explicitly UNKNOWN because the host has none.",
+    "Every request/result or JetBrains handoff digest binds to the same checkout source commit; repeated runs are deterministic and refusal/read-only arms leave event/decision counts unchanged with no orphan child, open port, resurrected endpoint, or post-uninstall call.",
+    "Windows quoting/path/CRLF and platform-neutral stdio/HTTP framing are covered; child handles, HTTP servers, and temp directories close before cleanup, and focused integration tests print nonzero counts."
+  ],
+  "taskRails": [
+    "Hard-depend on task-f33028b5374044bfa84deb5ed979277b; use public package roots/installed executables and real production boundaries only.",
+    "Do not add a JetBrains MCP command path or assert command identity for JetBrains; only stdio versus HTTP owns command/query equivalence.",
+    "Authentication and runtime-envelope decoding run before registry payload authority; assert exact stable code, stage, and layer rather than restamping.",
+    "Loopback only, no remote network, imported-state activation, best-tool selection, deep imports, or hand-built fake host.",
+    "Own only the transport/host matrix test and at most two focused fixture/helper files under tests/integration/portability; TDD with an accepted control and production-surface mutation drill."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "priority": "HIGH",
+  "order": 12.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:06:17.977Z",
+  "updatedAt": "2026-08-16T23:06:17.977Z"
+}

@@ -1,0 +1,34 @@
+{
+  "id": "task-f33028b5374044bfa84deb5ed979277b",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: publish acceptance entrypoints and package edges",
+  "description": "Objective: make every production subject used by the portability acceptance suite reachable through declared public package boundaries. After task-1e44b9b9d50e4cbab57a09d0105fdade lands the daemon importer edge, expose a real daemon stdio executable, a cycle-safe JetBrains ./host subpath, and the root acceptance dependencies needed for @moe/import, @moe/store, and @moe/jetbrains-adapter. HTTP continues through the already-shipped moe-mcp-http executable.",
+  "definitionOfDone": [
+    "apps/daemon/package.json exposes a production moe-mcp-stdio executable backed by the shipped mcp-main entrypoint while preserving the existing moe-mcp-http executable; both launch from their installed package context without source-relative test invocation.",
+    "adapters/jetbrains/package.json exposes a public ./host subpath resolving the shipped host bridge, without re-exporting it through the root index or introducing the host's @moe/jetbrains-adapter self-import cycle.",
+    "The root package declares @moe/import, @moe/store, and @moe/jetbrains-adapter as workspace dependencies and pnpm-lock.yaml contains exact matching root/daemon importer entries after task-1e44b9b9d50e4cbab57a09d0105fdade.",
+    "Compiled and plain-Node probes from the root import/call public @moe/import, @moe/store, @moe/jetbrains-adapter/host and resolve both daemon executables; negative nonexistent-subpath/specifier controls fail with exact diagnostics, and all probes are deleted in-command.",
+    "Package typechecks and nonzero package tests for daemon and JetBrains pass; only manifest/lock paths are committed and no generated binary, probe, or scratch evidence remains."
+  ],
+  "taskRails": [
+    "Hard-depend on task-1e44b9b9d50e4cbab57a09d0105fdade to avoid concurrent pnpm-lock/apps-daemon-manifest ownership.",
+    "Publish only existing production entrypoints; do not duplicate host logic, add a JetBrains command transport, or export deep test modules.",
+    "Public bare specifiers only; no tsconfig paths, project references, source-relative acceptance imports, loader aliases, or dependency inversion.",
+    "Own only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml; commit by explicit pathspec and preserve foreign lockfile changes."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "priority": "HIGH",
+  "order": 12.03,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:06:03.062Z",
+  "updatedAt": "2026-08-16T23:06:03.062Z"
+}

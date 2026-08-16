@@ -1,0 +1,34 @@
+{
+  "id": "task-1879166d7f12474fad8038e2a9d2433a",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist durable terminal effect authority for released attempts",
+  "description": "Prerequisite for task-6d40078159e84d92b3293d7b366cf727. Current measurement at HEAD a42ae2f: ActivationLedgerRecord is only the initial ACTIVE/RUNNING activation; its tails are grant-consumed, preflight-registered and process-observed. Daemon has no production writer for a terminal EffectIntent/EffectResult; FoundationAttemptRecorded is explicitly advisory and terminalises nothing. Deliverable: one focused daemon persistence/application module that accepts terminal output only from the production @moe/runner settle/reconciliation reducer, writes a decision-backed project/attempt/intent-bound terminal record, and exposes a strict current reader. No new wire kind. Consumer: task-6d40078159e84d92b3293d7b366cf727.",
+  "definitionOfDone": [
+    "A production call site persists an exact-version terminal EffectIntent plus its EffectResult, bound to projectId, attemptRef and intentId, only after the production runner settle/reconciliation surface accepts the transition; FoundationAttemptRecorded is never treated as terminal authority.",
+    "The current reader replays and canonical-byte-checks the decision-backed record and returns the terminal effect ref/state, while ABSENT, UNREADABLE, MALFORMED and AMBIGUOUS each fail closed with distinct stable codes and the exact refusing layer.",
+    "Caller-proposed intent id, terminal state, outcome or result bytes cannot override the durable transition; focused real-Sqlite tests drive the production writer, assert the exact refusal code/layer, zero residue, and one accepted control.",
+    "Same command bytes replay without extra events; conflicting bytes or stale expected version refuse before mutation, with raw event/decision counts and the original terminal record unchanged.",
+    "Completion names task-6d40078159e84d92b3293d7b366cf727 as the consumer and records the exact reader/call-site edge; daemon typecheck/test execute separately and the test output reports nonzero counts."
+  ],
+  "taskRails": [
+    "Use the public @moe/runner terminal reducer/result surface; verify apps/daemon package.json, pnpm-lock importer, and a compiled bare-specifier probe before naming the dependency. Never deep import or reimplement terminality.",
+    "No caller-selected terminal target/state/outcome/ref becomes authority. Missing or unverifiable evidence is UNKNOWN, with stable reason code and layer.",
+    "Do not infer terminality from FoundationAttemptRecorded, process exit, or absence; do not add a runtime wire kind.",
+    "Use real SqliteEventStore, TDD exact codes/layers, target <=250 lines per production source, and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6d40078159e84d92b3293d7b366cf727",
+  "priority": "CRITICAL",
+  "order": 78.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:45:16.648Z",
+  "updatedAt": "2026-08-16T22:45:16.648Z"
+}

@@ -87,25 +87,40 @@
     {
       "stepId": "step-5",
       "description": "ADVERSARIAL REVIEW AND MUTATION DRILLS. Review empty/huge histories, getters/proxies/cycles/symbols, duplicate identities, compound approval (two events sharing one commandId but different versions), terminal events, initial versus successor epochs, and whether replay state can diverge from `reduceGraphRevision`. Run and revert isolated mutants by exact owned path: (1) permit a first event other than Created — missing-create test must red; (2) skip strict `previous.version + 1` — version-gap test must red; (3) stop comparing activation binding/hash or succession epoch — the named binding/epoch case must red; (4) treat same-version conflicting bytes as an exact replay — identity-conflict test must red. Record each replaced range and intended assertion; confirm a non-applied mutant cannot count.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-16T22:41:38.200Z"
+      "note": "ALL FOUR NAMED MUTANTS APPLIED, REDDENED THEIR NAMED ASSERTION, AND WERE REVERTED BYTE-EXACTLY.\n\nRESTORE DISCIPLINE, because this is a shared worktree and my production file is UNTRACKED (so `git checkout` cannot restore it and would risk peers' uncommitted work): baseline sha256 `9544d54c639bce0a23bf993798f86e0874632a088b4fb4ce9a4ea60fe3379885` captured before drill 1, with a byte copy held outside the repo. After EVERY drill the file was restored from that copy and `sha256sum -c` confirmed OK — 4 of 4 verified, not assumed. Each mutant was also proven APPLIED before running, by grepping that the original guard text was ABSENT (count 0); a mutant that silently failed to apply would read green and count as a passing drill.\n\nDRILL 1 — permit a first event other than Created. Replaced range: the line `if (kind !== \"GraphRevisionCreated\") return refuse(\"GRAPH_REVISION_REPLAY_MISSING_CREATE\");` in the `current === undefined` branch, deleted. Intended assertion: the missing-create case. RESULT 1 failed / 45 passed — exactly `refuses a history that does not open with a create`. Confirms the guard is what produces MISSING_CREATE; without it that history falls through to the version check and reports VERSION_BREAK instead, which is why the test asserts the CODE and not merely \"refused\".\n\nDRILL 2 — skip the strict successor relation. Replaced `if (version !== current.version + 1)` with `if (version < current.version + 1 && false)`. Intended assertion: the version-gap case. RESULT 3 failed / 43 passed — `refuses a version gap`, `refuses a reordered history`, and `never leaks partial state or events on a refusal`. The reordering kill is the informative one: it shows reordering is detected BY the strict relation rather than by a separate ordering check, so the two cases are not redundant coverage of one guard — they are one guard reached by two different histories.\n\nDRILL 3 — stop comparing the activation against the approved binding. Deleted the `!sameBinding(current.boundHashes, witness)` clause from `applyActivated`, leaving the null check and the content-hash/goal checks intact. Intended assertion: the named binding case. RESULT 2 failed / 44 passed — `refuses an activation whose binding drifted from the approved identity` plus the partial-state sweep. Note this mutant is deliberately narrow: the surviving `witness.graphHash !== current.graphContentHash` clause still catches a drifted CONTENT hash, so only the budget/policy/quality/goal-version half of the identity goes unguarded. That is precisely why the suite carries a budgetHash-drift case separate from the graphHash-drift case; a single content-hash test would have survived this mutant.\n\nDRILL 4 — treat conflicting bytes at an applied version as an exact replay. Replaced `if (!sameData(seen, entry)) return refuse(...)` with the same condition `&& false`. Intended assertion: the identity-conflict case. RESULT 4 failed / 74 passed across BOTH replay suites — `refuses a conflicting redelivery at an already-applied version`, `refuses a redelivery that reuses a version under a different commandId`, `refuses a version regression below the applied floor`, and the partial-state sweep. Critically the two ACCEPTED idempotency tests stayed GREEN under this mutant, which proves they are not what pins the conflict: a suite with only byte-identical redelivery cases would have passed this drill entirely.\n\nBASE PROBE (production reverted, nothing else changed): `pnpm --filter @moe/core test` => Test Files 33 passed (33) / Tests 864 passed (864), exit 0. So every red above was caused by its mutant and not by ambient state or a peer's edit.\n\nADVERSARIAL REVIEW OF THE REMAINING NAMED SURFACES:\n- Empty history: refuses MISSING_CREATE via the post-loop guard, which is a DIFFERENT code path from drill 1's guard — drill 1 left it green, confirming they are independent.\n- Getters/proxies/cycles/symbols/exotic prototypes/sparse/extra-own-key: all refuse HISTORY_INVALID at the single entry snapshot, before any discriminator is read. Six cases in the table.\n- Compound approval: verified the precondition explicitly (Approved and Activated genuinely share one commandId at consecutive versions) before asserting replay keeps them distinct. Keying identity on commandId would collapse them; keying on version does not.\n- Terminal events: REJECTED and SUPERSEDED appear in no `REPLAY_TRANSITIONS` entry, so every later event refuses ILLEGAL_TRANSITION. Both terminals have their own case.\n- Initial vs successor epochs: initial pinned at exactly 1, successor at exactly predecessor + 1, each with its own drift case, plus a malformed predecessor epoch.\n- Divergence from `reduceGraphRevision`: cannot be asserted by inspection, so it is asserted by construction — all 11 legal paths compare replayed state AND events against the reducer's own output. There is no hand-written expected state anywhere in the suite.\n- `__proto__` as an event key is inert: the snapshot builds `Object.create(null)` records and",
+      "startedAt": "2026-08-16T22:41:38.200Z",
+      "completedAt": "2026-08-16T22:43:18.165Z"
     },
     {
       "stepId": "step-6",
       "description": "FINAL VERIFICATION, PATH-ATTRIBUTED GATE, AND COMMIT. Run separately with captured outputs: `pnpm --filter @moe/core typecheck`; canonical evidence command `pnpm --filter @moe/core test` (must print nonzero file/test counts); `pnpm typecheck`; `pnpm test`; `pnpm verify:foundation`. Compare merge-base versus HEAD repo-wide failing-path sets and require no new failure in the five owned paths; quote foreign red. Confirm new production source <=250 lines, existing touched `index.ts` remains below 400, bridge is LF-exact, no probe/scratch remains, and completion records task-dd4ffa0c40834c59892f957fbf61fb23 as consumer. Stage/commit only the five explicit paths and verify `git show --stat` is scoped.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/core/src/planning/graph-revision-replay.ts",
         "packages/core/src/planning/graph-revision-replay.js",
         "packages/core/src/planning/graph-revision-replay.test.ts",
         "packages/core/src/index.ts",
         "packages/core/src/index-surface.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-replay.ts",
+        "packages/core/src/planning/graph-revision-replay.js",
+        "packages/core/src/planning/graph-revision-replay.test.ts",
+        "packages/core/src/planning/graph-revision-replay-refusal.test.ts",
+        "packages/core/src/planning/graph-revision-replay-test-fixtures.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "note": "ALL FIVE GATES RUN SEPARATELY, OUTPUTS CAPTURED:\n1. `pnpm --filter @moe/core typecheck` — exit 0.\n2. CANONICAL EVIDENCE `pnpm --filter @moe/core test` — `Test Files 33 passed (33)` / `Tests 864 passed (864)`, exit 0. Nonzero counts printed, so the leg demonstrably EXECUTED rather than matching no package. Baseline at step 1 was 31/781; +2 files, +83 tests, all mine.\n3. `pnpm typecheck` — exit 0, every workspace package Done including apps/daemon.\n4. `pnpm test` — exit 1. 3 failures / 6834 passed / 2 skipped across 290 files. NONE are mine; attribution below.\n5. `pnpm verify:foundation` (= `pnpm typecheck && pnpm test:meta`) — passed; meta leg `Test Files 32 passed (32)` / `Tests 661 passed (661)`.\n\nPATH-ATTRIBUTED GATE — 0 NEW FAILURES IN OWNED PATHS. The 3 repo-wide failures split into two causes, both disclosed verbatim, neither reachable from my diff:\n\n(a) TWO ARE A SHELL ARTIFACT, NOT A CODE RED. `tests/integration/release-archive-cleanup.test.ts` > \"preserves the exact success result when cleanup throws\" and \"removes the real archive after success\", failing with `\"reason\": \"SOURCE_ARCHIVE_FAILED\"`. Re-run from PowerShell: `Test Files 1 passed (1)` / `Tests 4 passed (4)`. Same bytes, same commit — green in PowerShell, red under Git Bash. This is the known MSYS tar drive-letter fault in this repo's integration gate, so the repo-wide `pnpm test` red count depends on which shell runs it.\n\n(b) ONE IS A GENUINE FOREIGN RED, SHELL-INDEPENDENT. `packages/store/src/recovery-anchor.test.ts` > \"publishes exactly the anchor surface a restore controller composes\", failing identically in both shells with: `AssertionError: RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root: expected [ 'PREPARE', 'INACTIVE_INSTALL', …(6) ] to be undefined`. It is a WITHHELD-name leak on the `@moe/store` root. Structurally unreachable from this task: `packages/store/package.json` declares NO dependencies and NO devDependencies at all, so there is no edge to `@moe/core`; the test does not mention `@moe/core` (grep count 0); and neither the test nor `packages/store/src/index.ts` is modified in the working tree. Additionally `git status --porcelain` shows ZERO changes outside `packages/core/` and `.moe/`, so this red is carried by HEAD itself, not by any in-flight peer edit and not by me. Reported, not hidden, not fabricated green.\n\nREMAINING CHECKS ALL PASS: production source `graph-revision-replay.ts` is exactly 250 physical lines; the other three new sources are 154 / 236 / 169, all at or under the mechanically-enforced planning ceiling; touched `index.ts` is 303, below the 400 split threshold; the bridge is byte-exact LF (`cat -A` shows one `$`-terminated line, 44 bytes) and is additionally pinned by a test; no probe, scratch, debug or evidence file exists anywhere in `git status`. Drill artifacts were held outside the repository and never entered it. REQUIRED PRODUCTION CONSUMER: task-dd4ffa0c40834c59892f957fbf61fb23.\n\nCOMMIT — I DID NOT COMMIT, AND MUST NOT. A foreign whole-tree commit swallowed this task's work before I reached the commit step: `54ad5e8 feat(task-8f9305b9bb5e4b8db327a55981b2ea0e): Review-qualified goal closure` (HEAD, another worker's task) contains all eight of my paths, and `git status --porcelain -- packages/core/` is consequently EMPTY. Per epic rail 3 this is a known hazard, not a defect I caused and not one I may repair: I have not amended it, not reset, and not created an empty commit to claim the bytes. This is exactly what task-495ad5e8 (\"Make the task-completion hook commit by explicit owned pathspec\") exists to fix.\n\nI VERIFIED THE CAPTURE IS COMPLETE AND CURRENT rather than assuming it. All 8 owned paths: committed blob sha256 == working-tree sha256, 8 of 8 MATCH. The production module's committed hash is `9544d54c639bce0a23bf993798f86e0874632a088b4fb4ce9a4ea60fe3379885`, byte-identical to the pre-drill baseline I captured in step 5 — so the commit carries the final restored source, NOT a half-applied refactor and NOT any of the four mutants.\n\nWHAT QA SHOULD REVIEW (the commit message names another task, so review by base-ref diff, not by commit):\n`git diff cf272f67c3e34fe1d8c4dd00675512c67f165c05..HEAD -- packages/core/src/planning/graph-revision-replay.ts packages/core/src/planning/graph-revision-replay.js packages/core/src/planning/graph-revision-replay.test.ts packages/core/src/planning/graph-revision-replay-refusal.test.ts packages/core/src/planning/graph-revision-replay-test-fixtures.ts packages/core/src/index.ts packages/core/src/index-surface.test.ts packages/core/src/supersession/supersession-engine.test.ts`\n— 8 files changed, 868 insertions(+), 7 deletions(-): replay.ts 250, refusal.test.ts 236, test-fixtures.ts 169, replay.test.ts 154, index-surface.test.ts +50/-, index.ts +13, supersession-engine.test.ts 1 line (the export-count pin), bridge 1 line.\n\nADVERSARIAL SELF-REVIEW, three things I checked in my own diff and accept: (1) accepted events are the detached null-prototype snapshot copies r",
+      "startedAt": "2026-08-16T22:43:21.966Z",
+      "completedAt": "2026-08-16T22:47:10.582Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -117,22 +132,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:16:46.906Z",
-  "updatedAt": "2026-08-16T22:41:38.200Z",
+  "updatedAt": "2026-08-16T23:05:01.859Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:18:51.075Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T23:05:01.859Z",
+    "wallClockMs": 2770784
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T22:21:48.732Z",
@@ -152,5 +172,25 @@
     "wallClockMs": 3600000
   },
   "planApprovedAt": "2026-08-16T22:21:50.800Z",
-  "workStartedAt": "2026-08-16T22:22:03.076Z"
+  "workStartedAt": "2026-08-16T22:22:03.076Z",
+  "reviewStartedAt": "2026-08-16T22:48:19.713Z",
+  "verification": {
+    "command": "pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/core/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  33 passed (33)\n      Tests  864 passed (864)\n   Start at  01:46:32\n   Duration  800ms (transform 6.89s, setup 0ms, import 10.63s, tests 1.05s, environment 2ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-16T22:48:19.713Z"
+  },
+  "filesModified": [
+    "packages/core/src/planning/graph-revision-replay.test.ts",
+    "packages/core/src/planning/graph-revision-replay.ts",
+    "packages/core/src/planning/graph-revision-replay.js",
+    "packages/core/src/planning/graph-revision-replay-refusal.test.ts",
+    "packages/core/src/planning/graph-revision-replay-test-fixtures.ts",
+    "packages/core/src/index.ts",
+    "packages/core/src/index-surface.test.ts",
+    "packages/core/src/supersession/supersession-engine.test.ts"
+  ],
+  "completedAt": "2026-08-16T23:05:01.859Z",
+  "reviewCompletedAt": "2026-08-16T23:05:01.859Z",
+  "reviewSummary": "APPROVED. Gates re-run by me at HEAD 54ad5e8: @moe/core typecheck exit 0 (earlier TS2345 at replay.ts:236 fixed by the explicit readonly GraphRevisionLifecycle[] annotation); @moe/core test exit 0 = 33 files / 864 tests. Diff verified: 868 insertions / 7 deletions across the 8 owned paths, matching your numstat. replay.ts is 250 lines, at the rail target.\n\nDoD 1-5 verified, not taken on summary. DoD 4's oracle is real: LEGAL_PATHS drives production reduceGraphRevision and replay is compared against ITS state/events, with a nonzero assertion pinning every command kind, event kind and all six lifecycles; ACTIVE and SUPERSEDED controls present. DoD 3: expectRefusal asserts layer/code as ONE composite string, so a sibling layer answering first cannot read as this refusal. DoD 5: root exports values + types, byte-exact LF bridge assertion, and index-surface exercises replay THROUGH the root barrel - my missing-create drill was killed by that root test, proving that coverage is load-bearing. Consumer task-dd4ffa0c named.\n\nMUTATION SWEEP: 12 drills on the production surface, 10 KILLED - version break (successor and create-at-1), illegal transition, duplicate create, identity conflict on differing bytes, approval binding drift, supersession epoch+1, epochDrifted successor relation, missing create, deepFreeze.\n\nTwo survivors, classified not counted against you:\n- `witness.graphHash !== current.graphContentHash` in applyActivated is a TRUE equivalent mutant: sameBinding compares graphHash, boundHashes comes from bindingOf(), and applyApproved already enforced binding.graphHash === graphContentHash.\n- Dropping `keys.length === other.length` in sameData survives: reachable only via a redelivery whose NESTED object carries an extra key sorting last (admissible() is exact at top level only). Production is correct - an uncovered sub-clause worth a case if touched again.\n\nForeign red is foreign: packages/store is untouched in a42ae2f..HEAD and declares NO deps."
 }

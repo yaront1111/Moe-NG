@@ -1,0 +1,35 @@
+{
+  "id": "task-04dd5a0a9631484f9b7fe68897c3efac",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Persist the Foundation attempt journal authority",
+  "description": "Prerequisite for task-af9454f4438242e5854208284e0086e2. Current measurement at HEAD a42ae2f: `journal.append` exists in the frozen RuntimeCommandKind union and @moe/context exports `createDeadEndJournal`, but daemon has no production journal writer/reader and no attempt journalDigest. Deliverable: an authenticated, attempt/session/lease-bound journal application service and durable reader using the public @moe/context canonical journal, so safe release can bind the exact current digest rather than a caller/fixed value. Consumer: task-af9454f4438242e5854208284e0086e2.",
+  "definitionOfDone": [
+    "A production `journal.append` path authenticates first, checks the exact capability/payload allow-list, derives project/session/attempt/node/lease from durable authority, and persists only entries admitted by public `createDeadEndJournal`; no new wire kind is added.",
+    "The durable journal is bounded, canonical and append-only; its digest covers the exact ordered entries, and a strict current reader returns the attempt-bound digest/record from canonical bytes.",
+    "Caller-selected project, lease, graph, digest, truth class or replacement journal is structurally refused; stale session/lease, absent attempt, conflicting append, malformed entry, limit excess and unreadable/ambiguous storage each assert a stable exact code and refusing layer.",
+    "Same command bytes replay without another entry; conflicting bytes refuse before mutation, and raw event/decision counts plus canonical bytes prove the original survives.",
+    "Real SqliteEventStore + Authenticator tests include one accepted append/control, empty-current-journal semantics, nonzero hostile cases, zero residue, and a mutation where the digest ignores an entry that reddens a named assertion.",
+    "Completion names task-af9454f4438242e5854208284e0086e2 as the reader consumer; daemon typecheck/test run separately and print nonzero test counts."
+  ],
+  "taskRails": [
+    "Use the existing frozen `journal.append` kind and public @moe/context root; do not add a wire kind, copy journal canonicalization, or accept a caller digest.",
+    "Authentication precedes payload authority. Preserve authenticator/registry/context refusal code and layer rather than restamping.",
+    "The daemon command registry is already near the split limit; extract a focused registry fragment before 400 rather than growing a monolith.",
+    "TDD exact codes/layers, real SqliteEventStore, target <=250 lines per production source, explicit owned-path commits."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-af9454f4438242e5854208284e0086e2",
+  "priority": "CRITICAL",
+  "order": 80.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:53:19.142Z",
+  "updatedAt": "2026-08-16T22:53:19.142Z"
+}

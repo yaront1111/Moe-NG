@@ -20,8 +20,8 @@
     "Real SqliteEventStore in tests, closed in a `finally` on every exit path. Target <=250 physical lines; commit only owned paths by explicit pathspec."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -33,11 +33,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:04:32.945Z",
-  "updatedAt": "2026-08-16T22:40:25.789Z",
+  "updatedAt": "2026-08-16T22:45:36.388Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-16T22:40:25.789Z"
-  }
+  },
+  "blockedReason": "Fresh measurement at HEAD a42ae2f disproves the task's authority premise. work.release currently writes only WorkReleased claim bytes and carries no attempt/effect/resource identity; its intended release producer task-740924b7 is still PLANNING. ActivationLedgerRecord is only ACTIVE/RUNNING, its tails never settle an effect, and FoundationAttemptRecorded explicitly terminalises nothing. @moe/scheduler ResourceRow reducers are pure; daemon has no durable current resource writer/reader or attempt-to-resource membership, and recovery inventory is not live release authority. Indexed enumeration cannot recover events that no producer writes. Filed task-1879166d for durable effect settlement/current reads and task-5998ae63 for durable per-attempt resource lifecycle/current reads. Re-plan this three-file evidence projection only after task-740924b7, task-1879166d, and task-5998ae63 are DONE.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:45:25.168Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured current production surfaces; filed task-1879166d (durable effect terminal authority) and task-5998ae63 (durable per-attempt resource authority); blocked parent on those plus task-740924b7.",
+      "whatRemains": "After all three prerequisites are DONE, plan release-terminal-evidence.ts/.js/.test.ts using bounded indexed reads and the real release transaction.",
+      "pitfalls": "Do not infer terminality from FoundationAttemptRecorded, process exit, recovery inventory, caller lists, or absent records.",
+      "openQuestions": "None until prerequisite implementations expose their exact readers/codes.",
+      "releasedAt": "2026-08-16T22:45:36.386Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit handoff after filing measured prerequisites; continuing user-requested plan-all sweep."
+    }
+  ]
 }

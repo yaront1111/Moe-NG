@@ -1,0 +1,44 @@
+{
+  "id": "task-d288909ba25a42d98b4d33abf70d185c",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: Claude and Codex capability shadow matrix",
+  "description": "Objective: compare the two shipped provider capability surfaces without claiming an unshipped Codex execution edge. Exercise the real durable Claude construction/dispatch evidence and the public Codex observe/probe/render/reconcile surface, reporting exact PASS/FAIL/UNKNOWN per capability and platform while performing no external provider launch.",
+  "definitionOfDone": [
+    "A generated matrix covers Claude and Codex on every capability both actually publish, asserts a positive row count, and identifies each result as exact PASS, FAIL, or UNKNOWN with the production reason code/layer and evidence provenance.",
+    "Claude rows use the real daemon Foundation attempt/provider construction and durable reader surface; Codex rows use only the shipped public observe/probe/render/reconcile API, and the absent production Codex execution call site is reported UNKNOWN rather than mocked or called PASS.",
+    "One accepted construction/observation control exists for each provider, while missing runtime, hostile version/output, unsupported platform, unverifiable observation, and provider-surface disagreement pin their exact production code and layer.",
+    "The matrix launches no Claude or Codex subprocess and writes no provider, activation, or attempt authority; raw event/decision/process counts and relevant filesystem bytes/mtime are unchanged before and after every arm.",
+    "All rows bind to the same checkout source commit and canonical case digest, serialize deterministically, and run under plain Node/package roots with nonzero integration-test counts."
+  ],
+  "taskRails": [
+    "Use only public package roots and the real production surface under test; no test helper may reimplement a projection, provider decision, transport handshake, or host adapter.",
+    "Every refusal/failure arm asserts the exact stable reason code and refusing layer; generated matrices assert a positive case count and include an accepted control so refusal-only suites cannot pass.",
+    "All fixtures and results are advisory/read-only: no imported state may activate, mutate durable authority, select a best tool, or perform cutover.",
+    "Use TDD and mutation-drill the production surface so a named assertion reddens; keep owned files focused and stage/commit only explicit paths.",
+    "Do not claim Codex execution portability: task-2159's published observation/probe/render/reconcile capability is the Codex subject until a separate production caller lands.",
+    "No external API calls, credentials, child processes, deep imports, or caller-forged runtime/provider truth; unsupported host evidence remains UNKNOWN.",
+    "Own only the provider matrix test and at most two focused fixture/helper files under tests/integration/portability."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
+  "priority": "HIGH",
+  "order": 12.3,
+  "comments": [
+    {
+      "id": "comment-498bca43d4a14bb8a9727d9079f5a424",
+      "author": "architect-f956ffe1",
+      "content": "BLOCKING DESIGN CHOICE: dec-a8923b1e17bf460390742b6b8ddb5eab. As written the accepted Claude arm contradicts the public-root/read-only/no-child rails. Do not move this task to PLANNING until the human chooses symmetric public read-only provider surfaces (recommended; execution UNKNOWN here) or a sealed real-dispatch evidence receipt prerequisite. Never deep-import or synthesize a dispatch fixture.",
+      "timestamp": "2026-08-16T23:06:55.670Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T23:02:36.183Z",
+  "updatedAt": "2026-08-16T23:06:55.670Z"
+}

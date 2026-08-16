@@ -1,0 +1,35 @@
+{
+  "id": "task-00e4827dd9374ec79625351d560c82c8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Compose and index durable provider process observations",
+  "description": "Prerequisite for task-ded026d6587442eabc28ff2609d231aa. Current measurement at HEAD a42ae2f: safe_boundary.observe is envelope-reachable, but there is no system-runner/host observation source a handler can trust. The existing production pieces `launchActivationProviderRun` -> `commitActivationProviderRun` -> `commitProviderRunRecord` correctly bind the physical launcher handoff and ProviderRunRef(attempt/effect/run/epoch), yet have zero non-test call sites and no strict reader selecting the run by attemptRef. FoundationAttemptRecorded drops exit state, and activation PROCESS_OBSERVED is registration rather than termination. Deliverable: compose the existing physical launch/commit chain at the real dispatch/reconciliation boundary and expose a decision-verified current provider-run observation reader by project+attempt. Consumer: task-ded026d6587442eabc28ff2609d231aa.",
+  "definitionOfDone": [
+    "A production dispatch/reconciliation call site invokes exactly `launchActivationProviderRun` and then `commitActivationProviderRun`; the persisted ProviderRunRecord comes from the real launcher handoff, never from a safe_boundary.observe payload or a locally rebuilt observation.",
+    "The committed record retains the exact ProviderRunRef attemptRef/effectIntentId/runRef/epoch plus launcher exit/reconciliation truth, and is decision-backed to the authenticated project/session identity; a caller cannot select or rewrite any of those facts.",
+    "A strict current reader selects by projectId and attemptRef using an index-backed bounded scan, verifies command receipt/decision identity and canonical bytes, and returns exactly one record; ABSENT, UNREADABLE, MALFORMED, AMBIGUOUS and BINDING_MISMATCH have distinct stable codes and exact layers.",
+    "Real-Sqlite tests drive the production physical-boundary composition, cover one accepted observed-exit control plus unobserved, vanished, unreadable, duplicate, foreign-project and conflicting replay cases, and assert exact code/layer, zero partial residue, raw counts, and nonzero generated cases.",
+    "Exact replay returns the original record without a second physical launch or append; conflicting command bytes refuse before launch/commit and leave the original bytes unchanged.",
+    "Completion names task-ded026d6587442eabc28ff2609d231aa as consumer and records its exact reader call site; daemon typecheck/test and the existing plain-Node provider construction test execute with nonzero test evidence."
+  ],
+  "taskRails": [
+    "Compose the existing public runner/daemon launch and provider-run ledger surfaces; do not add a wire kind, reimplement process observation, infer exit from FoundationAttemptRecorded, or treat PROCESS_OBSERVED registration as termination.",
+    "Only the physical launcher/reconciliation boundary may supply exit facts. Caller payloads may identify no run, exit, reconciliation, observation ref, or safe flag.",
+    "Verify every cross-package manifest/lock/bare-import edge before naming it; preserve upstream runner/ledger refusal code and layer rather than restamping.",
+    "Use real SqliteEventStore, TDD exact codes/layers, bounded index reads, target <=250 lines per production source, and explicit owned-path commits."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-ded026d6587442eabc28ff2609d231aa",
+  "priority": "CRITICAL",
+  "order": 79.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:48:12.501Z",
+  "updatedAt": "2026-08-16T22:48:12.501Z"
+}
