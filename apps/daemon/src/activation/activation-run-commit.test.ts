@@ -49,6 +49,7 @@ import {
   type ClaudeLaunchSelection,
   type ClaudeTelemetryHandoff,
   type ClaudeTelemetryLaunchResult,
+  type ProviderUsageResult,
 } from "@moe/runner";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import type { CommandDecisionKey } from "@moe/store";
@@ -65,6 +66,7 @@ import { launchActivationProviderRun } from "./activation-telemetry-launch.js";
 import {
   commitActivationProviderRun,
   composeProviderRunRecord,
+  projectUsage,
 } from "./activation-run-commit.js";
 import type { ActivationRunCommitResult, ActivationRunClockFacts } from "./activation-run-commit.js";
 
@@ -389,6 +391,84 @@ describe("composeProviderRunRecord — provenance", () => {
     } finally {
       store.close();
     }
+  });
+});
+
+/**
+ * The usage projection's own arms. Only the empty one is reachable through a
+ * launch this package can drive, so the two COMPOSITION-layer codes would be
+ * unguarded — a refusal code with zero occurrences in a test file is a refusal
+ * nothing enforces — and they are asserted against the exported production
+ * function rather than a local restatement of it.
+ *
+ * `ProviderUsageResult` is a published @moe/runner TYPE, and these values are
+ * inputs to a pure mapper: nothing here claims a run was observed, and no record
+ * built from them is ever committed.
+ */
+const authorityRefusal = (): ProviderUsageResult => ({
+  code: "PROVIDER_USAGE_AUTHORITY_REFUSED",
+  layer: "USAGE_AUTHORITY",
+  message: "the measurement authority refused this observation",
+  ok: false,
+  upstream: [
+    { code: "BUDGET_OBSERVATION_SEQUENCE_REGRESSION", layer: "MEASUREMENT", message: "regressed" },
+  ],
+});
+
+describe("projectUsage — the two arms no reachable launch can drive", () => {
+  it("carries a scheduler-refused envelope with its sequence and issues verbatim", () => {
+    const refusal = authorityRefusal();
+    // A KNOWN sequence is the only field this pure mapper reads off the handoff.
+    const handoff = { sequence: { known: true, value: 7 } } as unknown as ClaudeTelemetryHandoff;
+    const projected = projectUsage(handoff, refusal);
+
+    if (!projected.ok) throw new Error(`expected a projection, got ${projected.code}`);
+    expect(projected.usage).toEqual([]);
+    expect(projected.usageRefusals).toEqual([
+      {
+        issues: [
+          { code: "BUDGET_OBSERVATION_SEQUENCE_REGRESSION", layer: "MEASUREMENT", message: "regressed" },
+        ],
+        providerSequence: 7,
+      },
+    ]);
+  });
+
+  it("refuses rather than defaulting an unknown provider sequence to zero", async () => {
+    // A REAL blind handoff, whose sequence is genuinely unknown.
+    const handoff = handoffOf(await refusedLaunch());
+    expect(handoff.sequence).not.toHaveProperty("value");
+
+    const projected = projectUsage(handoff, authorityRefusal());
+    const seen = refused(projected);
+    expect(seen.code).toBe("PROVIDER_RUN_USAGE_SEQUENCE_INVALID");
+    expect(seen.layer).toBe("PROVIDER_RUN_COMPOSITION");
+  });
+
+  it("refuses an unreadable prior, which no record field would otherwise reveal", async () => {
+    const projected = projectUsage(handoffOf(await refusedLaunch()), {
+      code: "PROVIDER_USAGE_PRIOR_UNREADABLE",
+      layer: "USAGE_INPUT",
+      message: "a prior observation is not a normalizer-issued record",
+      ok: false,
+      upstream: [],
+    });
+    const seen = refused(projected);
+    expect(seen.code).toBe("PROVIDER_RUN_MEASUREMENT_REFUSED");
+    expect(seen.layer).toBe("PROVIDER_RUN_COMPOSITION");
+  });
+
+  it("invents no envelope for a USAGE_INPUT refusal the record already explains", async () => {
+    const projected = projectUsage(handoffOf(await refusedLaunch()), {
+      code: "PROVIDER_USAGE_RECEIPT_UNKNOWN",
+      layer: "USAGE_INPUT",
+      message: "the run reports no readable stdout receipt digest",
+      ok: false,
+      upstream: [],
+    });
+    if (!projected.ok) throw new Error(`expected a projection, got ${projected.code}`);
+    expect(projected.usage).toEqual([]);
+    expect(projected.usageRefusals).toEqual([]);
   });
 });
 

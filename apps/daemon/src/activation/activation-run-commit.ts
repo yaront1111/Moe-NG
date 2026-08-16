@@ -152,8 +152,11 @@ function normalizedUsage(
  * normalizer checks the sequence before it reaches the authority, so a known
  * sequence is implied here, and the guard refuses rather than substituting a zero
  * if that ever stops holding.
+ *
+ * EXPORTED so both COMPOSITION codes above are assertable: every arm but the
+ * empty one needs an OBSERVED launch, which needs ports the runner withholds.
  */
-function projectUsage(handoff: ClaudeTelemetryHandoff, usage: ProviderUsageResult): UsageProjection {
+export function projectUsage(handoff: ClaudeTelemetryHandoff, usage: ProviderUsageResult): UsageProjection {
   if (usage.ok) return { ok: true, usage: usage.measurements, usageRefusals: [] };
   if (usage.code === "PROVIDER_USAGE_PRIOR_UNREADABLE") {
     return providerRunRefusal("REFUSED", "PROVIDER_RUN_MEASUREMENT_REFUSED", COMPOSITION);
