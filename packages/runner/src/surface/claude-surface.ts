@@ -68,40 +68,13 @@ export {
   type RuntimePinningMethod,
 } from "../providers/claude/claude-observation.js";
 /**
- * The runtime pin-request seam, and the same principle as the telemetry block
- * below applied to CAPABILITIES rather than to facts: the caller supplies data,
- * this package mints the ports.
- *
- * `ClaudeRuntimePinRequest` names six fields and only three of them survive an
- * authenticated JSON boundary. The other three — a filesystem, a host facts
- * observer, a clock — are runtime AUTHORITY, and a consumer able to supply them
- * could hand pinning a runtime nobody ever observed. So `createClaudeRuntimePinRequest`
- * takes exactly `{quotedObservation, installedRoot, pinRoot}` as plain data and
- * mints the rest itself. The refusal vocabulary travels with it for the reason
- * every closed union does here: a code a consumer cannot read is a code nobody
- * can branch on.
- *
- * WITHHELD, and the asymmetry is the whole deliverable: `createNodeClaudeRuntimeFs`,
- * `RUNTIME_PIN_CHUNK_BYTES`, `observeInstalledClaudeRuntime`, `probeClaudeRuntime`,
- * `ClaudeRuntimeFsPort`, `ClaudeRuntimeFactsPort` and `ClaudeRuntimeObservationRefused`
- * all stay internal. Publishing any one of them would re-open the injectable seam
- * this factory exists to close — `observeInstalledClaudeRuntime` most of all,
- * because it takes an `executablePath` and a consumer holding it could point the
- * host observer at a binary no quote ever committed to. `prepareClaudeRuntimePin`
- * stays withheld too: the launcher applies it itself.
+ * The runtime pin-REQUEST and DISCOVERY seam lives in `claude-discovery-surface.ts`,
+ * beside this one and re-exported from the same package root. It was moved out
+ * whole when discovery joined it: the two are one seam — the factory that
+ * validates a quote, and the only published thing that can produce one it accepts
+ * — and that module carries the withheld list and the reasoning for it.
  */
-export {
-  CLAUDE_RUNTIME_PIN_ERROR_CODES,
-  CLAUDE_RUNTIME_PIN_LAYER,
-  type ClaudeRuntimePinErrorCode,
-  type ClaudeRuntimePinFailure,
-} from "../providers/claude/claude-runtime-pin-closure.js";
-export { type ClaudeRuntimePinRequest } from "../providers/claude/claude-runtime-pin.js";
-export {
-  createClaudeRuntimePinRequest,
-  type ClaudeRuntimePinRequestInput,
-  type ClaudeRuntimePinRequestResult,
-} from "../providers/claude/claude-runtime-request.js";
+export * from "./claude-discovery-surface.js";
 /**
  * The durable-authority seam. The FACTORY is published while the default port
  * set behind it is not, and that asymmetry is the point: a daemon needs the

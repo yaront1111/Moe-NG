@@ -142,6 +142,15 @@ import type {
   ClaudeRuntimePinErrorCode, ClaudeRuntimePinFailure, ClaudeRuntimePinRequest,
   ClaudeRuntimePinRequestInput, ClaudeRuntimePinRequestResult,
 } from "@moe/runner";
+/**
+ * The DISCOVERY seam's type closure, through the same root. `WindowsProcessUnknown`
+ * is one of the four arms its result can carry — a consumer that cannot name it
+ * cannot branch on the layer that refused, which is precisely the fact DoD 3
+ * requires to survive.
+ */
+import type {
+  DiscoverInstalledClaudeRuntimeResult, DiscoveredClaudeRuntime, WindowsProcessUnknown,
+} from "@moe/runner";
 /** The platform boundary seam, through the same root. */
 import type {
   LinuxBoundaryFacts, LinuxClassificationContext, LinuxPathFact, ObserveLinuxPlatformInput,
@@ -273,6 +282,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   // the clock it mints are NOT here — see the withheld-name control below.
   ["CLAUDE_RUNTIME_PIN_ERROR_CODES", "array"], ["CLAUDE_RUNTIME_PIN_LAYER", "string"],
   ["createClaudeRuntimePinRequest", "function"],
+  // The other half of that seam: the only published thing that can PRODUCE a
+  // quote the factory accepts. It takes no argument, so a consumer obtains an
+  // observation of THE installed runtime without choosing WHICH one is observed.
+  ["discoverInstalledClaudeRuntime", "function"],
   // platform/: the OS-neutral boundary vocabulary and the Linux classifier.
   ["LINUX_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_BOUNDARIES", "array"],
   ["PLATFORM_ERROR_CODES", "array"], ["PLATFORM_LAYERS", "array"],
@@ -351,7 +364,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(229);
+  expect(EXPECTED_EXPORTS.length).toBe(230);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -851,11 +864,57 @@ it("withholds every runtime capability the pin-request factory mints", () => {
   // Read off the imported NAMESPACE, never the barrel's text: the root re-exports
   // with `export *`, which a grep cannot see through.
   expect(withheld.filter((name) => name in surface)).toEqual([]);
-  // Positive control: the same membership test finds what this seam DOES publish.
-  expect(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES"]
-    .filter((name) => name in surface))
-    .toEqual(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES"]);
+  // Positive control: the same membership test finds what this seam DOES publish,
+  // including the discovery capability that closes the other half of the gap.
+  expect(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES",
+    "discoverInstalledClaudeRuntime"].filter((name) => name in surface))
+    .toEqual(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES",
+      "discoverInstalledClaudeRuntime"]);
 });
+
+/**
+ * The unsteerability is a TYPE-level fact rather than a runtime rejection, which
+ * would be one refactor away from being relaxed. An added parameter — required,
+ * optional or defaulted — stops `Parameters<>` being the empty tuple.
+ */
+type DiscoveryTakesNoArgument =
+  Parameters<typeof runner.discoverInstalledClaudeRuntime> extends readonly [] ? true : false;
+/** The fourth refusal arm is nameable through the root, so its layer is branchable. */
+type WindowsArmIsNameable =
+  WindowsProcessUnknown extends DiscoverInstalledClaudeRuntimeResult ? true : false;
+
+/**
+ * The other half of the pin-request seam, and the only published route to a quote
+ * `createClaudeRuntimePinRequest` accepts. The result is obtained by CALLING the
+ * published function: a constructed literal typechecks against a locally
+ * re-declared shape whether or not the real type was ever published.
+ */
+it("gives a root-only consumer an observation of an installed runtime it cannot choose", async () => {
+  const takesNoArgument: DiscoveryTakesNoArgument = true;
+  const windowsArmNameable: WindowsArmIsNameable = true;
+  expect([takesNoArgument, windowsArmNameable, runner.discoverInstalledClaudeRuntime.length])
+    .toEqual([true, true, 0]);
+  const result: DiscoverInstalledClaudeRuntimeResult =
+    await runner.discoverInstalledClaudeRuntime();
+  if (!("ok" in result && result.ok === true)) {
+    // Refusals keep the code of whichever authority answered, never a discovery code.
+    expect(typeof (result as { readonly code: string }).code).toBe("string");
+    return;
+  }
+  const discovered: DiscoveredClaudeRuntime = result;
+  expect(discovered.observation.truthClass).toBe("PROVEN");
+  expect(runner.RUNTIME_PINNING_METHODS).toContain(discovered.observation.pinningMethod);
+  // Quotable AS IS. The factory refuses a self-assembled quote with
+  // CLAUDE_RUNTIME_OBSERVATION_CHANGED; that it accepts this one is the deliverable.
+  const input: ClaudeRuntimePinRequestInput = {
+    quotedObservation: discovered.observation, installedRoot: discovered.installedRoot,
+    pinRoot: "C:\\pins",
+  };
+  const hydrated: ClaudeRuntimePinRequestResult = runner.createClaudeRuntimePinRequest(input);
+  if ("ok" in hydrated) throw new Error(`hydration refused with ${hydrated.code}`);
+  expect(hydrated.quotedObservation.observationDigest)
+    .toBe(discovered.observation.observationDigest);
+}, 120_000);
 
 function recordsOf(overrides: Overrides = {}): Overrides {
   const commit = commitFixture();
@@ -2145,10 +2204,11 @@ function owningSurfaces(name: string): readonly string[] {
 it("leaves the ten Family B Codex types owned by exactly one surface module", () => {
   // Guard the case list itself: an empty enumeration would pass every assertion
   // below while measuring nothing.
-  expect(SURFACE_SOURCES.size).toBe(6);
+  expect(SURFACE_SOURCES.size).toBe(7);
   expect([...SURFACE_SOURCES.keys()].sort()).toEqual([
-    "claude-surface.ts", "codex-surface.ts", "evidence-surface.ts",
-    "provider-record-surface.ts", "recovery-inventory-surface.ts", "recovery-surface.ts",
+    "claude-discovery-surface.ts", "claude-surface.ts", "codex-surface.ts",
+    "evidence-surface.ts", "provider-record-surface.ts", "recovery-inventory-surface.ts",
+    "recovery-surface.ts",
   ]);
 
   // Positive control for the stripper, both directions. `CodexCancelObservation`
