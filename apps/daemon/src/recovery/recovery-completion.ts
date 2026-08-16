@@ -70,8 +70,13 @@ export type {
  *   F  reduceProject          the pure lifecycle authority
  *   G  ONE durable commit     the decision and ProjectRecovered together
  *
- * Nothing is written before (G) and every gate accumulates into locals, so a
- * partially completed recovery is unreachable rather than merely untested.
+ * No PROJECT decision or event is written before (G) and every gate accumulates
+ * into locals, so a partially completed recovery is unreachable rather than
+ * merely untested. The one deliberate durable write on a refusal path is at (E):
+ * a single-use session proof is BURNED by `sessions.authenticate` even when the
+ * bindings above it then refuse, because a proof a rejected attempt could hand
+ * back unspent would not be single-use. That burn touches the identity
+ * aggregate, never the project's lifecycle.
  */
 
 const encoder = new TextEncoder();
