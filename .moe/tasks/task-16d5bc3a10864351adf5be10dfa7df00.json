@@ -73,7 +73,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-df297022",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,7 +85,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:58:07.943Z",
-  "updatedAt": "2026-08-16T02:21:48.282Z",
+  "updatedAt": "2026-08-16T11:30:43.019Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:02:24.368Z",
     "plannedStepCount": 6,
@@ -103,6 +103,15 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "Task was freshly planned (6 steps) after its cascade unblock at 02:04; the prior session claimed at 02:16 and may have completed early steps before the environment died — the implementationPlan step statuses are authoritative. All three premise dependencies are DONE and committed: d20ffd077 (event_type,global_position) index, 69c2c9e7 readEventsByTypeAfter public paging (commit 4493241), d92 horizon/ambiguity behavior.",
+      "whatRemains": "Execute the plan: the daemon consumer/performance hardening of readCurrentEffectSessionBinding against the committed index + bounded public paging, replacing the O(total-events) global scan cost, with scale/uniqueness invariants preserved and mutation drills per the plan.",
+      "pitfalls": "Facade lesson on record (msg-de56010e): if a public store method must grow, the DecisionLedgerCore delegate must grow with it — do not treat 'do not touch the facade' as unconditional. Verify owned-path cleanliness before writing; shared worktree.",
+      "openQuestions": "Whether the dead session left uncommitted bytes on the owned paths — git status them first and attribute by content before adopting or reporting collision.",
+      "releasedAt": "2026-08-16T11:30:43.019Z",
+      "releasedBy": "governor-1a5aca5d",
+      "reason": "Governor release under the human's standing unblock directive, 11:30Z. Holder worker-df297022 silent since 09:20 (2+ hours), wrapper pause-flagged after the 02:31 five-death event, liveness ping unanswered, surrounding fleet fully cycled — crash evidence class, not idle time."
+    },
     {
       "whatIsDone": "Fresh committed-byte measurement selected the generic store event-type index/query route. Prerequisite tasks d20ffd0775b4420bb2318c79019b4127 (schema/index) and 69c2c9e7ee084afea16c2b2ff935f459 (bounded typed query) were created; the consumer design and exact dependency-edge checks are recorded in Serena memory task-task-16d5bc3a10864351adf5be10dfa7df00-handoff.",
       "whatRemains": "After d20ffd07 and 69c2c9e7 are DONE, remeasure d92b1b15 committed bytes and re-plan this consumer to use readEventsByTypeAfter without changing truth semantics; submit only after public symbol, manifest+lock edge, and compiled bare-specifier probe all pass.",

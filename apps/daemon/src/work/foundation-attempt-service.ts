@@ -1,7 +1,9 @@
 /** Durable single-node dispatch. Binding -> activation -> reservation -> launch -> advisory. */
 
-import { buildInputManifest, buildResultManifest } from "@moe/runner";
-import type { ClaudeLaunchOptions, ClaudeLaunchRequest } from "@moe/runner";
+import {
+  buildInputManifest, buildResultManifest, createClaudeRuntimePinRequest,
+} from "@moe/runner";
+import type { ClaudeLaunchOptions } from "@moe/runner";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { decodeActivationRequestBytes } from "../activation/activation-ingress-contracts.js";
@@ -31,13 +33,14 @@ export type {
   FoundationAttemptOutcome, FoundationAttemptRecordAnswer,
 } from "./foundation-attempt-store.js";
 
-/** The daemon owns runtime capabilities; only post-launch workspace observation
- * is supplied by composition. The shipped launcher and its physical boundary
- * are deliberately not replaceable through this service. */
+/** Only post-launch workspace observation is supplied by composition. The runtime
+ * filesystem, host observer and clock are NOT dependencies: @moe/runner mints them
+ * from the request's three plain data fields, so no caller — test or transport —
+ * can hand pinning a runtime nobody observed. The shipped launcher and its
+ * physical boundary are not replaceable through this service either. */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
-  readonly runtimePorts: Pick<ClaudeLaunchRequest["runtime"], "clock" | "facts" | "fs">;
   readonly store: SqliteEventStore;
 }
 
@@ -173,6 +176,10 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       entries: request.inputManifest.entries as never,
     });
     if (!sealed.ok) return foundationAttemptRefusal(sealed.code, RUNNER_WORKSPACE_LAYER);
+    // The runner mints the runtime closure from the request's three data fields
+    // and keeps its OWN refusal code and RUNTIME layer. Nothing is written yet.
+    const runtime = createClaudeRuntimePinRequest(request.launchTemplate.runtime);
+    if ("ok" in runtime) return foundationAttemptRefusal(runtime.code, runtime.layer);
     const envelope = decodeActivationRequestBytes(request.activationRequestBytes);
     if (!envelope.ok) return refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
     const section = envelope.request.payload["activation"];
@@ -228,9 +235,8 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       projectId, store,
     });
     const result = await contained(
-      () => launch(launchRequestBody(
-        record, bound, request.launchTemplate, deps.runtimePorts),
-      narrowLaunchOptions(deps.launchOptions)),
+      () => launch(launchRequestBody(record, bound, request.launchTemplate, runtime),
+        narrowLaunchOptions(deps.launchOptions)),
       true);
     const manifest = sealed.manifest as unknown as Record<string, unknown>;
     if (!isRecord(result)) return unproven(bound, record, manifest, null);

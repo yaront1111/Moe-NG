@@ -144,12 +144,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "Rejected on DoD 1/2/3/5/6 and task/epic rails. The reported focused gate was re-run and did execute 1 file/16 tests with exit 0, but adversarial probes against committed 5e72476 exposed authority, replay, ordering, and fail-closed gaps. The successful test path is mock-backed, a malformed PROVEN-shaped launcher answer is upgraded to PROVEN, changed request bytes replay as success, cross-session refusal writes activation first, and hostile proxies throw. Both production TS files also fail the explicit DoD below-250 gate. The worker also disclosed that production preceded the first RED runs; on reopen, add the named failing cases first, then minimally fix and rerun the full planned gate.",
+  "reopenReason": "Governor cascade 09:48Z: BOTH missing production capabilities from the adversarial-review block are now landed and QA-approved DONE. Capability 1 (server-owned runtimePorts hydrator): ff589abd → 32eddfd3 (observeInstalledClaudeRuntime) → 75ee4a84 (pin-request hydration from host capabilities) all DONE — replace the caller/test-composed runtimePorts with the bare-root hydrator per the chain's landed surfaces. Capability 2 (nonblocking native control polling with real Windows proof): 7ba898f5 (fd0/polling half) AND d7b352e1 (settle re-founding; launcher natural-exit PROVEN child-driven at ~1.06s) both DONE. Resume the remaining steps of the 7-step plan (5 banked). Re-measure every consumed symbol on committed bytes first (stale-by-default); the WIP and exact evidence preserved in the Serena handoff cited by the old blockedReason. Downstream on this task: 44d48→8f930→5e43a→49ed1, a9fd9, e62e3→expansion chain, 22cfc, 97554 — the largest remaining cascade on the board.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -230,12 +230,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-15T23:43:44.020Z",
+  "updatedAt": "2026-08-16T11:29:21.361Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-827a27f6",
     "architect-09b5f32a",
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "worker-5678886b"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z",
@@ -245,10 +246,10 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedReason": "Adversarial review found two independent missing production capabilities that prevent safe verification and are outside this task's full 10-path scope.\nFirst, the current FoundationAttemptDeps.runtimePorts remains caller/test-composed runtime authority. Architect remeasurement requires the production chain task-ff589abd7dd84ee197a9abee729bef78 -> task-32eddfd3c9644558b7218778e1f07e92 -> task-75ee4a84bdd14d06b672abb18ed48cba, after which this service can replace runtimePorts with the bare-root server-owned hydrator.\nSecond, real Windows 10.0.26200 testing with the actual release broker proves packages/runner native watch blocks on silent-open fd0 after its first 50ms slice (documented at watch.rs:23-43); provider exit is not observed until parent timeout, and the public launcher returns CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT. No COMPLETED exists before timeout, so the previously proposed TypeScript onCompleted patch is ineffective. Prerequisite task-7ba898f5f587453f80c1e93e93e4977c was created for nonblocking native control polling with a real Windows proof.\nA mock boundary, deep import, locally forged runtime ports, or sub-50ms executable would narrow/fake DoD 1/2 and violate task rails. WIP and exact evidence are preserved in Serena handoff.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T23:24:42.597Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Reopen remediation is implemented in current WIP: split four production modules under 250 lines, removed the whole-launch override, bound full replay identity before activation, contained hostile inputs, exact-gated OBSERVED/PROVEN plus grant/registration/observation and the durable 3-transition tail, and added a 19-case nonzero substitution sweep. Focused Linux daemon suite last passed 1 file/21 tests and daemon typecheck passed. Real Windows release broker was built and exercised. Full details and commands are in Serena memory task-task-6cbff01023b14b26a78fc5e3eb1dd8a9-handoff and comments c0e805/58da1c.",

@@ -64,7 +64,7 @@
     {
       "stepId": "step-4",
       "description": "BUILD THE HOSTILE HARNESS the five sibling slices consume. Create `tests/security/hostile-harness.ts`. Note it is NOT a `.security.ts` file, so the lane will not execute it as a suite — it is imported. Provide:\n(1) BEFORE / AFTER / RACE drivers, each BOUNDED and each guaranteed to terminate. The failure mode these guard against is a hang, and a hanging test reports no verdict at all rather than a red one — so every driver takes an explicit bound and fails loudly when it expires rather than waiting.\n(2) Per-case temp roots under `os.tmpdir()` with a registry and a cleanup that removes every root on every exit path including throws. The lane runs `fileParallelism: false`, so one leaked root or held handle stalls everything after it.\n(3) A REFUSAL ASSERTION HELPER that requires BOTH the stable reason code AND the answering layer constant. Make the layer parameter non-optional so a layer-blind assertion does not compile, and add a case in the roster file proving the helper REJECTS a call carrying only a code — a helper that permits the weak form will be used in the weak form by five sibling slices.\nTHE HARNESS HOLDS NO AUTHORITY. It drives probes and asserts; it never decides whether a boundary refused correctly, never reimplements a codec, a digest or an admission rule. Every verdict comes from the production surface under test. Keep it under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts); if it would exceed, that is a signal it has grown authority it should not have.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/hostile-harness.ts",
         "tests/security/boundary-roster.security.ts"
@@ -72,29 +72,49 @@
       "newFiles": [
         "tests/security/hostile-harness.ts"
       ],
-      "startedAt": "2026-08-16T02:25:29.158Z"
+      "modifiedFiles": [
+        "tests/security/hostile-harness.ts"
+      ],
+      "note": "HOSTILE HARNESS COMPLETE. `pnpm test:security` EXIT=0 (captured separately, no `;`-chain, no pipe), `Test Files 2 passed (2)`, `Tests 48 passed (48)` — baseline from step 1 was 1 file / 17 tests.\n\nRESUME NOTE, stated because it changes what QA should diff: this session began with step-4 already IN_PROGRESS — a prior session died inside it — and BOTH owned files were already on disk AND already committed by FOREIGN whole-tree completion hooks: `git log -- tests/security/hostile-harness.ts tests/security/boundary-roster.security.ts` names 1733d72 (task-d7b352e1) and 49625fa (task-32eddfd3). Per the board rail I did not amend, reset, or re-claim those commits. I re-verified the deliverable from disk rather than trusting the dead session's claims.\n\nWHAT I CHANGED THIS SESSION: the harness was 279 physical lines, over this step's 250 cap. I compressed prose only — no export removed, no behaviour changed, no authority added or dropped. Now 248 by `grep -c ''` (PowerShell Measure-Object undercounts, so grep is the measure). The only code-shape change: `requireBound` merged its two numeric guards into one range check `!Number.isInteger || <=0 || > MAX_BOUND_MS`; both arms still throw HostileHarnessMisuseError, and the roster's \"refuses a bound above MAX_BOUND_MS instead of letting setTimeout clamp it to 1ms\" case still passes. `readRefusal` now returns `RefusalExpectation` instead of a duplicate `ObservedRefusal` interface of identical shape.\n\nWHAT THE HARNESS PROVIDES (all three parts of the step):\n(1) BOUNDED DRIVERS. probeBefore (probe then effect), probeAfter (effect then probe), probeRacing (concurrent, records `firstSettled`). Every leg goes through `withBound`, which races real work against a timer and ALWAYS clears it in `finally`. Expiry throws HostileBoundExceededError naming the stalled label — a distinct class, so a bound breach can never be misread as a refusal. MAX_BOUND_MS = 2_147_483_647 is refused rather than clamped: setTimeout clamps a wider delay to 1ms, so a caller widening a bound \"to be safe\" would silently get the TIGHTEST bound instead of the loosest.\n   probeRacing REPORTS both legs as LegOutcome rather than propagating the first rejection: in hostile probing the refusing leg is usually the interesting one, and propagating would discard the other leg AND destroy the settle order, which is the single fact the driver exists to establish.\n(2) TEMP ROOTS. hostileRoot(label) mkdtemps under os.tmpdir() and registers the root; cleanupHostileRoots() removes every registered root and never throws (a throw on one root would skip the rest and leak them all); withHostileRoot removes its root in `finally`, so the throwing path cleans too — asserted by the roster case \"removes a temp root on the throwing exit path\". Roots are realpath'd because macOS tmpdir() is the /var -> /private/var symlink and a containment check on the unresolved form reads a legitimate root as a path escape.\n(3) REFUSAL HELPER. assertRefusedWith(actual, {code, layer}) with `layer` NON-OPTIONAL, guarded twice: the type makes a code-only call a compile error, and a runtime check rejects one arriving through a cast. Roster proves the weak form is rejected — \"REJECTS an expectation carrying only a code\" casts `{code}` to RefusalExpectation and expects HostileHarnessMisuseError. Mismatches are distinguished: /refusal code mismatch/ vs /refusal layer mismatch/, so a test cannot pass on the code while a different layer answered.\n\nNO AUTHORITY, per the task rail: the harness never decides whether a boundary was right to refuse, never derives an expected code or layer, and reimplements no codec, digest or admission rule. Every expected value is supplied by the caller; every verdict comes from the production surface under test.",
+      "startedAt": "2026-08-16T02:25:29.158Z",
+      "completedAt": "2026-08-16T11:35:20.831Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS — prove the roster reads real source. Run each alone, revert before the next. (1) RENAME one declared boundary constant in its production source file (for example `EVENT_STREAM_LAYER` in apps/daemon/src/http/event-stream-observation.ts) and confirm a NAMED roster test goes red identifying that constant — proving the scan reads source rather than a cached or hand-copied list. (2) DELETE one roster entry and confirm the scan-minus-roster direction reddens naming it — proving the comparison is genuinely bidirectional rather than one-way. (3) Narrow the scanner's root by one directory and confirm the CARDINALITY and DISTRIBUTION assertions redden — proving they catch a silently-narrowed scan that set-equality alone would miss. (4) Loosen the exclusion filter to re-admit `.test-fixtures.ts` and confirm the named exclusion case from step 2(e) reddens — proving the exclusion rule is enforced, not merely documented. (5) Remove the optional-annotation group from the scanner regex and confirm the `PLATFORM_LINUX_LAYER`/`PLATFORM_MACOS_LAYER` case reddens — this is the regression drill for the exact miscount this task corrects.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion rather than an unrelated crash. Restore with `git checkout -- <the one drilled file>` (never by hand — a hand restore goes ambiguous) and verify `git status --short` shows it clean before the next; drill 1 edits a PRODUCTION file in a shared worktree, so leaving it on disk risks a foreign completion hook committing it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "apps/daemon/src/http/event-stream-observation.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/hostile-harness.ts",
+        "apps/daemon/src/http/event-stream-observation.ts"
+      ],
+      "note": "MUTATION DRILLS — 5 required, run as 7 (two extra variants, both load-bearing). Each run alone, exit captured separately, reverted and verified clean before the next. Exact replaced range printed for every drill, because a drill that applied nothing reads as green.\n\nDRILL 1 — RENAME A PRODUCTION BOUNDARY CONSTANT. apps/daemon/src/http/event-stream-observation.ts line 14: `export const EVENT_STREAM_LAYER = \"SEAM\" as const;` -> `export const EVENT_STREAM_LAYER_DRILLED = \"SEAM\" as const;` (`git diff --numstat` = 1 added / 1 removed, so it applied). EXIT=1, `Tests 2 failed | 46 passed (48)`. Red on \"has no roster entry absent from source (roster minus scan is empty)\" and \"scans exactly the roster's cardinality\", the failure naming CONSTANT AND FILE: `\"EVENT_STREAM_LAYER@apps/daemon/src/http/event-stream-observation.ts\"`. Proves the scan reads real source, not a cached or hand-copied list. Note the renamed form does NOT reappear in scan-minus-roster because `EVENT_STREAM_LAYER_DRILLED` no longer ends in LAYER/LAYERS/BOUNDARIES — the roster-minus-scan direction is what catches this one. Reverted `git checkout -- apps/daemon/src/http/event-stream-observation.ts`; line 14 restored verbatim, `git status --short` on that path empty.\n\nDRILL 2 — DELETE A ROSTER ENTRY. boundary-roster.security.ts line 150 removed: `{ constant: \"GOAL_LAYER\", file: \"packages/core/src/goal/goal-results.ts\", axis: \"scheduler-activation\" },` (numstat 0/1). EXIT=1, `Tests 4 failed | 44 passed (48)`. Red on scan-minus-roster naming `\"GOAL_LAYER@packages/core/src/goal/goal-results.ts\"`, plus cardinality, per-area distribution and the axis-sum. Proves the comparison is genuinely bidirectional. Reverted; entry back at line 150.\n\nDRILL 3a — NARROW THE SCAN ROOT. Line 217 `[\"apps\", \"packages\", \"adapters\"]` -> `[\"apps\", \"packages\"]` (numstat 1/1). EXIT=1, `Tests 2 failed | 46 passed (48)`: roster-minus-scan and scan cardinality, naming `\"IDE_ADAPTER_LAYER@adapters/ide-contract/src/index.ts\"` and `\"IDE_ADAPTER_LAYERS@adapters/ide-contract/src/index.ts\"`.\n\nDRILL 3b — THE DEFECT SET-EQUALITY ALONE CANNOT SEE, and the reason the cardinality and distribution assertions exist. Kept the narrowed root AND deleted the two adapters roster entries (lines 103-104), i.e. a roster generated from the same broken scan. BOTH set-equality directions now go GREEN — they are absent from the failure list — while EXIT=1, `Tests 4 failed | 44 passed (48)`: \"holds exactly the corrected number of hand-written entries\", \"matches the expected per-area distribution\", \"scans exactly the roster's cardinality\", \"partitions the roster: the five axis groups sum to the roster size\". This is the drill that proves the literal 87 and the nine-way split are load-bearing rather than decorative. Reverted.\n\nDRILL 4a — AN HONEST EQUIVALENT MUTANT, reported rather than hidden. Removing ONLY `relativePath.endsWith(\".test-fixtures.ts\")` (line 267) leaves the lane GREEN, `Tests 48 passed (48)`. The clause is SUBSUMED: `\"project-configuration.test-fixtures.ts\".endsWith(\"-fixtures.ts\")` is true, so the broader clause already excludes it. The `.test-fixtures.ts` clause is kept because it states the rule the roster documents, but a reviewer should know it is not independently killable.\n\nDRILL 4b — ACTUALLY RE-ADMIT TEST FIXTURES. Removed BOTH `.test-fixtures.ts` and `-fixtures.ts` clauses (and the now-trailing `||` on the `.spec.ts` line). EXIT=1, `Tests 4 failed | 44 passed (48)`, red on the BY-NAME case \"excludes EXPECTED_REFUSAL_LAYERS from project-configuration.test-fixtures.ts\" and on \"classifies the four exclusion shapes...\", the failure naming `\"EXPECTED_REFUSAL_LAYERS@packages/contracts/src/configuration/project-configuration.test-fixtures.ts\"`. Proves the exclusion rule is enforced, not merely documented. Reverted.\n\nDRILL 5 — DROP THE ANNOTATION GROUP, the regression drill for the exact miscount this task corrects. Line 226 `/^export const ([A-Z_]+(?:LAYERS|LAYER|BOUNDARIES))\\s*(?::[^=]+)?=/u` -> the same pattern without `(?::[^=]+)?` (numstat 1/1). EXIT=1, `Tests 5 failed | 43 passed (48)`, red on \"returns PLATFORM_LINUX_LAYER, which a ` = `-only pattern misses\", the macOS twin, \"matches the annotated form directly against the pattern\", plus roster-minus-scan naming `\"PLATFORM_LINUX_LAYER@packages/runner/src/platform/linux-facts.ts\"` and `\"PLATFORM_MACOS_LAYER@packages/runner/src/platform/macos/macos-facts.ts\"`. Reverted.\n\nDRILL 6 (extra, epic rail 6) — PROVE THE REFUSAL HELPER'S WEAK-FORM REJECTION IS NOT VACUOUS. Deleted the runtime layer guard in hostile-harness.ts (lines 234-238, the `expected.layer is required` throw). EXIT=1, `Tests 1 failed | 47 passed (48)`, red on exactly the intended case: \"REJECTS an expectation carrying only a code, so the weak form cannot be used\" — with the guard gone the cast reaches the comparison and throws a plain Error instead of HostileHarnessMisuseError, so the assertion sees the wrong class. RESTORE HAZARD HANDLED: hostile-harness.ts carries THIS ses",
+      "startedAt": "2026-08-16T11:35:29.237Z",
+      "completedAt": "2026-08-16T11:38:21.080Z"
     },
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` with its exit code captured separately — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported) — and read the OUTPUT: require a `Test Files`/`Tests` count line strictly above the lane-smoke-only baseline from step 1. `passWithNoTests: false` means an empty lane exits non-zero, but a lane that collected only the smoke file would still exit 0, so the count line is the real evidence. Then `pnpm typecheck` repo-wide, applying the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your two owned files, MUST be empty; quote any foreign red verbatim without repairing it.\nADVERSARIAL REVIEW: (a) is the roster hand-written, or did it get generated from the scan at some point during development? Only the hand-written form can police the scan. (b) does every set-equality failure name the constant AND its file rather than a count? (c) does the scanner find the repo root by SEARCHING for pnpm-workspace.yaml, with no `../..` hop-count anywhere? (d) do the cardinality (87) and nine-way distribution assertions both exist, so a narrowed scan cannot pass? (e) are the two test-support exclusions and the two annotated inclusions each asserted BY NAME? (f) is the refusal helper's layer parameter non-optional, and is there a case proving the weak form is rejected? (g) is the coverage ratchet still OPEN — this task must NOT assert that every boundary has hostile coverage, or it blocks its own five siblings; task-3b1cbdf9bd39405bb32230552d3ab242 owns that flip. (h) is every temp root cleaned on every exit path? (i) does `git status --porcelain` show only the two owned paths, drill 1's production edit reverted?\nCommit by explicit pathspec naming exactly `tests/security/boundary-roster.security.ts` and `tests/security/hostile-harness.ts` — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the count line verbatim, state the CORRECTED roster size of 87 with the four-constant reasoning (two included as real boundaries, two excluded as test-support), and flag that the five sibling slices' filed subset counts were derived from the old 85 and are now informational — the roster's axis tags are the authority they were told to consume. Keep verification.command under 500 characters.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/hostile-harness.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "GATE, ADVERSARIAL REVIEW, COMMIT.\n\nGATE, exit captured separately (`cmd > file 2>&1; echo EXIT=$?`), never `;`-chained into another command, never piped into tail:\n  `pnpm test:security` EXIT=0\n  ` Test Files  2 passed (2)`\n  `      Tests  48 passed (48)`\nBaseline from step 1 was lane-smoke only: 1 file / 17 tests. The count line — not the exit code — is the evidence; a lane that collected only the smoke file would also exit 0.\n\nREPO-WIDE TYPECHECK, path-attributed baseline: `pnpm typecheck` EXIT=0, `grep -c \"error TS\"` = 0. There is no HEAD failing-path set, so (HEAD minus merge-base) intersected with my owned paths is trivially EMPTY and there is no foreign red to quote. Merge-base for the record: cf272f67c3e34fe1d8c4dd00675512c67f165c05.\n\nADVERSARIAL REVIEW, item by item:\n(a) HAND-WRITTEN? Yes, and it is structurally impossible for it to be scanner output: the scan emits `{constant, file}` and has no notion of an axis, while every roster entry carries an `axis` judgement — and in several places that judgement CONTRADICTS the directory a generator would have keyed on (four `apps/daemon/src/recovery/` constants are `integrity` not `durable-store`; `apps/daemon/src/work/foundation-attempt-contracts.ts` splits across `runtime-provider` and `scheduler-activation`). Caveat stated plainly: the table was typed in an earlier session of this task, not this one, so I re-established its independence by drill rather than by assertion — drill 1 renames real production source and the roster reddens, drill 2 deletes a roster row and the scan reddens. Each side detects the other's corruption, which a self-generated table cannot do.\n(b) FAILURES NAME CONSTANT AND FILE: yes, every set-equality failure prints `CONSTANT@path`, e.g. `\"EVENT_STREAM_LAYER@apps/daemon/src/http/event-stream-observation.ts\"` and `\"GOAL_LAYER@packages/core/src/goal/goal-results.ts\"`. Never a bare count.\n(c) ROOT FOUND BY SEARCHING: `findRepoRoot` walks up from `dirname(fileURLToPath(import.meta.url))` looking for `pnpm-workspace.yaml` and throws if it reaches the filesystem root. `grep '\\.\\./\\.\\.'` over both owned files returns exactly ONE hit, line 230 — inside the comment explaining why a hop-count join is NOT used. No hop-count in code.\n(d) CARDINALITY AND DISTRIBUTION BOTH EXIST, and drill 3b proves they are load-bearing: with the scan narrowed AND the roster trimmed to match, both set-equality directions go green while cardinality, distribution and the axis-sum still redden.\n(e) BY NAME: exclusions `EXPECTED_REFUSAL_LAYERS` and `CORE_FAULT_BOUNDARIES`; inclusions `PLATFORM_LINUX_LAYER` and `PLATFORM_MACOS_LAYER`, each asserted against its declaring path.\n(f) REFUSAL HELPER: `layer` is a required field of `RefusalExpectation`, so a code-only call is a compile error, and a runtime guard rejects one arriving through a cast. The case \"REJECTS an expectation carrying only a code\" proves the weak form fails, and drill 6 proves that case is not vacuous — deleting the runtime guard turns it red.\n(g) RATCHET STILL OPEN: no assertion anywhere claims every boundary has hostile coverage. Confirmed by grep. task-3b1cbdf9bd39405bb32230552d3ab242 owns that flip; closing it here would block the five sibling slices.\n(h) TEMP ROOTS: `withHostileRoot` removes its root in `finally`, so the throwing path cleans (asserted by \"removes a temp root on the throwing exit path\"); `cleanupHostileRoots` sweeps the registry from `afterAll` and never throws, since one throw would skip the remaining roots and leak them all.\n(i) TREE: `git status --porcelain` over tests/ apps/ packages/ adapters/ showed only ` M tests/security/hostile-harness.ts` plus four `apps/daemon/src/work/foundation-attempt-*` files belonging to a peer's in-flight task, which I did not touch. Drill 1's production edit is reverted.\n\nCOMMIT: 7c8e9d56c86429dee364add8f51bc3068c515661, staged by explicit pathspec naming exactly `tests/security/boundary-roster.security.ts` and `tests/security/hostile-harness.ts` — no `git add -A`, no bare `git commit`. `git show --stat` reports one file, `tests/security/hostile-harness.ts | 99 +++--- , 34 insertions(+), 65 deletions(-)`. The roster contributes zero bytes to this commit because it was ALREADY carried into HEAD by foreign whole-tree completion commits 1733d72 (task-d7b352e1) and 49625fa (task-32eddfd3) while this task was mid-flight. Per the board rail I did not amend those commits, reset, or create an empty commit to claim the work. QA should review by base-ref diff: `git diff cf272f67c3e34fe1d8c4dd00675512c67f165c05..HEAD -- tests/security/boundary-roster.security.ts tests/security/hostile-harness.ts`.\nONE SELF-CORRECTION, disclosed: my first commit attempt used PowerShell here-string syntax inside the Bash tool, which put a literal `@` at the head of the subject line. I amended MY OWN unpushed commit (never a foreign one) to fix it; the tree content was unaffected.\n\nCOMMITTED BYTES == GATED BYTES, verified by sha256 of `git show HEAD:<path>` against the worki",
+      "startedAt": "2026-08-16T11:38:32.867Z",
+      "completedAt": "2026-08-16T11:40:27.519Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-1fe6c848",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -106,17 +126,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:58:36.221Z",
-  "updatedAt": "2026-08-16T02:33:23.910Z",
+  "updatedAt": "2026-08-16T11:41:01.927Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:09:19.141Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 3
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T02:11:55.013Z",
@@ -136,12 +159,41 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T11:30:43.362Z",
+    "escalatedAt": "2026-08-16T11:30:43.362Z"
   },
   "planApprovedAt": "2026-08-16T02:11:57.078Z",
   "contextFetchedBy": [
     "worker-5678886b",
-    "worker-1fe6c848"
+    "worker-1fe6c848",
+    "worker-0cd13358",
+    "qa-c7cedba3"
   ],
-  "workStartedAt": "2026-08-16T02:12:11.876Z"
+  "workStartedAt": "2026-08-16T02:12:11.876Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Prior sessions completed the plan's early steps: baseline + the corrected 87-entry roster enumeration (see the task's step-1 note carrying the annotation-blind-spot correction, comment-2093110c-adjacent history, and #general msg-66310d34), and step-2 TDD RED for the roster's cardinality/distribution/set-equality assertions was underway. Consult the task's implementationPlan step notes and Serena for exact landed bytes; git status the owned paths before writing.",
+      "whatRemains": "Resume at the first incomplete plan step: land boundary-roster.security.ts + hostile-harness plumbing in tests/security/, make the roster tests green (87 entries, both edge inclusions and both exclusions BY NAME), run the scanner-regression drill, then gate and commit by explicit pathspec. Six blocked children (aa32fdf7, 924c5d82, f643b972, 2259196e, c994bd0a, 3b1cbdf9) unblock when this lands.",
+      "pitfalls": "The roster count is 87, NOT the 85 in older notes — the task description carries the correction. grep -v '\\.test\\.' does not exclude .test-fixtures.ts files. Shared worktree: verify authorship of any dirty owned path before treating it as yours.",
+      "openQuestions": "Whether the prior session left uncommitted RED-test bytes in tests/security/ — check git status there first; if dirty, they are the predecessor's step-2 work to adopt, not foreign debris.",
+      "releasedAt": "2026-08-16T11:30:29.004Z",
+      "releasedBy": "governor-1a5aca5d",
+      "reason": "Governor release under the human's standing unblock directive, 11:30Z. Holder worker-1fe6c848 silent since 09:20 (2+ hours), its wrapper explicitly announced paused auto-resume after the 02:31 five-death event, liveness ping at 09:59 went unanswered, and the entire surrounding fleet cycled — the strongest crash evidence available without terminal eyes. This task gates SIX security children; freeing it is the highest-leverage claim on the board."
+    }
+  ],
+  "reviewStartedAt": "2026-08-16T11:40:59.193Z",
+  "verification": {
+    "command": "pnpm test:security",
+    "exitCode": 0,
+    "outputTail": "$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n Test Files  2 passed (2)\n      Tests  48 passed (48)\n   Start at  14:39:16\n   Duration  532ms (transform 47ms, setup 0ms, import 209ms, tests 143ms, environment 0ms)",
+    "reportedAt": "2026-08-16T11:40:59.193Z"
+  },
+  "filesModified": [
+    "tests/security/vitest.config.ts",
+    "tests/security/lane-smoke.security.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/hostile-harness.ts",
+    "apps/daemon/src/http/event-stream-observation.ts"
+  ]
 }

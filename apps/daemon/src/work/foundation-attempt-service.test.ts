@@ -2,8 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CLAUDE_LAUNCHER_VERSION, observeScope } from "@moe/runner";
-import type { GitObserver, ScopeObservation } from "@moe/runner";
+import {
+  CLAUDE_LAUNCHER_VERSION, buildProviderRuntimeObservation, observeScope,
+} from "@moe/runner";
+import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -149,6 +151,30 @@ const MULTI_NODE_GRAPH = Object.freeze({
   nodes: [{ executionBearing: true, nodeKey: "dev-a" }, { executionBearing: true, nodeKey: NODE_KEY }],
 });
 
+const INSTALLED_ROOT = "C:\\installed", PIN_ROOT = "C:\\pins";
+const EXECUTABLE_PATH = "C:\\installed\\claude.exe";
+
+/**
+ * A REAL digest-bound quote from the runner's own observation builder. The three
+ * fields below are the only runtime data a caller may ever propose: the
+ * filesystem, host observer and clock behind them are minted inside @moe/runner
+ * by `createClaudeRuntimePinRequest`, never composed here and never in deps.
+ */
+function runtimeQuote(
+  closure: readonly Record<string, unknown>[] = [
+    { kind: "EXECUTABLE", path: EXECUTABLE_PATH, sha256: DIGEST_A },
+  ],
+): ProviderRuntimeObservation {
+  const built = buildProviderRuntimeObservation({
+    adapterCapabilitySchemaDigest: DIGEST_B, clock: { observedAt: () => DECIDED_AT },
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
+    reportedVersion: "claude/2.0.0", resolvedRuntimeClosure: closure as never,
+  });
+  if (!built.ok) throw new Error(`runtime quote fixture refused: ${built.code}`);
+  return built.observation;
+}
+
 const LAUNCH_TEMPLATE = Object.freeze({
   argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
   bootstrapCredentialDigest: DIGEST_B, cwd: "C:/work", environment: {},
@@ -160,11 +186,10 @@ const LAUNCH_TEMPLATE = Object.freeze({
     provider: "claude", reasoningEffort: "high", selectedModelId: "claude-opus-5",
   },
   limits: { stderrBytes: 1_024, stdoutBytes: 1_024, tailBytes: 256, timeoutMs: 1_000 },
-  runtime: { installedRoot: "C:\\installed", pinRoot: "C:\\pins", quotedObservation: {} },
+  runtime: {
+    installedRoot: INSTALLED_ROOT, pinRoot: PIN_ROOT, quotedObservation: runtimeQuote(),
+  },
 });
-const RUNTIME_PORTS = {
-  clock: {}, facts: {}, fs: {},
-} as unknown as Parameters<typeof createFoundationAttemptService>[0]["runtimePorts"];
 const INPUT_MANIFEST = Object.freeze({
   baseIdentity: HEAD,
   entries: [{ byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A }],
@@ -240,7 +265,6 @@ function captureAnswer(): Record<string, unknown> {
 
 interface Harness {
   readonly captureCalls: Record<string, unknown>[];
-  readonly runtimeTouches: () => number;
   readonly service: { dispatch(input: unknown): Promise<FoundationAttemptOutcome> };
 }
 
@@ -248,21 +272,18 @@ interface HarnessOptions {
   readonly platform?: string;
 }
 
+/** Post-launch workspace observation is the ONLY dependency. No runtime
+ *  capability is composed here — the service mints its own through @moe/runner. */
 function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness {
   const captureCalls: Record<string, unknown>[] = [];
-  let runtimeTouches = 0;
-  const runtimePorts = {
-    clock: { observedAt: () => "2026-08-15T00:00:00.000Z" }, facts: {},
-    fs: { hostPlatform: () => { runtimeTouches += 1; return "win32"; } },
-  } as unknown as Parameters<typeof createFoundationAttemptService>[0]["runtimePorts"];
   const service = createFoundationAttemptService({
     captureResult: (input) => {
       captureCalls.push(input);
       return captureAnswer();
     },
-    launchOptions: { platform: options.platform ?? "linux" }, runtimePorts, store,
+    launchOptions: { platform: options.platform ?? "linux" }, store,
   });
-  return { captureCalls, runtimeTouches: () => runtimeTouches, service };
+  return { captureCalls, service };
 }
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
@@ -488,7 +509,6 @@ describe("foundation attempt dispatch — authority gates", () => {
       dispatchRequest({ graphSnapshot: structuredClone(MULTI_NODE_GRAPH) }));
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_MULTI_NODE_UNSUPPORTED", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.runtimeTouches()).toBe(0);
     expect(run.captureCalls).toHaveLength(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
@@ -509,7 +529,6 @@ describe("foundation attempt dispatch — authority gates", () => {
       binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: "session-9" },
     }));
     expectRefusal(wrongSession, "FOUNDATION_ATTEMPT_BINDING_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.runtimeTouches()).toBe(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
@@ -527,7 +546,6 @@ describe("foundation attempt dispatch — authority gates", () => {
     }));
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_BINDING_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.runtimeTouches()).toBe(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
@@ -544,7 +562,6 @@ describe("foundation attempt dispatch — authority gates", () => {
     const outcome = await run.service.dispatch(dispatchRequest({ launchTemplate }));
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_RECORD_DRIFT", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.runtimeTouches()).toBe(0);
     expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
@@ -559,7 +576,6 @@ describe("foundation attempt dispatch — authority gates", () => {
         return OBSERVED_RESULT;
       },
       launchOptions: { platform: "linux" },
-      runtimePorts: RUNTIME_PORTS,
       store,
     } as Parameters<typeof createFoundationAttemptService>[0]);
 
@@ -578,8 +594,7 @@ describe("foundation attempt dispatch — authority gates", () => {
     const store = readyStore("nested-launch-override");
     const service = createFoundationAttemptService({
       captureResult: captureAnswer,
-      launchOptions: { deps: {}, platform: "linux" },
-      runtimePorts: RUNTIME_PORTS, store,
+      launchOptions: { deps: {}, platform: "linux" }, store,
     } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -629,7 +644,6 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
 
     expect(injected.fired()).toBe(1);
     expectRefusal(outcome, "ACTIVATION_LEDGER_STORE_UNAVAILABLE", "ACTIVATION_LEDGER");
-    expect(run.runtimeTouches()).toBe(0);
     expect(run.captureCalls).toHaveLength(0);
     expect(real.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
     expect(real.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
@@ -645,7 +659,6 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
     expect(injected.fired()).toBe(1);
     expectRefusal(
       outcome, "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE", DAEMON_FOUNDATION_ATTEMPT);
-    expect(run.runtimeTouches()).toBe(0);
     expect(eventTypes(real, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(real.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
   });
@@ -711,8 +724,7 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     // NO launch port: this is the production default launcher, composed over the
     // durable authority ports, refusing at its own platform gate.
     const service = createFoundationAttemptService({
-      captureResult: captureAnswer, launchOptions: { platform: "linux" },
-      runtimePorts: RUNTIME_PORTS, store,
+      captureResult: captureAnswer, launchOptions: { platform: "linux" }, store,
     });
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -735,6 +747,94 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     expectRefusal(
       readFoundationAttemptRecord(store, "") as FoundationAttemptOutcome,
       "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", DAEMON_FOUNDATION_ATTEMPT);
+  });
+});
+
+describe("foundation attempt dispatch — the runtime closure is server-minted", () => {
+  it("ignores a deps-supplied runtime capability set and never touches it", async () => {
+    const store = readyStore("deps-runtime-ports");
+    let touches = 0;
+    const counting = {
+      clock: { observedAt: () => { touches += 1; return DECIDED_AT; } },
+      facts: { observe: async () => { touches += 1; return {}; } },
+      fs: { hostPlatform: () => { touches += 1; return "win32"; } },
+    };
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer, launchOptions: { platform: "linux" },
+      runtimePorts: counting, store,
+    } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    expect(touches).toBe(0);
+  });
+
+  it("refuses a quote whose digest no longer covers it, under the RUNTIME layer", async () => {
+    const store = readyStore("quote-digest-drift");
+    const run = harness(store);
+    const quotedObservation = structuredClone(runtimeQuote()) as unknown as Record<string, unknown>;
+    quotedObservation["reportedVersion"] = "claude/9.9.9-forged";
+    const launchTemplate = {
+      ...structuredClone(LAUNCH_TEMPLATE),
+      runtime: { installedRoot: INSTALLED_ROOT, pinRoot: PIN_ROOT, quotedObservation },
+    };
+
+    const outcome = await run.service.dispatch(dispatchRequest({ launchTemplate }));
+
+    expectRefusal(outcome, "CLAUDE_RUNTIME_QUOTE_INVALID", "RUNTIME");
+    expect(run.captureCalls).toHaveLength(0);
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+    expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
+  it("refuses a runtime root the pin layer rejects, before any authority write", async () => {
+    const store = readyStore("runtime-path-invalid");
+    const run = harness(store);
+    const launchTemplate = {
+      ...structuredClone(LAUNCH_TEMPLATE),
+      runtime: {
+        installedRoot: `${INSTALLED_ROOT}${String.fromCharCode(7)}x`, pinRoot: PIN_ROOT,
+        quotedObservation: runtimeQuote(),
+      },
+    };
+
+    const outcome = await run.service.dispatch(dispatchRequest({ launchTemplate }));
+
+    expectRefusal(outcome, "CLAUDE_RUNTIME_PATH_INVALID", "RUNTIME");
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+    expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
+  it("refuses every closure that does not declare exactly one EXECUTABLE", async () => {
+    const closures: readonly (readonly Record<string, unknown>[])[] = [
+      [{ kind: "PACKAGE", path: EXECUTABLE_PATH, sha256: DIGEST_A }],
+      [
+        { kind: "EXECUTABLE", path: EXECUTABLE_PATH, sha256: DIGEST_A },
+        { kind: "EXECUTABLE", path: `${EXECUTABLE_PATH}.bak`, sha256: DIGEST_B },
+      ],
+    ];
+    expect(closures).toHaveLength(2);
+    let generated = 0;
+    for (const closure of closures) {
+      const store = readyStore(`closure-${generated}`);
+      const run = harness(store);
+      const launchTemplate = {
+        ...structuredClone(LAUNCH_TEMPLATE),
+        runtime: {
+          installedRoot: INSTALLED_ROOT, pinRoot: PIN_ROOT,
+          quotedObservation: runtimeQuote(closure),
+        },
+      };
+
+      const outcome = await run.service.dispatch(dispatchRequest({ launchTemplate }));
+
+      expectRefusal(outcome, "CLAUDE_RUNTIME_QUOTE_INVALID", "RUNTIME");
+      expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+      generated += 1;
+    }
+    expect(generated).toBe(closures.length);
+    expect(generated).toBeGreaterThan(0);
   });
 });
 

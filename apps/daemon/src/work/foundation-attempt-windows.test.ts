@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
 import {
-  copyFileSync, createReadStream, existsSync, mkdirSync, mkdtempSync, readFileSync,
-  realpathSync, rmSync,
+  copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 } from "node:fs";
-import { lstat, mkdir, open, readdir, realpath, rename, rm } from "node:fs/promises";
 import { arch, release, tmpdir } from "node:os";
-import { basename, join, relative } from "node:path";
+import { basename, join } from "node:path";
 
 import { buildProviderRuntimeObservation, observeScope } from "@moe/runner";
-import type { ClaudeLaunchRequest, GitObserver, ScopeObservation } from "@moe/runner";
+import type { GitObserver, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -148,87 +146,74 @@ function captureAnswer(): Record<string, unknown> {
   };
 }
 
-type RuntimeFs = ClaudeLaunchRequest["runtime"]["fs"];
-type RuntimeWriteHandle = Awaited<ReturnType<RuntimeFs["openExclusiveWrite"]>>;
-
-async function walk(base: string, prefix = ""): Promise<string[]> {
-  const found: string[] = [];
-  for (const entry of await readdir(join(base, prefix), { withFileTypes: true })) {
-    const child = prefix === "" ? entry.name : join(prefix, entry.name);
-    if (entry.isDirectory()) found.push(...await walk(base, child));
-    else found.push(child);
-  }
-  return found;
-}
-
-function nodeRuntimeFs(): RuntimeFs {
-  return Object.freeze({
-    hostPlatform: (): string => process.platform,
-    realpath: async (path: string): Promise<string> => await realpath(path),
-    entryKind: async (path: string) => {
-      try {
-        const stats = await lstat(path);
-        if (stats.isSymbolicLink()) return "REPARSE" as const;
-        if (stats.isDirectory()) return "DIRECTORY" as const;
-        return stats.isFile() ? "FILE" as const : "OTHER" as const;
-      } catch { return "MISSING" as const; }
-    },
-    readChunks: (path: string): AsyncIterable<Uint8Array> =>
-      createReadStream(path) as unknown as AsyncIterable<Uint8Array>,
-    listFiles: async (path: string): Promise<readonly string[]> =>
-      (await walk(path)).map((entry) => relative(path, join(path, entry))).sort(),
-    ensureDirectory: async (path: string): Promise<void> => { await mkdir(path, { recursive: true }); },
-    createDirectoryExclusive: async (path: string): Promise<void> => { await mkdir(path); },
-    openExclusiveWrite: async (path: string): Promise<RuntimeWriteHandle> => {
-      const handle = await open(path, "wx");
-      return Object.freeze({
-        write: async (chunk: Uint8Array): Promise<void> => { await handle.write(chunk); },
-        close: async (): Promise<void> => { await handle.sync(); await handle.close(); },
-      });
-    },
-    rename: async (from: string, to: string): Promise<void> => { await rename(from, to); },
-    removeTree: async (path: string): Promise<void> => { await rm(path, { force: true, recursive: true }); },
-  });
-}
-
+/**
+ * NO RUNTIME CAPABILITY IS COMPOSED HERE. The filesystem, host observer and
+ * clock the pin protocol needs are minted inside @moe/runner from the three
+ * plain data fields below, so this suite proves the shipped composition rather
+ * than a test-owned one: a real broker launch that a test filesystem could not
+ * have faked. `pinRoot` is a scratch directory the RUNNER creates — its absence
+ * is physical evidence that no launch was ever attempted.
+ */
 interface WindowsFixture {
-  readonly marker: string; readonly request: Record<string, unknown>;
-  readonly runtimePorts: Pick<ClaudeLaunchRequest["runtime"], "clock" | "facts" | "fs">;
+  readonly marker: string; readonly pinRoot: string;
+  readonly request: Record<string, unknown>;
   readonly root: string; readonly store: SqliteEventStore;
 }
 
-function windowsFixture(label: string, command: string | null, timeoutMs: number): WindowsFixture {
-  const root = scratch(label), installed = join(root, "installed");
-  mkdirSync(installed);
+/**
+ * The Claude this host really has installed, or null. Production observation
+ * spawns `<executable> --version` through the shipped broker and keeps only the
+ * shape this provider reports, so a stand-in binary CANNOT be dressed up as one
+ * any more: the host observer is minted inside @moe/runner and takes no port.
+ */
+function installedClaude(): string | null {
+  const home = process.env["USERPROFILE"];
+  const candidates = [
+    ...(home === undefined ? [] : [join(home, ".local", "bin", CLAUDE_EXE)]),
+    ...(process.env["Path"] ?? process.env["PATH"] ?? "").split(";")
+      .filter((entry) => entry.length > 0).map((entry) => join(entry, CLAUDE_EXE)),
+  ];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  return found === undefined ? null : realpathSync(found);
+}
+
+const CLAUDE_EXE = "claude.exe";
+const REAL_CLAUDE = WINDOWS_ONLY ? installedClaude() : null;
+
+interface FixtureOptions {
+  /** An installed Claude to observe for real; omitted means a stand-in copy. */
+  readonly executable?: string;
+  readonly argv?: readonly string[];
+  readonly timeoutMs: number;
+}
+
+function windowsFixture(label: string, options: FixtureOptions): WindowsFixture {
+  const root = scratch(label);
   const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
-  const source = command === null ? join(systemRoot, "System32", "where.exe") : process.execPath;
-  const executable = join(installed, "claude.exe");
-  copyFileSync(source, executable);
-  const installedRoot = realpathSync(installed), executablePath = realpathSync(executable);
+  const executablePath = options.executable ?? standIn(root);
+  const installedRoot = realpathSync(join(executablePath, ".."));
   const sha256 = createHash("sha256").update(readFileSync(executablePath)).digest("hex");
-  const platformIdentity = { os: "win32", arch: arch(), osVersion: release() };
-  const reportedVersion = `${basename(source)}/${command === null ? sha256.slice(0, 12) : process.version}`;
   const quote = buildProviderRuntimeObservation({
     adapterCapabilitySchemaDigest: DIGEST_B, clock: { observedAt: () => DECIDED_AT },
-    pinningMethod: "CONTENT_ADDRESSED_COPY", platformIdentity, reportedVersion,
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: { os: "win32", arch: arch(), osVersion: release() },
+    reportedVersion: `${basename(executablePath)}/${sha256.slice(0, 12)}`,
     resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: executablePath, sha256 }],
   });
   if (!quote.ok) throw new Error(`runtime quote refused: ${quote.code}`);
-  const marker = join(root, "launched.txt");
   const environment = {
     COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
     PATH: process.env["Path"] ?? join(systemRoot, "System32"),
     SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
   };
-  const script = command?.replace("$MARKER", () => JSON.stringify(marker)) ?? null;
-  const argv = script === null
-    ? ["definitely-not-a-command", "--model", "claude-opus-5", "--effort", "high"]
-    : ["-e", script, "--", "--model", "claude-opus-5", "--effort", "high"];
+  const argv = [...options.argv ?? ["--version"]];
+  const pinRoot = join(root, "pins");
+  const timeoutMs = options.timeoutMs;
   const launchTemplate = {
     argv, bootstrapCredentialDigest: DIGEST_B, cwd: root, environment,
     launchSelection: SELECTION,
     limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs },
-    runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: quote.observation },
+    runtime: { installedRoot, pinRoot, quotedObservation: quote.observation },
   };
   const request = {
     activationRequestBytes: activationBytes(quote.observation.observationDigest),
@@ -236,13 +221,7 @@ function windowsFixture(label: string, command: string | null, timeoutMs: number
     graphSnapshot: structuredClone(GRAPH), inputManifest: structuredClone(INPUT_MANIFEST),
     launchTemplate,
   };
-  return {
-    marker, request, root, store: readyStore(root), runtimePorts: {
-      clock: { observedAt: () => "2026-08-15T00:00:01.000Z" },
-      facts: { observe: async () => ({ adapterCapabilitySchemaDigest: DIGEST_B,
-        platformIdentity, reportedVersion }) }, fs: nodeRuntimeFs(),
-    },
-  };
+  return { marker, pinRoot, request, root, store: readyStore(root) };
 }
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
@@ -271,89 +250,69 @@ function abortingStore(store: SqliteEventStore, abortOnCall: number): SqliteEven
 }
 
 describe("foundation attempt dispatch — real Windows conformance", () => {
-  it.runIf(WINDOWS_ONLY)("launches through the shipped broker once and adopts replay", async () => {
-    const fixture = windowsFixture("proven", null, 10_000);
-    let captures = 0;
-    const service = createFoundationAttemptService({
-      captureResult: () => { captures += 1; return captureAnswer(); },
-      launchOptions: { platform: "win32" }, runtimePorts: fixture.runtimePorts, store: fixture.store,
-    });
-
-    const first = await service.dispatch(fixture.request);
-
-    expect(first.ok).toBe(true);
-    if (!first.ok) return;
-    expect(captures).toBe(1);
-    const activation = eventTypes(fixture.store, ACTIVATION_AGGREGATE);
-    expect(activation).toEqual([
-      "EffectActivationCommitted", "FoundationActivationGrantConsumed",
-      "FoundationLaunchPreflightRegistered", "FoundationLaunchProcessObserved",
-    ]);
-    expect(new Set(activation).size).toBe(4);
-    for (const type of activation) expect(activation.filter((entry) => entry === type)).toHaveLength(1);
-    expect(eventTypes(fixture.store, DISPATCH_AGGREGATE))
-      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
-    expect(first.record).toMatchObject({
-      advisoryOnly: true, reasonCode: null, reasonLayer: null, resultManifest: { baseIdentity: HEAD },
-      truthClass: "PROVEN",
-    });
-    expect(first.record["registration"]).toMatchObject({ processIdentity: expect.stringMatching(/^windows:/u) });
-    expect(first.record["observation"]).toMatchObject({
-      observationDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
-      registrationDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
-    });
-    const replay = await service.dispatch(structuredClone(fixture.request));
-    expect(replay.ok && replay.digest).toBe(first.digest);
-    expect(captures).toBe(1);
-    expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(activation);
-    const changed = structuredClone(fixture.request);
-    (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(fixture.root, "other");
-    const refused = await service.dispatch(changed);
-    expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
-    expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(activation);
-  }, 60_000);
-
-  it.runIf(WINDOWS_ONLY)("persists exact stream uncertainty and never relaunches", async () => {
-    const fixture = windowsFixture(
-      "timeout", "require('node:fs').writeFileSync($MARKER, 'launched');setInterval(()=>{},1000)", 100);
+  /**
+   * The shipped host observer runs the named executable through the REAL Windows
+   * broker and demands the version shape this provider reports. A binary that is
+   * not the installed Claude runtime therefore cannot be pinned — which is the
+   * whole point of minting the observer inside @moe/runner instead of accepting
+   * one. `CLAUDE_RUNTIME_OBSERVATION_INVALID` is only reachable AFTER a real
+   * child process ran and its stdout was read: an absent broker would have
+   * answered `PROCESS_BOUNDARY_BROKER_UNRESOLVED` instead, so this code is
+   * physical evidence that the boundary launched, not that it was skipped.
+   */
+  it.runIf(WINDOWS_ONLY)("refuses a runtime the shipped observer cannot prove, and never relaunches", async () => {
+    const fixture = windowsFixture("unproven-runtime", null, 10_000);
     const service = createFoundationAttemptService({
       captureResult: () => { throw new Error("capture must not run"); },
-      launchOptions: { platform: "win32" }, runtimePorts: fixture.runtimePorts, store: fixture.store,
+      launchOptions: { platform: "win32" }, store: fixture.store,
     });
 
     const outcome = await service.dispatch(fixture.request);
 
-    expectRefusal(outcome, "CLAUDE_LAUNCH_STREAM_ERROR", "OUTPUT");
-    expect(existsSync(fixture.marker)).toBe(true);
+    expectRefusal(outcome, "CLAUDE_RUNTIME_OBSERVATION_INVALID", "RUNTIME");
+    // Nothing was pinned and no provider process ever started.
+    expect(existsSync(fixture.pinRoot)).toBe(false);
+    expect(existsSync(fixture.marker)).toBe(false);
     const stored = readFoundationAttemptRecord(fixture.store, ACTIVATION_AGGREGATE);
     expect(stored.ok && stored.record).toMatchObject({
-      reasonCode: "CLAUDE_LAUNCH_STREAM_ERROR", reasonLayer: "OUTPUT",
+      advisoryOnly: true, reasonCode: "CLAUDE_RUNTIME_OBSERVATION_INVALID", reasonLayer: "RUNTIME",
       resultManifest: null, truthClass: "SUSPECT",
     });
     const before = eventTypes(fixture.store, ACTIVATION_AGGREGATE);
-    expect(before).toEqual([
-      "EffectActivationCommitted", "FoundationActivationGrantConsumed",
-      "FoundationLaunchPreflightRegistered", "FoundationLaunchProcessObserved",
-    ]);
+    expect(before).toContain("EffectActivationCommitted");
+    expect(before).not.toContain("FoundationLaunchProcessObserved");
+    for (const type of before) expect(before.filter((entry) => entry === type)).toHaveLength(1);
+    expect(eventTypes(fixture.store, DISPATCH_AGGREGATE))
+      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+
     const replay = await service.dispatch(structuredClone(fixture.request));
+
+    // Answered from the stored bytes: no second observation, no second broker run.
     expect(replay.ok).toBe(true);
+    expect(replay.ok && replay.digest).toBe(stored.ok ? stored.digest : "");
+    expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(before);
+    expect(existsSync(fixture.pinRoot)).toBe(false);
+    const changed = structuredClone(fixture.request);
+    (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(fixture.root, "other");
+    const refused = await service.dispatch(changed);
+    expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(before);
   }, 60_000);
 
   it.runIf(WINDOWS_ONLY)("reservation failure reaches no runtime or physical launch", async () => {
     const fixture = windowsFixture("reservation-abort", null, 10_000);
-    let runtimeFacts = 0;
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
-      runtimePorts: { ...fixture.runtimePorts, facts: { observe: async () => {
-        runtimeFacts += 1; return await fixture.runtimePorts.facts.observe();
-      } } }, store: abortingStore(fixture.store, 2),
+      store: abortingStore(fixture.store, 2),
     });
 
     const outcome = await service.dispatch(fixture.request);
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE", DAEMON_FOUNDATION_ATTEMPT);
-    expect(runtimeFacts).toBe(0);
+    // The pinned copy is the runner's FIRST physical act; the marker is the
+    // provider's. Neither exists, so nothing was launched under a lost reservation.
+    expect(existsSync(fixture.pinRoot)).toBe(false);
+    expect(existsSync(fixture.marker)).toBe(false);
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(eventTypes(fixture.store, DISPATCH_AGGREGATE)).toHaveLength(0);
   });

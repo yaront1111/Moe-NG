@@ -196,11 +196,13 @@ export function attemptRecordBody(
 }
 
 /** Every authority field is the DURABLE one. `priorRegistration` and
- *  `duplicateDelivery` are pinned null: a reservation is not a prior process. */
+ *  `duplicateDelivery` are pinned null: a reservation is not a prior process.
+ *  `runtime` is the runner's OWN hydrated pin request, forwarded whole — the
+ *  template's three data fields already travelled inside it, so nothing here can
+ *  re-layer a caller value over a minted capability. */
 export function launchRequestBody(
   record: ActivationLedgerRecord, bound: FoundationAttemptBound,
-  template: FoundationAttemptLaunchTemplate,
-  runtimePorts: { readonly clock: unknown; readonly facts: unknown; readonly fs: unknown },
+  template: FoundationAttemptLaunchTemplate, runtime: object,
 ): Record<string, unknown> {
   return {
     argv: template.argv, attempt: record.attempt,
@@ -208,10 +210,6 @@ export function launchRequestBody(
     cwd: template.cwd, duplicateDelivery: null, effect: record.effectIntent,
     environment: template.environment, grant: record.grant,
     launchSelection: template.launchSelection, limits: template.limits, priorRegistration: null,
-    reconciliation: null, runtime: Object.freeze({
-      clock: runtimePorts.clock, facts: runtimePorts.facts, fs: runtimePorts.fs,
-      ...template.runtime,
-    }),
-    wrapperIdentity: record.grant.wrapperIdentity,
+    reconciliation: null, runtime, wrapperIdentity: record.grant.wrapperIdentity,
   };
 }

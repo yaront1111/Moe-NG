@@ -137,7 +137,7 @@
       "completedAt": "2026-08-16T09:41:17.614Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -147,22 +147,32 @@
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
   "order": 79,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-544663e16b06481ca6c7251d88f46743",
+      "author": "qa-c7cedba3",
+      "content": "QA VERDICT: APPROVE. Verified at HEAD 0f19e06. Two commits carry this task id: 7cdd714 is the worker's, by explicit pathspec, exactly the five owned paths; 0f19e06 is the completion hook's whole-tree commit and holds only board state and the Serena handoff. Part of the deliverable had already been swept in by 1733d72, so I reviewed by base-ref diff 1733d72..HEAD over owned paths.\n\nGATES I RE-RAN, each leg separately with its own exit code (not `&&`-chained, so no leg could hide behind another):\n- `pnpm --filter @moe/runner typecheck` -> EXIT 0.\n- `pnpm --filter @moe/runner test` -> EXIT 0, `Test Files 66 passed (66)`, `Tests 2216 passed | 1 skipped (2217)`.\n- `pnpm typecheck` -> EXIT 0, 18 workspace projects Done including packages/runner and apps/daemon.\nReproduces the recorded verification exactly.\n\nNO LEG WAS SILENTLY VACUOUS. A verbose focused run of the owned test file executes `Tests 43 passed (43)` with ZERO skips — the suite's single skip lives elsewhere. Both real-Windows conformance cases genuinely ran, at 2812ms and 2832ms.\n\nTWO MUTATION DRILLS RUN BY ME, against the production factory as task rail 3 requires, replaced range printed before each.\n\nDRILL 1 — the derivation guard, which is this design's crux. `soleExecutablePath`: `if (executables.length !== 1)` -> `if (executables.length < 1)`. RED on the named case `fails closed when the quoted closure declares two EXECUTABLEs`. What it reddened on is the interesting part and it is worth recording: the mutant still REFUSES — but by `readQuote` downstream instead of this factory — and the test caught it purely on the exact route prose, `expected 'closure must declare exactly one EXEC…' to be 'the quoted closure does not declare exactly one EXECUTABLE to observe'`. That is epic rail 6's \"which layer refused\" clause doing real work; a code-only assertion would have let this mutant live. Restored, SHA 0610b41c2d16b802 unchanged, git-clean.\n\nDRILL 2 — proving the drift sweep is not vacuous ON THIS HOST rather than assuming it. I broke the byte-drift arm's expected code to `QA_PROBE_ARM_DID_NOT_RUN`; the case went RED (`byte drift took the wrong arm`), so the arms really execute here and the leg is certified rather than early-exited. Restored, SHA 15caf0570523fce1 unchanged, git-clean.\n\nDoD-BY-DoD:\n1. MET — 33 hostile cases, each pinning code + `RUNTIME` layer + `truthClass: \"UNKNOWN\"` + the exact route message + `fs`/`facts`/`clock` all undefined on the refusal. Positive-count guard asserts both `> 0` and the literal 33, and a second assertion requires all 33 to carry a route pin so the pins must EXIST rather than merely survive. Every vector the DoD names is present: accessor, polluted prototype, thenable, revoked proxy, and a proxy whose descriptor trap throws. The revoked-proxy case is notable — `Array.isArray` throws on one, so a validator that asked it first would crash rather than refuse, and `snapshotExactRecord` is used precisely because a crash is not a refusal.\n2. MET — `carries every host-observation arm out of the port with its own code and layer` and `leaves the runtime UNKNOWN when the host observation refuses`. Nothing is defaulted: `createClaudeRuntimePinRequest(input: unknown)` snapshots exact keys first, and every field is derived rather than accepted.\n3. MET — real `observeInstalledClaudeRuntime` then real `prepareClaudeRuntimePin`. Asserts `quotedObservationDigest === quote.observationDigest`, `freshObservationDigest !== quote.observationDigest`, the pinned path under the pin root and different from the installed executable, and — the assertion that matters — an INDEPENDENT sha256 of the PINNED bytes equal to the digest the quote declared for the INSTALLED bytes. Rehashed, not copied on trust. Drift arms assert the exact code and prove nothing reached the pinning boundary.\n4. MET — `index-surface.test.ts` publishes `createClaudeRuntimePinRequest` and `CLAUDE_RUNTIME_PIN_ERROR_CODES` and withholds `createNodeClaudeRuntimeFs`, `observeInstalledClaudeRuntime`, `RUNTIME_PIN_CHUNK_BYTES`, `CLAUDE_LAUNCHER_DEFAULTS`, `readQuote` and the raw ports.\n5. MET, AND I PROVED THE EDGE MYSELF RATHER THAN READING THE CLAIM. `apps/daemon/package.json:20` declares `\"@moe/runner\": \"workspace:*\"`; `pnpm-lock.yaml:114` carries the importer entry under `apps/daemon`. I wrote my own probe importing `createClaudeRuntimePinRequest` from the BARE specifier, ran `pnpm --filter @moe/daemon typecheck` -> EXIT 0, and deleted it in the same command. NEGATIVE CONTROL, because a probe that cannot fail proves nothing: the same probe with a non-existent export name -> EXIT 1, `error TS2724: '\"@moe/runner\"' has no exported member named 'createClaudeRuntimePinRequestNOPE'`. The edge is real and the probe discriminates.\n6. MET — claude-runtime-request.ts 242 lines, claude-surface.ts 247, both under 250; the `.js` bridge is exactly one line, `export * from \"./claude-runtime-request.ts\";`. Nonzero counts and both typechecks above.\n\nRAILS: `claude-host-runtime.ts` and `claude-runtime-pin.ts` appear in `filesModified` but `git diff --name-only 1733d72..HEAD` over them is EMPTY — they were READ, not modified, so task rail 1 (compose, do not recreate) holds and the diff proves it. Refusal messages are path-free by construction, carrying forward the rail from task-32eddfd3's rejection history, with a dedicated test: `never echoes a path, a digest or a caller value in any refusal message`. Owned paths clean, no drill residue.\n\nRESOLVED FROM MY EARLIER #general FLAG: I reported a raw NUL byte in `claude-runtime-request.ts` making git classify it binary. It is GONE at HEAD — `od | grep -c '^00$'` over the committed blob returns 0. The raw-byte regex was replaced with explicit `MAX_CONTROL_CODE_POINT = 0x1f` / `DELETE_CODE_POINT = 0x7f` constants and a code-point loop, which is the right fix. `git diff --numstat` still prints `-  -` for the file only because the OLD side at 1733d72 was the binary blob.\n\nONE ROBUSTNESS NOTE, deliberately NOT a rejection because no DoD item requires it. The two real-Windows cases guard the same early exit with different rigour. `pins the really installed runtime` pins it hard — it asserts `brokerIsBuilt() === false` AND the exact code `PROCESS_BOUNDARY_BROKER_UNRESOLVED`, so the exit can only be taken when the broker genuinely is not built. `refuses byte, version, capability and platform drift` asserts only `typeof armOf(observed).code === \"string\"`, which ANY refusal satisfies — so on a host where the observation refuses for some other reason, the whole four-arm drift sweep would silently produce zero cases and still tick green. It is not vacuous here (drill 2 proved the arms run on this host), and both cases fail rather than skip when claude.exe is absent. Worth tightening to match its sibling the next time this file is opened.",
+      "timestamp": "2026-08-16T09:47:20.326Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:56:27.313Z",
-  "updatedAt": "2026-08-16T09:42:36.403Z",
+  "updatedAt": "2026-08-16T09:48:15.735Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:04:01.496Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T09:48:15.735Z",
+    "wallClockMs": 38654239
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
     "worker-827a27f6",
     "architect-27b64950",
     "worker-e47be2a7",
-    "worker-5e0f1818"
+    "worker-5e0f1818",
+    "qa-c7cedba3"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -229,5 +239,8 @@
     "packages/runner/src/providers/claude/claude-runtime-request.ts",
     "packages/runner/src/providers/claude/claude-runtime-request.js",
     "packages/runner/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T09:48:15.735Z",
+  "reviewCompletedAt": "2026-08-16T09:48:15.735Z",
+  "reviewSummary": "APPROVED at HEAD 0f19e06. Full evidence: comment-544663e1. 7cdd714 is the worker's commit (5 owned paths, explicit pathspec); 0f19e06 is the hook's whole-tree commit, board state only.\n\nGATES RE-RUN, each leg separately: runner typecheck EXIT 0; runner test EXIT 0, Files 66 passed (66), Tests 2216 passed | 1 skipped; `pnpm typecheck` EXIT 0, 18 projects Done. Verbose focused run shows 43 passed / ZERO skipped — no leg vacuous.\n\nTWO DRILLS RUN BY ME on the production factory, replaced range printed each time.\n1: soleExecutablePath `length !== 1` -> `< 1`. RED on `fails closed when the quoted closure declares two EXECUTABLEs`. Notably the mutant still REFUSES, via readQuote downstream — the test caught it purely on exact route prose, rail 6's \"which layer refused\" clause doing real work. SHA 0610b41c restored.\n2: broke the byte-drift arm's expected code. RED, proving the drift sweep really executes on THIS host rather than early-exiting. SHA 15caf057 restored. Both git-clean.\n\nDoD 1: 33 hostile cases pinning code + RUNTIME layer + UNKNOWN + exact route + no capability leak; count guard asserts >0 AND literal 33. Covers accessor, polluted prototype, thenable, revoked proxy, descriptor-trap proxy. DoD 3: real observeInstalledClaudeRuntime + real prepareClaudeRuntimePin, with an INDEPENDENT sha256 of the pinned bytes matched to the quote's declared digest. DoD 5 PROVEN BY MY OWN PROBE: bare-specifier import from apps/daemon typechecks EXIT 0, deleted in the same command, plus a NEGATIVE CONTROL (bogus name -> EXIT 1, TS2724). DoD 6: 242 and 247 lines, under 250; bridge one line.\n\nclaude-host-runtime.ts / claude-runtime-pin.ts appear in filesModified but their diff is EMPTY — read, not modified, so rail 1 holds by diff. The raw NUL byte I flagged in #general is GONE at HEAD.\n\nNOT a rejection, noted: the drift case's early-exit asserts only that a refusal code is a string, where its sibling pins brokerIsBuilt()===false plus the exact code."
 }
