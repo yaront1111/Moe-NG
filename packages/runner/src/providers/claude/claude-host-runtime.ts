@@ -7,8 +7,8 @@ import { isBoundedLabel, type ClaudeCapabilityProfile, type ClaudeProbeReport } 
 import { MAX_RUNTIME_TEXT_CHARS, type ClaudeFailure, type ClaudeObservationErrorCode,
   type PlatformIdentity, type ProviderRuntimeObservation } from "./claude-observation.js";
 import { probeClaudeRuntime } from "./claude-probe.js";
-import { refuse, type ClaudeRuntimePinErrorCode,
-  type ClaudeRuntimePinFailure } from "./claude-runtime-pin-closure.js";
+import { refuse, type ClaudeRuntimePinErrorCode, type ClaudeRuntimePinFailure }
+  from "./claude-runtime-pin-closure.js";
 import { createNodeClaudeRuntimeFs } from "./claude-runtime-pin-fs.js";
 import type { ClaudeRuntimeFacts } from "./claude-runtime-pin.js";
 import { inspectSources, pathShapeRejection, snapshotSourceCandidates,
@@ -94,27 +94,12 @@ function snapshotRequest(input: unknown): HostRequest | ClaudeRuntimePinFailure 
 }
 
 /**
- * Fixed category sentences for the closure authority's codes.
- *
- * The inspector builds its own prose from `JSON.stringify(candidate.path)`, so
- * forwarding one of its messages verbatim publishes the absolute installed path
- * on a public failure — which task rail 2 forbids. The CODE and the layer still
- * carry the precise reason, so nothing diagnostic is lost; only the location is.
+ * The inspector builds its prose from `JSON.stringify(candidate.path)`, so
+ * forwarding it verbatim publishes the installed path (task rail 2). Keeps the
+ * authority's code and layer — which carry the reason — replacing only prose.
  */
-const CLOSURE_REFUSAL_SENTENCES: Readonly<Partial<Record<ClaudeRuntimePinErrorCode, string>>> = Object.freeze({
-  CLAUDE_RUNTIME_QUOTE_INVALID: "a declared runtime source is not a supported quoted candidate",
-  CLAUDE_RUNTIME_PATH_INVALID: "the declared runtime executable path is not a supported shape",
-  CLAUDE_RUNTIME_PATH_MISSING: "the declared runtime executable is not a plain contained file",
-  CLAUDE_RUNTIME_PATH_NOT_FILE: "the declared runtime executable is not a plain file",
-  CLAUDE_RUNTIME_PATH_DUPLICATE: "the declared runtime closure names the same executable twice",
-  CLAUDE_RUNTIME_PATH_REPARSE: "the declared runtime executable path crosses a reparse point",
-  CLAUDE_RUNTIME_PATH_ESCAPE: "the declared runtime executable is not beneath the installed root",
-  CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH: "the declared runtime executable did not match its expected digest",
-});
-
-/** Keeps the answering authority's code and layer; replaces only its prose. */
 const closureRefusal = (code: ClaudeRuntimePinErrorCode): ClaudeRuntimePinFailure =>
-  refuse(code, CLOSURE_REFUSAL_SENTENCES[code] ?? "the declared runtime closure could not be verified");
+  refuse(code, "the declared runtime closure could not be verified");
 
 /** The supported v1 closure is the ONE named native executable, never a walk. */
 async function inspectClosure(
