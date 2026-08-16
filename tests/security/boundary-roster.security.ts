@@ -96,8 +96,10 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * Axis totals for the sibling slices: transport 15, integrity 13, durable-store 14,
- * runtime-provider 22, scheduler-activation 23 — sums to 87. These tags, NOT the subset
- * counts in the siblings' own descriptions, are the authority.
+ * runtime-provider 23, scheduler-activation 24 — sums to 89. These tags, NOT the subset
+ * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
+ * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
+ * scheduler-activation — producer-registers rule, governor entries.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -114,6 +116,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "PROJECT_CONFIGURATION_SELECTION_LAYER", file: "apps/daemon/src/configuration/project-configuration-selection.ts", axis: "integrity" },
   { constant: "DAEMON_ENTRY_LAYER", file: "apps/daemon/src/daemon-entry.ts", axis: "transport" },
   { constant: "DOCUMENT_WORK_SERVICE_LAYERS", file: "apps/daemon/src/documents/document-work-service-contract.ts", axis: "scheduler-activation" },
+  // Verification activation authority: FOUNDATION_* dispatch/verification family per the
+  // subject-wins rule (governor entry 2026-08-16, producer task-44d4873e).
+  { constant: "FOUNDATION_VERIFICATION_LAYERS", file: "apps/daemon/src/evidence/foundation-verification-contracts.ts", axis: "scheduler-activation" },
   { constant: "AFFORDANCE_SURFACE_LAYER", file: "apps/daemon/src/http/affordance-contract.ts", axis: "transport" },
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
@@ -138,6 +143,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RUNNER_WORKSPACE_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "runtime-provider" },
   { constant: "SCHEDULER_GRAPH_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "scheduler-activation" },
   { constant: "WORK_LAYERS", file: "apps/daemon/src/work/work-kernel.ts", axis: "scheduler-activation" },
+  // Provider-run record projection: consumes the provider-run family, same subject as
+  // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
+  { constant: "BENCHMARK_PROJECTION_LAYERS", file: "packages/benchmark/src/benchmark-projection-vocabulary.ts", axis: "runtime-provider" },
   { constant: "PROJECT_CONFIGURATION_REFUSAL_LAYERS", file: "packages/contracts/src/configuration/project-configuration-contract.ts", axis: "integrity" },
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_PROPOSAL_LAYERS", file: "packages/contracts/src/document-work/document-work-proposal-contract.ts", axis: "integrity" },
@@ -190,7 +198,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
 ]);
 
 /** The corrected enumeration size. Measured at HEAD abc3dcf; see step 1. */
-const EXPECTED_ROSTER_SIZE = 87;
+const EXPECTED_ROSTER_SIZE = 89;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -198,7 +206,8 @@ const EXPECTED_ROSTER_SIZE = 87;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 32,
+  "apps/daemon": 33,
+  "packages/benchmark": 1,
   "packages/runner": 20,
   "packages/core": 10,
   "packages/scheduler": 7,

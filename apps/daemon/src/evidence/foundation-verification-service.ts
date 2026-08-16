@@ -120,13 +120,6 @@ export function createFoundationVerificationService(deps: FoundationVerification
         : refuseVerification(
           "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
     }
-    if (!commitPhase(store, who, aggregate, "ACTIVATED", {
-      attemptAggregateId: request["attemptAggregateId"],
-      recipeSha256: sealed.recipe.sha256, verificationId,
-    }, eventsOf(store, aggregate).length, "ACTIVATED")) {
-      return refuseVerification(
-        "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED", "DAEMON_VERIFICATION_ACTIVATION");
-    }
     const run: RunVerifierProcessResult = await runVerifierProcess({
       activation: {
         attempt: loaded.activation.attempt, grant: loaded.activation.grant,

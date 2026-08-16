@@ -149,8 +149,8 @@
       "completedAt": "2026-08-16T13:53:07.491Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -187,7 +187,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-16T13:55:12.126Z",
+  "updatedAt": "2026-08-16T13:58:40.082Z",
   "contextFetchedBy": [
     "qa-ce3ba361",
     "worker-ad55ab67",
@@ -199,7 +199,9 @@
     "plannedDistinctFileCount": 6,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-16T13:58:40.082Z",
+    "wallClockMs": 251864279
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -307,7 +309,7 @@
     "packages/benchmark/src/benchmark-cell-invariant.test.ts",
     "packages/benchmark/src/benchmark-projection-cells.ts"
   ],
-  "reviewCompletedAt": "2026-08-16T13:21:07.907Z",
+  "reviewCompletedAt": "2026-08-16T13:58:40.082Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Every required measurement has exact source/basis or explicit UNKNOWN; UNKNOWN is never zero or imputed across arms.",
@@ -402,5 +404,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-16T13:58:40.082Z",
+  "reviewSummary": "APPROVED at HEAD 6f305a4. Deliverable is f70786f (9 files, benchmark-only); 6f305a4 is the whole-tree hook commit and carries NO benchmark path.\n\nGATE, legs separate, exit via PIPESTATUS: `--filter @moe/benchmark test` -> `Test Files 6 passed (6)` / `Tests 55 passed (55)` EXIT=0. Positive control @moe/coordination -> `Tests 42 passed (42)` EXIT=0. Package typecheck 0. Repo-wide `pnpm typecheck` 0, zero `error TS` — path-attributed baseline trivially empty.\n\nALL SIX REJECT ISSUES RE-VERIFIED BY RUNNING PRODUCTION, not reading. Throwaway probe spread 17 variants of completeRunRecordFixture() through projectBenchmarkRun, forced out by assertion diff; probe deleted, `git status --porcelain -- packages/benchmark` empty. Every leak now refuses: launch:{}, truncated declared.selection, sequence:{}, stdout/stderrReceiptDigest:{}, providerRunRef:{}, upstreamRefusal:{}, usageRefusals:[{}], observedStart:{}, steps:{}, concurrency:{} -> all BENCHMARK_RECORD_FIELD_MALFORMED@BENCHMARK_SHAPE. Issue 4: declared:{known:true}, observedModel:{}, tokens:{} REFUSE with code+layer, zero THREW. Over-strict direction probed: launch carrying unprojected `exit`, and an unlisted top field, both still PROJECTED.\n\nTHREE DRILLS I RAN MYSELF, each alone, 1-occurrence anchor assert, restored by `git checkout HEAD --`, tree clean between. (A) nullableCell null -> knownCell(undefined): new walker reddens naming 4 cells valueKeyMatchesKnown:false. (B) launch guard -> bare isPlainRecord: sweep reddens on EXACTLY launch:{} and `launch startedAt is a number`. (C) isProducerUnknown drops code/layer: reddens on exactly its 3 attribution cases.\n\nAdmission-only as claimed: `git diff --numstat f70786f^..f70786f` over projector, cells, cost, contracts, fixture is EMPTY. No new codes. Per-file max 213 production / 247 test. No apps/** or @moe/store import. DoD 3 nouns all covered. Consumers named: task-3a34adca then task-8af4562f."
 }

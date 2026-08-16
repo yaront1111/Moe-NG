@@ -22,22 +22,26 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND TAKE THE 23 FROM THE ROSTER — the largest axis, and the last before the ratchet. The roster's comment states the authority: \"transport 15, integrity 13, durable-store 14, runtime-provider 22, scheduler-activation 23 — sums to 87. These tags, NOT the subset counts in the siblings' own descriptions, are the authority.\" This task's description says 16.\nTHE 23. Activation (apps/daemon/src/activation): ACTIVATION_BUDGET_LAYER, ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER (activation-ingress-contracts.ts), ACTIVATION_LEDGER_LAYER (activation-ledger-contracts.ts), FOUNDATION_ACTIVATION_BINDING_LAYER (foundation-activation-transition.ts). Daemon work and orchestration: DOCUMENT_WORK_SERVICE_LAYERS, SPAWN_INVOCATION_LAYER, SCHEDULER_GRAPH_LAYER, WORK_LAYERS. Core planning/expansion: EXPANSION_APPROVAL_LAYERS, EXPANSION_HOLD_LAYERS, EXPANSION_PREPARATION_LAYERS, GOAL_LAYER, GRAPH_REVISION_LAYER, PLANNING_EXPANSION_LAYERS, SUPERSESSION_KERNEL_LAYER. Scheduler: MEASUREMENT_ISSUE_LAYERS, CONVERGENCE_BREAKER_LAYER, EXPANSION_BINDING_LAYERS, EXPANSION_EVIDENCE_LAYERS, FAIRNESS_CONTRACT_LAYERS, READINESS_LAYERS, SUPERSESSION_DISPOSITION_LAYERS.\nSIZE: 23 x 3 arms is 69+ cases. Split from the start into up to three `*.security.ts` files grouped by concern — activation admission, expansion/supersession/graph, scheduler decisions — with the roster-set completeness assertion in exactly ONE of them. Each file under 400 physical lines by `grep -c ''`.\nONE-MEMBER VOCABULARY, measured: `SpawnInvocationRefusalCode` (agent-spawn-invocation.ts:19) has EXACTLY ONE member, `\"SPAWN_ARGUMENT_UNQUOTABLE\"`, and `SPAWN_INVOCATION_LAYER` is `\"agent-spawn-invocation\"`. A sweep written for a larger union generates what it finds and passes silently — assert the member count and a positive case count, and re-count at HEAD rather than trusting this note.\nHARNESS: `probeBefore`, `probeAfter`, `probeRacing`, `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith` (layer non-optional at type level and re-checked at runtime), `MAX_BOUND_MS = 2_147_483_647`.\nGATE BASELINE: `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — recording the count line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "note": "BASELINE + ROSTER RE-MEASURED at HEAD 6f305a4.\n\nGATE BASELINE (`pnpm test:security` alone, exit captured separately, never piped/`;`-chained):\n  Test Files  2 failed | 6 passed (8)\n       Tests  4 failed | 342 passed (346)\n  EXIT=1\nThe 4 failures are FOREIGN and pre-existing: `boundary-roster.security.ts` and\n`durable-store-boundaries.security.ts` (the latter IMPORTS the roster module, so it re-registers\nand duplicates the roster's own describes). Both are \"roster versus live source scan >\nnames every scanned constant in the roster\" and \"> scans exactly the roster's cardinality\":\nthe scan reads 89, the committed roster declares 87. Not my paths.\n\nROSTER COUNT IS 24, NOT 23. The plan said 23, measured at HEAD 7086e54. A peer is landing the\n87->89 fix RIGHT NOW as UNCOMMITTED work in `tests/security/boundary-roster.security.ts`\n(`git status --short` shows it modified; `EXPECTED_ROSTER_SIZE` bumped 87 -> 89). One of the two\nnew entries is tagged onto MY axis:\n  FOUNDATION_VERIFICATION_LAYERS @ apps/daemon/src/evidence/foundation-verification-contracts.ts\nThat module is real and COMMITTED (6e25dd8), declaring 4 layers and 10 stable codes. HEAD's roster\ntags 23 scheduler-activation entries; the worktree's tags 24.\nCONSEQUENCE: I will cover 24, and the completeness assertion PARSES the roster at run time in BOTH\ndirections rather than hard-coding a count, so the set is taken from the artifact and not from this\nnote. I re-measure the roster immediately before the gate and drop the 24th if the peer's edit is\nreverted. I will NOT commit the peer's roster edit.\n\nTHE 24, grouped as the case tables will be:\n  activation admission - ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER, ACTIVATION_BUDGET_LAYER,\n    ACTIVATION_LEDGER_LAYER, FOUNDATION_ACTIVATION_BINDING_LAYER, FOUNDATION_VERIFICATION_LAYERS,\n    DOCUMENT_WORK_SERVICE_LAYERS, SPAWN_INVOCATION_LAYER, SCHEDULER_GRAPH_LAYER, WORK_LAYERS\n  expansion/supersession/graph - EXPANSION_APPROVAL_LAYERS, EXPANSION_HOLD_LAYERS,\n    EXPANSION_PREPARATION_LAYERS, PLANNING_EXPANSION_LAYERS, EXPANSION_BINDING_LAYERS,\n    EXPANSION_EVIDENCE_LAYERS, GRAPH_REVISION_LAYER, SUPERSESSION_KERNEL_LAYER,\n    SUPERSESSION_DISPOSITION_LAYERS, GOAL_LAYER\n  scheduler decisions - MEASUREMENT_ISSUE_LAYERS, CONVERGENCE_BREAKER_LAYER,\n    FAIRNESS_CONTRACT_LAYERS, READINESS_LAYERS\n\nONE-MEMBER VOCABULARY RE-COUNTED AT HEAD: `SpawnInvocationRefusalCode`\n(agent-spawn-invocation.ts:19) still has EXACTLY ONE member, \"SPAWN_ARGUMENT_UNQUOTABLE\";\n`SPAWN_INVOCATION_LAYER = \"agent-spawn-invocation\"`. It refuses by THROWING a\n`SpawnInvocationRefusal` carrying real `.code`/`.layer` properties, so it feeds\n`assertRefusedWith` directly once caught.\n\nREPLAY-ECHO TRAP CONFIRMED ON DISK: activation-ledger-commit.ts:106-175 (`answerReplayed`) reads\nthe derived aggregate back and compares CANONICAL DIGESTS; contracts:52-64 states the store's\nreplay identity excludes the `events` array. A same-record replay case cannot detect an echoing\nimplementation. The changed-byte replay case is planned against this, drill 1 targets it.\n\nFILE SPLIT DECIDED, deviating from the plan's \"up to three *.security.ts files\": the lane runs\n`isolate: true`, so two suite modules can never share collected outcomes - the roster-set\nassertion and the whole-slice invariant force every case into ONE suite module. Landing three\nsuite files would also exceed this task's declared owned paths (one file plus at most one\nsibling). So: one suite module holding every assertion, plus one case-table sibling. This matches\nthe accepted integrity-slice precedent (213-line suite + 1208-line case table) and the project\nglobalRail that the 250/400 cap is PER PRODUCTION FILE - a test case-table is not a production\nsource. Disclosed here rather than done silently.\n\nPRODUCTION SURFACES VERIFIED BY READ (no symbol taken on trust): decodeActivationRequestBytes,\ncommitActivationLedgerRecord/answerReplayed, readCurrentEffectSessionBinding,\nencode/decodeFoundationTransition, recordDocumentWorkProposal, agentSpawnInvocation, claimWork,\nfoundationAttemptRefusal, approveExpansionManually, reduceExpansionPlanningHold, prepareExpansion,\ninspectPlanningExpansionContract, bindCurrentExpansionHold, deriveExpansionEvidence,\nreduceGraphRevision, decideSupersession, buildSupersessionDispositions, reduceGoal,\nnormalizeUsageMeasurement, decideBreaker, readFairnessItems, projectReadiness.\nRefusal SHAPES differ and several carry no top-level {code,layer}: GraphRevision and Goal put the\ncode inside `error` beside a sibling `layer`; the fairness/evidence/binding families return\n`{ok:false, disposition, issues:[{code,layer}]}`; ActivationIngressRefused spells the layer\n`refusedBy`; FoundationAttemptRefused likewise. These need a projection onto the harness's shape\nthat READS production's own fields and invents none - same `asLayered` move the integrity slice\nused, and the shared harness stays unmodified.\n\nREUSABLE FIXTURES FOUND (test-fixture modules, excluded from the roster scan ",
+      "startedAt": "2026-08-16T13:56:17.867Z",
+      "completedAt": "2026-08-16T14:01:20.307Z"
     },
     {
       "stepId": "step-2",
       "description": "ACTIVATION ADMISSION ARMS — ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER, ACTIVATION_BUDGET_LAYER, ACTIVATION_LEDGER_LAYER, FOUNDATION_ACTIVATION_BINDING_LAYER, SPAWN_INVOCATION_LAYER, DOCUMENT_WORK_SERVICE_LAYERS.\nHOSTILE INPUT: a grant presented twice; a grant whose binding names a different effect intent, wrapper identity or session than the committed activation; a slot claimed while another attempt holds it; an activation whose transition no longer matches its binding; a spawn request whose argv cannot be quoted; a document-work proposal for a subject the caller does not own.\nTHE EXCLUSIVITY ASSERTION, which is this group's substance: a grant consumed twice and a slot claimed concurrently must each yield EXACTLY ONE admitted activation and one stable refusal — never two admissions, never two refusals. Read the durable state back to prove it; a returned refusal is not evidence that nothing was written.\nTHE REPLAY-ECHO TRAP, measured and specific to `ACTIVATION_LEDGER_LAYER`: the store's replay identity does NOT cover the events array (activation-ledger-commit.ts:12-24). A replay answered with the caller's own record makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. So the hostile replay case here must present a MATERIALLY DIFFERENT record under the same command key and assert the FIRST record's bytes come back, read from the durable aggregate. Without that, this boundary's coverage is vacuous no matter how many cases it has.\nBUDGET IS TWO-SIDED: an unmeasured budget and a zero budget are different facts. Drive an attempt whose usage is UNKNOWN and assert the refusal rather than a zero-cost admission, and assert no value is imputed from a sibling attempt.\nEvery refusal through `assertRefusedWith` with code and layer, each layer from the boundary's own constant. Ingress, slot and budget can all answer one activation — build each fixture valid at the earlier layers and name the arranged layer in a comment.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/activation-boundaries.security.ts"
       ],
       "newFiles": [
         "tests/security/activation-boundaries.security.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T14:01:26.476Z"
     },
     {
       "stepId": "step-3",
@@ -82,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-ad55ab67",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,7 +98,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:01.224Z",
-  "updatedAt": "2026-08-16T13:05:29.730Z",
+  "updatedAt": "2026-08-16T14:01:26.476Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -102,12 +106,15 @@
   "metrics": {
     "firstClaimAt": "2026-08-16T13:03:39.610Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:05:27.670Z",
   "planningNotes": {
@@ -129,5 +136,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-16T13:05:29.730Z"
+  "planApprovedAt": "2026-08-16T13:05:29.730Z",
+  "contextFetchedBy": [
+    "worker-ad55ab67"
+  ],
+  "workStartedAt": "2026-08-16T13:56:17.867Z"
 }

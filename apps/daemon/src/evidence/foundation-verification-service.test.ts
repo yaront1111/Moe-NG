@@ -979,7 +979,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     if (first.ok && second.ok) expect(second.digest).toBe(first.digest);
   });
 
-  it("refuses a replay with a materially different candidate and overwrites no history",
+  it("refuses a replay whose sealed recipe differs and overwrites no history",
     async () => {
       const ground = provenGround("replay-conflict");
       const svc = realService(ground.store);

@@ -147,8 +147,8 @@
       "completedAt": "2026-08-16T13:55:28.311Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5678886b",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-ce3ba361",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-16T13:55:28.311Z",
+  "updatedAt": "2026-08-16T13:57:18.681Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:08.863Z",
     "plannedStepCount": 7,
@@ -181,7 +181,8 @@
     "architect-94dd1835",
     "governor-a627169a",
     "architect-27b64950",
-    "worker-5678886b"
+    "worker-5678886b",
+    "qa-ce3ba361"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -241,5 +242,23 @@
     "escalatedAt": "2026-08-16T13:19:14.899Z"
   },
   "planApprovedAt": "2026-08-16T13:08:33.716Z",
-  "workStartedAt": "2026-08-16T13:20:17.848Z"
+  "workStartedAt": "2026-08-16T13:20:17.848Z",
+  "reviewStartedAt": "2026-08-16T13:56:52.005Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/runner/src\\n Test Files  66 passed (66)\\n      Tests  2216 passed | 1 skipped (2217)\\n   Duration  7.76s\\n\\n$ tsc --project tsconfig.json\\n\\n$ vitest run --root . --config package.json src\\n Test Files  103 passed (103)\\n      Tests  2122 passed (2122)\\n   Duration  6.15s\\n\\n(repo-wide) packages/runner typecheck: Done\\napps/daemon typecheck$ tsc --project tsconfig.json\\napps/daemon typecheck: Done\\nCHAIN_EXIT=0 (zero \"error TS\" lines repo-wide)",
+    "reportedAt": "2026-08-16T13:56:52.005Z"
+  },
+  "filesModified": [
+    "packages/runner/src/surface/evidence-surface.ts",
+    "apps/daemon/src/work/foundation-attempt-store.ts",
+    "apps/daemon/src/evidence/foundation-verification-contracts.ts",
+    "apps/daemon/src/evidence/foundation-verification-contracts.js",
+    "apps/daemon/src/evidence/foundation-verification-service.test.ts",
+    "apps/daemon/src/evidence/foundation-verification-service.ts",
+    "apps/daemon/src/evidence/foundation-verification-service.js",
+    "apps/daemon/src/evidence/foundation-verification-store.ts",
+    "apps/daemon/src/evidence/foundation-verification-store.js"
+  ]
 }

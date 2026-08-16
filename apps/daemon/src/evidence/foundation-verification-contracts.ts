@@ -45,20 +45,19 @@ export const FOUNDATION_VERIFICATION_LAYERS = Object.freeze([
 export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS)[number];
 
 /**
- * Closed, and every member has exactly one producer in the sibling service.
- * Deliberately absent: any code for a failed spawn, timeout, output overflow or
- * receipt-binding fault. `VERIFIER_PROCESS_ERROR_CODES` and
- * `RUNNER_EVIDENCE_ERROR_CODES` already name those, and a second vocabulary for
- * one condition only makes the two indistinguishable.
+ * Closed, and every member has exactly one producer. RECEIPT_UNCOMMITTED means
+ * ZERO rows were written and RECEIPT_AMBIGUOUS means MORE THAN ONE exists: one
+ * code for two opposite durable states tells a reviewer nothing, so each keeps
+ * its own — the same reason ACTIVATION_UNCOMMITTED is not folded in either.
  *
- * Also absent, after measuring rather than assuming: truncated-capture,
- * unverified-execution and candidate-changed codes. `runVerifierProcess` refuses
- * the moment a stream passes its bound and only ever answers `ok` with
- * disposition COMPLETED or FAILED; and a durable attempt record is IMMUTABLE —
- * one RECORDED event, with a second making `readStoredFoundationAttempt` refuse
- * AMBIGUOUS under the STORE's code. So all three would be orphans no layer could
- * emit. DoD 3 is met by carrying the producer's refusal, recording truncation on
- * the UNKNOWN row, and asserting no-authoritative-pass as a property.
+ * Deliberately absent: spawn, timeout, output-overflow, receipt-binding,
+ * truncated-capture, unverified-execution and candidate-changed codes.
+ * `runVerifierProcess` refuses the moment a stream passes its bound and only
+ * ever answers `ok` with disposition COMPLETED or FAILED; a durable attempt
+ * record is IMMUTABLE, a second RECORDED event making the STORE refuse under
+ * ITS code. Each would be an orphan no layer could emit. DoD 3 is met by
+ * carrying the producer's refusal, recording truncation on the UNKNOWN row, and
+ * asserting no-authoritative-pass as a property.
  */
 export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_REQUEST_MALFORMED",
@@ -68,6 +67,7 @@ export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_CANDIDATE_STALE",
   "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
   "FOUNDATION_VERIFICATION_REPLAY_CONFLICT",
+  "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED",
   "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
   "FOUNDATION_VERIFICATION_RECEIPT_AMBIGUOUS",
   "FOUNDATION_VERIFICATION_RECEIPT_UNREADABLE",
@@ -187,6 +187,7 @@ export type FoundationVerificationVerdict = (typeof FOUNDATION_VERIFICATION_VERD
 
 export interface FoundationVerificationReceiptParts {
   readonly attemptAggregateId: string;
+  readonly candidateRoot: string;
   readonly capture: VerifierCapture;
   readonly receipt: EvidenceReceipt;
   readonly recipeAggregateId: string;
@@ -197,14 +198,19 @@ export interface FoundationVerificationReceiptParts {
 
 /** The durable row: the runner's immutable receipt, plus the stdout/stderr/exit
  *  bindings the receipt itself does not carry. Field order is irrelevant — the
- *  codec canonicalizes — but the field SET is what review and closure hash. */
+ *  codec canonicalizes — but the field SET is what review and closure hash.
+ *  `candidateRoot` is part of that set because it is WHAT WAS VERIFIED: a replay
+ *  can only be told apart from a different candidate by a field the row holds,
+ *  and a root that never reaches durable state is a root nothing can conflict
+ *  with. Compare `foundation-verification-service.ts`'s replay clause. */
 export function verificationReceiptBody(
   parts: FoundationVerificationReceiptParts,
 ): Record<string, unknown> {
   const { capture, receipt } = parts;
   return {
-    attemptAggregateId: parts.attemptAggregateId, completedAt: capture.completedAt,
-    durationMs: capture.durationMs, exitCode: capture.exitCode,
+    attemptAggregateId: parts.attemptAggregateId, candidateRoot: parts.candidateRoot,
+    completedAt: capture.completedAt, durationMs: capture.durationMs,
+    exitCode: capture.exitCode,
     receipt: receipt as unknown as Record<string, unknown>, receiptSha256: receipt.sha256,
     recipeAggregateId: parts.recipeAggregateId, recipeSha256: receipt.recipeSha256,
     recordDigest: parts.recordDigest, recordVersion: FOUNDATION_VERIFICATION_RECEIPT_VERSION,

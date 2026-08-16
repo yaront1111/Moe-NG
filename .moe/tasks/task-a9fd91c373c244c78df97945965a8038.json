@@ -20,21 +20,25 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND READ THE ROUTE DECISION THIS PLAN MAKES — it changes DoD 1's mechanism and you must not undo it.\nMEASURED AT HEAD f65fbde. Both hard dependencies are DONE (task-e33747f9 activation ingress, task-6cbff010 attempt dispatch), plus task-9cba79a1 registry extraction.\nTHE WALL: `foundation.dispatch` is NOT in `RUNTIME_COMMAND_KINDS` (packages/contracts/src/runtime/runtime-vocabulary.ts:85), and `runtime-envelope.ts:142` refuses any envelope whose `commandKind` fails `isCommandKind` — BEFORE `http-adapter.ts:196` ever reads the registry. One seam, decode first. So registering a brand-new kind in the daemon registry would produce an entry nothing can reach, exactly the defect that stranded the coordination surface. Verify both lines yourself before proceeding.\nAND THE UNION IS CLOSED FOR M5 by human decision recorded 11:54Z on task-d17bb228: no `RuntimeCommandKind` expansion, no contracts/client regeneration during this milestone. That ruling binds here too.\nTHE ROUTE, therefore: compose the Foundation attempt edge behind the ALREADY-WIRED `effect.activate` kind rather than minting a new one. It is in the union, already registered as a singleton kind with its own `EFFECT_ACTIVATE_PAYLOAD_KEYS` allow-list, and it is the natural composition point because task-6cbff010's dispatch reads the DURABLE activation back from the store — the recorded dependency order (e337 → 6cb → this) is exactly that pipeline. The capability DoD 1 asks for is fully delivered: an authenticated production edge, capability-gated, allow-listed, with stable refusal mapping, authentication before payload authority. What changes is only that no new wire kind appears.\nFLAG IT, do not bury it: post the route to #general before step 5, naming DoD 1's literal \"expose one bounded Foundation attempt command\" and stating that the command is `effect.activate` extended rather than a new kind. If the human wants a new kind, that is a contracts-expansion prerequisite and this task re-blocks.\nGATES, each separate with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`. Record count lines and every failing file; the daemon legs are expected RED from foreign slices.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/contracts/src/runtime/runtime-vocabulary.ts",
         "packages/contracts/src/runtime/runtime-envelope.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "note": "BASELINE at HEAD 8151ade (plan measured f65fbde — HEAD has moved, several premises re-measured).\n\nTHE WALL, verified myself, both lines:\n- packages/contracts/src/runtime/runtime-vocabulary.ts:85 RUNTIME_COMMAND_KINDS — printed the whole frozen array. `foundation.dispatch` is ABSENT. So is any `attempt.*`/`dispatch.*` kind. `effect.activate` IS present.\n- packages/contracts/src/runtime/runtime-envelope.ts:142 — `if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput());`, and apps/daemon/src/http/http-adapter.ts:196 `deps.registry.get(...)` runs only after that decode. Confirmed: one seam, decode first, a new kind is unreachable.\n- The only definition of `foundation.dispatch` in the repo is apps/daemon/src/work/foundation-attempt-contracts.ts:39 — a local const, not a wire kind.\n\nORDERING FACT DoD 1 ASKS FOR IS ALREADY STRUCTURAL: http-adapter.ts:186 authenticateHttpRequest -> 193 decode -> 196 registry -> 199 capability -> 203 payload allow-list. Authentication precedes every payload read today.\n\nPLAN PREMISE CORRECTED: daemon-store-dependencies.ts is 194 lines by `grep -c ''`, not 397. The 3-line-headroom hazard the plan and task rail 2 both name no longer exists at this HEAD. Recording it because a later reader would otherwise plan around a wall that is gone.\n\nGATE: `pnpm --filter @moe/daemon typecheck` -> `tsc --project tsconfig.json`, EXIT=0, no diagnostics. Baseline is clean, so any red I produce later is mine. Did not spend the full `test` leg at baseline: the step-2 measurement below turned this task toward a block, and the daemon suite is long.\n\nROUTE STATUS: the plan's route (compose behind the already-wired `effect.activate`) is measured UNWORKABLE, not merely awkward — see step 2. Flagging to #general as step 1 required, with the corrected conclusion rather than the assumed one.",
+      "startedAt": "2026-08-16T13:58:58.248Z",
+      "completedAt": "2026-08-16T14:01:55.572Z"
     },
     {
       "stepId": "step-2",
       "description": "PROBE THE DISAGREEMENT CASES FIRST, as the routing note instructs — before naming symbols in the plan you implement. Drive the committed registry/public host and the stored-dispatch reader with DELIBERATELY DISAGREEING caller-versus-stored values and record what each answers:\n- a caller-presented grant, runtime closure, slot, budget, lease, attempt or process registration that differs from the durable record;\n- a replay whose command bytes differ from the stored decision's;\n- a node selection naming a node the durable graph does not carry.\nRecord the exact code and layer each produces, from the landed vocabularies: `FOUNDATION_ATTEMPT_CODES` is now FIFTEEN members after task-6cbff010's produce-or-drop round (RESULT_MANIFEST_INVALID was DROPPED because `buildResultManifest` answers that under the runner's own code at `RUNNER_WORKSPACE_LAYER`, and the contract comment says a second vocabulary for one condition \"would only make the two indistinguishable again\" — do not re-add it). `FOUNDATION_ATTEMPT_REPLAY_MISMATCH` and `FOUNDATION_ATTEMPT_BINDING_MISMATCH` are the caller-versus-stored codes; `FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS` and `FOUNDATION_ATTEMPT_DISPATCH_SUSPECT` cover the replay states.\nTHE POINT OF PROBING FIRST: the dispatch service already refuses most caller-supplied authority — `durableActivation` reads the activation back \"FROM THE STORE, never from the caller's copy and never from the command result the caller received\", and `FoundationAttemptDeps` deliberately excludes the runtime filesystem, host observer and clock so \"no caller — test or transport — can hand pinning a runtime nobody observed\". Ingress must NOT re-validate what dispatch already refuses; a second validator answering first would change which layer refuses and silently detach every downstream assertion. Record which layer answers each case, and design the ingress to add only what dispatch cannot see: authentication, capability, payload allow-list, and node selection.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T14:01:57.554Z"
     },
     {
       "stepId": "step-3",
@@ -89,7 +93,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -108,20 +112,22 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-16T13:11:59.220Z",
+  "updatedAt": "2026-08-16T14:01:57.554Z",
   "blockedFromStatus": null,
   "blockedAt": null,
   "blockedReason": null,
   "contextFetchedBy": [
     "architect-4eca9b79",
     "architect-94dd1835",
-    "governor-a627169a"
+    "governor-a627169a",
+    "worker-5678886b"
   ],
   "blockedResourceId": null,
   "metrics": {
     "firstClaimAt": "2026-08-15T18:31:16.469Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 1
   },
   "priorHandoffs": [
     {
@@ -137,7 +143,9 @@
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:11:57.152Z",
   "planningNotes": {
@@ -156,7 +164,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-16T13:58:15.212Z",
+    "escalatedAt": "2026-08-16T13:58:15.212Z"
   },
-  "planApprovedAt": "2026-08-16T13:11:59.220Z"
+  "planApprovedAt": "2026-08-16T13:11:59.220Z",
+  "workStartedAt": "2026-08-16T13:58:58.248Z"
 }

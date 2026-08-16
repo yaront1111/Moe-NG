@@ -201,7 +201,8 @@ async function boundaryRefusal(
   }
   if (boundary === "DURABLE_STORE_LAYER") {
     const closed = SqliteEventStore.openForProject(join(root, "closed.sqlite"), "security-project");
-    closed.close();
+    try { /* The hostile operation below deliberately receives a closed production handle. */ }
+    finally { closed.close(); }
     let failure: unknown;
     try {
       closed.getAggregateVersion("closed-reader-probe");

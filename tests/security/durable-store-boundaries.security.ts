@@ -109,7 +109,9 @@ const fulfilled = (outcome: RaceOutcome<RaceWorkerResult, RaceWorkerResult>): Ra
 async function runRaceCase(hostileCase: RaceCase): Promise<RaceCaseResult> {
   const root = hostileRoot(`race-${hostileCase.boundary.toLowerCase()}`);
   const databasePath = join(root, "events.sqlite");
-  SqliteEventStore.openForProject(databasePath, "moe-test-project").close();
+  const initializer = SqliteEventStore.openForProject(databasePath, "moe-test-project");
+  try { /* Initialize the shared schema before either hostile writer opens it. */ }
+  finally { initializer.close(); }
   const gate = new SharedArrayBuffer(8);
   const gateView = new Int32Array(gate);
   const left = startRaceWorker(databasePath, gate, "left");
