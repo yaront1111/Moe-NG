@@ -66,10 +66,16 @@ export const BENCHMARK_PROJECTION_MESSAGES:
  * UNKNOWN, so an unknown cell that could not say WHY would be the imputation hazard
  * wearing a different hat — indistinguishable, one edit later, from a zero.
  *
- * `PRODUCER_DECLARED_UNKNOWN` is the only basis that carries a producing authority's own
- * code and layer. The other four are the harness's own reading of the record's shape,
- * and they carry no code, because attributing one to a producer that never spoke would
- * be inventing evidence.
+ * TWO OF THE FIVE CARRY A PRODUCER'S OWN CODE AND LAYER, and they are not the same case.
+ * `PRODUCER_DECLARED_UNKNOWN` is a fact the producer reached and could not observe.
+ * `SELECTION_UNREADABLE` is the whole declared selection being unreadable, so the facts
+ * inside it were never individually reached at all — a distinction a later reader needs,
+ * because the first says the run was measured and this fact was absent, and the second
+ * says nothing about the run was asked for in a readable way.
+ *
+ * The remaining three — `BOOT_IDENTITY_MISMATCH`, `OBSERVATION_ABSENT`, `QUANTITY_ABSENT`
+ * — are the harness's own reading of the record's shape and carry no code, because
+ * attributing one to a producer that never spoke would be inventing evidence.
  */
 export const BENCHMARK_UNKNOWN_BASES = Object.freeze([
   "BOOT_IDENTITY_MISMATCH",
@@ -79,6 +85,15 @@ export const BENCHMARK_UNKNOWN_BASES = Object.freeze([
   "SELECTION_UNREADABLE",
 ] as const);
 export type BenchmarkUnknownBasis = (typeof BENCHMARK_UNKNOWN_BASES)[number];
+
+/**
+ * What a cost row's price is BOUND to. Never what the run cost: `PRICEBOOK_BINDING` says
+ * a derived list price exists against a named pricebook revision, and `NO_BINDING` says
+ * no price was bound at all. Neither is an actual-cost claim, and there is deliberately
+ * no third member that would let one become a cost.
+ */
+export const BENCHMARK_COST_BASES = Object.freeze(["NO_BINDING", "PRICEBOOK_BINDING"] as const);
+export type BenchmarkCostBasis = (typeof BENCHMARK_COST_BASES)[number];
 
 /**
  * One projected cell. An unknown cell never carries a `value` key at all, so a reader

@@ -35,12 +35,28 @@
  */
 
 export {
-  BENCHMARK_PROJECTION_CODES, BENCHMARK_PROJECTION_LAYERS, BENCHMARK_PROJECTION_MESSAGES,
-  benchmarkProjectionRefusal,
+  BENCHMARK_COST_BASES, BENCHMARK_PROJECTION_CODES, BENCHMARK_PROJECTION_LAYERS,
+  BENCHMARK_PROJECTION_MESSAGES, BENCHMARK_UNKNOWN_BASES, benchmarkProjectionRefusal,
 } from "./benchmark-projection-vocabulary.js";
 export type {
-  BenchmarkProjectionCode, BenchmarkProjectionLayer, BenchmarkProjectionRefusal,
+  BenchmarkCostBasis, BenchmarkProjectionCode, BenchmarkProjectionLayer,
+  BenchmarkProjectionRefusal, BenchmarkUnknownBasis, BenchmarkValue,
 } from "./benchmark-projection-vocabulary.js";
+export { admitRunRecord } from "./benchmark-record-admission.js";
+export type { BenchmarkAdmission } from "./benchmark-record-admission.js";
+export { projectCostClass, projectCounts } from "./benchmark-cost-projection.js";
+export type { BenchmarkCostRow, BenchmarkCounts } from "./benchmark-cost-projection.js";
+export { projectBenchmarkRun } from "./benchmark-run-projection.js";
+export type {
+  BenchmarkEffort, BenchmarkEvidenceReceipt, BenchmarkModelEvidence, BenchmarkProjectionResult,
+  BenchmarkRecordRefusals, BenchmarkReproducibility, BenchmarkRunProjection, BenchmarkSettings,
+  BenchmarkTiming,
+} from "./benchmark-run-projection.js";
+export {
+  FIXTURE_OBSERVED_END, FIXTURE_OBSERVED_END_OTHER_BOOT, FIXTURE_OBSERVED_START,
+  FIXTURE_USAGE_ROW, FIXTURE_USAGE_ROW_UNMEASURED, completeRunRecordFixture,
+  unknownFactFixture, unobservedRunRecordFixture,
+} from "./benchmark-record-fixture.js";
 export { PROJECTED_RECORD_KEYS, PROJECTED_RECORD_VERSION } from "./benchmark-record-contracts.js";
 export type {
   ProjectedClockObservation, ProjectedConcurrency, ProjectedDeclaredSelection,
