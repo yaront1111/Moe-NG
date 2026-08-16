@@ -12,58 +12,47 @@
  */
 
 import {
+  COMPONENT_KEYS,
   CROSS_HOST_AGGREGATE_VERSION,
-  CROSS_HOST_BODY_KEYS,
   CROSS_HOST_CASE_KEYS,
   CROSS_HOST_CONSUMER_TASK_ID,
   CROSS_HOST_EXPECTED_CASE_COUNT,
   CROSS_HOST_HOST_SLOTS,
   CROSS_HOST_RECEIPT_VERSION,
+  DISTRIBUTION_KEYS,
+  DOCTOR_KEYS,
+  RECEIPT_KEYS,
+  RUNTIME_KEYS,
+  SCHEDULE_KEYS,
+  SOURCE_KEYS,
+  TIMESTAMP_KEYS,
   canonicalDigest,
   crossHostFailure,
   exactKeys,
   isCrossHostSlot,
   isDigestText,
   isText,
+  scheduleUniverseOf,
   type CrossHostExpectation,
   type CrossHostFailure,
   type CrossHostReceipt,
   type CrossHostSlot,
 } from "./effect-evidence-contract.js";
 
-const RECEIPT_KEYS = Object.freeze([...CROSS_HOST_BODY_KEYS, "receiptDigest"]);
-const SOURCE_KEYS = Object.freeze(["commitSha", "objectFormat"]);
-const COMPONENT_KEYS = Object.freeze(["assetDigest", "manifestDigest", "name"]);
-const DISTRIBUTION_KEYS = Object.freeze(["aggregateDigest", "componentCount", "components"]);
-const DOCTOR_KEYS = Object.freeze(["arch", "nodeVersion", "os", "pnpmVersion", "reportDigest"]);
-const RUNTIME_KEYS = Object.freeze(["closureKind", "observationDigest", "pinningMethod", "truthClass"]);
-const SCHEDULE_KEYS = Object.freeze([
-  "configDigest", "fixtureDigest", "lockfileDigest", "scheduleDigest", "workflowDigest",
-]);
-const TIMESTAMP_KEYS = Object.freeze(["completedAt", "startedAt"]);
-
-export type VerifyHostReceiptResult =
-  | { readonly ok: true; readonly receipt: CrossHostReceipt }
-  | CrossHostFailure;
-
-/** The universe a schedule digest covers: which cases ran, not what they found. */
-export function scheduleUniverseOf(cases: readonly Record<string, unknown>[]): unknown {
-  return cases.map((entry) => ({ boundary: entry["boundary"], schedule: entry["schedule"] }));
-}
+export type VerifyHostReceiptResult = { readonly ok: true; readonly receipt: CrossHostReceipt } | CrossHostFailure;
 
 function malformed(slot: CrossHostSlot, message: string): CrossHostFailure {
   return crossHostFailure("CROSS_HOST_RECEIPT_MALFORMED", "CROSS_HOST_AGGREGATOR", slot, message);
 }
 
 function shapeRejection(body: Record<string, unknown>, slot: CrossHostSlot): CrossHostFailure | null {
-  const source = exactKeys(body["source"], SOURCE_KEYS);
   const distribution = exactKeys(body["distribution"], DISTRIBUTION_KEYS);
-  const doctor = exactKeys(body["doctor"], DOCTOR_KEYS);
-  const kernel = exactKeys(body["kernel"], ["release"]);
-  const runtime = exactKeys(body["runtime"], RUNTIME_KEYS);
-  const schedule = exactKeys(body["schedule"], SCHEDULE_KEYS);
-  const timestamps = exactKeys(body["timestamps"], TIMESTAMP_KEYS);
-  if ([source, distribution, doctor, kernel, runtime, schedule, timestamps].includes(null)) {
+  const sub = [
+    exactKeys(body["source"], SOURCE_KEYS), distribution, exactKeys(body["doctor"], DOCTOR_KEYS),
+    exactKeys(body["kernel"], ["release"]), exactKeys(body["runtime"], RUNTIME_KEYS),
+    exactKeys(body["schedule"], SCHEDULE_KEYS), exactKeys(body["timestamps"], TIMESTAMP_KEYS),
+  ];
+  if (sub.includes(null)) {
     return malformed(slot, "a bound sub-record does not carry exactly its declared keys");
   }
   if (body["receiptVersion"] !== CROSS_HOST_RECEIPT_VERSION) {
@@ -222,24 +211,25 @@ export interface AggregateInput {
 
 function rowFor(slot: CrossHostSlot, input: AggregateInput): CrossHostRow {
   const offered = input.slots[slot] ?? [];
-  const unknown = (failure: CrossHostFailure): CrossHostRow =>
-    ({ hostSlot: slot, truthClass: "UNKNOWN", receiptDigest: null, failure });
+  const unknown = (code: "CROSS_HOST_RECEIPT_MISSING" | "CROSS_HOST_RECEIPT_DUPLICATE" | null, failure?: CrossHostFailure): CrossHostRow => ({
+    hostSlot: slot, truthClass: "UNKNOWN", receiptDigest: null,
+    failure: failure ?? crossHostFailure(
+      code as "CROSS_HOST_RECEIPT_MISSING", "CROSS_HOST_AGGREGATOR", slot,
+      code === "CROSS_HOST_RECEIPT_MISSING"
+        ? "no host receipt was offered for this slot"
+        : "more than one receipt was offered for this slot and none of them is authoritative",
+    ),
+  });
   if (offered.length === 0) {
-    return unknown(crossHostFailure(
-      "CROSS_HOST_RECEIPT_MISSING", "CROSS_HOST_AGGREGATOR", slot,
-      "no host receipt was offered for this slot",
-    ));
+    return unknown("CROSS_HOST_RECEIPT_MISSING");
   }
   if (offered.length > 1) {
-    return unknown(crossHostFailure(
-      "CROSS_HOST_RECEIPT_DUPLICATE", "CROSS_HOST_AGGREGATOR", slot,
-      "more than one receipt was offered for this slot and none of them is authoritative",
-    ));
+    return unknown("CROSS_HOST_RECEIPT_DUPLICATE");
   }
   const verified = verifyHostReceipt(slot, offered[0] as Uint8Array, input.expected);
   return verified.ok
     ? { hostSlot: slot, truthClass: "PROVEN", receiptDigest: verified.receipt.receiptDigest, failure: null }
-    : unknown(verified);
+    : unknown(null, verified);
 }
 
 /**
@@ -249,8 +239,7 @@ function rowFor(slot: CrossHostSlot, input: AggregateInput): CrossHostRow {
  */
 export function aggregateHostReceipts(input: AggregateInput): CrossHostAggregate {
   const rows = CROSS_HOST_HOST_SLOTS.map((slot) => rowFor(slot, input));
-  const complete =
-    rows.length === CROSS_HOST_HOST_SLOTS.length && rows.every((row) => row.truthClass === "PROVEN");
+  const complete = rows.length === CROSS_HOST_HOST_SLOTS.length && rows.every((r) => r.truthClass === "PROVEN");
   const body = {
     aggregateVersion: CROSS_HOST_AGGREGATE_VERSION,
     consumerTaskId: CROSS_HOST_CONSUMER_TASK_ID,

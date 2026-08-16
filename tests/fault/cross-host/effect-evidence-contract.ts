@@ -180,10 +180,6 @@ export interface CrossHostExpectation {
   readonly distribution: CrossHostDistribution;
 }
 
-export type VerifyHostReceiptResult =
-  | { readonly ok: true; readonly receipt: CrossHostReceipt }
-  | CrossHostFailure;
-
 /**
  * Exact-key decoding: an unexpected own key is a refusal, never something to
  * ignore. A receipt that carries one extra field is not the receipt whose digest
@@ -208,4 +204,21 @@ export function isText(value: unknown): value is string {
 
 export function isDigestText(value: unknown): value is string {
   return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
+/** The exact-key sets every bound sub-record is decoded against. */
+export const RECEIPT_KEYS = Object.freeze([...CROSS_HOST_BODY_KEYS, "receiptDigest"]);
+export const SOURCE_KEYS = Object.freeze(["commitSha", "objectFormat"]);
+export const COMPONENT_KEYS = Object.freeze(["assetDigest", "manifestDigest", "name"]);
+export const DISTRIBUTION_KEYS = Object.freeze(["aggregateDigest", "componentCount", "components"]);
+export const DOCTOR_KEYS = Object.freeze(["arch", "nodeVersion", "os", "pnpmVersion", "reportDigest"]);
+export const RUNTIME_KEYS = Object.freeze(["closureKind", "observationDigest", "pinningMethod", "truthClass"]);
+export const SCHEDULE_KEYS = Object.freeze([
+  "configDigest", "fixtureDigest", "lockfileDigest", "scheduleDigest", "workflowDigest",
+]);
+export const TIMESTAMP_KEYS = Object.freeze(["completedAt", "startedAt"]);
+
+/** The universe a schedule digest covers: which cases ran, not what they found. */
+export function scheduleUniverseOf(cases: readonly Record<string, unknown>[]): unknown {
+  return cases.map((entry) => ({ boundary: entry["boundary"], schedule: entry["schedule"] }));
 }

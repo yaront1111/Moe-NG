@@ -34,17 +34,14 @@ import {
   canonicalBytes,
   canonicalDigest,
   receiptFileName,
+  scheduleUniverseOf,
   sealHostReceipt,
   type CrossHostExpectation,
   type CrossHostReceipt,
   type CrossHostReceiptBody,
   type CrossHostSlot,
 } from "./effect-evidence-contract.js";
-import {
-  aggregateHostReceipts,
-  scheduleUniverseOf,
-  verifyHostReceipt,
-} from "./effect-evidence-verify.js";
+import { aggregateHostReceipts, verifyHostReceipt } from "./effect-evidence-verify.js";
 import { CROSS_HOST_SCHEDULES, crossHostCaseUniverse } from "./effect-schedule-driver.js";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -163,20 +160,13 @@ function mutations(): readonly Mutation[] {
   };
   return Object.freeze([
     { label: "extra key", code: "CROSS_HOST_RECEIPT_MALFORMED", mutate: swap("extra", 1) },
-    {
-      label: "missing key",
-      code: "CROSS_HOST_RECEIPT_MALFORMED",
-      mutate: (body) => {
-        delete body["kernel"];
-      },
-    },
+    { label: "missing key", code: "CROSS_HOST_RECEIPT_MALFORMED", mutate: (body) => void delete body["kernel"] },
     { label: "host spoof", code: "CROSS_HOST_HOST_MISMATCH", mutate: inner("doctor", "os", "darwin") },
     { label: "doctor arch", code: "CROSS_HOST_HOST_UNVERIFIABLE", mutate: inner("doctor", "arch", "") },
     { label: "kernel absent", code: "CROSS_HOST_HOST_UNVERIFIABLE", mutate: inner("kernel", "release", "") },
     { label: "wrong source", code: "CROSS_HOST_SOURCE_MISMATCH", mutate: inner("source", "commitSha", "0".repeat(40)) },
     {
-      label: "manifest digest",
-      code: "CROSS_HOST_DISTRIBUTION_MISMATCH",
+      label: "manifest digest", code: "CROSS_HOST_DISTRIBUTION_MISMATCH",
       mutate: (body) => {
         const distribution = body["distribution"] as Record<string, unknown>;
         const components = (distribution["components"] as Record<string, unknown>[]).map((entry) => ({ ...entry }));
@@ -185,8 +175,7 @@ function mutations(): readonly Mutation[] {
       },
     },
     {
-      label: "asset digest",
-      code: "CROSS_HOST_DISTRIBUTION_MISMATCH",
+      label: "asset digest", code: "CROSS_HOST_DISTRIBUTION_MISMATCH",
       mutate: (body) => {
         const distribution = body["distribution"] as Record<string, unknown>;
         const components = (distribution["components"] as Record<string, unknown>[]).map((entry) => ({ ...entry }));
@@ -197,15 +186,11 @@ function mutations(): readonly Mutation[] {
     { label: "doctor closure", code: "CROSS_HOST_RUNTIME_UNVERIFIABLE", mutate: inner("runtime", "truthClass", "UNKNOWN") },
     { label: "runtime closure", code: "CROSS_HOST_RUNTIME_UNVERIFIABLE", mutate: inner("runtime", "pinningMethod", "UNSUPPORTED") },
     {
-      label: "schedule universe",
-      code: "CROSS_HOST_SCHEDULE_INCOMPLETE",
-      mutate: (body) => {
-        body["cases"] = (body["cases"] as unknown[]).slice(1);
-      },
+      label: "schedule universe", code: "CROSS_HOST_SCHEDULE_INCOMPLETE",
+      mutate: (body) => { body["cases"] = (body["cases"] as unknown[]).slice(1); },
     },
     {
-      label: "one raw case",
-      code: "CROSS_HOST_RAW_RECEIPT_MISMATCH",
+      label: "one raw case", code: "CROSS_HOST_RAW_RECEIPT_MISMATCH",
       mutate: (body) => {
         const cases = (body["cases"] as Record<string, unknown>[]).map((entry) => ({ ...entry }));
         cases[3]!["truthClass"] = "PROVEN";
@@ -213,15 +198,12 @@ function mutations(): readonly Mutation[] {
       },
     },
     {
-      label: "schedule digest",
-      code: "CROSS_HOST_SCHEDULE_DIGEST_MISMATCH",
+      label: "schedule digest", code: "CROSS_HOST_SCHEDULE_DIGEST_MISMATCH",
       mutate: inner("schedule", "scheduleDigest", "00".repeat(32)),
     },
     {
-      label: "self digest",
-      code: "CROSS_HOST_RECEIPT_DIGEST_MISMATCH",
-      reseal: false,
-      mutate: swap("receiptDigest", "00".repeat(32)),
+      label: "self digest", code: "CROSS_HOST_RECEIPT_DIGEST_MISMATCH",
+      reseal: false, mutate: swap("receiptDigest", "00".repeat(32)),
     },
   ]);
 }

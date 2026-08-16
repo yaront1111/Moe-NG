@@ -54,3 +54,164 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Host-native effect evidence for task-01c5f96ec1e247dc846fd628c929974a.
+  #
+  # Independent of `gate` on purpose. `gate` runs the broad repo suite and may be
+  # red for reasons that belong to another task; that red stays visible rather
+  # than being deleted to buy a green run, and it must not gate this evidence.
+  # Nothing here can produce PROVEN off-host: the collector derives the executing
+  # host from the production doctor collector, so a matrix variable, a job name
+  # or an artifact name cannot promote a row.
+  host-evidence:
+    name: host-evidence-${{ matrix.slot }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slot: linux
+            runner: ubuntu-latest
+          - slot: darwin
+            runner: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Compile the fault tree
+        run: pnpm exec tsc -p tests/fault/tsconfig.json
+
+      # `| tee` would report tee's status, so the real Vitest status is read back
+      # out of PIPESTATUS. An exit 0 that printed no counts ran no tests, so the
+      # count lines and the internal executed-case count are required explicitly.
+      - name: Run the host schedule
+        env:
+          MOE_CROSS_HOST_RAW: ${{ github.workspace }}/cross-host-raw
+        run: |
+          set -o pipefail
+          set +e
+          pnpm exec vitest run --config tests/fault/vitest.config.ts \
+            ${{ matrix.slot == 'linux' && 'linux' || 'macos' }}/effect-conformance.fault.ts \
+            2>&1 | tee vitest-host.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "vitest exit status: ${status}"
+          test "${status}" -eq 0
+          grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-host.log
+          grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-host.log
+          grep -Fq 'executedCaseCount=21' vitest-host.log
+
+      - name: Collect the host receipt
+        run: |
+          node tests/fault/cross-host/cross-host-evidence.mjs collect \
+            --slot ${{ matrix.slot }} \
+            --schedule cross-host-raw/schedule-${{ matrix.slot }}.json \
+            --out cross-host-receipt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cross-host-${{ matrix.slot }}-${{ github.sha }}
+          path: |
+            cross-host-receipt
+            cross-host-raw
+            vitest-host.log
+          if-no-files-found: error
+
+  # Always runs, including when a host leg failed: an aggregate that was never
+  # written is indistinguishable from a job that never started, and the missing
+  # row is exactly the fact worth publishing.
+  cross-host-aggregate:
+    name: cross-host-aggregate
+    needs: [host-evidence]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Downloaded into FIXED slots. The transport name is not authority: the
+      # aggregator re-derives each row from the verified doctor identity inside
+      # the receipt, so a receipt filed into the wrong slot is refused.
+      - name: Download the linux receipt
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-host-linux-${{ github.sha }}
+          path: cross-host-slots/linux-artifact
+
+      - name: Download the darwin receipt
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: cross-host-darwin-${{ github.sha }}
+          path: cross-host-slots/darwin-artifact
+
+      - name: Place each receipt in its expected slot
+        run: |
+          for slot in linux darwin; do
+            mkdir -p "cross-host-slots/${slot}"
+            if [ -d "cross-host-slots/${slot}-artifact/cross-host-receipt" ]; then
+              cp "cross-host-slots/${slot}-artifact/cross-host-receipt/"*.json "cross-host-slots/${slot}/" || true
+            fi
+          done
+          ls -R cross-host-slots
+
+      - name: Compile and run the hostile contract suite
+        run: |
+          set -o pipefail
+          set +e
+          pnpm exec tsc -p tests/fault/tsconfig.json
+          tsc_status=$?
+          test "${tsc_status}" -eq 0
+          pnpm exec vitest run --config tests/fault/vitest.config.ts \
+            cross-host/effect-evidence.fault.ts cross-host/production-surfaces.fault.ts \
+            2>&1 | tee vitest-contract.log
+          status=${PIPESTATUS[0]}
+          set -e
+          test "${status}" -eq 0
+          grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-contract.log
+          grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-contract.log
+
+      - name: Aggregate both host rows
+        run: |
+          node tests/fault/cross-host/cross-host-evidence.mjs aggregate \
+            --slots cross-host-slots \
+            --out cross-host-aggregate \
+            --require-complete
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cross-host-aggregate-${{ github.sha }}
+          path: |
+            cross-host-aggregate
+            vitest-contract.log
+          if-no-files-found: error

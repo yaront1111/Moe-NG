@@ -13,7 +13,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { lstatSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  lstatSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -44,6 +46,7 @@ export interface ActivationRecords {
   readonly grant: unknown;
   readonly registration: unknown;
   readonly lease: unknown;
+  readonly advancedAuthority: unknown;
   readonly effectRef: string;
 }
 
@@ -90,17 +93,32 @@ export function buildRuntime(
   return built.ok === true ? built.observation : null;
 }
 
-/** A real symlink on the executing filesystem, observed with lstat and realpath. */
+/**
+ * A real symlink on the executing filesystem, observed with lstat and realpath.
+ *
+ * The observation is the fact; the files are not. The temporary tree is removed
+ * in `finally` so no probe path survives the run, and a filesystem that refuses
+ * to create the link contributes `null` rather than an invented observation.
+ */
 function pathFact(): unknown {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-xh-path-")));
-  const target = join(root, "target");
-  const link = join(root, "link");
-  writeFileSync(target, "moe");
-  symlinkSync(target, link);
-  if (!lstatSync(link).isSymbolicLink()) {
+  let root: string | null = null;
+  try {
+    root = realpathSync(mkdtempSync(join(tmpdir(), "moe-xh-path-")));
+    const target = join(root, "target");
+    const link = join(root, "link");
+    writeFileSync(target, "moe");
+    symlinkSync(target, link);
+    if (!lstatSync(link).isSymbolicLink()) {
+      return null;
+    }
+    return { path: link, symlinkTarget: realpathSync(target), resolvedPath: realpathSync(link) };
+  } catch {
     return null;
+  } finally {
+    if (root !== null) {
+      rmSync(root, { recursive: true, force: true });
+    }
   }
-  return { path: link, symlinkTarget: realpathSync(target), resolvedPath: realpathSync(link) };
 }
 
 function workspaceFact(context: FactContext): unknown {
@@ -180,7 +198,12 @@ function crashSituation(context: FactContext, processExit: ClaudeProcessExit): u
       journalDigest: null,
       reviewPackageDigest: null,
     },
-    claimedAuthority: null,
+    // A restart-time adoption is only honest with a REAL fence advance: a higher
+    // epoch AND the new token that generation minted. Passing null here would
+    // make production refuse RECOVERY_OWNERSHIP_TRANSFER_UNPROVEN, which is the
+    // correct refusal for quiescence and the wrong input for a wrapper that
+    // actually took the next lease generation before classifying.
+    claimedAuthority: context.records.advancedAuthority,
   };
 }
 
