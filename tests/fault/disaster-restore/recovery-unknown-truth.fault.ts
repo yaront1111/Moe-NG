@@ -4,9 +4,12 @@
  *
  * Production always answers that ONE coordinator code, so the code alone cannot
  * tell the three absences apart; the upstream tuple is what carries provenance
- * and every case pins it. The three upstream codes are asserted pairwise
- * distinct at the end, so a future collapse into a single "not available"
- * reddens instead of passing.
+ * and every case pins it. Distinctness is enforced at the end over the upstreams
+ * PRODUCTION RETURNED — each case hands its target-absence upstream to
+ * `observeUpstream` BEFORE pinning it, so a future collapse into a single "not
+ * available" reddens the distinctness assertion itself and not merely the
+ * per-case pins. Asserting distinctness over restated literals would be
+ * unkillable: distinct literals are distinct under every production change.
  *
  * Each fixture is built VALID at every earlier layer and lacks only its target
  * proof. Case 2 proves that explicitly: the record is recorded, the ledger reads
@@ -33,7 +36,11 @@ import {
   recordRecoveryReconciliation,
   runRecoveryCompleteCommand,
 } from "@moe/daemon";
-import type { RestoreIncarnationBinding } from "@moe/daemon";
+import type {
+  RecoveryCompletionUpstream,
+  RecoveryInventoryRefusal,
+  RestoreIncarnationBinding,
+} from "@moe/daemon";
 
 import {
   DISASTER_PREPARED_AT,
@@ -75,6 +82,34 @@ const writeRequest = {
 
 let generation: SeededGeneration;
 let identity: RestoreIncarnationBinding;
+
+/**
+ * The upstream tuple production ACTUALLY returned for each case's target
+ * absence, keyed by case. The type is the UNION OF THE TWO PRODUCTION UPSTREAM
+ * TYPES the three cases answer with — the inventory ledger's and the completion
+ * evidence reader's — rather than a locally restated `{ code, layer }`. A
+ * restated shape is what let the previous version of the closing test detach
+ * from its subject.
+ */
+type ObservedUpstream = RecoveryInventoryRefusal["upstream"] | RecoveryCompletionUpstream;
+
+const observedUpstreams = new Map<string, ObservedUpstream>();
+
+/**
+ * Records what production answered, and is called BEFORE the per-case pin on
+ * purpose: if a collapse makes two cases agree, the map still holds three
+ * entries and the distinctness test fails on distinctness rather than being
+ * pre-empted by a per-case `toEqual`.
+ *
+ * A null upstream is refused rather than skipped. Production losing the tuple
+ * entirely is exactly the provenance collapse this file exists to catch, so it
+ * must not silently shrink the observed set into a vacuous pass.
+ */
+function observeUpstream(label: string, upstream: ObservedUpstream | null): void {
+  expect(upstream, `${label} returned no upstream tuple`).not.toBeNull();
+  if (upstream === null) throw new Error(`${label} returned no upstream tuple`);
+  observedUpstreams.set(label, upstream);
+}
 
 beforeAll(async () => {
   generation = await seedGeneration("unknown-truth");
@@ -182,6 +217,7 @@ describe("a missing inventory, artifact proof or key proof keeps recovery UNKNOW
     if (read.ok) throw new Error("an unrecorded digest must not read as FOUND");
     expect(read.code).toBe("UNKNOWN_TRUTH");
     expect(read.layer).toBe("RECOVERY_INVENTORY");
+    observeUpstream("case 1: absent inventory", read.upstream);
     expect(read.upstream).toEqual({
       code: "RECORD_NOT_FOUND",
       layer: "RECOVERY_INVENTORY_LEDGER",
@@ -239,6 +275,7 @@ describe("a missing inventory, artifact proof or key proof keeps recovery UNKNOW
     if (evidence.ok) throw new Error("an incomplete proof set must not assemble evidence");
     expect(evidence.code).toBe("UNKNOWN_TRUTH");
     expect(evidence.refusedBy).toBe("RECOVERY_INVENTORY");
+    observeUpstream("case 2: absent artifact proof", evidence.upstream);
     expect(evidence.upstream).toEqual({
       code: "RECOVERY_INVENTORY_PROOF_INCOMPLETE",
       layer: "RECOVERY_INVENTORY",
@@ -261,6 +298,7 @@ describe("a missing inventory, artifact proof or key proof keeps recovery UNKNOW
     if (refused.ok) throw new Error("no key-epoch proof must not record a reconciliation");
     expect(refused.code).toBe("UNKNOWN_TRUTH");
     expect(refused.layer).toBe("RECOVERY_INVENTORY");
+    observeUpstream("case 3: absent key-epoch proof", refused.upstream);
     expect(refused.upstream).toEqual({
       code: "RECOVERY_BINDING_UNAVAILABLE",
       layer: "RECOVERY_INVENTORY_LEDGER",
@@ -275,11 +313,19 @@ describe("a missing inventory, artifact proof or key proof keeps recovery UNKNOW
   });
 
   it("keeps the three absences distinguishable by upstream, not by code", () => {
-    const upstreams = [
-      "RECORD_NOT_FOUND",
-      "RECOVERY_INVENTORY_PROOF_INCOMPLETE",
-      "RECOVERY_BINDING_UNAVAILABLE",
-    ];
-    expect(new Set(upstreams).size).toBe(upstreams.length);
+    // Read from what production RETURNED in cases 1-3, never from restated
+    // literals: a local array of three distinct strings is distinct under every
+    // possible production change and so could not fail.
+    const observed = [...observedUpstreams.values()];
+    // The sweep actually swept. Without this, a case that stopped observing
+    // would leave this test comparing an empty set against itself and passing.
+    expect(observedUpstreams.size).toBe(3);
+
+    // Every case answered the SAME coordinator code upstream of here, which is
+    // precisely why the code cannot tell them apart and the tuple must.
+    expect(new Set(observed.map((upstream) => upstream.code)).size).toBe(observed.length);
+    expect(
+      new Set(observed.map((upstream) => `${upstream.code}@${upstream.layer}`)).size,
+    ).toBe(observed.length);
   });
 });
