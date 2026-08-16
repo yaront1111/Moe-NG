@@ -20,6 +20,7 @@ import { describe, expect, it } from "vitest";
 import {
   CROSS_HOST_SCHEDULES,
   crossHostCaseUniverse,
+  describeRun,
   executingHostSlot,
   runHostSchedules,
   writeRawSchedule,
@@ -57,6 +58,9 @@ describe("macOS effect conformance over every frozen platform boundary", () => {
     async () => {
       const host = await executingHostSlot();
       const run = await runHostSchedules(SLOT);
+      // Printed before any assertion so a red CI leg carries the outcome that
+      // produced it. A gate whose refusal cannot be read is not verifiable.
+      process.stdout.write(`hostScheduleOutcome=${JSON.stringify(describeRun(host, run))}\n`);
 
       if (host !== SLOT) {
         // Not a skip: the off-host outcome is itself the asserted fact.
@@ -71,7 +75,7 @@ describe("macOS effect conformance over every frozen platform boundary", () => {
       }
 
       if (!run.ok) {
-        throw new Error(`on-host schedule run refused: ${run.code} at ${run.layer}`);
+        throw new Error(`on-host schedule run refused: ${run.code} at ${run.layer}: ${run.message}`);
       }
       expect(run.hostSlot).toBe(SLOT);
       expect(run.doctor.os).toBe(SLOT);

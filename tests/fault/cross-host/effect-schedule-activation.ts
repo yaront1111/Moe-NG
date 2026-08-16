@@ -104,10 +104,20 @@ export interface ScheduleOutcome {
   readonly refusal: string;
 }
 
+/**
+ * The exact production refusal each schedule is defined by. A schedule that
+ * ends in some other refusal did not run the effect it names, so it is refused
+ * rather than recorded: "the child did not survive" is not the same fact as
+ * "the child was SIGKILLed" or "the wrapper cancelled it".
+ */
+export const CRASH_REFUSAL = "VERIFIER_PROCESS_EXIT_AMBIGUOUS/CAPTURE";
+export const CANCELLATION_REFUSAL = "VERIFIER_PROCESS_CANCELLED/CAPTURE";
+
 export async function runVerifierSchedule(
   context: Omit<FactContext, "records">,
   script: string,
   cancel: boolean,
+  expectedRefusal: string,
 ): Promise<ScheduleOutcome | CrossHostFailure> {
   const seed = nextSeed();
   const { request, lease } = activationRecordSet(seed);
@@ -143,6 +153,13 @@ export async function runVerifierSchedule(
     return collectorRefusal(
       "CROSS_HOST_SCHEDULE_INCOMPLETE", null,
       result.ok ? "the child was expected to die, not to complete" : `foreign refusal ${result.failure.code}`,
+    );
+  }
+  const observedRefusal = `${result.failure.code}/${result.failure.layer}`;
+  if (observedRefusal !== expectedRefusal) {
+    return collectorRefusal(
+      "CROSS_HOST_SCHEDULE_INCOMPLETE", null,
+      `the verifier refused ${observedRefusal}, not the scheduled ${expectedRefusal}`,
     );
   }
   const capture = result.capture;

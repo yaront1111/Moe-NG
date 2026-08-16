@@ -30,6 +30,8 @@ import {
 
 import { buildBoundaryFacts, buildRuntime, readHeadSha, type FactContext } from "./effect-boundary-facts.js";
 import {
+  CANCELLATION_REFUSAL,
+  CRASH_REFUSAL,
   SCRIPT_CRASH,
   SCRIPT_LIVE,
   runTombstoneSchedule,
@@ -164,7 +166,9 @@ export async function runHostSchedules(slot: CrossHostSlot): Promise<HostSchedul
     const outcome =
       schedule === "CRASH_BEFORE_ACTIVATION"
         ? runTombstoneSchedule()
-        : await runVerifierSchedule(base, schedule === "CANCELLATION" ? SCRIPT_LIVE : SCRIPT_CRASH, schedule === "CANCELLATION");
+        : schedule === "CANCELLATION"
+          ? await runVerifierSchedule(base, SCRIPT_LIVE, true, CANCELLATION_REFUSAL)
+          : await runVerifierSchedule(base, SCRIPT_CRASH, false, CRASH_REFUSAL);
     if ("ok" in outcome && outcome.ok === false) {
       return outcome;
     }
@@ -200,6 +204,27 @@ export async function runHostSchedules(slot: CrossHostSlot): Promise<HostSchedul
       observationDigest: runtime.observationDigest, truthClass: runtime.truthClass,
     },
     startedAt, completedAt: new Date().toISOString(), launchCount, tombstonedLaunchCount, cases,
+  };
+}
+
+/**
+ * A readable summary of whatever the schedule produced, refusal included.
+ *
+ * Diagnostic only — it asserts nothing and grants nothing. It exists because a
+ * host leg that refuses in CI is otherwise a bare exit code: the caller can see
+ * that the gate failed and not what the production surfaces actually said.
+ */
+export function describeRun(
+  observedHost: string,
+  run: HostScheduleRun | CrossHostFailure,
+): Readonly<Record<string, unknown>> {
+  if (run.ok !== true) {
+    return { observedHost, ok: false, code: run.code, layer: run.layer, hostSlot: run.hostSlot, message: run.message };
+  }
+  return {
+    observedHost, ok: true, hostSlot: run.hostSlot, doctor: run.doctor, kernel: run.kernel,
+    runtime: run.runtime, launchCount: run.launchCount, tombstonedLaunchCount: run.tombstonedLaunchCount,
+    cases: run.cases.map((c) => `${c.boundary}/${c.schedule}=${c.truthClass}:${c.code ?? "-"}:${c.layer ?? "-"}:pid${c.launchedPid ?? "-"}`),
   };
 }
 

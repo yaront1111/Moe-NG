@@ -97,6 +97,11 @@ jobs:
       # `| tee` would report tee's status, so the real Vitest status is read back
       # out of PIPESTATUS. An exit 0 that printed no counts ran no tests, so the
       # count lines and the internal executed-case count are required explicitly.
+      #
+      # A refusal is republished as a workflow `::error::` annotation. Job logs
+      # need repository admin to read, so a bare exit code makes a red host leg
+      # unreadable to the agent that owns it; the annotation carries the actual
+      # failing lines. It reports the refusal, it never relaxes one.
       - name: Run the host schedule
         env:
           MOE_CROSS_HOST_RAW: ${{ github.workspace }}/cross-host-raw
@@ -109,17 +114,37 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           echo "vitest exit status: ${status}"
-          test "${status}" -eq 0
-          grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-host.log
-          grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-host.log
-          grep -Fq 'executedCaseCount=21' vitest-host.log
+          reason=""
+          if [ "${status}" -ne 0 ]; then
+            reason="vitest exited ${status}"
+          elif ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-host.log; then
+            reason="no positive Test Files count: the leg ran no test file"
+          elif ! grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-host.log; then
+            reason="no positive Tests count: the leg ran no case"
+          elif ! grep -Fq 'executedCaseCount=21' vitest-host.log; then
+            reason="executedCaseCount=21 absent: the 21-case schedule did not complete"
+          fi
+          if [ -n "${reason}" ]; then
+            node -e 'const fs=require("node:fs");const tail=fs.readFileSync(process.argv[1],"utf8").slice(-5000);const enc=(s)=>s.replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A");process.stdout.write("::error title="+enc(process.argv[2])+"::"+enc(process.argv[2]+"\n"+tail)+"\n");' \
+              vitest-host.log "host-evidence-${{ matrix.slot }} refused: ${reason}"
+            exit 1
+          fi
 
       - name: Collect the host receipt
         run: |
+          set -o pipefail
+          set +e
           node tests/fault/cross-host/cross-host-evidence.mjs collect \
             --slot ${{ matrix.slot }} \
             --schedule cross-host-raw/schedule-${{ matrix.slot }}.json \
-            --out cross-host-receipt
+            --out cross-host-receipt 2>&1 | tee collect.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            node -e 'const fs=require("node:fs");const tail=fs.readFileSync(process.argv[1],"utf8").slice(-5000);const enc=(s)=>s.replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A");process.stdout.write("::error title="+enc(process.argv[2])+"::"+enc(process.argv[2]+"\n"+tail)+"\n");' \
+              collect.log "host-evidence-${{ matrix.slot }} collect refused: exit ${status}"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -184,28 +209,55 @@ jobs:
           done
           ls -R cross-host-slots
 
+      # Same annotation channel as the host legs, for the same reason: a refusal
+      # here must name itself rather than expiring into an unreadable exit code.
       - name: Compile and run the hostile contract suite
         run: |
           set -o pipefail
           set +e
-          pnpm exec tsc -p tests/fault/tsconfig.json
-          tsc_status=$?
-          test "${tsc_status}" -eq 0
+          pnpm exec tsc -p tests/fault/tsconfig.json 2>&1 | tee tsc-contract.log
+          tsc_status=${PIPESTATUS[0]}
+          set -e
+          if [ "${tsc_status}" -ne 0 ]; then
+            node -e 'const fs=require("node:fs");const tail=fs.readFileSync(process.argv[1],"utf8").slice(-5000);const enc=(s)=>s.replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A");process.stdout.write("::error title="+enc(process.argv[2])+"::"+enc(process.argv[2]+"\n"+tail)+"\n");' \
+              tsc-contract.log "cross-host-aggregate refused: tsc exited ${tsc_status}"
+            exit 1
+          fi
+          set +e
           pnpm exec vitest run --config tests/fault/vitest.config.ts \
             cross-host/effect-evidence.fault.ts cross-host/production-surfaces.fault.ts \
             2>&1 | tee vitest-contract.log
           status=${PIPESTATUS[0]}
           set -e
-          test "${status}" -eq 0
-          grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-contract.log
-          grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-contract.log
+          reason=""
+          if [ "${status}" -ne 0 ]; then
+            reason="vitest exited ${status}"
+          elif ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' vitest-contract.log; then
+            reason="no positive Test Files count: the contract suite ran no test file"
+          elif ! grep -Eq '^ *Tests +[1-9][0-9]* passed' vitest-contract.log; then
+            reason="no positive Tests count: the contract suite ran no case"
+          fi
+          if [ -n "${reason}" ]; then
+            node -e 'const fs=require("node:fs");const tail=fs.readFileSync(process.argv[1],"utf8").slice(-5000);const enc=(s)=>s.replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A");process.stdout.write("::error title="+enc(process.argv[2])+"::"+enc(process.argv[2]+"\n"+tail)+"\n");' \
+              vitest-contract.log "cross-host-aggregate refused: ${reason}"
+            exit 1
+          fi
 
       - name: Aggregate both host rows
         run: |
+          set -o pipefail
+          set +e
           node tests/fault/cross-host/cross-host-evidence.mjs aggregate \
             --slots cross-host-slots \
             --out cross-host-aggregate \
-            --require-complete
+            --require-complete 2>&1 | tee aggregate.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            node -e 'const fs=require("node:fs");const tail=fs.readFileSync(process.argv[1],"utf8").slice(-5000);const enc=(s)=>s.replace(/%/g,"%25").replace(/\r/g,"%0D").replace(/\n/g,"%0A");process.stdout.write("::error title="+enc(process.argv[2])+"::"+enc(process.argv[2]+"\n"+tail)+"\n");' \
+              aggregate.log "cross-host-aggregate refused: exit ${status}"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         if: always()
