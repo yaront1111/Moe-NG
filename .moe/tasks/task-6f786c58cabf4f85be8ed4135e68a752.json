@@ -179,12 +179,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "The sole named foreign spawner collision is now clear on disk; the same live assigned worker requested resume to rerun the exact Node 24.16 daemon gate and finish steps 9–10.",
+  "reopenReason": "Governor unblock 01:31Z, same human-approved class ruling as 5fc/8e307/fc658/8f84/d92: gate premise RESCOPED from raw @moe/daemon test exit 0 to the global path-attributed baseline rail. 8/10 steps banked. Resume the remaining steps with this exact gate: (1) owned-suite legs (this task's own recovery/composition suites + scoped daemon tsc) exit 0 with nonzero counts; (2) package/repo legs judged by (HEAD-minus-merge-base failing-path delta) ∩ owned paths = EMPTY, foreign red quoted verbatim, never repaired. Known foreign red at rescope: residual review-slice/goal-services daemon cases (d92's activation reds clear when its REVIEW lands). Note: much of the old blockedReason's red set has since landed green — re-measure at current HEAD before resuming, trust nothing stale. QA grades under the same rescoped rule.",
   "createdBy": "WORKER",
   "parentTaskId": "task-0c89476b78044024b07c86c0c8986bd0",
   "priority": "CRITICAL",
@@ -199,7 +199,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-15T22:43:09.500Z",
+  "updatedAt": "2026-08-16T01:31:14.515Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-5d4e2d6f"
@@ -212,9 +212,9 @@
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T22:37:47.663Z",
-  "blockedReason": "Fresh exact Node 24.16 gate after the spawner cleanup: daemon typecheck exits 0; daemon test executes 93 files / 1,949 tests but exits 1 with 5 foreign failures. j1-command-path.test.ts has two GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED failures, and index-surface.test.ts changed during the run; both remain foreign-dirty after a five-minute quiescence wait. The other three failures are package-root subprocess timeouts in graph-preview-request, index-surface project configuration, and runtime-entrypoint. Focused recovery is freshly 28/28 green and no failure is in recovery code. Shared-tree rails forbid modifying/resetting/stashing/committing the foreign tests; exact exit 0 cannot be truthfully recorded.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "blockedResourceId": null,
   "planSizeWarnings": [
     "Plan has 10 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",

@@ -21,12 +21,12 @@
     "Scope is apps/daemon/src/telemetry/provider-run-ledger.* only."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "PARKED BY GOVERNOR at architect-7f301fa7's measured request, 2026-08-15T18:13Z. SERIAL SPIDR FAMILY — slice 4 of 4, LAST in the chain. Promoted ahead of its prerequisites once already; that cost a full claim-measure-block cycle. It was the third sibling of the same family served to the same architect back to back.\n\nPROMOTE WHEN ALL OF THESE HOLD, re-run literally rather than read off status columns:\n1. task-8e3076177f87458f934a776eca68ba16 (record contract) DONE, with apps/daemon/src/telemetry/provider-run-contracts.ts present and exporting the contract.\n2. task-fc6581042426444a826981943f441908 (canonical codec) DONE, with its bytes/digest exports present on disk. THIS slice is the codec's real consumer.\n3. task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize composition) DONE.\n\nTHIS SLICE CARRIES TWO THINGS THE FAMILY OWES OUTWARD, so it cannot be dropped or merged:\n- the four-leg gate for the whole family, and\n- the CONSUMER-EDGE DECLARATION for task-6cbff01023b14b26a78fc5e3eb1dd8a9 (Durable Claude attempt dispatch). Sequence that declaration against a task that is about to move: task-6cbff010's other five producers are already DONE and its last one, task-e33747f9, is WORKING now. Do not write the declaration against it as though it were permanently blocked.\n\nIt also owns DoD 4 and the real-store half of DoD 5, which moved off task-8e307617 in the split. The stored DoD on task-8e307617 still shows the pre-split text; the authoritative scope of record is comment-d5574cd7a922 on that task.",
+  "reopenReason": "Governor 01:31Z: routed to an architect for remeasure under the human's standing unblock directive. Premise drift since the block was written: prerequisite 2 (provider-run-codec.ts) is now DONE and COMMITTED at HEAD (task-fc658104, all three codec paths + tests). Prerequisite 3 (provider-run-normalize.ts) is still ABSENT — and its owner task ea27beb6 was ARCHIVED with human approval because @moe/runner.normalizeProviderUsage (task-159f4c21, DONE) already owns normalization; the archive rationale (comment-c6a784da on ea27beb6) says replacements should be routed against the landed runner surface. ARCHITECT DECISION REQUIRED before this ledger slice can plan: either (a) this slice consumes the runner-owned normalization output directly (verify the cross-package edge per the workspace-dep rail), or (b) a daemon-local normalize prerequisite is genuinely still needed — then file it as a new task with the gap measured symbol by symbol, and re-block this one on it. Do not plan the ledger against an absent surface; do not rebuild normalization the runner already owns. Also inherit the recorded draft-type decision: the normalizer returns the record WITHOUT recordDigest — minting is the codec's authority.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -34,14 +34,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:57:08.294Z",
-  "updatedAt": "2026-08-16T00:11:09.862Z",
+  "updatedAt": "2026-08-16T01:31:28.259Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:08:33.234Z"
   },
-  "blockedReason": "Prerequisites 2 and 3 unmet, RE-MEASURED now rather than inherited. `ls apps/daemon/src/telemetry/` at HEAD 9d60091:\n  provider-run-contracts.ts   PRESENT (+ .js bridge, + tests)\n  provider-run-refusals.ts    PRESENT (+ .js bridge, + tests)\n  provider-run-codec.ts       ABSENT\n  provider-run-normalize.ts   ABSENT\n\nClause 1 HOLDS — slice 1 landed at commit 9d60091, and its worker split the vocabulary into provider-run-refusals.ts, which is where this slice imports PROVIDER_RUN_LEDGER_CODES and PROVIDER_RUN_LEDGER_LAYERS from. Clauses 2 and 3 do NOT: I planned both slices this session and both plans are APPROVED, but no worker has executed either, so their symbols do not exist. Any step naming one is speculation.\n\nPROGRESS WORTH RECORDING so the next promotion is not blind: the chain is one hop shorter than filed. I verified my own over-specification correction — NORMALIZE DEPENDS ONLY ON THE CONTRACT, not the codec, whose bytes/digest are consumed HERE. So codec and normalize can now proceed IN PARALLEL; this slice needs both.\n\nA DECISION FROM SLICE 3'S PLAN THIS SLICE MUST INHERIT: the normalizer returns the record WITHOUT `recordDigest` — a draft type — because minting a digest is the codec's authority and a placeholder hex string would sit in a typed field reading as real. THIS SLICE OWNS THE BRIDGE: draft -> encode -> commit.\n\nAlso inherited: slice 1 built the narrow `ProviderRunStore` port (contracts.ts:156) naming exactly three methods, with `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent BY CONSTRUCTION. Verify that guard holds before committing — it makes the no-new-schema rail unreachable, not merely discouraged.\n\nUNBLOCK WHEN, re-run literally:\n(a) task-fc6581042426444a826981943f441908 DONE and provider-run-codec.ts exists;\n(b) task-ea27beb6e1954d0e9dba8ad49cc1641e DONE and provider-run-normalize.ts exists;\n(c) both have `.js` bridges.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:43:24.091Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Measurement only; no plan submitted, no production code written. Re-measured at HEAD f0f62c0: apps/daemon/src/telemetry/ holds provider-run-contracts.test.ts (8654 bytes, 21:05) and no provider-run-contracts.ts. Slice 1 was WORKING at 3/7 steps with worker-d6220bc6 live in that directory; codec and normalize siblings both BLOCKED. Reported BLOCKED on that measurement rather than a speculative plan.",

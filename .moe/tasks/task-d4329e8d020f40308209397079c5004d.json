@@ -73,12 +73,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-e47be2a7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor unblock 01:31Z under the human's standing directive. The block's literal exit condition — \"Unblock when the foreign owner commits/clears the two files and `git status --short -- agent-spawner.ts agent-spawner.test.ts agent-spawn-invocation.ts` is clean\" — re-measured TRUE: all three paths clean at current HEAD (the agent-spawner WIP landed with task-7ba's completion sweep). The approved 6-step plan stands; step-1 preflight re-measures owned paths fresh per the stale-by-default rail. Note: the option surface the old WIP raced ahead of (killProcessGroup/killGraceMs etc.) is now committed — verify the committed option type before consuming it.",
   "createdBy": "WORKER",
   "parentTaskId": "task-58fd2c3781254d839ee27867f8f9f4e6",
   "priority": "HIGH",
@@ -86,7 +86,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:46:20.297Z",
-  "updatedAt": "2026-08-15T21:52:49.929Z",
+  "updatedAt": "2026-08-16T01:31:16.181Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:51:43.356Z",
     "plannedStepCount": 6,
@@ -95,7 +95,8 @@
   "contextFetchedBy": [
     "architect-09b5f32a",
     "governor-a627169a",
-    "worker-83e6139a"
+    "worker-83e6139a",
+    "worker-e47be2a7"
   ],
   "stepsCompleted": [],
   "failedDodItems": [],
@@ -118,10 +119,10 @@
   },
   "planApprovedAt": "2026-08-15T21:03:44.748Z",
   "workStartedAt": "2026-08-15T21:51:46.236Z",
-  "blockedReason": "Step-1's first mandatory premise fails on fresh measurement: both owned files are already foreign-dirty before this task wrote any bytes (`agent-spawner.ts` +56/-? and agent-spawner.test.ts +164/-36), and `agent-spawn-invocation.ts` is also foreign-dirty despite being explicitly out of scope. The WIP changes timeout semantics from exit to close, adds detached process-group termination, killProcessGroup/killGraceMs options, Windows taskkill behavior, CONFIG_DIRS cleanup, fileURLToPath cwd handling, and changes the UNQUOTABLE set to add !() — unrelated to this admission-start task and directly overlapping both owned paths. No `claudeSpawnStarter`/AgentSpawnStart symbol exists and task workStartedAt was null/0 steps on claim, proving this is not prior task progress. Current exact typecheck fails in that partial WIP at agent-spawner.test.ts:237/273/274/315 because options tests moved ahead of the committed option type during races. Global shared-tree rail forbids resetting, stashing, deleting or building over it. Unblock when the foreign owner commits/clears the two files and `git status --short -- agent-spawner.ts agent-spawner.test.ts agent-spawn-invocation.ts` is clean, or when governance explicitly transfers that WIP with a scoped plan amendment. No production/test bytes were written by this task.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:52:33.535Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Measurement only, zero task bytes. Confirmed planned admission symbols absent and loaded predecessor/decision memories. Reported exact foreign overlap and typecheck failures.",
