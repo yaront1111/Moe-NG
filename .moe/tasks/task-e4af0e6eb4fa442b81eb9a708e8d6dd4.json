@@ -15,36 +15,51 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND READ THE LIVE DEFECT THIS TASK ACTUALLY CLOSES. The human's decision was \"apps/daemon grows the loader plus a real call site\". Measuring for that found the call site ALREADY EXISTS and is currently sourcing its policy wrongly — which makes this a repair, not a greenfield add. Confirm all of this at current HEAD (measured at 0f19e06) before writing anything.\n`apps/daemon/src/planning/planning-services.ts` already imports `decideApprovalAuthority` and `ApprovalPolicy` from `@moe/core` (:2,:4) and calls it at :192-194 with `policy: approvalPolicy(request.payload)`. That helper (:139-146) reads `payload[\"approvalPolicy\"]`, returns `DEFAULT_APPROVAL_POLICY` when absent, and otherwise CASTS the caller's object through `as unknown as ApprovalPolicy` with no validation. `DEFAULT_APPROVAL_POLICY` (:134) is `{kind: \"PROCEED_WITHOUT_HUMAN\", delayMs: 0}`.\nNOW THE PART THAT MAKES IT LIVE: `PAYLOAD_KEYS[\"approval.decide\"]` (daemon-command-registry.ts:98) is `[\"activation\", \"command\", \"graphRevisionRef\", \"record\", \"runId\"]` — `approvalPolicy` is NOT allow-listed, and the seam refuses a payload carrying a disallowed key rather than trusting it (:194). So `value === undefined` is ALWAYS true and `DEFAULT_APPROVAL_POLICY` is the policy for EVERY gate-free approval decision in the daemon today: proceed without a human, immediately, with a delay nobody stated.\nThat is verbatim the incident `@moe/core`'s own contract comment describes at approval-policy.ts:47-52 — \"An auto-approval delay that defaults implicitly is the incident's actual mechanism: that board ran a 2s auto-approval nobody had stated per unit of work.\" Read that comment before designing the loader; it is the specification.\nAlso note the caller-cast path is currently unreachable but NOT harmless: it is one allow-list edit away from letting a client self-approve. This task removes it rather than relying on a guard in a different file.\nDO NOT re-derive the ruled-out carriers. `ProjectConfigurationSettings` (packages/contracts/.../project-configuration-contract.ts:154) and `WrapperKnobs` (orchestrator/wrapper-knobs.ts:9) were both measured and ruled out three times; they carry no approval mode.\nGATES, each run separately with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, recording the count line and every failing file as your before-set. Both expected RED from foreign slices; repair none of it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/daemon-command-registry.ts",
         "packages/core/src/planning/approval-policy.ts"
-      ]
+      ],
+      "note": "BASELINE at HEAD 3e52753 (plan measured 0f19e06; HEAD moved, defect re-measured and CONFIRMED unchanged).\n\nDEFECT CONFIRMED ON DISK:\n- planning-services.ts:2,4 imports decideApprovalAuthority + ApprovalPolicy from @moe/core; :192-194 calls it with `policy: approvalPolicy(request.payload)`.\n- :134-137 DEFAULT_APPROVAL_POLICY = {delayMs: 0, kind: \"PROCEED_WITHOUT_HUMAN\"}; :139-146 approvalPolicy() returns it when payload[\"approvalPolicy\"] is undefined, else casts `as unknown as ApprovalPolicy` unvalidated.\n- daemon-command-registry.ts:98 PAYLOAD_KEYS[\"approval.decide\"] = [\"activation\",\"command\",\"graphRevisionRef\",\"record\",\"runId\"] — approvalPolicy NOT allow-listed, so in production value===undefined ALWAYS and the default is the only policy ever used.\n- Read the contract comment at approval-policy.ts:47-52 as specified.\n\nNEW MEASUREMENT THE PLAN DID NOT HAVE (matters for steps 3/5):\n- The unit-test seam BYPASSES the registry allow-list: bootstrap-test-fixtures.ts:82 `send()` calls runBootstrapCommand(store, bytes, ALL_HANDLERS) directly. So 7 existing planning-services tests DO reach the payload branch and pin payload-sourced policy behaviour; they must be re-sourced from settings when the branch is deleted.\n- bootstrapSequence():325 sends approval.decide with approvalPayload() (no policy) and driveThrough throws on a setup refusal, so goal-services.test.ts (7 sites) and bootstrap-durability.test.ts depend on gate-free approval succeeding. A loader that refuses with no settings reddens them unless the fixture states its settings explicitly.\n- approvalDelayDisposition (approval-gate.ts:104-107, MAX_TIMER_DELAY_MS = 2**31-1) ALREADY bounds the delay at the consumer: 0 -> IMMEDIATE, >2**31-1 -> REQUIRE_HUMAN, else DEFERRED. Step 5(3)'s timer bound is therefore already landed; step 3(e)/6(3) drill it rather than add it.\n- HandlerContext (bootstrap-ledger.ts:88-92) is {ledger, request, store} — no env/config slot, confirming the env-shaped precedent (readStoreDependencyEnv:45, readWrapperKnobs) as the loader's source.\n\nGATES, run separately, exit codes captured (NOT ;-chained, NOT piped into tail without PIPESTATUS):\n1) `pnpm --filter @moe/daemon typecheck` EXIT=1. Failing file (before-set): src/work/in-flight-attempts.test.ts — TS2307 \"Cannot find module './in-flight-attempts.js'\" (31,74) and TS7006 (258,39). Foreign; not repaired.\n2) `pnpm --filter @moe/daemon test` EXIT=1. COUNT LINES: \"Test Files  1 failed | 100 passed (101)\" / \"Tests  2071 passed (2071)\". Sole failing file (before-set): src/work/in-flight-attempts.test.ts, same missing module. Foreign; not repaired.\n\nStanding unblock grep at baseline: `grep -rn \"approvalMode\\|speedModeDelayMs\" --include=*.ts apps packages` -> HITS=0.",
+      "startedAt": "2026-08-16T12:21:39.493Z",
+      "completedAt": "2026-08-16T12:25:01.055Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, PART 1 — the loader, which must fail closed in every direction. Create the loader's test against the not-yet-existing module. The loader turns daemon settings into an `ApprovalPolicy` from `@moe/core`, whose closed vocabulary is `APPROVAL_POLICY_KINDS` = `[\"PROCEED_WITHOUT_HUMAN\", \"REQUIRE_HUMAN\"]` (approval-policy.ts:36) and whose `PROCEED_WITHOUT_HUMAN` arm REQUIRES `delayMs` by construction.\nMAPPING TO PIN: an approval mode naming SPEED, together with an explicitly stated non-negative integer delay, yields `{kind: \"PROCEED_WITHOUT_HUMAN\", delayMs}` carrying THAT delay. Everything else yields `{kind: \"REQUIRE_HUMAN\"}`. \"Everything else\" is the whole point, so sweep it and assert a positive generated-case count: settings absent; approval mode absent; an unrecognised mode; SPEED with the delay ABSENT; SPEED with a non-integer, negative, NaN, Infinity or non-number delay; a delay supplied as a numeric string.\nSPEED-WITHOUT-A-DELAY MUST BE `REQUIRE_HUMAN`, NOT A DEFAULTED NUMBER. The contract says \"a policy that cannot be constructed without naming its delay cannot hide one\" — substituting any default here re-creates the incident in a new place. Assert that no code path can produce `PROCEED_WITHOUT_HUMAN` without an explicitly stated delay.\nAssert the direction of every refusal too: there must be NO input, malformed or otherwise, for which the loader answers `PROCEED_WITHOUT_HUMAN`. Write that as a property over the whole swept set, not a per-case check — a per-case list can be extended with a permissive case and stay green.\nWhere the loader reads from is a design choice this task makes: follow the daemon's established config precedent (`readStoreDependencyEnv`, daemon-store-dependencies.ts:45, and `readWrapperKnobs`) rather than inventing a new mechanism, and state the source in the module header so it is auditable.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-policy-settings.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/planning/approval-policy-settings.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-policy-settings.test.ts"
+      ],
+      "note": "TDD RED part 1 landed: apps/daemon/src/planning/approval-policy-settings.test.ts, written against the not-yet-existing module.\n\nSURFACE THE TEST PINS (two functions, one refusal point):\n- `decodeApprovalPolicy(settings: unknown)` — the typed decode. `speedModeDelayMs` must be a NUMBER that is a safe non-negative integer; a numeric STRING is refused. This is what makes the plan's \"a delay supplied as a numeric string\" a real refusal case.\n- `readApprovalPolicySettings(env)` — the env source, following readStoreDependencyEnv/readWrapperKnobs precedent. It converts only an unambiguous non-negative integer string and otherwise hands the raw value to the decoder, so the env adapter never invents a number and there is exactly one place that can refuse.\n- Keys pinned by name: APPROVAL_MODE_ENV_KEY=\"MOE_APPROVAL_MODE\", SPEED_MODE_DELAY_ENV_KEY=\"MOE_SPEED_MODE_DELAY_MS\", SPEED_APPROVAL_MODE=\"SPEED\". The settings vocabulary itself is `approvalMode` / `speedModeDelayMs`, which is also what closes step 7's standing grep.\n\nSWEEPS, with exact nonzero cardinality asserted so a sweep that generates nothing cannot pass:\n- REFUSED_SETTINGS 19 cases: absent, null, mode absent, delay-without-mode, unrecognised mode, mode case mismatch, mode not a string, SPEED with delay ABSENT, delay undefined/null/1.5/-1/NaN/Infinity/MAX_SAFE_INTEGER+1/\"2000\"/true, settings an array, settings a bare string.\n- ACCEPTED_SETTINGS 3 cases (representability proof in the same suite): stated 0, stated 2000, stated MAX_SAFE_INTEGER.\n- REFUSED_ENV 12, ACCEPTED_ENV 2 — including \" 0 \", \"1e3\", \"0x10\" and \"9007199254740992\" as refusals.\n\nPROPERTIES (asserted over the whole swept set against the production surface, not a per-case list): for every case, decoded kind is in APPROVAL_POLICY_KINDS; and if the kind is PROCEED_WITHOUT_HUMAN then the settings themselves stated a numeric delay and policy.delayMs equals it. Also asserts the set of kinds produced across the sweep equals the full vocabulary, so neither branch is dead.\n\nRED VERIFIED, right reason: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/approval-policy-settings.test.ts` EXIT=1, \"Error: Cannot find module './approval-policy-settings.js'\", \"Test Files  1 failed (1)\".",
+      "startedAt": "2026-08-16T12:25:06.539Z",
+      "completedAt": "2026-08-16T12:27:22.234Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED, PART 2 — the call site, including a regression test for the defect measured in step 1. In `planning-services.ts`'s test:\n(a) THE REGRESSION: with settings that do NOT authorise auto-approval, an `approval.decide` for gate-free work must NOT proceed without a human. Today it does — `DEFAULT_APPROVAL_POLICY` makes every such decision `PROCEED_WITHOUT_HUMAN` at 0ms — so this test MUST FAIL before the fix. Verify it reddens against current HEAD before implementing; a regression test that passes today is testing nothing.\n(b) With settings that DO authorise it, the decision proceeds and carries the STATED delay — assert the exact configured number reaches `ApprovalAuthorityDecision.delayMs`, not merely that some delay is present.\n(c) A satisfied human gate still proceeds with `delayMs: 0` and carries the grant, per `decideApprovalAuthority` (:127-137) — the loaded policy must not disturb the gate path, since satisfying a gate takes a named human principal and is not a policy value.\n(d) NO POLICY CAN COME FROM THE PAYLOAD. Assert that a payload carrying an `approvalPolicy` key cannot change the decision, and that the handler exposes no path that reads one. The registry allow-list already refuses that key today, but this assertion must hold at the HANDLER, so the guarantee survives an allow-list edit in a different file.\n(e) THE TIMER BOUND. `ApprovalAuthorityDecision.delayMs` is documented as a safe non-negative integer, WIDER than `setTimeout` accepts: \"A delay above 2**31-1 CLAMPS to 1ms there, so a consumer that means 'effectively never' and passes it straight to a timer gets 'immediately' — the inversion this contract exists to prevent. Bound it at the consumer, where the timer lives.\" Assert a delay above 2**31-1 does NOT become an immediate proceed. This is the single nastiest failure mode in the task: the inversion turns the most conservative configuration into the most permissive one.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "TDD RED part 2 landed in apps/daemon/src/planning/planning-services.test.ts. All seven payload-sourced policy arms were RE-SOURCED from settings, because step 1 measured that the unit seam bypasses the registry allow-list and those arms were therefore pinning a branch production can never reach.\n\nNEW/REWRITTEN ARMS:\n(a) REGRESSION \"refuses gate-free approval when no settings authorise proceeding without a human\" — settings absent, gate-free work, asserts APPROVAL_HUMAN_REVIEW_REQUIRED + APPROVAL_POLICY, decisionCount unchanged, no durable approvalRef, goal still DRAFT. Also \"refuses a SPEED mode whose delay the settings never stated\" and \"surfaces an ungated require-human policy refusal unchanged\" (now an unrecognised mode, not a payload).\n(b) \"carries the exact configured delay into the authority decision\" — env delay 2000 decodes and decideApprovalAuthority returns exactly {delayMs: 2000, grant: null, ok: true}. Both operands are production surfaces, so the exact number is pinned rather than \"some delay\".\n(c) \"proceeds on a satisfied human gate at delay zero under unstated settings\" — a satisfied gate is UNREACHABLE through proposal ingress by design (proposalGate refuses caller-shaped grant bytes), so it is seeded into the durable run via seedPlanningRunResult and the seed is asserted to have applied. Proves the gate path proceeds and carries the grant even under the most restrictive settings.\n(d) TWO arms, both at the HANDLER: a permissive payload policy cannot loosen an unstated-settings refusal, and a restrictive payload policy cannot tighten a configured zero-delay proceed. Two directions, so the guarantee cannot be satisfied by the distant allow-list.\n(e) \"requires human review instead of clamping an oversized configured delay\" — asserts the CORE still answers ok with delayMs exactly 2**31 and the DAEMON refuses anyway, so the red lands on the inversion at the consumer rather than on a core refusal.\nDoD 3/4: the gated sweep now enumerates what the SETTINGS can express, asserts the decoded kinds equal APPROVAL_POLICY_KINDS with cardinality 2, and refuses gated work for each — including under SPEED at a stated zero delay, the most permissive settings expressible.\n\nGUARD AGAINST A VACUOUS SWEEP: useApprovalSettings() reads process.env back after each vi.stubEnv and asserts the stub applied; a stub that silently did nothing would leave the fixture's authorising settings in place and turn every refusal arm into a test of nothing. afterEach(vi.unstubAllEnvs) restores.\n\nRED VERIFIED (module still absent, as expected at this step): `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/planning-services.test.ts` EXIT=1, \"Cannot find module './approval-policy-settings.js'\", \"Test Files  1 failed (1)\". The BEHAVIOURAL red for arm (a) — the one that proves the live defect — is verified at the top of step 5, with the loader present and the call site still unchanged; a module-not-found red would not prove the defect.",
+      "startedAt": "2026-08-16T12:31:18.761Z",
+      "completedAt": "2026-08-16T12:31:33.964Z"
     },
     {
       "stepId": "step-4",
       "description": "IMPLEMENT THE LOADER. Create `apps/daemon/src/planning/approval-policy-settings.ts` plus its one-line `.js` bridge (`export * from \"./approval-policy-settings.ts\";`, LF ending — apps/daemon requires a physical bridge per production module and the guard byte-compares, so CRLF or a trailing blank line lands it in `wrongContent`).\nIt reads the daemon's approval settings and returns an `ApprovalPolicy` typed against `@moe/core` — import the type from the BARE specifier, do not restate the union locally. Construct `PROCEED_WITHOUT_HUMAN` only from an explicitly stated non-negative safe integer delay; every other input, including a missing delay, returns `REQUIRE_HUMAN`.\nWrite the fail-closed direction into the module header WITH its reason, citing approval-policy.ts:47-52: an implicitly defaulted delay is the incident's mechanism, so this loader has no default delay and no permissive fallback. A future reader who sees `REQUIRE_HUMAN` returned for a malformed setting must be able to tell it is deliberate rather than an oversight to \"fix\".\nDo NOT modify `packages/core/**`. `decideApprovalAuthority`, `APPROVAL_POLICY_KINDS` and the `ApprovalPolicy` mapped type are complete and separately tested; if the contract genuinely cannot express the mapping, report blocked rather than editing it.\nKeep the module under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts). Do NOT publish from apps/daemon/src/index.ts — index-surface.test.ts pins an exact export count and index.ts is not an owned path here.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-policy-settings.ts",
         "apps/daemon/src/planning/approval-policy-settings.js"
@@ -52,15 +67,24 @@
       "newFiles": [
         "apps/daemon/src/planning/approval-policy-settings.ts",
         "apps/daemon/src/planning/approval-policy-settings.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-policy-settings.ts",
+        "apps/daemon/src/planning/approval-policy-settings.js",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+      ],
+      "note": "LOADER IMPLEMENTED. apps/daemon/src/planning/approval-policy-settings.ts, 82 physical lines by `grep -c ''` (cap 250). Bridge apps/daemon/src/planning/approval-policy-settings.js written with printf and verified byte-exact by `cat -A`: `export * from \"./approval-policy-settings.ts\";$` — one LF line, no CRLF, no trailing blank. index.ts NOT touched.\n\nSHAPE: `decodeApprovalPolicy(settings: unknown)` is the single decision point — PROCEED_WITHOUT_HUMAN is constructed from the stated delay and from nothing else, so no path can reach it without one. `readApprovalPolicySettings(env)` is the env source; `delaySetting` converts ONLY on /^\\d+$/u and otherwise hands the raw value through to be refused, which is what stops Number() inventing a delay (\"\" -> 0, \" 25 \" -> 25, \"1e3\" -> 1000, \"0x10\" -> 16 are all delays the settings never stated). ApprovalPolicy is imported from the BARE specifier @moe/core; the union is not restated. packages/core/** untouched.\n\nThe module header states the source (env, following readStoreDependencyEnv / readWrapperKnobs), states that the fail-closed direction is deliberate rather than an oversight to \"fix\", and cites approval-policy.ts:47-52 for why a defaulted delay IS the incident's mechanism.\n\nLOADER GREEN: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/approval-policy-settings.test.ts` EXIT=0, \"Test Files  1 passed (1)\" / \"Tests  7 passed (7)\".\n\nSCOPE ADDITION, with reason: apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts (+11 lines, test-tier). bootstrapSequence() sends approval.decide and driveThrough THROWS on a setup refusal, so once the handler stops defaulting, every suite that drives past approval (goal-services 7 sites, bootstrap-durability, j1-command-path) would fail in setup. The fixture now STATES its settings — SPEED at delay 0 via `??=`, so a test that stated its own settings wins — which is exactly the property this task lands: the fixture has to say what it wants instead of inheriting a default. No production behaviour is defined there.\n\nBEHAVIOURAL RED VERIFIED FOR THE RIGHT REASON, loader present and call site STILL UNCHANGED: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/planning-services.test.ts` EXIT=1, \"Tests  7 failed | 25 passed (32)\". Six fail \"expected true to be false\" — the approval PROCEEDED, which is the live defect: refuses-gate-free-approval-when-no-settings-authorise (:439), surfaces-an-ungated-require-human-policy-refusal-unchanged (:458), refuses-a-SPEED-mode-whose-delay-the-settings-never-stated (:474), requires-human-review-instead-of-clamping-an-oversized-configured-delay (:505), does-not-execute-a-deferred-configured-decision (:533), ignores-a-permissive-approval-policy-presented-in-the-payload (:569). The seventh, ignores-a-restrictive-approval-policy-presented-in-the-payload (:587), fails the other way (\"APPROVAL_HUMAN_REVIEW_REQUIRED: expected false to be true\"), proving the payload branch is genuinely live in the unit seam today rather than merely dead code.",
+      "startedAt": "2026-08-16T12:31:38.375Z",
+      "completedAt": "2026-08-16T12:33:12.090Z"
     },
     {
       "stepId": "step-5",
       "description": "REPLACE THE POLICY SOURCE, AND DELETE THE OLD ONE. In `planning-services.ts` (221 lines):\n(1) Source the policy from the loader at :192-194, replacing `policy: approvalPolicy(request.payload)`.\n(2) DELETE `DEFAULT_APPROVAL_POLICY` (:134-137) and the `approvalPolicy(payload)` helper (:139-146) outright. Do not keep either as a fallback. A payload-sourced or defaulted policy must become UNREPRESENTABLE in this handler, not merely unreachable — the current unreachability depends on an allow-list in a different file, and this task's whole point is that authority should not rest on a distant guard.\n(3) BOUND THE DELAY WHERE THE TIMER LIVES, per the contract's explicit instruction. `delayMs` is a safe non-negative integer, wider than `setTimeout`; a value above 2**31-1 clamps to 1ms and inverts \"effectively never\" into \"immediately\". Clamp or refuse at this consumer, and say which in a comment.\nThe handler must keep failing closed on every existing arm — do not let the loader's refusal path change which layer answers an unrelated refusal. `APPROVAL_AUTHORITY_CODES` and `APPROVAL_AUTHORITY_LAYERS` (approval-authority.ts:34,46) are unchanged and every existing refusal keeps its exact code and layer.\nMeasure the file after editing with `grep -c ''`; deleting two blocks and adding one call should shrink it, but confirm rather than assume.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T12:33:17.224Z"
     },
     {
       "stepId": "step-6",
@@ -85,7 +109,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0cd13358",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -97,15 +121,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-16T11:40:19.159Z",
+  "updatedAt": "2026-08-16T12:33:17.224Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:43:56.252Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
-    "governor-a627169a"
+    "governor-a627169a",
+    "worker-0cd13358"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -134,7 +160,12 @@
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:40:17.052Z",
   "planningNotes": {
@@ -151,7 +182,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-16T12:21:07.172Z",
+    "escalatedAt": "2026-08-16T12:21:07.172Z"
   },
-  "planApprovedAt": "2026-08-16T11:40:19.159Z"
+  "planApprovedAt": "2026-08-16T11:40:19.159Z",
+  "workStartedAt": "2026-08-16T12:21:39.493Z"
 }

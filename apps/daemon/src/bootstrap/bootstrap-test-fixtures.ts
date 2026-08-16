@@ -1,6 +1,11 @@
 import { SqliteEventStore } from "@moe/store";
 
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
+import {
+  APPROVAL_MODE_ENV_KEY,
+  SPEED_APPROVAL_MODE,
+  SPEED_MODE_DELAY_ENV_KEY,
+} from "../planning/approval-policy-settings.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap-contracts.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
@@ -16,6 +21,16 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap-services.js
  * that restated the ingress or sequence rules would let a suite stay green while the shipped
  * rule drifted away from it.
  */
+
+/**
+ * The fixture daemon runs under approval settings it STATES: SPEED at a delay of zero. The
+ * approval step of `bootstrapSequence` needs gate-free approval to proceed, and the handler
+ * now sources its policy from these settings rather than from a module-level default — which
+ * is the whole point, so the fixture has to say what it wants instead of inheriting it.
+ * `??=` leaves a test that stated its own settings alone.
+ */
+process.env[APPROVAL_MODE_ENV_KEY] ??= SPEED_APPROVAL_MODE;
+process.env[SPEED_MODE_DELAY_ENV_KEY] ??= "0";
 
 export const PROJECT_ID = "project-1";
 export const GOAL_ID = "goal-1";

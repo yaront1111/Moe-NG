@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   APPROVAL_AUTHORITY_CODES,
   APPROVAL_AUTHORITY_LAYERS,
   APPROVAL_POLICY_KINDS,
+  decideApprovalAuthority,
 } from "@moe/core";
 import type { ApprovalPolicy, HumanAuthorityGate } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
@@ -29,6 +30,12 @@ import {
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readApprovalGate } from "./approval-gate.js";
+import {
+  APPROVAL_MODE_ENV_KEY,
+  SPEED_APPROVAL_MODE,
+  SPEED_MODE_DELAY_ENV_KEY,
+  readApprovalPolicySettings,
+} from "./approval-policy-settings.js";
 import { PLANNING_HANDLERS } from "./planning-services.js";
 
 /**
@@ -104,10 +111,50 @@ const HUMAN_GATE: HumanAuthorityGate = Object.freeze({
   workRef: RUN_ID,
 });
 
-const POLICY_CASES: readonly ApprovalPolicy[] = Object.freeze([
-  { delayMs: 0, kind: "PROCEED_WITHOUT_HUMAN" },
-  { kind: "REQUIRE_HUMAN" },
-]);
+/**
+ * A gate a named human has already satisfied. It is seeded straight into the durable run
+ * because proposal ingress deliberately refuses caller-shaped grant bytes: minting a human
+ * is a future authority-bearing writer's job, not a payload's.
+ */
+const SATISFIED_GATE: HumanAuthorityGate = Object.freeze({
+  gateId: "gate-plan-approval",
+  grant: Object.freeze({
+    gateId: "gate-plan-approval",
+    grantedAtEpochMs: 1_760_000_000_000,
+    principalId: "human-1",
+    principalKind: "HUMAN" as const,
+    workRef: RUN_ID,
+  }),
+  workRef: RUN_ID,
+});
+
+type ApprovalEnv = Readonly<Record<string, string | undefined>>;
+
+/** Every settings shape the file can express, and the policy each one decodes to. */
+const SETTINGS_CASES: readonly { readonly env: ApprovalEnv; readonly why: string }[] =
+  Object.freeze([
+    {
+      env: { [APPROVAL_MODE_ENV_KEY]: SPEED_APPROVAL_MODE, [SPEED_MODE_DELAY_ENV_KEY]: "0" },
+      why: "the most permissive settings expressible: SPEED at a stated zero delay",
+    },
+    { env: {}, why: "no approval settings at all" },
+  ]);
+
+/**
+ * States the daemon's approval settings for one test. The read-back is not ceremony: a stub
+ * that failed to apply would leave the fixture's authorising settings in place and silently
+ * turn every refusal case below into a test of nothing.
+ */
+function useApprovalSettings(mode: string | undefined, delayMs: string | undefined): void {
+  vi.stubEnv(APPROVAL_MODE_ENV_KEY, mode);
+  vi.stubEnv(SPEED_MODE_DELAY_ENV_KEY, delayMs);
+  expect(process.env[APPROVAL_MODE_ENV_KEY]).toBe(mode);
+  expect(process.env[SPEED_MODE_DELAY_ENV_KEY]).toBe(delayMs);
+}
+
+function useSettings(env: ApprovalEnv): void {
+  useApprovalSettings(env[APPROVAL_MODE_ENV_KEY], env[SPEED_MODE_DELAY_ENV_KEY]);
+}
 
 function proposeGatedWork(store: SqliteEventStore): void {
   driveThrough(store, "plan.propose");
@@ -119,7 +166,19 @@ function proposeGatedWork(store: SqliteEventStore): void {
   expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
 }
 
+/** A durably proposed run carrying an already-satisfied gate, seeded past ingress. */
+function proposeGrantedWork(store: SqliteEventStore): void {
+  driveThrough(store, "plan.propose");
+  seedPlanningRunResult(store, {
+    state: { goalRef: GOAL_ID, lifecycle: "PLANNING" },
+    submissionHash: SUBMISSION_HASH,
+    workIdentity: { humanAuthorityGate: SATISFIED_GATE },
+  });
+  expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(SATISFIED_GATE);
+}
+
 afterEach(closeStores);
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe("planning service surface", () => {
   it("contributes exactly the two planning handlers", () => {
@@ -274,31 +333,36 @@ describe("plan propose", () => {
 });
 
 describe("approval decide", () => {
-  it("refuses every approval policy for gated work before activation", () => {
+  it("refuses every settings-decodable approval policy for gated work before activation", () => {
     expect(APPROVAL_POLICY_KINDS).toEqual([
       "PROCEED_WITHOUT_HUMAN",
       "REQUIRE_HUMAN",
     ]);
-    expect(POLICY_CASES.map(({ kind }) => kind)).toEqual(APPROVAL_POLICY_KINDS);
+    // The sweep is over what the SETTINGS FILE can express, and it covers the whole
+    // vocabulary: no settings value, and no combination of them, approves gated work.
+    const decoded: readonly ApprovalPolicy[] =
+      SETTINGS_CASES.map(({ env }) => readApprovalPolicySettings(env));
+    expect(decoded.map(({ kind }) => kind)).toEqual(APPROVAL_POLICY_KINDS);
+    expect(new Set(decoded.map(({ kind }) => kind)).size).toBe(APPROVAL_POLICY_KINDS.length);
 
-    for (const approvalPolicy of POLICY_CASES) {
+    for (const [index, { env, why }] of SETTINGS_CASES.entries()) {
+      useSettings(env);
       const store = openStore();
       proposeGatedWork(store);
       const before = decisionCount(store);
 
-      const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-        approvalPolicy,
-      }), `cmd-gated-${approvalPolicy.kind}`));
+      const outcome = send(store, envelope("approval.decide", 0, approvalPayload(),
+        `cmd-gated-${String(index)}`));
 
-      expect(outcome.ok).toBe(false);
+      expect(outcome.ok, why).toBe(false);
       if (outcome.ok) throw new Error("expected authority refusal");
       expect(APPROVAL_AUTHORITY_CODES).toContain("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
-      expect(outcome.code).toBe("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
+      expect(outcome.code, why).toBe("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
       expect(APPROVAL_AUTHORITY_LAYERS).toContain("HUMAN_AUTHORITY_GATE");
-      expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
-      expect(decisionCount(store)).toBe(before);
-      expect(durableApprovalRefs(store)).toEqual([]);
-      expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+      expect(outcome.refusedBy, why).toBe("HUMAN_AUTHORITY_GATE");
+      expect(decisionCount(store), why).toBe(before);
+      expect(durableApprovalRefs(store), why).toEqual([]);
+      expect(goalRow(store)?.lifecycle, why).toBe("DRAFT");
     }
   });
 
@@ -312,10 +376,10 @@ describe("approval decide", () => {
     }));
     expect(proposed.ok, proposed.ok ? "" : proposed.code).toBe(true);
     const before = decisionCount(store);
+    // Under the most permissive settings the file can express, so the gate is what answers.
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-      approvalPolicy: { delayMs: 0, kind: "PROCEED_WITHOUT_HUMAN" },
-    })));
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected unreadable-gate refusal");
@@ -345,10 +409,9 @@ describe("approval decide", () => {
     }));
     expect(proposed.ok, proposed.ok ? "" : proposed.code).toBe(true);
     const before = decisionCount(store);
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-      approvalPolicy: { kind: "REQUIRE_HUMAN" },
-    })));
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected forged-grant refusal");
@@ -358,14 +421,39 @@ describe("approval decide", () => {
     expect(goalRow(store)?.lifecycle).toBe("DRAFT");
   });
 
-  it("surfaces an ungated require-human policy refusal unchanged", () => {
+  /**
+   * THE REGRESSION. Before the settings binding landed, this handler sourced its policy from a
+   * module-level `DEFAULT_APPROVAL_POLICY` of `{kind: "PROCEED_WITHOUT_HUMAN", delayMs: 0}`,
+   * and the payload key that could have overridden it was never allow-listed at the seam. So
+   * EVERY gate-free approval the daemon made proceeded immediately, on a delay nobody stated —
+   * the incident's exact mechanism. Unstated settings must refuse, not default.
+   */
+  it("refuses gate-free approval when no settings authorise proceeding without a human", () => {
+    useApprovalSettings(undefined, undefined);
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-      approvalPolicy: { kind: "REQUIRE_HUMAN" },
-    })));
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected unstated-settings refusal");
+    expect(APPROVAL_AUTHORITY_CODES).toContain("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(APPROVAL_AUTHORITY_LAYERS).toContain("APPROVAL_POLICY");
+    expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
+    expect(decisionCount(store)).toBe(before);
+    expect(durableApprovalRefs(store)).toEqual([]);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("surfaces an ungated require-human policy refusal unchanged", () => {
+    useApprovalSettings("QUALITY", "0");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected policy refusal");
@@ -375,14 +463,44 @@ describe("approval decide", () => {
     expect(goalRow(store)?.lifecycle).toBe("DRAFT");
   });
 
-  it("requires human review instead of clamping an oversized auto-approval delay", () => {
+  it("refuses a SPEED mode whose delay the settings never stated", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, undefined);
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-      approvalPolicy: { delayMs: 2 ** 31, kind: "PROCEED_WITHOUT_HUMAN" },
-    })));
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected unstated-delay refusal");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  /**
+   * THE INVERSION. `delayMs` is a safe non-negative integer, wider than `setTimeout` accepts:
+   * above 2**31-1 a timer clamps it to 1ms, so the most conservative setting a board can write
+   * would become the most permissive thing the daemon does. The core still decides `ok` here —
+   * the bound belongs at this consumer, where the timer would live.
+   */
+  it("requires human review instead of clamping an oversized configured delay", () => {
+    const oversized = String(2 ** 31);
+    useApprovalSettings(SPEED_APPROVAL_MODE, oversized);
+    const decided = decideApprovalAuthority({
+      gate: null,
+      policy: readApprovalPolicySettings(process.env),
+    });
+    expect(decided.ok).toBe(true);
+    if (!decided.ok) throw new Error("the core admits the whole safe-integer range");
+    expect(decided.delayMs).toBe(2 ** 31);
+
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected oversized-delay refusal");
@@ -391,16 +509,26 @@ describe("approval decide", () => {
     expect(APPROVAL_AUTHORITY_LAYERS).toContain("APPROVAL_POLICY");
     expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
     expect(decisionCount(store)).toBe(before);
+    expect(durableApprovalRefs(store)).toEqual([]);
     expect(goalRow(store)?.lifecycle).toBe("DRAFT");
   });
 
-  it("does not execute a deferred policy decision without a daemon timer", () => {
+  it("carries the exact configured delay into the authority decision", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "2000");
+    const decided = decideApprovalAuthority({
+      gate: null,
+      policy: readApprovalPolicySettings(process.env),
+    });
+
+    expect(decided).toEqual({ delayMs: 2000, grant: null, ok: true });
+  });
+
+  it("does not execute a deferred configured decision without a daemon timer", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "25");
     const store = openStore();
     driveThrough(store, "approval.decide");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-      approvalPolicy: { delayMs: 25, kind: "PROCEED_WITHOUT_HUMAN" },
-    })));
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected deferred-policy refusal");
@@ -410,13 +538,74 @@ describe("approval decide", () => {
     expect(goalRow(store)?.lifecycle).toBe("DRAFT");
   });
 
-  it("keeps ungated approval behavior under an explicit zero-delay policy", () => {
+  it("keeps ungated approval behavior under an explicitly configured zero delay", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
     const store = openStore();
     driveThrough(store, "approval.decide");
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  /**
+   * The registry allow-list already refuses an `approvalPolicy` payload key, but that guard
+   * lives in a different file. These arms hold at the HANDLER, in both directions, so the
+   * guarantee survives an allow-list edit: a payload can neither loosen nor tighten the
+   * decision, because there is no payload-sourced policy left to read.
+   */
+  it("ignores a permissive approval policy presented in the payload", () => {
+    useApprovalSettings(undefined, undefined);
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
 
     const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
       approvalPolicy: { delayMs: 0, kind: "PROCEED_WITHOUT_HUMAN" },
     })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the payload policy to be ignored");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
+    expect(decisionCount(store)).toBe(before);
+    expect(durableApprovalRefs(store)).toEqual([]);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("ignores a restrictive approval policy presented in the payload", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
+      approvalPolicy: { kind: "REQUIRE_HUMAN" },
+    })));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  /**
+   * The gate path is not a policy value and the loaded policy must not disturb it: a human has
+   * decided, so the decision proceeds immediately and carries their grant forward even under
+   * the most restrictive settings the file can express.
+   */
+  it("proceeds on a satisfied human gate at delay zero under unstated settings", () => {
+    useApprovalSettings(undefined, undefined);
+    const decided = decideApprovalAuthority({
+      gate: SATISFIED_GATE,
+      policy: readApprovalPolicySettings(process.env),
+    });
+    expect(decided).toEqual({ delayMs: 0, grant: SATISFIED_GATE.grant, ok: true });
+
+    const store = openStore();
+    proposeGrantedWork(store);
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     expect(durableApprovalRefs(store)).toEqual(["approval-1"]);

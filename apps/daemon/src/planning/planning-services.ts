@@ -1,7 +1,6 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import { applyApprovalCommand, decideApprovalAuthority, reducePlanningRun } from "@moe/core";
 import type {
-  ApprovalPolicy,
   HumanAuthorityGate,
   PlanningRunCommand,
   PlanningRunEvent,
@@ -30,6 +29,7 @@ import {
   planningStateFromDurableRecord,
   readApprovalGate,
 } from "./approval-gate.js";
+import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 
 /**
  * Plan proposal and approval — the two authority-bearing commands in this task.
@@ -131,20 +131,6 @@ interface DurableRun {
   readonly submissionHash: string;
 }
 
-const DEFAULT_APPROVAL_POLICY: ApprovalPolicy = Object.freeze({
-  delayMs: 0,
-  kind: "PROCEED_WITHOUT_HUMAN",
-});
-
-function approvalPolicy(payload: JsonObject): ApprovalPolicy {
-  const value = payload["approvalPolicy"];
-  if (value === undefined) return DEFAULT_APPROVAL_POLICY;
-  if (value !== null && typeof value === "object" && !Array.isArray(value)) {
-    return value as unknown as ApprovalPolicy;
-  }
-  return { kind: "INVALID_POLICY" } as unknown as ApprovalPolicy;
-}
-
 /**
  * The durably proposed run. `goalRef` is read from the run rather than from the request so the
  * activation cannot be redirected at a goal this plan was never proposed for.
@@ -189,9 +175,12 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
     return refuse(request.kind, "BOOTSTRAP_REVISION_HASH_MISMATCH", "DAEMON_PREREQUISITE");
   }
 
+  // The policy comes from the daemon's own settings and from nowhere else. There is no
+  // default and no payload branch: a caller cannot present one, so self-approval is
+  // unrepresentable here rather than merely blocked by the registry's allow-list next door.
   const authority = decideApprovalAuthority({
     gate: run.gate,
-    policy: approvalPolicy(request.payload),
+    policy: readApprovalPolicySettings(process.env),
   });
   if (!authority.ok) return refuse(request.kind, authority.code, authority.layer);
   if (approvalDelayDisposition(authority.delayMs) !== "IMMEDIATE") {

@@ -91,20 +91,33 @@
       ]
     }
   ],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-27b64950",
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "HUMAN DECISION recorded 11:54Z on the worker's (a)/(b) question: RE-SCOPE, v1 STAYS CLOSED. The design doc's silence on coordination is treated as authority — no RuntimeCommandKind expansion, no contracts/client-regeneration prerequisite during M5. Architect: re-measure gap C's ORIGIN (comment-90116e38's third capability on the canary) and re-scope this task to one of: (1) coordination travels an EXISTING surface — candidates: the chat/message channel layer or the daemon plugin WS board-edit path (ws://127.0.0.1:9876/) — with the DoD naming that surface's real refusal semantics; or (2) if no existing surface honestly carries it, report that gap C is extra-design and recommend descoping it from the canary (task-97554's prerequisite list then shrinks by this id — flag me and I will record it). The worker's measurement stands: cast-kind entries are permanently unreachable (decode refuses before registry read; one seam only) — do not plan around the closed union. Foreign baseline red disclosed in the prior blockedReason (activation-run-commit.test.ts TS2307 x4, untracked peer WIP) is unrelated.",
+  "reopenReason": "Transit hop for archive; see comment-3134d956 for the full rationale and un-archive path.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 108.9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-123612ccc84a4279ad308931680b5ae3",
+      "author": "architect-27b64950",
+      "content": "RE-SCOPE MEASUREMENT, architect-27b64950 at HEAD 381c025. Answer: **option (2)** — no existing surface honestly carries gap C, so it is extra-design for M5.\n\nTHE CLOSED UNION, confirmed independently of the worker's report. `RUNTIME_COMMAND_KINDS` (packages/contracts/src/runtime/runtime-vocabulary.ts:85) is a frozen ~90-member list gating `RuntimeCommandEnvelope.commandKind` (runtime-envelope.ts:25). Read in full, it contains NO coordination or terminal envelope kind; `session.open/renew/close/rotate` are credential lifecycle, and the nearest neighbours (`journal.append`, `step.checkpoint`) are work-progress records, not addressed envelopes. So the worker's finding holds: decode refuses before the registry is read, one seam only, and a registry entry alone is permanently unreachable.\n\nCANDIDATE 1 — chat / message channel layer. DOES NOT EXIST IN moe-next. `grep -rln \"chat|message-channel|Channel\" --include=*.ts apps/daemon/src packages` returns exactly: apps/daemon/src/coordination/coordination-adapter.ts and packages/coordination/src/index.ts (the unreachable subject itself), plus packages/runner Windows frame/broker/session internals that are process plumbing. There is no chat surface to carry anything. The chat this board runs on belongs to the TRANSITIONAL daemon, which epic rail 2 puts outside moe-next.\n\nCANDIDATE 2 — daemon plugin WS (ws://127.0.0.1:9876/). DOES NOT EXIST IN moe-next, and is forbidden twice over. `grep -rn \"9876|WebSocket|websocket\"` across apps and packages returns one hit: `apps/daemon/src/mcp-http/mcp-http-host.ts:27`, which says \"no custom WebSocket, and no alternate lifecycle.\" The canary's own task rail says \"Official MCP stdio and Streamable HTTP only; no custom MCP-over-WebSocket dialect.\" That port belongs to the transitional daemon.\n\nWHY THAT SETTLES IT. Gap C's requirement (comment-90116e38, third capability) is typed session and terminal communication crossing MCP with a SEPARATE AUTHENTICATED COMMAND RECEIPT per state change. The receipt half is the binding one: the only thing in moe-next that mints an authenticated command receipt is the daemon command registry, and the registry is gated by the closed union. Every alternative carrier either does not exist or cannot produce a receipt. With union expansion ruled out for M5, the capability is out of design for this milestone — not merely unimplemented.\n\nRECOMMENDATION for the human to record:\n1. Descope gap C from canary task-97554aa4293e40eab56c0b642e18513a. Its prerequisite list then shrinks by this id, leaving GAP A (task-6cbff010 + task-d7b352e1) and GAP B (task-3e54b466, itself blocked on task-48c0c0db).\n2. Archive or park THIS task for a post-M5 epic that owns the `RuntimeCommandKind` expansion and the client regeneration it implies. It is a real capability, just not one M5 can carry.\n\nONE THING I WILL NOT ASSUME. The canary's DoD 3 names \"typed session/terminal communication with exact receipts\". Descoping gap C NARROWS that DoD, and narrowing an acceptance DoD is exactly what the Clause-2 rail forbids an architect from doing unilaterally. So this is a recommendation with its evidence, not an action — the human records the descope, or tells me the union expansion is back on the table for M5 and I plan it as a prerequisite instead.\n\nForeign baseline red (activation-run-commit.test.ts TS2307 x4, untracked peer WIP) is unrelated and unchanged.",
+      "timestamp": "2026-08-16T12:20:47.051Z"
+    },
+    {
+      "id": "comment-3134d9562b37410e97776b2c8f1d2c93",
+      "author": "governor-1a5aca5d",
+      "content": "ARCHIVED by governor-1a5aca5d 12:22Z under the human's standing needed/rescope/delete sweep directive, executing the human's earlier v1-closed ruling to its measured conclusion. The architect's re-scope (comment-123612cc) answered option (2): NO existing surface honestly carries coordination (closed RUNTIME_COMMAND_KINDS union, decode-refuses-before-registry, design doc silent on coordination — zero occurrences), so this capability is EXTRA-DESIGN for M5. The canary (97554) has been descoped from this prerequisite (its comment-6785a05f records the shrunk list). This task becomes a DESIGN-REVISION MARKER: if a future design revision adds a coordination operation to the command surface, un-archive via set_task_status ARCHIVED→BACKLOG and re-plan against the revised vocabulary — the worker's unreachability proof (compiled probe, TS2322 on both kinds) and the architect's required-edits list (runtime-vocabulary.ts:85 +2 kinds, generated-client regeneration with digest re-pin, mcp/core derived edits) remain valid starting points on this record.",
+      "timestamp": "2026-08-16T12:21:40.309Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:23:23.404Z",
-  "updatedAt": "2026-08-16T12:19:26.666Z",
+  "updatedAt": "2026-08-16T12:21:51.496Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T11:29:22.008Z",
     "plannedStepCount": 7,
@@ -137,5 +150,16 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-scope measurement at HEAD 381c025 under the human's 'v1 stays closed' decision; no plan submitted, no code written. Answer is option (2): no existing surface honestly carries gap C. Confirmed the closed union independently (RUNTIME_COMMAND_KINDS, runtime-vocabulary.ts:85, ~90 frozen members gating RuntimeCommandEnvelope.commandKind at runtime-envelope.ts:25, with no coordination or terminal envelope kind). Measured both candidate carriers ABSENT from moe-next: no chat/message channel layer exists, and no WebSocket surface exists — mcp-http-host.ts:27 explicitly forbids one, as does the canary's transport rail. Recommended descoping gap C from canary task-97554aa4 and parking this task post-M5. Evidence in comment-123612ccc84a4279ad308931680b5ae3; flagged to #general as msg-730e72b0.",
+      "whatRemains": "A human records one of two outcomes: (A) descope gap C — canary task-97554aa4's prerequisites shrink to GAP A (task-6cbff010 + task-d7b352e1) and GAP B (task-3e54b466, blocked on task-48c0c0db), and this task is archived or parked for a post-M5 epic owning the RuntimeCommandKind expansion; or (B) union expansion is back on for M5, in which case this task is re-planned with a contracts-expansion prerequisite filed first.",
+      "pitfalls": "1) DO NOT PLAN AROUND THE CLOSED UNION. A registry entry alone is permanently unreachable — decode refuses before the registry is read, one seam only. Any plan that adds a COORDINATION_FAMILY without expanding RUNTIME_COMMAND_KINDS ships a kind nothing can send. 2) DO NOT NARROW THE CANARY'S DoD 3 to make this closable — it names 'typed session/terminal communication with exact receipts', and narrowing an acceptance DoD is the exact Clause-2 escape hatch. That is why this is a recommendation and not an action. 3) The transitional daemon's chat and its ws://127.0.0.1:9876 board-edit path are NOT moe-next surfaces; epic rail 2 puts them outside this repo, so neither can be cited as an existing carrier. 4) SESSION_FAMILY remains a decoy — it is session credential lifecycle, not envelopes; that was true when this task was filed and is still true. 5) Foreign baseline red (activation-run-commit.test.ts TS2307 x4, untracked peer WIP) is unrelated.",
+      "openQuestions": "Only the human's (A)/(B) choice. Worth noting for whoever records it: gap C is a real capability with a real design behind it (packages/coordination carries a complete envelope vocabulary — COORDINATION_ENVELOPE_KINDS, COORDINATION_FORBIDDEN_FIELDS, COORDINATION_LIMITS — and apps/daemon/src/coordination has a working adapter with session authority and a recipient registry). Nothing here is missing except the wire. So (A) parks finished work rather than abandoning it, which argues for park-not-archive.",
+      "releasedAt": "2026-08-16T12:21:46.005Z",
+      "releasedBy": "architect-27b64950",
+      "reason": "Releasing the ASSIGNMENT only so the claim gate can offer other work. Stays BLOCKED in place awaiting the human's descope decision."
+    }
+  ]
 }

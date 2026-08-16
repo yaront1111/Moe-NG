@@ -107,8 +107,8 @@
       "completedAt": "2026-08-16T12:18:46.183Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -120,12 +120,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:58:07.943Z",
-  "updatedAt": "2026-08-16T12:20:04.356Z",
+  "updatedAt": "2026-08-16T12:26:20.124Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:02:24.368Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T12:26:20.124Z",
+    "wallClockMs": 51835756
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
@@ -205,5 +207,8 @@
     "apps/daemon/src/activation/foundation-launch-authority.test.ts",
     "apps/daemon/src/activation/foundation-binding-predicates.ts",
     "apps/daemon/src/activation/foundation-binding-predicates.js"
-  ]
+  ],
+  "completedAt": "2026-08-16T12:26:20.124Z",
+  "reviewCompletedAt": "2026-08-16T12:26:20.124Z",
+  "reviewSummary": "APPROVED. Verified by base-ref diff abc3dcf..HEAD over owned paths (step-2 tests sit in FOREIGN sweep 1733d72; hook commit 3e52753 is board metadata only).\n\nGATES re-run, legs separate: daemon typecheck EXIT=0. daemon test EXIT=0, count line \"Test Files 100 passed (100)\" / \"Tests 2071 passed (2071)\".\n\nDoD1: option (c) indexed store query, owner SqliteEventStore.readEventsByTypeAfter, recorded in the commit message and the scanForEffect comment. Not a side table, so task rail 3 never arises.\nDoD2: 6501 -> <=8 events served, on BOTH a real 6,501-event SqliteEventStore and the fake port; the real-store case also asserts the BOUND answer, so the bound is not bought by refusing.\nDoD3: \"still refuses a SECOND matching activation found past the old 6,400 ceiling\" is BYTE-IDENTICAL to abc3dcf and green.\nDoD4: no page ceiling; bound is `while (cursor < horizon)` off store.readEventHorizon().\n\nMY OWN DRILLS: (1) early return on first hit -> 7 reds incl. the untouched DoD3 test and 4 of the 6 new hostile page-shape cases, proving those reachable. (2) revert the port to readEventsAfter + restore the `continue` discard -> \"expected 6501 to be less than or equal to 8\" on BOTH cost assertions — the drill proving the objective was met. Restored by out-of-repo copy; md5 matches `git show HEAD:<path>`; git status clean.\n\nThe deleted 7-case hostile table is CORRECT: every fixture used NOISE_EVENT_TYPE, so under the new filter-honesty guard all seven would have refused on event type and stayed GREEN testing nothing. Replacement is stronger — real activation fixtures, exact code + layer per case, served>0, positive control.\n\nFOREIGN RED: store test EXIT=1, recovery-anchor.test.ts:694 \"RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root\". Zero bytes changed under packages/store; path-attributed intersection EMPTY. Positive control: task-69 contract suite 38/38 EXIT=0, and the case the comment names exists at line 265.\n\nPer-file: reader 371, predicates 62 by grep -c ''."
 }

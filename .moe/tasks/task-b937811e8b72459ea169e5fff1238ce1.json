@@ -15,8 +15,84 @@
     "No confirmatory corpus is generated or viewed until the implementation commit is frozen exactly as specified.",
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CREATE THE PACKAGE AND INSTALL IT — first, because the dependency-edge rail requires the manifest edit and workspace install to be step 1 with both files owned, and because the gate is vacuous until the package resolves.\nBASELINE THE HAZARD FIRST so it is on the record: `pnpm --filter @moe/benchmark test` today prints `No projects matched the filters in \"D:\\projexts\\moe-next\"` and EXITS 0. Reproduce that and quote it. It is the reason this task's own verification command has been unfalsifiable across three prior audits.\nCreate `packages/benchmark/package.json` and `packages/benchmark/tsconfig.json`, copying the shape of an existing workspace package rather than inventing one — `packages/coordination/package.json` is the template: `{name, version 0.0.0, private true, type module, exports {\".\": \"./src/index.ts\"}, scripts: {typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/benchmark/src\"}}`, and its tsconfig extends `../../tsconfig.base.json` with `rootDir: \"src\"`, its own `tsBuildInfoFile`, and `types: [\"node\"]`. The `--root ../..` in the test script is what makes vitest print a real count line; a script that resolves no files would restore the exact vacuity being fixed.\nRun the workspace install so `pnpm-lock.yaml` gains the importer entry. BOTH the new manifest and the lockfile are owned paths of this task — declare them and commit them.\nTHEN PROVE THE GATE IS NO LONGER VACUOUS, before writing any harness code: `pnpm --filter @moe/benchmark test` must now RESOLVE the package. With no tests yet it will report zero, which is fine at this step — what must change is that it stops printing \"No projects matched the filters\". Record both outputs side by side; that pair is the evidence the hazard is closed.\nDEPENDENCIES: keep them minimal and justified. This package projects evidence; it does not read a store. Do NOT add `@moe/store` or reach for apps/daemon — a package cannot import from an app, which is the constraint step 2 is built around.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/package.json",
+        "packages/benchmark/tsconfig.json",
+        "pnpm-lock.yaml"
+      ],
+      "newFiles": [
+        "packages/benchmark/package.json",
+        "packages/benchmark/tsconfig.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "SETTLE THE INPUT BOUNDARY, which is the design question this task has never answered. The records the harness projects are `ProviderRunRecord`s declared at `apps/daemon/src/telemetry/provider-run-contracts.ts:94`. A PACKAGE CANNOT IMPORT FROM AN APP, so the harness cannot take that type by reference.\nTHE ANSWER: the harness accepts BOUNDED PLAIN DATA and validates SHAPE ONLY. It pins `recordVersion` against `PROVIDER_RUN_RECORD_VERSION` (`\"moe-provider-run-record/1\"`, contracts.ts:57) as a literal it declares itself, and refuses anything else. That literal is the seam — when the record schema moves, this package reddens instead of silently projecting a shape it no longer understands.\nAND THE LINE IT MUST NOT CROSS: the harness PROJECTS, it never DECIDES. It re-derives no fact the codec already established, recomputes no digest, and mints no measurement. Shape validation answers \"is this the schema I project?\" and nothing more. A second validator that re-judged the evidence would be a competing authority over records the daemon's codec already sealed — exactly what the codec's own comment (\"the codec is the only authority on what is a record\") forecloses.\nWrite that boundary into the package's index header, with the version literal and the reason, so the next reader can tell projection from adjudication at a glance.\nCONSUMER EDGE (Clause 1): this package is infrastructure and lands with a named consumer rather than a call site — task-3a34adcabd03489e84f8dfbec913633a (corpus freeze), which the governor's cascade records as unblocking as this lands, followed by task-8af4562ff1ae41b28876aaee63f05ea3 (benchmark campaign). Record both ids in the completion.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "FREEZE THE UNKNOWN VOCABULARY — the open question three architects have deferred. The harness needs its own closed reason-code and layer lists for the cases where it cannot project a row, and they must be frozen arrays a test can ITERATE, not a type: a test cannot iterate a type, and a sweep needs every member at runtime. Follow the repo's established shape — `Object.freeze([...] as const)` plus a derived union type, as `COORDINATION_CODES`/`COORDINATION_LAYERS` and `PROVIDER_TELEMETRY_LAYERS` do.\nSCOPE IT TIGHTLY: codes for what the HARNESS cannot project — an unrecognised record version, a record whose required field is absent, a row whose basis is missing. NOT codes for what the run itself did; those already exist on the record as `terminal`, `infrastructure`, `upstreamRefusal` and `usageRefusals`, and duplicating them here would create a second vocabulary for one condition.\nNO CAMPAIGN SCORING, NO CLAIM DECISIONS. This vocabulary describes projection failures. A code that means \"this arm scored worse\" or \"this claim is unproven\" belongs to the campaign task, not here — that boundary is why this task is infrastructure-only.\nAssert the closed lists: every member reachable, a positive case count on any sweep over them, and no member declared without a producer. A code no layer can emit cannot fail closed — the same defect QA rejected on task-6cbff010 for exactly this reason.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED — the non-merge rules, which are the harness's entire substance. Every one of these is a rule the RECORD's own comments already state; the harness must not undo them in projection. Write them before the projector exists.\n(a) DECLARED IS NOT OBSERVED. `declared` carries what was asked for (selected model, reasoning effort, profile revision); `observedModel` carries what the provider's bytes said. The record comment says merging them \"destroys the only evidence that the provider ran the model it was asked to run\". Assert the projection keeps them as separate fields and that an absent `observedModel` is NOT filled from `declared` — the old handoffs' \"do not substitute runtime/profile IDs for model snapshot or reasoning effort\" is exactly this.\n(b) TWO CLOCKS, NOT RECONCILED. `launch.startedAt`/`completedAt` are the LAUNCHER's wall stamps; `observedStart`/`observedEnd` are the daemon's own `ClockObservation`s. The comment says they are \"two observers, deliberately not reconciled\". Assert the projection reports both and derives no single timing from a mix of them.\n(c) A DURATION NEEDS ONE BOOT. A `ClockObservation` binds wall seconds, boot identity and monotonic reading together, because \"a duration derived from a pair without `bootId` is unfalsifiable\". Assert the harness emits a duration ONLY when both observations share a `bootId`, and UNKNOWN otherwise — with a case where the boot ids differ.\n(d) NULL IS NOT ZERO. \"`null` is an unobserved reading and never a zero.\" Assert no null observation, absent token count or missing usage row is ever rendered as 0, and that a `ProviderCountCoverage` short of complete is carried through rather than dropped.\n(e) A BINDING IS NOT A COST. Usage rows carry `pricebookBinding`, and \"a derived list price stays a binding and never becomes an actual-cost claim\". Assert the cost-class column reports the binding and never presents a derived price as an actual cost.\n(f) NO IMPUTATION ACROSS ARMS. Assert one record's UNKNOWN is never filled from another record's value — drive two records where one is complete and one is not, and assert the incomplete one stays incomplete.\nEvery refusal case pins the exact frozen code AND layer from step 3. Assert a positive generated-case count on any sweep.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/run-projection.test.ts"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/run-projection.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "IMPLEMENT THE PROJECTION. Create the projector under `packages/benchmark/src/` — one module per concern if it would otherwise exceed 250 physical lines, measured with `grep -c ''` (PowerShell `Measure-Object -Line` undercounts). It turns a validated record into the harness's row set: run identity, cost class, timing, effort, settings, evidence receipt, reproducibility.\nEach column carries its own provenance and its own UNKNOWN. Run identity comes from `providerRunRef` verbatim — \"never three hand-rolled ids\". Effort and settings come from `declared`, model evidence from `observedModel`, and the two stay separate columns. Timing carries the launcher pair and the daemon pair separately, with a derived duration only under a shared `bootId`. Cost class reports each usage row's `pricebookBinding` alongside its measurement, never a computed total presented as actual. Evidence receipt carries `stdoutReceiptDigest`/`stderrReceiptDigest` and `recordDigest` verbatim. Reproducibility carries `launch`'s runtime and profile digests verbatim.\nRefusals stay disjoint exactly as the record keeps them: `usageRefusals` are the scheduler's layered issues, `upstreamRefusal` is the provider seam's, and the harness's own frozen codes cover only what IT could not project. Three sources, never flattened — flattening would make a scheduler issue indistinguishable from a provider refusal, which is the same defect the record's own comment guards against.\nNO CORPUS BYTES, NO SCORING, NO CLAIM DECISIONS. This module reads one record and emits its rows. Comparing arms, ranking them, or deciding a claim belongs to the campaign task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/run-projection.ts",
+        "packages/benchmark/src/index.ts"
+      ],
+      "newFiles": [
+        "packages/benchmark/src/run-projection.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS — prove each non-merge rule is enforced rather than merely described. Run each alone, revert before the next. (1) Fill an absent `observedModel` from `declared`; the step-4(a) case must redden — this is the drill for the substitution three handoffs warned about, and the one most likely to look like a helpful default. (2) Derive a duration from `launch.startedAt` and `observedEnd` — one stamp from each observer; the step-4(b) case must redden. (3) Emit a duration when the two `ClockObservation`s carry DIFFERENT `bootId`s; the step-4(c) case must redden — and confirm the red is about the boot mismatch, not about a missing field, since both produce an UNKNOWN and only one is the rule under test. (4) Render a null observation or an absent token count as 0; the step-4(d) case must redden. (5) Present a `pricebookBinding`-derived price as an actual cost; the step-4(e) case must redden. (6) Bump `PROVIDER_RUN_RECORD_VERSION` in the record fixture without changing the harness's pinned literal; the step-2 version guard must redden — proving the seam catches a schema move instead of projecting a shape it no longer understands.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/src/run-projection.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported).\nTHE GATE THAT HAS NEVER BEEN REAL: `pnpm --filter @moe/benchmark test` must now print a `Test Files N passed` / `Tests M passed` count line with M NONZERO. Exit 0 alone is NOT evidence and never was — quote the count line. POSITIVE CONTROL, mandatory: run the identical command shape against a package that certainly has tests (`pnpm --filter @moe/coordination test`) and confirm it prints its own count line, which discriminates a real run from a filter that silently matched nothing. Also quote the step-1 baseline (`No projects matched the filters`, EXIT 0) beside the new output — that before/after pair is the closing evidence for a hazard three audits carried.\nThen `pnpm --filter @moe/benchmark typecheck` exit 0, and `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty. Quote any foreign red verbatim; do not repair it.\nADVERSARIAL REVIEW: (a) does the harness import from apps/** or depend on @moe/store — it must not? (b) does it re-derive, recompute or adjudicate ANY fact rather than projecting? (c) is `recordVersion` pinned as a literal the package declares, with drill 6 proving the seam? (d) are `declared` and `observedModel` separate columns with no defaulting between them? (e) are the launcher and daemon clock pairs unreconciled, and is a duration emitted only under a shared `bootId`? (f) is any null, absent count or missing row rendered as 0 anywhere? (g) does a `pricebookBinding` ever present as an actual cost? (h) are the three refusal sources kept disjoint? (i) does the frozen vocabulary cover only projection failures, with no scoring or claim codes? (j) is every source under 250 lines by `grep -c ''`? (k) does `git status --porcelain` show only owned paths — including `pnpm-lock.yaml` — with every drill reverted?\nCommit by explicit pathspec naming each owned file including the lockfile — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after gate outputs and the positive control verbatim, name the test that reddened for each drill, and record the named consumers task-3a34adcabd03489e84f8dfbec913633a (corpus freeze) then task-8af4562ff1ae41b28876aaee63f05ea3 (campaign). Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/benchmark/package.json",
+        "packages/benchmark/src/index.ts",
+        "packages/benchmark/src/run-projection.ts",
+        "packages/benchmark/src/run-projection.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -54,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-16T12:17:31.589Z",
+  "updatedAt": "2026-08-16T12:24:35.163Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -63,7 +139,9 @@
     "governor-a627169a"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-13T16:00:55.803Z"
+    "firstClaimAt": "2026-08-13T16:00:55.803Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -97,5 +175,29 @@
       "releasedBy": "architect-a42f4965",
       "reason": "Explicit architect handoff after current-byte planning audit and BLOCKED report."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T12:24:33.082Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Have the harness read the store directly and decode committed records itself. REJECTED: it would need `@moe/store` plus the daemon's codec, and a package cannot import from an app. It would also duplicate decode authority the codec already owns.\n\n2) Move `ProviderRunRecord` into a package so the harness can import it. REJECTED as out of scope and a foreign-file edit: contracts.ts belongs to the telemetry slice, and relocating a sealed record type to satisfy a consumer inverts the dependency the codec's authority rests on.\n\n3) Put the harness in apps/daemon instead of creating the package. REJECTED: the task's own verification names `pnpm --filter @moe/benchmark test`, and the vacuous-gate hazard is only closed by making that filter resolve. Leaving the package absent preserves the exact unfalsifiable gate three audits flagged.\n\n4) Have the harness re-validate the evidence it projects. REJECTED: that is a competing authority over sealed records. Shape-and-version validation answers \"is this the schema I project?\"; anything further adjudicates.\n\n5) Reconcile the launcher and daemon clock pairs into one timing. REJECTED by the record's own comment — reconciling means overwriting one with the other, and the durable bytes would then no longer say which clock was read. Report both; derive only under a shared bootId.\n\n6) Default an absent `observedModel` from `declared` so every row has a model. REJECTED and drilled: it destroys the only evidence that the provider ran what it was asked to run. This is the most plausible-looking wrong move in the whole task, which is why drill 1 targets it.\n\n7) Include campaign scoring or claim decisions so the harness is \"useful\". REJECTED: infrastructure only. Scoring belongs to task-8af4562f, corpus to task-3a34adca, and mixing them is how a harness starts deciding claims it was built to measure.\n\n8) Add the frozen vocabulary later, once failures are known. REJECTED: it is the open question three architects deferred, and a code added after the fact tends to be added without a producer — the exact defect QA rejected on task-6cbff010.",
+    "codebaseInsights": "MEASURED AT HEAD 3e52753. I ran this task's Clause-2 audit earlier and filed the two prerequisites; both have landed, so the harness now has real emitted records to project.\n\nTHE WIRE IS CLOSED. All three greps that returned ZERO at my audit now return production hits: `activation-telemetry-launch.ts:95-96` calls `launchClaudeWithTelemetry`; `activation-run-commit.ts:51,133` calls `buildProviderRunRecord`; `activation-run-commit.ts:242` calls `commitProviderRunRecord`. Production emits and durably commits provider-run telemetry.\n\nTHE VACUOUS GATE IS STILL LIVE AND REPRODUCES EXACTLY: `pnpm --filter @moe/benchmark test` prints `No projects matched the filters in \"D:\\projexts\\moe-next\"` and EXITS 0. `packages/benchmark` is absent. This is why the task's own verification has been unfalsifiable across three audits, and why package creation plus a NONZERO count line is step 1 rather than an afterthought.\n\nTHE INPUT-BOUNDARY PROBLEM, which no prior pass named. `ProviderRunRecord` is declared at `apps/daemon/src/telemetry/provider-run-contracts.ts:94`. A PACKAGE CANNOT IMPORT FROM AN APP, so `packages/benchmark` cannot take that type by reference. The resolution is bounded plain data plus a self-declared `recordVersion` literal pinned against `PROVIDER_RUN_RECORD_VERSION` = \"moe-provider-run-record/1\" (contracts.ts:57), with SHAPE validation only — the harness projects, it never adjudicates. Anything more would be a second authority over records the daemon codec already sealed, and the codec's own comment says it \"is the only authority on what is a record\".\n\nTHE RECORD PRE-ANSWERS MOST OF THE HARNESS DESIGN. Its field comments state rules the projection must not undo, and every one matches a pitfall the prior handoffs recorded independently:\n- `declared` (asked for) vs `observedModel` (what the bytes said): \"Never defaulted from `declared`: a selection is not an observation, and merging them destroys the only evidence that the provider ran the model it was asked to run.\" That IS \"do not substitute runtime/profile IDs for model snapshot or effort\".\n- `observedStart`/`observedEnd` are `ClockObservation | null`, binding wall seconds + bootId + monotonic together, because \"a duration derived from a pair without `bootId` is unfalsifiable\" — and they are \"DISTINCT FROM `launch.startedAt`/`completedAt`\", \"two observers, deliberately not reconciled\". That IS \"do not accept caller-supplied timing pairs in place of production observations\".\n- \"`null` is an unobserved reading and never a zero.\" That IS \"UNKNOWN must never be rendered as zero\".\n- `usage` rows carry `pricebookBinding`: \"A derived list price stays a binding and never becomes an actual-cost claim.\"\n- `tokens`/`steps` carry their own `ProviderCountCoverage`; `usageRefusals` (scheduler, layered) and `upstreamRefusal` (provider seam) are disjoint by construction.\n\nPACKAGE SCAFFOLD, measured from `packages/coordination`: package.json with `type: module`, `exports {\".\": \"./src/index.ts\"}`, `typecheck: \"tsc --project tsconfig.json\"`, `test: \"vitest run --root ../.. packages/<name>/src\"`; tsconfig extends `../../tsconfig.base.json` with `rootDir: \"src\"`, its own tsBuildInfoFile, `types: [\"node\"]`. The `--root ../..` is what makes vitest print a real count line. Workspace glob is `packages/*`, so the package resolves once the manifest exists and the lockfile has its importer.",
+    "risks": "1) THE GATE HAS NEVER BEEN REAL. `pnpm --filter @moe/benchmark test` exits 0 on an absent package. Require the `Test Files`/`Tests` count line with a NONZERO M, plus a positive control against a package that certainly has tests. Quote the step-1 baseline beside the final output — that before/after pair is the only closing evidence for a hazard three audits carried.\n\n2) THE LOCKFILE IS AN OWNED PATH. Creating a workspace package requires an install; forgetting to commit `pnpm-lock.yaml` leaves the package unresolvable for everyone else while passing locally.\n\n3) FILLING `observedModel` FROM `declared` LOOKS HELPFUL. It is the substitution three handoffs warned about, and it silently destroys the evidence that the provider ran the model it was asked to run. Drill 1 exists for it.\n\n4) A DURATION ACROSS TWO OBSERVERS, OR ACROSS BOOTS, IS UNFALSIFIABLE. Drills 2 and 3 cover both, and drill 3 must redden on the BOOT MISMATCH specifically — a missing field also yields UNKNOWN, so a red for the wrong reason would leave the rule untested.\n\n5) NULL RENDERED AS ZERO is the classic UNKNOWN-laundering move, and a spreadsheet-shaped output invites it. Drill 4 guards it.\n\n6) A `pricebookBinding` PRESENTED AS AN ACTUAL COST turns a derived list price into a cost claim — the exact thing the record's comment forbids, and the thing a benchmark harness is most tempted to do.\n\n7) THREE DISJOINT REFUSAL SOURCES — scheduler `usageRefusals`, provider `upstreamRefusal`, and the harness's own projection codes. Flattening them makes a scheduler issue indistinguishable from a provider refusal.\n\n8) SCOPE CREEP INTO SCORING. Corpus is task-3a34adca and campaign is task-8af4562f. A harness that ranks arms has started deciding the claim it exists to measure.\n\n9) A CODE WITH NO PRODUCER cannot fail closed — QA rejected task-6cbff010 for exactly that. Every frozen member needs a producer and a code+layer test.\n\n10) SHARED WORKTREE. Re-check `git status --porcelain` before committing, commit by explicit pathspec including the lockfile, verify with `git show --stat`, confirm every drill reverted.\n\n11) CONSUMER EDGE: this is infrastructure, so Clause 1 is satisfied by NAMING the consumer — task-3a34adcabd03489e84f8dfbec913633a then task-8af4562ff1ae41b28876aaee63f05ea3. Record both ids rather than assuming the edge.",
+    "keyFiles": [
+      "apps/daemon/src/telemetry/provider-run-contracts.ts",
+      "apps/daemon/src/telemetry/provider-run-codec.ts",
+      "apps/daemon/src/activation/activation-run-commit.ts",
+      "packages/coordination/package.json",
+      "packages/coordination/tsconfig.json",
+      "pnpm-workspace.yaml",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-16T12:24:35.163Z"
 }
