@@ -19,8 +19,62 @@
     "Real SqliteEventStore in tests, opened per test and closed in a `finally` on every exit path — a held handle kills the vitest worker.",
     "Preserve foreign work; commit only the explicit owned paths by pathspec — never a bare `git commit`, never `git add -A`."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE, RE-MEASURE THE ENUMERATOR, AND SETTLE THE COMPOSITION ROOT — the open question this task was blocked on.\nTHE ENUMERATOR LANDED (task-48c0c0db, DONE): `apps/daemon/src/work/in-flight-attempts.ts`, 169 lines, exporting `readInFlightFoundationAttempts` (:145), the `InFlightAttemptSweep` result union (:56) and `IN_FLIGHT_SITUATION_KEYS` (:51). Its header records the rule and its provenance: \"A `FoundationDispatchReserved` WITH NO `FoundationAttemptRecorded` ON THE SAME AGGREGATE IS STILL IN FLIGHT — a decided property of the committed record, not an inference from absence plus a clock, and no timeout is consulted anywhere below\", lifted from `foundation-attempt-service.ts:218-224`. Read the whole header before wiring; it also states how a RECORDED-without-RESERVED aggregate is treated, which your sweep must not contradict.\n`InFlightAttemptSweep` is a UNION — the sweep can refuse. That is the shape the boot path must handle, not an array.\nTHE COMPOSITION ROOT IS `startDaemon`, not the store-dependency root. Measured: `daemon-entry.ts` (206 lines) declares `DAEMON_ENTRY_LAYER` (:41), a frozen `DAEMON_ENTRY_REFUSAL_CODES` (:44) and `refuseEntry` (:97), and `startDaemon` (:162) is where readiness is decided — so a refusal there can actually stop the listener. `createStoreDependencies` (daemon-store-dependencies.ts:94) holds the store handle but has no way to refuse startup, so a sweep failure there could not fail closed. Put the sweep in `startDaemon`, after `resolveDependencies` and BEFORE `startControlRoomListener`.\nCHECK WHETHER A REFUSAL CODE EXISTS: read `DAEMON_ENTRY_REFUSAL_CODES` in full. If it has no member for a failed reconciliation sweep, add ONE, and give it a producer and a code+layer test in the same task — a declared code no layer can emit cannot fail closed, which is what task-6cbff010 was rejected for.\nGATES, each separate with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`. Record count lines and every failing file; the daemon legs are expected RED from foreign slices.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/in-flight-attempts.ts",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — the boot sweep, driven against a REAL SqliteEventStore opened per test and closed in a `finally` on every exit path (a held handle kills the vitest worker). Write these before wiring; each must FAIL against current HEAD, since `startDaemon` runs no sweep today.\n(a) IN-FLIGHT ATTEMPTS ARE CLASSIFIED. Seed attempts the enumerator will return, start the daemon, and assert the durable store afterwards holds ONE reconciliation record per attempt — read back from the store, not from `reconcileOnRestart`'s return value.\n(b) THE SWEEP REFUSES STARTUP. `reconcileOnRestart` answers `{ok:false, code:\"EXPECTED_VERSION_CONFLICT\", layer:\"DURABLE_STORE\"}` on a conflict, and `InFlightAttemptSweep` can refuse in its own right. For each, assert the daemon does NOT become ready — not merely that a refusal was returned. Assert the listener is not accepting connections afterwards; a daemon that boots ready after a failed sweep is the defect this task exists to prevent, and a verdict-only assertion cannot see it.\n(c) BOTH REFUSAL SOURCES ARE DISTINGUISHABLE. The enumerator's refusal and the reconciler's refusal are different facts — one means \"I could not read what was in flight\", the other \"I could not durably record the classification\". Assert the exact code AND layer for each, and assert they are not collapsed into one entry code.\n(d) EXACTLY ONCE PER START. Start, stop, start again, and assert the second start does not duplicate records for already-classified attempts. `restart-reconciliation-idempotence.test.ts` already pins idempotence at the pure layer, so this case exercises the WIRING rather than re-deriving that property.\n(e) A CLEAN BOOT IS UNAFFECTED. With no in-flight attempts, the daemon starts normally and writes no reconciliation records — the control that stops the suite passing by refusing everything.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "WIRE THE SWEEP. In `startDaemon` (daemon-entry.ts:162), after `resolveDependencies` succeeds and BEFORE `startControlRoomListener`: call `readInFlightFoundationAttempts`, handle its refusal arm, then call `reconcileOnRestart(store, request)` with the real output and handle its refusal arm. A refusal from either returns `refuseEntry(...)` with a stable code at `DAEMON_ENTRY_LAYER`, and the listener never starts.\nBUILD THE REQUEST FROM BOOT FACTS, NOT FROM A CALLER. `RestartReconciliationRequest` is `{attempts, correlationId, decidedAt, principalId, projectId}`. The attempts come from the enumerator; project and principal come from the resolved dependencies; correlationId and decidedAt are minted here as server facts. Nothing in `DaemonStartOptions` may supply any of them — a start option that could set the principal would let a caller attribute a reconciliation to someone else.\nDO NOT MODIFY the producers: `restart-reconciliation.ts` and `in-flight-attempts.ts` are complete and separately tested, and `continuation-service.ts` is untouched by this step. If either genuinely cannot be composed as written, report blocked rather than editing it.\nDO NOT ROUTE THROUGH `continuation-test-harness.ts`. It is a test harness by name and by fact — it was `reconcileOnRestart`'s only non-test caller before the enumerator landed, and composing production through it would leave the gap exactly where it is while looking closed.\nLINE BUDGET: `daemon-entry.ts` is at 206 of a 250 target and 400 hard cap, so there is real room — but measure with `grep -c ''` after editing (PowerShell `Measure-Object -Line` undercounts). If the sweep plus its refusal handling would push past 250, put the sweep in a sibling module with its own one-line LF bridge and keep `startDaemon` a thin call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "EXPOSE THE CONTINUATION COMMAND — the second edge this task owns. `evaluateContinuationCommandBytes` (recovery/continuation-service.ts:143) has no authenticated caller; expose it through `daemon-command-registry.ts` so a continuation decision can be made by command rather than only by a test.\nFIRST, MEASURE WHETHER A KIND EXISTS. `RUNTIME_COMMAND_KINDS` (packages/contracts/src/runtime/runtime-vocabulary.ts:85) is a FROZEN union, and `runtime-envelope.ts:142` refuses any envelope whose `commandKind` fails `isCommandKind` BEFORE `http-adapter.ts:196` reads the registry — one seam, decode first. So a brand-new kind would be unreachable, and the union is closed for M5 by human decision recorded 11:54Z (no `RuntimeCommandKind` expansion, no client regeneration).\nThe union already contains `recovery.reconcile_external`, `recovery.inspect_external` and `reconciliation.decide` — and `RESTART_RECONCILIATION_COMMAND_KIND` is literally `\"reconciliation.decide\"` (restart-reconciliation.ts:23). Check whether one of those is the intended carrier before concluding anything. If a suitable kind is in the union, register the handler behind it with its own capability, payload allow-list and family entry, following the shape `RECOVERY_COMPLETION_COMMAND_KIND` already uses as a singleton kind.\nIF NO EXISTING KIND HONESTLY CARRIES IT, do not mint one and do not fake the edge: say so in the completion and report that half of DoD 5 as blocked on a contracts-expansion prerequisite, exactly as the coordination surface was. Half an honest task beats a registry entry nothing can reach.\nEither way, assert: an authenticated command produces a real receipt; an unauthenticated or malformed send refuses with its exact code and layer; and the payload allow-list refuses a field carrying a server fact rather than silently overwriting it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-entry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS — four, aimed at the wiring and the fail-closed direction. Run each alone, revert before the next. (1) Remove the boot-path sweep call; the step-2(a) classification test must redden — the drill that proves the wiring exists at all, and the one QA will look for since `reconcileOnRestart` had zero production callers before this task. (2) Make the refusal path continue to `startControlRoomListener`; the step-2(b) not-ready assertion must redden — and confirm it reddens because the daemon became READY, not because a code changed, since a daemon that boots after a failed sweep is the actual defect. (3) Collapse the enumerator's refusal into the reconciler's code; the step-2(c) distinguishability case must redden. (4) Take `principalId` or `projectId` from `DaemonStartOptions` instead of the resolved dependencies; a NAMED test must redden — proving reconciliation cannot be attributed to a caller-named principal.\nFor EVERY drill record the exact replaced range you edited — a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or a startup timeout. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each separate with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`; `pnpm --filter @moe/daemon test` reading the COUNT LINE, not the exit code; `pnpm typecheck` repo-wide. Apply the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty — and quote the foreign daemon red verbatim without repairing it.\nPROVE THE GAP CLOSED: `grep -rn \"reconcileOnRestart\" --include=*.ts apps | grep -v '\\.test\\.' | grep -v test-harness` must now return a PRODUCTION call site on the boot path. That grep returned zero production callers when this gap was measured, and it is GAP B of canary task-97554aa4293e40eab56c0b642e18513a — quote it.\nADVERSARIAL REVIEW: (a) does the sweep run in `startDaemon` after `resolveDependencies` and before `startControlRoomListener`? (b) does a refusal from EITHER the enumerator or the reconciler stop the daemon becoming ready, asserted by the listener not accepting rather than by a returned code? (c) are the two refusal sources distinguishable by code and layer, not collapsed? (d) is the request built from boot facts only, with nothing in `DaemonStartOptions` able to supply principal, project, correlation or decidedAt? (e) does any new `DAEMON_ENTRY_REFUSAL_CODES` member have a producer and a code+layer test — no orphans? (f) is `continuation-test-harness.ts` absent from the production path? (g) are `restart-reconciliation.ts`, `in-flight-attempts.ts` and `continuation-service.ts` untouched? (h) for the continuation command: was an EXISTING union kind used, or was that half honestly reported blocked rather than a new unreachable kind registered? (i) is `daemon-entry.ts` under 250 by `grep -c ''`, or split with a one-line LF bridge? (j) does `git status --porcelain` show only owned paths with every drill reverted?\nCommit by explicit pathspec — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the count lines and the closing grep verbatim, name the test that reddened for each drill, state the continuation-command outcome plainly, and record that this closes GAP B of canary task-97554aa4 — whose prerequisite list, after the gap C descope, is then one task from complete. Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-entry.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -33,9 +87,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:22:50.898Z",
-  "updatedAt": "2026-08-16T12:38:38.708Z",
+  "updatedAt": "2026-08-16T13:14:18.362Z",
   "metrics": {
-    "firstClaimAt": "2026-08-16T09:24:50.921Z"
+    "firstClaimAt": "2026-08-16T09:24:50.921Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -51,5 +107,25 @@
       "releasedBy": "architect-27b64950",
       "reason": "Releasing the ASSIGNMENT only so the claim gate can offer the enumerator and the coordination task. Stays BLOCKED in place on its prerequisite."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T13:14:16.308Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Put the sweep in `createStoreDependencies`. REJECTED on measurement: it holds the store handle but has no path to refuse startup, so a sweep failure there could not fail closed and the daemon would boot ready anyway. `startDaemon` is where readiness is decided.\n\n2) Route the sweep through `continuation-test-harness.ts`, which already calls `reconcileOnRestart`. REJECTED: it is a test harness by name and by fact, and it was the ONLY non-test caller before the enumerator landed. Composing production through it would leave the gap exactly where it is while looking closed — the most available wrong answer here.\n\n3) Collapse the enumerator's refusal into the reconciler's code for a simpler boot path. REJECTED: \"I could not read what was in flight\" and \"I could not durably record the classification\" are different facts with different remedies, and an operator seeing one code cannot tell which happened.\n\n4) Assert the refusal by its returned code and stop. REJECTED: the defect is a daemon that becomes READY after a failed sweep, and the returned object is identical either way. Assert the listener is not accepting; drill 2 requires the red to be about readiness, not a code.\n\n5) Let `DaemonStartOptions` supply principal or project for the reconciliation request. REJECTED: it would let a caller attribute a reconciliation to someone else. Boot facts only, drilled.\n\n6) Register a new command kind for the continuation decision. REJECTED unless no existing kind fits — the frozen union refuses unknown kinds at decode, so a new entry would be unreachable, and M5 forbids expansion. Measure `reconciliation.decide` first.\n\n7) Fake the continuation edge if no kind fits. REJECTED: report that half blocked. A registry entry nothing can reach is worse than an acknowledged gap, and the coordination surface is the precedent.",
+    "codebaseInsights": "MEASURED AT HEAD 002497c. I filed this task, blocked it on a sub-gap I found while first planning it, and now plan it with that prerequisite landed — so the chain is traceable end to end.\n\nTHE ENUMERATOR LANDED AS DESIGNED (task-48c0c0db): `apps/daemon/src/work/in-flight-attempts.ts`, 169 lines, exporting `readInFlightFoundationAttempts` (:145), `InFlightAttemptSweep` (:56) and `IN_FLIGHT_SITUATION_KEYS` (:51). Its header carries the rule AND its citation — the RESERVED-without-RECORDED property lifted from `foundation-attempt-service.ts:218-224`, explicitly \"not an inference from absence plus a clock, and no timeout is consulted anywhere below\". It also states how RECORDED-without-RESERVED is handled, which the boot sweep must not contradict.\n`InFlightAttemptSweep` IS A UNION, so the sweep can refuse in its own right — the boot path handles two independent refusal sources, not one.\n\nTHE COMPOSITION-ROOT QUESTION IS ANSWERED, and it was the open question in my own handoff. `daemon-entry.ts` (206 lines) declares `DAEMON_ENTRY_LAYER` (:41), a frozen `DAEMON_ENTRY_REFUSAL_CODES` (:44) and `refuseEntry` (:97); `startDaemon` (:162) is where readiness is decided, so a refusal there can actually stop the listener. `createStoreDependencies` (daemon-store-dependencies.ts:94) holds the store handle but cannot refuse startup, so a sweep failure there could not fail closed. The sweep therefore belongs in `startDaemon`, after `resolveDependencies` and before `startControlRoomListener`.\n\nCORRECTION TO A NUMBER I ASSERTED ELSEWHERE: `daemon-store-dependencies.ts` measures 194 lines, not the 397 that task-a9fd91c3's rails claim. I repeated that 397 into task-a9fd91c3's plan without measuring it — my own stale-by-default failure, and I am flagging it to #general so that worker is not told they have three lines of headroom when they have about two hundred.\n\nTHE CONTINUATION-COMMAND HALF NEEDS A MEASUREMENT BEFORE IT NEEDS A DESIGN. `RUNTIME_COMMAND_KINDS` is frozen and `runtime-envelope.ts:142` refuses an unknown `commandKind` before `http-adapter.ts:196` reads the registry — one seam, decode first — and the union is closed for M5 by the 11:54Z human decision. But the union DOES contain `reconciliation.decide`, and `RESTART_RECONCILIATION_COMMAND_KIND` is literally `\"reconciliation.decide\"` (restart-reconciliation.ts:23), plus `recovery.reconcile_external` and `recovery.inspect_external`. So an existing carrier plausibly exists here, unlike the coordination surface where I measured none. The plan requires measuring that before concluding, and requires an honest partial-block rather than an unreachable registered kind if no carrier fits.\n\nTHE HAZARD THIS TASK EXISTS TO PREVENT is a daemon that boots READY after a failed reconciliation sweep. A verdict-only assertion cannot see that — the refusal object looks identical whether or not the listener started — so the tests must assert the listener is not accepting.",
+    "risks": "1) A DAEMON THAT BOOTS READY AFTER A FAILED SWEEP is the defect, and it is invisible to a verdict-only assertion. Assert the listener is not accepting; drill 2 must redden on READINESS, not on a changed code.\n\n2) THE TEST HARNESS IS THE AVAILABLE WRONG ANSWER. `continuation-test-harness.ts` already calls `reconcileOnRestart` and compiles fine as a production route — and using it would leave the gap precisely where it was.\n\n3) TWO INDEPENDENT REFUSAL SOURCES. `InFlightAttemptSweep` is a union and `reconcileOnRestart` returns `{ok:false, code:\"EXPECTED_VERSION_CONFLICT\", layer:\"DURABLE_STORE\"}`. Collapsing them loses which failed.\n\n4) AN ORPHAN ENTRY CODE cannot fail closed. If `DAEMON_ENTRY_REFUSAL_CODES` gains a member, it needs a producer and a code+layer test in this task — task-6cbff010 was rejected for exactly three such orphans.\n\n5) THE CONTINUATION HALF MAY NOT BE REACHABLE. The union is frozen and closed for M5. Measure `reconciliation.decide` before designing; if nothing fits, report that half blocked rather than registering an unreachable kind.\n\n6) A CLEAN-BOOT CONTROL IS REQUIRED or the suite can pass by refusing everything — the natural failure mode of a refusal-heavy boot test.\n\n7) A HELD SQLITE HANDLE kills the vitest worker; real store per test, closed in a `finally` on every exit path. A startup test that hangs reports no verdict at all.\n\n8) DAEMON GATES RED AT BASELINE from foreign slices — attribute, disclose, require only the owned-path delta to be empty.\n\n9) DOWNSTREAM: this is GAP B of canary task-97554aa4. After the gap C descope its prerequisites are 6cbff010 (DONE) and this — so landing this takes the canary to one task from complete, and a half-wired boot path here would be discovered there rather than now.",
+    "keyFiles": [
+      "apps/daemon/src/work/in-flight-attempts.ts",
+      "apps/daemon/src/recovery/restart-reconciliation.ts",
+      "apps/daemon/src/recovery/continuation-service.ts",
+      "apps/daemon/src/daemon-entry.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "packages/contracts/src/runtime/runtime-vocabulary.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-16T13:14:18.362Z"
 }

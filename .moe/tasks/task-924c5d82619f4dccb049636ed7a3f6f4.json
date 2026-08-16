@@ -21,22 +21,26 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE SUBSET FROM THE ROSTER — this task's description says 18 and is SUPERSEDED. `tests/security/boundary-roster.security.ts` is committed and its axis totals read `transport 15, integrity 13, durable-store 14, ...`. Read the 13 integrity-tagged entries off the roster:\nPROJECT_CONFIGURATION_SELECTION_LAYER (apps/daemon/src/configuration/project-configuration-selection.ts); SESSION_AUTHORITY_DAEMON_LAYERS (daemon/identity/session-authority-contracts.ts); RECOVERY_COMPLETION_LAYER (daemon/recovery/recovery-completion-digest.ts); CORE_APPROVAL_LAYER and PROJECT_REDUCER_LAYER (daemon/recovery/recovery-completion-evidence.ts); RECOVERY_KEY_PROVIDER_LAYER (daemon/recovery/recovery-key-provider-contract.ts); PROJECT_CONFIGURATION_REFUSAL_LAYERS, DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS (packages/contracts); PROJECT_CONFIGURATION_CODEC_LAYERS (packages/core/src/configuration/project-configuration-manifest.ts); SESSION_AUTH_LAYERS (packages/core/src/identity/authenticate-session.ts); APPROVAL_AUTHORITY_LAYERS (packages/core/src/planning/approval-authority.ts); REVIEW_DECISION_LAYERS (packages/review/src/review-contract.ts).\nTHE ROSTER RE-TAGGED SEVERAL of my original filing's members, so do not reconcile the two lists — just take the roster's. `SESSION_AUTHORITY_DAEMON_LAYERS` and `SESSION_AUTH_LAYERS` moved HERE from transport; the expansion, supersession, goal, import and graph-revision constants my filing listed are NOT on this axis and belong to siblings. Covering one of those here creates the overlap the partition exists to prevent.\nTHE HARNESS (tests/security/hostile-harness.ts, 248 lines): `probeBefore`, `probeAfter`, `probeRacing` with `RaceOutcome`/`LegOutcome`, `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith`, `MAX_BOUND_MS = 2_147_483_647`. `RefusalExpectation.layer` is NON-OPTIONAL at the type level and re-checked at runtime, so use the helper rather than hand-rolling an assertion that bypasses both.\nGATE BASELINE: `pnpm test:security` alone, exit code captured (never `;`-chained, never piped into tail), recording the `Test Files`/`Tests` count line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "note": "BASELINE + ROSTER SUBSET measured at HEAD 7086e54.\n\nROSTER (committed bytes, grep of tests/security/boundary-roster.security.ts for axis:\"integrity\") returns EXACTLY 13, matching the plan verbatim: PROJECT_CONFIGURATION_SELECTION_LAYER, SESSION_AUTHORITY_DAEMON_LAYERS, RECOVERY_COMPLETION_LAYER, CORE_APPROVAL_LAYER, PROJECT_REDUCER_LAYER, RECOVERY_KEY_PROVIDER_LAYER, PROJECT_CONFIGURATION_REFUSAL_LAYERS, DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS, PROJECT_CONFIGURATION_CODEC_LAYERS, SESSION_AUTH_LAYERS, APPROVAL_AUTHORITY_LAYERS, REVIEW_DECISION_LAYERS. Description's 18-member list discarded, not reconciled.\n\nGATE BASELINE — `pnpm test:security` run ALONE, exit captured separately (no pipe, no `;`-chain): EXIT=1. Count line `Test Files 1 failed | 1 passed (2)` / `Tests 2 failed | 46 passed (48)`.\n\nTHE BASELINE IS ALREADY RED, AND THE RED IS FOREIGN. Both failures are in tests/security/boundary-roster.security.ts (NOT an owned path; it is task-9aca4b05's committed deliverable):\n  1. \"names every scanned constant in the roster (scan minus roster is empty)\" — received [\"BENCHMARK_PROJECTION_LAYERS@packages/benchmark/src/benchmark-projection-vocabulary.ts\"]\n  2. \"scans exactly the roster's cardinality\" — expected 87, got 88\nAttributed: `git show HEAD:packages/benchmark/src/benchmark-projection-vocabulary.ts` ALREADY contains BENCHMARK_PROJECTION_LAYERS at line 39, so the constant is committed at HEAD 7086e54 by a peer who did not add the roster entry. This red pre-dates my diff and is not repairable by me (step 4 forbids editing the roster).\n\nHARNESS confirmed on committed bytes: probeBefore/probeAfter/probeRacing, RaceOutcome/LegOutcome, hostileRoot/cleanupHostileRoots/withHostileRoot, assertRefusedWith (layer non-optional at type level AND re-checked at runtime), MAX_BOUND_MS = 2_147_483_647.\n\nREACHABILITY PROBED, not assumed. tests/security has no package.json and root node_modules/@moe holds only `daemon` and `runner`, so bare specifiers do not resolve for core/contracts/review/store. A scratch probe deep-importing apps/daemon/src/recovery/{restore-test-harness,recovery-completion,recovery-completion-evidence}.js plus packages/{store,core,contracts,review}/src/index.js compiled with `tsc -p tests/security/tsconfig.json` EXIT=0 (lane tsconfig sets composite:false and no rootDir). Probe deleted in the same command; `git status --short tests/security/` clean of it afterwards.\n\nPEER FILES PRESENT, UNTRACKED, NOT MINE: tests/security/transport-boundaries.security.ts and transport-hostile-cases.ts appeared mid-session (sibling transport slice). They post-date my baseline run, so the post-task count line must be attributed against them, not credited to this slice. Their .security.ts + non-test -cases.ts shape is the structure this slice will mirror.",
+      "startedAt": "2026-08-16T13:02:28.232Z",
+      "completedAt": "2026-08-16T13:09:26.710Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, PART 1 — FORGERY, and the rule that makes it mean anything. Create `tests/security/integrity-boundaries.security.ts`. This axis is about digests, codecs and authority records, so the central hostile move is a forged-but-internally-consistent payload.\nEVERY FORGERY CASE MUST RESEAL THROUGH THE PRODUCTION CODEC. Mutate the field under test, then RE-DIGEST and RE-ENCODE through the same production path that seals a genuine record, so the payload passes its own integrity check and only the SUBJECT is wrong. A probe that mutates a field without resealing tests the digest check and nothing else — it would pass against an implementation with no subject binding at all, which is precisely the defect these boundaries exist to catch.\nAssert BOTH halves per forgery: that the forged payload PASSES the digest/shape check (proving the reseal worked and the case is not a mismatch in disguise), and that it is then REFUSED on the subject with the exact code and layer.\nSUBJECTS TO FORGE, per boundary: a configuration manifest whose settings digest is resealed over different bytes (PROJECT_CONFIGURATION_CODEC_LAYERS, PROJECT_CONFIGURATION_REFUSAL_LAYERS, PROJECT_CONFIGURATION_SELECTION_LAYER); a session credential resealed for a different principal or project (SESSION_AUTH_LAYERS, SESSION_AUTHORITY_DAEMON_LAYERS); an approval resealed against a different subject or graph revision (APPROVAL_AUTHORITY_LAYERS, CORE_APPROVAL_LAYER); a recovery completion digest resealed over a different coverage set (RECOVERY_COMPLETION_LAYER); a reducer input resealed for a different project (PROJECT_REDUCER_LAYER); a review decision resealed for a different round or subject (REVIEW_DECISION_LAYERS); a distribution or document-work proposal resealed for a different target (DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS); and for RECOVERY_KEY_PROVIDER_LAYER, a key-epoch proof resealed against a different epoch.\nSECRETS RULE, binding on this axis specifically: no test may assert on, log, or embed key material, a credential value or a raw secret — assert on digests and refusal codes only. A test that prints a credential to prove it was rejected has published it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/integrity-boundaries.security.ts"
       ],
       "newFiles": [
         "tests/security/integrity-boundaries.security.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T13:09:32.502Z"
     },
     {
       "stepId": "step-3",
@@ -73,7 +77,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-ad55ab67",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,7 +89,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:59:34.102Z",
-  "updatedAt": "2026-08-16T12:28:54.638Z",
+  "updatedAt": "2026-08-16T13:09:32.502Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -93,9 +97,12 @@
   "metrics": {
     "firstClaimAt": "2026-08-16T12:27:00.619Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T12:28:52.570Z",
   "planningNotes": {
@@ -116,5 +123,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-16T12:28:54.638Z"
+  "planApprovedAt": "2026-08-16T12:28:54.638Z",
+  "contextFetchedBy": [
+    "worker-ad55ab67"
+  ],
+  "workStartedAt": "2026-08-16T13:02:28.232Z"
 }

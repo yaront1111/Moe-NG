@@ -21,31 +21,37 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE SUBSET FROM THE ROSTER — not from this task's own description, which predates the correction. `tests/security/boundary-roster.security.ts` is committed and its axis totals line reads `transport 15, integrity 13, durable-store 14, ...`. THIS TASK'S DESCRIPTION SAYS 13 AND IS WRONG; the roster is the authority every sibling slice was told to consume, and it also re-tagged members my original filing mis-assigned. Read the 15 transport-tagged entries off the roster and work from those:\nIDE_ADAPTER_LAYER and IDE_ADAPTER_LAYERS (adapters/ide-contract/src/index.ts); EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER, EFFORT_LAYERS (apps/control-room/src/performance/effort-records.ts); TIMELINE_REFUSAL_LAYERS (apps/control-room/src/timeline/timeline-contract.ts); DAEMON_ENTRY_LAYER (apps/daemon/src/daemon-entry.ts); AFFORDANCE_SURFACE_LAYER (http/affordance-contract.ts); EVENT_STREAM_LAYER (http/event-stream-observation.ts); CONTROL_ROOM_LISTENER_LAYER (http/http-listener-guards.ts); DAEMON_INGRESS_LAYER (recovery/recovery-completion-evidence.ts); CONTROL_ROOM_TRANSPORT_LAYER (packages/control-room-client/src/client-transport.ts); COORDINATION_LAYERS (packages/coordination/src/coordination-contracts.ts); IMPORT_REFUSAL_LAYERS (packages/import/src/import-contract.ts); HTTP_SHUTDOWN_LAYER (packages/mcp/src/http/http-shutdown.ts).\nNote what MOVED off this axis: `SESSION_AUTHORITY_DAEMON_LAYERS` and `SESSION_AUTH_LAYERS` are NOT transport in the roster. Do not cover them here — another slice owns them, and covering them twice creates the overlap the partition exists to prevent.\nTHE HARNESS, committed at tests/security/hostile-harness.ts (248 lines): `probeBefore`, `probeAfter`, `probeRacing` (with `RaceOutcome`/`LegOutcome`/`RaceSide`), `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith(actual, expected: RefusalExpectation)`, and `MAX_BOUND_MS = 2_147_483_647`. `RefusalExpectation.layer` is NON-OPTIONAL at the type level AND re-checked at runtime, so a code-only assertion is a compile error and a cast is rejected too — use the helper rather than hand-rolling an assertion that would bypass both.\nGATE BASELINE: `pnpm test:security` — run it alone with its exit code captured (never `;`-chained, never piped into tail) and record the `Test Files`/`Tests` count line as your before-set. The lane typechecks first and sets `passWithNoTests: false`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
       ],
-      "startedAt": "2026-08-16T12:54:51.317Z"
+      "note": "BASELINE RECORDED + SUBSET TAKEN FROM THE ROSTER (not this task's description).\n\nRoster confirmed on committed bytes: boundary-roster.security.ts 578 lines, axis totals line reads \"transport 15, integrity 13, durable-store 14, runtime-provider 22, scheduler-activation 23 - sums to 87\". Grepped the 15 transport-tagged entries; they match the plan's list exactly, including DAEMON_INGRESS_LAYER and IMPORT_REFUSAL_LAYERS (absent from the task description) and EXCLUDING SESSION_AUTHORITY_DAEMON_LAYERS / SESSION_AUTH_LAYERS (present in the description, re-tagged off this axis). Working from the roster's 15.\n\nHarness confirmed at 248 lines with every symbol the plan named: probeBefore/probeAfter/probeRacing (RaceOutcome/LegOutcome/RaceSide), hostileRoot/cleanupHostileRoots/withHostileRoot, assertRefusedWith, HostileBound, MAX_BOUND_MS=2_147_483_647. RefusalExpectation.layer is non-optional at the type level AND re-checked at runtime.\n\nGATE BASELINE - `pnpm test:security` run ALONE, exit code captured separately (not ;-chained, not piped into tail):\n  Test Files  1 failed | 1 passed (2)\n       Tests  2 failed | 46 passed (48)\n  EXIT=1\n\nTHE LANE IS ALREADY RED AT HEAD 11b78f2, from a file I am rail-forbidden to edit. Both failures are in boundary-roster.security.ts:\n  x \"names every scanned constant in the roster (scan minus roster is empty)\"\n      received [\"BENCHMARK_PROJECTION_LAYERS@packages/benchmark/src/benchmark-projection-vocabulary.ts\"]\n  x \"scans exactly the roster's cardinality\" - expected 87, got 88\nAttribution: `git log -1 -- packages/benchmark/src/benchmark-projection-vocabulary.ts` => 11b78f2 (task-6cbff010's completion commit, which swept in task-b937811e's in-flight benchmark package via the known whole-tree hook). The file is TRACKED, so this is committed state, not a transient untracked peer file. Not my diff, not mine to repair - adding the 88th entry means assigning a coverage axis, which is the roster owner's judgement and would silently create a gap or overlap in another slice's partition. Posted to the board (msg-9fe28f1d) since all five sibling slices share this gate.\n\nIMPORT-EDGE RE-MEASUREMENT (two probes, both deleted in the same command):\n- BARE SPECIFIERS DO NOT RESOLVE from this lane. root node_modules/@moe holds only `daemon` and `runner`; pnpm-lock's root importer declares only those two. Compiled probe => TS2307 for @moe/mcp, @moe/coordination, @moe/import, @moe/control-room-client, @moe/ide-adapter-contract, @moe/control-room - the packages holding 10 of my 15 boundaries.\n- DEEP RELATIVE IMPORTS DO WORK, at typecheck AND runtime, contradicting the planning note's blanket TS6059 claim. tests/security/tsconfig.json sets composite:false and NO rootDir, so TS6059 never fires. Probe `import { HTTP_SHUTDOWN_LAYER } from \"../../packages/mcp/src/http/http-shutdown.js\"` => tsc exit 0; a runtime probe importing five boundaries across mcp/coordination/ide-contract/control-room/daemon => vitest \"Test Files 1 passed, Tests 1 passed\". So no manifest edit and no blocked report is needed for the edge - deep relative is the route.\n\nAlso noted: apps/daemon barrel exports DAEMON_ENTRY_LAYER, EVENT_STREAM_LAYER, CONTROL_ROOM_LISTENER_LAYER but NOT AFFORDANCE_SURFACE_LAYER or DAEMON_INGRESS_LAYER, so the lane will import all boundaries by deep relative path uniformly rather than mixing routes.",
+      "startedAt": "2026-08-16T12:54:51.317Z",
+      "completedAt": "2026-08-16T12:58:27.334Z"
     },
     {
       "stepId": "step-2",
       "description": "RESOLVE THE ONE BOUNDARY THAT MAY NOT BE REACHABLE, before writing 45 cases around it. `COORDINATION_LAYERS` is transport-tagged, but the coordination surface has NO production caller: `createCoordinationAdapter` is reachable only from its own test, and task-d17bb228 (which would have wired a command kind) is BLOCKED pending a human descope decision — the `RuntimeCommandKind` union is closed and expansion is ruled out for M5.\nMeasure it yourself, then choose ONE and say which in the file:\n(a) COVER IT AT ITS OWN LAYER. The adapter, session authority and recipient registry are real and callable in-process. Hostile coverage of `send`/`acknowledge` against `createCoordinationAdapter` directly is honest transport coverage of that boundary's refusal semantics, even though no command kind routes to it today. This is the expected answer and keeps the axis complete.\n(b) If the boundary genuinely cannot be exercised without the absent wire, say so explicitly in the file and in the completion, and DO NOT fabricate coverage. An UNKNOWN row that certifies nothing is better than a case driving a surface that cannot refuse.\nWhat you must NOT do is quietly skip it: the ratchet task (task-3b1cbdf9) will later assert every roster entry resolves to a real before/after/race case, so a silent omission surfaces there as a late red with no owner. Decide now and record the decision.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/transport-boundaries.security.ts"
-      ]
+      ],
+      "note": "COORDINATION_LAYERS DECISION: option (a) — COVER IT AT ITS OWN LAYER. Recorded here and to be restated in the file header.\n\nRe-measurement corrected the plan on one point. The plan named `createCoordinationAdapter` as the surface to drive; that symbol does NOT exist in packages/coordination. `grep -rn createCoordinationAdapter --include=*.ts .` finds it only at apps/daemon/src/coordination/coordination-adapter.ts, referenced solely by its own test — the plan's \"no production caller\" claim is accurate, but the symbol lives in the DAEMON, not in the package that declares COORDINATION_LAYERS.\n\nThe right surface is `createCoordinationService`, and it is strictly better for this purpose:\n- COORDINATION_LAYERS is declared in packages/coordination/src/coordination-contracts.ts, and createCoordinationService is that same package's own service — so driving it is coverage of the boundary AT ITS OWN LAYER in the literal sense, not via a daemon wrapper.\n- It is exported from the package index (`export { createCoordinationService } from \"./coordination-service.js\"`), so it is a real public seam and not test-only reach.\n- Its refusals are `CoordinationRefused { code, detail, layer, outcome: \"REFUSED\" }` where `layer` is a member of COORDINATION_LAYERS — exactly the shape assertRefusedWith reads, with no projection needed.\n- Its guard chain is real production admission: clock -> authenticate (AUTHENTICATION) -> session ownership (AUTHENTICATION) -> capability (CAPABILITY) -> address/registry (ADDRESS) -> effect binding (ADDRESS) -> correlation (CORRELATION) -> decode (DECODE). Four distinct layers are reachable with hostile input alone, before the mailbox is ever consulted.\n\n`CoordinationDependencies` is `{ authenticate, mailbox, now, resolveEffectBinding, resolveRecipient }`. The three port functions are the HOSTILE INPUT side, so doubles there are permitted by the task rail. The mailbox is downstream of admission and will be supplied as a stub that THROWS if touched — which does double duty: it is not a mock standing in for the admission boundary, and a case reaching it fails loudly instead of silently passing, proving admission refused before any store contact.\n\nSo the axis stays complete with no fabricated coverage and no UNKNOWN row. Option (b) is not needed.\n\nTWO OTHER SURFACE FACTS MEASURED THIS STEP, both affecting how cases are written:\n1. `RecoveryCompletionRefused` (the DAEMON_INGRESS_LAYER shape, declared in recovery-completion-digest.ts:213) spells its answering layer `refusedBy`, NOT `layer`/`reasonLayer`. assertRefusedWith's readRefusal accepts only the latter two and throws HostileHarnessMisuseError otherwise. This slice will pass an explicit two-field projection `{ code: r.code, layer: r.refusedBy }` at the call site, with a comment naming why. That is a field re-spelling of values read off the production object — it defaults nothing, infers nothing, and reimplements no refusal decision — so the harness stays untouched as step 5 requires, and no blocked report is warranted for it.\n2. `BOUNDARY_ROSTER` is NOT exported from boundary-roster.security.ts (only the `RosterEntry`/`CoverageAxis` types are). The completeness assertion therefore cannot import the array. It will PARSE the roster file's committed text for `axis: \"transport\"` entries, which is stronger than importing anyway: it reads the real artifact, reddens if the roster re-tags a member, and cannot drift from a hand-kept copy. The parse will itself assert it found exactly 15, so a regex that silently matches zero reddens instead of passing.",
+      "startedAt": "2026-08-16T12:58:31.648Z",
+      "completedAt": "2026-08-16T13:01:43.554Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED, PART 1 — the BEFORE and AFTER arms across all 15 boundaries. Create `tests/security/transport-boundaries.security.ts` (the lane runs `**/*.security.ts`). Per boundary: at least one BEFORE case (hostile input arriving before the boundary has admitted anything — forged, absent, malformed or expired credentials; a malformed envelope; an oversized payload) and one AFTER case (authority presented after it should no longer be honoured — stale credential after rotation, revoked recipient, replayed command, closed or shut-down transport).\nEvery refusal goes through `assertRefusedWith(actual, {code, layer})` — both required, and the helper rejects a code-only call at compile time and at runtime. Take each expected layer from the boundary's OWN declared constant, not from a string literal you type: the point of the roster is that these constants are the vocabulary.\nBUILD EACH FIXTURE VALID AT THE EARLIER LAYERS. Several of these boundaries sit behind another — an HTTP listener guard refuses before an affordance surface ever sees a request, and a transport-level malformed frame refuses before any session check. A fixture that is invalid at the earlier layer is answered there, and the assertion silently stops testing its subject. Where two layers can answer, say in a comment which one you arranged to answer and why.\nASSERT A POSITIVE CASE COUNT PER BOUNDARY, and assert the swept boundary set equals the roster's 15 transport entries in BOTH directions — a boundary that generated zero cases must redden rather than pass, and a case for a boundary outside this axis must redden too.\nSPLIT IF NEEDED: 15 boundaries x 3 arms is 45+ cases. If a file would exceed 400 physical lines by `grep -c ''`, split into at most three `*.security.ts` files under tests/security/, keeping the roster-set assertion in ONE of them so the completeness check has a single home.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/transport-boundaries.security.ts"
       ],
       "newFiles": [
         "tests/security/transport-boundaries.security.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T13:01:46.519Z"
     },
     {
       "stepId": "step-4",
@@ -81,7 +87,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
@@ -94,16 +100,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:59:05.501Z",
-  "updatedAt": "2026-08-16T12:54:51.317Z",
+  "updatedAt": "2026-08-16T13:13:39.641Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:12:17.247Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 2
   },
-  "blockedReason": null,
+  "blockedReason": "BLOCKED at step-3. Two blockers, neither mine to repair. Full detail: chat msg-d74c315d and Serena memory task-task-aa32fdf7e5ea4fb7916d3d52e83cebf2-handoff.\n\n1. ANOTHER LIVE SESSION IS WRITING MY OWNED PATH. I wrote tests/security/transport-boundaries.security.ts, typechecked clean, ran it at \"Tests 3 failed | 62 passed (65)\" - the 3 were my own wrong expectations mid-TDD, 2 already fixed. It was then REPLACED by a foreign 44947-byte version, still being edited. Measured by mtime: 16:08:01 v1 importing a ./transport-boundary-registry.js that never existed; 16:10:55 v2 refactored self-contained; a third slice durable-store-boundaries.security.ts appeared 16:09:01, helper 16:11:11. I will not overwrite it - its harness usage beats mine (probeBefore/probeAfter/probeRacing per boundary; mine used probeRacing only). Standing down matches the precedent for the second 6cbff session and defect task-05b0a693.\n\n2. pnpm test:security CANNOT REACH EXIT 0, which complete_task hard-requires. Baseline before any work of mine, run alone with exit code captured: Test Files 1 failed | 1 passed (2); Tests 2 failed | 46 passed (48); EXIT=1. Both failures are in boundary-roster.security.ts, which my rails forbid me to edit: the scan finds 88 boundaries, the hand list has 87. The 88th is BENCHMARK_PROJECTION_LAYERS in packages/benchmark/src/benchmark-projection-vocabulary.ts, attributed by git log -1 to HEAD 11b78f2 (task-6cbff010's commit carrying task-b937811e's package). Adding it means assigning a coverage AXIS - the roster owner's judgement. The tsc leg is also red from the foreign file, quoted not repaired: transport-boundaries.security.ts(546,27) TS2339 'known' does not exist on type 'WireObservation'. The gate typechecks first, so zero tests run and no count line prints.\n\nLEFT ON DISK: nothing of mine; I removed my orphaned transport-hostile-cases.ts after grep showed zero importers. No commit, no foreign file touched.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-16T13:13:39.641Z",
   "priorHandoffs": [
     {
       "whatIsDone": "Measurement only at HEAD abc3dcf; no plan submitted, no code written. Confirmed both artifacts this slice consumes are ABSENT — `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules, so neither boundary-roster.security.ts nor hostile-harness.ts exists. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved plan, not DONE. Reported BLOCKED with that measurement.",
@@ -115,7 +122,10 @@
       "reason": "Releasing the ASSIGNMENT only so the claim gate can offer other work. Task stays BLOCKED in place on its foundation."
     }
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T12:26:55.614Z",
   "planningNotes": {

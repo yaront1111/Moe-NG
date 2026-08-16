@@ -16,12 +16,12 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Hard dependency task-6cbff010 is not DONE and does not yet expose the required durable released-attempt reader. Planning now would invent safe-release authority; re-promote only after dispatch is QA-approved and its exact public reader is re-measured.",
+  "reopenReason": "Governor cascade 13:01Z: the task rail's explicit precondition (\"forbids planning before task-6cbff010 is DONE\") is now satisfied — 6cbff QA-approved DONE at 13:00 with the committed effect.activate path and Foundation durable attempt/release/result records landed. Architect: re-measure the committed Foundation record surfaces (foundation-attempt-store.ts settleFoundationAttempt, recordProviderRun) before planning the safe-release evidence; downstream 738a12a8 and c4171c1c unblock when this lands.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
@@ -29,13 +29,13 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-15T18:32:29.546Z",
+  "updatedAt": "2026-08-16T13:01:34.558Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:32:23.731Z",
-  "blockedReason": "The task rail explicitly forbids planning before task-6cbff010 is DONE. That producer is currently BLOCKED awaiting the committed effect.activate path, and committed HEAD still has no Foundation durable attempt/release/result/reconciliation reader under apps/daemon/src. Therefore none of the required stored release facts—unchanged WORK_RELEASE_OR_PAUSE cause, released lease/slot, terminal effects/resources, observed safe boundary, and exactly one committed handoff—can be selected from production. Planning would reconstruct safe-release authority from caller/test data, which is forbidden. Re-promote only after 6cb is QA-approved DONE; then probe its exact project+attempt reader with missing/conflicting/unreadable cases and confirm every named fact is retained. If any fact is omitted, repair 6cb rather than inventing it here.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "contextFetchedBy": [
     "architect-a9210e34",
     "architect-94dd1835"

@@ -127,8 +127,8 @@
       "completedAt": "2026-08-16T12:52:34.739Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -219,7 +219,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-16T12:53:55.445Z",
+  "updatedAt": "2026-08-16T13:00:56.219Z",
   "contextFetchedBy": [
     "qa-c7cedba3",
     "worker-5678886b"
@@ -230,7 +230,9 @@
     "plannedDistinctFileCount": 4,
     "executedStepCount": 21,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-16T13:00:56.219Z",
+    "wallClockMs": 600149556
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -318,7 +320,7 @@
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/src/work/foundation-attempt-contracts.ts"
   ],
-  "reviewCompletedAt": "2026-08-16T11:55:11.216Z",
+  "reviewCompletedAt": "2026-08-16T13:00:56.219Z",
   "rejectionDetails": {
     "failedDodItems": [
       "The service passes only the committed one-use grant and freshly observed runtime closure to @moe/runner's launcher and persists immutable process registration, raw evidence digests, and result-manifest identity."
@@ -417,5 +419,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-16T13:00:56.219Z",
+  "reviewSummary": "APPROVED round 3. Round-2's only failed item (DoD 2 persistence half) is closed with executed evidence.\n\nGATES, each run separately, own exit code:\n- @moe/runner test: \"Test Files 66 passed (66)\" / \"Tests 2216 passed | 1 skipped\", EXIT 0\n- @moe/daemon typecheck: EXIT 0\n- @moe/daemon test: \"Test Files 102 passed (102)\" / \"Tests 2101 passed\", EXIT 0\n- focused vitest --root . --config package.json src/work/foundation-attempt: 2 files / 33 tests, EXIT 0 (round-2 baseline 28)\n- pnpm typecheck EXIT 1 ONLY on untracked peer packages/benchmark/src/benchmark-run-projection.test.ts (TS2307; package absent at merge-base cf272f6). test:security 2 failed, both naming BENCHMARK_PROJECTION_LAYERS@packages/benchmark, zero foundation-attempt hits. HEAD-minus-base failing paths intersected with owned paths = EMPTY.\n\nDoD 2 proven: recordProvenFoundationAttempt persists a NON-NULL resultManifest whose sha256 equals the runner's own buildResultManifest output, plus inputManifestSha256/scopeObservationSha256/baseIdentity/authoredPaths, the durable PROCESS_OBSERVED registration (not the pending PREFLIGHT one), observation digests, exact stdout/stderrSha256 - all read back through re-decoded byte-compared durable bytes. True MOVE: expectedVersion 1, event id COPIED from the grant, EFFECTS_COMMITTED check, read-back preserved.\n\nMY 4 DRILLS (each alone, restored): (A) resultManifest->null RED on \"expected null not to be null\"; (B) registration<-observation RED on the field toStrictEqual, NOT on RECORD_DRIFT; (C) delete the daemon input-manifest fence RED on exactly ONE test while the RUNNER-layer sibling stayed GREEN; (D) mint event id from bound.target RED on the explicit events[1].eventId assertion.\n\nVocabulary produced: INPUT_MANIFEST_INVALID store.ts:220 + test:1019; RESULT_MANIFEST_INVALID dropped; DISPATCH_SUSPECT in-flight-attempts.ts:158. Round-1 fixes intact. Lines 218/213/235/194.\n\nINCIDENT: hook commit 86d2326 captured my drill D; restored from 11b78f2 by pathspec."
 }

@@ -16,13 +16,84 @@
     "Use public package roots, TDD exact stable reason codes/layers, target <=250 lines and split before 400.",
     "Multi-node/fan-out remains typed UNSUPPORTED with zero authority."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE, AND READ THE ROUTE DECISION THIS PLAN MAKES — it changes DoD 1's mechanism and you must not undo it.\nMEASURED AT HEAD f65fbde. Both hard dependencies are DONE (task-e33747f9 activation ingress, task-6cbff010 attempt dispatch), plus task-9cba79a1 registry extraction.\nTHE WALL: `foundation.dispatch` is NOT in `RUNTIME_COMMAND_KINDS` (packages/contracts/src/runtime/runtime-vocabulary.ts:85), and `runtime-envelope.ts:142` refuses any envelope whose `commandKind` fails `isCommandKind` — BEFORE `http-adapter.ts:196` ever reads the registry. One seam, decode first. So registering a brand-new kind in the daemon registry would produce an entry nothing can reach, exactly the defect that stranded the coordination surface. Verify both lines yourself before proceeding.\nAND THE UNION IS CLOSED FOR M5 by human decision recorded 11:54Z on task-d17bb228: no `RuntimeCommandKind` expansion, no contracts/client regeneration during this milestone. That ruling binds here too.\nTHE ROUTE, therefore: compose the Foundation attempt edge behind the ALREADY-WIRED `effect.activate` kind rather than minting a new one. It is in the union, already registered as a singleton kind with its own `EFFECT_ACTIVATE_PAYLOAD_KEYS` allow-list, and it is the natural composition point because task-6cbff010's dispatch reads the DURABLE activation back from the store — the recorded dependency order (e337 → 6cb → this) is exactly that pipeline. The capability DoD 1 asks for is fully delivered: an authenticated production edge, capability-gated, allow-listed, with stable refusal mapping, authentication before payload authority. What changes is only that no new wire kind appears.\nFLAG IT, do not bury it: post the route to #general before step 5, naming DoD 1's literal \"expose one bounded Foundation attempt command\" and stating that the command is `effect.activate` extended rather than a new kind. If the human wants a new kind, that is a contracts-expansion prerequisite and this task re-blocks.\nGATES, each separate with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`. Record count lines and every failing file; the daemon legs are expected RED from foreign slices.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/contracts/src/runtime/runtime-envelope.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "PROBE THE DISAGREEMENT CASES FIRST, as the routing note instructs — before naming symbols in the plan you implement. Drive the committed registry/public host and the stored-dispatch reader with DELIBERATELY DISAGREEING caller-versus-stored values and record what each answers:\n- a caller-presented grant, runtime closure, slot, budget, lease, attempt or process registration that differs from the durable record;\n- a replay whose command bytes differ from the stored decision's;\n- a node selection naming a node the durable graph does not carry.\nRecord the exact code and layer each produces, from the landed vocabularies: `FOUNDATION_ATTEMPT_CODES` is now FIFTEEN members after task-6cbff010's produce-or-drop round (RESULT_MANIFEST_INVALID was DROPPED because `buildResultManifest` answers that under the runner's own code at `RUNNER_WORKSPACE_LAYER`, and the contract comment says a second vocabulary for one condition \"would only make the two indistinguishable again\" — do not re-add it). `FOUNDATION_ATTEMPT_REPLAY_MISMATCH` and `FOUNDATION_ATTEMPT_BINDING_MISMATCH` are the caller-versus-stored codes; `FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS` and `FOUNDATION_ATTEMPT_DISPATCH_SUSPECT` cover the replay states.\nTHE POINT OF PROBING FIRST: the dispatch service already refuses most caller-supplied authority — `durableActivation` reads the activation back \"FROM THE STORE, never from the caller's copy and never from the command result the caller received\", and `FoundationAttemptDeps` deliberately excludes the runtime filesystem, host observer and clock so \"no caller — test or transport — can hand pinning a runtime nobody observed\". Ingress must NOT re-validate what dispatch already refuses; a second validator answering first would change which layer refuses and silently detach every downstream assertion. Record which layer answers each case, and design the ingress to add only what dispatch cannot see: authentication, capability, payload allow-list, and node selection.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-contracts.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — authentication and selection, the two things ingress genuinely owns. Create the ingress test using a REAL SqliteEventStore AND the real Authenticator (task rail 2 forbids reimplementing either in a test helper). Pin, each with exact code, stage and layer:\nAUTHENTICATION BEFORE PAYLOAD AUTHORITY (DoD 1): an unauthenticated request refuses BEFORE any payload field is read — assert observably that no durable read and no dispatch invocation occurred, not merely that a refusal came back. A request authenticated but lacking the capability refuses next. Order is the assertion.\nNODE SELECTION (DoD 3): exactly ONE low-risk execution-bearing node delegates. ZERO matching nodes refuses; MORE THAN ONE refuses — both with an exact daemon code and layer, and both BEFORE any claim, activation or provider effect. Assert zero dispatch invocations on each, the `forgedCalls 0` shape task-6cbff010 already established. Multi-node stays typed UNSUPPORTED with zero authority (task rail 4), so assert the refusal rather than a partial selection.\nNO CALLER-SELECTED AUTHORITY (DoD 2): sweep the list the DoD names — grant, runtime closure, slot, budget, lease, attempt, effect, process registration — asserting a positive generated case count and that each is refused or ignored in favour of the durable fact, with the layer that answered recorded. Where dispatch already refuses one, assert DISPATCH's code and layer, not an ingress duplicate; that is what step 2's probe is for.\nDerive project, principal and session from durable production readers, never from the payload. Assert a payload carrying any of them is refused by the seam's allow-list rather than silently overwritten — a silently-ignored spoof is indistinguishable from an honoured one at the call site.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED, PART 2 — replay identity (DoD 4). Use the STORE COMMAND-DECISION identity, not a hand-rolled key. Cases:\n- Replaying the same command returns the ORIGINAL dispatch record, read back from the durable decision rather than recomputed. Assert raw EVENT and DECISION counts are unchanged — the DoD asks for counts explicitly because a replay that quietly appends is invisible to a verdict-only assertion.\n- Assert ZERO duplicate launch invocation on replay. This is the one that matters: a replay that re-launches has already had the side effect by the time any refusal is returned.\n- CONFLICTING command bytes under the same decision identity refuse with a distinct code, and the original record survives byte-identically.\nTHE ECHO TRAP, which has recurred repeatedly on this board: the store's replay identity does not cover the events array, so a replay answered from the CALLER's bytes makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. The conflicting-bytes case is the only one that kills it — present materially different bytes and assert the FIRST record comes back.\nAlso assert ZERO RESIDUE (DoD 5): after every refusal arm, the store holds no partial claim, activation, attempt or registration. Read it back; a returned refusal is not evidence that nothing was written.\nAND ONE ACCEPTED CONTROL (DoD 5): a fully valid request that reaches dispatch, proving the whole path can succeed. Without it the suite could pass by refusing everything, which is the failure mode a refusal-heavy ingress suite falls into naturally.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "IMPLEMENT THE INGRESS COMPOSITION. Create `apps/daemon/src/work/foundation-attempt-ingress.ts` plus its one-line `.js` bridge (`export * from \"./foundation-attempt-ingress.ts\";`, LF ending; the bridge guard byte-compares). It: authenticates, checks capability, applies the payload allow-list, derives project/principal/session and the current graph/node/claim facts from durable production readers, selects exactly one execution-bearing node, and delegates to `createFoundationAttemptService(...).dispatch`.\nWIRE IT BEHIND `effect.activate` per step 1's route — extend that already-registered singleton kind's handler rather than adding a new `WiredCommandKind`. Keep its `EFFECT_ACTIVATE_PAYLOAD_KEYS` allow-list authoritative; if the composition needs a field the allow-list lacks, that is a payload-contract change to raise, not to make silently.\nWATCH THE HARD LINE LIMIT: task rail 2 says do NOT grow `daemon-store-dependencies.ts` past 400 lines and it is at 397 — THREE lines of headroom. Measure with `grep -c ''` (PowerShell `Measure-Object -Line` undercounts). If composition needs more, put it in the new ingress module or a sibling with its own LF bridge; do not spend the headroom.\nRETURN DISPATCH'S REFUSALS UNCHANGED, with `FOUNDATION_ATTEMPT_CODES` members and their refusing layer intact. Do not restamp them into an ingress vocabulary — four layers can answer here (authenticator, registry allow-list, ingress selection, dispatch) and restamping erases which did.\nDO NOT reimplement registry or authentication, do not manufacture an ACTIVE provider slot, do not modify `foundation-attempt-service.ts`/`-store.ts`/`-contracts.ts` (task-6cbff010, DONE) or the activation ingress (task-e33747f9, DONE). This is the consumer edge; report blocked rather than editing a producer.\nKeep the new module under 250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.ts",
+        "apps/daemon/src/work/foundation-attempt-ingress.js",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.ts",
+        "apps/daemon/src/work/foundation-attempt-ingress.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS — five, aimed at ordering and identity rather than the easy refusals. Run each alone, revert before the next. (1) Read a payload field before authenticating; the step-3 ordering assertion must redden — proving \"authentication runs before payload authority\" is observed rather than described. (2) Select the FIRST matching node instead of requiring exactly one; the more-than-one case must redden with zero dispatch invocations — proving multi-node stays UNSUPPORTED rather than silently resolved. (3) Answer a replay from the caller's bytes instead of the durable decision; the conflicting-bytes case must redden — if it stays green that assertion is tautological and must be strengthened before completing, and say so either way. (4) Skip the replay guard so a duplicate launch fires; the zero-duplicate-invocation assertion must redden — note this is the drill where a green would mean the side effect already happened before any refusal. (5) Restamp one dispatch refusal into an ingress code; a NAMED test must redden on the lost layer.\nFor EVERY drill record the exact replaced range you edited — a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each separate with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`; `pnpm --filter @moe/daemon test` reading the COUNT LINE, not the exit code; `pnpm typecheck` repo-wide; and the plain-Node provider construction check DoD 5 names — run it from the repo root, since a plain-Node smoke started from Git Bash resolves MSYS paths and fails for reasons unrelated to the code. Apply the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty; quote the foreign daemon red verbatim without repairing it.\nADVERSARIAL REVIEW: (a) was the route flagged to #general before implementation — that the command is `effect.activate` extended rather than a new kind, because the closed union refuses an unknown `commandKind` at `runtime-envelope.ts:142` before the registry is read? (b) does authentication provably run before any payload field is read, asserted by zero durable reads and zero dispatch invocations? (c) does zero-or-many node selection refuse before any claim, activation or provider effect, with multi-node typed UNSUPPORTED? (d) does replay use the STORE decision identity, return the original record, and assert raw event and decision counts plus zero duplicate launch? (e) do dispatch refusals keep their own `FOUNDATION_ATTEMPT_CODES` member and layer, unrestamped, with ingress adding only what dispatch cannot see? (f) is there ONE accepted control proving the path can succeed, so the suite cannot pass by refusing everything? (g) is zero residue asserted by reading the store back on every refusal arm? (h) is `daemon-store-dependencies.ts` still under 400 by `grep -c ''` — it was at 397 — and every new production file under 250? (i) are the producers untouched: `foundation-attempt-{service,store,contracts}.ts`, the activation ingress, the registry's authentication? (j) does `git status --porcelain` show only owned paths with every drill reverted?\nCommit by explicit pathspec — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the count lines and the foreign red verbatim, name the test that reddened for each drill, state whether drill 3 revealed a previously-vacuous assertion, and record the route decision plainly — DoD 1's capability is delivered through the existing `effect.activate` kind because the closed union forbids a new one for M5. Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-ingress.ts",
+        "apps/daemon/src/work/foundation-attempt-ingress.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Hard dependencies task-9cba79a1, task-e33747f9, and task-6cbff010 are not DONE. Planning now would invent registry, activation, and dispatch authority; re-open only after all three production consumers are QA-approved.",
+  "reopenReason": "Governor cascade 13:01Z: both hard-dependency clauses now TRUE — task-e33747f (effect activation ingress) DONE and committed since cdd53e4, and task-6cbff010 (attempt dispatch) QA-approved DONE at 13:00. The recorded direction (governor comment-55c9ce72: e337 → 6cb → this task) is satisfied in order. Architect: per the old premise's own instruction, probe the registry/public host and stored-dispatch reader with deliberately disagreeing caller/stored replay values BEFORE naming symbols; do not manufacture ACTIVE provider slots or reimplement registry/authentication.",
   "createdBy": "WORKER",
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
@@ -37,10 +108,10 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-15T23:30:29.657Z",
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:31:30.175Z",
-  "blockedReason": "The task's own hard-dependency condition remains false. Registry extraction task-9cba79a1 is DONE, but task-e33747f982e0452a9f9d784fd1cb914d is still WORKING (not QA-approved DONE) and its apparent effect.activate changes are/just were foreign in-flight bytes; upstream task-6cbff01023b14b26a78fc5e3eb1dd8a9 is BLOCKED awaiting that committed activation path. A committed-HEAD grep for Foundation attempt dispatch/read APIs remains empty, so there is no production service for this ingress to delegate to. Governor comment-55c9ce72 already fixes the direction: e337 -> 6cb -> this task. Planning now would invent the dispatch authority or consume foreign work. Re-promote only after e337 and 6cb are both QA-approved DONE, then probe the registry/public host and stored-dispatch reader with deliberately disagreeing caller/stored replay values before naming symbols. Do not manufacture ACTIVE provider slots or reimplement registry/authentication.",
+  "updatedAt": "2026-08-16T13:11:59.220Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "contextFetchedBy": [
     "architect-4eca9b79",
     "architect-94dd1835",
@@ -48,7 +119,9 @@
   ],
   "blockedResourceId": null,
   "metrics": {
-    "firstClaimAt": "2026-08-15T18:31:16.469Z"
+    "firstClaimAt": "2026-08-15T18:31:16.469Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
   },
   "priorHandoffs": [
     {
@@ -60,5 +133,30 @@
       "releasedBy": "architect-94dd1835",
       "reason": "Dependency order revalidated; free architect capacity."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T13:11:57.152Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Register a new `foundation.dispatch` kind in the daemon registry, as DoD 1's wording suggests. REJECTED on measurement: `runtime-envelope.ts:142` refuses any kind outside the frozen union before the registry is consulted, so the entry would be unreachable — the identical defect that stranded the coordination adapter. The human's 11:54Z ruling also forbids expanding the union this milestone.\n\n2) Report blocked, mirroring my own answer on task-d17bb228. REJECTED because the situations differ where it matters: for coordination I MEASURED that no existing carrier exists, so the capability was genuinely out of design. Here `effect.activate` is already in the union, already registered, and already the upstream of the dispatch this task delegates to. Blocking a CRITICAL task when a sound route exists would be the mirror-image error of planning an unreachable one.\n\n3) Carry it on `work.claim`. REJECTED: it is already registered as the advisory board claim service, so overloading it would conflate an advisory surface with an execution-bearing one. `effect.activate` is the durable authority the dispatch reads back.\n\n4) Re-validate caller-supplied grant/runtime/slot/budget/lease at ingress for defence in depth. REJECTED: dispatch already refuses those from the durable side, and a second validator answering first changes which layer refuses — every downstream test pinning dispatch's layer would silently detach. Ingress adds only what dispatch cannot see.\n\n5) Put the composition in `daemon-store-dependencies.ts`. REJECTED: it is at 397 of a hard 400 named in the task rails.\n\n6) Restamp dispatch refusals into an ingress vocabulary for a uniform shape. REJECTED: four layers can answer here (authenticator, allow-list, ingress selection, dispatch) and restamping erases which one did.\n\n7) Let a refusal-only suite stand. REJECTED: DoD 5 requires one accepted control, and without it the suite passes by refusing everything — the natural failure mode of a refusal-heavy ingress test.",
+    "codebaseInsights": "MEASURED AT HEAD f65fbde. All three hard dependencies are DONE: task-9cba79a1 (registry extraction), task-e33747f9 (activation ingress), task-6cbff010 (attempt dispatch, whose round-2 fix I planned earlier this session).\n\nTHE WALL, and it decides this plan's shape. `foundation.dispatch` is NOT in `RUNTIME_COMMAND_KINDS` (runtime-vocabulary.ts:85), and `runtime-envelope.ts:142` reads `if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput());` — the envelope refuses an unknown kind BEFORE `http-adapter.ts:196` reads the registry. One seam, decode first. Registering a brand-new kind would therefore create a registry entry nothing can reach, which is precisely how the coordination surface (task-d17bb228) ended up unreachable.\nAnd the union is CLOSED for M5 by human decision recorded 11:54Z: no `RuntimeCommandKind` expansion, no contracts/client regeneration this milestone.\n\nTHE ROUTE I TOOK, and why it is a re-route rather than a narrowing: compose behind the already-wired `effect.activate` kind. It is in the union, already registered as a singleton with `EFFECT_ACTIVATE_PAYLOAD_KEYS`, and it is the natural composition point because task-6cbff010's dispatch reads the DURABLE activation back from the store — the recorded dependency order e337 → 6cb → this IS that pipeline. Every capability DoD 1 demands (authenticated edge, capability gate, payload allow-list, stable refusal mapping, authentication before payload authority) is delivered; only the appearance of a NEW wire kind changes. That is why the plan flags it to #general rather than treating it as a DoD narrowing — but it must be flagged, because DoD 1's literal wording says \"expose one bounded Foundation attempt command\".\n\nWHAT DISPATCH ALREADY REFUSES, so ingress does not duplicate it. `durableActivation` (foundation-attempt-service.ts) reads the activation \"FROM THE STORE — never from the caller's copy and never from the command result the caller received\". `FoundationAttemptDeps` deliberately excludes the runtime filesystem, host observer and clock, with the comment that @moe/runner \"mints them from the request's three plain data fields, so no caller — test or transport — can hand pinning a runtime nobody observed\", and \"the shipped launcher and its physical boundary are not replaceable through this service either\". So ingress adds ONLY authentication, capability, payload allow-list and node selection. A second validator answering first would change which layer refuses and silently detach downstream assertions — hence the step-2 probe requirement to record which layer answers each disagreement case before designing.\n\nTHE VOCABULARY after task-6cbff010's produce-or-drop round is FIFTEEN members. `FOUNDATION_ATTEMPT_RESULT_MANIFEST_INVALID` was DROPPED, and the contract comment now records why: `buildResultManifest` answers that under the runner's own code at `RUNNER_WORKSPACE_LAYER`, and \"a second vocabulary for one condition would only make the two indistinguishable again\". Do not re-add it. `FOUNDATION_ATTEMPT_REPLAY_MISMATCH` and `..._BINDING_MISMATCH` are the caller-versus-stored codes; `..._DISPATCH_IN_PROGRESS` and `..._DISPATCH_SUSPECT` cover replay states.\n\nHARD LINE LIMIT: task rail 2 forbids growing `daemon-store-dependencies.ts` past 400 and it is at 397 — three lines of headroom. Composition goes in the new ingress module, not there.",
+    "risks": "1) THE ROUTE DECISION IS THE BIGGEST CALL IN THIS PLAN and it contradicts DoD 1's literal wording. It must be posted to #general BEFORE implementation, not defended at QA. If the human wants a genuinely new wire kind, that is a contracts-expansion prerequisite and this task re-blocks — which is cheap to discover now and expensive after the code lands.\n\n2) A NEW KIND WOULD BE UNREACHABLE, silently. The registry would accept the entry; the envelope would refuse every request carrying it. Nothing in the daemon's own tests would necessarily catch that, because they can construct a decoded envelope directly.\n\n3) DUPLICATING DISPATCH'S REFUSALS AT INGRESS changes which layer answers and detaches downstream assertions. Step 2 exists to record the answering layer per disagreement case before any code is written.\n\n4) A REPLAY THAT RE-LAUNCHES has already had the side effect by the time it refuses. Assert ZERO duplicate launch invocation, not just a refusal code.\n\n5) THE ECHO TRAP: the store's replay identity does not cover the events array, so only materially different command bytes detect an implementation answering from the caller's copy. Drill 3 is the guard, and a green there means the assertion is tautological.\n\n6) 397 OF 400 LINES in `daemon-store-dependencies.ts`, named explicitly in the task rails. Three lines of headroom is not a budget.\n\n7) A REFUSAL-ONLY SUITE PASSES BY REFUSING EVERYTHING. The one accepted control is what makes the rest meaningful.\n\n8) ZERO RESIDUE must be read back from the store on every refusal arm; a returned refusal is not evidence that nothing was written.\n\n9) DAEMON GATES RED AT BASELINE from foreign slices — attribute, disclose, and require only the owned-path delta to be empty. Read the count line; exit 0 with no count line ran nothing.\n\n10) THE PLAIN-NODE PROVIDER CHECK must be run from the repo root — a plain-Node smoke started from Git Bash resolves MSYS paths and fails for reasons unrelated to the code.\n\n11) PRODUCERS ARE OFF-LIMITS: `foundation-attempt-{service,store,contracts}.ts` (task-6cbff010) and the activation ingress (task-e33747f9) are both DONE. Report blocked rather than editing one.",
+    "keyFiles": [
+      "packages/contracts/src/runtime/runtime-vocabulary.ts",
+      "packages/contracts/src/runtime/runtime-envelope.ts",
+      "apps/daemon/src/http/http-adapter.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/work/foundation-attempt-service.ts",
+      "apps/daemon/src/work/foundation-attempt-contracts.ts",
+      "apps/daemon/src/activation/activation-ingress.ts",
+      "apps/daemon/src/daemon-store-dependencies.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-16T13:11:59.220Z"
 }

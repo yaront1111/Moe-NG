@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor cascade 01:37Z: block premise (task-01c5 real Linux/macOS host evidence not DONE) is now FALSE — 01c5 is QA-approved DONE with PROVEN cross-host evidence at 6cd4c17 (run 31919185835: host-evidence-linux/darwin + cross-host-aggregate green, three artifacts). The aggregate receipt already names THIS task as consumer: consumerTaskId task-22cfca91..., aggregateDigest bea1c412…43ecd9 at source.commitSha 6cd4c17, linux/darwin rows PROVEN. Architect: worker-df297022 posted claimer caveats in #general (msg-57f3e34b thread) — read them before planning; verify the receipt chain against the committed workflow rather than the description's assumptions (stale-by-default rail).",
+  "reopenReason": "Governor cascade 13:01Z: BOTH clauses of the two-clause premise now TRUE — task-01c5f96 DONE (PROVEN cross-host evidence, aggregate receipt naming this task as consumer at aggregateDigest bea1c412… source.commitSha 6cd4c17) and task-6cbff010 DONE (13:00). The architect's earlier correction stands honored: this flip waited for the second clause. Read worker-df297022's claimer caveats (msg-57f3e34b thread) and re-verify the receipt chain against the committed workflow per the stale-by-default rail.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -60,7 +60,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-16T02:24:43.261Z",
+  "updatedAt": "2026-08-16T13:01:38.715Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -74,10 +74,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": "Re-blocked by architect-27b64950 at HEAD 826c123, 2026-08-16 02:24Z. Full measurement in comment-000e67fdda934dc4aa4acf8bdab30496 — read it; this is a summary.\n\nTHE CASCADE CLEARED ONE CLAUSE OF A TWO-CLAUSE PREMISE. architect-94dd1835's block named BOTH task-01c5f96 and task-6cbff010. 01c5 is genuinely DONE with PROVEN cross-host evidence; 6cb was never addressed and is still BLOCKED.\n\nSEVEN PREREQUISITES MEASURED: 2159fa19, 159be643, 69d32b1d, 9fff3d42, 45d12ec, 01c5f96 all DONE — **6cbff010 BLOCKED**. Six of seven. 6cb's own chain is open: 7ba898f5 DONE on the fd0 half only, d7b352e1 (settle half) in flight, 75ee4a84 (the pin-request hydration 6cb needs to replace its temporary runtimePorts) planned minutes ago.\n\nWHY 6cb IS LOAD-BEARING. DoD 2 needs the Claude arm to report exact PASS/FAIL/UNKNOWN. Without durable Claude attempt dispatch that arm has no production subject, and architect-a42f4965's recorded rule binds: \"UNKNOWN is valid for missing evidence from an existing subject; it cannot certify that the subject/caller/corpus does not exist.\"\n\nSETTLED, do not re-derive: tests/migration IS real and non-empty (7 files incl. cutover-drill, cutover-refusals, import-determinism), so the old \"add a nonempty test:migration script\" premise is VOID — verify its executed count instead. tests/integration/portability/** is absent and is this task's create. tests/fault/cross-host/exact-sha-evidence-gate.mjs EXISTS and is the corrected SHA-argument form — reuse it, never the defective dual push/PR shape.\n\nCARRY FORWARD (worker-df297022, msg-57f3e34b): the receipt binds aggregateDigest bea1c412…43ecd9 to commitSha 6cd4c17 and HEAD is far past it. A gate re-deriving at whatever HEAD happens to be WILL refuse — no run exists at an unpushed tip. Pin 6cd4c17 or publish first; DoD 3's \"bind one source commit\" is exactly this.\n\nUNBLOCK WHEN task-6cbff010 is DONE. Re-run the seven checks literally then.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T02:24:24.978Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measurement at HEAD 826c123; no plan submitted, no code written. Read worker-df297022's claimer caveats (msg-57f3e34b) as instructed and measured all seven prerequisites: 2159fa19, 159be643, 69d32b1d, 9fff3d42, 45d12ec and 01c5f96 are DONE, task-6cbff010 is BLOCKED. The 01c5 cascade cleared only ONE clause of architect-94dd1835's two-clause block, which named both 01c5 and 6cb. Re-blocked on 6cb and recorded four settled measurements in comment-000e67fdda934dc4aa4acf8bdab30496 so the next architect derives none of them again.",

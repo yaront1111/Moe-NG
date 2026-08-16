@@ -18,8 +18,70 @@
     "Assert against the production surface, never a test helper that reimplements a budget rule, a fairness ordering, or a readiness verdict.",
     "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND TAKE THE 23 FROM THE ROSTER — the largest axis, and the last before the ratchet. The roster's comment states the authority: \"transport 15, integrity 13, durable-store 14, runtime-provider 22, scheduler-activation 23 — sums to 87. These tags, NOT the subset counts in the siblings' own descriptions, are the authority.\" This task's description says 16.\nTHE 23. Activation (apps/daemon/src/activation): ACTIVATION_BUDGET_LAYER, ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER (activation-ingress-contracts.ts), ACTIVATION_LEDGER_LAYER (activation-ledger-contracts.ts), FOUNDATION_ACTIVATION_BINDING_LAYER (foundation-activation-transition.ts). Daemon work and orchestration: DOCUMENT_WORK_SERVICE_LAYERS, SPAWN_INVOCATION_LAYER, SCHEDULER_GRAPH_LAYER, WORK_LAYERS. Core planning/expansion: EXPANSION_APPROVAL_LAYERS, EXPANSION_HOLD_LAYERS, EXPANSION_PREPARATION_LAYERS, GOAL_LAYER, GRAPH_REVISION_LAYER, PLANNING_EXPANSION_LAYERS, SUPERSESSION_KERNEL_LAYER. Scheduler: MEASUREMENT_ISSUE_LAYERS, CONVERGENCE_BREAKER_LAYER, EXPANSION_BINDING_LAYERS, EXPANSION_EVIDENCE_LAYERS, FAIRNESS_CONTRACT_LAYERS, READINESS_LAYERS, SUPERSESSION_DISPOSITION_LAYERS.\nSIZE: 23 x 3 arms is 69+ cases. Split from the start into up to three `*.security.ts` files grouped by concern — activation admission, expansion/supersession/graph, scheduler decisions — with the roster-set completeness assertion in exactly ONE of them. Each file under 400 physical lines by `grep -c ''`.\nONE-MEMBER VOCABULARY, measured: `SpawnInvocationRefusalCode` (agent-spawn-invocation.ts:19) has EXACTLY ONE member, `\"SPAWN_ARGUMENT_UNQUOTABLE\"`, and `SPAWN_INVOCATION_LAYER` is `\"agent-spawn-invocation\"`. A sweep written for a larger union generates what it finds and passes silently — assert the member count and a positive case count, and re-count at HEAD rather than trusting this note.\nHARNESS: `probeBefore`, `probeAfter`, `probeRacing`, `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith` (layer non-optional at type level and re-checked at runtime), `MAX_BOUND_MS = 2_147_483_647`.\nGATE BASELINE: `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — recording the count line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/hostile-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ACTIVATION ADMISSION ARMS — ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER, ACTIVATION_BUDGET_LAYER, ACTIVATION_LEDGER_LAYER, FOUNDATION_ACTIVATION_BINDING_LAYER, SPAWN_INVOCATION_LAYER, DOCUMENT_WORK_SERVICE_LAYERS.\nHOSTILE INPUT: a grant presented twice; a grant whose binding names a different effect intent, wrapper identity or session than the committed activation; a slot claimed while another attempt holds it; an activation whose transition no longer matches its binding; a spawn request whose argv cannot be quoted; a document-work proposal for a subject the caller does not own.\nTHE EXCLUSIVITY ASSERTION, which is this group's substance: a grant consumed twice and a slot claimed concurrently must each yield EXACTLY ONE admitted activation and one stable refusal — never two admissions, never two refusals. Read the durable state back to prove it; a returned refusal is not evidence that nothing was written.\nTHE REPLAY-ECHO TRAP, measured and specific to `ACTIVATION_LEDGER_LAYER`: the store's replay identity does NOT cover the events array (activation-ledger-commit.ts:12-24). A replay answered with the caller's own record makes every idempotence assertion compare the caller's bytes with the caller's bytes and pass forever. So the hostile replay case here must present a MATERIALLY DIFFERENT record under the same command key and assert the FIRST record's bytes come back, read from the durable aggregate. Without that, this boundary's coverage is vacuous no matter how many cases it has.\nBUDGET IS TWO-SIDED: an unmeasured budget and a zero budget are different facts. Drive an attempt whose usage is UNKNOWN and assert the refusal rather than a zero-cost admission, and assert no value is imputed from a sibling attempt.\nEvery refusal through `assertRefusedWith` with code and layer, each layer from the boundary's own constant. Ingress, slot and budget can all answer one activation — build each fixture valid at the earlier layers and name the arranged layer in a comment.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/activation-boundaries.security.ts"
+      ],
+      "newFiles": [
+        "tests/security/activation-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "EXPANSION, SUPERSESSION AND GRAPH ARMS — EXPANSION_APPROVAL_LAYERS, EXPANSION_HOLD_LAYERS, EXPANSION_PREPARATION_LAYERS, PLANNING_EXPANSION_LAYERS, EXPANSION_BINDING_LAYERS, EXPANSION_EVIDENCE_LAYERS, GRAPH_REVISION_LAYER, SUPERSESSION_KERNEL_LAYER, SUPERSESSION_DISPOSITION_LAYERS, GOAL_LAYER, SCHEDULER_GRAPH_LAYER, WORK_LAYERS.\nHOSTILE INPUT: an expansion approval bound to a superseded graph revision; a preparation released after its hold expired; an expansion receipt whose evidence names a different revision; a supersession disposition presented for a node the kernel never superseded; a graph revision replayed after the graph moved; a goal closure witness for a different goal; a work claim whose lease no longer holds.\nTHE STALE-BINDING FAMILY IS THE POINT HERE. Every one of these boundaries guards \"is this decision still bound to the thing it was made about?\", so the AFTER arm carries most of the weight: present a decision that was valid, move the subject, present it again, and assert the exact refusal code and layer. A BEFORE-only suite would pass against an implementation with no binding recheck at all.\nSUPERSESSION HAS TWO LAYERS IN SERIES — the core kernel (`SUPERSESSION_KERNEL_LAYER`) and the scheduler's disposition (`SUPERSESSION_DISPOSITION_LAYERS`). A fixture invalid at the kernel never reaches the disposition, so name the arranged layer per case; the same applies to expansion, where core approval/hold/preparation sit ahead of the scheduler's binding and evidence.\nRACE: two conflicting approvals for one subject; a supersession racing a claim on the superseded node; an expansion hold racing its own expiry. Bound well below `MAX_BOUND_MS` (2**31-1, where `setTimeout` clamps to 1ms), assert per-side via `RaceOutcome` that exactly one is admitted or both refuse, and make each case pass whichever side wins — an order-dependent race is a flake whose usual fix pins the order and destroys the property.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/expansion-boundaries.security.ts"
+      ],
+      "newFiles": [
+        "tests/security/expansion-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "SCHEDULER DECISION ARMS — MEASUREMENT_ISSUE_LAYERS, CONVERGENCE_BREAKER_LAYER, FAIRNESS_CONTRACT_LAYERS, READINESS_LAYERS.\nHOSTILE INPUT: a usage envelope whose measurement cannot be normalized; a readiness verdict replayed after the graph moved; a fairness decision driven by a forged capacity or in-flight count; a breaker trip presented without the observations that would justify it.\nUNKNOWN IS NEVER ZERO AND NEVER IMPUTED — assert it here as a property over the whole group, not per case. An unmeasured usage row, an unresolved readiness verdict and an unobservable capacity each stay UNKNOWN; none is rendered as 0, and none is filled from another attempt's value. This is the single rule these four boundaries exist to hold, and a spreadsheet-shaped scheduler output is exactly where it gets quietly violated.\nRACE: a fairness decision racing a convergence breaker trip, and a readiness verdict racing a graph revision. Assert per-side; never two admissions.\nCOMPLETENESS ACROSS THE SLICE: assert a positive case count per boundary, and assert the union of the three files' swept boundaries equals the roster's 23 scheduler-activation entries in BOTH directions.\nWHOLE-SLICE INVARIANT, asserted once over the collected outcomes across all three files rather than per case: no hostile input yields an admitted activation, a consumed grant, an approved expansion, an advanced graph revision, or a truth class above UNKNOWN.\nCLEANUP: every filesystem-touching case takes its root from `hostileRoot(label)` or runs inside `withHostileRoot`, with `cleanupHostileRoots()` registered so roots are removed on every exit path including throws and timeouts. Real `SqliteEventStore` for anything that commits, closed in a `finally` — a held handle kills the vitest worker and `fileParallelism: false` means one leak stalls the rest of the lane.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-boundaries.security.ts"
+      ],
+      "newFiles": [
+        "tests/security/scheduler-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS — five, aimed at the traps rather than the easy cases. Run each alone, revert before the next. (1) THE REPLAY-ECHO DRILL: make the activation ledger answer a replay with the caller's own record instead of the durable one; the changed-byte replay case from step 2 MUST redden. If it stays green, that case compared the caller's bytes with the caller's bytes and the whole `ACTIVATION_LEDGER_LAYER` coverage is vacuous — report that finding either way. (2) Remove one grant-consumption or slot-exclusion check; the exclusivity case must redden showing TWO admissions, not merely a changed code. (3) Make one stale binding recheck pass; the corresponding AFTER case in step 3 must redden — proving the after-arm tests a recheck rather than the initial validation. (4) Render one UNKNOWN measurement as 0; the step-4 property must redden. (5) Delete one boundary's cases; the roster-set assertion must redden naming that constant.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or timeout. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; drills 1-4 edit PRODUCTION files across apps/daemon, packages/core and packages/scheduler, so a drill left on disk risks a foreign completion hook committing it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-ledger-commit.ts",
+        "tests/security/activation-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — and read the count line; strictly above the step-1 baseline, and say by how many. Then, because drills 1-4 edit three packages, re-run `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/core test` and `pnpm --filter @moe/scheduler test` and confirm each is back to its baseline; the daemon suite is expected RED from foreign in-flight slices, so attribute rather than absorb. Then `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty.\nADVERSARIAL REVIEW: (a) does the union of the three files' swept boundaries equal the roster's 23 entries in BOTH directions? (b) does the `ACTIVATION_LEDGER_LAYER` replay case present a MATERIALLY DIFFERENT record and assert the FIRST record's durable bytes come back? (c) do the grant and slot cases assert EXACTLY ONE admission with the durable state read back, rather than just a refusal code? (d) does the expansion/supersession group carry real AFTER cases — valid decision, subject moved, presented again — rather than BEFORE-only coverage? (e) is the arranged layer named per case where two sit in series (ingress/slot/budget, kernel/disposition, core/scheduler expansion)? (f) is the UNKNOWN-never-zero-never-imputed rule asserted as a property over the scheduler group? (g) does the `SPAWN_INVOCATION_LAYER` sweep assert its one-member vocabulary and a positive case count? (h) is every race bounded well below `MAX_BOUND_MS`, terminating, asserted per-side, order-independent? (i) is the whole-slice invariant present across all three files? (j) are `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` untouched? (k) is each file under 400 lines by `grep -c ''`? (l) does `git status --porcelain` show only owned paths, with every production drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after count lines, name the test that reddened for each drill, state whether drill 1 revealed a previously-vacuous assertion, and record that this satisfies the `scheduler-activation` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242 — the LAST of the five axes, so that ratchet becomes plannable once this lands. Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/activation-boundaries.security.ts",
+        "tests/security/expansion-boundaries.security.ts",
+        "tests/security/scheduler-boundaries.security.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,9 +94,40 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:01.224Z",
-  "updatedAt": "2026-08-16T11:46:20.197Z",
+  "updatedAt": "2026-08-16T13:05:29.730Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-16T13:03:39.610Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T13:05:27.670Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Use the description's 16-member list. REJECTED: the roster says 23 and re-tagged members in both directions. Reconciling would double-cover and under-cover simultaneously.\n\n2) One file for 69+ cases. REJECTED on the 400-line split rail. Three files grouped by concern, with the completeness assertion in exactly one.\n\n3) Test the activation ledger replay with the SAME record. REJECTED and it is this axis's defining trap: the store's replay identity does not cover the events array, so an echoing implementation passes. Only a changed-byte replay detects it.\n\n4) Assert grant/slot exclusivity by refusal code alone. REJECTED: a code proves something refused, not that exactly one was admitted. Read the durable state back and assert the count — drill 2 requires the red to show TWO admissions.\n\n5) BEFORE-only coverage on the expansion and supersession boundaries. REJECTED: their whole purpose is the binding RECHECK, so a suite without after arms passes against an implementation that never rechecks.\n\n6) Assert UNKNOWN-never-zero per case. REJECTED in favour of a property over the scheduler group — a per-case list is exactly what gets extended with a permissive case later.\n\n7) Cover the daemon's approval consumer defect here. REJECTED as scope: task-e4af0e6e owns that repair (every gate-free approval currently proceeds on a defaulted `PROCEED_WITHOUT_HUMAN`). This slice covers the core and scheduler boundaries' own refusals — but if a case unexpectedly passes, check whether that defaulted policy is answering before presuming the boundary sound.\n\n8) Pin the winner of each race. REJECTED: order-dependence is a flake whose standard fix destroys the property.",
+    "codebaseInsights": "MEASURED AT HEAD 7086e54. Largest axis, 23 entries, and the last of the five — the ratchet (task-3b1cbdf9) becomes plannable once this lands.\n\nROSTER OVERRIDES THE DESCRIPTION: axis totals say `scheduler-activation 23`; the description says 16. The roster also re-tagged — `ACTIVATION_LEDGER_LAYER` came here from my original filing's durable-store list, and the expansion/supersession/goal/graph constants came here from my integrity list. Take the roster; do not reconcile.\n\nTHE 23, grouped as the plan splits them. Activation admission: ACTIVATION_BUDGET_LAYER, ACTIVATION_INGRESS_LAYER, ACTIVATION_SLOT_LAYER (activation-ingress-contracts.ts:74-76), ACTIVATION_LEDGER_LAYER (activation-ledger-contracts.ts:50), FOUNDATION_ACTIVATION_BINDING_LAYER (foundation-activation-transition.ts:85), plus DOCUMENT_WORK_SERVICE_LAYERS, SPAWN_INVOCATION_LAYER, SCHEDULER_GRAPH_LAYER, WORK_LAYERS. Expansion/supersession/graph: EXPANSION_APPROVAL_LAYERS, EXPANSION_HOLD_LAYERS, EXPANSION_PREPARATION_LAYERS, PLANNING_EXPANSION_LAYERS, EXPANSION_BINDING_LAYERS, EXPANSION_EVIDENCE_LAYERS, GRAPH_REVISION_LAYER, SUPERSESSION_KERNEL_LAYER, SUPERSESSION_DISPOSITION_LAYERS, GOAL_LAYER. Scheduler decisions: MEASUREMENT_ISSUE_LAYERS, CONVERGENCE_BREAKER_LAYER, FAIRNESS_CONTRACT_LAYERS, READINESS_LAYERS.\n\nTHE REPLAY-ECHO TRAP, measured and decisive for `ACTIVATION_LEDGER_LAYER`. `activation-ledger-commit.ts:12-24` states the store's replay identity does NOT cover the events array, which is why that module answers a replay by reading the derived aggregate back rather than echoing the caller. A hostile replay case that presents the SAME record cannot detect an echoing implementation — it compares the caller's bytes with the caller's bytes and passes forever. Only a CHANGED-BYTE replay kills it. Drill 1 targets exactly this, and if it stays green the boundary's coverage is vacuous however many cases it has.\n\nONE-MEMBER VOCABULARY: `SpawnInvocationRefusalCode` (agent-spawn-invocation.ts:19) has exactly ONE member, `\"SPAWN_ARGUMENT_UNQUOTABLE\"`, with `SPAWN_INVOCATION_LAYER = \"agent-spawn-invocation\"`. A sweep written for a bigger union generates what it finds and passes silently.\n\nLAYERS IN SERIES, three times over on this axis — ingress/slot/budget on one activation; core supersession kernel ahead of the scheduler's disposition; core expansion approval/hold/preparation ahead of the scheduler's binding and evidence. A fixture invalid at the earlier layer is answered there, so the arranged layer must be named per case.\n\nTHE AFTER ARM CARRIES THIS AXIS. Almost every boundary here guards \"is this decision still bound to the thing it was made about?\" — a stale approval, a superseded revision, an expired hold, a moved graph. A BEFORE-only suite would pass against an implementation with no binding recheck at all, which is why step 3 makes the after arm explicit rather than incidental.\n\nBUDGET IS TWO-SIDED: an unmeasured budget and a zero budget are different facts, and `MEASUREMENT_ISSUE_LAYERS` plus `ACTIVATION_BUDGET_LAYER` are where that collapses if it is going to. The scheduler group asserts it as a property rather than per case.",
+    "risks": "1) THE REPLAY-ECHO DEFECT SHIPS GREEN. Same-record replay cases cannot detect it. Drill 1 is the guard, and a green there means the coverage was vacuous rather than that the implementation is sound.\n\n2) EXCLUSIVITY ASSERTED BY CODE ALONE proves a refusal happened, not that exactly one admission did. Read durable state back; drill 2 requires the red to show two admissions.\n\n3) A BEFORE-ONLY SUITE passes against an implementation with no binding recheck — and this axis is almost entirely binding rechecks.\n\n4) THREE PLACES WHERE LAYERS SIT IN SERIES. A fixture invalid at the earlier layer is answered there and the assertion silently stops testing its subject. Name the arranged layer per case.\n\n5) UNKNOWN RENDERED AS ZERO OR IMPUTED is the scheduler group's characteristic failure, and a tabular output invites it. Property-level assertion, drill 4.\n\n6) A ONE-MEMBER VOCABULARY (`SpawnInvocationRefusalCode`) makes a sweep silently thin. Assert the member count and a positive case count, and re-count at HEAD.\n\n7) DRILLS 1-4 EDIT PRODUCTION across apps/daemon, packages/core and packages/scheduler. Revert via `git checkout --`, confirm clean, and re-run all three package suites at the gate — a foreign whole-tree completion hook committing a drill has already happened twice on this board.\n\n8) A HELD SQLITE HANDLE kills the vitest worker; `fileParallelism: false` means one leak stalls the rest of the lane. Real store, closed in a `finally` on every exit path.\n\n9) EXIT 0 IS NOT EVIDENCE. A lane collecting only the four earlier slices still exits 0. Require the count line above baseline.\n\n10) THE DAEMON SUITE IS RED AT BASELINE from foreign in-flight slices — attribute rather than absorb, and require only the owned-path delta to be empty.\n\n11) THIS IS THE LAST AXIS. Ratchet task-3b1cbdf9 will assert every one of the 87 roster entries resolves to a real before/after/race case; with 23 entries across three files, completeness is the easiest thing to lose here and the most expensive to discover later.",
+    "keyFiles": [
+      "tests/security/boundary-roster.security.ts",
+      "tests/security/hostile-harness.ts",
+      "apps/daemon/src/activation/activation-ingress-contracts.ts",
+      "apps/daemon/src/activation/activation-ledger-commit.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-invocation.ts",
+      "packages/core/src/expansion/expansion-approval.ts",
+      "packages/core/src/supersession/supersession-engine.ts",
+      "packages/scheduler/src/budget/budget-measurement.ts",
+      "packages/scheduler/src/readiness/readiness-model.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-16T13:05:29.730Z"
 }

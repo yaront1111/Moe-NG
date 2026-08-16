@@ -18,9 +18,81 @@
     "A held SQLite handle kills the vitest worker; close in a `finally` on every exit path.",
     "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE, TAKE THE SUBSET FROM THE ROSTER, AND SETTLE THE LANE BOUNDARY — which matters more here than on any other axis.\nTHE 14 durable-store entries, read off the committed roster (this task's description said 8 and is superseded): DOCTOR_VERSION_LAYERS (daemon/recovery/doctor-version-contract.ts); DURABLE_INVENTORY_ADAPTER_LAYER (durable-recovery-inventory-contract.ts); DURABLE_STORE_LAYER (recovery-completion-evidence.ts); RECOVERY_INCARNATION_LAYER (recovery-incarnation-contract.ts); RECOVERY_INVENTORY_LAYER, RECOVERY_INVENTORY_LEDGER_LAYER, RECOVERY_INVENTORY_UPSTREAM_LAYERS (recovery-inventory-contract.ts); RECOVERY_SUCCESSION_LAYER (recovery-succession-contract.ts); RESTORE_CONTROLLER_LAYER, RESTORE_REFUSAL_LAYERS (restore-controller-contract.ts); RECOVERY_ANCHOR_LAYER (packages/store/recovery-anchor-contracts.ts); RECOVERY_BINDING_CODEC_LAYER, RECOVERY_INSTALL_LAYERS, RECOVERY_INSTALL_TRANSACTION_LAYER (packages/store/recovery-install-contracts.ts).\nNOTE WHAT IS NOT HERE: `ACTIVATION_LEDGER_LAYER` and `PROVIDER_RUN_LEDGER_LAYERS` were on my original filing's list and the roster put them on another axis. Do not cover them.\nTHE LANE BOUNDARY, and this is the step's real content. task-0c89476b78044024b07c86c0c8986bd0 owns `tests/fault/disaster-restore/**` and already covers these same production surfaces — all 8 `RECOVERY_ANCHOR_FAULT_POINTS`, the restore quiesce path, and the UNKNOWN_TRUTH inventory arms. THIS SLICE MUST NOT RE-RUN THOSE CASES IN A DIFFERENT LANE. The two lanes ask different questions: the FAULT lane asks \"when execution is interrupted at a boundary, is the durable state coherent?\"; the SECURITY lane asks \"when a hostile CALLER presents forged, stale, replayed or racing input, is it refused with the exact code and layer?\" Write that distinction into this file's header, and for each boundary state which question your cases ask. If a case would be indistinguishable from a disaster-restore case, it belongs there, not here.\nHARNESS (tests/security/hostile-harness.ts): `probeBefore`, `probeAfter`, `probeRacing`, `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith`, `MAX_BOUND_MS = 2_147_483_647`. `RefusalExpectation.layer` is non-optional at the type level and re-checked at runtime.\nGATE BASELINE: `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — recording the count line.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/hostile-harness.ts"
+      ],
+      "note": "Re-measured HEAD 7086e54 and roster: exactly 14 durable-store entries (the definitive subset); ACTIVATION_LEDGER_LAYER and PROVIDER_RUN_LEDGER_LAYERS are excluded. Security baseline executed foreground: Test Files 1 failed | 1 passed (2), Tests 2 failed | 46 passed (48), exit 1. Both failures are pre-existing foreign red caused by unrostered BENCHMARK_PROJECTION_LAYERS in packages/benchmark/src/benchmark-projection-vocabulary.ts (foreign WIP). Security-vs-fault lane boundary settled: this slice will only exercise hostile caller forged/stale/replayed/racing input, not interruption/coherence sweeps owned by tests/fault/disaster-restore.",
+      "startedAt": "2026-08-16T13:02:37.004Z",
+      "completedAt": "2026-08-16T13:03:53.579Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED, PART 1 — the hostile-caller arms, which is what makes this a security slice rather than a second fault suite. Create `tests/security/durable-store-boundaries.security.ts`. Per boundary, at least one BEFORE and one AFTER case driven by adversarial INPUT rather than interrupted execution:\nBEFORE — a forged or malformed record presented to a durable reader: an anchor record whose payload does not match its `anchorDigest`; a recovery binding whose codec version is unsupported; an inventory record whose upstream tuple is fabricated; a succession chain link claiming a predecessor it cannot prove; a restore request whose generation is not bound to its incarnation; a doctor version report whose components disagree.\nAFTER — authority presented once it should no longer hold: a stale incarnation or key epoch after a fresh restore; a succession link replayed after the chain moved; a restore command replayed against an already-settled aggregate; an inventory read after its window sealed.\nUSE THE EXISTING REFUSAL VOCABULARIES rather than inventing expectations — `RESTORE_CONTROLLER_REASON_CODES` (9 members incl. RESTORE_FENCE_REPLAYED, RESTORE_INCARNATION_UNANCHORED, RESTORE_KEY_EPOCH_MISMATCH, RESTORE_GENERATION_NOT_BOUND), `RECOVERY_INSTALL_REASON_CODES`, `RECOVERY_ANCHOR_REASON_CODES`, and the inventory's `UNKNOWN_TRUTH`. Every assertion through `assertRefusedWith` with both code and layer, each layer taken from the boundary's own declared constant.\nTHE INVENTORY TRAP, measured and specific: `durable-recovery-inventory-contract.ts:153` states that several distinct upstream conditions ALL answer `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`, \"and only the upstream tuple distinguishes the cases\". So for every inventory boundary, assert the UPSTREAM TUPLE as well as the code and layer — a code-and-layer-only assertion there is satisfied by any of several unrelated failures and is vacuous by construction. `RECOVERY_INVENTORY_UPSTREAM_LAYERS` is the vocabulary to pin against.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/security/durable-store-boundaries.security.ts"
+      ],
+      "newFiles": [
+        "tests/security/durable-store-boundaries.security.ts"
+      ],
+      "modifiedFiles": [
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts"
+      ],
+      "note": "TDD RED was the missing scenario module, then exact production mismatches reddened expected tuples (inventory adapter code/layer, incarnation code, restore layer, anchor code, closed-store folding). Corrected expectations to the production vocabularies. Focused security run is green: Test Files 1 passed (1), Tests 43 passed | 31 skipped (74). The 14-entry roster has one BEFORE and one AFTER hostile-caller case each; all run through production constructors/readers/services, real SqliteEventStore handles close in finally, inventory cases pin upstream tuples, and refusal readback is zero records except the deliberate one-complete-binding transaction conflict.",
+      "startedAt": "2026-08-16T13:03:58.392Z",
+      "completedAt": "2026-08-16T13:12:15.859Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED, PART 2 — RACE, and the one place this axis may legitimately use the fault seam. Per boundary, one concurrent case contending at the durable admission point: two restores claiming one generation; an install racing a discard; a succession link racing a competing successor; two inventory writers sealing one window; a commit racing an expected-version bump.\nUSE A REAL SqliteEventStore for anything that commits — opened per case and closed in a `finally` on every exit path including throws. A fake store reimplements the very expected-version and replay semantics under test, so a green against a fake proves the fake. A held handle kills the vitest worker outright, and this lane runs `fileParallelism: false`, so one leak stalls everything after it.\nTHE FAULT SEAM IS AVAILABLE AND LEGITIMATE HERE, but only in service of the security question. `RecoveryAnchorRequest` carries an `injectFault` callback snapshotted through the public entry (recovery-anchor-record.ts:111), and the 8 `RECOVERY_ANCHOR_FAULT_POINTS` are real call sites. Use it ONLY to hold one side of a race at a boundary while the other side presents hostile input — that is a security question. Do NOT sweep the 8 fault points asserting post-crash state coherence; that is task-0c89476b's job in the fault lane, and duplicating it here is the exact overlap step 1 forbids.\nBOUND EVERY RACE well below `MAX_BOUND_MS` (2**31-1, the `setTimeout` clamp boundary — at or above it a bound clamps to 1ms and races nothing). Assert PER SIDE via `RaceOutcome` that exactly one side is admitted and the other carries a stable code and layer, or both refuse — never two admissions. Make each case pass whichever side wins; an order-dependent race is a flake whose usual fix pins the order and destroys the property.\nCOMPLETENESS: assert a positive case count per boundary and assert the swept set equals the roster's 14 durable-store entries in BOTH directions.\nWHOLE-SLICE INVARIANT, asserted once over the collected outcomes: no hostile case yields a committed record, an installed anchor, an advanced succession, or a truth class above UNKNOWN. Read the durable aggregate back to prove it — \"it returned a refusal\" is not evidence that nothing was written.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/security/durable-store-boundaries.security.ts"
+      ],
+      "modifiedFiles": [
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts"
+      ],
+      "note": "Added one bounded (2,000ms < MAX_BOUND_MS) real-SqliteEventStore expected-version race per each of the 14 roster constants. TDD RED caught an unverified harness field name (maxMs); after reading the actual HostileBound contract, timeoutMs is used. Each RaceOutcome is asserted order-independently: exactly one fulfilled side, the other maps the verbatim EXPECTED_VERSION_CONFLICT through the production completion store boundary as DURABLE_STORE, and readback contains exactly the winner's one complete payload. Focused run: Test Files 1 passed (1), Tests 14 passed | 74 skipped (88).",
+      "startedAt": "2026-08-16T13:12:21.132Z",
+      "completedAt": "2026-08-16T13:14:05.466Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "ATOMICITY, CLEANUP AND THE SHARED-ARTIFACT BOUNDARY. For EVERY refusal arm in this slice, read the durable aggregate back through a production reader and assert it is untouched or holds exactly one complete record — never a fragment. A partial write reported as a refusal is a defect, and on this axis it is the defect that matters most: a half-installed anchor or a half-sealed inventory window is worse than a clean failure, because the next reader treats it as evidence.\nEvery filesystem-touching case takes its root from `hostileRoot(label)` or runs inside `withHostileRoot`; register `cleanupHostileRoots()` so every root is removed on every exit path including throws and timeouts. Close every store handle in a `finally`.\nNEVER call `commitWithApply` or `commitExpectedVersionDecisionWithApply`. They hand the callback a raw `DatabaseSync`, which is how the no-new-schema rail gets violated by accident; the narrow ledger ports deliberately cannot name them, and a test reaching for them would be exercising a path production cannot take.\nDo NOT modify `hostile-harness.ts` or `boundary-roster.security.ts` — committed deliverables of task-9aca4b05, read by five slices; report blocked rather than editing either. Do NOT touch `tests/fault/**`, and in particular do not edit or extend `tests/fault/disaster-restore/**`, which belongs to task-0c89476b.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "tests/security/durable-store-boundaries.security.ts"
+      ],
+      "startedAt": "2026-08-16T13:14:08.831Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "MUTATION DRILLS — prove the coverage binds to real durable guards. Run each alone, revert before the next. (1) Remove one identity-binding check from a covered production boundary — the restore controller's `RESTORE_GENERATION_NOT_BOUND` comparison, or the anchor's digest check — and confirm a NAMED case reddens on its exact code and layer. (2) Make one inventory refusal drop its upstream tuple while keeping `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`; the step-2 inventory case must redden — this is THE drill for this axis, because without it a code-and-layer assertion there passes for any of several unrelated failures. (3) Make one refusal leave a partial durable write; the step-4 read-back assertion must redden — proving atomicity is asserted rather than assumed from the refusal's presence. (4) Make one race admit BOTH sides; the per-side assertion must redden. (5) Delete one boundary's cases; the roster-set assertion must redden naming that constant.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or timeout — note that on this axis a wrong-reason red is easy, because several distinct failures already collapse to `UNKNOWN_TRUTH`. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; drills 1-3 edit PRODUCTION files in a shared worktree, so a drill left on disk risks a foreign completion hook committing it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/recovery/restore-controller.ts",
+        "tests/security/durable-store-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — and read the OUTPUT: the count line must be strictly above the step-1 baseline, and say by how many. `passWithNoTests: false` catches an empty lane, but a lane collecting only the roster, smoke, transport and integrity files still exits 0. Then `pnpm --filter @moe/store test` and `pnpm --filter @moe/daemon test`, since drills 1-3 touch production in both packages — confirm they are back to their baselines. Then `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty; quote any foreign red verbatim without repairing it.\nADVERSARIAL REVIEW: (a) does the swept set equal the roster's 14 durable-store entries in BOTH directions, with no member from another axis? (b) is the LANE BOUNDARY honoured — does the file header state the security-vs-fault distinction, and does each boundary say which question its cases ask, with nothing that merely re-runs a disaster-restore case? (c) does EVERY inventory assertion pin the upstream tuple as well as the code and layer? (d) does every refusal arm read the durable aggregate back and assert no fragment? (e) is every commit against a REAL SqliteEventStore, closed in a `finally` on every exit path? (f) are `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent from the diff? (g) is every race bounded well below `MAX_BOUND_MS`, terminating, asserted per-side, order-independent? (h) is the whole-slice invariant present — no committed record, installed anchor, advanced succession, or truth class above UNKNOWN? (i) are `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` untouched? (j) is each file under 400 lines by `grep -c ''`? (k) does `git status --porcelain` show only owned paths, with every production drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after count lines, name the test that reddened for each drill, state how you kept this slice distinct from task-0c89476b's fault coverage, and record that this satisfies the `durable-store` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242. Keep verification.command under 500 characters.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/durable-store-boundaries.security.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-9f145232",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -32,9 +104,45 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:02.653Z",
-  "updatedAt": "2026-08-16T11:46:11.279Z",
+  "updatedAt": "2026-08-16T13:14:08.831Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "metrics": {
+    "firstClaimAt": "2026-08-16T12:59:29.245Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 3
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T13:01:27.239Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Sweep the 8 `RECOVERY_ANCHOR_FAULT_POINTS` here asserting post-crash coherence. REJECTED as duplication: that is precisely task-0c89476b's DoD 1 in the fault lane. Two suites asserting the same property in two lanes doubles maintenance and halves the chance either is updated when the property changes.\n\n2) Skip the anchor and restore boundaries entirely to avoid overlap. REJECTED symmetrically: they carry real hostile-input surface — forged anchor records, replayed restore fences, stale incarnations — that the fault lane does not test, and the ratchet will demand coverage for every roster entry regardless.\n\n3) Assert inventory refusals by code and layer alone, as on the other axes. REJECTED, and this is the axis-specific defect: several upstream conditions collapse to `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`, so such an assertion passes for unrelated failures. The upstream tuple must be pinned.\n\n4) Use a fake store for the race and commit cases. REJECTED: a fake reimplements the expected-version and replay semantics under test, so a green proves the fake. Real `SqliteEventStore`, closed in a `finally`.\n\n5) Assert \"it returned a refusal\" and stop. REJECTED on this axis above all others: a half-installed anchor or half-sealed inventory window is worse than a clean failure, because the next reader treats the fragment as evidence. Every refusal arm reads the aggregate back.\n\n6) Reach for `commitWithApply` to set up a hostile durable state quickly. REJECTED: it hands out a raw `DatabaseSync` and the narrow ports deliberately cannot name it, so a test using it exercises a path production cannot take.\n\n7) Pin the winner of each race. REJECTED: order-dependence is a flake whose standard fix destroys the property.",
+    "codebaseInsights": "MEASURED AT HEAD 7086e54. Foundation committed; this slice plans against real bytes.\n\nTHE ROSTER SUPERSEDES THE DESCRIPTION: axis totals read `durable-store 14`; the description says 8. The roster also re-tagged — `ACTIVATION_LEDGER_LAYER` and `PROVIDER_RUN_LEDGER_LAYERS` were on my original filing's list and are NOT on this axis.\n\nTHE 14: DOCTOR_VERSION_LAYERS, DURABLE_INVENTORY_ADAPTER_LAYER, DURABLE_STORE_LAYER, RECOVERY_INCARNATION_LAYER, RECOVERY_INVENTORY_LAYER, RECOVERY_INVENTORY_LEDGER_LAYER, RECOVERY_INVENTORY_UPSTREAM_LAYERS, RECOVERY_SUCCESSION_LAYER, RESTORE_CONTROLLER_LAYER, RESTORE_REFUSAL_LAYERS (all apps/daemon/src/recovery/*), plus RECOVERY_ANCHOR_LAYER, RECOVERY_BINDING_CODEC_LAYER, RECOVERY_INSTALL_LAYERS, RECOVERY_INSTALL_TRANSACTION_LAYER (packages/store). The axis is RECOVERY/RESTORE-shaped, not ledger-shaped.\n\nTHE LANE-OVERLAP PROBLEM, which is this slice's defining risk and which no other axis has. I planned task-0c89476b (disaster restore proof) earlier this session; it owns `tests/fault/disaster-restore/**` and already covers these EXACT production surfaces — all 8 `RECOVERY_ANCHOR_FAULT_POINTS` (PREPARE, INACTIVE_INSTALL, TRANSACTION, FILE_FSYNC, DIRECTORY_PERSISTENCE, VERIFICATION, SWITCH, INSTALLED_MARKER), the restore quiesce path, and the UNKNOWN_TRUTH inventory arms. Without an explicit boundary this slice becomes a second copy of that suite in another lane, which costs review time and proves nothing new.\nThe honest split: the FAULT lane asks \"when execution is interrupted at a boundary, is the durable state coherent?\"; the SECURITY lane asks \"when a hostile CALLER presents forged, stale, replayed or racing input, is it refused with the exact code and layer?\" Same surfaces, different question. The plan requires that distinction in the file header and per boundary.\n\nVOCABULARIES ALREADY EXIST, so nothing needs inventing: `RESTORE_CONTROLLER_REASON_CODES` has 9 members including RESTORE_FENCE_REPLAYED, RESTORE_INCARNATION_UNANCHORED, RESTORE_KEY_EPOCH_MISMATCH, RESTORE_GENERATION_NOT_BOUND, RESTORE_RECORD_UNREADABLE; `RECOVERY_INSTALL_REASON_CODES` and `RECOVERY_ANCHOR_REASON_CODES` cover the store side; the inventory answers `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`.\n\nTHE INVENTORY TRAP, measured: `durable-recovery-inventory-contract.ts:153` states several distinct upstream conditions ALL answer `UNKNOWN_TRUTH` and \"only the upstream tuple distinguishes the cases\". So on the three inventory boundaries a code-and-layer assertion is VACUOUS BY CONSTRUCTION — it is satisfied by any of several unrelated failures. `RECOVERY_INVENTORY_UPSTREAM_LAYERS` exists precisely to be pinned, and drill 2 targets exactly this.\n\nTHE FAULT SEAM IS AVAILABLE: `RecoveryAnchorRequest.injectFault` is snapshotted through the public entry (recovery-anchor-record.ts:111) and the 8 fault points are live call sites (recovery-anchor.ts:83,95 and recovery-anchor-install.ts:232-260). Legitimate here ONLY to hold one side of a race while the other presents hostile input — not to sweep post-crash coherence, which is the fault lane's question.\n\nHARNESS confirmed: `assertRefusedWith` requires `layer` at type level and re-checks at runtime; `MAX_BOUND_MS` = 2**31-1, the `setTimeout` clamp boundary.",
+    "risks": "1) BECOMING A SECOND DISASTER-RESTORE SUITE. The single biggest risk here, and unique to this axis. Same surfaces, and the fault-point seam is right there. Step 1 requires the security-vs-fault distinction in the header and per boundary; step 3 permits the seam only to hold a race side.\n\n2) THE INVENTORY ASSERTION IS VACUOUS WITHOUT THE UPSTREAM TUPLE. Several conditions answer `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`; a code-and-layer assertion there is satisfied by any of them. Drill 2 is the guard, and it is the drill most likely to reveal a hole.\n\n3) A PARTIAL DURABLE WRITE REPORTED AS A REFUSAL. On this axis the fragment becomes the next reader's evidence. Read the aggregate back on every refusal arm; a returned refusal is not proof nothing was written.\n\n4) A HELD SQLITE HANDLE kills the vitest worker, and `fileParallelism: false` means one leak stalls the rest of the lane. Close in a `finally` on every exit path including throws.\n\n5) A WRONG-REASON RED IS EASY HERE because several distinct failures already collapse to one code. Confirm each drill's red lands on the intended assertion, not merely that something went red.\n\n6) DRILLS 1-3 EDIT PRODUCTION in both packages/store and apps/daemon. Revert via `git checkout --`, confirm clean, and re-run both package suites at the gate — a foreign whole-tree completion hook committing a drill has already happened twice on this board.\n\n7) `commitWithApply` / `commitExpectedVersionDecisionWithApply` must not appear — the no-new-schema rail, and the narrow ports cannot name them.\n\n8) EXIT 0 IS NOT EVIDENCE. A lane collecting only the roster, smoke, transport and integrity files still exits 0. Require the count line above baseline.\n\n9) SHARED ARTIFACTS: `hostile-harness.ts` and `boundary-roster.security.ts` are read by five slices; `tests/fault/disaster-restore/**` belongs to task-0c89476b.\n\n10) DOWNSTREAM: ratchet task-3b1cbdf9 will assert every roster entry resolves to a real before/after/race case, so completeness is this slice's obligation.",
+    "keyFiles": [
+      "tests/security/boundary-roster.security.ts",
+      "tests/security/hostile-harness.ts",
+      "apps/daemon/src/recovery/restore-controller-contract.ts",
+      "apps/daemon/src/recovery/recovery-inventory-contract.ts",
+      "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts",
+      "packages/store/src/recovery-anchor-contracts.ts",
+      "packages/store/src/recovery-install-contracts.ts",
+      "packages/store/src/recovery-anchor-record.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-16T13:01:29.290Z",
+  "contextFetchedBy": [
+    "worker-9f145232"
+  ],
+  "workStartedAt": "2026-08-16T13:02:37.004Z"
 }
