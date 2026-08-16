@@ -3,23 +3,23 @@
  * COMPLETENESS HOME for the whole runtime-provider axis.
  *
  * Nine of the roster's twenty-two entries live here; the other thirteen are in
- * `runtime-provider-platform.security.ts` and `runtime-provider-launch.security.ts`. This file
- * is the ONE place the union of the three partitions is checked against the roster's committed
- * bytes, in BOTH directions, so a boundary owned by nobody — or a name no roster entry carries —
- * reddens exactly once rather than three times or never.
+ * `runtime-provider-platform.security.ts` and `runtime-provider-launch.security.ts`. This file is
+ * the ONE place the union of the three partitions is checked against the roster's committed bytes,
+ * in BOTH directions, so a boundary owned by nobody — or a name no roster entry carries — reddens
+ * exactly once rather than three times or never.
  *
  * WHY THE WHOLE-SLICE INVARIANT RUNS PER FILE. The lane is `pool: "forks"` with `isolate: true`,
- * so the three files cannot share one array. `describeSliceInvariants` is therefore ONE
- * implementation invoked three times, each over that file's ENTIRE ledger rather than per case:
- * no admitted artifact, no accepted receipt, no materialized path outside containment, no
- * executed effect, no truth class above UNKNOWN, and no refusal message echoing a path or digest.
+ * so the three files cannot share one array. `describeSliceInvariants` is ONE implementation
+ * invoked three times, each over that file's ENTIRE ledger rather than per case: no admitted
+ * artifact, no accepted receipt, no materialized path outside containment, no executed effect,
+ * no truth class above UNKNOWN, and no refusal message echoing a path or digest.
  *
- * CONTAINMENT IS THE HEART OF THIS GROUP. Every path-shaped case covers the escape family —
- * `..` traversal, an absolute/drive-qualified path, a backslash, a reserved device name, a NUL,
- * and a symlink whose target leaves the root. The symlink case CANONICALISES before asserting:
- * `hostileRoot` realpaths its temp directory precisely because macOS `tmpdir()` is the symlink
- * `/var` over `/private/var`, which a naive string comparison reads as an escape and would pass
- * the case for the wrong reason on one platform while failing it on another.
+ * CONTAINMENT IS THE HEART OF THIS GROUP. Every path-shaped case covers the escape family — `..`
+ * traversal, an absolute/drive-qualified path, a backslash, a reserved device name, a NUL, and a
+ * symlink whose target leaves the root — and the scope sweep pins the EXACT code per member, so a
+ * removed canonicalisation rule reddens instead of falling through to another refusal. The symlink
+ * case canonicalises first: `hostileRoot` realpaths its temp directory because macOS `tmpdir()` is
+ * the symlink `/var` over `/private/var`, which a naive comparison reads as an escape.
  */
 
 import { realpathSync, symlinkSync, writeFileSync } from "node:fs";
