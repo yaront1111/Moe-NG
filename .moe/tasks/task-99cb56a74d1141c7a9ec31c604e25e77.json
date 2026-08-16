@@ -116,8 +116,8 @@
       "completedAt": "2026-08-16T15:15:51.477Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-ce3ba361",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -129,12 +129,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T11:51:54.479Z",
-  "updatedAt": "2026-08-16T15:16:59.239Z",
+  "updatedAt": "2026-08-16T15:21:21.273Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T13:14:36.418Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T15:21:21.273Z",
+    "wallClockMs": 7604855
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -190,5 +192,8 @@
     "packages/runner/src/surface/claude-discovery-surface.ts",
     "packages/runner/src/surface/claude-discovery-surface.js",
     "packages/runner/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T15:21:21.273Z",
+  "reviewCompletedAt": "2026-08-16T15:21:21.273Z",
+  "reviewSummary": "APPROVED. Deliverable is at 65b3214; HEAD 1745ab4 is board-state only — `git diff --numstat 65b3214 1745ab4 -- packages/runner` EMPTY. Graded HEAD bytes; all five paths tracked.\n\nGATES, each separate: runner typecheck EXIT=0 (0 \"error TS\"); runner test EXIT=0, 67 files / 2228 passed | 1 skipped; repo typecheck EXIT=0.\n\nDoD 1: discoverInstalledClaudeRuntime() takes ZERO arguments — no path, fs, facts port or clock. DRILLED the asymmetry: re-exporting observeInstalledClaudeRuntime onto the root reddens two named tests — \"publishes exactly the reviewed root namespace, with no loss and no addition\" and \"withholds every runtime capability the pin-request factory mints\". The four withheld symbols appear ONLY in comments, zero export positions.\n\nDoD 2: \"reaches a PROVEN pin against the really installed runtime through discovery alone\" ran 3126ms on this win32 host — that duration is the evidence of a real broker launch, not a rebuilt digest. ON_WINDOWS = process.platform === \"win32\" so the branch was live, and a discovery refusal throws rather than skipping, so it cannot pass vacuously here.\n\nDoD 3: a forged quote with TRUE closure, TRUE sha256 and TRUE platform identity but invented version and capability digest refuses exactly {CLAUDE_RUNTIME_OBSERVATION_CHANGED, RUNTIME, UNKNOWN} (1661ms, real re-observation); the stand-in binary refuses OBSERVATION_INVALID at RUNTIME after the broker really probed it.\n\nOn the pre-flagged `comparedFacts` mirror: NOT an epic-rail-6 violation — it is a field selector over two production-produced observations and never recomputes the digest. I drilled production factsDigest anyway (dropped osVersion): two named tests redden in claude-runtime-pin.test.ts. Bound, no finding.\n\nDoD 4: reachable with no test-owned capability — apps/daemon declares @moe/runner workspace:*, root publishes the only producer.\n\nFiles 220/76/200/250 lines. Both drilled files restored, hash-verified == HEAD; suite re-run green 2228."
 }

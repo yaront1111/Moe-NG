@@ -1,0 +1,33 @@
+{
+  "id": "task-931f99e8a84348689f97820acf0482bb",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: authenticated graph mutation ingress",
+  "description": "Objective: expose the five existing graph mutation kinds through the real daemon command registry after their durable application services land. Deliverable: a bounded graph registry fragment wired into the extracted registry/HTTP adapter for graph.approve, graph.prepare_supersession, graph.release_preparation, graph.request_expansion and graph.supersede, each delegating to its production service under the real Authenticator and CommandDecisionPort. Hard dependencies: task-738a12a816e8421a96edd84648565a38, task-c4171c1cfe854cb78dd233794b342025, task-32c1ba453469448d87bf0925b3590657 and task-eacea969d636420b8f5c47304039e056. NOT in scope: graph.get, new runtime kinds, domain reimplementation, Foundation attempt ingress or UI. Consumer/final hardening: task-efc2ef6330074b4d9893809f7425c95f. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "All five already-frozen runtime graph mutation kinds are registered exactly once with a human-approved required capability/family and exact payload allow-list; the real HTTP Authenticator/capability gate runs before any graph payload property is read.",
+    "Each accepted command delegates to its named durable production service and returns that service's exact stable refusal code/layer without restamping; registry/transport code contains no graph reducer, projection fold, current-state synthesis, reservation or activation logic.",
+    "Same command bytes replay through the real CommandDecisionPort to the original durable result with unchanged event/decision/effect counts; conflicting bytes under the same project/principal/command identity refuse at the decision layer before another service invocation.",
+    "Real Authenticator + SqliteEventStore tests cover unauthenticated, missing capability, extra/missing/hostile payload, every delegated refusal family and one accepted control per service; every refusal pins code, layer and refusing service, generated matrices assert nonzero counts, and all pre-service arms assert zero calls/residue.",
+    "The 346-line daemon-command-registry.ts is decomposed before it would reach 400, every production file remains focused, root/public bridge guards pass, and daemon test output reports nonzero Test Files and Tests counts."
+  ],
+  "taskRails": [
+    "Do not choose capability/family/payload schemas by analogy: obtain the Graph Beta authority decision first and pin the approved mapping in tests.",
+    "Use only existing @moe/contracts runtime kinds and the real registry/Auth/decision seams; no transport clone, no new wire vocabulary and no caller-supplied current graph authority.",
+    "TDD, exact codes/layers, <=250-line target and split before 400, explicit owned paths and path-attributed gates."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:35:18.331Z",
+  "updatedAt": "2026-08-16T22:35:18.331Z"
+}

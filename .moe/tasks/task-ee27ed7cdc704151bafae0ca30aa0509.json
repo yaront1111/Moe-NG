@@ -1,0 +1,156 @@
+{
+  "id": "task-ee27ed7cdc704151bafae0ca30aa0509",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: replay graph revision events into state",
+  "description": "Production prerequisite for task-dd4ffa0c40834c59892f957fbf61fb23. Measurement at HEAD a42ae2f: @moe/core exports reduceGraphRevision for commands and emits GraphRevisionEvent, but has no public event apply/replay/hydration function. A durable projection cannot rebuild authority from events without reimplementing the lifecycle. Land the core-owned event replay surface that validates exact event shapes/order/version/identity and reconstructs GraphRevisionState. Not in scope: snapshot content, persistence, daemon transport, runtime-kind wiring, or authoritative design edits.",
+  "definitionOfDone": [
+    "A public @moe/core production replay function folds readonly unknown event input into the exact immutable GraphRevisionState represented by GraphRevisionEvent, using the same lifecycle/version/identity invariants as reduceGraphRevision.",
+    "Created/submitted/approved/activated/rejected/superseded sequences reconstruct every state field and accept duplicate delivery only under the explicitly defined idempotent identity; missing create, gaps/reordering, impossible transitions, conflicting duplicate bytes, bad bindings/epochs, extra keys, or hostile objects fail closed.",
+    "Every refusal returns an exact stable core code and CORE graph-revision layer; UNKNOWN/corrupt history never yields partial state or graph authority.",
+    "Focused generated lifecycle/permutation/hostile-input tests assert exact code/layer, prove nonzero cases, compare replayed state/events against the public reduceGraphRevision production surface, and include ACTIVE and SUPERSEDED accepted controls.",
+    "The @moe/core root exports the replay symbols with LF bridge/loadability coverage, and completion names task-dd4ffa0c40834c59892f957fbf61fb23 as the real consumer."
+  ],
+  "taskRails": [
+    "Do not create a daemon-side parallel lifecycle reducer; event hydration belongs beside reduceGraphRevision in @moe/core.",
+    "Snapshot hostile input before inspection and preserve stable reason code/layer distinctions for order, version, identity, binding, and shape failures.",
+    "Use TDD, <=250 lines per production file and split before 400, nonzero generated counts, mutation drill against the production replay surface, and explicit-path commit only."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND SURFACE AUDIT. Record merge-base/status and re-measure the public command reducer plus event shapes before editing: `reduceGraphRevision` is public; `GraphRevisionEvent` is Created/Submitted/Approved/Activated/Rejected/Superseded; `graph-revision-validation.ts` already supplies the binding/submission/activation/refusal/state validators; no replay/apply symbol exists. Record the current nonvacuous package baseline (planning measurement: `pnpm --filter @moe/core test` => 31 files / 781 tests, exit 0). Name task-dd4ffa0c40834c59892f957fbf61fb23 as the required production consumer; do not edit the authoritative design or daemon.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE AND SURFACE AUDIT — all plan claims re-measured at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9 (branch moe/work-2026-08-08, merge-base vs main cf272f67). Shared worktree: 33 entries in `git status --porcelain` from peer tasks; commits will be explicit-pathspec only.\n\nCONFIRMED AS PLANNED:\n- `reduceGraphRevision` public at graph-revision-reducer.ts:215; `GRAPH_REVISION_TRANSITIONS` at :75-81; `GRAPH_REVISION_COMMAND_KINDS` at :69-72. File is 241 lines — must not grow (all replay logic goes in the new module).\n- `GraphRevisionEvent` union = Created/Submitted/Approved/Activated/Rejected/Superseded (graph-revision-contract.ts:186-192).\n- Reusable validators present in graph-revision-validation.ts: validSubmission(:63), validBinding(:47), sameBinding(:52), validActivation(:95), validRefusal(:101), validGraphRevisionState(:141), plus bindingOf/validSuccessionBinding. Snapshot machinery in planning-snapshot.ts: snapshotData(:44), exact(:98), deepFreeze(:113), validRef/validHex64/strongTruth.\n- NO replay/apply/hydration symbol exists. Swept `export (function|const|type|interface) *([Rr]eplay|[Hh]ydrat)` across packages/core/src: single hit is `ReplayOutcome` in identity/authenticate-session.ts:52, an unrelated session-auth type. Gap is real.\n- Nonvacuous package baseline reproduced exactly: `pnpm --filter @moe/core test` => Test Files 31 passed (31) / Tests 781 passed (781), exit 0.\n\nREQUIRED PRODUCTION CONSUMER: task-dd4ffa0c40834c59892f957fbf61fb23 (Graph Beta: persist the current active graph projection). Recorded now; will be restated at completion per rail clause 1.\n\nFINDING — PLAN SCOPE IS ONE FILE SHORT (step 4 will need it). The root export count is pinned in FOUR places, not the one the plan names. All four currently read 80:\n 1. packages/core/src/index-surface.test.ts:66 — EXPECTED_EXPORTS catalogue (JS default sort: UPPERCASE before lowercase; each entry declares an ExportKind).\n 2. packages/core/src/index-surface.test.ts:118 — `expect(EXPECTED_EXPORTS.length).toBe(80)`.\n 3. packages/core/src/index-surface.test.ts:497 — `namedExportCount: 80`, a bare number inside the child-process strip-types probe's toEqual.\n 4. packages/core/src/supersession/supersession-engine.test.ts:88 — `expect(Object.keys(core).filter((key) => key !== \"default\").length).toBe(80)`. A sibling suite in a different directory, deliberately coupled to the root surface; nothing in planning/ or index-surface points at it.\nPin 4 is NOT in step-4's affectedFiles. Publishing the replay symbols reddens it regardless, so step 4 must edit it — forced scope growth of exactly one test file, no production change, and I will re-state it in the step-4 note. Sweep to prove all pins moved: `grep -rn \"toBe(80)\\|namedExportCount: 80\" --include='*.ts' packages apps | grep -v '/dist/'` must return zero hits afterward.\n\nPLANNED ROOT ADDITIONS (4 runtime values, 80 -> 84): replayGraphRevisionEvents (function), GRAPH_REVISION_REPLAY_CODES (array), GRAPH_REVISION_EVENT_KINDS (array), CORE_GRAPH_REVISION_REPLAY (string). Result/refusal types are `export type` and invisible to all four count pins by construction.\n\nREFUSAL SHAPE NOTE for step 3: the reducer's refusals go through graph-revision-results.ts using @moe/contracts `createRuntimeError` + `layer: GRAPH_REVISION`. The plan instead specifies a NEW closed `GRAPH_REVISION_REPLAY_CODES` vocabulary on layer `CORE_GRAPH_REVISION_REPLAY`, which is the right call and avoids the registry trap recorded for this aggregate: GRAPH_REVISION is a valid source for ILLEGAL_TRANSITION/EXPECTED_VERSION_CONFLICT/REVISION_REBOUND/SUPERSEDED_AUTHORITY but NOT for IDEMPOTENCY_CONFLICT, and createRuntimeError degrades a bad code/source pairing to UNKNOWN_ERROR silently. A distinct replay vocabulary sidesteps that entirely and keeps order/version/identity/binding/shape distinctions expressible.\n\nNo files modified in this step.",
+      "startedAt": "2026-08-16T22:22:03.076Z",
+      "completedAt": "2026-08-16T22:23:33.703Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — write `graph-revision-replay.test.ts` against the new public `replayGraphRevisionEvents(unknown)` surface. Generate every legal lifecycle path by driving the real `reduceGraphRevision` production function, collect its emitted events, replay them, and assert byte/value-equal frozen state for DRAFT, PENDING_APPROVAL, APPROVED, ACTIVE, REJECTED from each legal source, and SUPERSEDED (including initial versus succession activation). Assert the generated transition/path count is nonzero and covers every member of `GRAPH_REVISION_COMMAND_KINDS`/event-kind vocabulary. Add exact code+layer cases for non-array/sparse/extra-keyed/hostile input, empty/missing or repeated create, malformed event/witness/binding, version gap/regression/reordering, impossible lifecycle, mismatched goal/hash/expectedGoalVersion, invalid activation/succession epoch, events after terminal state, exact duplicate delivery, and conflicting duplicate bytes.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-replay.test.ts"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/graph-revision-replay.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-replay.test.ts"
+      ],
+      "note": "TDD RED established. `npx vitest run --root . packages/core/src/planning/graph-revision-replay.test.ts` fails with `Error: Cannot find module './graph-revision-replay.js'` — red for the absence of the production module, not for a broken fixture. No implementation exists yet.\n\nGENERATION IS REAL, NOT HAND-WRITTEN. Every legal history is produced by driving the actual `reduceGraphRevision` through a `Step` list and collecting the events it emitted; `drive()` THROWS on a rejected fixture command rather than returning a short history, because a path that stopped early would still replay cleanly and prove nothing about the lifecycle it claims. Refusal fixtures are then one deliberate drift from a generated history (`mutatedLast`), so both operands are never hand-authored — that is the tautology this suite has to avoid, since replay's only honest oracle is the reducer that owns the lifecycle.\n\n11 legal paths cover all six lifecycles: DRAFT, PENDING_APPROVAL, APPROVED, ACTIVE (compound from PENDING_APPROVAL AND separate from APPROVED AND as a named successor), REJECTED (from DRAFT, PENDING_APPROVAL and APPROVED), SUPERSEDED (after both activation shapes). ACTIVE and SUPERSEDED accepted controls are separate named tests per DoD 4, asserting the rebuilt `graphEpoch` (1 initial, 2 for a successor) and the exact five-key `boundHashes` identity.\n\nNONZERO/COVERAGE GUARD (rail: a sweep producing zero cases passes while testing nothing): one test asserts `LEGAL_PATHS.length > 0` and that the driven command kinds equal `GRAPH_REVISION_COMMAND_KINDS` exactly, the driven event kinds equal `GRAPH_REVISION_EVENT_KINDS` exactly, and the reached lifecycles equal all six. A separate test asserts every published member of `GRAPH_REVISION_REPLAY_CODES` is actually exercised by the refusal table — an unreachable published code is an unverifiable refusal.\n\nREFUSAL TABLE: 38 cases, each asserting code AND layer together as one string (`${layer}/${code}`) so a sibling layer answering first cannot read as this refusal. Covers non-array/string/null/undefined/sparse/extra-own-key/getter-entry histories, cyclic + exotic-prototype + symbol-keyed events, empty history, missing create, duplicate create, create at version != 1, unknown kind, missing/extra event keys, non-hex hashes, empty refs, truth-floor violations on submission and refusal witnesses, malformed approval binding, version gap, version regression, reordering, illegal transitions (approval onto DRAFT, submission after approval, events after terminal SUPERSEDED and terminal REJECTED), binding drift (budget hash, content hash, goal ref, expectedGoalVersion vs its own witness, approval binding not over this content), epoch drift (initial epoch != 1, successor skipping the predecessor epoch, malformed predecessor epoch), and a malformed supersession authority hash.\n\nIDENTITY SEMANTICS PINNED BOTH WAYS, which is the half a duplicate-only test always misses: byte-identical redelivery of the last event AND of the entire history end-to-end are accepted, leaving state and the event list equal to the reducer's; a redelivery at an already-applied version with one drifted byte, and one reusing a version under a different commandId, both refuse GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT.\n\nCOMPOUND-APPROVAL TRAP COVERED (the architect's named risk): a dedicated test first asserts the precondition that makes the case load-bearing — the Approved and Activated events genuinely share one commandId at consecutive versions — then asserts replay treats them as distinct. Keying identity on commandId alone would collapse them; keying on (version, commandId) does not.\n\nAlso asserted: refusals expose exactly `{code, layer, ok}` and never a partial state or event list; accepted results are frozen; the caller's history array is neither mutated nor returned by reference.\n\nTwo defects in my own first draft, both caught and fixed before the run: a malformed `boundHashes` expectation built from spread-undefined keys, and a coverage loop that assigned a reducer RESULT into a state variable. Both would have been type errors or vacuous assertions.",
+      "startedAt": "2026-08-16T22:23:38.496Z",
+      "completedAt": "2026-08-16T22:27:22.456Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE CORE-OWNED EVENT HYDRATOR. Add `graph-revision-replay.ts` with a closed `GRAPH_REVISION_REPLAY_CODES` vocabulary and `CORE_GRAPH_REVISION_REPLAY` layer. Snapshot the entire hostile input once via the existing planning snapshot machinery; require a dense ordinary event array and exact per-kind data keys; detach/freeze all accepted data. Fold only the lifecycle/version relation already declared by `GRAPH_REVISION_TRANSITIONS`, reuse `validSubmission`, `validBinding`/`sameBinding`, `validActivation`, `validRefusal`, and `validGraphRevisionState`, and reconstruct every GraphRevisionState field from event facts. Track `(version, commandId)` identities: byte-identical repeated delivery is idempotently ignored, while same identity/different bytes is `GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT`. Missing create, gaps, illegal ordering, binding/hash drift, and epoch/succession drift get distinct stable codes; never return partial state on failure. Keep the new production module <=250 physical lines and add its exact one-line LF `.js` bridge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-replay.ts",
+        "packages/core/src/planning/graph-revision-replay.js"
+      ],
+      "newFiles": [
+        "packages/core/src/planning/graph-revision-replay.ts",
+        "packages/core/src/planning/graph-revision-replay.js"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/planning/graph-revision-replay.ts",
+        "packages/core/src/planning/graph-revision-replay.js",
+        "packages/core/src/planning/graph-revision-replay.test.ts",
+        "packages/core/src/planning/graph-revision-replay-refusal.test.ts",
+        "packages/core/src/planning/graph-revision-replay-test-fixtures.ts"
+      ],
+      "note": "HYDRATOR LANDED AND GREEN. `pnpm --filter @moe/core typecheck` exit 0. Package suite: 857 passed, 1 failed — the single failure is `runtime-entrypoint.test.ts` reporting `planning/graph-revision-replay.js` as UNEXPECTED, which is correct and by design right now: the bridge exists but the module is not yet reachable from `index.ts`. Step 4 publishes it and closes that. Baseline was 781 tests; the suite is now 858.\n\nIMPLEMENTATION. `graph-revision-replay.ts` is exactly 250 physical lines, longest line 106. Whole input snapshotted ONCE via `snapshotData` before any discriminator read, so getters/proxies/cycles/symbols/exotic prototypes cannot observe or vary the decision; every later check reads only inert snapshot data, and accepted events are the detached snapshot copies, never the caller's objects. `REPLAY_TRANSITIONS` restates `GRAPH_REVISION_TRANSITIONS` over event kinds (Approved from PENDING_APPROVAL, Activated from APPROVED, Rejected from DRAFT/PENDING_APPROVAL/APPROVED, Superseded from ACTIVE, and REJECTED/SUPERSEDED terminal by having no entry). Compound approval materialises the intermediate APPROVED state replay-side; the final state still equals the reducer's, which the generated equivalence tests prove. Identity is keyed on VERSION, with byte-identical redelivery ignored and any other bytes at an applied version refusing IDENTITY_CONFLICT — commandId alone would collapse a compound approval's two events, which is the architect's named risk. Refusals return `{code, layer, ok}` only.\n\nVALIDATOR REUSE IS REAL, NOT DECORATIVE. `applyCreated` builds the seed state and hands it to `validGraphRevisionState`, so the hex/ref/version/placement floors are the aggregate's own validator rather than a restatement — that is what answers the non-hex-hash and empty-revision cases. Submitted/Rejected/Approved delegate to `validSubmission`/`validRefusal`/`validBinding` + `bindingOf`; Activated delegates to `validActivation` + `sameBinding`. One deliberate exception, commented in the source: `validActivation` folds shape and epoch into a single boolean, so replay reads the epoch relation first (via the exported `validSuccessionBinding`) to keep EPOCH_DRIFT distinct from a shape fault. That is ~4 lines of attribution logic, not a second witness contract.\n\nTHREE THINGS THE PLAN'S MEASUREMENT MISSED, ALL FOUND BY RUNNING RATHER THAN READING:\n\n1. `SupersessionDecision[\"successor\"]` IS AN INTERSECTION, not the bare kernel binding. It is `SupersessionSuccessorBinding & { readonly lifecycle: \"ACTIVE\" }` (supersession-engine.ts:44), so the emitted event's successor carries SIX keys, not five. My `exact()` tuple omitted `lifecycle` and every SUPERSEDED path failed EVENT_INVALID — 6 red tests. Fixed by adding `lifecycle` to `SUCCESSOR_KEYS` and requiring it to equal \"ACTIVE\" (the successor is ACTIVE by construction; that is the atomic authority move). Reading the type alias was not enough — following it to the intersection was.\n\n2. THE 250-LINE CEILING APPLIES TO TEST AND FIXTURE FILES IN THIS DIRECTORY, mechanically enforced. `planning/planning-source-size.test.ts` sweeps EVERY `*.ts` in planning/ with \"no allowlist, no basename or suffix exception\", and its own header says the fix belongs in the offending file, never in an exception. My single 493-line suite was a hard offender. FORCED SCOPE GROWTH, +2 test-tier files beyond the plan's declared newFiles: `graph-revision-replay-test-fixtures.ts` (169) holds the reducer-driven generators and assertion helpers, `graph-revision-replay.test.ts` (140) holds accepted paths/controls/idempotency/vocabulary, `graph-revision-replay-refusal.test.ts` (236) holds the 42-case refusal table. All four files now measure 250/140/236/169. The fixtures file follows the existing `graph-revision-test-fixtures.ts` convention, registers no suite, and correctly takes NO `.js` bridge — the audit does not report it missing, which confirms bridges are decided by reachability from `index.ts`, not by filename.\n\n3. `REPLAY_TRANSITIONS[kind].includes(current.lifecycle)` FAILED TYPECHECK with TS2345 \"not assignable to parameter of type 'never'\": indexing a const-asserted record by a union of kinds yields a union of readonly tuples, and `includes` narrows its parameter to the intersection of the element types. Fixed with the same explicit annotation `reduceGraphRevision` already uses at graph-revision-reducer.ts:236 — `const allowed: readonly GraphRevisionLifecycle[] = ...`.\n\nREFUSAL TABLE GREW TO 42 CASES. Four were added while implementing, specifically so no production branch is unexercised: a successor whose own lifecycle is not ACTIVE (EVENT_INVALID), a successor naming a predecessor revision or predecessor content that is not this revision's (BINDING_DRIFT x2), and a successor skipping predecessor epoch + 1 (EPOCH_DRIFT). The closed-vocabulary test asserts the published codes equal the exercised set exactly, so adding a code without reaching it now fails.\n\nBRIDGE: `graph-revision-replay.js` written wit",
+      "startedAt": "2026-08-16T22:29:50.194Z",
+      "completedAt": "2026-08-16T22:39:12.066Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "PUBLISH AND LOCK THE ROOT SURFACE. Export the replay function, result/refusal types, codes, layer, and event-kind vocabulary from `@moe/core` in `index.ts`; update the exact root key/type table in `index-surface.test.ts` and call the production replay through a bare `@moe/core` namespace control. In `graph-revision-replay.test.ts`, byte-compare the LF bridge against `export * from \"./graph-revision-replay.ts\";\\n`. Do not expose internal snapshot/validation helpers and do not add a daemon-side reducer.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/planning/graph-revision-replay.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts",
+        "packages/core/src/planning/graph-revision-replay.test.ts"
+      ],
+      "note": "ROOT SURFACE PUBLISHED AND LOCKED. `pnpm --filter @moe/core typecheck` exit 0. `pnpm --filter @moe/core test` => Test Files 33 passed (33) / Tests 864 passed (864), exit 0. The step-3 bridge-audit failure is closed: `runtime-entrypoint.test.ts` now passes because the module is reachable from the entry point, which is exactly the reachability rule that decides the bridge set.\n\nPUBLISHED (4 runtime values + 5 types, appended as one value block plus one alphabetized type block after the existing graph-revision blocks): `CORE_GRAPH_REVISION_REPLAY`, `GRAPH_REVISION_EVENT_KINDS`, `GRAPH_REVISION_REPLAY_CODES`, `replayGraphRevisionEvents`; types `GraphRevisionEventKind`, `GraphRevisionReplayAcceptedResult`, `GraphRevisionReplayCode`, `GraphRevisionReplayRefusal`, `GraphRevisionReplayResult`. No internal snapshot or validation helper is exposed, and no daemon-side reducer was added.\n\nALL FOUR EXPORT-COUNT PINS MOVED 80 -> 84, which is the step-1 finding paying off — the plan named only one of them:\n 1. index-surface.test.ts EXPECTED_EXPORTS catalogue, entries inserted in JS default sort order (UPPERCASE before lowercase): CORE_GRAPH_REVISION_REPLAY between CORE_DECISION_REASON_OBLIGATION and CORE_STEP_UP_OBLIGATION; GRAPH_REVISION_EVENT_KINDS and GRAPH_REVISION_REPLAY_CODES between GRAPH_REVISION_COMMAND_KINDS and GRAPH_REVISION_TRANSITIONS; replayGraphRevisionEvents between reduceProject and rotateCredential.\n 2. index-surface.test.ts `expect(EXPECTED_EXPORTS.length).toBe(84)`.\n 3. index-surface.test.ts `namedExportCount: 84` inside the child-process strip-types probe.\n 4. supersession/supersession-engine.test.ts:88 — the sibling suite. OUT-OF-PLAN EDIT, FORCED: publishing any root export reddens it regardless of what this task does, and it is not in step-4's affectedFiles. One number changed, no logic touched.\nProof every pin moved: `grep -rn \"toBe(80)\\|namedExportCount: 80\" --include='*.ts' packages apps | grep -v '/dist/'` returns ZERO hits; the same sweep at 84 returns exactly the three numeric pins. The catalogue's hand-transcribed provenance comment was updated to account for the 4 new values so the count stays reviewable rather than a bare number.\n\nTYPE GUARD SATISFIED (guard 2 of the file's three). All five published types are annotated onto values that came through the bare `@moe/core` specifier, so an unpublished type is a tsc error instead of a silently green test — runtime count pins cannot see `export type` at all.\n\nCOMPOSITION CONTROL, NOT A RESOLUTION CHECK. The new root test builds its history with the ROOT's `core.reduceGraphRevision` and feeds it to the ROOT's `core.replayGraphRevisionEvents`, then asserts the replayed state equals the reducer's state. That proves the two published surfaces compose; asserting only that both names resolve would pass on a broken hydrator. It also pins the refusal half through the root: an empty history returns code GRAPH_REVISION_REPLAY_MISSING_CREATE with layer `core.CORE_GRAPH_REVISION_REPLAY`, and both vocabularies are asserted to contain the code and the event kind.\n\nLF BRIDGE PINNED BY BYTES, in graph-revision-replay.test.ts: `readFileSync(bridge, \"utf8\")` must equal `export * from \"./graph-revision-replay.ts\";\\n` exactly. This is worth a test rather than an eyeball because vitest rewrites a `./foo.js` specifier back to `foo.ts`, so nothing else in the package can distinguish a correct bridge from a CRLF one.\n\nSIZES AFTER THIS STEP: graph-revision-replay.ts 250, graph-revision-replay.test.ts 154, graph-revision-replay-refusal.test.ts 236, graph-revision-replay-test-fixtures.ts 169 — all at or under the mechanically-enforced planning ceiling. index.ts grew to 303, still under the 400 split threshold.",
+      "startedAt": "2026-08-16T22:39:15.436Z",
+      "completedAt": "2026-08-16T22:41:14.710Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL REVIEW AND MUTATION DRILLS. Review empty/huge histories, getters/proxies/cycles/symbols, duplicate identities, compound approval (two events sharing one commandId but different versions), terminal events, initial versus successor epochs, and whether replay state can diverge from `reduceGraphRevision`. Run and revert isolated mutants by exact owned path: (1) permit a first event other than Created — missing-create test must red; (2) skip strict `previous.version + 1` — version-gap test must red; (3) stop comparing activation binding/hash or succession epoch — the named binding/epoch case must red; (4) treat same-version conflicting bytes as an exact replay — identity-conflict test must red. Record each replaced range and intended assertion; confirm a non-applied mutant cannot count.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-16T22:41:38.200Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL VERIFICATION, PATH-ATTRIBUTED GATE, AND COMMIT. Run separately with captured outputs: `pnpm --filter @moe/core typecheck`; canonical evidence command `pnpm --filter @moe/core test` (must print nonzero file/test counts); `pnpm typecheck`; `pnpm test`; `pnpm verify:foundation`. Compare merge-base versus HEAD repo-wide failing-path sets and require no new failure in the five owned paths; quote foreign red. Confirm new production source <=250 lines, existing touched `index.ts` remains below 400, bridge is LF-exact, no probe/scratch remains, and completion records task-dd4ffa0c40834c59892f957fbf61fb23 as consumer. Stage/commit only the five explicit paths and verify `git show --stat` is scoped.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/core/src/planning/graph-revision-replay.ts",
+        "packages/core/src/planning/graph-revision-replay.js",
+        "packages/core/src/planning/graph-revision-replay.test.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-3d941382",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 113.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:16:46.906Z",
+  "updatedAt": "2026-08-16T22:41:38.200Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:18:51.075Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1",
+    "worker-3d941382"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T22:21:48.732Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Rebuild graph lifecycle inside daemon: rejected by task rail and would drift from core. 2) Persist reducer state and trust it: rejected because corrupt self-consistent state could gain authority without replay. 3) Replay original commands: rejected because durable projection reads GraphRevisionEvent and StoredEvent does not expose original command bytes. 4) Convert events back into synthetic commands and call reduceGraphRevision: rejected because events intentionally omit command-only facts (notably full supersession input), so synthetic commands would invent authority. 5) Add event hydration beside the reducer using the same validators/transition vocabulary, with generated equivalence tests against the production reducer: selected. Exact duplicate identity is ignored; conflicting bytes refuse.",
+    "codebaseInsights": "Measured at HEAD a42ae2f. `reduceGraphRevision` is packages/core/src/planning/graph-revision-reducer.ts:214-239; accepted transitions are declared in `GRAPH_REVISION_TRANSITIONS` at 74-80. The reducer emits Created with revision/goal/content/plan, Submitted with witness, Approved with binding, Activated with goal/expectedGoalVersion/witness, Rejected with witness, and Superseded with authorityHash/successor. Those fields are sufficient to reconstruct GraphRevisionState, whose fields are boundHashes, goalRef, graphContentHash, graphEpoch, lifecycle, planHash, revisionId, submissionRef, version. Existing internal validators `validSubmission`, `validBinding`, `sameBinding`, `validActivation`, `validRefusal`, and `validGraphRevisionState` are reusable. No replay/apply/hydration symbol is exported. Core package resolves; fresh baseline executed 31 files/781 tests. Later daemon consumer edge is viable: apps/daemon/package.json declares @moe/core, pnpm-lock.yaml has link:../../packages/core, and a temporary compiled bare-specifier daemon probe imported `reduceGraphRevision` from @moe/core and exited 0 before deletion.",
+    "risks": "Compound `graph.approve` emits Approved and Activated with the same commandId at consecutive versions, so duplicate identity cannot be keyed by commandId alone. Exact duplicate delivery must not mask a conflicting event at one version. Snapshot hostile input before any discriminator/key read. Activation must match the approved binding/content hash and distinguish initial graphEpoch=1 from successor predecessorEpoch+1. Superseded event does not contain the full original supersession request; replay may validate event/state monotonic facts but must not pretend to re-authorize the original decision. Root export keys are exact-set pinned. `graph-revision-reducer.ts` is 241 lines and must not be grown; all replay logic belongs in the new file.",
+    "keyFiles": [
+      "packages/core/src/planning/graph-revision-contract.ts",
+      "packages/core/src/planning/graph-revision-reducer.ts",
+      "packages/core/src/planning/graph-revision-validation.ts",
+      "packages/core/src/planning/planning-snapshot.ts",
+      "packages/core/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-16T22:21:50.800Z",
+  "workStartedAt": "2026-08-16T22:22:03.076Z"
+}

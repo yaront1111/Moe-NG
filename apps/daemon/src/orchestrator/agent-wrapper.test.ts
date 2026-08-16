@@ -8,6 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import type { AffordancePort } from "../http/affordance-contract.js";
+import { workItemIdFor } from "../http/affordance-read.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -18,6 +19,7 @@ import type { AgentSpawnStartResult, SpawnReport,
   SpawnStartRefusal } from "./agent-spawn-contract.js";
 import { SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
 import type { SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
+import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
@@ -1110,5 +1112,258 @@ describe("agent spawn admission truth", () => {
     expect(real.code).toBe("SPAWN_ARGUMENT_UNQUOTABLE");
     expect(foreignAlias.layer).toBe("agent-spawn-invocation");
     expect(foreignReported.layer).toBe("agent-spawn-invocation");
+  });
+});
+
+/**
+ * THE REPORTED DEFECT, end to end.
+ *
+ * Two live agent sessions on ONE work item. It happens when the durable claim
+ * EXPIRES while the child it fenced is still running: `activeClaim` nulls the
+ * expired record, the affordance surface therefore projects `claim: null`
+ * (measured at affordance-read.ts:74-76), and the item reads exactly like a
+ * fresh unclaimed one. The wrapper's only surviving guard is its in-process
+ * `active` map — which a restarted wrapper does not have.
+ *
+ * So the second pass here comes from a SECOND wrapper instance holding a fence
+ * on a REOPENED store handle. That is the honest reproduction: a same-instance
+ * second pass would be refused by the in-process map and would prove nothing
+ * about durability.
+ *
+ * The surface's `claim: null` is injected rather than waited for. The expiry
+ * projection itself is measured in step 1 and driven against a REAL expired
+ * claim in agent-session-fence.test.ts; reproducing it here by sleeping past a
+ * real TTL would make this a clock race, and a test that fails on a slow box
+ * teaches the next reader to rerun it rather than to believe it.
+ */
+describe("createAgentWrapper — durable staffing fence", () => {
+  it("refuses a second wrapper's pass while the first child is live, and spawns ONCE", async () => {
+    const projectId = "proj-wrapper-fence-race";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    const stores: SqliteEventStore[] = [];
+    try {
+      const opening = harness.port.readSurface();
+      if (opening.outcome !== "SURFACE") throw new Error(opening.code);
+      const first = opening.steps.find((step) =>
+        step.status === "READY" && step.claim === null
+        && !step.kind.startsWith("session.")
+        && step.kind !== "approval.decide" && step.kind !== "goal.close");
+      if (first === undefined) throw new Error("no staffable step on the surface");
+      const target = workItemIdFor(first.kind, first.aggregateId);
+
+      // ONE staffable item, so "spawnAgent was called exactly once" is exact
+      // rather than "once for this item, plus whatever else the board offered".
+      const soloPort: AffordancePort = {
+        boundProjectId: projectId,
+        readSurface: () => {
+          const surface = harness.port.readSurface();
+          if (surface.outcome !== "SURFACE") return surface;
+          return {
+            ...surface,
+            steps: surface.steps
+              .filter((step) => workItemIdFor(step.kind, step.aggregateId) === target),
+          };
+        },
+      };
+
+      const spawnCalls: string[] = [];
+      const spawnAgent = async (request: SpawnRequest): Promise<AgentSpawnStartResult> => {
+        spawnCalls.push(request.workItemId);
+        // Admitted and held open: the child is still running for the whole test.
+        return { exit: new Promise<void>(() => undefined), ok: true };
+      };
+
+      const firstStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(firstStore);
+      let suffix = 0;
+      const firstWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `fencea${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        staffingFence: createAgentSessionFence({ projectId, store: firstStore }),
+      });
+
+      const firstReport = await firstWrapper.runOnce();
+      expect(firstReport.spawned).toMatchObject([{ outcome: "SPAWNED", workItemId: target }]);
+      expect(spawnCalls).toEqual([target]);
+      const agentSession = firstReport.spawned[0]?.sessionId;
+      if (agentSession === null || agentSession === undefined) throw new Error("no session");
+
+      // THE DEFECT STATE, produced durably rather than faked in the port: the
+      // claim is gone from the store while the child is still running. A
+      // released claim and an expired one are the same fact to every reader
+      // here — `activeClaim` returns null for both — and release is reachable
+      // deterministically, where expiry would need a real 60s sleep or a TTL so
+      // short it also expires the agent's own session mid-handshake.
+      const claimed = readWorkClaimLedger(store, projectId).claims.get(target);
+      if (claimed === undefined) throw new Error("no durable claim to retire");
+      writeClaim(
+        store, projectId, "work.release", agentSession, target,
+        claimed.version, "fence-race-reap",
+      );
+
+      // The precondition, asserted rather than assumed: the item now reads
+      // UNCLAIMED on the real surface, so nothing there can refuse the next
+      // pass and the durable claim layer cannot answer either.
+      const aged = soloPort.readSurface();
+      if (aged.outcome !== "SURFACE") throw new Error(aged.code);
+      expect(aged.steps).toMatchObject([{ claim: null, status: "READY" }]);
+
+      // A RESTARTED wrapper: empty `active` map, fence on a reopened handle.
+      firstStore.close();
+      stores.pop();
+      const secondStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(secondStore);
+      const secondWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW + 120_000,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `fenceb${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        staffingFence: createAgentSessionFence({ projectId, store: secondStore }),
+      });
+
+      const secondReport = await secondWrapper.runOnce();
+      // THE COUNT FIRST, deliberately. It is the assertion that states the
+      // defect — two children on one item — and a second spawn that failed
+      // afterwards would still have put both in the shared worktree. Removing
+      // the fence makes this line, not the outcome line, the one that reddens.
+      expect(spawnCalls).toEqual([target]);
+      expect(secondReport.spawned).toMatchObject([
+        { outcome: "AGENT_STAFFING_CHILD_LIVE", sessionId: null, workItemId: target },
+      ]);
+    } finally {
+      store.close();
+      while (stores.length > 0) stores.pop()?.close();
+      harness.dispose();
+    }
+  });
+
+  it("retires the record when the child dies on the REJECTION path, so the item is staffable again", async () => {
+    // The wedge case, and the one that would be worse than the race it fixes: a
+    // crashed child whose record is never retired makes the item unstaffable
+    // FOREVER, breaking resume-after-crash (task rail 2).
+    //
+    // The claim is released by cleanup on this path, so the claim gate cannot be
+    // what answers afterwards — only the live-child record can. That is what
+    // makes the final ADMIT a real assertion about the retire call rather than
+    // about claim cleanup.
+    const projectId = "proj-wrapper-fence-rejected";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const opening = harness.port.readSurface();
+      if (opening.outcome !== "SURFACE") throw new Error(opening.code);
+      const first = opening.steps.find((step) =>
+        step.status === "READY" && step.claim === null
+        && !step.kind.startsWith("session.")
+        && step.kind !== "approval.decide" && step.kind !== "goal.close");
+      if (first === undefined) throw new Error("no staffable step on the surface");
+      const target = workItemIdFor(first.kind, first.aggregateId);
+
+      const fence = createAgentSessionFence({ projectId, store });
+      let killChild: (error: Error) => void = () => undefined;
+      const exit = new Promise<void>((_resolve, reject) => { killChild = reject; });
+      let suffix = 0;
+      const dying = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `fencex${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        // The child's death is DEFERRED so the live window is observable. An
+        // already-rejected promise retires on the first microtask, before any
+        // assertion could see the fenced state, and the "while live" check
+        // below would then be asserting nothing.
+        spawnAgent: async () => ({ exit, ok: true }),
+        staffingFence: fence,
+      });
+
+      const report = await dying.runOnce();
+      expect(report.spawned[0]).toMatchObject({ outcome: "SPAWNED" });
+
+      // Asked PAST the claim's expiry on purpose. At `NOW` the claim is still
+      // active and CLAIM_HELD answers first, which would say nothing about the
+      // child record; past expiry the claim gate is silent, so only the
+      // live-child record can produce this refusal.
+      const afterExpiry = new Date(NOW + 120_000).toISOString();
+      expect(fence.admit(target, afterExpiry))
+        .toMatchObject({ code: "AGENT_STAFFING_CHILD_LIVE", ok: false });
+
+      killChild(new Error("AGENT_PROCESS_FAILED:EXIT_NONZERO:1"));
+      await expect(dying.settle()).rejects
+        .toThrowError("AGENT_PROCESS_FAILED:EXIT_NONZERO:1");
+
+      // Dead predecessor, item staffable again. This is the assertion drill 3
+      // reddens: with the rejection-branch retire removed the record stays live
+      // and the item is wedged forever.
+      expect(fence.admit(target, afterExpiry)).toMatchObject({ ok: true });
+    } finally {
+      store.close();
+      harness.dispose();
+    }
+  });
+
+  it("refuses the SUPERSEDED session's work.renew at the work-claim layer, mutating nothing", () => {
+    // DoD 2 in moe-next's vocabulary. The DoD names old-Moe tools (heartbeat,
+    // complete_step, chat_send); none of them exist here. The real equivalents
+    // are work.renew — the claim holder's keepalive, and the first command a
+    // superseded session actually hits — and session authentication below.
+    const projectId = "proj-wrapper-fence-superseded";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const item = "policy.install@policy-superseded";
+      writeClaim(store, projectId, "work.claim", "sess-first", item, 0, "superseded-first");
+      writeClaim(store, projectId, "work.release", "sess-first", item, 1, "superseded-release");
+      writeClaim(store, projectId, "work.claim", "sess-second", item, 2, "superseded-second");
+
+      const before = readWorkClaimLedger(store, projectId).claims.get(item);
+      expect(before).toMatchObject({ claimedBy: "sess-second", status: "OPEN", version: 3 });
+      const beforeBytes = JSON.stringify(before);
+
+      const refused = runWorkClaimCommand(store, new TextEncoder().encode(JSON.stringify({
+        commandId: "superseded-renew", correlationId: "superseded",
+        decidedAt: new Date(NOW).toISOString(), expectedVersion: 3, kind: "work.renew",
+        payload: { expiresAt: new Date(NOW + 120_000).toISOString(), workItemId: item },
+        principalId: "sess-first", projectId, schemaVersion: WORK_CLAIM_SCHEMA_VERSION,
+      })));
+
+      // The CODE and the LAYER that answered. Two layers can refuse a superseded
+      // session — this prerequisite gate and session authentication — so a test
+      // asserting only `ok === false` goes vacuous the moment the other one
+      // starts answering first.
+      expect(refused).toMatchObject({
+        code: "WORK_CLAIM_NOT_CLAIMANT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+      });
+
+      // Refused means REFUSED: the durable aggregate is byte-identical after.
+      const after = readWorkClaimLedger(store, projectId).claims.get(item);
+      expect(JSON.stringify(after)).toBe(beforeBytes);
+      expect(after).toMatchObject({ claimedBy: "sess-second", version: 3 });
+    } finally {
+      store.close();
+      harness.dispose();
+    }
+  });
+
+  it("refuses an unopened session credential at the identity layer", () => {
+    // The second layer that can answer for a superseded session. It answers with
+    // a VERDICT and no reason code — worth pinning literally, because a reader
+    // assuming a coded refusal here would write an assertion that never matches.
+    // The AUTHENTICATED control is what keeps this from being an authenticator
+    // that simply refuses everything.
+    const projectId = "proj-wrapper-fence-identity";
+    const harness = isolatedHarness(projectId);
+    try {
+      const { authenticator } = harness.isolated.provide();
+      expect(authenticator.authenticate("secret-a-session-that-was-never-opened"))
+        .toEqual({ verdict: "UNAUTHENTICATED" });
+      expect(authenticator.authenticate(OPERATOR)).toMatchObject({ verdict: "AUTHENTICATED" });
+    } finally {
+      harness.dispose();
+    }
   });
 });

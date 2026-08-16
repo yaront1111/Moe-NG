@@ -1,0 +1,55 @@
+{
+  "id": "task-efc2ef6330074b4d9893809f7425c95f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: wire graph commands and current-graph query",
+  "description": "Graph Beta consumer of task-dd4ffa0c40834c59892f957fbf61fb23 and prerequisite for task-a9fd91c373c244c78df97945965a8038. Expose the existing graph.* runtime command kinds and graph.get query through the real daemon HTTP/MCP authentication and decision surfaces, delegating mutation/read work to the durable active-graph service. Measurement at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9: RUNTIME_COMMAND_KINDS already contains graph.approve, graph.prepare_supersession, graph.release_preparation, graph.request_expansion, and graph.supersede; RUNTIME_QUERY_KINDS contains graph.get; daemon-command-registry.ts wires none of them and mcp-dispatch-port.ts serves only work.get_context/events.read. Stage: GRAPH BETA. Not in scope: adding runtime kinds, Foundation attempt ingress, launch/workspace sourcing, or fan-out attempt dispatch.",
+  "definitionOfDone": [
+    "The daemon command registry exposes every existing mutation kind in the bounded graph.* family with exact capability, family, payload allow-list, and stable refusal mapping; the real Authenticator runs before any graph payload field is read.",
+    "Each accepted graph mutation delegates to the landed @moe/core graph lifecycle and task-dd4ffa0c40834c59892f957fbf61fb23 durable service in one decision-bound transaction; the transport never reconstructs graph authority or trusts a caller-provided active projection.",
+    "The existing graph.get query is reachable through the production HTTP/MCP path and returns the durable current-project snapshot/revision/epoch from task-dd4ffa0c40834c59892f957fbf61fb23; absent or unverifiable state remains UNKNOWN with an exact code and layer.",
+    "Same-byte replay returns the original durable decision without duplicate graph events; conflicting bytes under one decision identity refuse with an exact replay-conflict code/layer and preserve the original event and decision counts.",
+    "Focused real SqliteEventStore + Authenticator tests assert authentication/capability/payload ordering, exact code/stage/layer for each refusal, nonzero generated-case counts, zero residue, one accepted mutation control, and one graph.get control; daemon typecheck and test gates execute with a nonzero test count."
+  ],
+  "taskRails": [
+    "Hard-depend on task-dd4ffa0c40834c59892f957fbf61fb23 and consume its production projection; do not copy its fold into the registry or tests.",
+    "Use only existing graph command/query kinds from @moe/contracts; runtime vocabulary/schema expansion is forbidden in this slice.",
+    "Use the extracted daemon command registry and real Authenticator/CommandDecisionPort; do not reimplement transport, authentication, or decision identity.",
+    "Fail closed with stable reason codes/layers, use TDD, target <=250 lines per production source and split before 400, and preserve foreign shared-tree work."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human instructed plan all filed Graph Beta prerequisites.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 115,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T21:46:03.379Z",
+  "updatedAt": "2026-08-16T22:40:21.878Z",
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:22:11.233Z"
+  },
+  "blockedReason": "Fresh exploration shows this ticket is an integration umbrella, not a <=5-file implementation task, and its claimed production dependencies are absent. GraphRevisionEvent has no content bytes; the retracted task-77 plan wrongly equated structural graphIdentity with the broader design GraphRevisionContent hash. No daemon service produces GraphRevisionCreated/Submitted or persists graph.approve/supersede. graph.prepare_supersession/release_preparation have no durable paired SupersessionFundingReservation/PreparedPlanningFence lifecycle. graph.request_expansion's existing core reducer still lacks durable safe-release/current-hold authority (existing blocked e62/738/c417 chain). The registry is already 346 lines, and no approved graph capability/payload mapping exists. I SPIDR-split durable preparation (task-32c1ba45), atomic activation (task-eacea969), mutation ingress (task-931f99e8) and current query (task-c4b80778); efc2 becomes the final integration/hardening parent after those land. Submitting a direct plan now would invent authority, exceed the five-file quality bar, and create unreachable/mock-backed handlers.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:35:50.641Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fresh codebase exploration completed; parent correctly BLOCKED. Filed four child tasks: task-32c1ba45 durable supersession preparation, task-eacea969 atomic active-graph transitions, task-931f99e8 authenticated mutation ingress, task-c4b80778 authenticated current-graph query. Documented content-hash authority and expansion safe-release blockers.",
+      "whatRemains": "Wait for graph content authority decision dec-64b2391, graph replay task-ee27ed7c, current-active projection task-dd4ffa0c, expansion producer chain, and the four child tasks; then re-measure and plan this parent only as final integration/hardening.",
+      "pitfalls": "Never equate scheduler graphIdentity with GraphRevisionContent.graphContentHash; do not invent missing prepare/release authority or widen frozen runtime vocabulary.",
+      "openQuestions": "Human must decide full canonical GraphRevisionContent versus explicitly non-authoritative structural snapshot; exact graph capabilities/payloads also require authority.",
+      "releasedAt": "2026-08-16T22:40:21.876Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after SPIDR split and confirmed BLOCKED status; freeing this architect to continue the user's plan-all sweep."
+    }
+  ]
+}

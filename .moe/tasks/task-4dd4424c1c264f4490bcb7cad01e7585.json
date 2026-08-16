@@ -1,0 +1,166 @@
+{
+  "id": "task-4dd4424c1c264f4490bcb7cad01e7585",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Production verifier authority provider for the agent wrapper",
+  "description": "PREREQUISITE of task-97554aa4293e40eab56c0b642e18513a (Foundation self-host canary), discovered at the canary's step-1 resume-gate re-measurement on 2026-08-17.\n\nMEASURED GAP at committed HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9 (git grep against HEAD, not the working tree):\n\n  git grep -n \"verificationAuthority\" HEAD -- apps/ packages/ | grep -v '\\.test\\.'\n    apps/daemon/src/orchestrator/agent-wrapper-main.ts:240:      verificationAuthority: () => null,\n    apps/daemon/src/orchestrator/node-verifier.ts:62:  readonly verificationAuthority: (\n    apps/daemon/src/orchestrator/node-verifier.ts:165:      const authority = config.verificationAuthority(nodeRef, brief);\n\n  git grep -n \"VerifierAuthorityFacts\" HEAD -- apps/ packages/ | grep -v '\\.test\\.'\n    -> only the type declaration (review/verifier-receipt-contracts.ts:15), its re-export\n       (review/verifier-receipt-ledger.ts:22) and two consuming positions. ZERO producers.\n\nTHE DEFECT. The only production host that constructs the node verifier -- apps/daemon/src/orchestrator/agent-wrapper-main.ts, the real `agent-wrapper-main.js` entry the canary must spawn -- passes `verificationAuthority: () => null`, with the shipped comment \"No production authority provider is shipped yet. Refuse a green test rather than manufacture calibration, package or policy facts in-process.\"\n\nnode-verifier.ts:165-172 turns that null into, for EVERY node:\n    reports.push({ detail: \"host verifier authority unavailable\", nodeRef,\n                   outcome: \"VERIFICATION_AUTHORITY_UNAVAILABLE\" });\n    continue;\n\nSo `recordVerifierReceipt` (node-verifier.ts:176) is unreachable and the `integration.accept_output` dispatch (node-verifier.ts:152, :198) never fires through the production host. The refusal is honest and correctly fails closed -- this task is NOT a request to weaken it. It is the missing producer.\n\nWHY IT BLOCKS THE CANARY. Canary DoD 3 requires one exclusive task to complete \"plan, execute, verify, independent review, accept ... with exact receipts\", and canary plan step 3 requires the journey to \"execute the real verifier, independent review and final acceptance\" through production surfaces. With no authority producer, the only reachable verify outcome is VERIFICATION_AUTHORITY_UNAVAILABLE. Global rail Clause 2 forbids the alternatives: no narrowed DoD, no mock-backed journey, no authority reimplemented inside the E2E test.\n\nObjective: ship the daemon-owned producer of `VerifierAuthorityFacts` and wire it into agent-wrapper-main, so a node with genuine durable calibration/package/policy facts verifies and earns a receipt, while a node WITHOUT them still refuses with the same stable outcome.\n\nDeliverable: a focused daemon module (suggested apps/daemon/src/review/verifier-authority-provider.ts plus its one-line .js bridge) that reads the facts from the durable store -- never from caller input, never minted in-process -- plus focused tests; and the agent-wrapper-main.ts:240 edit replacing `() => null` with that provider.\n\nNOT in scope: changing the VerifierAuthorityFacts shape, the receipt ledger, review-services acceptance, or anything under tests/e2e/foundation.\n\nRead verifier-receipt-contracts.ts:15 for the exact required fields BEFORE planning, and confirm each field has a durable source; if any field has no durable source on disk, that is a further prerequisite to file, not a field to fabricate.",
+  "definitionOfDone": [
+    "A production daemon module produces VerifierAuthorityFacts by reading the durable store; git grep shows it is the value passed at apps/daemon/src/orchestrator/agent-wrapper-main.ts, and `verificationAuthority: () => null` no longer appears anywhere in production.",
+    "Every field of VerifierAuthorityFacts (per apps/daemon/src/review/verifier-receipt-contracts.ts:15) is sourced from a durable record; a test proves no field is defaulted, minted in-process, or read from caller input.",
+    "A test drives the real createNodeVerifier with the real provider over a seeded store and asserts a receipt was recorded via recordVerifierReceipt and the integration.accept_output dispatch fired -- asserting the receipt identity, not merely ok:true.",
+    "A test with the durable facts ABSENT asserts the literal outcome string VERIFICATION_AUTHORITY_UNAVAILABLE and that no receipt row was written; the fail-closed path is preserved, not weakened.",
+    "A mutation drill on the provider's durable read makes the receipt-recording test go red for its receipt assertion (not for a crash), and production bytes are restored exactly.",
+    "pnpm typecheck and pnpm --filter @moe/daemon test are exit 0 with a nonzero printed Test Files count line; owned production files are each <=250 physical lines."
+  ],
+  "taskRails": [
+    "Fail closed with stable reason codes; an absent durable fact stays VERIFICATION_AUTHORITY_UNAVAILABLE and never gains authority by default.",
+    "Do not weaken or delete the existing refusal branch at node-verifier.ts:165-172; add the producer, keep the guard.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400.",
+    "Stage and commit only explicit owned paths by pathspec; no git add -A, no worktree, no push, no merge."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure on committed HEAD, then RESOLVE THE PER-FIELD AUTHORITY MATRIX before writing any production line. `VerifierAuthorityFacts` (apps/daemon/src/review/verifier-receipt-contracts.ts:15) has exactly three fields: `calibration: ReviewerCalibration`, `packageItems: readonly ReviewPackageItemInput[]`, `policy: PolicyEvaluationInput`. Confirm with `git grep -n \"verificationAuthority\\|VerifierAuthorityFacts\" HEAD -- apps/ packages/ | grep -v '\\.test\\.'` that agent-wrapper-main.ts still passes `() => null` and that ZERO producers exist; if a producer has landed meanwhile, STOP and report the task already closed rather than adding a second one. Then write down, in the step note, the durable source for each field. Architect's measurement at HEAD a42ae2f, to be re-confirmed not re-derived: (a) POLICY has a durable source -- `installPolicy` (bootstrap/bootstrap-policy-services.ts:42) commits a `PolicyInstalled` event and folds `{slices: {[sliceRef]: slice}}`, readable via the `installedSlices`/`stateOf` shape on the bootstrap ledger aggregate; (b) PACKAGE ITEMS are `{digest, kind, locator}` over the frozen `REVIEW_PACKAGE_ITEM_KINDS` allow-list and are derivable from durable review state -- `readReviewLedger(store, projectId, nodeRef)` already yields `latest.resultSha256`, `latest.decisionId` and `aggregateVersion` at node-verifier.ts:137-144; (c) CALIBRATION is `{corpusRevision, sentinelPassed, staleness}` and its own contract comment (packages/review/src/review-contract.ts:127) says \"Both are caller-supplied durable facts\" -- there is NO durable producer on disk today. Decide and record ONE lawful durable home for calibration; the installed-policy slice keyed by an explicit sliceRef is the intended candidate because it is an existing durable mechanism that requires a real prior `policy.install` command. If you cannot bind calibration to a durable record that a real command writes, call `moe.report_blocked` naming the field and the absent writer -- do NOT default it, mint it in-process, or read it from `NodeMission`.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/review/verifier-receipt-contracts.ts",
+        "apps/daemon/src/orchestrator/node-verifier.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/bootstrap/bootstrap-policy-services.ts"
+      ],
+      "startedAt": "2026-08-16T22:14:05.318Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Add apps/daemon/src/review/verifier-authority-provider.test.ts against a real `SqliteEventStore` (open a temp-file store; do not stub it). Write the failing tests for the provider's contract BEFORE the module exists: (1) with every durable record seeded, `createVerifierAuthorityProvider({store, projectId})(nodeRef, brief)` returns a frozen `VerifierAuthorityFacts` whose policy fields equal the INSTALLED slice bytes, whose packageItems digests equal the durable review digests, and whose calibration equals the durably recorded calibration -- assert the exact values, never `toBeTruthy`; (2) with the policy slice absent it returns `null`; (3) with the calibration record absent it returns `null`; (4) with the review ledger unreadable or holding no accepted-route round it returns `null`. Every negative case must ALSO assert that the store's raw event count is unchanged, so a provider that writes on a read path fails. Per the epic rail on reason codes: because `null` is this port's single refusal channel, each negative test must additionally assert WHICH durable record was missing by seeding exactly one gap at a time and asserting the other three positive cases still pass in the same test file -- a single `expect(result).toBeNull()` with all records absent is the vacuous shape this rail forbids.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN. Create apps/daemon/src/review/verifier-authority-provider.ts plus its one-line `.js` bridge (`export * from \"./verifier-authority-provider.ts\";` -- required, a new .ts module without it is invisible to the .js import graph). Export `createVerifierAuthorityProvider(config: {store: SqliteEventStore; projectId: string}): (nodeRef: string, brief: NodeMission) => VerifierAuthorityFacts | null`, matching `NodeVerifierConfig.verificationAuthority` at node-verifier.ts:62-65 EXACTLY so no call-site type change is needed. It reads the installed policy slice from the bootstrap ledger aggregate, the calibration from the durable home fixed in step 1, and derives packageItems from `readReviewLedger`; every returned object is `Object.freeze`d. Any read that throws, any absent record, any digest failing the receipt contract's HEX64 shape, and any item kind outside `REVIEW_PACKAGE_ITEM_KINDS` returns `null` -- never a partial fact set and never a default. The provider performs NO writes. Keep the file <=250 physical lines; if the three readers push it past that, split the readers into a sibling module rather than trimming validation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.ts",
+        "apps/daemon/src/review/verifier-authority-provider.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.ts",
+        "apps/daemon/src/review/verifier-authority-provider.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RED then GREEN on the real verifier composition, in apps/daemon/src/orchestrator/node-verifier.test.ts (extend it; do not create a parallel suite). Drive the REAL `createNodeVerifier` with the REAL provider from step 3 over a seeded store -- no stub authority function anywhere in these two cases. Case A (earns a receipt): seed the durable policy slice, calibration, and a review ledger whose latest round routes ACCEPT, supply a `runTest` returning `exitCode: 0` with a known output sha, and assert (i) the report outcome is exactly `\"ACCEPTED\"`, (ii) `readVerifierReceipt(store, projectId, verifierReceiptId(projectId, nodeRef, latest.decisionId))` returns `ok: true`, (iii) the stored receipt's `execution.outputSha256` equals the capture sha and its `calibration`/`policy`/`packageItems` are byte-equal to the provider's return -- assert the receipt IDENTITY and contents, not `ok: true` alone. Case B (fail-closed preserved): identical seeding minus the calibration record, and assert the report outcome is the literal string `\"VERIFICATION_AUTHORITY_UNAVAILABLE\"`, that `runTest` was never invoked (the authority check at node-verifier.ts:165 precedes the run at :173), and that no receipt row exists.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/node-verifier.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Wire the production host. Replace `verificationAuthority: () => null,` at apps/daemon/src/orchestrator/agent-wrapper-main.ts:240 with the step-3 provider constructed from the wrapper's already-open `verifierStore` and `config.projectId` (both are in scope at that point -- `verifierStore = SqliteEventStore.open(config.storePath)` is assigned immediately above the `createNodeVerifier` call). Delete the now-false comment on the preceding lines (\"No production authority provider is shipped yet...\") and replace it with one line stating that absent durable facts still yield VERIFICATION_AUTHORITY_UNAVAILABLE. Change nothing else in this file: the spawner, MCP host, verifier runner and stop plumbing are out of scope. Then prove the wiring by grep, not by reading: `git grep -n \"verificationAuthority\" -- apps/ | grep -v '\\.test\\.'` must show the provider at the wrapper call site and must NOT show `() => null` anywhere in production.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills, two of them, because \"wiring exists\" and \"wiring fails closed\" are separate claims. Drill 1 (composition): in verifier-authority-provider.ts make the durable calibration read return a hard-coded literal instead of the stored value; the step-4 Case A receipt-content assertion must go RED on the calibration comparison -- if it goes red on a crash or a different assertion, the test is not pinning the durable read and must be strengthened. Drill 2 (fail-closed): make the absent-record branch return a fabricated facts object instead of `null`; the step-4 Case B assertion on the literal `\"VERIFICATION_AUTHORITY_UNAVAILABLE\"` must go RED. Record for each drill the exact command, the failing test NAME, and the assertion that failed. Restore exact bytes after each drill and verify with `git diff --numstat -- apps/daemon/src/review/verifier-authority-provider.ts` showing 0 added and 0 deleted lines; the shared worktree makes `git checkout` a hazard, so restore by re-editing, not by checkout. Run the drills one at a time -- a peer commit landing mid-drill can otherwise swallow the patch and leave git reading clean.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.ts",
+        "apps/daemon/src/orchestrator/node-verifier.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial self-review, then commit by explicit pathspec. Read the whole owned diff as an attacker: can any field of the returned facts originate from `NodeMission`, from a command payload, or from a default? Does any negative path still permit a receipt? Does the provider write, or hold, a store handle that outlives the verifier (a held SQLite handle kills the vitest worker)? Is the frozen `REVIEW_PACKAGE_ITEM_KINDS` allow-list honoured, and does an item kind outside it refuse rather than pass through? Is the failure-round path at node-verifier.ts:88-98 -- which still uses the synthetic `PACKAGE_ITEM_FILL` digests -- left untouched, as it must be? Confirm no production file exceeds 250 physical lines. Then `git status --porcelain`, unstage any foreign entry with `git restore --staged -- <path>`, and commit ONLY these five paths by explicit pathspec: apps/daemon/src/review/verifier-authority-provider.ts, .js, .test.ts, apps/daemon/src/orchestrator/node-verifier.test.ts, apps/daemon/src/orchestrator/agent-wrapper-main.ts. Verify with `git show --stat` that no foreign path is present. If a foreign whole-tree completion already captured these bytes, do NOT amend or reset -- record the merge-base diff for QA instead.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/review/verifier-authority-provider.ts",
+        "apps/daemon/src/review/verifier-authority-provider.js",
+        "apps/daemon/src/review/verifier-authority-provider.test.ts",
+        "apps/daemon/src/orchestrator/node-verifier.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification gate. Run in the FOREGROUND, chained with `&&` so a red leg cannot be masked (a `;` chain reports only the last command; a pipe reports the tail's exit code): `pnpm typecheck && pnpm --filter @moe/daemon test`. Read the OUTPUT, not the exit code: `pnpm --filter <pkg>` prints \"No projects matched the filters\" and EXITS 0 when the package name does not resolve, so the leg is only evidence if it prints a `Test Files N passed` count line with N nonzero -- `@moe/daemon` is apps/daemon, and a run with no count line is UNVERIFIED, not passing. Confirm the two new test names from steps 2 and 4 appear in the run. Repo-wide red is compared against the merge-base baseline and may be disclosed only when the new failing-path delta intersected with this task's five owned paths is empty; a red inside the owned paths is a block, not a disclosure. This command's fresh output is the sole `complete_task` verification evidence.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "package.json",
+        "apps/daemon/package.json"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under standing human directive (21:44Z, actively unstall blocked chains): CRITICAL prerequisite of the Foundation self-host canary (task-97554aa4, Gap E), freshly filed by architect-2cc07e26; BACKLOG was the create_task default, not human triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 4.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T21:47:27.141Z",
+  "updatedAt": "2026-08-16T22:21:18.644Z",
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T22:13:47.355Z",
+  "metrics": {
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 10,
+    "firstClaimAt": "2026-08-16T22:13:51.833Z"
+  },
+  "planningNotes": {
+    "approachesConsidered": "Rejected: (a) letting the wrapper mint calibration/policy in-process -- that is exactly what the shipped comment refuses and what epic rail 4 forbids; (b) widening NodeVerifierConfig or changing VerifierAuthorityFacts -- the port shape is already correct, only its producer is missing; (c) reading the facts from NodeMission (the node spec JSON on disk) -- spec files are host-owned input, not durable authority, and a spec file is writable by any agent in the shared tree; (d) filing a further prerequisite for calibration -- policy.install already provides a durable, command-written, sliceRef-keyed home, so a new durable writer would be a duplicate mechanism. Step 1 keeps the escape hatch: if the worker cannot bind calibration to a record a real command writes, it blocks rather than defaults. Chose a single focused provider module over three per-field modules because the three reads share one refusal channel (null) and splitting them would spread the fail-closed decision across files.",
+    "codebaseInsights": "Measured at committed HEAD a42ae2f with `git grep <sym> HEAD` (the working tree is foreign-dirty and must not be trusted). VerifierAuthorityFacts is declared at review/verifier-receipt-contracts.ts:15 with exactly three fields and is re-exported from review/verifier-receipt-ledger.ts:22 -- import the TYPE from the ledger path, which is what node-verifier.ts:16 already does. The port is NodeVerifierConfig.verificationAuthority at node-verifier.ts:62-65, called at :165; on null it pushes outcome VERIFICATION_AUTHORITY_UNAVAILABLE and `continue`s at :166-173, so recordVerifierReceipt (:176) and the integration.accept_output dispatch (:152 replay path, :198 fresh path) are unreachable today. The single production construction site is agent-wrapper-main.ts:240, inside the same block that opens `verifierStore` and holds `config.projectId` -- no new plumbing is needed to reach a store. Durable sources: policy is folded by installPolicy (bootstrap/bootstrap-policy-services.ts:42-61) as `{slices: {[sliceRef]: slice}}` behind a PolicyInstalled event, read via installedSlices/stateOf; review digests come from readReviewLedger (review/review-read-model.ts) which node-verifier already calls at :137 and whose `latest` carries resultSha256/decisionId/aggregateVersion; package item kinds are the frozen REVIEW_PACKAGE_ITEM_KINDS allow-list (CRITERION, DAEMON_ARTIFACT, DAEMON_RECEIPT, GRAPH_HASH, INTEGRATED_TREE, PLAN_HASH, RUBRIC, SUBMITTED_BYTES) at packages/review/src/review-contract.ts:150. ReviewerCalibration is {corpusRevision, sentinelPassed, staleness} at review-contract.ts:128 and has ZERO durable producers -- only review-test-fixtures.ts:249 mints one. A new .ts module in this repo needs a one-line .js bridge or it is invisible to the .js import graph.",
+    "risks": "The load-bearing risk is fabrication: two of the three fields have no durable writer today, and the cheapest wrong fix is a literal default that makes every node verify. Step 1 forces the per-field decision and permits report_blocked; steps 2 and 6 make a fabricated value fail a named test. Second risk is a vacuous negative suite -- `expect(result).toBeNull()` with everything absent passes even if the provider ignores the store entirely, which is why step 2 requires one seeded gap at a time plus a passing positive control in the same file. Third, do not touch the failure-round payload at node-verifier.ts:88-98: its PACKAGE_ITEM_FILL digests are synthetic by disclosed design and rewriting them is out of scope. Fourth, ordering: the authority check precedes runTest, so Case B must assert runTest was never called -- otherwise a reordering regression stays green. Fifth, SqliteEventStore handles must be closed on every path in tests; a held handle kills the vitest worker outright. Sixth, the shared worktree makes `git checkout` a destructive restore and makes a peer commit able to swallow a drill patch -- restore drills by re-editing and confirm with `git diff --numstat` showing zero added lines. Finally, this task is a hard prerequisite of the Foundation self-host canary (task-97554aa4, GAP E); its completion note should name that task as the consumer edge.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+      "apps/daemon/src/orchestrator/node-verifier.ts",
+      "apps/daemon/src/review/verifier-receipt-contracts.ts",
+      "apps/daemon/src/review/verifier-receipt-ledger.ts",
+      "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+      "apps/daemon/src/review/review-read-model.ts",
+      "packages/review/src/review-contract.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-16T22:13:49.418Z",
+  "contextFetchedBy": [
+    "worker-a83aecdf"
+  ],
+  "workStartedAt": "2026-08-16T22:14:05.318Z",
+  "blockedReason": "Step-1 authority matrix re-measured at HEAD a42ae2f. Gap confirmed open (agent-wrapper-main.ts:240 still `() => null`; zero producers). BLOCKING: 2 of 3 VerifierAuthorityFacts fields have NO durable source, so the provider cannot be built without fabricating.\n\n(1) policy — OK. installPolicy (bootstrap-policy-services.ts:42-61) folds {slices:{[sliceRef]:slice}} behind PolicyInstalled, readable via installedSlices/stateOf. policy.install allow-list is [\"slice\"] (daemon-command-registry.ts:113).\n\n(2) calibration — NO DURABLE WRITER, as step 1 anticipated. ReviewerCalibration {corpusRevision,sentinelPassed,staleness} (review-contract.ts:128); only producer on disk is review-test-fixtures.ts:249.\n\n(3) packageItems — NO DURABLE SOURCE. New, and contradicts step-1 premise (b): NOT derivable from readReviewLedger. ReviewRoundRecord (review-read-model.ts:21-30) carries only aggregateVersion/decisionId/lineage/principalId/reviewInputDigest/resultSha256/round/routing — no items. submitRound (review-services.ts:150-155) commits {lineage,reviewInputDigest,round,routing} and DISCARDS the payload items. Not recoverable from the request either: CommandDecisionRecordBase (store-contracts.ts:86-106) retains requestSha256 only, no requestBytes. buildReviewPackage needs >=1 CRITERION plus singleton GRAPH_HASH/PLAN_HASH/RUBRIC/SUBMITTED_BYTES/INTEGRATED_TREE (review-package.ts:119-134); recordVerifierReceipt refuses a provider DAEMON_RECEIPT (verifier-receipt-ledger.ts:178). Every production instance of those kinds is a synthetic literal: node-verifier.ts:93-97 PACKAGE_ITEM_FILL (disclosed-synthetic, out of scope) and live-dispatch.ts:144-148 hex64(). NodeMission is {instructions,test,title,workspace} (agent-wrapper.ts:47-52) and carries none.\n\nDeriving 6 items with 64-hex digests from 3 scalars is minting. The task's own text (\"no durable source = a prerequisite to file, not a field to fabricate\"), Clause 2 and rail 4 require a prerequisite, not a narrowed DoD or in-test authority.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-16T22:18:49.957Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 (authority matrix) fully measured at HEAD a42ae2f, no code written. Task premise re-confirmed open: agent-wrapper-main.ts:240 still passes `verificationAuthority: () => null` and VerifierAuthorityFacts has zero producers. Per-field durable-source matrix resolved: (1) policy HAS a durable source — installPolicy (bootstrap-policy-services.ts:42-61) folds {slices:{[sliceRef]:slice}} behind PolicyInstalled, readable via installedSlices/stateOf, and policy.install's payload allow-list is [\"slice\"] (daemon-command-registry.ts:113). (2) calibration has NO durable writer — ReviewerCalibration {corpusRevision,sentinelPassed,staleness} (review-contract.ts:128), sole producer on disk is review-test-fixtures.ts:249. (3) packageItems have NO durable source AND are not derivable — this overturns step-1 premise (b). Also measured the constraints any future provider must satisfy: buildReviewPackage needs >=1 CRITERION plus singleton GRAPH_HASH/PLAN_HASH/RUBRIC/SUBMITTED_BYTES/INTEGRATED_TREE (review-package.ts:119-134); recordVerifierReceipt refuses a provider-supplied DAEMON_RECEIPT (verifier-receipt-ledger.ts:178) because it appends its own; calibration must pass calibrationCodes (reviewer-eligibility.ts:116-125) i.e. non-empty corpusRevision, sentinelPassed true, staleness not STALE/UNKNOWN; and the policy input must evaluatePolicy to ALLOW for action integration.accept_output by actor daemon:node-verifier or decodeVerifierReceiptBytes rejects the receipt (verifier-receipt-contracts.ts:221-226). Full detail is in the task's blockedReason and in Serena memories `task-4dd4424c-handoff` and `gotcha-review-package-items-have-no-durable-source`.",
+      "whatRemains": "Blocked pending an architect decision, already routed to architect-2cc07e26 (msg-bbaeae51 in #architects): file durable-source prerequisites for calibration and packageItems, chain task-4dd4424c behind them, no DoD narrowing. Then steps 2-8 run as planned. Two things the next claimer must NOT do: do not resume this task until those prerequisites land, and do not satisfy packageItems by minting digests.",
+      "pitfalls": "The decisive trap: 'derive packageItems from durable review state' reads plausible and measures false. submitRound (review-services.ts:150-155) commits only {lineage,reviewInputDigest,round,routing} and DISCARDS the payload items, and they are not recoverable from the request either — CommandDecisionRecordBase (store-contracts.ts:86-106) exposes resultBytes and requestSha256 but has NO requestBytes field. So the durable record holds a hash of the package, never its contents. Producing six 64-hex content digests from three scalars (resultSha256/decisionId/aggregateVersion) is minting, not deriving, and would yield a receipt whose reviewInputDigest is unbound from anything a reviewer saw. Do not source any field from NodeMission — it is {instructions,test,title,workspace} (agent-wrapper.ts:47-52) and carries none of the three fields; it is also host-owned input, not durable authority. Do not reuse the PACKAGE_ITEM_FILL synthetic set at node-verifier.ts:93-97: it is disclosed-synthetic and explicitly out of scope. Do not weaken the refusal at node-verifier.ts:165-173 — note it correctly precedes runTest at :174, so a fail-closed test asserting 'runTest never invoked' is sound. Nothing was edited: git status --porcelain over apps/daemon/src/review/ and apps/daemon/src/orchestrator/ was empty at HEAD a42ae2f, and there is no commit for this task.",
+      "openQuestions": "(A) Where should the round's package items durably live? Natural fix is for submitRound to persist the admitted items in its committed result (or a sibling record keyed by decisionId) with review-read-model.ts parseRound surfacing them — but review-services is outside this task's stated scope, so it needs its own task. Worth noting GRAPH_HASH/PLAN_HASH have durable analogues on the graph_revision aggregate (graphContentHash/planHash) while RUBRIC/SUBMITTED_BYTES/INTEGRATED_TREE/CRITERION have no durable producer at all — and the daemon wires no graph.* kinds, the same Graph Beta gap that blocked task-a9fd91c3. (B) Is a policy.install slice keyed by an explicit sliceRef the sanctioned durable home for calibration? It looks lawful — the allow-list admits an arbitrary slice object and review-contract.ts:127 calls calibration 'caller-supplied durable facts', so caller-supplied-then-durably-written is the contract's own shape — but that is a design call for an architect, not a worker. I did not implement (B) alone because the provider must return all three fields or null, so without (A) there is no provider.",
+      "releasedAt": "2026-08-16T22:21:18.642Z",
+      "releasedBy": "worker-a83aecdf",
+      "reason": "Self-release of a BLOCKED task's assignment, per governor suggestion (msg-e8e6901f). Task stays BLOCKED awaiting the architect decision routed to architect-2cc07e26; this only frees the worker slot so I can take the next plan that lands. Not an abandonment and not an idle-time release — the block is filed with full measurement and needs an architect, not another worker."
+    }
+  ]
+}

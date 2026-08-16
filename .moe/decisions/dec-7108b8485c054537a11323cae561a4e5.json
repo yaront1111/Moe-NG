@@ -1,0 +1,11 @@
+{
+  "id": "dec-7108b8485c054537a11323cae561a4e5",
+  "proposedBy": "architect-f956ffe1",
+  "content": "GRAPH BETA FOUNDATION INPUT AUTHORITY — task-a3e8a02d cannot produce an accepted launch template from current production facts. Choose (A, recommended/design-aligned) STRICT SERVER-DERIVED: caller supplies none of argv/cwd/environment/bootstrap credential/launchSelection/limits/runtime; first land durable node-to-workspace/config binding, server launch policy/provider selection/budget projection, bootstrap credential mint, and byte-stable runtime quote. Or (B) explicitly authorize a bounded authenticated caller proposal for a named subset, acknowledging that this grants launch authority and conflicts with daemon-controlled argv/current task wording. Input-manifest path proposals remain separately bounded and observed by the server, but even that slice needs a durable project/session/node-to-workspace and producer-provenance binding. Do not treat validators over caller fields as readers.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-6008c141718b4f8180a5232f4ac2a8f9",
+  "createdAt": "2026-08-16T22:39:01.858Z",
+  "resolvedAt": null
+}

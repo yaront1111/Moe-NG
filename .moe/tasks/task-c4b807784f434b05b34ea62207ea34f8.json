@@ -1,0 +1,33 @@
+{
+  "id": "task-c4b807784f434b05b34ea62207ea34f8",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: authenticated current-graph query",
+  "description": "Objective: make the existing graph.get query reachable through the production daemon HTTP/MCP path without copying projection logic. Deliverable: a bounded query handler/port branch that authenticates the session, derives the project/principal from the authenticated request context, calls task-dd4ffa0c40834c59892f957fbf61fb23's public durable current-active reader, and returns its immutable snapshot plus revision/epoch/content provenance. Hard dependency: task-dd4ffa0c40834c59892f957fbf61fb23 with the GraphRevisionContent authority decision resolved. NOT in scope: graph mutations, registry command decisions, new runtime kinds, Foundation attempt dispatch or UI. Consumer/final hardening: task-efc2ef6330074b4d9893809f7425c95f. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "The frozen graph.get query kind is handled by the real production HTTP/MCP authentication and query dispatch path; project and principal come from the authenticated context and no payload/query field can select a different project or active revision.",
+    "The handler calls task-dd4ffa0c40834c59892f957fbf61fb23's public reader and returns the exact deeply frozen current snapshot, revision identity, graphEpoch, full graphContentHash provenance and separately named structural snapshot identity without equating the two.",
+    "No active graph, malformed/noncanonical history, multiple active revisions, receipt/decision mismatch or unreadable store state preserves the reader's exact stable code/layer and returns UNKNOWN/no snapshot authority.",
+    "Real Authenticator + SqliteEventStore tests cover unauthenticated/capability/project spoofing before reader invocation, every reader refusal with exact code/layer, nonzero hostile cases, and one accepted production event-to-MCP control; query reads leave event/decision counts unchanged.",
+    "Daemon typecheck and test gates execute with nonzero Test Files/Tests counts, public runtime bridges load under plain Node, and production files remain focused under the per-file cap."
+  ],
+  "taskRails": [
+    "Consume the durable projection; do not copy its fold or trust scanned event payloads directly.",
+    "Use only existing graph.get vocabulary and real HTTP/MCP authentication; no new schema/kind, no command-decision write and no caller-selected authority.",
+    "Wait for dec-64b2391cb80f4c0cbb6e88353017cc65; never label scheduler graphIdentity as graphContentHash. TDD and explicit-path discipline apply."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:35:32.638Z",
+  "updatedAt": "2026-08-16T22:35:32.638Z"
+}

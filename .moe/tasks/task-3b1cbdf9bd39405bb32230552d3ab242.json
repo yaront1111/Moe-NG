@@ -18,12 +18,12 @@
     "Preserve foreign work; commit only the explicit owned paths by pathspec."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 15:21Z: ALL SIX declared dependencies are QA-approved DONE — roster 9aca4b05 (89-entry, five-axis partition) and the five hostile-coverage slices: aa32fdf7 transport (15), 924c5d82 integrity (13), f643b972 durable-store (14), 2259196e runtime-provider (23), c994bd0a scheduler-activation (24). The lane was measured at 462/462 EXIT=0 at c994bd0a's approval and has since grown with 2259196e's rework. Architect: close the completeness ratchet and wire the final gate per the slice set; CARRY THE QA PAIR'S THREE AUDIT ITEMS as explicit plan steps (qa-c7cedba3 msg-57524980, 15:04): (1) drill first — read types only for clauses no drill reached; (2) per slice, does it assert a value that was ACCEPTED, not just that bad input was rejected; (3) for each whole-slice invariant, can its operands be drilled apart (key cross-check operands can be equivalent mutants). When this lands, parent 05ce9 re-runs its own gate and closes the security matrix.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -31,9 +31,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:35.966Z",
-  "updatedAt": "2026-08-16T02:13:48.040Z",
-  "blockedReason": "Blocked on all six declared dependencies. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:15Z. This slice reached PLANNING far ahead of its chain; blocking rather than planning against six absent surfaces.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. The roster, the harness and all five axis coverage files are ABSENT. Foundation task-9aca4b05 is WORKING; the five axis slices are BLOCKED on it (I blocked them in this same pass).\n\nWHY THIS ONE ESPECIALLY CANNOT BE PLANNED EARLY. Its entire job is to CLOSE the completeness ratchet — to assert that every roster entry resolves to a real before/after/race case in the sibling slices. There are no sibling cases to resolve against, so any assertion written now would either be vacuous or would have to invent the coverage-resolution mechanism it is supposed to police. Worse, this task's own rails forbid it from filling a coverage gap: if a slice is missing a boundary, this task reports it rather than absorbing it. Planning before the slices exist inverts that — everything would look like a gap.\n\nCARRY THIS FORWARD when planning it: the roster size is 87, NOT the 85 stated in this task's description. My original enumeration grep demanded ` = ` immediately after the constant name and missed type-annotated declarations; two real platform boundaries (`PLATFORM_LINUX_LAYER`, `PLATFORM_MACOS_LAYER`) were omitted and two test-support constants must stay excluded. The roster task owns the correction and asserts all four by name. Do not hardcode 85 into the ratchet — read the roster. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN all six ids are DONE AND `ls tests/security/` shows the roster, the harness and all five axis `.security.ts` files. Run it literally; never on task status alone.",
+  "updatedAt": "2026-08-16T22:39:19.100Z",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T02:13:48.040Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ]
 }

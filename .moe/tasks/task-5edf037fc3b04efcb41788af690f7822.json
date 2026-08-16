@@ -1,0 +1,35 @@
+{
+  "id": "task-5edf037fc3b04efcb41788af690f7822",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Durable reviewer calibration record and its installing command",
+  "description": "PREREQUISITE of task-4dd4424c1c264f4490bcb7cad01e7585 (Production verifier authority provider), which is itself GAP E of task-97554aa4293e40eab56c0b642e18513a (Foundation self-host canary). Sibling of task-92031b0a64f74b08b4278b94db67dee6; the two are independent and can run in parallel.\n\nMEASURED GAP at committed HEAD a42ae2f (git grep against HEAD, not the working tree):\n\n  git grep -n \"ReviewerCalibration\" HEAD -- apps/ packages/ | grep -v '\\.test\\.'\n\nReviewerCalibration is declared at packages/review/src/review-contract.ts:128 as\n  { corpusRevision: string; sentinelPassed: boolean; staleness: ReviewCalibrationStaleness }\nwith the doc comment \"Design 15.3 currency and sentinel gate. Both are caller-supplied durable facts.\"\n\nIt is CONSUMED at packages/review/src/reviewer-eligibility.ts:116 and :135 and is a required field of VerifierAuthorityFacts (apps/daemon/src/review/verifier-receipt-contracts.ts:16) and of the stored VerifierReceiptV1 (:42). But the ONLY thing on disk that ever produces one is the test fixture apps/daemon/src/review/review-test-fixtures.ts:249. There is no command, no event, and no durable record. apps/daemon/src/review/review-acceptance.ts:116 only reads one back OUT of an already-recorded receipt, so it cannot be the source.\n\nThe contract calls the facts \"caller-supplied DURABLE facts\" -- caller-supplied is the intended authority model, but DURABLE is the half that is missing: today a caller could only supply them in-process, per call, unattested.\n\nWHY IT BLOCKS. task-4dd4424c must produce VerifierAuthorityFacts.calibration from a durable record. With no writer, the only ways to satisfy it are to default the field, mint it in the wrapper, or read it from a node spec file that any agent in the shared tree can write -- all forbidden by global rail Clause 2 and epic rail 4, and all explicitly refused by the shipped comment at apps/daemon/src/orchestrator/agent-wrapper-main.ts:239.\n\nObjective: give reviewer calibration a durable home written by a real authenticated command, and a focused reader that returns it or fails closed.\n\nDeliverable: the durable record plus its reader plus focused tests. RESOLVE THE MECHANISM AT PLANNING TIME by measurement, and record the decision: the leading candidate is the EXISTING policy.install slice mechanism (apps/daemon/src/bootstrap/bootstrap-policy-services.ts:42-61 folds {slices:{[sliceRef]:slice}} behind a PolicyInstalled event, with the payload allow-list [\"slice\"] at daemon-command-registry.ts:113), which would require no new command kind and no runtime-vocabulary change. Only introduce a dedicated command kind if measurement shows the slice mechanism genuinely cannot carry it -- and note that the runtime command vocabulary is frozen with a full-coverage ratchet, so adding a kind is a far larger change than it looks.\n\nNOT in scope: changing the ReviewerCalibration shape, reviewer-eligibility's rules, VerifierAuthorityFacts, the receipt ledger, or anything under tests/e2e/foundation.",
+  "definitionOfDone": [
+    "Planning notes record the chosen durable mechanism with the measurement behind it, and state explicitly whether a new runtime command kind was required and why; reusing policy.install's slice mechanism is preferred and a new kind must be justified against the frozen-vocabulary ratchet.",
+    "A real authenticated command durably records a ReviewerCalibration for a project; a test drives that command through the production registry and asserts the stored record's corpusRevision, sentinelPassed and staleness are byte-identical to what was installed.",
+    "A focused reader returns the stored calibration; with no record installed it returns an exact stable not-found code and layer and NO calibration -- a test pins both literals and asserts the raw store event count is unchanged on the read path.",
+    "A malformed or partially-specified calibration (missing sentinelPassed, an unknown staleness value, a non-string corpusRevision) is refused at the ingress layer with its exact code, and nothing is committed; the generated hostile-case count is asserted nonzero.",
+    "A mutation drill on the durable read makes a NAMED test go red for its calibration-value assertion (not for a crash), and production bytes are restored exactly.",
+    "The completion note names task-4dd4424c1c264f4490bcb7cad01e7585 as the production consumer; pnpm typecheck && pnpm --filter @moe/daemon test exit 0 with a nonzero printed Test Files count line, and owned production files are each <=250 physical lines."
+  ],
+  "taskRails": [
+    "Fail closed with stable reason codes; an absent calibration is a refusal, never a default, and never an optimistic pass of the sentinel gate.",
+    "Prefer the existing durable slice mechanism over minting a runtime command kind; the command vocabulary is frozen with a full-coverage ratchet and widening it is a separate, larger decision.",
+    "Do not change the ReviewerCalibration shape or reviewer-eligibility's rules; this task supplies the missing durable writer and reader only.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Stage and commit only explicit owned paths by pathspec; no git add -A, no worktree, no push, no merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 4.4,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:29:38.779Z",
+  "updatedAt": "2026-08-16T22:29:38.779Z"
+}

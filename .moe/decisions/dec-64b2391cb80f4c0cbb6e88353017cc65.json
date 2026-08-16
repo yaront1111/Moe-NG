@@ -1,0 +1,11 @@
+{
+  "id": "dec-64b2391cb80f4c0cbb6e88353017cc65",
+  "proposedBy": "architect-f956ffe1",
+  "content": "GRAPH BETA AUTHORITY DECISION needed before task-dd4ffa0c/task-efc2 can be planned safely. The design says GraphRevisionContent hash covers canonical nodes/edges, repository base tree, parent revision, completion node, policy revision, decomposition budget, and author. Current code has only scheduler GraphSnapshot.graphIdentity (structure only) and core stores an opaque graphContentHash; no full content schema/codec/producer exists. Choose: (A, recommended) land a full canonical GraphRevisionContent contract/producer and bind the durable snapshot to its recomputed hash before graph.get/mutations; or (B) authorize an explicitly non-authoritative structural snapshot projection carrying separate snapshotIdentity and core graphContentHash provenance, which cannot yet drive Foundation execution. Do not equate the two hashes.",
+  "status": "proposed",
+  "approvedBy": null,
+  "channel": "chan-ced99359298945b39ae4709bf92992a6",
+  "messageId": "msg-6d4c47ad66a44996a292650e2b8caa92",
+  "createdAt": "2026-08-16T22:32:36.597Z",
+  "resolvedAt": null
+}

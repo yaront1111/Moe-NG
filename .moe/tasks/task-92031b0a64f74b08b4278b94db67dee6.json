@@ -1,0 +1,35 @@
+{
+  "id": "task-92031b0a64f74b08b4278b94db67dee6",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Persist review package items alongside their reviewInputDigest",
+  "description": "PREREQUISITE of task-4dd4424c1c264f4490bcb7cad01e7585 (Production verifier authority provider), which is itself GAP E of task-97554aa4293e40eab56c0b642e18513a (Foundation self-host canary). Discovered by the worker at 4dd4424c's step-1 authority-matrix gate and re-measured by the architect; it CORRECTS an architect measurement error in that task's planning notes, which wrongly asserted package items were derivable from readReviewLedger.\n\nMEASURED GAP at committed HEAD a42ae2f (git grep / git show against HEAD, not the working tree):\n\napps/daemon/src/review/review-services.ts submitRound:\n  - :112  const itemValues = payloadArray(request.payload, \"packageItems\")\n  - :119  const items = parseItems(itemValues)\n  - :123  const built = buildReviewPackage(items)      <- items ARE validated and bound\n  - :141  commitAccepted(... eventPayload: { reviewInputDigest, round, route, subjectRef },\n                             result: { lineage, reviewInputDigest, round, routing })\n\nThe bound items are used to compute `built.value.reviewInputDigest` and are then DISCARDED. Nothing durable retains them.\n\nCorroborating measurements:\n- ReviewRoundRecord (apps/daemon/src/review/review-read-model.ts:21-30) carries aggregateVersion, decisionId, lineage, principalId, reviewInputDigest, resultSha256, round, routing -- no items.\n- The request bytes are not recoverable either: CommandDecisionRecordBase (packages/store/src/store-contracts.ts:86-106) retains requestSha256 only, never requestBytes.\n- buildReviewPackage (packages/review/src/review-package.ts:119-134) requires >=1 CRITERION plus singleton GRAPH_HASH / PLAN_HASH / RUBRIC / SUBMITTED_BYTES / INTEGRATED_TREE.\n- Every production instance of those kinds today is a synthetic literal: node-verifier.ts:93-97 PACKAGE_ITEM_FILL (disclosed-synthetic, deliberately out of scope) and apps/control-room/src/live/live-dispatch.ts:144-148 hex64().\n- NodeMission is {instructions, test, title, workspace} (apps/daemon/src/orchestrator/agent-wrapper.ts:47-52) and carries none of them.\n\nWHY IT BLOCKS. task-4dd4424c must produce VerifierAuthorityFacts.packageItems from a durable record. With the items discarded, the only ways to satisfy it are to mint six 64-hex digests from three scalars, to narrow the DoD, or to reimplement authority inside a test -- all three forbidden by global rail Clause 2 and epic rail 4.\n\nObjective: retain the exact bound package items durably, alongside the reviewInputDigest that already attests them, so a later reader can recover them AND verify them.\n\nDeliverable: submitRound persists the bound items in the same accepted commit as the existing round record, plus a focused durable reader that returns them for a subject/round, plus focused tests. The integrity check is already available and must be used: re-running buildReviewPackage over the restored items must reproduce the stored reviewInputDigest, so a corrupted or substituted item set is detectable rather than merely present.\n\nNOT in scope: changing the ReviewPackageItemInput shape, the REVIEW_PACKAGE_ITEM_KINDS allow-list, buildReviewPackage's rules, the review round lineage/routing semantics, node-verifier's disclosed-synthetic failure-round payload at node-verifier.ts:88-98, or anything under tests/e2e/foundation.\n\nNote for planning: this changes a durable event payload, so it touches the wire/stored shape. Per the epic's verification-budget rule, a schema-shaped change gets full regression at any position -- plan the upcaster/back-compat question explicitly rather than assuming old rounds can be re-read.",
+  "definitionOfDone": [
+    "submitRound durably retains the exact bound package items in the same accepted commit as the round record; a test reads them back for a subject/round and asserts the item set is byte-identical to what was submitted, asserting the items themselves rather than a count.",
+    "A durable reader returns the stored items, and re-running buildReviewPackage over them reproduces the stored reviewInputDigest; a test mutates one stored item and asserts the digest comparison refuses with an exact stable code and layer.",
+    "A round recorded BEFORE this change (no stored items) reads back as an explicit stable not-found/UNKNOWN code rather than an empty item list -- absent evidence must never present as a valid empty package; a test pins that code and layer.",
+    "The existing refusal ordering is preserved: an item set failing buildReviewPackage still refuses at the kernel PACKAGE layer with its original code and writes nothing, proving persistence was added after validation and not in place of it.",
+    "A mutation drill removing the persistence makes a NAMED read-back test go red for its item assertion (not for a crash), and production bytes are restored exactly.",
+    "pnpm typecheck && pnpm --filter @moe/daemon test && pnpm test are exit 0, each printing a nonzero Test Files count line; owned production files are each <=250 physical lines."
+  ],
+  "taskRails": [
+    "Fail closed with stable reason codes; a round with no stored items is UNKNOWN, never an empty package, and never gains authority by default.",
+    "Do not weaken buildReviewPackage or the REVIEW_PACKAGE_ITEM_KINDS allow-list; persist what validation already bound, after it bound it.",
+    "This alters a durable event payload: address back-compatibility for rounds recorded before the change explicitly, and run full regression rather than the owned-package legs alone.",
+    "Use TDD. Keep each production source focused, target <=250 lines, split before 400. Stage and commit only explicit owned paths by pathspec; no git add -A, no worktree, no push, no merge."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 4.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:29:07.687Z",
+  "updatedAt": "2026-08-16T22:29:07.687Z"
+}

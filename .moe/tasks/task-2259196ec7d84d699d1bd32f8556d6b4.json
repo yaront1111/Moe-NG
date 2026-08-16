@@ -123,8 +123,8 @@
       "completedAt": "2026-08-16T15:16:29.015Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -136,7 +136,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:34.185Z",
-  "updatedAt": "2026-08-16T15:18:12.463Z",
+  "updatedAt": "2026-08-16T15:20:54.301Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -147,7 +147,9 @@
     "plannedDistinctFileCount": 6,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-16T15:20:54.301Z",
+    "wallClockMs": 8362715
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -219,7 +221,7 @@
     "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
     "tests/security/provider-boundaries.security.ts"
   ],
-  "reviewCompletedAt": "2026-08-16T14:30:17.066Z",
+  "reviewCompletedAt": "2026-08-16T15:20:54.301Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Every refusal pins the exact stable reason code AND the answering layer; where a platform layer and a provider layer can both refuse, the fixture is valid at the platform layer so the provider layer is provably the one that answered.",
@@ -300,5 +302,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-16T15:20:54.301Z",
+  "reviewSummary": "Re-review after reject #1. Both findings FIXED, proven by re-running my original drills at HEAD a42ae2f. Fix is eaf4f4d; a42ae2f is .moe bookkeeping. Both commits tests-only, zero production files.\n\nDoD 2 FIXED. Re-ran the exact mutant that survived last time: deleted `recomputed !== observation.observationDigest` from claude-runtime-pin-closure.ts:116. Last time all 22 platform tests stayed GREEN. Now 3 red, led by the intended named test \"AFTER - a closure that drifted after the digest was taken is refused, not re-derived\", plus the RACE case. The new fixture reaches the drift branch instead of crashing into the canonicalisation catch-all.\n\nDoD 5 FIXED, falsifiable rather than argued. `admitted` now comes from `admissionOf(actual)` (ledger.ts:108), derived from the production outcome and erring toward TRUE on an unrecognisable shape. Writers push FIRST, assert SECOND (:172), which is why an admission can reach the ledger at all. Truth class recorded via `truthClassOf`, never defaulted. Both DoD-5 nouns swept in assertAdmittedNothing (invariants.ts:124-144): clause 1 admissions, clause 2 PROVEN, plus a `truthBearing` count pin so the sweep cannot go vacuous if a surface stops reporting truth.\n\nProof it is live, not decoration - it reddened under BOTH drills, on two independent boundaries:\n- drift drill: \"expected [ 'CLAUDE_RUNTIME_PIN_LAYER#AFTER' ] to deeply equal []\"\n- truncation drill (claude-result-telemetry.ts:202), re-run as a regression check on the 357-line ledger rewrite: still reddens \"AFTER - a truncated and an unfinished capture keep DISTINCT codes at the same layer\", and now the invariant too.\n\nStale name fixed: invariants.ts:236 reads 23.\n\nGATES, legs separate: tsc EXIT 0; vitest EXIT 0, 9 files / 462 tests. Owned 3 files / 89 tests, count line above the 373 baseline without them. packages/adapters/apps clean before AND after the run. All owned files under 400 lines. All three drill targets restored byte-identical by sha256."
 }

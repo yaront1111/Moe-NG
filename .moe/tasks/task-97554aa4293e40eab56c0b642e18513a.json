@@ -89,7 +89,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -135,11 +135,17 @@
       "author": "governor-1a5aca5d",
       "content": "PREREQUISITE DESCOPE (governor, 12:22Z), executing the consequence recorded in d17bb228's 11:54 routing: gap C (coordination command kind) is EXTRA-DESIGN for M5 — architect-27b64950's re-scope measurement (comment-123612cc on d17bb228) found no existing surface honestly carries it, the RUNTIME_COMMAND_KINDS union is design-frozen (~90 members), and the human ruled v1 stays closed. THEREFORE this canary's prerequisite list SHRINKS: it now waits on task-6cbff010 (durable attempt dispatch, in round-2 work) and task-3e54b466 (restart reconciliation boot wiring, behind 48c0c0db) ONLY. task-d17bb228 is being archived as a design-revision marker. The next planner of this canary must re-scope its step-1 gate and any gap-C-dependent DoD language accordingly: coordination is not a certified capability of the M5 self-host claim. Gap A remains chain-owned (6cbff), gap B remains 3e54b466.",
       "timestamp": "2026-08-16T12:21:31.059Z"
+    },
+    {
+      "id": "comment-4e8f78a8ee8b487aa283b16da7433b9b",
+      "author": "governor-7610ed5a",
+      "content": "Governor freshness note (21:49Z) — two references in the stored blockedReason went stale within minutes of being written, both in the direction of MORE progress:\n\n1. \"OWNER EXISTS: task-a9fd91c3 (PLANNING, 2/7 steps)\" — a9fd91c3 was re-BLOCKED at 21:46:50Z per the recorded human decision (msg-cd966214 / its reopenReason): ingress is deferred to Graph Beta; the effect.activate route was probe-refuted. Gap A's owner is therefore the Graph Beta chain, not a9fd91c3 directly.\n2. \"BACKLOG dd4ffa0c, efc2ef63, a3e8a02d\" — all three were promoted to PLANNING at 21:47Z and are claimable now.\n\nAlso: Gap E's filed prerequisite task-4dd4424c was promoted BACKLOG → PLANNING at 21:49Z. Net re-promote condition for this canary: Graph Beta three + task-4dd4424c land (plus the human wire/authority decision Graph Beta carries), then re-measure Gap A/E at the then-HEAD.",
+      "timestamp": "2026-08-16T21:48:44.214Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-16T15:03:29.208Z",
+  "updatedAt": "2026-08-16T22:10:06.044Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 8,
@@ -185,14 +191,24 @@
     "architect-a42f4965",
     "architect-94dd1835",
     "worker-d6220bc6",
-    "governor-a627169a"
+    "governor-a627169a",
+    "architect-2cc07e26"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
-  "blockedReason": null,
+  "blockedReason": "Step-1 resume gate re-measured at committed HEAD a42ae2f (git grep vs HEAD). Gap B IS closed; two capabilities are still NOT host-reachable, so the reopen premise \"prerequisite list is complete\" is false.\n\nCLOSED (5): (1) mcp-http-main.ts + mcp-main.ts -> daemon-store-dependencies.js. (2) agent-wrapper-main.ts -> createAgentWrapper + claudeSpawnStarter + createMcpHttpHost. (4) node-verifier.ts:176 recordVerifierReceipt exists. (5) startDaemon -> runBootReconciliation -> createBootReconciliationPort (daemon-store-dependencies.ts:165) -> readInFlightFoundationAttempts + reconcileOnRestart. (7) review-services.ts:161 \"integration.accept_output\": acceptOutput. DESCOPED (6) coordination, per comment-6785a05f.\n\nGAP A - pinned Claude launch has ZERO production host caller:\n- createFoundationAttemptService (work/foundation-attempt-service.ts:97): 0 production callers; only its 2 own test files.\n- Its captureResult port (:41): 0 production implementations.\n- createFoundationClaudeLauncher (foundation-launch-authority.ts:290) and createClaudeRuntimePinRequest: sole caller is that unreached service (:197, :145).\n- activation-telemetry-launch.ts (launchClaudeWithTelemetry :95): 0 production callers; activation-ingress.ts imports no launch module.\n- daemon-command-registry.ts imports only ./work/work-claim-*; real spawn path agent-wrapper-main.ts:256 claudeSpawnStarter -> agent-spawner.ts:352 spawnRuntime is raw node:child_process, no @moe/runner, no pin.\nOWNER EXISTS: task-a9fd91c3 (PLANNING, 2/7 steps) is exactly this edge. Also BLOCKED 5e43a9e2, 49ed1e6d; BACKLOG dd4ffa0c, efc2ef63, a3e8a02d.\n\nGAP E - host verifier hard-wired to refuse: agent-wrapper-main.ts:240 verificationAuthority: () => null; VerifierAuthorityFacts has ZERO producers, so node-verifier.ts:165-172 yields VERIFICATION_AUTHORITY_UNAVAILABLE for every node, no receipt recorded. Defeats DoD 3. Filed task-4dd4424c.\n\nPer step-1 and global rail Clause 2: no mock journey. Steps 2-8 unchanged.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T21:48:12.436Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Step-1 resume gate fully re-measured at HEAD a42ae2f: 5 of 7 capabilities CLOSED, coordination descoped per comment-6785a05f, Gap B confirmed closed. Gap A (pinned Claude launch: zero production host callers) and Gap E (wrapper verifier authority hard-wired null) measured and documented in blockedReason. Gap E prerequisite task-4dd4424c filed (now PLANNING).",
+      "whatRemains": "Nothing until prerequisites land: Graph Beta three (dd4ffa0c/efc2ef63/a3e8a02d) + task-4dd4424c, plus the human wire/authority decision Graph Beta carries. Then re-measure Gap A/E at the then-HEAD before any plan.",
+      "pitfalls": "No-mock-journey rail (global Clause 2) forbids planning around the gaps. Do not trust the blockedReason's board references — two went stale within minutes of writing; see comment-4e8f78a8 for corrections.",
+      "openQuestions": "Whether Gap A resolution comes via Graph Beta transport or a dedicated host caller task — Graph Beta's human decision will settle it.",
+      "releasedAt": "2026-08-16T22:10:06.041Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Human-approved release of a stale assignment on a BLOCKED task: architect-2cc07e26 completed the block filing (Gap A/E measured at a42ae2f, task-4dd4424c filed) and then parked — alive, heartbeating, but not answering mentions or claiming for 20 min while 12 PLANNING tasks sit unassigned. Task stays BLOCKED; this only frees the architect. Not an idle-time release of in-progress work."
+    },
     {
       "whatIsDone": "Architect output delivered for all three step-1 gaps at HEAD e881141; no plan submitted and no code written, which is correct for a Clause-2 acceptance gate whose subjects are absent. Re-measured every gap on disk rather than trusting comment-90116e38 — all three unchanged. GAP A: not filed, per routing; recorded as owned by ff589abd(DONE) -> 32eddfd3(DONE) -> 75ee4a84(planned) -> 6cbff010(BLOCKED), plus d7b352e1 with sibling 7ba898f5 DONE on the fd0 half only. GAP B: filed task-3e54b466da3d4385ae9fbbf886a45464 (Run restart reconciliation from the daemon boot path). GAP C: filed task-d17bb228d6324beb83aa59ad9f6e6521 (Register the coordination command kind so typed envelopes cross MCP). Re-blocked the canary on all four ids; full evidence in comment-0fda722c721b4e69a9aadae01421d73a.",
       "whatRemains": "Land 6cbff010 + d7b352e1 (GAP A's consumer edge), 3e54b466 (GAP B) and d17bb228 (GAP C). Then re-run the three caller-set greps literally, confirm each capability has a production caller, and resume steps 2-8 of the existing canary plan unchanged.",

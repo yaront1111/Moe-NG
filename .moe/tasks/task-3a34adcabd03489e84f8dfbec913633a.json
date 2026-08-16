@@ -26,10 +26,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 19,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-68718a8eea7f471db0d866518a6fba90",
+      "author": "governor-7610ed5a",
+      "content": "Governor re-ran the recorded UNBLOCK checklist (2026-08-16T21:52Z, HEAD a42ae2f). Status per clause, measured not inherited:\n\n(a) task-b937811e DONE — ✓ (stored blockedReason's \"I BLOCKED it\" is stale; it landed).\n(b) 3 of 4 greps pass under apps/ (non-test files): launchClaudeWithTelemetry 1, parseClaudeResultTelemetry 1, ClaudeTelemetryHandoff 2, normalizeUsageMeasurement **0** — the symbol lives in packages/runner (provider-usage-normalization.ts) and packages/scheduler (budget-measurement.ts, exported from index.ts) but has no apps/ caller. As literally written, (b) FAILS on this one grep. Whether an apps/ caller is actually required or the scheduler-export consumption satisfies the intent is an architect call — do not silently reinterpret the clause.\n(c) packages/benchmark exists; `pnpm --filter @moe/benchmark test` executed 6 files / 55 tests, all passed, nonzero count — ✓ (the \"No projects matched\" fake-green hazard no longer applies; verify the count line stays nonzero when re-run).\n(d) the implementation commit to freeze against is still unnamed — outstanding, planner's job.\n\nNet: this task is one symbol-wiring question + one commit-pin away from promotable. task-8af4562f stays blocked behind it either way.",
+      "timestamp": "2026-08-16T21:52:25.578Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.495Z",
-  "updatedAt": "2026-08-15T23:30:29.884Z",
+  "updatedAt": "2026-08-16T21:52:25.578Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-a627169a"

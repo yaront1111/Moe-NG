@@ -15,9 +15,152 @@
     "Use only public package roots across package boundaries; no deep imports, test-owned authority, mock-backed acceptance, or optimistic UNKNOWN upgrades.",
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Extend the frozen goal-prerequisite vocabulary IN PLACE, do not start a second one. `apps/daemon/src/goals/goal-close-prerequisite.ts` already owns `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED` and `GOAL_PREREQUISITE_REFUSAL_CODES` (measured: 67 lines, `.js` bridge present, exported from `goal-services.ts`). APPEND seven codes, never reorder: GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT, GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS, GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE, GOAL_CLOSE_VERIFICATION_NOT_PASSED, GOAL_CLOSE_RESULT_DIGEST_MISMATCH, GOAL_CLOSE_REVIEW_PACKAGE_STALE, GOAL_CLOSE_AUTHORITY_REMAINS. Absent and ambiguous stay SEPARATE codes for the same reason `foundation-verification-contracts.ts:44-59` keeps RECEIPT_UNCOMMITTED apart from RECEIPT_AMBIGUOUS: zero rows and two rows demand opposite repairs. All eight refuse at the EXISTING layer `DAEMON_PREREQUISITE`, which `bootstrap-ledger.ts:33-42` already lists in `SERVICE_REFUSED_BY` — so bootstrap-ledger.ts needs NO edit and is dropped from owned paths. Also export the currently-private `enabledScope` helper as `readApprovedNodeScope` so step 5 reuses the one durable scope reader instead of a second copy. TDD: first extend the existing vocabulary test at `goal-services.test.ts:174` to restate all eight codes BY HAND (not derived from the production array — a derived list would grow on both sides and stay green).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "note": "Appended 7 codes to GOAL_PREREQUISITE_REFUSAL_CODES (never reordered), added GOAL_PREREQUISITE_LAYER, exported enabledScope as readApprovedNodeScope. bootstrap-ledger.ts needed no edit (DAEMON_PREREQUISITE already in SERVICE_REFUSED_BY:33-42). Vocabulary test restates all 8 by hand. Focused run: Test Files 1 passed, Tests 19 passed.",
+      "startedAt": "2026-08-16T22:14:47.676Z",
+      "completedAt": "2026-08-16T22:17:44.432Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Build the shared durable-evidence fixture `apps/daemon/src/goals/goal-closure-test-fixtures.ts` (test-only module, NO .js bridge — `review-test-fixtures.ts` has none either). Two exports. (a) `seedVerifiedNode(store, nodeRef)`: drives the REAL chain end to end, copying the setup already proven in `apps/daemon/src/evidence/foundation-verification-service.test.ts:1-70` — `seedReadyProject` from `../recovery/restore-test-harness.js` (its PROJECT_ID is also \"project-1\", so it shares a store with `bootstrap-test-fixtures.ts`), `runEffectActivateCommand`, `createFoundationLauncherAuthority`, `recordProvenFoundationAttempt` with `binding.nodeKey = nodeRef`, then `createFoundationVerificationService(...).sealRecipe()` and `.verify()` through `createNodeProcessLauncher` — a real child process, never a recording launcher. It returns the durable receipt row plus `{attemptAggregateId, verificationId, leaseIdentity, effectIdentity, receiptSha256, recordDigest}`. It THROWS if the outcome is not `ok` with verdict PASSED, so a fixture that silently produced no receipt cannot leave later assertions testing an empty store. (b) `seedReviewAcceptance(store, nodeRef)`: lift the existing `acceptReviewedNode` body verbatim out of `j1-command-path.test.ts:68-109` (seedVerifierReceipt + the authenticated `integration.accept_output` command through the package root) so both suites share one seeding path. This step lands NO production change; it is the prerequisite for steps 3, 4 and 7. NOTE: `createFoundationVerificationService` currently has ZERO callers outside `apps/daemon/src/evidence/` (grepped) — this task is its first real consumer edge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "note": "goal-closure-test-fixtures.ts (test-only, no .js bridge). seedVerifiedNode drives the full real chain (activation ingress -> launcher authority -> recordProvenFoundationAttempt -> sealRecipe -> verify through the SHIPPED node launcher, a real child process) and throws unless the verdict matches. Every identity is nodeRef-derived (lease/token/session/lock/wrapper/slot/resource/intent) so two nodes in one store cannot share a grant and adopt each other's run. Deviation from the step text: seedReadyProject is NOT called - every caller drives bootstrapSequence first, so it would only replay. Also exports approveNodes, seedProvenAttempt and seedReviewAcceptance (lifted from j1-command-path.test.ts:68-109). Smoke: Test Files 1 passed, Tests 1 passed - a real PASSED receipt whose receipt.graphIdentity is the node ref.",
+      "startedAt": "2026-08-16T22:17:47.295Z",
+      "completedAt": "2026-08-16T22:21:53.642Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD, evidence half. Write `apps/daemon/src/goals/goal-qualification.test.ts` RED against the not-yet-written `qualifyGoalClosure(store, projectId, goalId)`. One case per durable state, each pinning the EXACT code AND that the refusing layer is `DAEMON_PREREQUISITE`, and each re-reading the store to assert the goal aggregate did not move and `decisionCount` did not grow: (1) approved node in scope with no `FoundationVerificationReceipted` row naming it -> RECEIPT_ABSENT; (2) two receipts whose `receipt.graphIdentity` is the same node -> RECEIPT_AMBIGUOUS; (3) a receipt whose durable bytes were tampered after the fact via `commitRaw`-style direct write so the re-encode byte-compare in `readStoredReceipt` fails -> RECEIPT_UNREADABLE; (4) a receipt read back with verdict FAILED -> NOT_PASSED; (5) the attempt record mutated after verification so `readFoundationAttemptRecord(store, row.attemptAggregateId).digest !== row.recordDigest` -> RESULT_DIGEST_MISMATCH. Cases 1-5 must be distinguishable from each other, not merely all-refused: assert the code, since a single earlier guard answering for all five would otherwise pass (see `mem:refusal-test-answered-by-earlier-guard`). If the arms are written as a swept table, assert the generated case count is 5 and > 0.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-qualification.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "note": "goal-qualification.test.ts holds the 5 evidence arms, each pinning the exact code AND layer DAEMON_PREREQUISITE, each snapshotting the store and re-reading goal aggregate + decisionCount + goal event count afterwards. Every arm seeds everything else valid so no earlier guard can answer: ABSENT seeds review acceptance for BOTH nodes and verifies only one; AMBIGUOUS drives two REAL verifications of one node; UNREADABLE plants the same receipt re-serialised non-canonically under its own verification id (only the byte compare in readStoredReceipt can catch it); NOT_PASSED runs a real verifier exiting 3; RESULT_DIGEST_MISMATCH appends a second RECORDED event so the record no longer reads back. Written as five separate cases, not a sweep, so no generated-count assertion applies. RED confirmed: \"Cannot find module './goal-qualification.js'\", Test Files 1 failed.",
+      "startedAt": "2026-08-16T22:21:55.690Z",
+      "completedAt": "2026-08-16T22:23:15.698Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD, review + authority half + the positive arm, same test file. (6) node verified but `readReviewLedger(store, projectId, nodeRef).accepted === undefined` -> REVIEW_ACCEPTANCE_REQUIRED (the existing code, unchanged behaviour); (7) accepted, but `readVerifierReceipt(store, projectId, accepted.verifierReceiptId)` no longer reads back with `accepted.verifierReceiptSha256`, and separately a case where the latest review round's `reviewInputDigest` differs from the accepted one -> REVIEW_PACKAGE_STALE for both, and assert BOTH sub-cases individually (one code, two guards, so the message or the seeded condition must discriminate — see `mem:gotcha-one-code-many-guards-needs-the-message-as-discriminator`); (8) a SECOND `EffectActivationCommitted` on an attempt aggregate whose attempt record carries a `nodeKey` in scope but which no accepted receipt names -> AUTHORITY_REMAINS; (9) an activation on the receipt's own attempt aggregate whose bytes do not read back through `readFoundationActivationHistory` -> AUTHORITY_REMAINS (unreadable authority is not zero authority; fail closed). POSITIVE ARM, and it is load-bearing because a refusal-only suite is blind to a wrong accepted value (`mem:refusal-only-suite-cannot-see-a-wrong-accepted-value`): a fully verified + accepted node yields `ok`, and the test RECOMPUTES the expected `acceptanceClosureRef`, `completionNodeAcceptedRef`, `obligationsHoldRef` and `zeroAuthorityProofRef` from the durable bytes it seeded and asserts equality field by field, plus `truthClass === \"DAEMON_VERIFIED\"` on both witnesses. Do not recompute by calling the production derivation helper — hash the seeded values independently, or the assertion is a tautology.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "note": "Added arms 6-9 plus the positive arm. DEVIATION, measured and forced: the step text's second REVIEW_PACKAGE_STALE sub-case (\"latest round's reviewInputDigest differs from the accepted one\") is not a real condition - review-acceptance.ts:120,127 records the VERIFIER RECEIPT's reviewInputDigest, which is structurally never a round's (recordVerifierReceipt swaps the DAEMON_RECEIPT package item, verifier-receipt-ledger.ts:197-228), so that comparison would refuse every closure. The honest durable equivalent is used instead: the accepted verifier receipt's source must still be the LATEST review round, the exact comparison acceptOutput itself made at acceptance time. Both stale sub-cases and both authority sub-cases share one code, so each pins the EXACT message via expectRefusedExactly. Positive arm recomputes all four refs by restating the length-framed hash scheme by hand (only the version tag is imported).",
+      "startedAt": "2026-08-16T22:23:18.261Z",
+      "completedAt": "2026-08-16T22:24:52.500Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement `apps/daemon/src/goals/goal-qualification.ts` plus its one-line bridge `goal-qualification.js` (`export * from \"./goal-qualification.ts\";` — every sibling has one and it is git-tracked; without it the module is invisible at runtime). `qualifyGoalClosure(store, projectId, goalId)` returns either `{ok:true, closureWitness, zeroAuthorityWitness}` or `{ok:false, code}`. Algorithm, every input from durable bytes: (a) `readApprovedNodeScope` (step 1) for the node set, null -> REVIEW_ACCEPTANCE_REQUIRED, unchanged; (b) index the durable receipts by scanning `store.readEventsByTypeAfter(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED, 0n, page)`, take only `verificationId` from each scanned payload and then RE-READ every row through `readStoredReceipt(store, verificationId)` from `../evidence/foundation-verification-store.js` — the scanned bytes are never trusted directly, because `readStoredReceipt` is the only path that re-encodes and byte-compares; key the index by `row.receipt.graphIdentity`, and a second row for one node sets AMBIGUOUS; (c) per node in sorted order run the five evidence checks, then the review checks against `readReviewLedger` + `readVerifierReceipt`; (d) authority: for every `EffectActivationCommitted` event, resolve its aggregate through `readFoundationAttemptRecord` to a `nodeKey`; if that nodeKey is in scope and the aggregate is not the one the node's PASSED receipt names, or `readFoundationActivationHistory` does not read it back with `lease.leaseId === receipt.leaseIdentity` and `effectIntent.intentId === receipt.effectIdentity`, refuse AUTHORITY_REMAINS; (e) derive the witnesses as sha256 over version-tagged ordered tuples of the durable values only (`acceptanceClosureRef` over (nodeRef, receiptSha256, verifierReceiptSha256, reviewInputDigest) plus the approvalRef; `completionNodeAcceptedRef` over the whole ordered accepted node set — design 278's designated completionNodeKey is NOT durable anywhere (grepped: only a test literal), so binding the full approved closure proves more, not less, and this is recorded as a known gap; `obligationsHoldRef` over the receipts' `obligations`; `zeroAuthorityProofRef` over the ordered (leaseIdentity, effectIdentity) pairs and the count of activations scanned), each with `truthClass: \"DAEMON_VERIFIED\"`. Target <=250 physical lines; if it crosses, split the durable readers into `goal-qualification-reads.ts` with its own `.js` bridge rather than letting one file grow past 400.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/goals/goal-qualification.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/goals/goal-qualification.js",
+        "apps/daemon/src/goals/goal-qualification-reads.ts",
+        "apps/daemon/src/goals/goal-qualification-reads.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/goals/goal-qualification.js",
+        "apps/daemon/src/goals/goal-qualification-reads.ts",
+        "apps/daemon/src/goals/goal-qualification-reads.js",
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-qualification.test.ts",
+        "apps/daemon/src/goals/goal-closure-test-fixtures.ts"
+      ],
+      "note": "Landed goal-qualification.ts (239 lines) + goal-qualification-reads.ts (184) and both .js bridges; goal-close-prerequisite.ts (121) now yields {approvalRef, scope}. Split taken up front as pre-authorised - one file would have crossed 250. Scanned receipt bytes are used ONLY to take verificationId and to skip out-of-scope rows; every fact comes from readStoredReceipt's byte-compared re-read. Two production additions beyond the step text, both bound to durable state and both pinned by their own test: the acceptance must AGREE with the receipt it names (sha256 + reviewInputDigest), and a durable re-plan refuses rather than letting noPendingDraftOrSupersession be asserted away. FIXTURE DEFECT FOUND AND FIXED: labels must be unique per PROCESS, not per store - runVerifierProcess's module-level run registry is keyed by grantId, so the second test reusing label \"node-1\" refused GRANT_ALREADY_CONSUMED against a fresh store. Gates: pnpm --filter @moe/daemon typecheck exit 0; focused suite Test Files 1 passed, Tests 13 passed.",
+      "startedAt": "2026-08-16T22:24:54.925Z",
+      "completedAt": "2026-08-16T22:29:33.363Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Wire `closeGoal` in `apps/daemon/src/goals/goal-services.ts:81-119`. Replace the `hasDurableGoalCloseReviewAcceptance` guard with `qualifyGoalClosure`; on refusal return `refuse(request.kind, code, \"DAEMON_PREREQUISITE\")` and commit nothing; on success build the `GoalCommand` with the DERIVED `closureWitness` and `zeroAuthorityWitness`, so the payload objects never reach `reduceGoal`. The ingress requirement stays exactly as it is — `daemon-command-registry.ts:109` still lists both keys and the two existing ingress tests (`goal-services.test.ts:384` and `:403`) must stay green — but the payload values are now DECLARED AND INERT, and the comment block at `goal-services.ts:70-80` must be rewritten to say so plainly instead of claiming \"evidence-bound BY CONSTRUCTION\". Update `goal-services.test.ts` in the same step: the two cases that let the CORE refuse a witness (`:422` malformed closure evidence, `:441` self-reported review evidence) can no longer reach the core and become daemon-layer cases or are replaced; then add the two proofs the DoD's first item actually requires, BOTH directions — a payload carrying garbage refs and `truthClass: \"AGENT_REPORTED\"` still CLOSES because the durable records hold, and a payload carrying perfectly-shaped refs REFUSES when the durable records are absent. The happy-path case at `:362` now seeds through `seedVerifiedNode` + `seedReviewAcceptance`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-close-prerequisite.ts",
+        "apps/daemon/src/goals/goal-services.test.ts"
+      ],
+      "note": "closeGoal now calls qualifyGoalClosure and hands reduceGoal the DERIVED witnesses; the payload objects are read at ingress and never again. Comment block rewritten to say the values are declared and inert instead of \"evidence-bound BY CONSTRUCTION\". hasDurableGoalCloseReviewAcceptance deleted - the composer supersedes it and dead code would be a second answer to one question. goal-services.test.ts: local approveNodes/acceptReviewedNode replaced by the shared fixtures; the two cases that let the CORE refuse a payload witness are replaced by the two DoD-1 proofs, both directions - garbage refs plus truthClass AGENT_REPORTED/SELF_REPORTED still CLOSE (a handler that forwarded the payload would redden here on validClosure), and perfectly-shaped refs still REFUSE at DAEMON_PREREQUISITE with no durable record. Ingress cases unchanged and still green. Gates: typecheck exit 0; Test Files 1 passed, Tests 20 passed.",
+      "startedAt": "2026-08-16T22:29:35.760Z",
+      "completedAt": "2026-08-16T22:32:45.737Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Keep the J1 journey green and prove DoD 3 and DoD 4 at the published surface. In `apps/daemon/src/goals/j1-command-path.test.ts`, delete the local `acceptReviewedNode` (lines 68-109) in favour of `seedReviewAcceptance` from the shared fixture, and add `seedVerifiedNode` at the same two call sites (`:171` and `:217`) so `goal.close` still qualifies. The three-human-action assertion (`HUMAN_ACTIONS`, `:163-186`) and the per-kind replay sweep (`:200-236`) must both stay green unmodified in their assertions — that IS DoD 3's \"no extra human command is introduced\" and DoD 4's \"one durable closure row on replay\", and weakening either is a rejection. Add the byte-identity half of DoD 4 that no existing test covers: capture the `resultSha256` of the `integration.accept_output` and the `FoundationVerificationReceipted` decision rows BEFORE `goal.close`, then re-read them after, and assert equality — earlier review and evidence records must remain readable and byte-identical across the closure. Seeding runs before the close command, so confirm the receipt seeding does not itself disturb the goal aggregate version the close envelope declares (`envelope(\"goal.close\", 2, ...)` at `bootstrap-test-fixtures.ts:343`); if it does, the fixture writes to different aggregates and the number stands — verify rather than assume.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/j1-command-path.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/j1-command-path.test.ts"
+      ],
+      "note": "j1-command-path.test.ts: local acceptReviewedNode deleted for the shared seedReviewAcceptance, and seedVerifiedNode added at both goal.close sites. The three-human-action assertions and the per-kind replay sweep are UNMODIFIED in what they assert (only the loop turned async) and both stay green - DoD 3 and DoD 4's one-durable-row half. Added the byte-identity half DoD 4 needed: the acceptance decision's resultSha256 and the FoundationVerificationReceipted event payloads are captured as bytes before goal.close and compared after, with a non-vacuity guard that both lists are non-empty so a stale event-type literal cannot pass as \"nothing changed\". VERIFIED not assumed: envelope(\"goal.close\", 2, ...) still holds - the seeding writes only to activation/dispatch/verification/node aggregates, and both the journey and the sweep pass unchanged. Gates: typecheck exit 0; src/goals - Test Files 3 passed, Tests 49 passed.",
+      "startedAt": "2026-08-16T22:32:48.161Z",
+      "completedAt": "2026-08-16T22:34:18.752Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "Single verification and adversarial gate. Run exactly `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` from the repo root (confirmed: `@moe/daemon` is apps/daemon and declares both scripts). READ THE OUTPUT, not the exit code — a `--filter` leg prints \"No projects matched the filters\" and exits 0, and the discriminator is the `Test Files N passed` count line; record that nonzero count as the evidence. `pnpm typecheck` is repo-wide: attribute any red by the merge-base-vs-HEAD path delta and disclose foreign red verbatim rather than hiding or fabricating green. Then MUTATION-DRILL THE DURABLE READ, not a request-field check, three drills, each restored before the next: (i) make the receipt index trust the scanned bytes instead of re-reading through `readStoredReceipt` — the RECEIPT_UNREADABLE case must redden; (ii) make the `readFoundationAttemptRecord(...).digest !== row.recordDigest` comparison always false — the RESULT_DIGEST_MISMATCH case must redden; (iii) make the derived `closureWitness` fall back to `payloadObject(request.payload, \"closureWitness\")` in `goal-services.ts` — the garbage-refs-still-close proof from step 6 must redden. A drill that reddens the WRONG test, or hangs, is not a pass. Record the exact failing test names. Finally run the `adversarial-self-review` skill over the whole diff: concurrent second close, empty approved scope, a node in scope with zero activations at all, a receipt whose `graphIdentity` is the empty string, and per-file line counts (<=250 target, split before 400).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/goals/goal-qualification.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/goals/goal-qualification-reads.ts",
+        "apps/daemon/src/goals/goal-qualification.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
+      ],
+      "note": "GATE. pnpm --filter @moe/daemon typecheck exit 0. Full plan gate run: daemon test EXIT=1, \"Tests 1 failed | 2169 passed (2170)\", sole failing FILE across 5 runs = src/orchestrator/agent-wrapper.test.ts (a peer's UNCOMMITTED work). Attribution: the failing test name is absent from `git show HEAD:...` and present only in the working tree; my diff touches zero files under src/orchestrator; the identical command was EXIT 0 at 01:35 with my full production diff in place. Repo-wide pnpm typecheck red only on packages/core/src/planning/graph-revision-replay.ts:236 - an UNTRACKED peer file. Delta minus baseline, intersected with owned paths, is EMPTY.\nDRILLS, each restored by content hash (4f5838df.../bd1e8fc7... verified): (i) index trusts scanned bytes instead of readStoredReceipt -> reddens ONLY \"refuses RECEIPT_UNREADABLE when a durable receipt's bytes are not canonical\"; (ii) verifiedResultHolds stops reading the attempt record -> reddens ONLY \"refuses RESULT_DIGEST_MISMATCH when the verified result moved after the receipt\"; (iii) closureWitness forwards the payload -> reddens ONLY \"closes on durable records even when the payload's witnesses are garbage\". No drill hung; none hit the wrong test.\nADVERSARIAL REVIEW, three real fixes landed: scan() now refuses a non-advancing cursor (an unbounded loop would hang rather than refuse); receiptFrom() rejects a row missing ANY bound field (textOf's \"\" would have been hashed into a ref as if it were a value) and coerces obligations through ?? null (JSON.stringify(undefined) is not a string and threw one frame later under the wrong code). Checked and safe: concurrent second close (goal CAS + tested), empty scope (null -> REVIEW_ACCEPTANCE_REQUIRED, tested), node with zero activations (RECEIPT_ABSENT first, tested), empty graphIdentity (skipped as out of scope, node then reads ABSENT). Documented not fixed: read-then-write is not one transaction across aggregates - append-only records make the failure mode STALE, never forged; a durable read fence belongs to the store. Per-file: 98/125/197/248 production lines, all under 250.\nCommitted 87b3d5b by explicit pathspec, 11 owned paths, verified with git show --stat.",
+      "startedAt": "2026-08-16T22:34:21.539Z",
+      "completedAt": "2026-08-16T22:41:25.706Z"
+    }
+  ],
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -42,9 +185,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-16T15:03:24.366Z",
+  "updatedAt": "2026-08-16T22:42:20.785Z",
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:23:47.761Z"
+    "firstClaimAt": "2026-08-09T14:23:47.761Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-d46fcb95",
@@ -54,7 +200,9 @@
     "worker-618633fa",
     "architect-09b5f32a",
     "governor-a627169a",
-    "architect-d9dccf21"
+    "architect-d9dccf21",
+    "architect-77071474",
+    "worker-0b2f9c35"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -79,5 +227,64 @@
       "releasedBy": "architect-d46fcb95",
       "reason": "Block is recorded and is a dependency gate, not a plan defect. Releasing so the architect slot is free; this needs task-44d4873e to land, not another architect."
     }
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T22:14:28.861Z",
+  "planningNotes": {
+    "approachesConsidered": "TWO FORKS WERE PUT TO THE HUMAN IN THE REPL AND BOTH WERE DECIDED; do not re-open them.\n\nFORK 1 - what happens to the payload witnesses. Considered (a) derive-and-replace and (b) declare-and-cross-check (the `expectedRecordDigest` / CANDIDATE_STALE pattern from foundation-verification-contracts.ts:146). HUMAN CHOSE (a): the composer derives both witnesses from durable bytes and hands THOSE to `reduceGoal`; the payload keys stay required at ingress for wire compatibility and are inert. (b) was rejected because it needs a seventh payload-mismatch code that DoD 2 does not enumerate, and because every fixture would have to compute derived hashes. The inert-field smell is answered by a test in both directions, not by a comment: garbage payload refs + real durable records -> CLOSES; perfect payload refs + no durable records -> REFUSES.\n\nFORK 2 - what 'remaining authority' means. Design line 278 demands proof of zero live planning/execution/review/qualification leases, attempts, processes, effects, resources, provider slots, funding holds, fences and reconciliation items. NONE of those has a durable terminal record: the activation ledger writes `EffectActivationCommitted` plus exactly three transitions (GRANT_CONSUMED, PREFLIGHT_REGISTERED, PROCESS_OBSERVED) and no release event exists anywhere in apps/daemon, and `LeaseRecord.state` is frozen at ACTIVE by event immutability so it carries no liveness signal. Considered reporting blocked for a prerequisite that lands release records. HUMAN CHOSE the accounted-for-activations measure: every durable activation whose attempt record carries a `nodeKey` in the approved scope must be named by that node's PASSED evidence receipt (`leaseIdentity`, `effectIdentity`); anything unaccounted or unreadable refuses. It is an honest subset of design 278, measurable on committed bytes today, and it fails closed.\n\nAlso considered and rejected: a second frozen refusal vocabulary in the new module. The existing `GOAL_PREREQUISITE_REFUSAL_CODES` in goal-close-prerequisite.ts is the right home and is already asserted by goal-services.test.ts:174, so it ratchets for free.",
+    "codebaseInsights": "RE-MEASURED ON COMMITTED BYTES, 2026-08-17. The Serena memory `task-task-8f9305b9bb5e4b8db327a55981b2ea0e-handoff` is OBSOLETE: its 'ZERO EvidenceReceipt' grep and 'apps/daemon/src/evidence/ DIRECTORY ABSENT' are both false now. Commands run and results:\n\n- `grep -rn EvidenceReceipt --include=*.ts -l apps packages adapters` -> 12 files including apps/daemon/src/evidence/foundation-verification-{contracts,service,store}.ts (249/193/183 lines, each with a git-tracked .js bridge).\n- READ PATH THAT EXISTS: `readStoredReceipt(store, verificationId)` in foundation-verification-store.ts:109 returns `{ok:true, authority:\"PROVEN_RECEIPT\", digest, row, verdict}` and is the ONLY byte-checked path (it re-decodes, RE-ENCODES and byte-compares against the stored payload at :91-105). Absent / ambiguous / unreadable are already three distinct answers there.\n- The durable row body is `verificationReceiptBody` (contracts:202-218): attemptAggregateId, candidateRoot, receipt (the whole EvidenceReceipt), receiptSha256, recipeSha256, recordDigest, verdict, verificationId, plus capture bindings. `row.receipt.graphIdentity` IS the nodeKey (service.ts:158 sets `graphIdentity: String(loaded.record[\"nodeKey\"])`), which is the only durable node->receipt edge and is what the index in step 5 keys on.\n- REVIEW HALF: `readReviewLedger(store, projectId, subjectRef).accepted` (review-read-model.ts:140-148, 180) yields `AcceptanceRecord {policyDecision, reviewInputDigest, reviewerCalibrationDigest, verifierReceiptId, verifierReceiptSha256}`. `readVerifierReceipt(store, projectId, receiptId)` (verifier-receipt-ledger.ts:85) re-reads the VerifierReceiptV1 and returns `receiptSha256` - comparing it to the accepted value is the real 'stale review package' discriminator.\n- NOTE THE TWO RECEIPT FAMILIES ARE DISJOINT. `AcceptanceRecord.verifierReceiptId` is a VerifierReceiptV1 (review's own, command kind `internal.integration.verifier_receipt`), NOT the foundation EvidenceReceipt. There is no shared hash between them, which is why 'mismatched result hash' is defined as `readFoundationAttemptRecord(store, row.attemptAggregateId).digest !== row.recordDigest` - the result moved after verification. That is a real durable comparison; do not invent a cross-family hash.\n- CORE CONTRACT: `validClosure` (goal-validation.ts:159) demands exactly acceptanceClosureRef, completionNodeAcceptedRef, noCurrentPreparationGeneration===true, noPendingDraftOrSupersession===true, obligationsHoldRef, and truthClass in {DAEMON_VERIFIED, HUMAN_APPROVED}. `validZeroAuthority` (:167) demands exactly zeroAuthorityProofRef + that truthClass. `exact()` means EXTRA KEYS FAIL - the derived object must carry these keys and nothing else.\n- LAYER: `DAEMON_PREREQUISITE` is already in `SERVICE_REFUSED_BY` (bootstrap-ledger.ts:33-42) and `refuse()` there takes a plain `code: string`, so bootstrap-ledger.ts needs no edit. It is REMOVED from the owned paths the task description listed.\n- STORE SURFACE: `store.readEventsByTypeAfter(eventType, afterGlobalPosition, limit)` exists (sqlite-event-store.ts:354) and is the scan used for both the receipt index and the activation sweep. The activation ledger record lives ON THE ATTEMPT AGGREGATE (`readFoundationActivationHistory(attemptAggregateId, eventsOf(store, attemptAggregateId), projectId)`, verification-service.ts:167), which is what makes the authority check precise rather than a whole-project sweep.\n- CONSUMER-EDGE RAIL: `createFoundationVerificationService` has ZERO callers outside apps/daemon/src/evidence/ (grepped). This task is its first real consumer edge, which is exactly what the pure-package rail asks for.\n- GATE LEGS RESOLVE: apps/daemon/package.json declares name `@moe/daemon` with `typecheck` and `test` scripts, so neither --filter leg is the silent exit-0 no-match case.",
+    "risks": "1. BIGGEST RISK - THE FIXTURE, NOT THE COMPOSER. Seeding one durable `FoundationVerificationReceipted` row needs the whole real chain: seedReadyProject -> activation ingress -> launcher authority -> recordProvenFoundationAttempt -> sealRecipe -> verify() spawning a REAL node child. Model it on apps/daemon/src/evidence/foundation-verification-service.test.ts:1-70; do not shortcut it with a recording launcher, because a receipt minted from a fake process is the mock-backed acceptance the rails forbid. Budget step 2 accordingly; if the chain will not seed, report blocked rather than narrowing the DoD.\n2. `runVerifierProcess` keeps a MODULE-LEVEL run registry keyed by grantId (documented at foundation-verification-service.test.ts:66-68). Two seeded nodes sharing an effect intent share a grant and the second adopts the first one's run. Derive each seeded node's intent from its nodeRef.\n3. The two harnesses both use PROJECT_ID \"project-1\" (bootstrap-test-fixtures.ts:35 and recovery/restore-test-harness.ts:32) so they share one store - convenient, and also the reason a seeding call can collide with the goal aggregate version the close envelope hardcodes (`envelope(\"goal.close\", 2, ...)`, bootstrap-test-fixtures.ts:343). Verify the version rather than assuming the fixture writes only to other aggregates.\n4. `completionNodeAcceptedRef` HAS NO DURABLE SOURCE. Grep finds `completionNode` only as a test literal at bootstrap-test-fixtures.ts:269 and in the core type. Deriving it over the whole approved node set is the deliberate conservative choice; say so in a comment, and do not quietly pick scope[0] or the last element.\n5. `exact()` in goal-validation.ts rejects EXTRA keys. A derived witness carrying a helpful debug field fails `validClosure` and the core refuses with a code that looks nothing like the real cause.\n6. Mutation drills run in a SHARED worktree (`mem:mutation-drills-in-shared-worktree`): a peer's task-completion hook can commit a whole tree and swallow the drill so git reads clean. Snapshot the file hash before each drill and restore by content, not by `git checkout`.\n7. Vitest workers die on a held SQLite handle - every seeded store must go through the harness `closeStores` in `afterEach`.\n8. A refusal test whose seeded condition is answered by an EARLIER guard passes while testing nothing. The five evidence arms in step 3 sit behind each other in one loop; assert the exact code per arm and, for the two REVIEW_PACKAGE_STALE guards sharing one code, make the seeded condition itself the discriminator.\n9. Per-file cap is PER PRODUCTION FILE. goal-qualification.ts is the one at risk; the split into goal-qualification-reads.ts is pre-authorised in step 5 and both halves need a .js bridge.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/goals/goal-close-prerequisite.ts",
+      "apps/daemon/src/evidence/foundation-verification-store.ts",
+      "apps/daemon/src/evidence/foundation-verification-contracts.ts",
+      "apps/daemon/src/review/review-read-model.ts",
+      "apps/daemon/src/review/verifier-receipt-ledger.ts",
+      "apps/daemon/src/activation/activation-ledger-reader.ts",
+      "apps/daemon/src/evidence/foundation-verification-service.test.ts",
+      "packages/core/src/goal/goal-validation.ts",
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-16T22:14:31.971Z",
+    "escalatedAt": "2026-08-16T22:14:31.971Z"
+  },
+  "planApprovedAt": "2026-08-16T22:14:30.935Z",
+  "workStartedAt": "2026-08-16T22:14:47.676Z",
+  "reviewStartedAt": "2026-08-16T22:42:18.147Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src --exclude '**/orchestrator/agent-wrapper.test.ts'   [plan gate; the excluded file is a PEER's uncommitted red, attribution in summary]",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  106 passed (106)\n      Tests  2140 passed (2140)\n\nFOREIGN RED, verbatim, from the unexcluded run of the same gate:\n FAIL  src/orchestrator/agent-wrapper.test.ts > createAgentWrapper - durable staffing fence > refuses a second wrapper's pass while the first child is live, and spawns ONCE\n Test Files  1 failed | 106 passed (107)\n      Tests  1 failed | 2169 passed (2170)\nand from pnpm typecheck:\npackages/core typecheck: src/planning/graph-revision-replay.ts(236,46): error TS2345: Argument of type '\"ACTIVE\" | \"APPROVED\" | \"DRAFT\" | \"PENDING_APPROVAL\" | \"REJECTED\" | \"SUPERSEDED\"' is not assignable to parameter of type 'never'.\nBoth paths are peer-owned (one uncommitted, one untracked); neither is in this task's owned paths.",
+    "reportedAt": "2026-08-16T22:42:18.147Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/goals/goal-close-prerequisite.ts",
+    "apps/daemon/src/goals/goal-services.test.ts",
+    "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+    "apps/daemon/src/goals/goal-qualification.test.ts",
+    "apps/daemon/src/goals/goal-qualification.ts",
+    "apps/daemon/src/goals/goal-qualification.js",
+    "apps/daemon/src/goals/goal-qualification-reads.ts",
+    "apps/daemon/src/goals/goal-qualification-reads.js",
+    "apps/daemon/src/goals/goal-services.ts",
+    "apps/daemon/src/goals/j1-command-path.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts"
   ]
 }

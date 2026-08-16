@@ -1,0 +1,51 @@
+{
+  "id": "task-dd4ffa0c40834c59892f957fbf61fb23",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: persist the current active graph projection",
+  "description": "Graph Beta prerequisite for task-a9fd91c373c244c78df97945965a8038. Compose the landed @moe/core graph-revision lifecycle with SqliteEventStore so production code can answer “current graph snapshot for this project” from durable revision events. Measurement at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9: packages/core/src/planning/graph-revision-{contract,reducer}.ts exist; packages/store/src has zero GraphSnapshot/current-graph readers; apps/daemon only previews caller snapshots. This task owns the durable projection/read seam only. The daemon graph command/query transport is a separate consumer task. Stage: GRAPH BETA per the design’s incremental-delivery boundary. Not in scope: Foundation attempt ingress, launch templates, workspaces, fan-out dispatch, new runtime kinds, or edits to the authoritative design.",
+  "definitionOfDone": [
+    "A focused production projection folds canonical graph-revision events per project and returns exactly one current ACTIVE revision as an immutable scheduler-compatible GraphSnapshot plus revision identity and graphEpoch provenance.",
+    "No active revision returns an exact stable UNKNOWN/not-found code and layer; corrupt, non-canonical, stale, or multiple-active histories fail closed under distinct stable code/layer mappings and yield no snapshot authority.",
+    "Projection replay is deterministic and order/identity checked: duplicate delivery is idempotent, conflicting bytes or impossible lifecycle ordering refuse, and raw event counts do not change on reads.",
+    "Focused tests use a real SqliteEventStore, assert exact refusal code and layer, prove generated hostile-case counts are nonzero, and include one accepted active-graph control read from production events rather than a helper reimplementation.",
+    "The task names the daemon graph transport task as its real consumer and records that task id in completion evidence; pnpm --filter @moe/daemon test reports a nonzero executed-test count and pnpm --filter @moe/daemon typecheck exits 0 for owned paths."
+  ],
+  "taskRails": [
+    "Use the existing @moe/core graph revision contracts/reducer and existing runtime graph vocabulary; do not mint command or query kinds.",
+    "Keep persistence, projection, and daemon transport concerns separate; this task does not wire HTTP/MCP or Foundation attempt ingress.",
+    "Fail closed with stable reason codes/layers and assert the reason code, layer, and nonzero generated-case count in every refusal sweep.",
+    "Use TDD; target <=250 physical lines per production source and split before 400; preserve foreign shared-tree work and commit only explicit owned paths."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Still blocked on task-77e8cb4439b148f386d2bbf244c79c16 and task-ee27ed7cdc704151bafae0ca30aa0509; unblock_worker released architect ownership only.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114,
+  "comments": [
+    {
+      "id": "comment-fbecba49e83f4441aea8655698ddcbb6",
+      "author": "governor-7610ed5a",
+      "content": "Governor durable copy of the full block measurement (the current 147-char blockedReason is a stub written after an unblock_worker ownership release; the original detail existed only in chat, which this project has proven destructible):\n\narchitect-f956ffe1, 22:16Z, HEAD a42ae2f — \"Fresh symbol audit overturns this task's premise. GraphRevisionEvent contains lifecycle/hash facts but no GraphSnapshot/content bytes; @moe/scheduler has no canonical snapshot codec/content-hash producer; @moe/core has reduceGraphRevision(command) but no event apply/replay/hydration surface. A daemon projection would otherwise invent both content identity and a parallel lifecycle reducer, violating the task rail and stale-dependency global rail.\"\n\nPrerequisites filed and PLANNING: task-77e8cb44 (canonical graph snapshot content identity — claimed by architect-f956ffe1 at 22:17Z) and task-ee27ed7c (replay graph revision events into state — unclaimed). Re-promote this task only after both land; re-measure the three absent surfaces above at the then-HEAD first.",
+      "timestamp": "2026-08-16T22:17:31.471Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T21:45:45.041Z",
+  "updatedAt": "2026-08-16T22:17:31.471Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:11:17.151Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "Still blocked on task-77e8cb4439b148f386d2bbf244c79c16 and task-ee27ed7cdc704151bafae0ca30aa0509; unblock_worker released architect ownership only.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:17:13.034Z"
+}

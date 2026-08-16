@@ -1,0 +1,162 @@
+{
+  "id": "task-77e8cb4439b148f386d2bbf244c79c16",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: canonical graph snapshot content identity",
+  "description": "Production prerequisite for task-dd4ffa0c40834c59892f957fbf61fb23. Measurement at HEAD a42ae2f: @moe/scheduler validates and canonicalizes GraphSnapshot into ValidatedGraph.graphIdentity, but no public codec/hash binds immutable snapshot bytes to @moe/core’s graphContentHash. Land one scheduler-owned canonical snapshot encoding/decoding and domain-separated SHA-256 content identity so durable graph revisions can prove the stored snapshot matches their approved hash. Not in scope: persistence, graph lifecycle, daemon transport, ingress, or new runtime kinds.",
+  "definitionOfDone": [
+    "A public @moe/scheduler production function accepts unknown input through validateGraphSnapshot and returns one immutable canonical GraphSnapshot representation plus a domain-separated lowercase SHA-256 graphContentHash.",
+    "Equivalent node/edge input orderings produce byte-identical canonical encoding and the same hash; any structural difference changes the canonical identity, while policy overrides are excluded from content identity exactly as ValidatedGraph.graphIdentity specifies.",
+    "A strict decoder rejects malformed, non-canonical, oversized, extra-keyed, hostile descriptor/proxy, or digest-mismatched bytes under stable scheduler code/layer pairs and never returns graph authority.",
+    "Focused tests assert each exact code/layer, nonzero generated permutation/hostile-case counts, accepted round-trip and ordering controls, and mutate the production canonicalizer/hash path to prove the guards redden.",
+    "The @moe/scheduler root exports the symbols with LF .js runtime bridge/loadability coverage, and completion names task-dd4ffa0c40834c59892f957fbf61fb23 as the real consumer."
+  ],
+  "taskRails": [
+    "Reuse validateGraphSnapshot and ValidatedGraph.graphIdentity; do not introduce a second structural graph validator or include policy in graph content identity.",
+    "Keep the public codec/hash focused and deterministic across Windows, macOS, and Linux; never depend on filesystem path normalization or locale ordering.",
+    "Use TDD, stable reason codes/layers, nonzero case counts, <=250 lines per production file and split before 400; explicit-path commit only."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND TDD SETUP. Re-run `git status --porcelain`, record the merge-base, and confirm `@moe/scheduler` resolves by package name. Re-measure that `validateGraphSnapshot` returns canonical `ValidatedGraph.nodes/edges/completionNodeKey` plus policy-free `graphIdentity`, while no `graph-content` codec/hash symbol exists. Record the current positive control `pnpm --filter @moe/scheduler test` count (baseline measured at planning: `Test Files 43 passed`, `Tests 1326 passed`). Do not edit the authoritative design. The production consumer is task-dd4ffa0c40834c59892f957fbf61fb23; completion must name it even though this pure slice does not land its daemon call site.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE MEASURED at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9, merge-base cf272f67c3e34fe1d8c4dd00675512c67f165c05, branch moe/work-2026-08-08.\n\nPOSITIVE CONTROL (fresh): `pnpm --filter @moe/scheduler test` -> exit 0, `Test Files 43 passed (43)`, `Tests 1326 passed (1326)`. Count lines present, so the filter resolves and really executed — matches the plan's planning-time baseline exactly.\n\nGAP CONFIRMED ABSENT (re-measured, not inherited): `git grep -n \"graph-content|graphContentHash|encodeGraphContent|decodeGraphContent\" -- packages apps adapters` returns ZERO hits in packages/scheduler. `graphContentHash` exists only as the CONSUMER contract field in @moe/core (planning/graph-revision-contract.ts:78,125,147) and its reducer gate. No codec, no hash producer, no scheduler symbol. Nothing to duplicate.\n\nREUSE SURFACES RE-MEASURED ON DISK:\n- validate-graph.ts:38 validateGraphSnapshot(snapshot, policyOverride?, counter?) -> deepFrozen ValidatedGraph with nodes/edges cloned in canonical sorted order, policy copied, graphIdentity = computeGraphIdentity(view).\n- graph-internal.ts:168-186 computeGraphIdentity builds a length-framed \"MOE-GRAPH-IDENTITY/1\" string over nodes/edges/completion ONLY — policy is absent by construction, so DoD 2's policy exclusion is inherited rather than reimplemented.\n- graph-model.ts:41-45 GraphSnapshot is exactly {nodes, edges, completionNodeKey}.\n- graph-policy.ts:39-42 absolute ceilings 64 nodes / 128 hard / 128 total edges / 128 key code units -> conservative envelope byte ceiling. Worst-case canonical envelope computes to ~69.8 KB, so 128 KiB is the conservative bound.\n- runtime-shape.ts is the strict-read discipline to reuse (isPlainRecord/isPlainArray reject proxies, readOwnDataProperty rejects accessors, hasExactDenseArrayShape rejects holes/expandos).\n\nCONSUMER-BINDING CONSTRAINT FOUND (not in the plan, affects the hash format): @moe/core planning/graph-revision-reducer.ts:85 gates graphContentHash with validHex64. The hash must therefore be exactly 64 LOWERCASE hex or task-dd4ffa0c cannot use it — this pins \"lowercase SHA-256 hex\" as a hard interop requirement, not a style choice.\n\nPUBLICATION COSTS MEASURED: index-surface.test.ts:83-135 pins the root namespace as a hand-written sorted table and :139 asserts EXPECTED_EXPORTS.length === 86, with :179 comparing Object.keys(scheduler).sort() to it. Every new VALUE export costs a table row plus that count; type-only exports are invisible to it. The .js bridge byte format is confirmed by od: `export * from \"./<name>.ts\";` + LF, no BOM, no CRLF.\n\nAuthoritative design not touched. Consumer for completion is task-dd4ffa0c40834c59892f957fbf61fb23.",
+      "startedAt": "2026-08-16T22:19:14.269Z",
+      "completedAt": "2026-08-16T22:22:00.448Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — specify the public production boundary in `graph-content.test.ts`. Pin `encodeGraphContent(unknown)` and `decodeGraphContent(unknown)` behavior: accepted output is deeply frozen; the envelope has exact schema/hash/snapshot keys; equivalent node/edge permutations encode byte-identically and hash identically; one structural change changes identity; policy overrides do not; round-trip returns the canonical snapshot. Refusal tables must assert exact code AND layer, assert a nonzero generated-case count, and cover malformed/extra-keyed/oversized input, invalid UTF-8/JSON, non-canonical bytes, digest mismatch, scheduler-invalid snapshots, hostile getters/symbols/proxies, sparse arrays, and raw-byte mutation. Structural validation refusals must preserve the production graph-validation code/layer rather than be restamped by the codec.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "TDD RED landed: packages/scheduler/src/graph-content.test.ts. Focused run `pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/graph-content.test.ts` -> exit 1, `Cannot find module './graph-content.js'`, `Test Files 1 failed (1)`. Honest scope: a missing-module red proves the spec is wired, NOT that its assertions bite — that evidence is step 5's mutation drills, and I am not counting this as more than it is.\n\nBOUNDARY PINNED (public surface the implementation must now satisfy):\n- encodeGraphContent(snapshot: unknown, policyOverride?: unknown) and decodeGraphContent(bytes: unknown), both total, both returning {ok:true,value} | {ok:false,issues}.\n- Envelope value = {schemaVersion, graphContentHash, snapshot, bytes}; JSON envelope key order is exactly [\"schema\",\"hash\",\"snapshot\"] and the snapshot's is [\"nodes\",\"edges\",\"completionNodeKey\"].\n\nTHREE LAYERS, asserted as exact code+layer PAIRS everywhere (never code alone):\n- GRAPH_CONTENT_CODEC: NOT_BYTES, TOO_LARGE, UNREADABLE, MALFORMED, UNSUPPORTED_SCHEMA\n- GRAPH_CONTENT_IDENTITY: DIGEST_MISMATCH, NONCANONICAL\n- GRAPH_VALIDATION: passthrough of the validator's OWN GraphIssueCode, unrestamped. Probed the real validator first rather than guessing these: hostile shapes yield GRAPH_MALFORMED_NODE / GRAPH_MALFORMED_SNAPSHOT, and the hostile table asserts those exact codes.\n\nTHE TWO DISJOINT ATTACKS ARE SEPARATELY PINNED, which is what makes both guards load-bearing:\n- \"same spelling, different content\" — a swapped executionBearing re-encodes byte-identically, so ONLY digest recomputation can catch it -> DIGEST_MISMATCH.\n- \"alternate spelling, same content\" — 6 variants (whitespace, reordered keys, duplicate key, n-escaped key, leading space, trailing newline) each recompute the CORRECT digest, so only the byte re-encode compare can catch them -> NONCANONICAL.\nDigest is asserted BEFORE re-encode, so a semantic mutation cannot misreport as \"non-canonical\".\n\nGENERATED COUNTS ASSERTED (a sweep that produced zero cases would otherwise pass): 36 orderings (3! x 3!) must be byte-identical; 6 structural mutations must all differ AND not collide with each other; 4 policy overrides must not move the hash; every refusal table asserts length > 0.\n\nCONTRACT DEVIATION, measured not assumed: the plan says \"accepted output is deeply frozen\", but `Object.freeze(new Uint8Array(2))` throws `TypeError: Cannot freeze array buffer views with elements` on this Node (v24.16.0) — verified directly. So the landed contract is FROZEN ENVELOPE + COPIED BYTES, and detachment is asserted in its place (buffer identity differs, caller mutation of returned bytes cannot corrupt a later call, a caller Buffer is copied rather than aliased since Buffer.prototype.slice returns a view).",
+      "startedAt": "2026-08-16T22:22:05.429Z",
+      "completedAt": "2026-08-16T22:25:50.945Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE MINIMUM CODEC/IDENTITY SURFACE. Add `graph-content.ts` with one frozen schema version, byte ceiling derived conservatively from the scheduler's absolute graph/key bounds, and closed framing refusal codes split by `GRAPH_CONTENT_CODEC` versus `GRAPH_CONTENT_IDENTITY`. Encoder: call `validateGraphSnapshot` first; project only canonical nodes/edges/completion from the validated graph (never caller order, policy, brand, or locale sorting); compute a domain-separated lowercase SHA-256 from `ValidatedGraph.graphIdentity`; serialize one fixed-key UTF-8 JSON envelope. Decoder: reject non-Uint8Array/oversize before decoding, use fatal UTF-8 and bounded JSON, require exact ordinary data shape, call `validateGraphSnapshot`, recompute identity, require hash equality, re-encode and byte-compare to reject alternate encodings, then return detached frozen data. Catch hostile reflection/codec exceptions and fail closed; never normalize keys or paths. Add the exact one-line LF `.js` bridge.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.js"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.js",
+        "packages/scheduler/src/graph-content-format.ts",
+        "packages/scheduler/src/graph-content-format.js",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "CODEC LANDED. Focused run `pnpm --filter @moe/scheduler exec vitest run --root ../.. packages/scheduler/src/graph-content.test.ts` -> exit 0, `Test Files 1 passed (1)`, `Tests 28 passed (28)`. `pnpm typecheck` in packages/scheduler -> exit 0.\n\nPLAN DEVIATION, FORCED — one extra production file + bridge. The plan named graph-content.ts alone. Written as one module it measured 344 physical lines by `awk END{print NR}`, over the <=250 rail (epic rail 5, task rail 3, and step 6's own check). The rail's stated remedy for a per-file violation is to split the file, so I split it rather than delete the reasoning comments to squeeze under a number. Landed: graph-content.ts 207 lines (public boundary, vocabulary, layer order) and graph-content-format.ts 161 lines (wire mechanics). Both under 250; neither near 400. Owned paths grow from 5 to 7.\n\nWHY THE SPLIT IS AT THIS SEAM, not an arbitrary cut: graph-content-format.ts is deliberately NOT published. canonicalGraphJson and graphContentHash take a ValidatedGraph, so a consumer holding them could mint canonical bytes for a graph that never passed the kernel. Keeping them internal means the only route to a graphContentHash is through validateGraphSnapshot.\n\nMECHANISM, as built:\n- Encoder: validateGraphSnapshot FIRST, then project only the validated graph's canonical order (caller order, policy, brand and locale sorting are all unreachable from the serializer), then hash, then serialize. Nothing unvalidated can acquire an identity.\n- Hash: sha256 over `MOE-GRAPH-CONTENT-HASH/1\\n<len>:` + graphIdentity, hex (lowercase from Node), giving the 64-char spelling @moe/core's validHex64 gate needs. The digest domain is a SEPARATE constant from the wire SCHEMA_TAG so the two can rotate independently.\n- Decoder order: not-bytes -> oversize -> fatal UTF-8 + JSON -> envelope shape -> schema tag -> validateGraphSnapshot -> digest -> re-encode byte compare. Digest strictly before re-encode.\n- Bytes: readContentBytes rejects proxies via util.types.isProxy, requires util.types.isUint8Array, then COPIES with `new Uint8Array(value)`. A Buffer is accepted and copied rather than aliased, because Buffer.prototype.slice returns a view over the caller's memory.\n\nTWO DESIGN CALLS WORTH REVIEWING:\n1. Envelope key ORDER is not checked in readContentEnvelope. A reordered envelope is an alternate spelling of the same content and the re-encode comparison already rejects it as NONCANONICAL — one mechanism instead of two that could disagree.\n2. Two test rows I had written were WRONG about which layer owns a judgement, and I corrected the tests, not the production code: a non-object `snapshot` inside a well-formed envelope, and a duplicate edge key, both belong to the graph kernel and now assert GRAPH_MALFORMED_SNAPSHOT / GRAPH_DUPLICATE_EDGE at layer GRAPH_VALIDATION. The duplicate-edge test additionally asserts that NO returned code is a member of GRAPH_CONTENT_ISSUE_CODES, which is the real anti-restamping check.\n\nBridges verified by `od -c`: both end `s   \"   ;  \\n` — LF, no CRLF, no BOM.",
+      "startedAt": "2026-08-16T22:27:06.918Z",
+      "completedAt": "2026-08-16T22:30:10.288Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "PUBLISH AND PIN THE BARE PACKAGE SURFACE. Export the graph-content functions, result/types, schema/limit constants, refusal vocabulary, and layers from `@moe/scheduler` in `index.ts`; update the exact root export table in `index-surface.test.ts` and add a real package-root call that proves the exported encoder/decoder reaches the production implementation. In `graph-content.test.ts`, byte-compare the LF bridge against `export * from \"./graph-content.ts\";\\n`. Do not add a second graph validator or a second hash path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "note": "ROOT SURFACE PUBLISHED AND PINNED. `pnpm --filter @moe/scheduler test` -> exit 0, `Test Files 44 passed (44)`, `Tests 1364 passed (1364)` — up from the step-1 baseline of 43/1326, i.e. +1 file and +38 tests, all mine. `pnpm typecheck` in packages/scheduler -> exit 0.\n\nSIX VALUE EXPORTS, pin paid in full: EXPECTED_EXPORTS gained GRAPH_CONTENT_ISSUE_CODES, GRAPH_CONTENT_LAYERS, GRAPH_CONTENT_SCHEMA_VERSION, MAX_GRAPH_CONTENT_BYTES, decodeGraphContent, encodeGraphContent in sorted position, and the hand-written count moved 86 -> 92. The five TYPES use `export type` and are correctly invisible to that count, which reads Object.keys of the namespace.\n\nREAL ROOT CALL, not a shape check. The new index-surface test drives encode -> decode -> refuse through the bare `@moe/scheduler` specifier and asserts production behavior: the hash matches /^[0-9a-f]{64}$/ (the spelling @moe/core's validHex64 gate needs), the returned node order is the VALIDATOR's (the fixture supplies dev-b before dev-a and the result comes back dev-a, dev-b), the round-trip hash is stable, and the refusal returns the exact pair [\"GRAPH_CONTENT_NOT_BYTES\",\"GRAPH_CONTENT_CODEC\"] drawn from the exported vocabularies rather than a string the test invented.\n\nNEGATIVE CONTROL for the withheld half, matching the file's existing WITHHELD_* convention: 7 names from graph-content-format.ts (canonicalGraphJson, graphContentHash, projectGraphSnapshot, readContentBytes, readContentEnvelope, sameBytes, SCHEMA_TAG) asserted absent from the root namespace, with a positive control that encodeGraphContent/decodeGraphContent ARE present. Publishing canonicalGraphJson or graphContentHash would let a consumer mint bytes and a matching digest for a snapshot validateGraphSnapshot never accepted — the exact bypass the codec closes.\n\nBRIDGES COVERED TWO WAYS. Byte-exact: a new table test readFileSync-compares both siblings against `export * from \"./<name>.ts\";\\n`, catching a CRLF or BOM that tsc and vitest are both blind to. Loadability: scheduler-runtime-entrypoint.test.ts spawns a real node:worker_threads Worker with --experimental-strip-types importing @moe/scheduler, and index.ts now re-exports through ./graph-content.js, so a missing bridge fails that worker with ERR_MODULE_NOT_FOUND. It passes — that is the plain-Node loadability evidence DoD 5 wants, and step 5 will DRILL it rather than just assert it.\n\nNo second graph validator and no second hash path: graph-content.ts imports validateGraphSnapshot and nothing else structural, and graphContentHash is the only createHash call across both new files.",
+      "startedAt": "2026-08-16T22:32:02.440Z",
+      "completedAt": "2026-08-16T22:32:14.695Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "ADVERSARIAL SELF-REVIEW AND MUTATION DRILLS. Review null/empty/huge inputs, hostile property descriptors/proxies, Unicode/UTF-8, permutation determinism, policy exclusion, hash-domain separation, caller-buffer mutation after return, and cross-platform locale/path independence. Run three isolated mutants, reverting each by exact owned path before the next: (1) serialize caller order instead of validated canonical order — the permutation test must red; (2) include policy in the content hash — the policy-exclusion control must red; (3) remove the decoder's re-encode byte comparison or hash comparison — the named non-canonical/digest case must red on its exact code/layer. Record the replaced range and intended failing test for each; a mutant that did not apply or reds elsewhere is not evidence.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.test.ts"
+      ],
+      "startedAt": "2026-08-16T22:32:43.297Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL VERIFICATION, PATH-ATTRIBUTED REVIEW, AND COMMIT. Run each leg separately and capture its own exit/output: `pnpm --filter @moe/scheduler typecheck`; canonical evidence command `pnpm --filter @moe/scheduler test` (must print nonzero `Test Files` and `Tests` count lines); `pnpm typecheck`; `pnpm test`; `pnpm verify:foundation`. Compare repo-wide failing paths at merge-base versus HEAD and require no new failure intersecting the five owned paths; quote foreign red verbatim. Confirm every production source is <=250 physical lines (split before 400), the bridge is LF-exact, no scratch/probe remains, and task-dd4ffa0c40834c59892f957fbf61fb23 is named as consumer. Stage/commit only the five explicit owned paths, never a whole-tree commit, and verify `git show --stat` contains nothing else.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content.js",
+        "packages/scheduler/src/graph-content.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Architect retraction after authoritative-design remeasurement: the approved plan incorrectly equates structural scheduler ValidatedGraph.graphIdentity with the broader GraphRevisionContent.graphContentHash (design line 197). Worker was told to stop twice and continued through steps 3-4, likely due the live routed-mention delivery fault. Preserve current files; no commit. Whole-plan rework/human Graph Beta authority decision dec-64b2391cb80f4c0cbb6e88353017cc65 required.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 113.1,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:16:46.823Z",
+  "updatedAt": "2026-08-16T22:34:01.596Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-16T22:17:07.456Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 4
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1",
+    "worker-b8af1a87"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-16T22:18:45.462Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Hash caller JSON directly: rejected because input order and alternate JSON encodings would create multiple identities for one graph. 2) Hash policy with structure: rejected because `ValidatedGraph.graphIdentity` explicitly excludes policy and graphContentHash names immutable graph content. 3) Put the codec in @moe/store: rejected because store is dependency-free/domain-neutral and cannot own GraphSnapshot validation. 4) Define it only in daemon: rejected because graph content identity is scheduler domain truth and future graph producers/consumers need one public authority. 5) Trust a supplied digest after JSON parse: rejected; decoder must recompute and byte-compare canonical encoding. 6) Reimplement structure parsing: rejected; `validateGraphSnapshot` is the production surface.",
+    "codebaseInsights": "Measured at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9 with Serena searches and symbol reads: `validateGraphSnapshot` (validate-graph.ts:37-75) returns a deeply frozen ValidatedGraph whose `graphIdentity` is computed by `computeGraphIdentity` (graph-internal.ts:168-186) from canonical node/edge order and excludes policy. `GraphSnapshot` is exactly nodes/edges/completionNodeKey. No graph snapshot codec or graphContentHash producer exists in scheduler/store/daemon. Scheduler absolute bounds are 64 nodes, 128 hard/total edges, and 128 UTF-16 code units per key. Package `@moe/scheduler` resolves; fresh baseline `pnpm --filter @moe/scheduler test` executed 43 files / 1326 tests, exit 0. Consumer edge is already viable for the later daemon task: apps/daemon/package.json declares @moe/scheduler, pnpm-lock.yaml importer links it, and a temporary compiled bare-specifier probe importing `validateGraphSnapshot` from @moe/scheduler alongside core/store exited 0 and was deleted in the same PowerShell command.",
+    "risks": "Canonical bytes must come from the validated canonical graph, never the caller's ordering. Decoder must reject alternate-but-equivalent JSON bytes or persistence can bind different bytes to one digest. Graph policy must stay out of content identity. UTF-8 decoding, JSON parsing, proxy/descriptors, and Uint8Array handling can throw and must become typed refusals. A mutable caller buffer/result can change after validation unless copied and frozen. Root exports are exact-set pinned in index-surface.test.ts, and every new TS runtime module needs an exact LF .js bridge. Do not call the pure package complete without naming task-dd4ffa0c40834c59892f957fbf61fb23 as consumer.",
+    "keyFiles": [
+      "packages/scheduler/src/validate-graph.ts",
+      "packages/scheduler/src/graph-internal.ts",
+      "packages/scheduler/src/graph-model.ts",
+      "packages/scheduler/src/graph-policy.ts",
+      "packages/scheduler/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-16T22:18:47.535Z",
+  "workStartedAt": "2026-08-16T22:19:14.269Z",
+  "blockedReason": "Authoritative-design remeasurement invalidated the plan after steps 1-4: GraphRevisionContent hash includes repository base, parent, policy, decomposition budget and author in addition to graph structure. The produced graph-content surface and tests currently claim structural graphIdentity is graphContentHash, which would redefine the authority contract. Preserve current bytes for the next owner; do not commit/reset. Resume only after dec-64b2391 is resolved and rewrite the task/plan accordingly.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:34:01.596Z"
+}

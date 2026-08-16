@@ -78,7 +78,10 @@ type ExportKind = "array" | "function" | "number" | "record";
  * producer bindCurrentExpansionHold, and validateOpportunityAttestation) + the 7
  * usage-measurement values (the
  * normalizeUsageMeasurement authority plus the six closed vocabularies a provider
- * telemetry composer needs so it never has to copy the source/coverage matrix).
+ * telemetry composer needs so it never has to copy the source/coverage matrix) + the
+ * 6 graph content identity values (the encode/decode codec boundary, its schema
+ * version, byte ceiling, and the two closed refusal vocabularies a durable graph
+ * revision needs to tell a framing refusal from an identity refusal).
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -99,7 +102,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["FAIRNESS_FORCED_BYPASS_BOUND", "number"], ["FAIRNESS_PRIORITY_CLASSES", "array"],
   ["FAIRNESS_PRIORITY_LADDER", "array"], ["FAIRNESS_ROTATION_DISPOSITIONS", "array"],
   ["FAIRNESS_SERVICE_COST", "number"], ["FORBIDDEN_VERDICT_KEYS", "array"],
-  ["GraphAnalysisError", "function"], ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
+  ["GRAPH_CONTENT_ISSUE_CODES", "array"], ["GRAPH_CONTENT_LAYERS", "array"],
+  ["GRAPH_CONTENT_SCHEMA_VERSION", "number"],
+  ["GraphAnalysisError", "function"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
+  ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
@@ -116,8 +122,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"],
-  ["createTraversalCounter", "function"], ["deriveExpansionEvidence", "function"],
-  ["deriveReservationId", "function"],
+  ["createTraversalCounter", "function"], ["decodeGraphContent", "function"],
+  ["deriveExpansionEvidence", "function"],
+  ["deriveReservationId", "function"], ["encodeGraphContent", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
@@ -136,7 +143,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(86);
+  expect(EXPECTED_EXPORTS.length).toBe(92);
 });
 
 /**
@@ -173,6 +180,71 @@ it("withholds the refusal constructors that would let a consumer mint provenance
   expect(WITHHELD_BINDING_NAMES.filter((name) => published.has(name))).toStrictEqual([]);
   // Positive control on the same block: the value that IS published resolves from it.
   expect(published.has("bindCurrentExpansionHold")).toBe(true);
+});
+
+/**
+ * The wire mechanics behind the codec. `canonicalGraphJson` and
+ * `graphContentHash` take an ALREADY-validated graph, so a consumer holding
+ * either could mint canonical bytes and a matching digest for a snapshot the
+ * kernel never accepted — the exact bypass `encodeGraphContent` exists to make
+ * impossible. Negative control for the block that publishes the codec.
+ */
+const WITHHELD_GRAPH_CONTENT_NAMES: readonly string[] = [
+  "canonicalGraphJson", "graphContentHash", "projectGraphSnapshot",
+  "readContentBytes", "readContentEnvelope", "sameBytes", "SCHEMA_TAG",
+  "DECODE_POLICY",
+];
+
+it("withholds the wire mechanics that would let a consumer mint content identity", () => {
+  expect(WITHHELD_GRAPH_CONTENT_NAMES.length).toBe(8);
+  const published = new Set(Object.keys(scheduler));
+  expect(WITHHELD_GRAPH_CONTENT_NAMES.filter((name) => published.has(name)))
+    .toStrictEqual([]);
+  // Positive control on the same block: the values that ARE published resolve.
+  expect([published.has("encodeGraphContent"), published.has("decodeGraphContent")])
+    .toEqual([true, true]);
+});
+
+it("reaches the real graph content codec through the bare package root", () => {
+  const snapshot = {
+    nodes: [
+      { nodeKey: "dev-b", executionBearing: true },
+      { nodeKey: "dev-a", executionBearing: true },
+    ],
+    edges: [{
+      edgeKey: "dev-e1", producerNodeKey: "dev-a",
+      consumerNodeKey: "dev-b", kind: "HARD",
+    }],
+    completionNodeKey: "dev-b",
+  };
+  const encoded = scheduler.encodeGraphContent(snapshot);
+  expect(encoded.ok).toBe(true);
+  if (!encoded.ok) return;
+
+  // A real production result, not a shape: the hash is the digest @moe/core's
+  // revision gate accepts, and the canonical order is the validator's, not the
+  // caller's (the snapshot above deliberately supplies dev-b first).
+  expect(encoded.value.graphContentHash).toMatch(/^[0-9a-f]{64}$/u);
+  expect(encoded.value.snapshot.nodes.map((node) => node.nodeKey))
+    .toEqual(["dev-a", "dev-b"]);
+  expect(encoded.value.schemaVersion).toBe(scheduler.GRAPH_CONTENT_SCHEMA_VERSION);
+
+  const decoded = scheduler.decodeGraphContent(encoded.value.bytes);
+  expect(decoded.ok).toBe(true);
+  if (!decoded.ok) return;
+  expect(decoded.value.graphContentHash).toBe(encoded.value.graphContentHash);
+
+  // And the refusal path reaches the same implementation, with the exported
+  // vocabulary describing it rather than a string the test made up.
+  const refused = scheduler.decodeGraphContent("not bytes");
+  expect(refused.ok).toBe(false);
+  if (refused.ok) return;
+  expect(refused.issues.map((issue) => [issue.code, issue.layer]))
+    .toEqual([["GRAPH_CONTENT_NOT_BYTES", "GRAPH_CONTENT_CODEC"]]);
+  expect(scheduler.GRAPH_CONTENT_ISSUE_CODES)
+    .toContain(refused.issues[0]?.code);
+  expect(scheduler.GRAPH_CONTENT_LAYERS).toContain(refused.issues[0]?.layer);
+  expect(scheduler.MAX_GRAPH_CONTENT_BYTES).toBeGreaterThan(0);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {

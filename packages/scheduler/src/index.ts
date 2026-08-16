@@ -68,6 +68,29 @@ export {
   resolveGraphPolicy,
 } from "./graph-policy.js";
 export { createTraversalCounter } from "./graph-model.js";
+/**
+ * Canonical graph content identity. The codec boundary is published; the wire
+ * mechanics in `./graph-content-format.js` are deliberately withheld, because
+ * `canonicalGraphJson`/`graphContentHash` take an already-validated graph and a
+ * consumer holding them could mint canonical bytes for a snapshot the kernel
+ * never accepted. Going through `encodeGraphContent` is the only route to a
+ * `graphContentHash`.
+ */
+export {
+  GRAPH_CONTENT_ISSUE_CODES,
+  GRAPH_CONTENT_LAYERS,
+  GRAPH_CONTENT_SCHEMA_VERSION,
+  MAX_GRAPH_CONTENT_BYTES,
+  decodeGraphContent,
+  encodeGraphContent,
+} from "./graph-content.js";
+export type {
+  GraphContent,
+  GraphContentIssue,
+  GraphContentIssueCode,
+  GraphContentLayer,
+  GraphContentResult,
+} from "./graph-content.js";
 
 export {
   activateProviderSlot,

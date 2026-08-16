@@ -40,6 +40,10 @@ import type {
 } from "@moe/core";
 import type { ApprovalDecisionRecord, PolicyEvaluationInput } from "@moe/core";
 import type {
+  GraphRevisionEventKind, GraphRevisionReplayAcceptedResult, GraphRevisionReplayCode,
+  GraphRevisionReplayRefusal, GraphRevisionReplayResult,
+} from "@moe/core";
+import type {
   ApprovalAuthorityCode, ApprovalAuthorityDecision, ApprovalAuthorityLayer,
   ApprovalAuthorityRefusal, ApprovalAuthorityRequest, ApprovalAuthorityResult, ApprovalPolicy,
   ApprovalPolicyKind, HumanAuthorityGate, HumanAuthorityGrant, HumanAuthorityGrantResult,
@@ -61,14 +65,15 @@ type ExportKind = "array" | "function" | "record" | "string";
  * preparation and approval values + the 6 project-configuration codec values
  * (2 frozen vocabularies, 1 domain tag, 3 functions) published by task-bcea7056
  * + the 5 approval policy and human-authority values (3 frozen vocabularies,
- * 2 functions) published by task-5d8f11c8.
+ * 2 functions) published by task-5d8f11c8 + the 4 graph revision replay values
+ * (2 frozen vocabularies, 1 layer tag, 1 function) published by task-ee27ed7c.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["APPROVAL_ACTOR_KINDS", "array"],
   ["APPROVAL_AUTHORITY_CODES", "array"], ["APPROVAL_AUTHORITY_LAYERS", "array"],
   ["APPROVAL_COMMAND_KINDS", "array"], ["APPROVAL_POLICY_KINDS", "array"],
   ["CARRY_FORWARD_REASON_CODES", "array"], ["CORE_DECISION_REASON_OBLIGATION", "string"],
-  ["CORE_STEP_UP_OBLIGATION", "string"],
+  ["CORE_GRAPH_REVISION_REPLAY", "string"], ["CORE_STEP_UP_OBLIGATION", "string"],
   ["EXPANSION_APPROVAL_CODES", "array"], ["EXPANSION_APPROVAL_COMPONENTS", "array"],
   ["EXPANSION_APPROVAL_LAYERS", "array"],
   ["EXPANSION_HOLD_CAUSES", "array"], ["EXPANSION_HOLD_COMMAND_KINDS", "array"],
@@ -76,7 +81,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EXPANSION_PREPARATION_CODES", "array"], ["EXPANSION_PREPARATION_COMPONENTS", "array"],
   ["EXPANSION_PREPARATION_LAYERS", "array"],
   ["GOAL_COMMAND_KINDS", "array"], ["GOAL_TRANSITIONS", "record"],
-  ["GRAPH_REVISION_COMMAND_KINDS", "array"], ["GRAPH_REVISION_TRANSITIONS", "record"],
+  ["GRAPH_REVISION_COMMAND_KINDS", "array"], ["GRAPH_REVISION_EVENT_KINDS", "array"],
+  ["GRAPH_REVISION_REPLAY_CODES", "array"], ["GRAPH_REVISION_TRANSITIONS", "record"],
   ["PLANNING_EXPANSION_ERROR_CODES", "array"], ["PLANNING_EXPANSION_LAYERS", "array"],
   ["PLANNING_EXPANSION_TARGETS", "array"], ["PLANNING_RUN_COMMAND_KINDS", "array"],
   ["PLANNING_RUN_TRANSITIONS", "record"],
@@ -106,7 +112,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["prepareExpansion", "function"], ["reduceExpansionPlanningHold", "function"],
   ["reduceGoal", "function"], ["reduceGraphRevision", "function"],
   ["reducePlanningRun", "function"], ["reduceProject", "function"],
-  ["rotateCredential", "function"], ["snapshotPlanningRunContractState", "function"],
+  ["replayGraphRevisionEvents", "function"], ["rotateCredential", "function"],
+  ["snapshotPlanningRunContractState", "function"],
   ["validExpansionCreateCommand", "function"], ["validExpansionCreatedEvent", "function"],
   ["validExpansionHoldBinding", "function"], ["validExpansionProposalIdentity", "function"],
   ["validExpansionProposeCommand", "function"], ["validExpansionSealedEvent", "function"],
@@ -115,7 +122,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(80);
+  expect(EXPECTED_EXPORTS.length).toBe(84);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -252,6 +259,37 @@ it("refuses a preparation from the root, naming code, component and layer", () =
   expect(core.EXPANSION_PREPARATION_CODES).toContain(code);
   expect(core.EXPANSION_PREPARATION_COMPONENTS).toContain(component);
   expect(core.EXPANSION_PREPARATION_LAYERS).toContain(layer);
+});
+
+/**
+ * Composition control: the history is produced by the ROOT's own `reduceGraphRevision` and fed to
+ * the ROOT's `replayGraphRevisionEvents`, so this proves the published replay surface composes with
+ * the published command surface — not merely that both names resolve.
+ */
+it("replays a graph revision history from the root, naming code, layer and vocabularies", () => {
+  const created = core.reduceGraphRevision(undefined, {
+    commandId: "cmd-create", expectedVersion: 0, goalRef: "goal-1",
+    graphContentHash: hex("2"), kind: "graph_revision.create", planHash: hex("1"),
+    revisionId: "revision-1",
+  });
+  expect(created.ok).toBe(true);
+  if (!created.ok) throw new Error("expected an accepted create");
+  const replayed: GraphRevisionReplayResult = core.replayGraphRevisionEvents(created.events);
+  expect(replayed.ok).toBe(true);
+  if (!replayed.ok) throw new Error("expected an accepted replay");
+  const hydrated: GraphRevisionReplayAcceptedResult = replayed;
+  const eventKind: GraphRevisionEventKind = "GraphRevisionCreated";
+  expect([hydrated.state.lifecycle, hydrated.events[0]?.kind]).toEqual(["DRAFT", eventKind]);
+  expect(hydrated.state).toEqual(created.state);
+
+  const refused: GraphRevisionReplayResult = core.replayGraphRevisionEvents([]);
+  expect(refused.ok).toBe(false);
+  if (refused.ok) throw new Error("expected a refusal");
+  const refusal: GraphRevisionReplayRefusal = refused;
+  const code: GraphRevisionReplayCode = "GRAPH_REVISION_REPLAY_MISSING_CREATE";
+  expect([refusal.code, refusal.layer]).toEqual([code, core.CORE_GRAPH_REVISION_REPLAY]);
+  expect(core.GRAPH_REVISION_REPLAY_CODES).toContain(code);
+  expect(core.GRAPH_REVISION_EVENT_KINDS).toContain(eventKind);
 });
 
 const humanApproval = (): ApprovalDecisionRecord => ({
@@ -494,7 +532,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 80,
+    namedExportCount: 84,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

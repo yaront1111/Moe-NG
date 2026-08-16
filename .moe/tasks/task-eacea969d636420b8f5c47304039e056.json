@@ -1,0 +1,33 @@
+{
+  "id": "task-eacea969d636420b8f5c47304039e056",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: atomic active-graph transition service",
+  "description": "Objective: land the durable application service that graph.approve and graph.supersede transport can call without reconstructing authority. Deliverable: one project-scoped daemon service that validates the canonical proposed GraphRevisionContent, replays the landed planning/goal/graph-revision/supersession kernels against durable state, and commits each initial or replacement activation as one decision-bound active-graph transition. Hard dependencies: the resolved canonical GraphRevisionContent producer, task-dd4ffa0c40834c59892f957fbf61fb23, task-32c1ba453469448d87bf0925b3590657, and for expansion replacements task-c4171c1cfe854cb78dd233794b342025. NOT in scope: HTTP/MCP registry wiring, preparation creation/release, Foundation attempt ingress, or fan-out dispatch. Consumer: task-efc2ef6330074b4d9893809f7425c95f. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "Initial graph.approve derives the durable planning run, goal, approved content/quality/budget/policy bindings and expected versions, drives the production planning/goal/graph-revision reducers, and commits the approval plus exactly one ACTIVE revision at graphEpoch 1 in one command decision.",
+    "Replacement graph.supersede requires the exact current preparation generation and approved successor, revalidates consequence/disposition/funding/fence/current-graph facts, drives the production supersession and goal-epoch surfaces, and atomically marks the predecessor SUPERSEDED, successor ACTIVE at predecessor epoch + 1, and paired preparation records CONSUMED.",
+    "The request may identify a target but cannot supply active projection, graph epoch, lifecycle, funding, planning disposition, carry authority, content bytes outside the durably sealed proposal, or an already-ACTIVE state; any missing/unverifiable fact refuses with an exact service/upstream code and layer and zero events.",
+    "Same-byte replay returns the original immutable activation record with unchanged raw event/decision counts; changed bytes under one decision identity, stale version/epoch, wrong predecessor/successor, preparation drift, or concurrent activation refuses without consuming preparation or advancing an epoch.",
+    "Real SqliteEventStore tests assert exact code/layer/refusing aggregate, nonzero hostile and interleaving counts, one initial and one replacement accepted control, zero partial residue at every fault boundary, and mutation drills for one-active, epoch+1, preparation consumption and caller-authority guards."
+  ],
+  "taskRails": [
+    "Wait for human decision dec-64b2391cb80f4c0cbb6e88353017cc65 and consume a recomputed full GraphRevisionContent hash; never equate scheduler graphIdentity with graphContentHash.",
+    "Use public @moe/core/@moe/scheduler/@moe/store roots and verify daemon manifest, lock importer and compiled bare-specifier probes before planning; preserve delegated refusal code/layer.",
+    "One durable decision must cover the complete authority move; no compensating second commit, mock-backed accepted path or caller-supplied current state. TDD and per-file line caps apply."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:34:57.261Z",
+  "updatedAt": "2026-08-16T22:34:57.261Z"
+}

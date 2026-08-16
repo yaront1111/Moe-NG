@@ -102,6 +102,19 @@ export {
   GRAPH_REVISION_TRANSITIONS,
   reduceGraphRevision,
 } from "./planning/graph-revision-reducer.js";
+export {
+  CORE_GRAPH_REVISION_REPLAY,
+  GRAPH_REVISION_EVENT_KINDS,
+  GRAPH_REVISION_REPLAY_CODES,
+  replayGraphRevisionEvents,
+} from "./planning/graph-revision-replay.js";
+export type {
+  GraphRevisionEventKind,
+  GraphRevisionReplayAcceptedResult,
+  GraphRevisionReplayCode,
+  GraphRevisionReplayRefusal,
+  GraphRevisionReplayResult,
+} from "./planning/graph-revision-replay.js";
 export type {
   GraphActivationBinding,
   GraphRevisionAcceptedResult,

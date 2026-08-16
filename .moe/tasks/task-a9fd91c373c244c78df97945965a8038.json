@@ -94,7 +94,7 @@
       ]
     }
   ],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -114,15 +114,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T21:35:14.536Z",
-  "updatedAt": "2026-08-16T15:01:59.197Z",
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "updatedAt": "2026-08-16T22:10:17.130Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T21:46:50.058Z",
+  "blockedReason": "Human decision msg-cd966214/reopenReason defers ingress to Graph Beta and explicitly requires filing prerequisites, not planning the ingress. Re-measured at HEAD a42ae2f1f9168d13b8b786404fc47b366cc8edd9: @moe/core graph revision reducer/contracts and graph.* runtime vocabulary exist, but apps/daemon/src/daemon-command-registry.ts wires no graph.* kinds; mcp-dispatch-port.ts has no graph.get branch; packages/store/src has no GraphSnapshot/current-graph projection; Foundation dispatch still requires graphSnapshot/inputManifest/launchTemplate and daemon has no production launchTemplate source. effect.activate remains exact-key fenced and must not be widened. Filed the three production prerequisites named in needsFrom. Resume only after they land and Graph Beta makes the wire/authority decision; then re-measure before any ingress plan.",
   "contextFetchedBy": [
     "architect-4eca9b79",
     "architect-94dd1835",
     "governor-a627169a",
-    "worker-5678886b"
+    "worker-5678886b",
+    "architect-f956ffe1"
   ],
   "blockedResourceId": null,
   "metrics": {
@@ -132,6 +133,15 @@
     "executedStepCount": 2
   },
   "priorHandoffs": [
+    {
+      "whatIsDone": "Human decision msg-cd966214 executed exactly: no ingress planned, effect.activate not widened, three Graph Beta prerequisite tasks filed (dd4ffa0c current-graph projection, efc2ef63 graph command/query transport, a3e8a02d launch-input authority decision) and re-blocked with measurements at a42ae2f. Note: task retains 2/7 completed plan steps from the pre-refutation plan — a re-served shell.",
+      "whatRemains": "Nothing on this task until the Graph Beta three land and the human wire/authority decision is made; then re-measure before any ingress plan.",
+      "pitfalls": "The effect.activate exact-key fence (activation-ingress-contracts.ts count-then-membership) is probe-verified with positive controls — do not re-litigate the refuted route. The 2 completed plan steps belong to the dead plan; do not resume them.",
+      "openQuestions": "Whether the inherited 7-step plan should be wiped when this task is eventually re-planned — architect call at re-promotion time.",
+      "releasedAt": "2026-08-16T22:10:17.129Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Human-approved release of a stale assignment on a BLOCKED task: architect-f956ffe1 completed the human-directed filing (Graph Beta prerequisites dd4ffa0c/efc2ef63/a3e8a02d, re-block with fresh measurements) and then parked — alive but unresponsive to mentions and not claiming for 20 min. Task stays BLOCKED; this only frees the architect."
+    },
     {
       "whatIsDone": "Full structural re-measurement of the approved route, done at HEAD d7f6b6e (three commits newer than the 8151ade the first probe used). Four independent walls documented with file:line evidence and grep counts, recorded in blockedReason and in the #general post msg-036c73cc. Also corrected a stale rail: task rail 2 and plan step 5 both claim daemon-store-dependencies.ts sits at 397 of a hard 400 ('three lines of headroom'); it is 194 lines by `grep -c ''`. Deliberately zero production files written — narrowing the DoD to whatever compiles would ship an ingress that takes graph/launch/manifest authority from the caller, which DoD 2 forbids and which df29871b was already QA-rejected for.",
       "whatRemains": "An architect/human decision, not worker execution. One of: (a) lift the M5 RUNTIME_COMMAND_KINDS union freeze so a foundation.dispatch kind + payload allow-list can exist (human ruling, contracts expansion); (b) schedule a PRECEDING task for the three missing durable readers (graph snapshot projection, launch-template producer, attempt input-manifest reader) — note all three sit inside this task's explicit 'NOT in scope' list, so this task cannot absorb them; (c) re-cut the DoD to what ingress can legally own today, which after W4 is authentication + capability + allow-list only, since node selection already belongs to dispatch (admitSingleExecutionNode).",

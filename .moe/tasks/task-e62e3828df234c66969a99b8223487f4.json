@@ -16,8 +16,8 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-27b64950",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,18 +36,37 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-16T15:05:30.828Z",
+  "updatedAt": "2026-08-16T22:31:49.102Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-16T22:30:51.602Z",
+  "blockedReason": "RE-MEASURED at HEAD a42ae2f. The governor's unblock premise is HALF true: task-6cbff010 IS DONE, but it never produced the release facts. The reader has nothing durable to read.\n\nFIELD BY FIELD over `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:27-36), 17 fields, grepped across apps/daemon/src excluding tests and fixtures: ZERO production producers for effectsTerminal, leaseState, observationRef, providerSlotState, receiptRef, safeBoundaryObserved, terminalEffectRefs, terminalResourceRefs, resourcesTerminal, strongestReason, terminalTarget, attemptState, leaseRef, providerSlotRef, and WORK_RELEASE_OR_PAUSE. 15 of 17. Only `attemptRef` (durable attempt record) and `truthClass` (the reader's own stamp) are reachable.\n\nThe kernels that COMPUTE these exist in packages/runner (drain-table.ts, drain-disposition.ts, safe-boundary.ts) and packages/scheduler (lease-drain.ts, authority-kernel.ts). No daemon path PERSISTS them: `attemptRecordBody` (foundation-attempt-contracts.ts:182-199) writes activationDigest, attemptId, effectId, grantId, nodeKey, observation, reason code/layer, registration, resultManifest, stream shas, truthClass, wrapperIdentity — none of the release, lease, slot, terminal, boundary, receipt or handoff facts.\n\nTask rail 1 binds: repair the producer, do not reconstruct authority here. No plan, no narrowed DoD.\n\nFOUR PREREQUISITES, disjoint fact sets:\n- 740924b7: reason, disposition{resumable,strongestReason,terminalTarget}, attemptState, lease and providerSlot ref+state.\n- 6d400781: effectsTerminal, terminalEffectRefs, resourcesTerminal, terminalResourceRefs.\n- ded026d6: safeBoundaryObserved, observationRef.\n- af9454f4 (CREATED THIS PASS): receiptRef and the {digest,ref} handoff, the only two no task claimed. Load-bearing: core safeRelease (:209-215) needs same(release.handoff, command.workerHandoff), so with no producer the daemon can only echo the caller.\n\nUNBLOCK: all four DONE, then re-measure.",
   "contextFetchedBy": [
     "architect-a9210e34",
-    "architect-94dd1835"
+    "architect-94dd1835",
+    "architect-77071474"
   ],
   "priorHandoffs": [
+    {
+      "whatIsDone": "Answered the question three prior architects left open. Re-measured ExpansionReleaseEvidence field by field at HEAD a42ae2f: 15 of its 17 fields have ZERO production producers in apps/daemon/src (every apparent hit is inside a *-test-fixtures.ts). Confirmed the shape of the gap - the kernels that COMPUTE the facts all exist in packages/runner and packages/scheduler, but no daemon path PERSISTS any of them; attemptRecordBody (foundation-attempt-contracts.ts:182-199) carries none of the release, lease, slot, terminal, boundary, receipt or handoff facts. Audited the board for producer coverage, found 13 of the 15 already owned by task-740924b7 / task-6d400781 / task-ded026d6, and CREATED task-af9454f4 for the only two nobody owned (receiptRef and the {digest,ref} worker handoff). Reported this task BLOCKED naming all four. Serena memory task-task-e62e3828df234c66969a99b8223487f4-handoff rewritten with the reproducible grep and the per-task field split.",
+      "whatRemains": "Nothing on this task until all four producers are DONE. Then re-measure the 15 fields (including the counts in my own note) and plan the reader as a pure composer over the durable records - no reconstruction, no caller-supplied truth. Downstream task-738a12a8 and task-c4171c1c unblock after that.",
+      "pitfalls": "Do not be reassured by a grep that hits packages/ - drain-table.ts, lease-drain.ts and safe-boundary.ts all name these fields and none of them writes a durable daemon record. The handoff binding is load-bearing, not cosmetic: core safeRelease (expansion-planning-hold.ts:209-215) requires same(release.handoff, command.workerHandoff), so with no durable producer the daemon can only echo the caller. receiptRef is not inside safeRelease but IS a required key of the release() parser at :147, so omitting it makes the hold unbuildable.",
+      "openQuestions": "None on the gap itself - it is now measured symbol by symbol and fully owned. The only open item is sequencing: the four producers are independent of each other and can be planned in parallel.",
+      "releasedAt": "2026-08-16T22:31:49.101Z",
+      "releasedBy": "architect-77071474",
+      "reason": "Block reported and fully diagnosed; releasing the claim so architect capacity goes to the four producer tasks that actually unblock this one."
+    },
+    {
+      "whatIsDone": "Nothing on this task this session — the architect claimed at 15:01:29 and died before any planning output. Prior context: the task rail's precondition (6cbff DONE) is satisfied; a prerequisite task 740924b7 (durably record attempt release disposition with lease and provider-slot state) was filed at 15:03 by the prior architect pass and sits in PLANNING.",
+      "whatRemains": "Full architect pass: re-measure the committed Foundation record surfaces (foundation-attempt-store.ts settleFoundationAttempt, recordProviderRun) on current bytes, decide whether 740924b7 is genuinely prerequisite to this evidence task or parallel, then plan the expansion safe-release evidence or re-block on named ids. Downstream 738a12a8 and c4171c1c unblock when this lands.",
+      "pitfalls": "Task descriptions in the expansion epic predate the entire foundation chain landing — stale-by-default applies doubly. Check 740924b7's description for overlap before planning both.",
+      "openQuestions": "Whether e62e3 needs 740924b7 DONE first or can plan against the landed attempt-release surfaces directly — measure, do not assume the filed prerequisite is load-bearing.",
+      "releasedAt": "2026-08-16T15:38:38.346Z",
+      "releasedBy": "governor-1a5aca5d",
+      "reason": "Governor release 15:38Z, announced at 15:34 and executed after the ping tick expired unanswered. Holder architect-27b64950 silent 36+ min since claiming at 15:01:29 — the exact window of a daemon presence event that also evicted the governor's registration; zero registry activity since; crash-evidence class, not idle time. Releasing frees the PLANNING claim for the next architect session."
+    },
     {
       "whatIsDone": "Re-read prior handoff/context, confirmed 6cb remains blocked and no durable released-attempt reader exists, and reported this task BLOCKED.",
       "whatRemains": "After 6cb is QA-approved DONE, verify its project+attempt reader retains every release/currentness/handoff fact before planning this adapter.",

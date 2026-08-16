@@ -1,0 +1,33 @@
+{
+  "id": "task-32c1ba453469448d87bf0925b3590657",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: durable supersession preparation generation",
+  "description": "Objective: land the missing production authority for graph.prepare_supersession and graph.release_preparation before transport wiring. Deliverable: a focused daemon service that derives a supersession preparation from the durable active graph, approved successor, current planning dispositions, funding and fence facts; commits one bounded preparation generation whose SupersessionFundingReservation and PreparedPlanningFence share target/deadline/lifecycle; and releases both atomically by exact generation. Hard dependencies: the canonical GraphRevisionContent decision/producer, task-dd4ffa0c40834c59892f957fbf61fb23 current-active projection, and task-c4171c1cfe854cb78dd233794b342025 approved expansion binding. NOT in scope: HTTP/MCP registry wiring, graph.supersede activation, Foundation attempt ingress, or new runtime kinds. Consumer: task-efc2ef6330074b4d9893809f7425c95f. Verification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test.",
+  "definitionOfDone": [
+    "Production prepare reads the current active graph, approved target/preparation identity, complete planning disposition set, funding availability and fence membership from durable readers; the request cannot provide or replace any current authority fact.",
+    "One accepted prepare commits a single immutable generation containing the stored supersession plan identity plus paired HELD SupersessionFundingReservation and ACTIVE PreparedPlanningFence with identical goal, target revision, generation and deadline; at most one current generation exists.",
+    "Same-byte replay returns the original preparation without duplicate events or reservations; same decision identity with changed bytes, stale graph epoch/version, a sealed submission still finalizing, or changed consequence facts refuses with an exact code and layer and zero residue.",
+    "Release requires the exact current generation/version and no committed activation, then atomically transitions the paired reservation and fence to RELEASED/refunded; stale, foreign, repeated-conflict or unverifiable release fails closed while exact replay is idempotent.",
+    "Real SqliteEventStore tests assert exact code/layer and refusing service, nonzero hostile/race matrices, raw event/decision/reservation counts, one accepted prepare/release control, and production mutation drills for paired lifecycle, single-current-generation and caller-authority guards."
+  ],
+  "taskRails": [
+    "Do not invent GraphRevisionContent authority or caller-provided current/funding/fence facts; wait for the named durable producers and human decision dec-64b2391cb80f4c0cbb6e88353017cc65.",
+    "Reuse the landed @moe/core/@moe/scheduler supersession, expansion-preparation, funding and disposition surfaces through public roots; preserve delegated code/layer/origin rather than restamping.",
+    "Keep preparation/release separate from activation and transport; TDD, target <=250 lines per production source and split before 400, explicit-path commit only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 114.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T22:34:31.585Z",
+  "updatedAt": "2026-08-16T22:34:31.585Z"
+}
