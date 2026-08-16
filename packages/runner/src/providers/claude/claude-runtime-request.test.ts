@@ -1,6 +1,15 @@
-import { expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join as nativeJoin } from "node:path";
+
+import { afterAll, expect, it } from "vitest";
 
 import { canonicalDigest } from "../../canonical.js";
+import { resolveBrokerBinary } from "../../platform/windows/windows-broker-path.js";
+import { observeInstalledClaudeRuntime } from "./claude-host-runtime.js";
+import { prepareClaudeRuntimePin } from "./claude-runtime-pin.js";
 import {
   buildProviderRuntimeObservation,
   observationDigestInput,
@@ -65,6 +74,7 @@ const MESSAGES = Object.freeze({
   digest: "the quoted observation digest does not cover the snapshot this factory kept",
   executable: "the quoted closure does not declare exactly one EXECUTABLE to observe",
   executablePath: "the quoted EXECUTABLE entry does not carry a text path",
+  bound: "the quoted closure declares more entries than a runtime closure may hold",
 });
 
 const entry = (kind: string, path: string, sha256: string): RuntimeClosureEntry =>
@@ -199,6 +209,17 @@ function hostileCases(): readonly HostileCase[] {
       ]),
     }),
     MESSAGES.executable);
+  // Bounded BEFORE the quote is hashed: readQuote enforces the same ceiling, but
+  // only after canonicalising the whole quote, so an unbounded closure would be
+  // digested in full before anything refused it.
+  quote("the quoted closure declares more entries than the vocabulary allows", sound({
+    quotedObservation: reseal({
+      ...SOUND_QUOTE,
+      resolvedRuntimeClosure: Array.from({ length: 65 }, (_unused, index) => ({
+        kind: "EXECUTABLE", path: `${INSTALLED_ROOT}\\claude-${index}.exe`, sha256: DIGEST_A,
+      })),
+    }),
+  }), MESSAGES.bound);
   quote("the quoted EXECUTABLE carries no text path", sound({
     quotedObservation: reseal({
       ...SOUND_QUOTE,
@@ -230,10 +251,10 @@ const CASES = hostileCases();
 it("generated a positive number of hostile cases", () => {
   expect(CASES.length, "a sweep that generates zero cases passes while testing nothing")
     .toBeGreaterThan(0);
-  expect(CASES.length).toBe(32);
+  expect(CASES.length).toBe(33);
   // Every case pins its exact route. Counted so the pins have to EXIST rather
   // than merely be honoured where they happen to survive.
-  expect(CASES.filter((testCase) => testCase.message.length > 0).length).toBe(32);
+  expect(CASES.filter((testCase) => testCase.message.length > 0).length).toBe(33);
 });
 
 for (const [index, testCase] of CASES.entries()) {
@@ -333,3 +354,238 @@ it("publishes nothing beside the factory and its refusal carrier", () => {
   expect(Object.keys(requestModule).sort())
     .toEqual(["ClaudeRuntimeObservationRefused", "createClaudeRuntimePinRequest"]);
 });
+
+/* ------------------------------------------------------------------ *
+ * The REAL host, through the REAL production preparation.
+ *
+ * Nothing below injects a filesystem, a facts port, a clock or a process seam —
+ * the whole point of the factory is that those cannot be supplied, so a test that
+ * reached for one would be testing a shape the production path never takes.
+ * ------------------------------------------------------------------ */
+
+const WIN = process.platform === "win32";
+const HOST_CASE_TIMEOUT_MS = 60_000;
+const roots: string[] = [];
+
+function fixtureRoot(prefix: string): string {
+  const root = realpathSync(mkdtempSync(nativeJoin(tmpdir(), prefix)));
+  roots.push(root);
+  return root;
+}
+
+afterAll(() => {
+  for (const root of roots) rmSync(root, { force: true, recursive: true });
+});
+
+/** `where.exe` rather than a hard-coded install path: the host owns where Claude lives. */
+function brokerIsBuilt(): boolean {
+  return typeof resolveBrokerBinary() === "string";
+}
+
+function installedClaudeExecutable(): string | null {
+  if (!WIN) return null;
+  try {
+    const found = execFileSync("where.exe", ["claude.exe"], { encoding: "utf8" })
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.toLowerCase().endsWith(".exe"));
+    return found.length === 0 ? null : realpathSync(found[0] as string);
+  } catch {
+    return null;
+  }
+}
+
+function requestFor(
+  quotedObservation: unknown,
+  installedRoot: string,
+  pinRoot: string,
+): Record<string, unknown> {
+  return accepted({ quotedObservation, installedRoot, pinRoot });
+}
+
+/** The exact arm production returned, read off the production result itself. */
+function armOf(result: unknown): { readonly code: unknown; readonly layer: unknown } {
+  const record = result as Record<string, unknown>;
+  return { code: record["code"], layer: typeof record["layer"] === "string" ? record["layer"] : null };
+}
+
+/**
+ * The observer can refuse from more than one authority, and the port it is
+ * wrapped in has no refusal channel — `observe()` returns facts or throws. So the
+ * arm is asserted against PRODUCTION'S OWN ANSWER for the same input rather than
+ * against a hand-written expectation: a factory that restamped the code, or
+ * flattened the layer, disagrees with the observer here and reddens.
+ */
+it("carries every host-observation arm out of the port with its own code and layer", async () => {
+  const root = WIN ? fixtureRoot("moe-request-arms-") : "C:\\moe-absent-root";
+  const absent = nativeJoin(root, "claude.exe");
+  const notAnImage = nativeJoin(root, "not-an-image.exe");
+  if (WIN) writeFileSync(notAnImage, "not a portable executable");
+
+  const cases = [
+    { name: "the quoted executable is not there", executable: absent },
+    { name: "the quoted executable is not a loadable image", executable: notAnImage },
+  ];
+  let asserted = 0;
+  for (const testCase of cases) {
+    const quote = quoteOf([entry("EXECUTABLE", testCase.executable, DIGEST_A)]);
+    const request = requestFor(quote, root, nativeJoin(root, "pins"));
+    const port = request["facts"] as { readonly observe: () => Promise<unknown> };
+    const thrown = await port.observe().then(
+      () => null,
+      (error: unknown) => error,
+    );
+    expect(thrown, `${testCase.name}: the port resolved instead of refusing`).not.toBeNull();
+    const carried = (thrown as { readonly refusal?: Record<string, unknown> }).refusal;
+    expect(typeof carried, `${testCase.name}: the refusal was not carried`).toBe("object");
+    const oracle = armOf(
+      await observeInstalledClaudeRuntime({ installedRoot: root, executablePath: testCase.executable }),
+    );
+    expect({ code: carried?.["code"], layer: carried?.["layer"] }, `${testCase.name} lost its arm`)
+      .toEqual(oracle);
+    expect(carried?.["truthClass"], `${testCase.name} upgraded an UNKNOWN`).toBe("UNKNOWN");
+    const message = (thrown as Error).message;
+    expect(PATH_SHAPED.test(message), `${testCase.name}: the throw echoes a path: ${message}`)
+      .toBe(false);
+    expect(message.includes(testCase.executable)).toBe(false);
+    asserted += 1;
+  }
+  expect(asserted, "the arm sweep asserted nothing").toBe(cases.length);
+}, HOST_CASE_TIMEOUT_MS);
+
+it("leaves the runtime UNKNOWN when the host observation refuses", async () => {
+  const root = WIN ? fixtureRoot("moe-request-unknown-") : "C:\\moe-absent-root";
+  const quote = quoteOf([entry("EXECUTABLE", nativeJoin(root, "claude.exe"), DIGEST_A)]);
+  const prepared = await prepareClaudeRuntimePin(
+    requestFor(quote, root, nativeJoin(root, "pins")) as never,
+  );
+  expect(prepared.ok).toBe(false);
+  const failure = prepared as unknown as Record<string, unknown>;
+  expect(failure["layer"]).toBe(RUNTIME_LAYER);
+  expect(failure["truthClass"]).toBe("UNKNOWN");
+  expect(CLAUDE_RUNTIME_PIN_ERROR_CODES).toContain(failure["code"]);
+}, HOST_CASE_TIMEOUT_MS);
+
+/**
+ * DoD 3, on the real host. Both halves are asserted deliberately: a preparation
+ * whose fresh observation MATCHED the quote in every field would mean nothing was
+ * re-observed, and one that differed in every field would mean the quote was
+ * ignored. The quoted digest must match and the pinned binding must not.
+ */
+it("pins the really installed runtime, or refuses with the host's own stable code", async () => {
+  if (!WIN) {
+    // Not skipped: a leg that generates zero cases passes while proving nothing.
+    const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
+    const prepared = await prepareClaudeRuntimePin(
+      requestFor(quote, INSTALLED_ROOT, PIN_ROOT) as never,
+    );
+    expect(armOf(prepared)).toEqual({ code: "CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED", layer: RUNTIME_LAYER });
+    return;
+  }
+  const executable = installedClaudeExecutable();
+  expect(executable, "no claude.exe on PATH: the pinned arm cannot be certified here").not.toBeNull();
+  const installedRoot = realpathSync(dirname(executable as string));
+  const observed = await observeInstalledClaudeRuntime({ installedRoot, executablePath: executable as string });
+  if (!("ok" in observed && observed.ok === true)) {
+    // The ONLY admissible early exit, and it is pinned rather than shrugged at:
+    // with the broker built there is nothing left that could refuse here, so a
+    // leg that returned early on this host would be proving nothing.
+    expect(brokerIsBuilt(), "the broker is built, so the real runtime had to observe").toBe(false);
+    expect(armOf(observed).code).toBe("PROCESS_BOUNDARY_BROKER_UNRESOLVED");
+    return;
+  }
+  const quote = observed.observation;
+  const pinRoot = fixtureRoot("moe-request-pin-");
+  const prepared = await prepareClaudeRuntimePin(requestFor(quote, installedRoot, pinRoot) as never);
+  if (!prepared.ok) throw new Error(`preparation refused: ${prepared.code}: ${prepared.message}`);
+
+  expect(prepared.quotedObservationDigest).toBe(quote.observationDigest);
+  expect(prepared.freshObservationDigest).not.toBe(quote.observationDigest);
+  expect(prepared.observation.observationDigest).toBe(prepared.freshObservationDigest);
+  expect(prepared.observation.reportedVersion).toBe(quote.reportedVersion);
+  expect(prepared.pinnedRoot.toLowerCase().startsWith(realpathSync(pinRoot).toLowerCase())).toBe(true);
+  expect(prepared.executablePath.toLowerCase().startsWith(prepared.pinnedRoot.toLowerCase())).toBe(true);
+  expect(prepared.executablePath).not.toBe(executable);
+  // REHASHED, not copied on trust: an independent digest of the PINNED bytes must
+  // equal the digest the quote declared for the INSTALLED bytes.
+  expect(createHash("sha256").update(readFileSync(prepared.executablePath)).digest("hex"))
+    .toBe(quote.resolvedRuntimeClosure[0]?.sha256);
+}, HOST_CASE_TIMEOUT_MS);
+
+/**
+ * Each drift arm separately, and each proving the drift never reached the pinning
+ * boundary: `prepareClaudeRuntimePin` creates the pin root only once the quote and
+ * the fresh observation have agreed, so an untouched pin root is evidence that
+ * nothing a launcher could use was ever produced.
+ */
+it("refuses byte, version, capability and platform drift before anything is pinned", async () => {
+  if (!WIN) {
+    const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
+    const prepared = await prepareClaudeRuntimePin(
+      requestFor(quote, INSTALLED_ROOT, PIN_ROOT) as never,
+    );
+    expect(armOf(prepared)).toEqual({ code: "CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED", layer: RUNTIME_LAYER });
+    return;
+  }
+  const executable = installedClaudeExecutable();
+  expect(executable, "no claude.exe on PATH: the drift arms cannot be certified here").not.toBeNull();
+  const installedRoot = realpathSync(dirname(executable as string));
+  const observed = await observeInstalledClaudeRuntime({
+    installedRoot,
+    executablePath: executable as string,
+  });
+  if (!("ok" in observed && observed.ok === true)) {
+    expect(typeof armOf(observed).code).toBe("string");
+    return;
+  }
+  const truth = observed.observation as unknown as Record<string, unknown>;
+  const closure = truth["resolvedRuntimeClosure"] as readonly Record<string, unknown>[];
+  const CHANGED = "the runtime observed now is not the runtime the quote bound";
+  const drifts = [
+    {
+      name: "byte drift",
+      quote: reseal({ ...truth, resolvedRuntimeClosure: [{ ...closure[0], sha256: DIGEST_B }] }),
+      code: "CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH",
+      message: null,
+    },
+    {
+      name: "version drift",
+      quote: reseal({ ...truth, reportedVersion: "9.9.9 (Claude Code)" }),
+      code: "CLAUDE_RUNTIME_OBSERVATION_CHANGED",
+      message: CHANGED,
+    },
+    {
+      name: "capability drift",
+      quote: reseal({ ...truth, adapterCapabilitySchemaDigest: SCHEMA_DIGEST }),
+      code: "CLAUDE_RUNTIME_OBSERVATION_CHANGED",
+      message: CHANGED,
+    },
+    {
+      name: "platform drift",
+      quote: reseal({
+        ...truth,
+        platformIdentity: { ...(truth["platformIdentity"] as Record<string, unknown>), osVersion: "0.0.1" },
+      }),
+      code: "CLAUDE_RUNTIME_OBSERVATION_CHANGED",
+      message: CHANGED,
+    },
+  ];
+  let asserted = 0;
+  for (const drift of drifts) {
+    const pinRoot = nativeJoin(fixtureRoot("moe-request-drift-"), "pins");
+    const prepared = await prepareClaudeRuntimePin(
+      requestFor(drift.quote, installedRoot, pinRoot) as never,
+    );
+    expect(armOf(prepared), `${drift.name} took the wrong arm`)
+      .toEqual({ code: drift.code, layer: RUNTIME_LAYER });
+    if (drift.message !== null) {
+      expect((prepared as unknown as Record<string, unknown>)["message"],
+        `${drift.name} took the wrong route`).toBe(drift.message);
+    }
+    expect((prepared as unknown as Record<string, unknown>)["truthClass"]).toBe("UNKNOWN");
+    // Nothing a launcher could use was produced, and nothing was published.
+    expect(existsSync(pinRoot), `${drift.name} reached the pinning boundary`).toBe(false);
+    asserted += 1;
+  }
+  expect(asserted, "the drift sweep asserted nothing").toBe(4);
+}, HOST_CASE_TIMEOUT_MS);

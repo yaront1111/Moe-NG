@@ -132,6 +132,16 @@ import type {
   ScopeObservation, VerificationRecipe, VerifierIdentity, WorkspaceInputManifest,
   WorkspaceResultManifest,
 } from "@moe/runner";
+/**
+ * The runtime pin-REQUEST seam's type closure, through the same root. A consumer
+ * that can call the hydrator but cannot NAME its input, its result union or the
+ * refusal it may return cannot compose it at all, so an under-published closure
+ * has to fail here rather than in the consumer's own repository.
+ */
+import type {
+  ClaudeRuntimePinErrorCode, ClaudeRuntimePinFailure, ClaudeRuntimePinRequest,
+  ClaudeRuntimePinRequestInput, ClaudeRuntimePinRequestResult,
+} from "@moe/runner";
 /** The platform boundary seam, through the same root. */
 import type {
   LinuxBoundaryFacts, LinuxClassificationContext, LinuxPathFact, ObserveLinuxPlatformInput,
@@ -258,6 +268,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   // port set behind it is not, so the two authority slots are the only ones a
   // consumer can reach. See the withheld-name control below.
   ["CLAUDE_LAUNCH_REGISTRATION_PHASES", "array"], ["createClaudeLauncher", "function"],
+  // The runtime pin-REQUEST seam: the hydrator plus the refusal vocabulary a
+  // consumer needs to branch on it. The filesystem, the host facts observer and
+  // the clock it mints are NOT here — see the withheld-name control below.
+  ["CLAUDE_RUNTIME_PIN_ERROR_CODES", "array"], ["CLAUDE_RUNTIME_PIN_LAYER", "string"],
+  ["createClaudeRuntimePinRequest", "function"],
   // platform/: the OS-neutral boundary vocabulary and the Linux classifier.
   ["LINUX_SUPPORTED_ARCHITECTURES", "array"], ["PLATFORM_BOUNDARIES", "array"],
   ["PLATFORM_ERROR_CODES", "array"], ["PLATFORM_LAYERS", "array"],
@@ -336,7 +351,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(226);
+  expect(EXPECTED_EXPORTS.length).toBe(229);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -771,6 +786,75 @@ it("withholds the selection snapshot and verifier from the root", () => {
   expect(["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]
     .filter((name) => name in surface)).toEqual(
     ["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]);
+});
+
+/**
+ * The runtime pin-REQUEST seam. `ClaudeRuntimePinRequest` names six fields and
+ * only three of them are data; a root-only consumer supplies those three and
+ * receives the other three already minted. Production consumer:
+ * task-6cbff01023b14b26a78fc5e3eb1dd8a9.
+ */
+it("hydrates a runtime pin request from plain data through the package root", () => {
+  const quotedObservation: ProviderRuntimeObservation =
+    observationFixture("CONTENT_ADDRESSED_COPY");
+  const input: ClaudeRuntimePinRequestInput = {
+    quotedObservation, installedRoot: "C:\\installed", pinRoot: "C:\\pins",
+  };
+  const result: ClaudeRuntimePinRequestResult = runner.createClaudeRuntimePinRequest(input);
+  if ("ok" in result) throw new Error(`hydration refused with ${result.code}`);
+  const request: ClaudeRuntimePinRequest = result;
+  expect(Object.keys(request).sort()).toEqual(
+    ["clock", "facts", "fs", "installedRoot", "pinRoot", "quotedObservation"],
+  );
+  expect(Object.isFrozen(request)).toBe(true);
+  expect(request.quotedObservation.observationDigest).toBe(quotedObservation.observationDigest);
+  // The three a caller may not supply are minted here, and are really callable.
+  expect(typeof request.fs.hostPlatform()).toBe("string");
+  expect(typeof request.clock.observedAt()).toBe("string");
+  expect(typeof request.facts.observe).toBe("function");
+});
+
+it("refuses a caller-supplied capability with the runtime layer's own reason code", () => {
+  const smuggled = {
+    quotedObservation: observationFixture("CONTENT_ADDRESSED_COPY"),
+    installedRoot: "C:\\installed", pinRoot: "C:\\pins", fs: {},
+  };
+  const result: ClaudeRuntimePinRequestResult = runner.createClaudeRuntimePinRequest(smuggled);
+  if (!("ok" in result)) throw new Error("a smuggled capability was accepted");
+  const failure: ClaudeRuntimePinFailure = result;
+  const code: ClaudeRuntimePinErrorCode = failure.code;
+  expect(runner.CLAUDE_RUNTIME_PIN_ERROR_CODES).toContain(code);
+  expect(runner.CLAUDE_RUNTIME_PIN_LAYER).toBe("RUNTIME");
+  expect({ code, layer: failure.layer, truth: failure.truthClass }).toEqual({
+    code: "CLAUDE_RUNTIME_OBSERVATION_INVALID",
+    layer: runner.CLAUDE_RUNTIME_PIN_LAYER,
+    truth: "UNKNOWN",
+  });
+});
+
+/**
+ * Negative control for the pin-request seam's WIDTH, and the real deliverable of
+ * publishing the factory: a positive export list cannot prove an ABSENCE.
+ * `observeInstalledClaudeRuntime` matters most — it takes an `executablePath`, so
+ * a consumer holding it could point the host observer at a binary no quote ever
+ * committed to, which is exactly the authority the factory withholds by deriving
+ * that path from the quoted closure instead.
+ */
+it("withholds every runtime capability the pin-request factory mints", () => {
+  const withheld = [
+    "createNodeClaudeRuntimeFs", "RUNTIME_PIN_CHUNK_BYTES", "observeInstalledClaudeRuntime",
+    "probeClaudeRuntime", "ClaudeRuntimeObservationRefused", "prepareClaudeRuntimePin",
+    "CLAUDE_LAUNCHER_DEFAULTS", "discoverSources", "resolveSources", "readQuote",
+    "inspectSources", "snapshotSourceCandidates", "aggregateClosureDigest", "authorityDigest",
+  ];
+  expect(withheld.length).toBe(14);
+  // Read off the imported NAMESPACE, never the barrel's text: the root re-exports
+  // with `export *`, which a grep cannot see through.
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the same membership test finds what this seam DOES publish.
+  expect(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES"]
+    .filter((name) => name in surface))
+    .toEqual(["createClaudeRuntimePinRequest", "CLAUDE_RUNTIME_PIN_ERROR_CODES"]);
 });
 
 function recordsOf(overrides: Overrides = {}): Overrides {
