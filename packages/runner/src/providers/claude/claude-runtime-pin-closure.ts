@@ -1,16 +1,33 @@
-import { win32 } from "node:path";
-
-import { canonicalDigest, isHex64, isNormalizedText, isPlainRecord } from "../../canonical.js";
-import { streamDigest, type ClaudeRuntimeFsPort } from "./claude-runtime-pin-fs.js";
+import { canonicalDigest, isHex64, isPlainRecord } from "../../canonical.js";
+import { type ClaudeRuntimeFsPort } from "./claude-runtime-pin-fs.js";
 import {
   CLAUDE_RUNTIME_OBSERVATION_VERSION,
   MAX_RUNTIME_CLOSURE_ENTRIES,
-  MAX_RUNTIME_TEXT_CHARS,
   observationDigestInput,
   type ProviderRuntimeObservation,
   type RuntimeClosureEntry,
-  type RuntimeClosureKind,
 } from "./claude-observation.js";
+import {
+  inspectSources,
+  snapshotSourceCandidates,
+  type InspectedCandidate,
+  type RuntimeSourceCandidate,
+  type SourceEntry,
+  type SourceInspectionFailure,
+} from "./claude-runtime-source.js";
+
+/**
+ * Path/containment/digest authority lives in `claude-runtime-source.ts` and is
+ * re-exported here so every existing importer stays source-compatible. There is
+ * exactly ONE implementation of each rule; this module owns only the refusal
+ * shape, the quote semantics, and the aggregate identity.
+ */
+export {
+  fold,
+  isInside,
+  pathShapeRejection,
+  type SourceEntry,
+} from "./claude-runtime-source.js";
 
 /**
  * Refusal vocabulary and closure resolution for the Claude runtime pin.
@@ -68,63 +85,6 @@ export function isRefusal(value: unknown): value is ClaudeRuntimePinFailure {
 
 export function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-/** Windows path identity is case-insensitive, so every comparison folds. */
-export const fold = (value: string): string => value.toLowerCase();
-
-/**
- * Rejects UNC (`\\server\share`), device (`\\?\`, `\\.\`), relative and
- * reserved-character forms before any filesystem call, because `resolve`
- * happily normalises several of them into something that then passes a prefix
- * check against the containment root.
- */
-const LOCAL_ABSOLUTE = /^[A-Za-z]:\\(?:[^\\/:*?"<>|]+\\)*[^\\/:*?"<>|]+$/u;
-
-export function pathShapeRejection(value: unknown): string | null {
-  if (
-    typeof value !== "string" ||
-    value.length === 0 ||
-    value.length > MAX_RUNTIME_TEXT_CHARS ||
-    !isNormalizedText(value)
-  ) {
-    return "is not bounded normalized text";
-  }
-  if (!LOCAL_ABSOLUTE.test(value)) {
-    return "is not an absolute local-drive Windows path";
-  }
-  if (value.slice(3).split("\\").some((segment) => segment === "." || segment === "..")) {
-    return "contains a relative segment";
-  }
-  return null;
-}
-
-export function isInside(root: string, candidate: string): boolean {
-  const prefix = root.endsWith(win32.sep) ? root : `${root}${win32.sep}`;
-  return fold(candidate).startsWith(fold(prefix));
-}
-
-/**
- * Walks every segment below the containment root. Checking only the final entry
- * would let a junction anywhere above it redirect the whole subtree while the
- * leaf still lstats as an ordinary file.
- */
-async function segmentRejection(
-  fs: ClaudeRuntimeFsPort,
-  root: string,
-  target: string,
-): Promise<ClaudeRuntimePinErrorCode | null> {
-  const segments = win32.relative(root, target).split(win32.sep);
-  let current = root;
-  for (const [index, segment] of segments.entries()) {
-    current = win32.join(current, segment);
-    const kind = await fs.entryKind(current);
-    if (kind === "REPARSE") return "CLAUDE_RUNTIME_PATH_REPARSE";
-    if (kind === "MISSING") return "CLAUDE_RUNTIME_PATH_MISSING";
-    const last = index === segments.length - 1;
-    if (last ? kind !== "FILE" : kind !== "DIRECTORY") return "CLAUDE_RUNTIME_PATH_NOT_FILE";
-  }
-  return null;
 }
 
 /** The observation digest minus `freshness`: two instants are not two runtimes. */
@@ -185,83 +145,66 @@ export function readQuote(quote: unknown): QuoteFacts | ClaudeRuntimePinFailure 
   };
 }
 
-export interface SourceEntry {
-  readonly kind: RuntimeClosureKind;
-  readonly canonicalPath: string;
-  readonly relativePath: string;
-  readonly sha256: string;
+/** Converts the shared inspector's internal failure into this layer's refusal. */
+function wrap(failure: SourceInspectionFailure): ClaudeRuntimePinFailure {
+  return refuse(failure.code, failure.message);
 }
 
-/** Code-unit order over the source-relative path; the repository's sort rule. */
-function byRelativePath(left: SourceEntry, right: SourceEntry): number {
-  return left.relativePath < right.relativePath
-    ? -1
-    : left.relativePath > right.relativePath
-      ? 1
-      : 0;
-}
-
-async function resolveOne(
+/**
+ * The narrow internal discovery surface: caller-named candidates in, validated
+ * streamed entries out. No expected digest is declared, so nothing here can be
+ * "confirmed" against a caller's claim — the bytes are simply measured.
+ *
+ * Internal to @moe/runner by construction: it is not re-exported from the
+ * package root. Consuming task: task-32eddfd3c9644558b7218778e1f07e92.
+ */
+export async function discoverSources(
   fs: ClaudeRuntimeFsPort,
-  entry: RuntimeClosureEntry,
+  candidates: readonly RuntimeSourceCandidate[],
   realRoot: string,
-  seen: Set<string>,
-): Promise<SourceEntry | ClaudeRuntimePinFailure> {
-  const shape = pathShapeRejection(entry.path);
-  if (shape !== null) {
-    return refuse("CLAUDE_RUNTIME_PATH_INVALID", `${JSON.stringify(entry.path)} ${shape}`);
-  }
-  if (seen.has(fold(entry.path))) {
-    return refuse("CLAUDE_RUNTIME_PATH_DUPLICATE", `${JSON.stringify(entry.path)} is declared twice`);
-  }
-  seen.add(fold(entry.path));
-  if (!isInside(realRoot, entry.path)) {
-    return refuse(
-      "CLAUDE_RUNTIME_PATH_ESCAPE",
-      `${JSON.stringify(entry.path)} is not beneath the installed root`,
-    );
-  }
-  const rejection = await segmentRejection(fs, realRoot, entry.path);
-  if (rejection !== null) {
-    return refuse(rejection, `${JSON.stringify(entry.path)} is not a plain contained file`);
-  }
-  const canonicalPath = await fs.realpath(entry.path);
-  if (fold(canonicalPath) !== fold(entry.path) || !isInside(realRoot, canonicalPath)) {
-    return refuse(
-      "CLAUDE_RUNTIME_PATH_REPARSE",
-      `${JSON.stringify(entry.path)} resolves to ${JSON.stringify(canonicalPath)}`,
-    );
-  }
-  const sha256 = await streamDigest(fs, canonicalPath);
-  if (sha256 !== entry.sha256) {
-    return refuse(
-      "CLAUDE_RUNTIME_SOURCE_DIGEST_MISMATCH",
-      `${JSON.stringify(entry.path)} hashes to ${sha256}, the quote declared ${entry.sha256}`,
-    );
-  }
-  return {
-    kind: entry.kind,
-    canonicalPath,
-    relativePath: win32.relative(realRoot, canonicalPath),
-    sha256,
-  };
+): Promise<readonly SourceEntry[] | ClaudeRuntimePinFailure> {
+  const snapshot = snapshotSourceCandidates(candidates);
+  if (!Array.isArray(snapshot)) return wrap(snapshot as SourceInspectionFailure);
+  const inspected = await inspectSources(
+    fs,
+    (snapshot as readonly RuntimeSourceCandidate[]).map((candidate) => ({
+      ...candidate,
+      expectedSha256: null,
+    })),
+    realRoot,
+  );
+  return Array.isArray(inspected)
+    ? (inspected as readonly SourceEntry[])
+    : wrap(inspected as SourceInspectionFailure);
 }
 
+/**
+ * The quote path. Identical inspection to `discoverSources`, plus the quote's
+ * declared digest attached to each candidate; the comparison is the inspector's
+ * last act, so a drifting path is never reported as a mere digest mismatch.
+ */
 export async function resolveSources(
   fs: ClaudeRuntimeFsPort,
   closure: readonly RuntimeClosureEntry[],
   realRoot: string,
 ): Promise<readonly SourceEntry[] | ClaudeRuntimePinFailure> {
-  const seen = new Set<string>();
-  const resolved: SourceEntry[] = [];
-  for (const entry of closure) {
-    const source = await resolveOne(fs, entry, realRoot, seen);
-    if (isRefusal(source)) {
-      return source;
-    }
-    resolved.push(source);
-  }
-  return resolved.sort(byRelativePath);
+  // Every field is copied out ONCE, here. Indexing back into `closure` further
+  // down would let a hostile array-like answer position `index` with a different
+  // entry the second time, pairing a validated path with another's digest.
+  const declared = closure.map((entry) => ({
+    kind: entry.kind,
+    path: entry.path,
+    sha256: entry.sha256,
+  }));
+  const snapshot = snapshotSourceCandidates(declared.map(({ kind, path }) => ({ kind, path })));
+  if (!Array.isArray(snapshot)) return wrap(snapshot as SourceInspectionFailure);
+  const candidates: InspectedCandidate[] = (snapshot as readonly RuntimeSourceCandidate[]).map(
+    (candidate, index) => ({ ...candidate, expectedSha256: declared[index]?.sha256 ?? null }),
+  );
+  const inspected = await inspectSources(fs, candidates, realRoot);
+  return Array.isArray(inspected)
+    ? (inspected as readonly SourceEntry[])
+    : wrap(inspected as SourceInspectionFailure);
 }
 
 /**
