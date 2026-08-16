@@ -170,7 +170,7 @@ export function settleFoundationAttempt(
   const encoded = encodeFoundationPayload(attemptRecordBody(bound, record, input, parts));
   if (!encoded.ok) return encoded;
   const written = commitFoundationPhase(
-    store, bound, "RECORDED", encoded.bytes, 1, `${bound.target}:RECORDED`);
+    store, bound, "RECORDED", encoded.bytes, 1, `${record.grant.grantId}:RECORDED`);
   if (written === null || written.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
   }
