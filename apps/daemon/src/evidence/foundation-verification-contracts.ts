@@ -28,16 +28,18 @@ export const FOUNDATION_VERIFICATION_EVENT_TYPES = Object.freeze({
   ACTIVATED: "FoundationVerificationActivated",
   RECEIPTED: "FoundationVerificationReceipted",
   RECIPE_SEALED: "FoundationVerificationRecipeSealed",
+  REFUSED: "FoundationVerificationRefused",
 } as const);
 
-/** Ordered by when they can answer: REQUEST/IDENTITY/ACTIVATION are strictly
- *  before any process starts, EXECUTION interprets a run that already happened,
- *  RECEIPT covers writing the row and reading it back. */
+/** Ordered by when they can answer: REQUEST/IDENTITY/ACTIVATION are all strictly
+ *  before any process starts, RECEIPT covers writing the row and reading it back.
+ *  There is deliberately no EXECUTION layer: every post-run refusal on this path
+ *  belongs to the wrapper, the evidence builder or the store, and carries THEIR
+ *  layer — a daemon layer nothing could emit would be an orphan. */
 export const FOUNDATION_VERIFICATION_LAYERS = Object.freeze([
   "DAEMON_VERIFICATION_REQUEST",
   "DAEMON_VERIFICATION_IDENTITY",
   "DAEMON_VERIFICATION_ACTIVATION",
-  "DAEMON_VERIFICATION_EXECUTION",
   "DAEMON_VERIFICATION_RECEIPT",
 ] as const);
 export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS)[number];
@@ -48,6 +50,15 @@ export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS
  * receipt-binding fault. `VERIFIER_PROCESS_ERROR_CODES` and
  * `RUNNER_EVIDENCE_ERROR_CODES` already name those, and a second vocabulary for
  * one condition only makes the two indistinguishable.
+ *
+ * Also absent, after measuring rather than assuming: truncated-capture,
+ * unverified-execution and candidate-changed codes. `runVerifierProcess` refuses
+ * the moment a stream passes its bound and only ever answers `ok` with
+ * disposition COMPLETED or FAILED; and a durable attempt record is IMMUTABLE —
+ * one RECORDED event, with a second making `readStoredFoundationAttempt` refuse
+ * AMBIGUOUS under the STORE's code. So all three would be orphans no layer could
+ * emit. DoD 3 is met by carrying the producer's refusal, recording truncation on
+ * the UNKNOWN row, and asserting no-authoritative-pass as a property.
  */
 export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_REQUEST_MALFORMED",
@@ -56,10 +67,8 @@ export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_RECIPE_SEAL_INVALID",
   "FOUNDATION_VERIFICATION_CANDIDATE_STALE",
   "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
-  "FOUNDATION_VERIFICATION_CANDIDATE_CHANGED",
   "FOUNDATION_VERIFICATION_REPLAY_CONFLICT",
-  "FOUNDATION_VERIFICATION_CAPTURE_TRUNCATED",
-  "FOUNDATION_VERIFICATION_EXECUTION_UNVERIFIED",
+  "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
   "FOUNDATION_VERIFICATION_RECEIPT_AMBIGUOUS",
   "FOUNDATION_VERIFICATION_RECEIPT_UNREADABLE",
 ] as const);
@@ -76,27 +85,16 @@ export const FOUNDATION_VERIFICATION_REFUSAL_SOURCES = Object.freeze([
 export type FoundationVerificationRefusalSource =
   (typeof FOUNDATION_VERIFICATION_REFUSAL_SOURCES)[number];
 
+interface RefusalOf<S, C, L> {
+  readonly code: C; readonly layer: L; readonly ok: false; readonly source: S;
+}
+
 export type FoundationVerificationRefused =
-  | {
-    readonly ok: false; readonly source: "DAEMON_VERIFICATION";
-    readonly code: FoundationVerificationCode; readonly layer: FoundationVerificationLayer;
-  }
-  | {
-    readonly ok: false; readonly source: "FOUNDATION_ATTEMPT";
-    readonly code: string; readonly layer: string;
-  }
-  | {
-    readonly ok: false; readonly source: "VERIFIER_PROCESS";
-    readonly code: VerifierProcessErrorCode; readonly layer: VerifierProcessLayer;
-  }
-  | {
-    readonly ok: false; readonly source: "RUNNER_SUPERVISOR";
-    readonly code: string; readonly layer: string;
-  }
-  | {
-    readonly ok: false; readonly source: "RUNNER_EVIDENCE";
-    readonly code: RunnerEvidenceErrorCode; readonly layer: EvidenceRefusalLayer;
-  };
+  | RefusalOf<"DAEMON_VERIFICATION", FoundationVerificationCode, FoundationVerificationLayer>
+  | RefusalOf<"FOUNDATION_ATTEMPT", string, string>
+  | RefusalOf<"VERIFIER_PROCESS", VerifierProcessErrorCode, VerifierProcessLayer>
+  | RefusalOf<"RUNNER_SUPERVISOR", string, string>
+  | RefusalOf<"RUNNER_EVIDENCE", RunnerEvidenceErrorCode, EvidenceRefusalLayer>;
 
 export function refuseVerification(
   code: FoundationVerificationCode, layer: FoundationVerificationLayer,
@@ -143,14 +141,11 @@ export function carryEvidenceRefusal(
 }
 
 /**
- * IDENTITIES ONLY, and that is the whole point of this type.
- *
- * There is no field here for an input manifest, a result manifest, a runtime
- * observation, a recipe body or a receipt. A caller cannot present a
- * substitute for durable state because the substitute is not representable —
- * DoD 1 enforced by the type rather than by a validator that a later refactor
- * can quietly stop calling. `expectedRecordDigest` is the caller's belief about
- * WHICH durable record it is verifying, never a replacement for the record.
+ * IDENTITIES ONLY, and that is the whole point of this type. No field for an
+ * input manifest, result manifest, runtime observation, recipe body or receipt:
+ * a substitute for durable state is UNREPRESENTABLE rather than validated away,
+ * so no later refactor can stop calling the check. `expectedRecordDigest` is the
+ * caller's belief about WHICH record it verifies, never a replacement for it.
  */
 export interface FoundationVerificationRequest {
   readonly attemptAggregateId: string;
@@ -167,15 +162,10 @@ export const FOUNDATION_VERIFICATION_REQUEST_KEYS = Object.freeze([
 
 /**
  * Declaring a recipe is not replacing durable state: it is how one is created.
- * From the sealed event onward the recipe is loaded by identity and never again
- * accepted from a caller.
- *
- * `runtimeObservation` lives here because the wrapper's launch gate demands a
- * PROVEN one and the durable attempt record carries only its DIGESTS
- * (quotedRuntimeDigest, freshRuntimeDigest), never the observation itself. What
- * the verifier runs and the runtime it runs on are sealed by the same event, so
- * the verify path can load both by identity instead of taking either from a
- * caller.
+ * From the sealed event onward it is loaded by identity, never from a caller.
+ * `runtimeObservation` lives here because the launch gate demands a PROVEN one
+ * and the durable attempt record carries only its DIGESTS, never the observation
+ * itself — so what runs and the runtime it runs on are sealed by one event.
  */
 export interface FoundationRecipeRegistration {
   readonly argv: readonly string[];
@@ -213,24 +203,34 @@ export function verificationReceiptBody(
 ): Record<string, unknown> {
   const { capture, receipt } = parts;
   return {
-    attemptAggregateId: parts.attemptAggregateId,
-    completedAt: capture.completedAt,
-    durationMs: capture.durationMs,
-    exitCode: capture.exitCode,
-    receipt: receipt as unknown as Record<string, unknown>,
-    receiptSha256: receipt.sha256,
-    recipeAggregateId: parts.recipeAggregateId,
-    recipeSha256: receipt.recipeSha256,
-    recordDigest: parts.recordDigest,
-    recordVersion: FOUNDATION_VERIFICATION_RECEIPT_VERSION,
-    signal: capture.signal,
-    startedAt: capture.startedAt,
-    stderrSha256: capture.stderr.sha256,
-    stderrTruncated: capture.stderr.truncated,
-    stdoutSha256: capture.stdout.sha256,
-    stdoutTruncated: capture.stdout.truncated,
-    verdict: parts.verdict,
+    attemptAggregateId: parts.attemptAggregateId, completedAt: capture.completedAt,
+    durationMs: capture.durationMs, exitCode: capture.exitCode,
+    receipt: receipt as unknown as Record<string, unknown>, receiptSha256: receipt.sha256,
+    recipeAggregateId: parts.recipeAggregateId, recipeSha256: receipt.recipeSha256,
+    recordDigest: parts.recordDigest, recordVersion: FOUNDATION_VERIFICATION_RECEIPT_VERSION,
+    signal: capture.signal, startedAt: capture.startedAt, stderrSha256: capture.stderr.sha256,
+    stderrTruncated: capture.stderr.truncated, stdoutSha256: capture.stdout.sha256,
+    stdoutTruncated: capture.stdout.truncated, verdict: parts.verdict,
     verificationId: parts.verificationId,
+  };
+}
+
+/** The honest UNKNOWN a refusal leaves once the activation is committed, so a
+ *  verification never ends with no durable fact. Not a receipt, no verdict. The
+ *  truncation flags are RECORDED, not dropped: a truncated stream whose tail
+ *  happens to look green is how a false pass gets minted. */
+export function verificationRefusalBody(
+  verificationId: string, refused: FoundationVerificationRefused,
+  capture: VerifierCapture | null,
+): Record<string, unknown> {
+  return {
+    code: refused.code, layer: refused.layer, recordVersion: FOUNDATION_VERIFICATION_RECEIPT_VERSION,
+    source: refused.source,
+    stderrSha256: capture === null ? null : capture.stderr.sha256,
+    stderrTruncated: capture === null ? null : capture.stderr.truncated,
+    stdoutSha256: capture === null ? null : capture.stdout.sha256,
+    stdoutTruncated: capture === null ? null : capture.stdout.truncated,
+    truthClass: "UNKNOWN", verificationId,
   };
 }
 

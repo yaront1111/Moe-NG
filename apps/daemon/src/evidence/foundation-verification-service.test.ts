@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
 import {
-  CLAUDE_LAUNCHER_VERSION, buildInputManifest, buildProviderRuntimeObservation,
-  buildVerificationRecipe, observeScope,
+  CLAUDE_LAUNCHER_VERSION, EVIDENCE_RECEIPT_VERSION, buildInputManifest,
+  buildProviderRuntimeObservation, buildVerificationRecipe, createNodeProcessLauncher,
+  observeScope, receiptDigestInput,
 } from "@moe/runner";
 import type {
-  DeclaredInput, GitObserver, LaunchedProcess, ProcessLauncher, ProviderRuntimeObservation,
-  ScopeObservation, VerifierExitObservation, VerifierLaunchSpec,
+  DeclaredInput, EvidenceReceiptBody, GitObserver, LaunchedProcess, ProcessLauncher,
+  ProviderRuntimeObservation, ScopeObservation, VerifierExitObservation, VerifierLaunchSpec,
 } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -23,12 +24,18 @@ import { createFoundationLauncherAuthority } from "../activation/foundation-laun
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
 } from "../recovery/restore-test-harness.js";
-import { deriveDispatchAggregateId } from "../work/foundation-attempt-contracts.js";
+import {
+  FOUNDATION_DISPATCH_COMMAND_KIND, FOUNDATION_DISPATCH_EVENT_TYPES,
+  FOUNDATION_RESERVATION_VERSION, deriveDispatchAggregateId,
+} from "../work/foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "../work/foundation-attempt-contracts.js";
 import {
-  readDurableFoundationObservation, readFoundationAttemptRecord, recordProvenFoundationAttempt,
+  commitFoundationPhase, readDurableFoundationObservation, readFoundationAttemptRecord,
+  recordProvenFoundationAttempt,
 } from "../work/foundation-attempt-store.js";
-import { encodeFoundationPayload } from "../work/foundation-attempt-codec.js";
+import {
+  decodeFoundationPayload, encodeFoundationPayload,
+} from "../work/foundation-attempt-codec.js";
 import {
   FOUNDATION_VERIFICATION_CODES, FOUNDATION_VERIFICATION_COMMAND_KIND,
   FOUNDATION_VERIFICATION_EVENT_TYPES, FOUNDATION_VERIFICATION_LAYERS,
@@ -303,6 +310,21 @@ function ground(label: string, answer: Record<string, unknown>): Ground {
   };
   const observed = readDurableFoundationObservation(store, bound, record, value);
   if (observed === null) throw new Error("durable observation fixture was refused");
+  // The RECORDED event commits at expectedVersion 1, so the dispatch aggregate
+  // must already carry its RESERVED event — the production reservation, not a
+  // shortcut around it.
+  const reservation = encodeFoundationPayload({
+    activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
+    attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey: bound.nodeKey,
+    recordVersion: FOUNDATION_RESERVATION_VERSION, requestDigest: DIGEST_A,
+    sessionId: bound.sessionId,
+  });
+  if (!reservation.ok) throw new Error("reservation fixture refused");
+  const reserved = commitFoundationPhase(
+    store, bound, "RESERVED", reservation.bytes, 0, `${record.grant.grantId}:RESERVED`);
+  if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error("reservation fixture was not committed");
+  }
   recordProvenFoundationAttempt(store, bound, record, sealedInput(), {
     answer, observation: observed[0], registration: observed[1],
   });
@@ -409,11 +431,145 @@ function sealTamperedRecipe(store: SqliteEventStore, recipeAggregateId: string):
   });
 }
 
-function service(store: SqliteEventStore, launcher: ProcessLauncher): ReturnType<
-  typeof createFoundationVerificationService
-> {
-  return createFoundationVerificationService({ launcher, store });
+type Service = ReturnType<typeof createFoundationVerificationService>;
+
+function service(store: SqliteEventStore, launcher: ProcessLauncher): Service {
+  return createFoundationVerificationService({
+    launcher, principalId: PRINCIPAL_ID, projectId: PROJECT_ID, store,
+  });
 }
+
+/**
+ * The REAL production launcher and a REAL child process. Every case that accepts
+ * evidence uses this: a receipt minted from a stand-in process would prove only
+ * that the stand-in was believed.
+ */
+function realService(store: SqliteEventStore, timeoutMs?: number): Service {
+  return createFoundationVerificationService({
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID, store,
+    ...(timeoutMs === undefined ? {} : { reapGraceMs: 2_000, timeoutMs }),
+  });
+}
+
+/** cwd for the child, so a spawn failure can never be mistaken for a verdict. */
+function candidateDir(label: string): string {
+  const root = mkdtempSync(join(tmpdir(), `moe-candidate-${label}-`));
+  scratchRoots.push(root);
+  return root;
+}
+
+/** The real launcher, with a concurrent writer firing at the exact moment the
+ *  child starts. The process is genuine; only the timing is arranged. */
+function mutatingLauncher(onLaunch: () => void): ProcessLauncher {
+  const real = createNodeProcessLauncher();
+  return {
+    launch: (spec: VerifierLaunchSpec): LaunchedProcess => {
+      const launched = real.launch(spec);
+      onLaunch();
+      return launched;
+    },
+  };
+}
+
+/** A SECOND durable RECORDED event on the same dispatch aggregate, committed
+ *  through the store's own port — the shape a concurrent writer would leave. */
+function appendSecondRecord(ground: Ground): void {
+  const target = ground.bound.target;
+  const version = ground.store.readEvents(target).length;
+  const encoded = encodeFoundationPayload({ duplicate: true, target });
+  if (!encoded.ok) throw new Error("second record fixture could not be encoded");
+  ground.store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_DISPATCH_COMMAND_KIND, committedResultBytes: encoded.bytes,
+    correlationId: `corr-second-${target}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${target}:SECOND`, eventType: FOUNDATION_DISPATCH_EVENT_TYPES.RECORDED,
+      payload: encoded.bytes,
+    }],
+    expectedVersion: version,
+    key: { commandId: `cmd-second-${target}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: encoded.bytes, targetAggregateId: target,
+  });
+}
+
+/** The exact bytes the store holds for the one RECEIPTED event. */
+function receiptBytes(store: SqliteEventStore, aggregateId: string): Uint8Array {
+  const found = store.readEvents(aggregateId).filter(
+    (event) => event.eventType === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  const payload = found[0]?.payload;
+  if (payload === undefined) throw new Error("no receipt row on the aggregate");
+  return payload;
+}
+
+/** A SECOND receipt row, committed through the store's own port, so the read
+ *  model faces a genuinely ambiguous aggregate rather than a simulated one. */
+function appendSecondReceipt(store: SqliteEventStore, aggregateId: string): void {
+  const encoded = encodeFoundationPayload({ duplicate: true, verificationId: aggregateId });
+  if (!encoded.ok) throw new Error("second receipt fixture could not be encoded");
+  store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: encoded.bytes,
+    correlationId: `corr-dup-${aggregateId}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${aggregateId}:DUP`, eventType: FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED,
+      payload: encoded.bytes,
+    }],
+    expectedVersion: store.readEvents(aggregateId).length,
+    key: { commandId: `cmd-dup-${aggregateId}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: encoded.bytes, targetAggregateId: aggregateId,
+  });
+}
+
+/** Commits arbitrary bytes as a RECEIPTED event, so a drifted payload can be
+ *  planted without going through the canonical encoder. */
+function commitRawReceipt(
+  store: SqliteEventStore, aggregateId: string, payload: Uint8Array,
+): void {
+  store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: payload,
+    correlationId: `corr-raw-${aggregateId}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `${aggregateId}:RAW`, eventType: FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED,
+      payload,
+    }],
+    expectedVersion: store.readEvents(aggregateId).length,
+    key: { commandId: `cmd-raw-${aggregateId}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: payload, targetAggregateId: aggregateId,
+  });
+}
+
+/** Consumes an event id on an unrelated aggregate. Event ids are unique
+ *  store-wide, so a later commit trying to reuse it cannot land. */
+function burnEventId(store: SqliteEventStore, eventId: string): void {
+  const encoded = encodeFoundationPayload({ burned: eventId });
+  if (!encoded.ok) throw new Error("burn fixture could not be encoded");
+  store.commitExpectedVersionDecision({
+    commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: encoded.bytes,
+    correlationId: `corr-burn-${eventId}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId, eventType: FOUNDATION_VERIFICATION_EVENT_TYPES.REFUSED, payload: encoded.bytes,
+    }],
+    expectedVersion: 0,
+    key: { commandId: `cmd-burn-${eventId}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: encoded.bytes, targetAggregateId: `burn:${eventId}`,
+  });
+}
+
+/** The decoded durable UNKNOWN row a refusal leaves behind. */
+function decodedRefusal(store: SqliteEventStore, aggregateId: string): Record<string, unknown> {
+  const found = store.readEvents(aggregateId).filter(
+    (event) => event.eventType === FOUNDATION_VERIFICATION_EVENT_TYPES.REFUSED);
+  expect(found).toHaveLength(1);
+  const decoded = decodeFoundationPayload(found[0]?.payload);
+  if (!decoded.ok) throw new Error("durable refusal row did not decode");
+  return decoded.value;
+}
+
+const EXIT_ZERO = Object.freeze([process.execPath, "-e", "process.exit(0)"]);
+const EXIT_THREE = Object.freeze([process.execPath, "-e", "process.exit(3)"]);
+const FLOOD = Object.freeze([
+  process.execPath, "-e",
+  `process.stdout.write("x".repeat(${2 * 1024 * 1024}));process.exit(0)`,
+]);
+const HANG = Object.freeze([process.execPath, "-e", "setInterval(() => undefined, 1000)"]);
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
   return store.readEvents(aggregateId).map((event) => event.eventType);
@@ -582,5 +738,394 @@ describe("foundation verification — the activation is committed before the run
     // activation is an effect nothing authorised.
     expect(types).toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED);
     expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  });
+});
+
+describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN distinction", () => {
+  it("mints exactly one immutable receipt from the runner's builder on a green run",
+    async () => {
+      const ground = provenGround("green");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-green", EXIT_ZERO)).ok).toBe(true);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("green"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-green",
+        verificationId: "verify-green",
+      });
+
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+      expect(outcome.verdict).toBe("PASSED");
+      expect(outcome.authority).toBe("PROVEN_RECEIPT");
+      // Exactly one, read back from durable state rather than the return value.
+      const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-green"));
+      expect(types.filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED))
+        .toHaveLength(1);
+
+      const receipt = nested(outcome.row, "receipt");
+      // It came from the RUNNER's builder, not a locally-composed lookalike.
+      // `receiptDigestInput` is the runner's ONE declaration of the bound field
+      // set, so a receipt this daemon composed by hand could not satisfy it.
+      const bound = receiptDigestInput(receipt as unknown as EvidenceReceiptBody);
+      expect(Object.keys(bound).length).toBeGreaterThan(0);
+      for (const field of [
+        "recipeSha256", "inputTreeSha256", "resultTreeSha256", "runtimeObservationSha256",
+        "timestamps", "argv", "graphIdentity", "leaseIdentity", "effectIdentity",
+      ]) {
+        expect(Object.hasOwn(bound, field)).toBe(true);
+      }
+      // The digest provably does not cover itself, so a stored receipt can be
+      // re-verified without its own sha256 being an input.
+      expect(Object.hasOwn(bound, "sha256")).toBe(false);
+      expect(receipt["receiptVersion"]).toBe(EVIDENCE_RECEIPT_VERSION);
+      expect(receipt["sha256"]).toMatch(/^[0-9a-f]{64}$/u);
+      // Bound to the recipe, both trees, the runtime and the timing.
+      const stored = readFoundationAttemptRecord(ground.store, ground.attemptAggregateId);
+      expect(stored.ok).toBe(true);
+      if (!stored.ok) return;
+      expect(receipt["inputTreeSha256"]).toBe(nested(stored.record, "inputManifest")["sha256"]);
+      expect(receipt["resultTreeSha256"]).toBe(nested(stored.record, "resultManifest")["sha256"]);
+      expect(typeof receipt["runtimeObservationSha256"]).toBe("string");
+      expect(nested(receipt, "timestamps")["startedAt"]).toBe(outcome.row["startedAt"]);
+      // stdout/stderr/exit are the bindings the receipt itself does not carry.
+      expect(outcome.row["exitCode"]).toBe(0);
+      expect(outcome.row["stdoutSha256"]).toEqual(expect.any(String));
+      expect(outcome.row["stderrSha256"]).toEqual(expect.any(String));
+      expect(outcome.row["stdoutTruncated"]).toBe(false);
+    });
+
+  it("keeps a failed run as PROVEN, authoritative, durable evidence — never a refusal",
+    async () => {
+      const ground = provenGround("failed");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-failed", EXIT_THREE)).ok).toBe(true);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("failed"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-failed",
+        verificationId: "verify-failed",
+      });
+
+      // The recipe ran, the verifier answered, and the answer was no. That is
+      // evidence, not an absence of it.
+      expect(outcome.ok).toBe(true);
+      if (!outcome.ok) return;
+      expect(outcome.verdict).toBe("FAILED");
+      expect(outcome.authority).toBe("PROVEN_RECEIPT");
+      expect(outcome.row["exitCode"]).toBe(3);
+      expect(outcome.row["truthClass"]).not.toBe("UNKNOWN");
+      const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-failed"));
+      expect(types.filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED))
+        .toHaveLength(1);
+      // And it survives as bytes for a later reviewer.
+      const replayed = svc.readReceipt("verify-failed");
+      expect(replayed.ok).toBe(true);
+      if (replayed.ok) expect(replayed.verdict).toBe("FAILED");
+    });
+
+  it("refuses a truncated capture and RECORDS the truncation instead of dropping it",
+    async () => {
+      const ground = provenGround("truncated");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-flood", FLOOD)).ok).toBe(true);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("truncated"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-flood",
+        verificationId: "verify-truncated",
+      });
+
+      // The wrapper's own code and layer, carried through unrestamped.
+      expect(outcome).toMatchObject({
+        code: "VERIFIER_PROCESS_OUTPUT_OVERFLOW", layer: "CAPTURE", ok: false,
+        source: "VERIFIER_PROCESS",
+      });
+      const aggregate = deriveVerificationAggregateId("verify-truncated");
+      const types = eventTypes(ground.store, aggregate);
+      expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+      // Truncation outlives the run: a truncated stream whose tail happens to
+      // look green is exactly how a false pass gets minted.
+      expect(types).toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.REFUSED);
+      const row = decodedRefusal(ground.store, aggregate);
+      expect(row["stdoutTruncated"]).toBe(true);
+      expect(row["truthClass"]).toBe("UNKNOWN");
+      expect(row["code"]).toBe("VERIFIER_PROCESS_OUTPUT_OVERFLOW");
+    });
+
+  it("refuses a timed-out run, terminating rather than hanging", async () => {
+    const ground = provenGround("timeout");
+    const svc = realService(ground.store, 750);
+    expect(svc.sealRecipe(registration("recipe-hang", HANG)).ok).toBe(true);
+
+    const started = Date.now();
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("timeout"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-hang",
+      verificationId: "verify-timeout",
+    });
+
+    expect(outcome).toMatchObject({
+      code: "VERIFIER_PROCESS_TIMED_OUT", layer: "CAPTURE", ok: false, source: "VERIFIER_PROCESS",
+    });
+    // The run really ended; it did not merely stop being awaited.
+    expect(Date.now() - started).toBeLessThan(20_000);
+    const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-timeout"));
+    expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  }, 30_000);
+
+  it("refuses, minting no receipt, when the candidate changed between load and execution",
+    async () => {
+      const ground = provenGround("changed");
+      // The candidate moves underneath the RUN: a second RECORDED event lands on
+      // the same aggregate at the moment the child is launched, committed through
+      // the store's own port by a concurrent writer. No hook on the service.
+      const svc = createFoundationVerificationService({
+        launcher: mutatingLauncher(() => appendSecondRecord(ground)),
+        principalId: PRINCIPAL_ID, projectId: PROJECT_ID, store: ground.store,
+      });
+      expect(svc.sealRecipe(registration("recipe-changed", EXIT_ZERO)).ok).toBe(true);
+
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("changed"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-changed",
+        verificationId: "verify-changed",
+      });
+
+      // The STORE is the layer that can see it, so the store's code answers and
+      // travels unrestamped. This daemon declares no code for the condition.
+      expect(outcome).toMatchObject({
+        code: "FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS", layer: "DAEMON_FOUNDATION_ATTEMPT",
+        ok: false, source: "FOUNDATION_ATTEMPT",
+      });
+      const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-changed"));
+      expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+    });
+
+  /**
+   * The property, asserted over the WHOLE non-green set rather than per case, so
+   * a scenario added later cannot escape it. This is DoD 3's floor: an
+   * unverified execution never becomes an authoritative passing receipt.
+   */
+  it("never mints an authoritative PASSING receipt for any non-green run", async () => {
+    const scenarios = [
+      { argv: FLOOD, label: "prop-flood" },
+      { argv: HANG, label: "prop-hang" },
+      { argv: Object.freeze([process.execPath, "-e", "process.exit(9)"]), label: "prop-exit9" },
+    ];
+    expect(scenarios.length).toBeGreaterThan(0);
+
+    for (const scenario of scenarios) {
+      const ground = provenGround(scenario.label);
+      const svc = realService(ground.store, 750);
+      expect(svc.sealRecipe(registration(`recipe-${scenario.label}`, scenario.argv)).ok).toBe(true);
+      const outcome = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId,
+        candidateRoot: candidateDir(scenario.label), expectedRecordDigest: ground.recordDigest,
+        recipeAggregateId: `recipe-${scenario.label}`, verificationId: scenario.label,
+      });
+
+      // Either it refused outright, or it is a PROVEN FAILED verdict. What it
+      // may never be is PASSED, and no durable row may claim otherwise.
+      if (outcome.ok) {
+        expect(outcome.verdict).toBe("FAILED");
+      }
+      const readBack = svc.readReceipt(scenario.label);
+      if (readBack.ok) {
+        expect(readBack.verdict).not.toBe("PASSED");
+      }
+      const types = eventTypes(ground.store, deriveVerificationAggregateId(scenario.label));
+      const receipts = types.filter(
+        (type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+      expect(receipts.length).toBeLessThanOrEqual(1);
+    }
+  }, 60_000);
+});
+
+/**
+ * DoD 4 and DoD 5. The read model exists for task-8f9305b9bb5e4b8db327a55981b2ea0e
+ * (Review-qualified goal closure) and then the Foundation canary
+ * task-97554aa4293e40eab56c0b642e18513a, both of which hash the BYTES rather
+ * than compare objects — which is why byte identity, not deep equality, is what
+ * these cases assert.
+ */
+describe("foundation verification — replay leaves one run, and the read model is byte-exact", () => {
+  it("replays to exactly one verification run and one receipt row", async () => {
+    const ground = provenGround("replay-once");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-replay", EXIT_ZERO)).ok).toBe(true);
+    const request = {
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("replay-once"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-replay",
+      verificationId: "verify-replay",
+    };
+
+    const first = await svc.verify(request);
+    expect(first.ok).toBe(true);
+    const aggregate = deriveVerificationAggregateId("verify-replay");
+    const before = receiptBytes(ground.store, aggregate);
+    const second = await svc.verify(request);
+
+    expect(second.ok).toBe(true);
+    // Counted from DURABLE state, not from either return value.
+    const types = eventTypes(ground.store, aggregate);
+    expect(types.filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED))
+      .toHaveLength(1);
+    expect(types.filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED))
+      .toHaveLength(1);
+    // The replay answered from the durable row: same bytes, byte for byte.
+    expect(Buffer.from(receiptBytes(ground.store, aggregate)).equals(Buffer.from(before)))
+      .toBe(true);
+    if (first.ok && second.ok) expect(second.digest).toBe(first.digest);
+  });
+
+  it("refuses a replay with a materially different candidate and overwrites no history",
+    async () => {
+      const ground = provenGround("replay-conflict");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-first", EXIT_ZERO)).ok).toBe(true);
+      // A DIFFERENT recipe: different argv, so a different sealed sha256.
+      expect(svc.sealRecipe(registration("recipe-other", EXIT_THREE)).ok).toBe(true);
+      const first = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId,
+        candidateRoot: candidateDir("replay-conflict"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-first",
+        verificationId: "verify-conflict",
+      });
+      expect(first.ok).toBe(true);
+      const aggregate = deriveVerificationAggregateId("verify-conflict");
+      const before = receiptBytes(ground.store, aggregate);
+
+      const second = await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId,
+        candidateRoot: candidateDir("replay-conflict-2"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-other",
+        verificationId: "verify-conflict",
+      });
+
+      expectDaemonRefusal(
+        second, "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
+      // The first receipt's BYTES are still exactly where they were.
+      expect(Buffer.from(receiptBytes(ground.store, aggregate)).equals(Buffer.from(before)))
+        .toBe(true);
+      expect(eventTypes(ground.store, aggregate)
+        .filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED)).toHaveLength(1);
+    });
+
+  it("returns a prior receipt byte-identically to what was persisted", async () => {
+    const ground = provenGround("read-bytes");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-read", EXIT_ZERO)).ok).toBe(true);
+    const written = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("read-bytes"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-read",
+      verificationId: "verify-read",
+    });
+    expect(written.ok).toBe(true);
+
+    const readBack = svc.readReceipt("verify-read");
+
+    expect(readBack.ok).toBe(true);
+    if (!readBack.ok || !written.ok) return;
+    // Byte identity against the ORIGINALLY PERSISTED bytes, not against a
+    // re-derived object: two objects can be deep-equal while their canonical
+    // bytes differ, and it is the bytes review and closure will hash.
+    const persisted = receiptBytes(ground.store, deriveVerificationAggregateId("verify-read"));
+    const reencoded = encodeFoundationPayload(readBack.row);
+    expect(reencoded.ok).toBe(true);
+    if (reencoded.ok) {
+      expect(Buffer.from(reencoded.bytes).equals(Buffer.from(persisted))).toBe(true);
+      expect(reencoded.digest).toBe(readBack.digest);
+    }
+    expect(readBack.digest).toBe(written.digest);
+  });
+
+  it("refuses rather than returning a partial answer when a stored receipt cannot be read",
+    async () => {
+      const ground = provenGround("unreadable");
+      const svc = realService(ground.store);
+      expect(svc.sealRecipe(registration("recipe-unreadable", EXIT_ZERO)).ok).toBe(true);
+      expect((await svc.verify({
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("unreadable"),
+        expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-unreadable",
+        verificationId: "verify-unreadable",
+      })).ok).toBe(true);
+
+      // A SECOND receipt row on the same aggregate: the read can no longer say
+      // which one is the receipt, and answering with either would be a guess.
+      appendSecondReceipt(ground.store, deriveVerificationAggregateId("verify-unreadable"));
+
+      expectDaemonRefusal(
+        svc.readReceipt("verify-unreadable"), "FOUNDATION_VERIFICATION_RECEIPT_AMBIGUOUS",
+        "DAEMON_VERIFICATION_RECEIPT");
+    });
+
+  it("refuses a stored receipt whose bytes are not the canonical bytes", async () => {
+    const ground = provenGround("drifted");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-drift", EXIT_ZERO)).ok).toBe(true);
+    expect((await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("drifted"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-drift",
+      verificationId: "verify-drift",
+    })).ok).toBe(true);
+
+    // A SECOND aggregate carrying the SAME receipt object re-serialised
+    // non-canonically. It decodes to a deep-equal row, so only a BYTE compare
+    // can catch it — a read model that merely decoded would hand this back as
+    // authoritative evidence.
+    const source = receiptBytes(ground.store, deriveVerificationAggregateId("verify-drift"));
+    const decoded = decodeFoundationPayload(source);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    const drifted = encoder.encode(JSON.stringify(decoded.value, null, 1));
+    expect(Buffer.from(drifted).equals(Buffer.from(source))).toBe(false);
+    commitRawReceipt(ground.store, deriveVerificationAggregateId("verify-drifted-copy"), drifted);
+
+    expectDaemonRefusal(
+      svc.readReceipt("verify-drifted-copy"), "FOUNDATION_VERIFICATION_RECEIPT_UNREADABLE",
+      "DAEMON_VERIFICATION_RECEIPT");
+  });
+
+  it("refuses when the verification activation cannot be committed", async () => {
+    const ground = provenGround("no-activation");
+    const recorder = recordingLauncher();
+    const svc = service(ground.store, recorder.launcher);
+    expect(svc.sealRecipe(registration("recipe-noact", EXIT_ZERO)).ok).toBe(true);
+
+    // Burn the exact event id the activation commit will use. Event ids are
+    // unique store-wide, so the service's own commit cannot land — the same
+    // mechanism that makes a reused grant refuse in the dispatch slice.
+    burnEventId(ground.store, `${deriveVerificationAggregateId("verify-noact")}:ACTIVATED`);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("no-activation"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-noact",
+      verificationId: "verify-noact",
+    });
+
+    expectDaemonRefusal(
+      outcome, "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
+      "DAEMON_VERIFICATION_ACTIVATION");
+    // An activation that did not commit must not be followed by a run.
+    expect(recorder.launches).toHaveLength(0);
+    expect(eventTypes(ground.store, deriveVerificationAggregateId("verify-noact")))
+      .not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  });
+
+  it("tells an ABSENT receipt apart from an unreadable one", async () => {
+    const ground = provenGround("absent-receipt");
+    const svc = realService(ground.store);
+
+    // Never verified: there is no receipt, which is not the same fact as a
+    // receipt that will not decode. A reviewer draws opposite conclusions.
+    expectDaemonRefusal(
+      svc.readReceipt("verify-never-ran"), "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
+      "DAEMON_VERIFICATION_RECEIPT");
+    expectDaemonRefusal(
+      svc.readReceipt(""), "FOUNDATION_VERIFICATION_REQUEST_MALFORMED",
+      "DAEMON_VERIFICATION_REQUEST");
+    expect(eventTypes(ground.store, deriveVerificationAggregateId("verify-never-ran")))
+      .toHaveLength(0);
   });
 });
