@@ -4,6 +4,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { ACTIVATION_LEDGER_EVENT_TYPE } from "../activation/activation-ledger-contracts.js";
+import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
@@ -23,6 +24,7 @@ import {
   decodeFoundationPayload,
   encodeFoundationPayload,
 } from "../work/foundation-attempt-codec.js";
+import { readFoundationAttemptRecord } from "../work/foundation-attempt-store.js";
 import {
   FOUNDATION_DISPATCH_COMMAND_KIND,
   FOUNDATION_DISPATCH_EVENT_TYPES,
@@ -83,8 +85,9 @@ function expectUnmoved(store: SqliteEventStore, before: StoreSnapshot): void {
  *  going through the canonical encoder — the only way to reach the byte-compare branch. */
 function commitRawReceipt(
   store: SqliteEventStore, verificationId: string, payload: Uint8Array,
+  targetAggregateId?: string,
 ): void {
-  const aggregateId = deriveVerificationAggregateId(verificationId);
+  const aggregateId = targetAggregateId ?? deriveVerificationAggregateId(verificationId);
   const written = store.commitExpectedVersionDecision({
     commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND, committedResultBytes: payload,
     correlationId: `corr-raw-${verificationId}`, decidedAt: DECIDED_AT,
@@ -99,6 +102,55 @@ function commitRawReceipt(
     requestBytes: payload, targetAggregateId: aggregateId,
   });
   expect(written.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+
+function receiptOf(row: Record<string, unknown>): Record<string, unknown> {
+  const receipt = row["receipt"];
+  if (typeof receipt !== "object" || receipt === null || Array.isArray(receipt)) {
+    throw new TypeError("the template row carries no receipt");
+  }
+  return receipt as Record<string, unknown>;
+}
+
+interface PlantedOverrides {
+  readonly receipt?: Record<string, unknown>;
+  readonly row?: Record<string, unknown>;
+}
+
+/**
+ * A canonical RECEIPTED row, built from a REAL production-minted receipt with named fields
+ * drifted and committed under its own verification id.
+ *
+ * Planting is the ONLY way to reach the guards that compare a receipt against the record and the
+ * activation it names: a receipt the real chain mints agrees with both BY CONSTRUCTION, so every
+ * such guard is unreachable from an honest seed and a suite built only on honest seeds leaves
+ * them unguarded. The bytes still go through `encodeFoundationPayload`, so `readStoredReceipt`'s
+ * decode/re-encode byte compare accepts the row and the refusal under test is the only one that
+ * can answer.
+ */
+function plantReceipt(
+  store: SqliteEventStore, template: Record<string, unknown>, verificationId: string,
+  overrides: PlantedOverrides,
+): void {
+  const receipt = { ...receiptOf(template), ...overrides.receipt };
+  const encoded = encodeFoundationPayload({
+    ...template, ...overrides.row, receipt, verificationId,
+  });
+  if (!encoded.ok) throw new Error("the planted receipt could not be encoded");
+  commitRawReceipt(store, verificationId, encoded.bytes);
+}
+
+/** The lease and effect identities a durable activation actually reads back as. */
+function activationIdentities(
+  store: SqliteEventStore, attemptAggregateId: string,
+): Readonly<{ effectIdentity: string; leaseIdentity: string }> {
+  const history = readFoundationActivationHistory(
+    attemptAggregateId, store.readEvents(attemptAggregateId), PROJECT_ID);
+  if (!history.ok) throw new Error("the seeded activation does not read back");
+  return {
+    effectIdentity: history.history.record.effectIntent.intentId,
+    leaseIdentity: history.history.record.lease.leaseId,
+  };
 }
 
 /** A SECOND RECORDED event on the dispatch aggregate: the shape a concurrent writer leaves
@@ -282,6 +334,35 @@ describe("goal closure qualification — the durable evidence half", () => {
     expectUnmoved(store, before);
   }, 60_000);
 
+  /**
+   * THE SCANNED BYTES ARE NEVER THE ANSWER — the module's headline claim, made falsifiable.
+   *
+   * A decoy row is committed to its OWN aggregate while naming another verification's id, so the
+   * scanned bytes claim `node-1` and the row those bytes point at is the real, out-of-scope
+   * `node-src` receipt. Reading the SCANNED value would admit a receipt for a node nothing
+   * verified; reading the STORED row skips it and leaves node-1 with no evidence at all.
+   */
+  it("indexes the stored row a receipt points at, never the bytes that pointed at it", async () => {
+    const store = openStore();
+    approveNodes(store, ["node-1"]);
+    seedReviewAcceptance(store, "node-1");
+    const template = await seedVerifiedNode(store, "node-src");
+    const decoy = encodeFoundationPayload({
+      ...template.row, receipt: { ...receiptOf(template.row), graphIdentity: "node-1" },
+      verificationId: template.verificationId,
+    });
+    expect(decoy.ok).toBe(true);
+    if (!decoy.ok) return;
+    commitRawReceipt(store, template.verificationId, decoy.bytes,
+      deriveVerificationAggregateId("verify-decoy-aggregate"));
+    const before = snapshot(store);
+
+    const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    expectRefused(outcome, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT");
+    expectUnmoved(store, before);
+  }, 60_000);
+
   it("refuses RECEIPT_UNREADABLE when a durable receipt's bytes are not canonical", async () => {
     const store = openStore();
     approveNodes(store, ["node-1"]);
@@ -322,14 +403,19 @@ describe("goal closure qualification — the durable evidence half", () => {
     expectUnmoved(store, before);
   }, 60_000);
 
-  it("refuses RESULT_DIGEST_MISMATCH when the verified result moved after the receipt", async () => {
+  /**
+   * The UNREADABLE half of `verifiedResultHolds`: the record no longer reads back at all, so
+   * `stored.ok` is what refuses. Stated exactly, because the digest comparison beside it is a
+   * SEPARATE clause and this case never reaches it — the arm below is the one that does.
+   */
+  it("refuses RESULT_DIGEST_MISMATCH when the verified result no longer reads back", async () => {
     const store = openStore();
     approveNodes(store, ["node-1"]);
     seedReviewAcceptance(store, "node-1");
     const seeded = await seedVerifiedNode(store, "node-1");
-    // The receipt still says PASSED; the record it names no longer reads back as the one that
-    // was verified, so the pass describes a result the store no longer holds.
     appendSecondAttemptRecord(store, seeded.attemptAggregateId);
+    // The precondition that makes this the ok-clause case and not the digest one.
+    expect(readFoundationAttemptRecord(store, seeded.attemptAggregateId).ok).toBe(false);
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -337,6 +423,37 @@ describe("goal closure qualification — the durable evidence half", () => {
     expectRefused(outcome, "GOAL_CLOSE_RESULT_DIGEST_MISMATCH");
     expectUnmoved(store, before);
   }, 60_000);
+
+  /**
+   * The DIGEST half, which no honest seed can reach: a real chain mints a receipt whose
+   * `recordDigest` is the record's own digest by construction. Here the record reads back
+   * cleanly — `stored.ok` is asserted TRUE — and only the digest the receipt claims for it is
+   * wrong, so the comparison is the sole guard that can answer.
+   */
+  it("refuses RESULT_DIGEST_MISMATCH when the receipt claims a digest the record does not hold",
+    async () => {
+      const store = openStore();
+      approveNodes(store, ["node-1"]);
+      seedReviewAcceptance(store, "node-1");
+      const ground = seedProvenAttempt(store, "node-1");
+      // A real PASSED receipt for an OUT-OF-SCOPE node, used only as the template every planted
+      // field is drifted from. Its own row stays out of scope and is never the answer here.
+      const template = await seedVerifiedNode(store, "node-src");
+      plantReceipt(store, template.row, "verify-planted-digest", {
+        receipt: { ...activationIdentities(store, ground.attemptAggregateId),
+          graphIdentity: "node-1" },
+        row: { attemptAggregateId: ground.attemptAggregateId, recordDigest: "f".repeat(64) },
+      });
+      const stored = readFoundationAttemptRecord(store, ground.attemptAggregateId);
+      expect(stored.ok).toBe(true);
+      if (stored.ok) expect(stored.digest).not.toBe("f".repeat(64));
+      const before = snapshot(store);
+
+      const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+      expectRefused(outcome, "GOAL_CLOSE_RESULT_DIGEST_MISMATCH");
+      expectUnmoved(store, before);
+    }, 60_000);
 });
 
 describe("goal closure qualification — the review and authority halves", () => {
@@ -370,19 +487,52 @@ describe("goal closure qualification — the review and authority halves", () =>
       expectUnmoved(store, before);
     }, 60_000);
 
-  it("refuses REVIEW_PACKAGE_STALE when the acceptance disagrees with the receipt it names",
+  /**
+   * ONE operand drifts per case. `stageAcceptance` supplies its own defaults, so overriding only
+   * the sha256 would ALSO leave `reviewInputDigest` disagreeing and both clauses of the
+   * cross-check would be wrong at once — either could be deleted and the suite would stay green.
+   * Each case below therefore passes the real value through for the field it is not testing.
+   */
+  it("refuses REVIEW_PACKAGE_STALE when only the acceptance's receipt sha256 disagrees",
     async () => {
       const store = openStore();
       approveNodes(store, ["node-1"]);
       seedReviewAcceptance(store, "node-1");
       await seedVerifiedNode(store, "node-1");
-      // The receipt id is the REAL one, so the read-back guard above cannot answer; only the
-      // sha256 the acceptance claims for it is wrong.
       const real = readReviewLedger(store, PROJECT_ID, "node-1").accepted;
       if (real === undefined) throw new Error("the fixture recorded no acceptance");
       stageAcceptance(store, "node-1", {
-        verifierReceiptId: real.verifierReceiptId, verifierReceiptSha256: "e".repeat(64),
+        reviewInputDigest: real.reviewInputDigest,
+        verifierReceiptId: real.verifierReceiptId,
+        verifierReceiptSha256: "e".repeat(64),
       });
+      const staged = readReviewLedger(store, PROJECT_ID, "node-1").accepted;
+      // The precondition that makes exactly one clause reachable.
+      expect(staged?.reviewInputDigest).toBe(real.reviewInputDigest);
+      const before = snapshot(store);
+
+      const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+      expectRefusedExactly(outcome, "GOAL_CLOSE_REVIEW_PACKAGE_STALE",
+        "the accepted verifier receipt does not match the acceptance");
+      expectUnmoved(store, before);
+    }, 60_000);
+
+  it("refuses REVIEW_PACKAGE_STALE when only the acceptance's review input digest disagrees",
+    async () => {
+      const store = openStore();
+      approveNodes(store, ["node-1"]);
+      seedReviewAcceptance(store, "node-1");
+      await seedVerifiedNode(store, "node-1");
+      const real = readReviewLedger(store, PROJECT_ID, "node-1").accepted;
+      if (real === undefined) throw new Error("the fixture recorded no acceptance");
+      stageAcceptance(store, "node-1", {
+        reviewInputDigest: "e".repeat(64),
+        verifierReceiptId: real.verifierReceiptId,
+        verifierReceiptSha256: real.verifierReceiptSha256,
+      });
+      const staged = readReviewLedger(store, PROJECT_ID, "node-1").accepted;
+      expect(staged?.verifierReceiptSha256).toBe(real.verifierReceiptSha256);
       const before = snapshot(store);
 
       const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
@@ -445,14 +595,18 @@ describe("goal closure qualification — the review and authority halves", () =>
       expectUnmoved(store, before);
     }, 60_000);
 
+  /**
+   * THREE CLAUSES SHARE THIS MESSAGE — the activation not reading back AT ALL, and its lease and
+   * effect identities each disagreeing with the receipt. This case reaches only the first: the
+   * blur makes `readsBackAs` null, so the identity comparisons are never evaluated. The two
+   * cases after it reach one identity clause each, with `readsBackAs` asserted NON-null.
+   */
   it("refuses AUTHORITY_REMAINS when the receipt's own activation does not read back",
     async () => {
       const store = openStore();
       approveNodes(store, ["node-1"]);
       seedReviewAcceptance(store, "node-1");
       const seeded = await seedVerifiedNode(store, "node-1");
-      // Unreadable authority is not zero authority. The aggregate is still the one the receipt
-      // names, so only the read-back clause can answer.
       blurActivationHistory(store, seeded.attemptAggregateId);
       const before = snapshot(store);
 
@@ -462,6 +616,56 @@ describe("goal closure qualification — the review and authority halves", () =>
         "a durable activation does not read back as its receipt's lease and effect");
       expectUnmoved(store, before);
     }, 60_000);
+
+  it("refuses AUTHORITY_REMAINS when the activation reads back as a different lease", async () => {
+    const store = openStore();
+    approveNodes(store, ["node-1"]);
+    seedReviewAcceptance(store, "node-1");
+    const ground = seedProvenAttempt(store, "node-1");
+    const template = await seedVerifiedNode(store, "node-src");
+    const live = activationIdentities(store, ground.attemptAggregateId);
+    // Reads back perfectly, names the right aggregate, carries the right record digest — only
+    // the lease the receipt claims is not the lease the activation still holds.
+    plantReceipt(store, template.row, "verify-planted-lease", {
+      receipt: {
+        effectIdentity: live.effectIdentity, graphIdentity: "node-1",
+        leaseIdentity: "lease-that-is-not-the-durable-one",
+      },
+      row: { attemptAggregateId: ground.attemptAggregateId, recordDigest: ground.recordDigest },
+    });
+    expect(live.leaseIdentity).not.toBe("lease-that-is-not-the-durable-one");
+    const before = snapshot(store);
+
+    const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    expectRefusedExactly(outcome, "GOAL_CLOSE_AUTHORITY_REMAINS",
+      "a durable activation does not read back as its receipt's lease and effect");
+    expectUnmoved(store, before);
+  }, 60_000);
+
+  it("refuses AUTHORITY_REMAINS when the activation reads back as a different effect", async () => {
+    const store = openStore();
+    approveNodes(store, ["node-1"]);
+    seedReviewAcceptance(store, "node-1");
+    const ground = seedProvenAttempt(store, "node-1");
+    const template = await seedVerifiedNode(store, "node-src");
+    const live = activationIdentities(store, ground.attemptAggregateId);
+    plantReceipt(store, template.row, "verify-planted-effect", {
+      receipt: {
+        effectIdentity: "intent-that-is-not-the-durable-one", graphIdentity: "node-1",
+        leaseIdentity: live.leaseIdentity,
+      },
+      row: { attemptAggregateId: ground.attemptAggregateId, recordDigest: ground.recordDigest },
+    });
+    expect(live.effectIdentity).not.toBe("intent-that-is-not-the-durable-one");
+    const before = snapshot(store);
+
+    const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    expectRefusedExactly(outcome, "GOAL_CLOSE_AUTHORITY_REMAINS",
+      "a durable activation does not read back as its receipt's lease and effect");
+    expectUnmoved(store, before);
+  }, 60_000);
 });
 
 /**
