@@ -97,14 +97,20 @@
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, then `pnpm --filter @moe/daemon test` reading the `Test Files`/`Tests` COUNT LINE rather than the exit code. Both stay RED from the foreign slices recorded in step 1; apply the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your owned files, MUST be empty — and quote the remaining foreign red verbatim with its exact failing lines and paths. Do not repair it, do not narrow a leg to hide it, do not fabricate a green.\nADVERSARIAL REVIEW: (a) is the report's outcome type CLOSED, with no `| string` anywhere, so a wrong value is a compile error? (b) does the refusal arm carry the producer's `code` AND `layer` verbatim, unwrapped and unstringified? (c) is the exit promise never awaited on the reporting path, and is its rejection still handled so nothing escapes unhandled? (d) does the `SpawnInvocationRefusalCode` sweep assert a positive case count, given the vocabulary has exactly one member today? (e) are the nine pre-existing `surfaceOutcome` assertions still compiling and green? (f) are `agent-spawn-invocation.ts` and `agent-spawner.ts` UNTOUCHED — they belong to task-d4329e8d020f40308209397079c5004d? (g) is every edited file under 400 physical lines by `grep -c ''`? (h) does `git status --porcelain` show only owned paths, every drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines verbatim, quote the foreign daemon red as disclosure, name the test that reddened for each drill, and state explicitly whether drill 1 revealed a previously-vacuous assertion — that finding matters more than the fix. Keep verification.command under 500 characters.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/orchestrator/agent-wrapper.ts",
         "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
         "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
         "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
       ],
-      "startedAt": "2026-08-16T02:23:33.334Z"
+      "modifiedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
+      ],
+      "note": "GATE, ADVERSARIAL REVIEW, COMMIT — and the review found a defect MY OWN DIFF INTRODUCED, which I fixed and drilled before finishing.\n\nTHE ADVERSARIAL FINDING (concurrency, the checklist's first item). `runOnce` reads the affordance surface ONCE per pass, then loops the snapshot guarded by `active.size >= maxAgents` and `active.has(workItemId)`. While it was SYNCHRONOUS those guards were airtight — a pass ran to completion before anything could observe `active`. Adding `await staff(step)` turned them into check-then-act across a yield point: two overlapping passes read the same pre-staffing snapshot and can staff one item twice or overshoot maxAgents. Production's caller is a strictly sequential `for(;;) { await runOnce() }`, so nothing was broken today — but `runOnce` is exported and the hazard is created BY this diff, not inherited. Fixed with a 5-line pass-level latch (`pending.then(runPass, runPass)`, with `.catch` so a failed pass cannot poison the chain behind it). It serialises PASSES only — the pass still returns the moment admission resolves — so task rail 3 (never await a child lifetime) is untouched, and I say so explicitly because \"serialise\" is the word that rail uses about a different thing.\nDRILL 5 proves it load-bearing: replacing the latch with `const runOnce = runPass;` reddens the new named test \"serialises overlapping passes instead of double-staffing one item\" on the intended assertion — `expected [ { kind: 'project.register', …(4) } ] to have a length of +0 but got 1`. Restored, SHA-verified 5e2d10dc… .\n\nADVERSARIAL CHECKLIST, answered in order:\n(a) outcome CLOSED with no `| string`? NO, and deliberately — see step 3. `outcome` is honestly `string` (open dispatch codes this task does not own); the closed fact is `refusal`, and drill 1a proved `\"SPAWNED\" | string` is an EQUIVALENT MUTANT that can never redden anything.\n(b) code AND layer verbatim, unwrapped? YES — `refusal: start` at agent-wrapper.ts:299 passes the producer's own frozen object through; nothing is re-coded or stringified.\n(c) exit never awaited, rejection still handled? YES — the only `start.exit` reference is `const exit = start.exit.then(ok, err).finally(...)` at :303. Grep for `await start.exit` returns nothing. Drill 3 proved the separation is pinned.\n(d) sweep asserts a positive case count? YES — `expect(codes.length).toBeGreaterThan(0)` plus `expect(observed).toEqual([...codes])`, over a `Record<SpawnInvocationRefusalCode, string>` the compiler forces to stay exhaustive in both directions.\n(e) pre-existing `surfaceOutcome` assertions? All EIGHT compile and pass (the plan said nine; measured eight in step 1).\n(f) producer files untouched? YES, proven by authorship not assertion: my working tree holds zero edits to agent-spawner.ts / agent-spawn-invocation.ts / agent-spawner.test.ts, and every commit changing them since merge-base belongs to another task (e867ee9/task-6f786c58, 6ca5da0/task-d92b1b15, ac09ca9/task-d4329e8d). Commits carrying MY task id that touch them: 0.\n(g) every file under 400 by `grep -c ''`? agent-wrapper.ts 375, agent-wrapper-main.ts 348, agent-spawn-contract.ts 126.\n(h) only owned paths, drills reverted? YES — working tree clean of my paths after commit; drill-marker grep returns 0 in every production file.\nAlso considered and judged theoretical: a malformed `{ok:true}` injection with no `exit` would throw inside `staff` and reject the pass — impossible in TypeScript, and the seam is injectable config, so a malformed injection is a programming error rather than untrusted input.\n\nA FOREIGN WHOLE-TREE COMMIT SWEPT MY WORK MID-RUN. Commit 49625fa `fix(task-32eddfd3…): Observe installed Claude runtime… (retry after qa_reject #2)` captured ALL FOUR owned files (+453/-80) while I was drilling. Per the epic rail I did NOT amend it, reset, or create a claiming commit. My remaining delta — the reentrancy latch and its test — is committed by explicit pathspec as e881141 (`git diff --cached --name-only` verified only the two owned paths before committing; `git show --stat` confirms 2 files, +53/-1). Its message names the sweep so nobody reads the small commit as the whole task.\nQA MUST REVIEW BY BASE-REF DIFF, NOT BY MY COMMIT. Use `git diff abc3dcf..HEAD -- <the four owned paths>`: agent-spawn-contract.ts +32/-0, agent-wrapper-main.ts +16/-8, agent-wrapper.test.ts +400/-36, agent-wrapper.ts +57/-36. Exactly two commits touch those paths in that range — 49625fa (the foreign sweep of my bytes) and e881141 (mine). Do NOT use merge-base cf272f6: it predates the producer task, so it over-counts agent-spawn-contract.ts as +126/-0 including bytes task-d4329e8d wrote.\n\nGATES, each leg run separately with its own captured exit code, at the committed SHA:\n  `pnpm --filter @moe/daemon typecheck` -> EXIT 0, zero errors.\n  `pnpm --filter @moe/daemon test` -> EXIT 1, `Test Files 1 failed | 98 passed (99)`, `Tests 2 failed | 2048 passed (2050)`.\n  Owned scope -> EXIT 0, `Test Files 8 passed (8)`, `Tests 85 passed (85)`.",
+      "startedAt": "2026-08-16T02:23:33.334Z",
+      "completedAt": "2026-08-16T02:29:39.795Z"
     }
   ],
   "status": "WORKING",
@@ -120,12 +126,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:46:38.518Z",
-  "updatedAt": "2026-08-16T02:23:33.335Z",
+  "updatedAt": "2026-08-16T02:29:39.795Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:57:06.886Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
@@ -151,7 +157,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T02:05:32.158Z",

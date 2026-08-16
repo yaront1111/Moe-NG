@@ -802,24 +802,62 @@ describe("current effect/session binding", () => {
     readonly status?: string;
   }
 
+  /**
+   * A REAL committed activation, reduced to the four fields the scan reads, so
+   * the moving-scan fake can hand back events that genuinely DECODE.
+   *
+   * They have to. The scan now refuses any page carrying an event the type
+   * filter should have excluded, so a fake returning noise would refuse on its
+   * FIRST page and the case would prove termination over one page instead of
+   * over the whole captured horizon - a hang detector that stops watching.
+   */
+  interface MovingScanSeed {
+    readonly aggregateId: string;
+    readonly eventId: string;
+    readonly eventType: string;
+    readonly payload: readonly number[];
+  }
+
+  function movingScanSeed(): MovingScanSeed {
+    return withDirectory("moving-scan-seed", (directory) =>
+      withStore(join(directory, "store.sqlite"), (store) => {
+        seedActivation(store);
+        const stored = store.readEvents(DERIVED)[0];
+        if (stored === undefined) throw new Error("moving-scan seed failed");
+        return {
+          aggregateId: stored.aggregateId, eventId: stored.eventId,
+          eventType: stored.eventType, payload: Array.from(stored.payload),
+        };
+      }));
+  }
+
   async function runMovingScanWatchdog(): Promise<MovingScanResult> {
     const readerUrl = pathToFileURL(join(import.meta.dirname, "activation-ledger-reader.ts")).href;
+    const seed = movingScanSeed();
     const script = `
       import { parentPort } from "node:worker_threads";
       import { readCurrentEffectSessionBinding } from ${JSON.stringify(readerUrl)};
+      const seed = ${JSON.stringify(seed)};
+      const payload = Uint8Array.from(seed.payload);
       let horizonReads = 0;
       let pageReads = 0;
+      // BOTH pagers answer, and both never stop: whichever surface the scan
+      // reads through, the store keeps promising more with a strictly advancing
+      // cursor forever. Only the captured horizon can end this walk.
+      const endlessPage = (after) => {
+        pageReads += 1;
+        const globalPosition = after + 1n;
+        return { hasMore: true, items: [{
+          aggregateId: seed.aggregateId, eventId: seed.eventId, eventType: seed.eventType,
+          globalPosition, payload,
+        }], nextCursor: globalPosition };
+      };
       const answer = readCurrentEffectSessionBinding({
         getHealth: () => ({ projectId: ${JSON.stringify(PROJECT_ID)} }),
         readEventHorizon: () => { horizonReads += 1; return 3n; },
         readEvents: () => [],
-        readEventsAfter: (after) => {
-          pageReads += 1;
-          const globalPosition = after + 1n;
-          return { hasMore: true, items: [{
-            eventType: ${JSON.stringify(NOISE_EVENT_TYPE)}, globalPosition,
-          }], nextCursor: globalPosition };
-        },
+        readEventsAfter: (after) => endlessPage(after),
+        readEventsByTypeAfter: (_eventType, after) => endlessPage(after),
       }, ${JSON.stringify(PROJECT_ID)}, "absent-effect", ${JSON.stringify(SESSION)}, 0);
       parentPort.postMessage({
         code: answer.code, horizonReads, kind: "RESULT", layer: answer.layer,
@@ -933,11 +971,17 @@ describe("current effect/session binding", () => {
       const databasePath = join(directory, "store.sqlite");
       withStore(databasePath, (store) => {
         seedActivation(store);
+        // EVERY fake below answers BOTH pagers with the same hostile shape. The
+        // scan reads through only one of them, and which one is exactly what
+        // this task changed; a fake that implemented only the retired method
+        // would have its TypeError swallowed by the scan's own try/catch and
+        // report UNREADABLE, quietly retiring the case it was written for.
         const stuck = {
           getHealth: () => store.getHealth(),
           readEventHorizon: () => 1n,
           readEvents: (aggregateId: string) => store.readEvents(aggregateId),
           readEventsAfter: () => ({ hasMore: true, items: [], nextCursor: 0n }),
+          readEventsByTypeAfter: () => ({ hasMore: true, items: [], nextCursor: 0n }),
         } as unknown as SqliteEventStore;
         expect(codeOf(readCurrentEffectSessionBinding(stuck, PROJECT_ID, INTENT_ID, SESSION, 0)))
           .toBe("UNKNOWN:FOUNDATION_BINDING_SCAN_INCOMPLETE");
@@ -950,6 +994,11 @@ describe("current effect/session binding", () => {
           readEventsAfter: (after: bigint) => ({
             hasMore: true, items: store.readEventsAfter(after, 100).items, nextCursor: after,
           }),
+          readEventsByTypeAfter: (eventType: string, after: bigint) => ({
+            hasMore: true,
+            items: store.readEventsByTypeAfter(eventType, after, 100).items,
+            nextCursor: after,
+          }),
         } as unknown as SqliteEventStore;
         expect(codeOf(readCurrentEffectSessionBinding(stalled, PROJECT_ID, INTENT_ID, SESSION, 0)))
           .toBe("UNKNOWN:FOUNDATION_BINDING_SCAN_INCOMPLETE");
@@ -958,6 +1007,7 @@ describe("current effect/session binding", () => {
           readEventHorizon: () => 1n,
           readEvents: (aggregateId: string) => store.readEvents(aggregateId),
           readEventsAfter: () => { throw new Error("injected read failure"); },
+          readEventsByTypeAfter: () => { throw new Error("injected read failure"); },
         } as unknown as SqliteEventStore;
         expect(codeOf(readCurrentEffectSessionBinding(thrower, PROJECT_ID, INTENT_ID, SESSION, 0)))
           .toBe("UNKNOWN:FOUNDATION_BINDING_EVIDENCE_UNREADABLE");
@@ -996,58 +1046,84 @@ describe("current effect/session binding", () => {
     });
   });
 
-  it("refuses every hostile page shape inside the captured event horizon", () => {
+  /*
+   * THE HOSTILE PAGE-SHAPE TABLE MOVED, and it is worth knowing where and why.
+   *
+   * It lived here as seven cases against POSITIONAL CONTIGUITY, the completeness
+   * proof the global walk performed. The scan now pages the event-type-filtered
+   * stream, where matches are sparse BY CONSTRUCTION, so four of those cases
+   * described shapes a correct store now produces routinely:
+   *   "gap" and "premature end"          -> legal: a match with non-matching
+   *                                        rows before or after it is the normal
+   *                                        shape of a filtered page.
+   *   "past horizon", "overshoots        -> no longer refusals: growth past the
+   *   horizon", "hasMore at horizon",       captured horizon is outside this
+   *   "positions mislabelled"               answer, so the scan ignores it and
+   *                                         stops rather than failing closed.
+   * Leaving them here would have been worse than deleting them: every fixture
+   * used NOISE_EVENT_TYPE, so under the new filter-honesty guard all seven would
+   * have refused on the event type and the table would have stayed GREEN while
+   * exercising no page-shape guard at all.
+   *
+   * The replacement table is `activation-ledger-reader.test.ts` > "effect scan",
+   * the cases named "refuses ... as SCAN_INCOMPLETE". It is strictly stronger:
+   * it drives the same production entry point, every fixture is a REAL
+   * activation event so the guard under test is the one that answers, it names
+   * the replacement guards one per case (strictly increasing position, cursor
+   * naming the last returned position, empty-page-claiming-more, filter
+   * honesty), and it carries a positive control the old table lacked. The
+   * horizon cases became "ignores an activation committed past the captured
+   * horizon" in that same suite.
+   */
+
+  it("refuses a page whose cursor does not name its last returned position", () => {
     withDirectory("scan-page-shapes", (directory) => {
       const databasePath = join(directory, "store.sqlite");
       withStore(databasePath, (store) => {
         seedActivation(store);
         const stored = store.readEvents(DERIVED)[0]!;
-        const noiseAt = (globalPosition: bigint): StoredEvent => ({
-          ...stored, eventType: NOISE_EVENT_TYPE, globalPosition,
-        });
-        const cases = [
-          { horizon: 2n, name: "gap", page: { hasMore: false, items: [noiseAt(2n)], nextCursor: 2n } },
-          { horizon: 1n, name: "past horizon", page: { hasMore: false, items: [noiseAt(2n)], nextCursor: 2n } },
-          { horizon: 2n, name: "premature end", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: 1n } },
-          { horizon: 1n, name: "cursor mismatch", page: { hasMore: false, items: [noiseAt(1n)], nextCursor: null } },
-          { horizon: 1n, name: "hasMore at horizon", page: { hasMore: true, items: [noiseAt(1n)], nextCursor: 1n } },
-          // EVERY OTHER SHAPE CHECK PASSES ON THESE TWO. The item count, the
-          // cursor and hasMore all agree with the horizon, so only the per-item
-          // position comparison can refuse them: the first hides a skipped
-          // position behind a correct-looking count, the second reads one event
-          // past the horizon it captured. Without them both halves of that
-          // comparison are surviving mutants - dropping either leaves the five
-          // cases above green while the scan silently judges the wrong events.
-          { horizon: 2n, name: "positions mislabelled", page: { hasMore: false, items: [noiseAt(2n), noiseAt(3n)], nextCursor: 2n } },
-          { horizon: 1n, name: "overshoots horizon", page: { hasMore: false, items: [noiseAt(1n), noiseAt(2n)], nextCursor: 2n } },
-        ] as const;
-        for (const hostile of cases) {
-          let reads = 0;
-          const fake = {
-            getHealth: () => store.getHealth(),
-            readEventHorizon: () => hostile.horizon,
-            readEvents: (aggregateId: string) => store.readEvents(aggregateId),
-            readEventsAfter: () => reads++ === 0
-              ? hostile.page : { hasMore: false, items: [], nextCursor: null },
-          } as unknown as SqliteEventStore;
-          const answer = readCurrentEffectSessionBinding(
-            fake, PROJECT_ID, "absent-effect", SESSION, 0,
-          );
-          expectBindingUnknown(answer, "FOUNDATION_BINDING_SCAN_INCOMPLETE");
-        }
-        expect(cases).toHaveLength(7);
+        // The one shape that means the same thing under both pagers, kept here
+        // against a REAL store so the retired table leaves a live case behind.
+        const fake = {
+          getHealth: () => store.getHealth(),
+          readEventHorizon: () => 1n,
+          readEvents: (aggregateId: string) => store.readEvents(aggregateId),
+          readEventsAfter: () => ({ hasMore: false, items: [stored], nextCursor: null }),
+          readEventsByTypeAfter: () => ({ hasMore: false, items: [stored], nextCursor: null }),
+        } as unknown as SqliteEventStore;
+        expectBindingUnknown(
+          readCurrentEffectSessionBinding(fake, PROJECT_ID, "absent-effect", SESSION, 0),
+          "FOUNDATION_BINDING_SCAN_INCOMPLETE",
+        );
       });
     });
   });
 
+  /**
+   * TERMINATION, AND THE ONE NUMBER THAT PROVES THE HORIZON IS WHAT ENDS IT.
+   *
+   * The store never says stop, so `hasMore` cannot end this walk; `pageReads: 3`
+   * against a captured horizon of 3 is the whole assertion. The watchdog exists
+   * because the failure mode is a HANG, and a hung drill reads as a passing
+   * guard - `WATCHDOG_TIMEOUT` makes that failure loud instead of silent.
+   *
+   * The ANSWER changed with this task and the change is deliberate: the walk
+   * used to refuse SCAN_INCOMPLETE here because `hasMore` was still true at the
+   * horizon. Under the filtered pager `hasMore` is computed over matches, so a
+   * true `hasMore` at the horizon is ordinary concurrent growth, and growth past
+   * H is not this answer's business. It is now ABSENT/NOT_FOUND for the same
+   * reason the scan no longer refuses a match past H: refusing on it would
+   * rebuild, at the horizon, exactly the permanent-refusal cliff this task
+   * removed at the page cap.
+   */
   it("bounds a continuously advancing scan to the captured horizon", async () => {
     expect(await runMovingScanWatchdog()).toStrictEqual({
-      code: "FOUNDATION_BINDING_SCAN_INCOMPLETE",
+      code: "FOUNDATION_BINDING_NOT_FOUND",
       horizonReads: 1,
       kind: "RESULT",
       layer: FOUNDATION_ACTIVATION_BINDING_LAYER,
       pageReads: 3,
-      status: "UNKNOWN",
+      status: "ABSENT",
     });
   }, 10_000);
 
@@ -1118,6 +1194,67 @@ describe("current effect/session binding", () => {
         expect(codeOf(answer)).toBe("UNKNOWN:FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS");
         expect(answer.status === "BOUND" ? null : answer.layer)
           .toBe(FOUNDATION_ACTIVATION_BINDING_LAYER);
+      });
+    });
+  }, 180_000);
+
+  /**
+   * DoD 2, MEASURED ON THE REAL STORE: the answer without the walk.
+   *
+   * The wrapper below adds counting and NOTHING else - every method delegates to
+   * the same `SqliteEventStore` the two cases above drive, so what is counted is
+   * the production reader's consumption of the production pager, not a fake's
+   * idea of one. `served` is stream events handed to the scan; the aggregate
+   * read that follows a hit is deliberately not counted, because it is O(1) in
+   * the aggregate and was never the defect.
+   *
+   * The bound is a LITERAL and the assertion is that it holds while the stream
+   * is 6,501 events long - both halves are asserted, because a bound that
+   * passed on an empty store would prove nothing. Before this task the same
+   * measurement was 6,501: the scan read every event to answer a question about
+   * one. That is the number this task exists to move, and drill 5 re-proves it
+   * by reverting the port and watching this case redden.
+   */
+  it("answers from the real store without reading the whole global stream", () => {
+    withDirectory("scan-cost", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        seedActivation(store);
+        expect(floodGlobalStream(store, EVENTS_PAST_THE_OLD_SCAN_CEILING))
+          .toBe(EVENTS_PAST_THE_OLD_SCAN_CEILING);
+        const stream = walkGlobalStream(store);
+        expect(stream).toHaveLength(EVENTS_PAST_THE_OLD_SCAN_CEILING + 1);
+        expect(stream.length).toBeGreaterThan(OLD_SCAN_CEILING);
+
+        let served = 0;
+        let pages = 0;
+        const measure = <Page extends { readonly items: readonly StoredEvent[] }>(
+          page: Page,
+        ): Page => {
+          pages += 1;
+          served += page.items.length;
+          return page;
+        };
+        const counting = {
+          getHealth: () => store.getHealth(),
+          readEventHorizon: () => store.readEventHorizon(),
+          readEvents: (aggregateId: string) => store.readEvents(aggregateId),
+          readEventsAfter: (after: bigint, limit?: number) =>
+            measure(store.readEventsAfter(after, limit)),
+          readEventsByTypeAfter: (eventType: string, after: bigint, limit?: number) =>
+            measure(store.readEventsByTypeAfter(eventType, after, limit)),
+        } as unknown as SqliteEventStore;
+
+        // The scan really did its job: this is the same BOUND answer the
+        // uncounted case above asserts, so the bound is not bought by refusing.
+        expect(
+          readCurrentEffectSessionBinding(counting, PROJECT_ID, INTENT_ID, SESSION, NOW_MILLISECONDS),
+        ).toStrictEqual({
+          activationDigest: COMMIT.activationDigest, effectId: INTENT_ID, sessionId: SESSION,
+          status: "BOUND",
+        });
+        expect(served).toBeLessThanOrEqual(8);
+        expect(pages).toBeLessThanOrEqual(2);
       });
     });
   }, 180_000);

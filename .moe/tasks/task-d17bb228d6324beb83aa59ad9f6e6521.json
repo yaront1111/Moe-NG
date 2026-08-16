@@ -1,0 +1,37 @@
+{
+  "id": "task-d17bb228d6324beb83aa59ad9f6e6521",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Register the coordination command kind so typed envelopes cross MCP",
+  "description": "Objective: make the daemon's coordination surface reachable by an authenticated MCP command, so typed session and terminal envelopes cross a real boundary instead of existing only inside their own directory. GAP C of the Foundation self-host canary (task-97554aa4293e40eab56c0b642e18513a).\n\nMEASURED GAP at HEAD e881141, re-verified independently and unchanged:\n- `createCoordinationAdapter` is defined at `apps/daemon/src/coordination/coordination-adapter.ts:111`, taking `{clock, projectId, store}` and composing `createSessionAuthority` plus `createRecipientRegistry`. Its COMPLETE caller set is `coordination-adapter.test.ts:25,84,90`. Zero production callers.\n- The whole directory is unreachable: `grep -rn \"coordination/\" --include=*.ts apps/daemon/src`, filtered to exclude `apps/daemon/src/coordination/` itself and test files, returns ZERO lines. No production daemon module imports anything from it.\n- `daemon-command-registry.ts` admits exactly four families — `BOOTSTRAP_FAMILY` (:48), `REVIEW_FAMILY` (:56), `SESSION_FAMILY` (:61, session.open/renew/close, credential lifecycle only), `WORK_FAMILY` (:66) — plus effect.activate and recovery.complete. There is NO coordination or terminal envelope kind, so no MCP client can send or read a typed advisory envelope.\n- Note the near-miss that makes this easy to mis-scope: `SESSION_FAMILY` already exists and is about session CREDENTIAL lifecycle. It is not the coordination envelope surface, and extending it instead of adding the coordination kind would leave the gap in place while looking like progress.\n\nDeliverable: a coordination command kind registered in `daemon-command-registry.ts`, backed by `createCoordinationAdapter`, carrying typed addressed envelopes with an authenticated command receipt per state change. Advisory text stays advisory: an envelope's free-form content can never grant command, capability, policy, lease, approval or execution authority, and `advisoryOnly: true` must survive the round trip.\n\nNOT in scope: changing the coordination adapter's internals, the session-authority or recipient-registry semantics, the restart reconciliation wiring (GAP B, its own task), the pinned Claude spawn (GAP A, owned by the ff589 -> 32eddfd3 -> 75ee4a84 -> 6cbff010 chain plus task-d7b352e1), or the canary journey itself.\n\nOwned paths: apps/daemon/src/daemon-command-registry.ts, one new coordination command module plus its .js bridge, and their tests. Do NOT edit apps/daemon/src/coordination/** — it is complete and this task is the consumer edge.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code. Daemon gates are red at baseline from foreign slices; apply the path-attributed baseline over the owned paths.",
+  "definitionOfDone": [
+    "`grep -rn \"createCoordinationAdapter\" --include=*.ts apps | grep -v '\\.test\\.'` returns a PRODUCTION call site in addition to its own definition, and the coordination directory is no longer unreachable: a grep for `coordination/` imports from production daemon modules outside that directory returns at least one line. Both counts were zero before this task.",
+    "A registry test sends a typed coordination envelope through the same authenticated command path every other family uses and asserts a real command receipt is produced; the envelope's payload is read back and matches what was sent.",
+    "Advisory text carries NO authority: a test sends an envelope whose free-form content names a command kind, a capability, a lease and an approval, and asserts none of them takes effect and that `advisoryOnly: true` survives the round trip unchanged.",
+    "Every refusal pins the exact stable code AND the answering layer — unauthenticated sender, revoked or non-live recipient, cross-project recipient, malformed envelope, oversized payload. Where session authority and the coordination layer can both refuse, the fixture is valid at the session layer so the coordination layer is provably the one that answered.",
+    "The new kind does not widen an existing family: a test asserts `SESSION_FAMILY` still holds exactly its three credential-lifecycle kinds, so the coordination kind was added rather than smuggled into the session surface.",
+    "A mutation removing the registry entry turns a NAMED test red, and a mutation letting advisory text set a real field turns a different NAMED test red — proving both the edge and the advisory-only boundary are load-bearing.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately; the test leg prints a nonzero Test Files/Tests count line, and the HEAD-minus-merge-base failing-path delta intersected with the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "This is a CONSUMER EDGE task. Do not modify apps/daemon/src/coordination/** — the adapter, session authority and recipient registry are complete and separately tested. If the adapter genuinely cannot be composed as written, report blocked rather than editing it.",
+    "Add a COORDINATION kind; do not extend SESSION_FAMILY. That family is session credential lifecycle (open/renew/close) and reusing it would leave the coordination gap in place while appearing to close it.",
+    "Free-form text is advisory and can never bypass command authority — no envelope content may grant a command, capability, policy, lease, approval or execution right. Every state change needs its own authenticated command receipt.",
+    "Official MCP transports only; no custom dialect. The kind travels the same authenticated command path as every other family.",
+    "Preserve foreign work; commit only the explicit owned paths by pathspec — never a bare `git commit`, never `git add -A`."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 108.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T09:23:23.404Z",
+  "updatedAt": "2026-08-16T09:23:23.404Z"
+}

@@ -25,11 +25,24 @@
  * satisfy it. task-3b1cbdf9bd39405bb32230552d3ab242 owns that flip.
  */
 
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
+
+import {
+  assertRefusedWith,
+  cleanupHostileRoots,
+  HostileBoundExceededError,
+  HostileHarnessMisuseError,
+  MAX_BOUND_MS,
+  probeAfter,
+  probeBefore,
+  probeRacing,
+  withHostileRoot,
+} from "./hostile-harness.js";
+import type { RefusalExpectation } from "./hostile-harness.js";
 
 /**
  * The five coverage axes, one per sibling slice. Closed union: a typo in an entry's
@@ -303,6 +316,13 @@ function scanDeclaredBoundaries(): readonly ScannedBoundary[] {
   return found;
 }
 
+/**
+ * Scanned once per run, not once per assertion: the walk touches ~600 files and eight
+ * cases consult it. Still a live read of real source on every run, so a rename in a
+ * production module is visible to the very next run — which is what the drills prove.
+ */
+const SCANNED: readonly ScannedBoundary[] = scanDeclaredBoundaries();
+
 const keyOf = (entry: ScannedBoundary | RosterEntry): string => `${entry.constant}@${entry.file}`;
 
 const areaOf = (file: string): string => file.split("/").slice(0, 2).join("/");
@@ -333,41 +353,31 @@ describe("declared-boundary roster", () => {
 
 describe("roster versus live source scan", () => {
   it("scans a non-empty set of declarations", () => {
-    expect(scanDeclaredBoundaries().length).toBeGreaterThan(0);
+    expect(SCANNED.length).toBeGreaterThan(0);
   });
 
   it("names every scanned constant in the roster (scan minus roster is empty)", () => {
     const rostered = new Set(BOUNDARY_ROSTER.map(keyOf));
-    const missing = scanDeclaredBoundaries()
-      .filter((found) => !rostered.has(keyOf(found)))
-      .map(keyOf);
-    expect(missing).toEqual([]);
+    expect(SCANNED.filter((found) => !rostered.has(keyOf(found))).map(keyOf)).toEqual([]);
   });
 
   it("has no roster entry absent from source (roster minus scan is empty)", () => {
-    const scanned = new Set(scanDeclaredBoundaries().map(keyOf));
-    const stale = BOUNDARY_ROSTER.filter((entry) => !scanned.has(keyOf(entry))).map(keyOf);
-    expect(stale).toEqual([]);
+    const scanned = new Set(SCANNED.map(keyOf));
+    expect(BOUNDARY_ROSTER.filter((e) => !scanned.has(keyOf(e))).map(keyOf)).toEqual([]);
   });
 
   it("scans exactly the roster's cardinality", () => {
-    expect(scanDeclaredBoundaries()).toHaveLength(EXPECTED_ROSTER_SIZE);
+    expect(SCANNED).toHaveLength(EXPECTED_ROSTER_SIZE);
   });
 });
 
 describe("scanner exclusion rule", () => {
   it("excludes EXPECTED_REFUSAL_LAYERS from project-configuration.test-fixtures.ts", () => {
-    const found = scanDeclaredBoundaries().filter(
-      (entry) => entry.constant === "EXPECTED_REFUSAL_LAYERS",
-    );
-    expect(found).toEqual([]);
+    expect(SCANNED.filter((e) => e.constant === "EXPECTED_REFUSAL_LAYERS")).toEqual([]);
   });
 
   it("excludes CORE_FAULT_BOUNDARIES from packages/testkit", () => {
-    const found = scanDeclaredBoundaries().filter(
-      (entry) => entry.constant === "CORE_FAULT_BOUNDARIES",
-    );
-    expect(found).toEqual([]);
+    expect(SCANNED.filter((e) => e.constant === "CORE_FAULT_BOUNDARIES")).toEqual([]);
   });
 
   it("classifies the four exclusion shapes and keeps ordinary production modules", () => {
@@ -381,23 +391,18 @@ describe("scanner exclusion rule", () => {
 
 describe("scanner matches the annotated declaration form", () => {
   it("returns PLATFORM_LINUX_LAYER, which a ` = `-only pattern misses", () => {
-    const found = scanDeclaredBoundaries().find(
-      (entry) => entry.constant === "PLATFORM_LINUX_LAYER",
-    );
+    const found = SCANNED.find((e) => e.constant === "PLATFORM_LINUX_LAYER");
     expect(found?.file).toBe("packages/runner/src/platform/linux-facts.ts");
   });
 
   it("returns PLATFORM_MACOS_LAYER, which a ` = `-only pattern misses", () => {
-    const found = scanDeclaredBoundaries().find(
-      (entry) => entry.constant === "PLATFORM_MACOS_LAYER",
-    );
+    const found = SCANNED.find((e) => e.constant === "PLATFORM_MACOS_LAYER");
     expect(found?.file).toBe("packages/runner/src/platform/macos/macos-facts.ts");
   });
 
   it("matches the annotated form directly against the pattern", () => {
-    expect(DECLARATION_PATTERN.exec('export const A_LAYER: PlatformLayer = "x";')?.[1]).toBe(
-      "A_LAYER",
-    );
+    const annotated = 'export const A_LAYER: PlatformLayer = "x";';
+    expect(DECLARATION_PATTERN.exec(annotated)?.[1]).toBe("A_LAYER");
     expect(DECLARATION_PATTERN.exec('export const B_LAYERS = ["x"];')?.[1]).toBe("B_LAYERS");
     expect(DECLARATION_PATTERN.exec(' * export const C_LAYER = "prose";')).toBeNull();
     expect(DECLARATION_PATTERN.exec("export const NOT_A_BOUNDARY = 1;")).toBeNull();
@@ -406,10 +411,7 @@ describe("scanner matches the annotated declaration form", () => {
 
 describe("coverage axis partition", () => {
   it("tags every entry with exactly one axis from the closed set", () => {
-    const offenders = BOUNDARY_ROSTER.filter(
-      (entry) => !COVERAGE_AXES.includes(entry.axis),
-    ).map(keyOf);
-    expect(offenders).toEqual([]);
+    expect(BOUNDARY_ROSTER.filter((e) => !COVERAGE_AXES.includes(e.axis)).map(keyOf)).toEqual([]);
   });
 
   it("uses every axis at least once", () => {
@@ -434,6 +436,141 @@ describe("coverage axis partition", () => {
       0,
     );
     expect(total).toBe(EXPECTED_ROSTER_SIZE);
+  });
+});
+
+describe("hostile harness drivers are bounded", () => {
+  afterAll(() => {
+    cleanupHostileRoots();
+  });
+
+  const bound = { timeoutMs: 1_000, label: "harness-self-check" };
+
+  it("probeBefore runs the probe first, then the effect", async () => {
+    const order: string[] = [];
+    const result = await probeBefore(
+      bound,
+      async () => {
+        order.push("probe");
+        return "p";
+      },
+      async () => {
+        order.push("effect");
+        return "e";
+      },
+    );
+    expect(order).toEqual(["probe", "effect"]);
+    expect(result).toEqual({ probe: "p", effect: "e" });
+  });
+
+  it("probeAfter runs the effect first, then the probe", async () => {
+    const order: string[] = [];
+    await probeAfter(
+      bound,
+      async () => order.push("effect"),
+      async () => order.push("probe"),
+    );
+    expect(order).toEqual(["effect", "probe"]);
+  });
+
+  it("probeRacing records which leg settled first", async () => {
+    const outcome = await probeRacing(
+      bound,
+      async () => "fast",
+      async () => await new Promise((resolve) => setTimeout(() => resolve("slow"), 40)),
+    );
+    expect(outcome.firstSettled).toBe("left");
+    expect(outcome.left).toEqual({ status: "fulfilled", value: "fast" });
+    expect(outcome.right).toEqual({ status: "fulfilled", value: "slow" });
+  });
+
+  it("probeRacing reports a refusing leg as settled rather than propagating it", async () => {
+    const refusal = new Error("leg refused");
+    const outcome = await probeRacing(
+      bound,
+      async () => {
+        throw refusal;
+      },
+      async () => await new Promise((resolve) => setTimeout(() => resolve("slow"), 40)),
+    );
+    expect(outcome.firstSettled).toBe("left");
+    expect(outcome.left).toEqual({ status: "rejected", reason: refusal });
+  });
+
+  it("fails loudly when a probe outlives its bound, naming the stalled label", async () => {
+    const stalled = probeBefore(
+      { timeoutMs: 20, label: "never-settles" },
+      async () => await new Promise(() => undefined),
+      async () => "unreached",
+    );
+    await expect(stalled).rejects.toThrow(HostileBoundExceededError);
+    await expect(stalled).rejects.toThrow(/never-settles/u);
+  });
+
+  it("refuses a bound above MAX_BOUND_MS instead of letting setTimeout clamp it to 1ms", async () => {
+    const overflowed = probeBefore(
+      { timeoutMs: MAX_BOUND_MS + 1, label: "too-wide" },
+      async () => "p",
+      async () => "e",
+    );
+    await expect(overflowed).rejects.toThrow(HostileHarnessMisuseError);
+  });
+
+  it("removes a temp root on the throwing exit path", async () => {
+    let captured = "";
+    await expect(
+      withHostileRoot("throwing-case", async (root) => {
+        captured = root;
+        expect(existsSync(root)).toBe(true);
+        throw new Error("case failed");
+      }),
+    ).rejects.toThrow("case failed");
+    expect(captured).not.toBe("");
+    expect(existsSync(captured)).toBe(false);
+  });
+});
+
+describe("refusal helper pins code AND layer", () => {
+  const refusal = { code: "PROJECT_CONFIGURATION_INPUT_INVALID", layer: "PROJECT_CONFIGURATION_MANIFEST" };
+
+  it("accepts a refusal whose code and layer both match", () => {
+    expect(() => {
+      assertRefusedWith(refusal, { code: refusal.code, layer: refusal.layer });
+    }).not.toThrow();
+  });
+
+  it("rejects a mismatched code", () => {
+    expect(() => {
+      assertRefusedWith(refusal, { code: "SOME_OTHER_CODE", layer: refusal.layer });
+    }).toThrow(/refusal code mismatch/u);
+  });
+
+  it("rejects a matching code answered by the WRONG layer", () => {
+    expect(() => {
+      assertRefusedWith(refusal, { code: refusal.code, layer: "SOME_OTHER_LAYER" });
+    }).toThrow(/refusal layer mismatch/u);
+  });
+
+  it("REJECTS an expectation carrying only a code, so the weak form cannot be used", () => {
+    const layerBlind = { code: refusal.code } as unknown as RefusalExpectation;
+    expect(() => {
+      assertRefusedWith(refusal, layerBlind);
+    }).toThrow(HostileHarnessMisuseError);
+  });
+
+  it("rejects an actual value carrying no layer, rather than passing on the code alone", () => {
+    expect(() => {
+      assertRefusedWith({ code: refusal.code }, { code: refusal.code, layer: refusal.layer });
+    }).toThrow(/no string `layer`/u);
+  });
+
+  it("reads the reasonCode/reasonLayer spelling production also uses", () => {
+    expect(() => {
+      assertRefusedWith(
+        { reasonCode: refusal.code, reasonLayer: refusal.layer },
+        { code: refusal.code, layer: refusal.layer },
+      );
+    }).not.toThrow();
   });
 });
 

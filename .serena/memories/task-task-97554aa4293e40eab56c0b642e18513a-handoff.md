@@ -1,75 +1,70 @@
-# Foundation self-host canary — worker handoff 2026-08-15 (BLOCKED again at step 1)
+# task-97554aa4 Foundation self-host canary — architect output 2026-08-16
 
-## Outcome
-`worker-d6220bc6` ran step-1's resume gate at committed HEAD `65a3241ec313ac06a2705ea912ae876bdc442f46`
-and reported BLOCKED. Escalated to @governors (no live architect).
-Full file:line evidence lives in task comment `comment-90116e38af76441397716ce20fc3a992` — read it
-before re-planning; do not re-derive the greps.
+Delivered the routed Clause-2 output at HEAD e881141: three gaps re-measured on disk,
+two production tasks filed, canary re-blocked on four ids. No plan submitted — correct
+for an acceptance gate whose subjects are absent.
 
-## Why the earlier unblock did not clear this
-`governor-f70d1157` unblocked the task after verifying FOUR claims from worker-e46fb0dc's original
-block (goal.close in GOAL_HANDLERS, approval.decide activation composition, integration.accept_output
-in REVIEW_HANDLERS, apps/daemon/src/review persistence). **All four re-verified TRUE at 65a3241.**
-They are not in dispute.
+## The three gaps, re-measured (all still open)
 
-But the plan that architect-94dd1835 submitted AFTER the unblock has a step-1 gate over **seven**
-capabilities, and `planningNotes.risks` explicitly named three symbols the unblock never touched.
-Those three are still test-only. An unblock clears the claims it enumerates, not the gate.
+**GAP A — pinned Claude production spawn. NOT FILED**, per routing. Owned by:
+`ff589abd` (DONE) → `32eddfd3` (DONE, `observeInstalledClaudeRuntime` at
+claude-host-runtime.ts:201) → `75ee4a84` (planned, `createClaudeRuntimePinRequest` —
+the factory replacing 6cbff010's temporary `runtimePorts`) → `6cbff010` (BLOCKED).
+Plus `d7b352e1`; sibling `7ba898f5` is DONE on the fd0 half only.
 
-## The three gaps (measured, not read off a design)
-| Capability | Symbol | Complete caller set |
-|---|---|---|
-| pinned Claude launcher | `createFoundationClaudeLauncher` @ `apps/daemon/src/activation/foundation-launch-authority.ts:290` | own `.test.ts:42,602` + `.js` bridge |
-| restart reconciliation | `reconcileOnRestart` @ `apps/daemon/src/recovery/restart-reconciliation.ts:235` | `continuation-test-harness.ts:6,73` + 2 `.test.ts` |
-| durable coordination | `createCoordinationAdapter` @ `apps/daemon/src/coordination/coordination-adapter.ts:111` | own `.test.ts:84,90` |
+**GAP B — restart reconciliation. UNWIRED.** `reconcileOnRestart`
+(restart-reconciliation.ts:235) callers: `continuation-test-harness.ts:6,73` (a harness
+by name and fact), two test files, one doc comment. Zero production. `startDaemon`
+(daemon-entry.ts:162) = resolveDependencies → mint CSRF → startControlRoomListener →
+freeze/return. Filed **task-3e54b466**.
 
-Supporting facts, all re-runnable:
-- `git grep -n launchClaude -- '*.ts' | grep -v ^packages/runner` -> **ZERO lines.** @moe/runner's
-  launcher has no consumer anywhere outside its own package.
-- Production's only real Claude spawn is `claudeSpawner` (orchestrator/agent-spawner.ts) at
-  `agent-wrapper-main.ts:82`. It spawns `MOE_AGENT_COMMAND` (default `claude`) with env credentials
-  and does **no** pin observation, version check, executable-closure check, or registration commit.
-- `startDaemon` (`daemon-entry.ts:162`) read in full: `resolveDependencies -> startControlRoomListener
-  -> freeze/return`. **No reconciliation sweep at boot.** So a restart writes no
-  `{ADOPTED,SUSPECT,QUARANTINED,RECONCILIATION_COMMAND}` records for step 4 / DoD 2 to assert over.
-- `daemon-command-registry.ts` wires `runRecoveryCompleteCommand` and `daemon-store-dependencies.ts:16`
-  wires `createRestorePort`. Both are DIFFERENT capabilities (completion digest; restore/quiesce) —
-  neither classifies in-flight attempts.
-- `git grep -n "coordination/" -- 'apps/daemon/src/**'` minus the coordination dir -> **ZERO lines.**
-  The whole coordination directory is unreachable from every production daemon module.
-- Registry admits exactly: BOOTSTRAP (10 kinds), REVIEW (4), SESSION (3 — `session.open/renew/close`,
-  credential lifecycle ONLY), WORK (3), `effect.activate`, `recovery.complete`. No coordination or
-  terminal envelope kind exists, so no MCP client can send/read a typed advisory envelope.
+**GAP C — durable coordination. UNWIRED.** `createCoordinationAdapter`
+(coordination-adapter.ts:111) has three callers, all its own test. A grep for
+`coordination/` imports from production daemon modules outside that directory returns
+**zero**. Registry admits BOOTSTRAP(:48)/REVIEW(:56)/SESSION(:61)/WORK(:66) + effect.activate
++ recovery.complete — no coordination kind. Filed **task-d17bb228**.
 
-## What IS real — do not re-measure
-Plain-Node probe, cwd `D:\projexts\moe-next\apps\daemon`:
-`runner launchClaude: function` / `runner admitResume: function` / `coordination keys: 14` /
-`daemon root: exports=78 REVIEW_HANDLERS=object`. `apps/daemon/package.json:16` declares
-`@moe/coordination": "workspace:*"`. Hosts real: `mcp-http-main.ts:40 -> createMcpHttpHost`,
-`agent-wrapper-main.ts:74 -> createAgentWrapper`, `:132 -> createNodeVerifier` (real bounded spawn,
-sha-256 receipt, Windows `taskkill /T` tree kill at `agent-wrapper-main.ts` runTest).
-**The edges are fine. The gap is COMPOSITION, not publication — project rail Clause 1.**
+## Then planning GAP B found a sub-gap
 
-## What unblocks it (three production consumer edges, not exports)
-- A: compose `createFoundationClaudeLauncher`/`createFoundationLauncherAuthority` into the spawn path
-  so `claudeSpawner`'s launch is pin-observed and fails closed by code on a non-approved host.
-- B: call `reconcileOnRestart` from the boot path (`startDaemon` or the store-dependency composition
-  root) so a restart durably writes classifications; expose the continuation command via the registry.
-- C: register a coordination command kind in `daemon-command-registry.ts` backed by
-  `createCoordinationAdapter` so typed session/terminal envelopes cross MCP with authenticated receipts.
+`reconcileOnRestart` needs `InFlightAttempt[]`, and **nothing produces it** — the grep
+returns only the type declaration and the request field. Checked for it under other
+names first: all four `foundation-attempt-store.ts` readers (:73, :115, :128, :149) are
+keyed by a known id, so none enumerate; the other `inFlight` hits are an in-memory map
+in recovery-incarnation.ts and scheduler capacity units.
 
-Steps 2-8 of the current plan are unchanged and resume as written once these exist.
+Filed **task-48c0c0db** (enumerator) and blocked `3e54b466` on it. Did not absorb it:
+the wiring task is a consumer edge, an enumerator is new production capability, and
+absorbing it would have made the wiring task edit what it composes.
 
-## The trap to refuse
-`packages/testkit/src/foundation/foundation-model-j3j4.ts` exists and makes a green J3/J4 trivial to
-fake. Same for calling the pure reducers directly from the `.e2e.ts`. Both are the mock-backed
-journey / test-owned authority that epic rail 4 and Clause 2 forbid, and this task is the epic's
-TERMINAL acceptance gate — a fake green here retires the whole gate. Refusing that is the point.
+## Chain now
 
-## State on disk
-No bytes written by this session. `tests/e2e/foundation` still holds exactly the 8 committed
-harness/fixture/spec/manifest files and zero journey files. Nothing staged, nothing committed.
-Root `test:e2e` is still `tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e` —
-the isolated `*.e2e.ts` lane config was never written (it is step 1's second half, unreached).
+`48c0c0db` → `3e54b466` → canary(GAP B)
+`d17bb228` → canary(GAP C)
+`75ee4a84` → `6cbff010` + `d7b352e1` → canary(GAP A)
 
-Prior spec context: `mem:spec-foundation-journeys-hand-transcribed`.
+`3e54b466`, `d17bb228` and the GAP A chain are independent — three parallel tracks; only
+the canary waits on all four.
+
+## Traps recorded in the filed tasks
+
+- **`SESSION_FAMILY` is a decoy for GAP C**: it exists and is session *credential*
+  lifecycle (open/renew/close), not coordination envelopes. Extending it closes nothing.
+  `d17bb228`'s DoD pins it at exactly three kinds so the substitution reddens.
+- **A test harness is not a production caller.** Routing production through
+  `continuation-test-harness.ts` would leave GAP B where it is while looking closed.
+- **`FOUNDATION_DISPATCH_EVENT_TYPES` has no terminal member** (only RECORDED and
+  RESERVED), so "still in flight" must be decided from committed evidence. Inferring it
+  from absence classifies every finished attempt as a crash.
+- `packages/testkit/src/foundation/foundation-model-j3j4.ts` would make a green J3/J4
+  trivial to fake — exactly the mock-backed journey this terminal gate must refuse.
+
+## Unblock test — greps, never status
+
+```
+grep -rn "reconcileOnRestart" --include=*.ts apps | grep -v '\.test\.' | grep -v test-harness
+grep -rn "createCoordinationAdapter" --include=*.ts apps | grep -v '\.test\.'
+grep -rn "coordination/" --include=*.ts apps/daemon/src | grep -v "^apps/daemon/src/coordination/"
+```
+All three returned zero at this HEAD. Steps 2-8 of the canary plan are unchanged.
+
+Related: `mem:gotcha-board-promotes-tasks-ahead-of-their-dependencies`.

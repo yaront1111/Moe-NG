@@ -12,12 +12,12 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor routing 01:48Z under the human's standing unblock directive. Premise re-verified minutes ago: grep for approvalMode/speedModeDelayMs in non-test daemon/package sources still returns zero — the claimed settings load path remains absent, so the old conclusion (no production-ready plan without an unattached decoder) still holds AS A WORKER conclusion. The ARCHITECT output it calls for is different: per the Clause-2 rail, measure the gap symbol by symbol and file the prerequisite production task(s) (the settings load/decode surface itself), then re-block this consumer on them by id — or, if fresh measurement finds the surface landed since HEAD ddb4753 under a different name, plan against it. Do not plan this binding task around the gap.",
+  "reopenReason": "HUMAN DECISION recorded 02:20Z, answering the block's explicit (a)/(b)/(c) question: OPTION (a) — apps/daemon OWNS the transitional settings load and auto-approval consumer. moe-next's daemon grows the settings loader (approvalMode/speedModeDelayMs surface, typed against the @moe/core approval policy contract) PLUS a real auto-approval call site in the same task, satisfying Clause 1 with a genuine consumer edge rather than an export-only package. Epic rail 2 stands unamended; the sibling daemon is the thing being replaced, not the owner. Architect: plan loader + call site together; the prior measurements (ProjectConfigurationSettings and WrapperKnobs both ruled out as carriers) are recorded in the previous blockedReason and need not be re-derived a fourth time.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -25,7 +25,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-16T02:18:44.778Z",
+  "updatedAt": "2026-08-16T09:20:16.642Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:43:56.252Z"
   },
@@ -33,10 +33,10 @@
     "architect-09b5f32a",
     "governor-a627169a"
   ],
-  "blockedReason": "Re-blocked by architect-27b64950 at HEAD abc3dcf, 2026-08-16 02:20Z. The governor asked me to file prerequisite task(s) or plan against a renamed surface. I am doing NEITHER, and that is the point: the gap is a missing DECISION, not a missing symbol.\n\nMEASURED, both directions:\n- `grep -rn \"approvalMode\\|speedModeDelayMs\" --include=*.ts apps packages adapters` -> ZERO. Unchanged.\n- `grep -rln \"ProjectSettings|settingsDecode|decodeSettings|OrchestratorSettings\"` -> ZERO. Nothing landed under another name.\n- Both candidates measured AND RULED OUT, so nobody re-measures them a fourth time: `ProjectConfigurationSettings` / `parseProjectConfigurationSettings` (packages/contracts/.../project-configuration-contract.ts:154, parser.ts:186) is the PRODUCT manifest surface consumed by project-configuration-selection.ts for settingsDigest, carrying no approval mode. `WrapperKnobs` / `readWrapperKnobs` (orchestrator/wrapper-knobs.ts:9,32) are ENV knobs. Neither reaches transitional plan auto-approval, as architect-09b5f32a recorded.\n\nWHY NO PREREQUISITE FILED. The real consumer runs in the sibling transitional daemon, and epic rail 2 pins development to moe-next. A moe-next-local loader would land with NO consumer here — the Clause-1 \"exports the symbols is not composition\" failure — and its owner could not satisfy their own consumer-edge DoD. Filing it would be guessing an answer only the human can give.\n\nTHE DECISION, unchanged from architect-09b5f32a and still unanswered: which repo/package owns the transitional settings load and auto-approval consumer, and how may it legally depend on @moe/core? (a) apps/daemon owns it and this task plans a loader plus a real call site; (b) the sibling keeps it and rail 2 is amended, or this task leaves the epic; (c) out of scope for M5, archive.\n\nUNBLOCK on a human naming (a), (b) or (c). Not on re-measurement.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T02:18:27.831Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Clause-2 measurement at HEAD abc3dcf; no plan submitted, no prerequisite filed, no code written — deliberately. Confirmed the gap is total in both directions: zero hits for approvalMode/speedModeDelayMs anywhere in apps/packages/adapters, and zero for ProjectSettings/settingsDecode/decodeSettings/OrchestratorSettings, so nothing landed under another name. Additionally RULED OUT both candidate surfaces by name and line so they are not re-measured a fourth time: ProjectConfigurationSettings + parseProjectConfigurationSettings (packages/contracts/src/configuration/project-configuration-contract.ts:154, parser.ts:186) is the product manifest surface consumed by project-configuration-selection.ts for settingsDigest and carries no approval mode; WrapperKnobs + readWrapperKnobs (apps/daemon/src/orchestrator/wrapper-knobs.ts:9,32) are orchestrator ENV knobs. Re-blocked with the block reshaped from 'surface absent' to 'destination undecided'.",

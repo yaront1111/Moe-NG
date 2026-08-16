@@ -20,12 +20,12 @@
     "Preserve foreign work; commit only the explicit owned paths by pathspec — never a bare `git commit`, never `git add -A`."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 09:26Z: the declared prerequisite is DONE — task-6c0db1f9 (telemetry emission seam, activation-telemetry-launch.*) is QA-approved. Architect: re-measure the landed seam on committed bytes before naming symbols, and carry the finding recorded on this task at filing time: `launchClaudeWithTelemetry` returns ok:true for REFUSED and NOT-ATTEMPTED launches with BLIND handoffs whose facts are UNKNOWN — which handoff states are committable must be decided and pinned in this task's DoD, or committing on ok:true alone writes a durable falsehood into the ledger. The composition targets (commitProviderRunRecord, deriveProviderRunEventId, ProviderRunCommitInput, buildProviderRunRecord) were all measured PRESENT at abc3dcf.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -33,14 +33,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:52:05.958Z",
-  "updatedAt": "2026-08-16T02:09:16.080Z",
+  "updatedAt": "2026-08-16T09:25:56.742Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:07:59.352Z"
   },
-  "blockedReason": "Blocked on its declared prerequisite. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:12Z. This task reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASUREMENT, both directions:\n- PRESENT, so NOT the gap: `commitProviderRunRecord` (apps/daemon/src/telemetry/provider-run-ledger.ts:202), `deriveProviderRunEventId` (:89), `ProviderRunCommitInput` (:63), `buildProviderRunRecord` (packages/runner/.../provider-run-record.ts:210). Every symbol this task composes exists.\n- ABSENT: `apps/daemon/src/activation/activation-telemetry-launch.*` — `ls` returns nothing. Owner task-6c0db1f9920841fea295512f602054ee is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS DESPITE THE SYMBOLS EXISTING. `ClaudeTelemetryHandoff` is reachable from @moe/runner today, so a module could be unit-tested against it now. But this task's DoD requires `commitProviderRunRecord` to gain a real production call site, and the only legitimate caller is the activation seam the prerequisite is building. Landing early produces a module nothing imports — the Clause-1 \"exports the symbols is not composition\" failure this chain exists to close — and would force guessing the prerequisite's exported shape, which the stale-by-default rail forbids.\n\nUNBLOCK WHEN task-6c0db1f9 is DONE AND `ls apps/daemon/src/activation/activation-telemetry-launch.ts` succeeds. Run both literally; never on task status alone.\n\nCARRIED FINDING for whoever plans this: `launchClaudeWithTelemetry` returns `ok:true` for REFUSED and NOT-ATTEMPTED launches, both carrying a BLIND handoff with UNKNOWN facts and a populated `telemetryRefusal`; only a malformed run ref reaches the refusal arm. So this task must NOT commit on `ok:true` alone — a blind handoff committed as an observation writes a durable falsehood into the ledger. Decide which handoff states are committable and pin it in the DoD.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T02:08:57.205Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Measurement only at HEAD abc3dcf; no plan submitted, no code written. Confirmed every SYMBOL this task composes already exists (commitProviderRunRecord provider-run-ledger.ts:202, deriveProviderRunEventId :89, ProviderRunCommitInput :63, buildProviderRunRecord provider-run-record.ts:210) and that the one thing missing is the prerequisite MODULE: `ls apps/daemon/src/activation/activation-telemetry-launch.*` returns nothing, and its owner task-6c0db1f9920841fea295512f602054ee is WORKING with an approved 6-step plan rather than DONE. Reported BLOCKED with that measurement.",

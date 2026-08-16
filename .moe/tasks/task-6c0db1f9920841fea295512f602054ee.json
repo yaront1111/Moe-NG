@@ -100,17 +100,24 @@
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, then `pnpm --filter @moe/daemon test` reading the `Test Files`/`Tests` COUNT LINE rather than the exit code (an exit-0 leg with no count line ran nothing). Both stay RED from the foreign slices recorded in step 1. Apply the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your three owned files, MUST be empty — and quote the remaining foreign red verbatim with its exact failing lines and paths.\nADVERSARIAL REVIEW: (a) does any branch treat `ok:true` as success? It must not — that is this task's central hazard. (b) is `parseClaudeResultTelemetry` called separately anywhere? It must not be; the launch already composes it. (c) is the refusal returned unchanged, with the runner's code and layer intact and unwrapped? (d) does the module mint, normalize or bound-check a run ref? It must not — `snapshotRunRef` is withheld by design. (e) does any message this module produces interpolate a path, argv, environment value, digest or captured byte? (f) is any UNKNOWN fact rendered as zero or imputed? (g) is the production source under 250 lines by `grep -c ''`, with a correct one-line LF bridge? (h) is `apps/daemon/src/index.ts` unmodified? (i) does `git status --porcelain` show only the three owned paths, probe deleted, every drill reverted?\nCommit by explicit pathspec naming exactly the three files — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines verbatim, quote the foreign daemon red as disclosure, show the DoD grep flipping from zero to non-zero, name the test that reddened for each drill, and state whether drill 1 revealed a previously-vacuous assertion. NAME THE CONSUMER EDGE THIS PRODUCES FOR: task-d3239529aab54f98b31bfd3662e316bf composes this handoff into a durable provider-run record; that task is BACKLOG and depends on this one. Keep verification.command under 500 characters.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-telemetry-launch.js",
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
       ],
-      "startedAt": "2026-08-16T02:22:13.399Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.ts",
+        "apps/daemon/src/activation/activation-telemetry-launch.js",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
+      ],
+      "note": "GATE, REVIEW, COMMIT — all done. Committed as e46fe61 on moe/work-2026-08-08, 3 files, 431 insertions.\n\nGATE, legs run separately with their own exit codes, no `;` chain and no pipe:\nDAEMON_TYPECHECK_EXIT=0, no diagnostics.\nDAEMON_TEST_EXIT=0 — \"Test Files 99 passed (99)\", \"Tests 2033 passed (2033)\". Nonzero count line, so not an exit-without-tests.\n\nPATH-ATTRIBUTED BASELINE — and the honest result is the opposite of what the plan predicted. The step-1 before-set was BOTH legs RED (20 TS errors, 5 failing tests, all in the peer-owned uncommitted orchestrator/agent-wrapper.test.ts). At HEAD both legs are GREEN: the HEAD failing-path set is EMPTY, so HEAD-minus-merge-base intersected with my three owned files is empty by construction. There is no foreign red left to quote — its owner landed the fix mid-session, so I am NOT pasting the stale before-set in as if it still stood. The file churned three times while I worked (5 failures, then 15 plus 4 errors, then none), which is why I settled this on the failing FILE SET rather than counts.\nMy own contribution reconciles exactly: 98 -> 99 test files (+1, mine) and 2026 -> 2033 tests (+7, mine).\n\nADVERSARIAL REVIEW, every item measured on the committed bytes:\n(a) `grep -cE '\\.ok\\b|result\\.ok'` = 0. The module has no branch on `ok` at all — the central hazard is structurally absent, not merely avoided.\n(b) `grep -c 'parseClaudeResultTelemetry('` = 0. The launch composes it at :227.\n(c) Refusal returned unchanged — both arms pass straight through; no daemon code, no re-wrap. Four code+layer pairs pinned across two vocabularies.\n(d) `grep -cE 'trim\\(|slice\\(|replace\\(|Math\\.|Number\\(|String\\(|test\\('` = 0. No mint, no normalize, no bound-check.\n(e) My first check here used a broken pattern (an empty regex alternation matched all 97 lines) and I re-ran it properly: zero template literals outside comments, zero string concatenation, zero `throw`/`new Error`/message construction. The only string literals in executable code are the two `\"@moe/runner\"` specifiers and the `\"claude\"` type literal. The module produces no strings at all, so nothing can interpolate a path, argv, environment value or digest.\n(f) `grep -cE 'known: true|value: 0|\\?\\? 0'` = 0. No fact is imputed.\n(g) 97 physical lines by `grep -c ''` (cap 250). Bridge verified with `od -c`: one line, LF, no trailing blank, byte-pattern identical to the activation-embargo.js sibling. The bridge guard is PROVEN satisfied, not assumed — runtime-entrypoint.test.ts is inside the 99 passing files.\n(h) apps/daemon/src/index.ts unmodified; `git status --porcelain` on it is empty.\n(i) Working tree clean of scratch: no probe, no drill fragment, `git status --porcelain | grep -E \"__probe|__edge|probe-reach\"` returns nothing.\n\nCOMMIT DISCIPLINE. The three files were untracked, and a pathspec cannot name an untracked file — so I staged exactly those three by explicit path, confirmed `git diff --cached --name-only` listed exactly three, then committed with the same three-path pathspec. No `git add -A`, no bare commit. `git show --name-only` confirms the commit contains those three files and nothing foreign. Committed bytes verified byte-identical to the gated bytes: `git show HEAD:<path> | sha256sum` MATCHES the working-tree sha for all three.\n\nCONSUMER EDGE THIS PRODUCES FOR: task-d3239529aab54f98b31bfd3662e316bf composes this handoff into a durable provider-run record. It is BACKLOG and depends on this task. Its two traps are recorded in the Serena handoff memory: `ok:true` is not success (and `launch.truthClass` is \"PROVEN\" on the NOT_ATTEMPTED arm, meaning no process started — not a proven run), and `parseClaudeResultTelemetry` must not be called again.\n\nDoD GREP, zero to five: `grep -rn \"launchClaudeWithTelemetry\\|parseClaudeResultTelemetry\" --include=*.ts apps | grep -v '\\.test\\.'` returned ZERO at step 1; it now returns the import at :51 and the two production call sites at :95/:96 (plus two prose mentions), none in a test file.\n\nDRILL SUMMARY — each reddened a NAMED test, none was vacuous: (1) `ok`-only branch -> \"reports a REFUSED launch as a blind handoff, never as an observation\" AND \"reports a delivery that launched nothing as NOT_ATTEMPTED, distinct from REFUSED\"; (2) lookalike handoff -> \"returns the runner's own handoff, not a daemon-composed lookalike\"; (3) run-ref normalizer -> \"refuses a malformed run ref at TELEMETRY_INPUT and launches nothing\"; (4) UNKNOWN-as-zero -> \"renders every unmeasured fact as UNKNOWN carrying its code, never as zero\". DRILL 1 DID NOT REVEAL A VACUOUS ASSERTION: both blind-arm cases reddened, so they genuinely distinguish a blind handoff from an observed one.\n\nDISCLOSED LIMIT, measured not assumed: no OBSERVED case exists and none is reachable from apps/**, because `deps` is all-or-nothing and four of the ten launcher ports have no published export (TS2305 on prepareClaudeRuntimePin, registerLaunchLock, resolveDuplicateDelivery, intakeProcessObservation). Consequently refusal layers T",
+      "startedAt": "2026-08-16T02:22:13.399Z",
+      "completedAt": "2026-08-16T02:26:00.425Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-1fe6c848",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,12 +129,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:51:35.274Z",
-  "updatedAt": "2026-08-16T02:22:13.399Z",
+  "updatedAt": "2026-08-16T09:25:35.455Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:05:36.568Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T09:25:35.455Z",
+    "wallClockMs": 26398887
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -137,7 +146,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T02:07:56.005Z",
@@ -155,11 +165,32 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T09:21:11.671Z",
+    "escalatedAt": "2026-08-16T09:21:11.671Z"
   },
   "planApprovedAt": "2026-08-16T02:07:58.078Z",
   "contextFetchedBy": [
-    "worker-1fe6c848"
+    "worker-1fe6c848",
+    "qa-c7cedba3"
   ],
-  "workStartedAt": "2026-08-16T02:08:07.809Z"
+  "workStartedAt": "2026-08-16T02:08:07.809Z",
+  "reviewStartedAt": "2026-08-16T02:26:30.162Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  99 passed (99)\n      Tests  2033 passed (2033)\n   Start at  05:24:00\n   Duration  5.30s (transform 39.34s, setup 0ms, import 82.04s, tests 42.54s, environment 9ms)",
+    "reportedAt": "2026-08-16T02:26:30.162Z"
+  },
+  "filesModified": [
+    "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+    "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+    "apps/daemon/src/activation/activation-ingress.ts",
+    "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+    "apps/daemon/src/activation/activation-telemetry-launch.ts",
+    "apps/daemon/src/activation/activation-telemetry-launch.js"
+  ],
+  "completedAt": "2026-08-16T09:25:35.455Z",
+  "reviewCompletedAt": "2026-08-16T09:25:35.455Z",
+  "reviewSummary": "APPROVED — re-verified from disk/git, not from summaries.\n\nGATES, separate exits: `pnpm --filter @moe/daemon typecheck` EXIT=0. `pnpm --filter @moe/daemon test` EXIT=1, count line \"Test Files 2 failed | 97 passed (99)\" / \"Tests 4 failed | 2047 passed (2051)\" — nonzero, so it executed. Focused owned run: \"Test Files 1 passed (1)\", \"Tests 7 passed (7)\", EXIT=0.\n\nBASELINE: the 4 reds are in activation-ledger-reader.test.ts + foundation-launch-authority.test.ts — FOREIGN, uncommitted (520 insertions in `git diff`), owned by task-df29871b / task-d92b1b15; 3 of the 4 failing test NAMES are ADDED lines in that diff (peer mid-TDD). New module has ZERO importers repo-wide. Owned-path intersection EMPTY.\n\nDoD: (1) grep at e46fe61^ = 0 production hits; now activation-telemetry-launch.ts:51,95,96 non-test. (2) refusals unwrapped, code AND layer pinned: TELEMETRY_RUN_REF_MALFORMED/TELEMETRY_INPUT, CLAUDE_LAUNCH_MODEL_MISMATCH/TELEMETRY_CONFIGURATION, CLAUDE_LAUNCH_REQUEST_MALFORMED/LAUNCHER. (5) .ts 97 lines by `grep -c ''`; bridge exactly `export * from \"./activation-telemetry-launch.ts\";` + LF (od-verified); index.ts absent from the commit.\n\nMY OWN DRILLS (4; replaced range printed, restored to hash b942a704, git status clean between):\n- lookalike handoff -> named lookalike test RED at Object.isFrozen:224.\n- treat ok:true as healthy -> REFUSED (:165) + NOT_ATTEMPTED (:188) RED; headline assertions NOT vacuous.\n- daemon-side run-ref normalizer -> malformed-ref test RED at :153; refusal stays at TELEMETRY_INPUT.\n- UNKNOWN token as zero -> unmeasured-never-zero test RED.\n\nNo OBSERVED case is DISCLOSED, not narrowed: prepareClaudeRuntimePin, registerLaunchLock, resolveDuplicateDelivery, intakeProcessObservation, CLAUDE_LAUNCHER_DEFAULTS unexported; `entry.deps ?? CLAUDE_LAUNCHER_DEFAULTS` (claude-launcher.ts:168) all-or-nothing. No second parseClaudeResultTelemetry call, no interpolated message. Committed bytes == reviewed bytes at HEAD e881141."
 }

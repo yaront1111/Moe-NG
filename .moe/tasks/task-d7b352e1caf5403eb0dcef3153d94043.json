@@ -108,22 +108,24 @@
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Rebuild the broker one final time so the committed Rust and the exercised exe agree. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: the cargo broker suite via `--target-dir dist/windows-job-native`, reading the executed count against the 95-test baseline and ACCOUNTING FOR THE DELTA (you deleted three `ProviderEof` cases and added the new ones — the arithmetic must reconcile, an unexplained drop is a silently lost case); the focused launcher file; then `pnpm --filter @moe/runner test` reading its `Test Files`/`Tests` count line. Apply the path-attributed baseline — failing paths at HEAD minus failing paths at merge-base, intersected with your owned files, MUST be empty — and quote any remaining foreign red verbatim. Do not repair a foreign red, do not narrow a leg to hide one, do not fabricate a green.\nADVERSARIAL REVIEW: (a) does every Unknown assertion pin the exact `Unobserved` member? (b) is `Completed` still reachable from exactly one path, now over three preconditions? (c) is `wait_until_job_is_empty` UNWEAKENED — it is now the only thing carrying termination, so any relaxation converts this from an honest simplification into a fail-open? (d) does the settle.rs header state the measured duplex reason the observation is impossible, so nobody restores the precondition? (e) are `Precondition`/`Unobserved` still absent from every `.ts` file and from status.rs, confirming no wire change? (f) did the never-ending case actually terminate, and is the test itself bounded — the failure mode guarded against is a hang, and a hanging test yields no verdict at all? (g) is `frames.rs` untouched, and did the shared-file handshake with @worker-5678886b hold? (h) `git status --porcelain` shows only owned paths, the gitignored exe absent, every drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines verbatim and reconcile the cargo delta; name the test that reddened for DoD 3's drill; give the measured launcher latency against its literal bound and against the HEAD numbers it must beat; state plainly that DoD 2's refusal is now `Unobserved::JobActive` because `ProviderEof` was deleted, and that DoD 3's drill was inverted to restoring the precondition — both re-mappings are deliberate and were posted to #general, not quiet narrowings. Record that task-6cbff01023b14b26a78fc5e3eb1dd8a9's Windows chain needs BOTH this task and task-7ba898f5f587453f80c1e93e93e4977c. Keep verification.command under 500 characters.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/src/settle.rs",
         "packages/runner/src/platform/windows/native/broker/src/completion.rs",
         "packages/runner/src/platform/windows/native/broker/tests/session.rs",
         "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
       ],
-      "startedAt": "2026-08-16T01:53:41.476Z"
+      "note": "GATE RE-RUN FRESH AT HEAD e881141. THREE LEGS, EACH SEPARATE EXIT CODE, ALL GREEN. No source byte written this session — the work was already committed as abc3dcf; per the governor's 09:25Z cascade my job was the gate, and I redid nothing.\n\nLEG 1 — broker, `cargo test --locked --release --no-fail-fast --manifest-path .../native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker`. CARGO_EXIT=0. **12 binaries, 96 passed, 0 failed** (12 `test result` lines, summed passed = 96, 12 lines carrying `0 failed`). Count line quoted, not the exit code alone. Arithmetic reconciles to the 96-test baseline exactly: 96 baseline + 3 added in step 2 - 3 ProviderEof cases deleted in step 3 = 96. All five DoD-bearing cases confirmed EXECUTED by name in the output, not inferred from the total:\n  test a_pathological_provider_channel_no_longer_withholds_completed ... ok\n  test a_job_that_never_empties_is_unknown_job_active_on_the_natural_path ... ok\n  test a_job_that_never_empties_is_unknown_job_active_on_the_termination_path ... ok\n  test completed_is_absent_when_the_exit_cannot_be_queried_exactly ... ok\n  test provider_bytes_that_are_a_valid_control_frame_never_reach_the_control_path ... ok\nThe suite terminated (5.08s for the 36-case binary), so DoD 2's never-ending case is bounded and did not convert the deadlock into a hang.\n\nLEG 2 — launcher, `npx vitest run --root . packages/runner/src/providers/claude/claude-launcher.windows`. VITEST_EXIT=0. `Test Files 1 passed (1)` / `Tests 2 passed (2)`, **tests 1.04s** against the file's 6_000ms configured timeout. Flat and child-driven; reproduces dd806f63's recorded 1.06s and beats the defect's 6.46s on the same file. DoD 1 and DoD 4 hold at HEAD.\n\nLEG 3 — `pnpm --filter @moe/runner test`. RUNNER_EXIT=0. `Test Files 65 passed (65)` / `Tests 2167 passed | 1 skipped (2168)`. **THE PRIOR BLOCKER IS DISCHARGED — and I am reporting the real mechanism, not the convenient one.** The red was `claude-host-runtime.test.ts > refuses a closure that drifts while the version probe runs`, which my latency fix genuinely broke because that case was founded on the defect. It is green now because its OWNER DELETED IT: commit 826c123 `fix(task-32eddfd3...): drop the unwinnable drift race, pin the version routes`, which is QA-approved DONE under the 02:10Z option-(a) ruling. Measured, not assumed — `git show abc3dcf:<file> | grep -c` = 1, `git show HEAD:<file> | grep -c` = 0. A verbose focused re-run confirms the file's replacement cases execute green rather than the file having gone vacuous. I did not narrow a leg, did not repair a foreign file, and do not claim the case now passes.\n\nPATH-ATTRIBUTED BASELINE: failing paths at HEAD = EMPTY across all three legs, so the (HEAD minus merge-base) ∩ owned-paths intersection is empty by construction. No foreign red remains in these legs to quote.\n\nADVERSARIAL REVIEW (a)-(h), each re-measured on disk this session:\n(a) YES — every Unknown assertion pins an exact member: JobActive at tests/session.rs 838/915/943, ExitQuery at 821, RootWait(...) at 809/1020/1038/1359. No bare \"not Completed\".\n(b) YES — `Completion::Completed` is CONSTRUCTED at exactly one site, settle.rs:116, downstream of all three surviving preconditions. main.rs:132 and session.rs:147 are match arms consuming it, not second paths to it.\n(c) UNWEAKENED — `git diff abc3dcf..HEAD -- src/session.rs` is empty, so `wait_until_job_is_empty` is byte-identical to the gated version. It is now the only thing carrying termination, so this was the check that mattered most.\n(d) YES — settle.rs:16-33 carries the measured duplex reason (fd4/fd5 are DUPLEX and are the child's own stdio handles) plus the decisive empirical proof (drain returned first-poll with zero bytes while the parent still captured byte-exact stdout and stderr, impossible if the broker faced the child's output direction). `Precondition::ALL` is `[Precondition; 3]` at completion.rs:62; settle.rs is 117 lines by `grep -c ''`.\n(e) CONFIRMED — `grep \"Precondition\\|Unobserved\"` over status.rs and every windows/*.ts returns nothing. No wire change, no TS edit.\n(f) YES — see leg 1; bounded and terminating.\n(g) frames.rs UNTOUCHED — `git show --stat abc3dcf -- src/frames.rs src/frames/` lists no file. The handshake with the 7ba half held; that task is DONE.\n(h) `git status --porcelain` carries ZERO owned paths — every owned file is committed, no drill residue survives, and the gitignored exe is absent from status. The dirty entries are all foreign: .moe board state, apps/daemon activation tests, tests/security.\n\nEXE FRESHNESS: `cargo build --locked --release ... -p moe-windows-job-broker --bins` reported `Finished ... in 0.05s` with no recompile, which is cargo asserting the existing exe is already current for HEAD's sources — the launcher leg therefore exercised HEAD's Rust, not a stale binary.\n\nNO COMMIT THIS SESSION, deliberately. abc3dcf is an ancestor of HEAD (`git merge-base --is-ancestor` = true) and carries 5 owned fi",
+      "startedAt": "2026-08-16T01:53:41.476Z",
+      "completedAt": "2026-08-16T09:27:47.102Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor 01:19Z: worker-2a50faca's block is correct — the plan was approved at 01:12:56 and superseded two seconds later by comment-0c0880b2 (direction correction from worker-5678886b's duplex-handle measurements: Job-empty does NOT license the drain; the Node parent is not in the Job). Re-plan from the measured menu in that comment and #general msg-5c7814a1: (a) delete the provider-EOF precondition with wait_until_job_is_empty carrying termination explicitly (worker-recommended), or (b) drop the broker's fd4/fd5 copies post-CreateProcess. DoD invariants unchanged: never-ending provider still reaches ProviderEof; nothing fail-opens; the launcher natural-exit case goes PROVEN child-driven. No files were changed by the blocked attempt.",
+  "reopenReason": "Governor cascade 09:25Z: the sole blocker is discharged — task-32eddfd3 is QA-approved DONE, which means the drift case in claude-host-runtime.test.ts was re-founded per the 02:10Z option-(a) ruling and its suite is green. d7b352e1's work is COMPLETE and COMMITTED (abc3dcf: precondition deletion, broker 96/96, launcher case PROVEN child-driven at 1.06s, all three drills red-then-restored — full evidence in comment-afaf5696 and worker-dd806f63's recorded gate). NEXT CLAIMER: do not redo the work. Re-run the recorded final gate fresh at current HEAD (broker `-p moe-windows-job-broker` 12 binaries/96 tests, launcher focused leg with `--root .`, runner package leg), verify the runner suite no longer reds on the drift case, then complete with the path-attributed baseline disclosures. Steps and drill evidence are in the task's comments and Serena task-task-d7b352e1...-handoff.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -144,17 +146,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:05:04.580Z",
-  "updatedAt": "2026-08-16T02:02:33.483Z",
+  "updatedAt": "2026-08-16T09:29:21.015Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T01:05:46.718Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-27b64950",
     "worker-2a50faca",
-    "worker-dd806f63"
+    "worker-dd806f63",
+    "worker-5678886b",
+    "qa-c7cedba3"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -165,7 +169,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T01:28:24.990Z",
@@ -184,12 +189,31 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-16T09:24:56.128Z",
+    "escalatedAt": "2026-08-16T09:24:56.128Z"
   },
   "planApprovedAt": "2026-08-16T01:28:27.060Z",
   "workStartedAt": "2026-08-16T01:17:01.419Z",
-  "blockedReason": "Work DONE and COMMITTED (abc3dcf). Blocked only at the final gate, by a red MY OWN DIFF CAUSED in another active task's file — which the path-attributed baseline rail does NOT let me disclose past. Full evidence in comment-afaf5696.\n\nGREEN: broker EXIT 0, 12 binaries / 96 passed / 0 failed (reconciles 96 +3 -3 = 96); launcher DoD 1+4 EXIT 0, 2 passed, tests 1.06s against a 6_000ms timeout — flat and child-driven, vs 6.46s under the restored defect; @moe/runner typecheck EXIT 0. Three drills red on NAMED tests, all reverted.\n\nRED: `pnpm --filter @moe/runner test` EXIT 1 on claude-host-runtime.test.ts > \"refuses a closure that drifts while the version probe runs\":\n  expected 'CLAUDE_RUNTIME_OBSERVATION_INVALID' to be 'CLAUDE_RUNTIME_PIN_SOURCE_DRIFT'\nThat test is FOUNDED ON THE DEFECT. Its own comment: \"The probe holds the boundary open for its whole bound.\" claude-host-runtime.ts:134 probes --version through openWindowsProcessBoundary with PROBE_TIMEOUT_MS=4_000; the old broker made every boundary run last the full bound. The test sleeps 750ms, swaps the executable, and expects the probe still in flight. Child-driven completion returns in ~50-100ms, so the swap lands after both inspection passes and an earlier layer answers.\nDECISIVE: vitest reports that case at 794ms, barely over its own 750ms sleep; under the defect it could not have finished before ~4000ms.\n\nNOT COMPLETING: exit 0 is required, and narrowing to my green legs would hide a red. NOT REPAIRING: the file is task-32eddfd3's (worker-e47be2a7), actively edited — its module mtime moved to 04:58:43 mid-run and a second run showed 5 extra failures that are their in-flight TDD.\n\nNEEDED: extend my scope to re-found that one case, or route it to task-32eddfd3. Repair either way — make the CHILD carry the duration (probe an executable outliving the 750ms sleep), the same correction applied here to the launcher case.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-16T02:01:50.381Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "reviewStartedAt": "2026-08-16T09:29:16.016Z",
+  "verification": {
+    "command": "cargo test --locked --release --no-fail-fast --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker",
+    "exitCode": 0,
+    "outputTail": "running 36 tests\ntest a_pathological_provider_channel_no_longer_withholds_completed ... ok\ntest a_job_that_never_empties_is_unknown_job_active_on_the_natural_path ... ok\ntest a_job_that_never_empties_is_unknown_job_active_on_the_termination_path ... ok\ntest completed_is_absent_when_the_exit_cannot_be_queried_exactly ... ok\ntest provider_bytes_that_are_a_valid_control_frame_never_reach_the_control_path ... ok\ntest result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.08s\nCARGO_EXIT=0\n-- 12 test binaries total, summed: 96 passed / 0 failed --\n\nLEG 2: npx vitest run --root . packages/runner/src/providers/claude/claude-launcher.windows\n Test Files  1 passed (1)\n      Tests  2 passed (2)\n   Duration  2.24s (... tests 1.04s ...)\nVITEST_EXIT=0\n\nLEG 3: pnpm --filter @moe/runner test\n Test Files  65 passed (65)\n      Tests  2167 passed | 1 skipped (2168)\nRUNNER_EXIT=0",
+    "reportedAt": "2026-08-16T09:29:16.016Z"
+  },
+  "filesModified": [
+    "packages/runner/src/platform/windows/native/broker/src/settle.rs",
+    "packages/runner/src/platform/windows/native/broker/src/main.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+    "packages/runner/src/platform/windows/native/broker/src/completion.rs",
+    "packages/runner/src/platform/windows/native/broker/src/session.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/containment.rs",
+    "packages/runner/src/platform/windows/native/broker/src/bin/detached_spawner.rs",
+    "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
+  ]
 }

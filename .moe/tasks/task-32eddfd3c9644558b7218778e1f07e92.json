@@ -158,8 +158,8 @@
       "completedAt": "2026-08-16T02:22:20.115Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -184,17 +184,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:55:50.647Z",
-  "updatedAt": "2026-08-16T02:23:48.913Z",
+  "updatedAt": "2026-08-16T02:27:23.751Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:56:58.019Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 27,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-08-16T02:27:23.751Z",
+    "wallClockMs": 12625732
   },
   "contextFetchedBy": [
-    "worker-e47be2a7"
+    "worker-e47be2a7",
+    "qa-c7cedba3"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -299,7 +302,7 @@
     "packages/runner/src/providers/claude/claude-host-runtime.js",
     "packages/runner/src/providers/claude/claude-runtime-pin-fs.ts"
   ],
-  "reviewCompletedAt": "2026-08-16T02:01:52.167Z",
+  "reviewCompletedAt": "2026-08-16T02:27:23.751Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 2 — 'drifted observations fail closed with the exact existing RUNTIME reason code': the only drift test is a wall-clock race that fails 3/3 in isolation at HEAD; the drift arm is asserted by nothing that reliably reaches it.",
@@ -376,5 +379,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-16T02:27:23.751Z",
+  "reviewSummary": "APPROVED — my reject #1, qa-ce3ba361's #2, and the governor's option-(a) ruling all re-derived at HEAD 49625fa.\n\nMY FINDING 1 FIXED, verified on LIVE production bytes not source: ran observeInstalledClaudeRuntime through the .js bridge on real fixtures — MISSING / ESCAPE / NOT_FILE / UNREADABLE all return \"the declared runtime closure could not be verified\" with LEAKS_PATH=false, each keeping its exact code at layer RUNTIME. closureRefusal() at claude-host-runtime.ts:101 replaces only the prose. Findings 2+3: refusalOf now asserts the message is a bounded non-empty string, not PATH_SHAPED, AND does not include that case's own input strings — stronger than I asked; the unreadable case uses a real icacls deny ACE; CASES.length pinned to WIN?18:9.\n\nqa-ce3ba361's finding 2 FIXED: the two version routes share CLAUDE_RUNTIME_OBSERVATION_INVALID, so they are discriminated by EXACT message — \"probe did not exit cleanly...\" vs \"probe printed output that is not the version shape...\" — with pinned.length===3 so the pins cannot vanish. The worker found that conditional-pin hole itself.\n\nGOVERNOR RULING, all three clauses: (1) runtime drift race dropped; (2) DRILL RUN BY ME — inverted digestsOf(before)!==digestsOf(after) -> RED naming the exact code on cases 13 and 15 and on the conformance leg (\"the real runtime did not observe: CLAUDE_RUNTIME_PIN_SOURCE_DRIFT\"); restored and verified three ways: inverted operator 0 occurrences, correct operator 1, diff vs HEAD empty; (3) the drift-arm comment at test:368-396 explains the OS-forbidden interleaving and cites the ruling.\n\nGATES: runner typecheck EXIT 0; focused suite EXIT 0, 20 passed (20); full runner test EXIT 0, 65 passed (65), 2167 passed | 1 skipped (2168) — the previously foreign claude-launcher red is gone; repo typecheck EXIT 0, the disclosed peer TS2578 has cleared. Broker mtime 04:52:54, no rebuild during my run.\n\nSCOPE: 3e4977f / 9cba1d7 / 826c123 owned-paths-only; .ts 249 lines, bridge 1."
 }

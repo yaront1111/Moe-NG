@@ -21,28 +21,37 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, RE-MEASURE THE LANDED PRODUCER, AND SETTLE THE ONE THING THE DoD DOES NOT NAME. Measured at HEAD abc3dcf; re-confirm on current bytes.\nLANDED (task-32eddfd3, DONE): `packages/runner/src/providers/claude/claude-host-runtime.ts`, 249 lines, exporting `observeInstalledClaudeRuntime(input: unknown): Promise<ObserveInstalledClaudeRuntimeResult>` (:201), `InstalledClaudeRuntimeInput` = `{installedRoot, executablePath, versionTimeoutMs?}` (:31), `ObservedInstalledClaudeRuntime` = `{ok:true, observation, facts, profile}` (:37), and the four-arm result union (:44) — `ObservedInstalledClaudeRuntime | ClaudeRuntimePinFailure | ClaudeFailure<ClaudeObservationErrorCode> | WindowsProcessUnknown`. FOUR authorities can answer; that is why every refusal must pin code AND layer. It is NOT published from the runner root — confirm with a grep — because task-32eddfd3's plan deliberately left that edge to THIS task.\nTHE GAP THE DoD LEAVES OPEN, and the decision this plan makes: the factory's public input is exactly `{quotedObservation, installedRoot, pinRoot}`, but `observeInstalledClaudeRuntime` also needs `executablePath`. DO NOT add it to the public input — that would let a caller name which binary gets observed, which is precisely the runtime authority this task exists to withhold. DERIVE it from `quotedObservation.resolvedRuntimeClosure`: take the single entry whose `kind` is `\"EXECUTABLE\"` (the kinds are EXECUTABLE | LAUNCHER | PACKAGE). Zero such entries, or more than one, is a refusal with an existing stable code — never a pick-the-first. The caller thereby cannot point the observer anywhere the quote has not already committed to.\nCARRY QA'S RAIL FROM 32eddfd3, which it was rejected on once: refusal messages must NOT echo runtime paths, argv, environment values or digests. This consumer inherits that and its tests must assert it — not merely avoid violating it.\nGATES, each run separately with its own exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported): `pnpm --filter @moe/runner typecheck` (measured EXIT 0 earlier this session — if still 0, any later error is yours) and `pnpm --filter @moe/runner test`, recording the `Test Files`/`Tests` count line and every failing file as your before-set.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-host-runtime.ts",
         "packages/runner/src/providers/claude/claude-runtime-pin.ts",
         "packages/runner/src/surface/claude-surface.ts"
-      ]
+      ],
+      "note": "BASELINE at HEAD 49625fa (merge-base with main = cf272f67).\n\nPRODUCER RE-MEASURED ON COMMITTED BYTES, all confirmed:\n- packages/runner/src/providers/claude/claude-host-runtime.ts = 249 lines (grep -c ''), exports observeInstalledClaudeRuntime(input: unknown) at :201, InstalledClaudeRuntimeInput {installedRoot, executablePath, versionTimeoutMs?} at :31, ObservedInstalledClaudeRuntime {ok,observation,facts,profile} at :37, four-arm result union at :44.\n- NOT published from the runner root: grep of index.ts + surface/*.ts for observeInstalledClaudeRuntime / claude-host-runtime = zero hits. This task owns that edge.\n- claude-runtime-request.* ABSENT; createClaudeRuntimePinRequest = zero hits repo-wide. Nothing to re-implement.\n- claude-surface.ts = 212 lines.\n\nGATES, run separately, own exit codes:\n- pnpm --filter @moe/runner typecheck -> EXIT 0.\n- pnpm --filter @moe/runner test -> EXIT 0, \"Test Files 65 passed (65)\" / \"Tests 2167 passed | 1 skipped (2168)\". The foreign red the plan warned about (claude-launcher.windows.test.ts:178) is GONE; task-d7b352e1 cleared it at abc3dcf. Before-set = empty.\n\nDERIVATION DECISION SETTLED, and it is cheaper than the plan assumed: readQuote() in claude-runtime-pin-closure.ts:138 ALREADY refuses a closure whose EXECUTABLE count !== 1, with code CLAUDE_RUNTIME_QUOTE_INVALID at layer RUNTIME. So the zero/two-EXECUTABLE refusal is an EXISTING stable code reached through the EXISTING production quote reader, not a new arm. The factory derives executablePath from the single EXECUTABLE entry of quote.closure. No executablePath on the public input.\n\nONE DESIGN POINT THE PLAN LEAVES IMPLICIT, resolved: ClaudeRuntimeFactsPort.observe returns Promise<ClaudeRuntimeFacts> with no refusal channel, so the observer's four arms CANNOT pass through it with code+layer intact -- prepareClaudeRuntimePin's observeFacts (claude-runtime-pin.ts:91) catches a throw and restamps it CLAUDE_RUNTIME_OBSERVATION_INVALID. Therefore the factory is ASYNC and observes ONCE eagerly, returning each observer arm directly with its own code and layer. The minted port still re-observes freshly per call, so prepareClaudeRuntimePin's before/after facts comparison stays a real re-observation rather than a cached tautology. This is also what makes plan drill 3 (re-stamp an arm, a NAMED test reddens on the lost layer) testable at all.\n\nHOST FACTS FOR THE CONFORMANCE LEG: claude.exe resolves at C:\\Users\\Yaron\\.local\\bin\\claude.exe; broker resolution is via resolveBrokerBinary(). Both arms of the real-Windows leg are reachable on this host.\n\nCONSUMER EDGE PRE-CHECK: apps/daemon/package.json:20 declares \"@moe/runner\": \"workspace:*\", and pnpm-lock.yaml carries the apps/daemon importer entry for it. Compiled bare-specifier probe deferred to step 5 as planned.\n\nQA rail carried from the producer's rejection #1: refusal messages must not echo installedRoot/pinRoot/executable path/argv/environment/digests. Asserted in step 2 as a property over the whole swept set.",
+      "startedAt": "2026-08-16T02:24:48.314Z",
+      "completedAt": "2026-08-16T02:27:56.052Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, PART 1 — the hostile-input sweep, which is the factory's actual job. Create `packages/runner/src/providers/claude/claude-runtime-request.test.ts` against the not-yet-existing factory. The public input must be SERIALIZABLE PLAIN DATA ONLY, so the sweep must cover every way a caller smuggles capability across an authenticated JSON boundary: a function in any field; an extra key beyond the exact three; a missing key; a getter/accessor property; a revoked or live Proxy; a thenable; a prototype-polluted object; `Object.create(null)` vs a plain literal; a non-string path; an oversized path; a path containing NUL.\nAssert a POSITIVE generated-case count — a sweep that silently produces zero cases passes while testing nothing — and assert each case's exact stable reason code AND the answering layer. Note `Array.isArray` throws on a revoked proxy and `types.isProxy` is the safe first question; a case that crashes instead of refusing is a defect, not a pass.\nAlso pin the DERIVATION decision from step 1: a `quotedObservation` whose `resolvedRuntimeClosure` holds ZERO `EXECUTABLE` entries refuses, and one holding TWO refuses — each with its exact code and layer. These two cases are what stop a future implementation quietly picking the first entry.\nAND PIN THE MESSAGE RULE: for every refusal case, assert the message does NOT contain the installedRoot, the pinRoot, the executable path, any argv, any environment value or any digest. Assert it as a property over the whole swept set, not one spot check — the producer was rejected on exactly this and a single example would not have caught it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
       ],
       "newFiles": [
         "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/providers/claude/claude-runtime-request.test.ts"
+      ],
+      "note": "RED sweep landed at claude-runtime-request.test.ts. 32 generated hostile cases, count asserted positive AND exact (a zero-case sweep passes while testing nothing). Coverage: null/text/array/function input; missing key; 5 capability-smuggling keys (fs, facts, clock, process, deps) - the exact defect this task closes; accessor property; non-enumerable property; polluted prototype; thenable; REVOKED proxy (Array.isArray throws on one, so a crash instead of a refusal is a defect - snapshotExactRecord's try/catch is the safe answer); proxy whose getOwnPropertyDescriptor trap throws; 8 path cases (non-text, function, empty, oversized, relative, UNC, ..-segment, NUL); 8 quote cases. Every case asserts code + layer RUNTIME + truthClass UNKNOWN + EXACT message (two routes share CLAUDE_RUNTIME_QUOTE_INVALID, so code alone cannot say which guard answered) + membership in CLAUDE_RUNTIME_PIN_ERROR_CODES + no fs/facts/clock leaking on the refusal.\n\nDERIVATION PINNED (step-1's decision): zero EXECUTABLE and TWO EXECUTABLE both refuse with this factory's own prose, not readQuote's - so a future \"pick the first\" implementation still refuses (readQuote catches two) but on a DIFFERENT message, and the pin reddens. Fixtures are built through the production buildProviderRuntimeObservation and tampered ones re-digested through observationDigestInput, so each case is valid at earlier layers and the guard under test is the one that answers.\n\nNO-ECHO RAIL asserted as a PROPERTY over the whole swept set (32/32, count asserted) - path-shape regex plus 9 literal secrets (both roots, 3 paths, 3 digests, schema digest, quote digest) plus a 200-char bound. QA rejected the producer task-32eddfd3 on exactly this and one spot check would not have caught it.\n\nAlso: frozen 6-key result, null-prototype record accepted (boundary is data SHAPE not identity), caller-mutation-after-validation proven inert, thenable quote proven to lose its `then` in the snapshot, and module WIDTH pinned to exactly 2 exports.\n\nRED CONFIRMED for the right reason: `Cannot find module './claude-runtime-request.js'`, Test Files 1 failed, `Tests no tests`. Not a stale green.\n\nBASELINE re-measured at HEAD e881141 (step-1 measured 49625fa): `pnpm --filter @moe/runner typecheck` EXIT 0; `pnpm --filter @moe/runner test` EXIT 0, `Test Files 65 passed (65)` / `Tests 2167 passed | 1 skipped (2168)`. The foreign red step-1 warned about (claude-launcher.windows.test.ts:178) is GONE - do not disclose a stale red. Broker binary IS built (dist/windows-job-native/release/moe-windows-job-broker.exe) and claude.exe resolves at C:\\Users\\Yaron\\.local\\bin\\claude.exe, so the step-5 conformance leg can reach the PROVEN arm.",
+      "startedAt": "2026-08-16T02:27:58.801Z",
+      "completedAt": "2026-08-16T09:28:21.630Z"
     },
     {
       "stepId": "step-3",
       "description": "IMPLEMENT THE FACTORY. Create `claude-runtime-request.ts` plus its one-line `.js` bridge (`export * from \"./claude-runtime-request.ts\";`, LF ending — the bridge guard byte-compares, so CRLF or a trailing blank line lands it in `wrongContent`).\n`createClaudeRuntimePinRequest(input: unknown)` — typed `unknown`, like every other hostile boundary in this package — snapshots the exact three fields into a frozen plain object BEFORE any I/O, so nothing the caller still holds can mutate a validated path afterwards. Then, and only then, mint the capabilities INSIDE the package: `createNodeClaudeRuntimeFs()` for `fs`; a `ClaudeRuntimeFactsPort` whose `observe()` calls `observeInstalledClaudeRuntime({installedRoot, executablePath: <derived from the quote>})` and returns its `.facts`; and the host clock for `clock`. Return the existing `ClaudeRuntimePinRequest` shape, frozen, or an existing refusal — never a new vocabulary.\nTHE OBSERVER'S FOUR REFUSAL ARMS PASS THROUGH UNCHANGED. `ObserveInstalledClaudeRuntimeResult` can be a `ClaudeRuntimePinFailure`, a `ClaudeFailure<ClaudeObservationErrorCode>`, or a `WindowsProcessUnknown`. Return each with its own code and layer intact; re-stamping them into one flat vocabulary would erase which authority answered, and the producer's own header says that is the point. A host observation failure stays UNKNOWN and is never optimistically upgraded.\nNEVER accept or expose `fs`, `facts`, `clock`, a process seam, or a default-dependency override — not as an optional parameter, not as a second overload, not as an exported type a caller could satisfy. That injectability is the defect this task closes.\nKeep the file under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts).",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-runtime-request.ts",
         "packages/runner/src/providers/claude/claude-runtime-request.js"
@@ -50,7 +59,8 @@
       "newFiles": [
         "packages/runner/src/providers/claude/claude-runtime-request.ts",
         "packages/runner/src/providers/claude/claude-runtime-request.js"
-      ]
+      ],
+      "startedAt": "2026-08-16T09:28:23.951Z"
     },
     {
       "stepId": "step-4",
@@ -92,7 +102,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5e0f1818",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -104,16 +114,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:56:27.313Z",
-  "updatedAt": "2026-08-16T02:22:48.729Z",
+  "updatedAt": "2026-08-16T09:28:23.951Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:04:01.496Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
     "worker-827a27f6",
-    "architect-27b64950"
+    "architect-27b64950",
+    "worker-e47be2a7",
+    "worker-5e0f1818"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -133,7 +146,10 @@
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T02:22:46.660Z",
   "planningNotes": {
@@ -151,7 +167,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-16T02:24:24.955Z",
+    "escalatedAt": "2026-08-16T02:24:24.955Z"
   },
-  "planApprovedAt": "2026-08-16T02:22:48.729Z"
+  "planApprovedAt": "2026-08-16T02:22:48.729Z",
+  "workStartedAt": "2026-08-16T02:24:48.314Z"
 }

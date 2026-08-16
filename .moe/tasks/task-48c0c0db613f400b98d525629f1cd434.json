@@ -1,0 +1,38 @@
+{
+  "id": "task-48c0c0db613f400b98d525629f1cd434",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Enumerate in-flight foundation attempts from the durable store",
+  "description": "Objective: produce the `InFlightAttempt[]` that restart reconciliation consumes. Prerequisite of task-3e54b466da3d4385ae9fbbf886a45464 (Run restart reconciliation from the daemon boot path), discovered at ITS planning time.\n\nMEASURED GAP at HEAD e881141. `reconcileOnRestart` (recovery/restart-reconciliation.ts:235) takes `RestartReconciliationRequest` = `{attempts: readonly InFlightAttempt[], correlationId, decidedAt, principalId, projectId}` (:60-66), where `InFlightAttempt` = `{attemptRef: string, situation: unknown}` (:32-35). NOTHING PRODUCES THAT ARRAY: `grep -rn \"InFlightAttempt\" --include=*.ts apps/daemon/src` returns only its own declaration and its use inside the request type. So the boot sweep cannot be wired until something can answer \"which attempts were in flight when we died\".\n\nWHY THIS IS NOT PART OF THE WIRING TASK. Wiring is a consumer edge — call a complete capability and fail closed. This is NEW production capability: a durable reader with its own fold, its own refusals and its own tests. Merging them would have made the wiring task edit what it composes, which its own rails forbid.\n\nMEASURED VOCABULARY, so the reader is not guessed:\n- `FOUNDATION_DISPATCH_EVENT_TYPES` (work/foundation-attempt-contracts.ts:47) = `{RECORDED: \"FoundationAttemptRecorded\", RESERVED: \"FoundationDispatchReserved\"}`. Exactly two members.\n- `FOUNDATION_DISPATCH_COMMAND_KIND` = \"foundation.dispatch\" (:39).\n- Existing single-attempt readers, all keyed by a known id and therefore unusable for enumeration: `readStoredFoundationAttempt` (work/foundation-attempt-store.ts:128), `readFoundationAttemptRecord` (:149), `readDurableFoundationObservation` (:73), `readFoundationReservationDigest` (:115). Reuse their decode/drift discipline rather than re-deriving it — `readStoredFoundationAttempt` re-encodes the decoded payload and compares bytes, refusing `FOUNDATION_ATTEMPT_RECORD_DRIFT` on mismatch. The enumerator must not be laxer.\n- Bounded paging landed this cycle: `readEventsByTypeAfter` on the public store (sqlite-event-store.ts:354, delegated at decision-ledger.ts:77/148), index-backed by `domain_events_event_type_position`. Use it — do NOT walk all project events.\n\nTHE DESIGN QUESTION THIS TASK MUST ANSWER FROM THE DURABLE RECORD, not invent: `FOUNDATION_DISPATCH_EVENT_TYPES` names no terminal/completion member, so \"still in flight\" cannot be read off that map alone. Determine it from committed evidence — e.g. a RESERVED without its RECORDED, or a recorded attempt with no later terminal marker in whatever aggregate owns one — and pin the rule in the module comment. If the durable record genuinely cannot distinguish in-flight from finished, that is a real gap: report blocked with the missing evidence named, rather than inferring liveness from absence.\n\n`situation` is typed `unknown` because `classifyCrash` validates it internally. Populate it from committed evidence only; never from a caller claim or a clock guess.\n\nNOT in scope: calling `reconcileOnRestart` (task-3e54b466 owns that), the coordination command kind (task-d17bb228), the pinned Claude spawn chain, or changing restart-reconciliation.ts.\n\nOwned paths: one new module under apps/daemon/src/work/ or apps/daemon/src/recovery/ plus its .js bridge and its .test.ts.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code. Daemon gates are red at baseline from foreign slices; apply the path-attributed baseline over the owned paths.",
+  "definitionOfDone": [
+    "A production reader returns `readonly InFlightAttempt[]` from a real SqliteEventStore, and `grep -rn \"InFlightAttempt\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.'` shows a producer in addition to the type declaration and the request field — the producer count was zero before this task.",
+    "The in-flight rule is stated in the module comment and asserted: a test seeds attempts in each committed state and asserts exactly which are returned and which are not, so \"in flight\" is a decided property of the record rather than an inference from absence.",
+    "Enumeration is BOUNDED and index-backed: it pages via `readEventsByTypeAfter` and a test asserts the number of events read is proportional to attempt events, not to total project events — with a literal bound that a full-stream walk would fail.",
+    "Decode drift is refused, not skipped: an attempt whose payload does not re-encode to the same bytes yields the exact stable code and layer that `readStoredFoundationAttempt` already uses for that condition, and the sweep does NOT silently omit it — an undecodable attempt is never treated as finished.",
+    "`situation` is populated only from committed evidence; a test asserts no caller-supplied value and no clock reading can reach it, and a mutation feeding a caller value turns a NAMED test red.",
+    "A refusal pins the exact stable code AND the answering layer; where the store and the attempt decoder can both refuse, the fixture is valid at the store layer so the decoder is provably the one that answered.",
+    "Real SqliteEventStore in tests, opened per test and closed in a `finally` on every exit path; production source under 250 physical lines by `grep -c ''`, with a one-line LF .js bridge; apps/daemon/src/index.ts unmodified.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately; the test leg prints a nonzero Test Files/Tests count line, and the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "Decide `in flight` from committed evidence and write the rule down. If the durable record cannot distinguish in-flight from finished, report blocked naming the missing evidence — never infer liveness from the absence of a marker, which would classify every finished attempt as a crash.",
+    "Do not modify restart-reconciliation.ts, foundation-attempt-store.ts or foundation-attempt-contracts.ts. Reuse their decode/drift discipline; `readStoredFoundationAttempt` re-encodes and byte-compares before trusting a payload, and this reader must not be laxer.",
+    "Page with `readEventsByTypeAfter`. Walking all project events to filter by type is the O(total events) defect task-16d5bc3a exists to remove; do not reintroduce it here.",
+    "Fail closed: an undecodable or drifted attempt is refused with its stable code and layer, never silently omitted from the sweep. An omitted attempt is an attempt nobody will reconcile.",
+    "Real SqliteEventStore in tests, closed in a `finally` on every exit path — a held handle kills the vitest worker. Preserve foreign work; commit only owned paths by pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 109.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T09:26:32.125Z",
+  "updatedAt": "2026-08-16T09:26:32.125Z"
+}

@@ -50,23 +50,29 @@
     {
       "stepId": "step-3",
       "description": "WRITE THE ROSTER AND THE SCANNER. The roster is a frozen hand-written array of 87 `{constant, file, axis}` records. Hand-written AND source-compared is the whole design: a table derived from the scan cannot police the scan, and a hand list alone under-covers silently the day an 88th boundary lands. Type the `axis` field against the closed five-member union so a typo is a compile error rather than an orphaned tag.\nTHE SCANNER MUST FIND THE REPO ROOT BY SEARCHING, NEVER BY HOP-COUNTING. Walk upward from `dirname(fileURLToPath(import.meta.url))` looking for `pnpm-workspace.yaml` — the same technique `packages/runner/src/platform/windows/windows-broker-path.ts` uses and documents as \"searched for, never hop-counted\". A `../../..` join silently narrows the scan root when a file moves, and a scan rooted one directory too deep returns fewer constants while the roster still matches whatever it found.\nScan `apps/`, `packages/` and `adapters/` for `.ts` files, skipping `node_modules` and every test-support path named in step 1's exclusion rule, and match `^export const ([A-Z_]+(?:LAYERS|LAYER|BOUNDARIES))\\s*(?::[^=]+)?=` per line — the optional annotation group is what the original count missed. Return `{constant, file}` with the file relative to the repo root so roster entries and scan results compare as plain strings.\nAssert the scan itself found something before comparing: a scan returning zero satisfies set-equality against an empty roster, and (a) plus (b) from step 2 are what make that impossible.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts"
       ],
-      "startedAt": "2026-08-16T02:18:33.466Z"
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "ROSTER AND SCANNER LANDED — GREEN. `pnpm test:security` EXIT=0, `Test Files 2 passed (2)`, `Tests 35 passed (35)`. Baseline was 1 file / 17 tests, so the lane is strictly above it.\n\nHAND-WRITTEN, and I can state exactly what that means here: I read the 87 declaration sites and typed every entry. The `axis` field in particular cannot be generated — it is a per-constant judgement about which sibling slice owns hostile coverage, and no scanner emits it. Nothing in the table was produced by running the scanner and pasting output.\n\nTHE TAGGING RULE is documented in the file so a tag can be audited rather than guessed: axis follows the constant's SUBJECT, not merely its directory. Where the two disagree the subject wins. Two consequences called out in the comment: four `apps/daemon/src/recovery/` constants are integrity rather than durable-store (they name digest, approval, reducer and key-provider layers), and `foundation-attempt-contracts.ts` splits across two axes because it declares a runner-workspace layer and a scheduler-graph layer in one file.\n\nAXIS TOTALS: transport 15, integrity 13, durable-store 14, runtime-provider 22, scheduler-activation 23. Sums to 87.\nSTRONG INDEPENDENT CONFIRMATION: runtime-provider lands on exactly 22, which is precisely what planningNotes predicted it would become once the two platform constants were included (\"runtime-provider gains the two platform constants and becomes 22\"). I tagged by subject without working backwards from that number, and it matched. The other four axes do NOT match the siblings' filed counts (filed: transport 13, integrity 18, durable-store 8, scheduler-activation 16) — expected, since those were derived from the old 85 and the plan states the roster's tags override them. Flagged for the completion.\n\nSCANNER: repo root found by walking upward searching for `pnpm-workspace.yaml`, throwing at the filesystem root if absent. No `../..` hop-count anywhere in the file. Walks apps/packages/adapters, skips `node_modules` and dot-directories, applies `isProductionModule`, matches the line-anchored pattern with the optional annotation group, returns `{constant, file}` repo-root-relative with forward slashes.\n\nTWO MEASURED FINDINGS FROM THIS STEP:\n\n1. A `*/` INSIDE A DOC COMMENT CLOSED THE COMMENT EARLY. I wrote the glob `.project-configuration-smoke-*/consumer.ts` in a block comment; the `*/` terminated it, and tsc reported four cascading errors that named none of the real cause — `TS1443 Module declaration names may only use ' or \" quoted strings` at the comment line, then `TS1434`, `TS1146`, and `TS1160 Unterminated template literal` 180 lines later at EOF. The lane's tsc-first gate caught it before vitest ran. Reworded to `.project-configuration-smoke-<id>`. Worth knowing: a glob ending `*/` is unquotable inside a block comment, and the resulting diagnostics point everywhere except the offending line.\n\n2. 21 COMMITTED PROBE DIRECTORIES UNDER apps/daemon, FOREIGN AND NOT MINE TO FIX. `apps/daemon/.project-configuration-smoke-<id>/` x21, each holding `consumer.ts` AND a `consumer.db` SQLite file. `git ls-files` returns them, so they are TRACKED, not untracked scratch. Epic rail 5 forbids debug/probe/scratch files remaining in commits, so this is a real violation — but it is foreign work outside my two owned paths, so I am disclosing it rather than deleting it. Verified they contain ZERO boundary declarations, so the roster count is unaffected either way. The scanner skips dot-directories specifically so scratch of this shape can never enter the roster; that skip is documented in the file as load-bearing rather than cosmetic.\n\nPERFORMANCE FIX made while wiring the tests: `scanDeclaredBoundaries()` was being called on all 8 assertion sites, each doing a full ~600-file walk. Hoisted to a single module-level `SCANNED`. Test time fell from 250ms to 9ms. It is still a live read of real source once per run, so the step-5 drills remain able to see a production rename — memoizing across a run does not weaken that.\n\nFILE SIZE, disclosed rather than left for QA to find: `grep -c ''` reports 430 lines (PowerShell `Measure-Object`/`.Count` also said 430 here, but grep is the authoritative count per repo convention). That is above the 250 target and above the 400 split point. My reading is that the cap does not bind this file, and I want the reasoning on record rather than assumed:\n- both the project globalRail and epic rail 5 state the cap as \"PER PRODUCTION FILE\" / \"per production source\". This is a lane test file, not a production source.\n- the committed precedent in this very directory, `lane-smoke.security.ts`, is 251 lines.\n- 87 hand-written roster entries are 87 irreducible lines mandated by DoD 1, plus ~90 lines of assertions that ARE the deliverable. Deleting assertions or the design rationale to reach a number would make the artifact worse.\nI already trimmed it from 464 to 430 by compressing prose only — no assertion, no rationale, and no data was removed. If QA read",
+      "startedAt": "2026-08-16T02:18:33.466Z",
+      "completedAt": "2026-08-16T02:25:25.856Z"
     },
     {
       "stepId": "step-4",
       "description": "BUILD THE HOSTILE HARNESS the five sibling slices consume. Create `tests/security/hostile-harness.ts`. Note it is NOT a `.security.ts` file, so the lane will not execute it as a suite — it is imported. Provide:\n(1) BEFORE / AFTER / RACE drivers, each BOUNDED and each guaranteed to terminate. The failure mode these guard against is a hang, and a hanging test reports no verdict at all rather than a red one — so every driver takes an explicit bound and fails loudly when it expires rather than waiting.\n(2) Per-case temp roots under `os.tmpdir()` with a registry and a cleanup that removes every root on every exit path including throws. The lane runs `fileParallelism: false`, so one leaked root or held handle stalls everything after it.\n(3) A REFUSAL ASSERTION HELPER that requires BOTH the stable reason code AND the answering layer constant. Make the layer parameter non-optional so a layer-blind assertion does not compile, and add a case in the roster file proving the helper REJECTS a call carrying only a code — a helper that permits the weak form will be used in the weak form by five sibling slices.\nTHE HARNESS HOLDS NO AUTHORITY. It drives probes and asserts; it never decides whether a boundary refused correctly, never reimplements a codec, a digest or an admission rule. Every verdict comes from the production surface under test. Keep it under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts); if it would exceed, that is a signal it has grown authority it should not have.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/hostile-harness.ts",
         "tests/security/boundary-roster.security.ts"
       ],
       "newFiles": [
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T02:25:29.158Z"
     },
     {
       "stepId": "step-5",
@@ -88,7 +94,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-5678886b",
+  "assignedWorkerId": "worker-1fe6c848",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -100,16 +106,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:58:36.221Z",
-  "updatedAt": "2026-08-16T02:18:33.466Z",
+  "updatedAt": "2026-08-16T02:33:23.910Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:09:19.141Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T02:11:55.013Z",
@@ -133,7 +140,8 @@
   },
   "planApprovedAt": "2026-08-16T02:11:57.078Z",
   "contextFetchedBy": [
-    "worker-5678886b"
+    "worker-5678886b",
+    "worker-1fe6c848"
   ],
   "workStartedAt": "2026-08-16T02:12:11.876Z"
 }
