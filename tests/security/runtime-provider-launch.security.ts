@@ -396,4 +396,4 @@ describe("provider launch group — the blind-handoff trap", () => {
 });
 
 describeBenchmarkProjectionBoundary(ledger);
-describeSliceInvariants("provider launch group", ledger, OWNED, LAUNCH_SECRETS);
+describeSliceInvariants("provider launch group", ledger, OWNED, LAUNCH_SECRETS, 6);

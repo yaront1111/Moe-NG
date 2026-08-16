@@ -14,6 +14,15 @@ import { PassThrough } from "node:stream";
 
 import { expect } from "vitest";
 
+import { canonicalDigest } from "../../packages/runner/src/canonical.js";
+import {
+  CLAUDE_RUNTIME_OBSERVATION_VERSION,
+  observationDigestInput,
+} from "../../packages/runner/src/providers/claude/claude-observation.js";
+import type {
+  ProviderRuntimeObservation,
+  RuntimeClosureEntry,
+} from "../../packages/runner/src/providers/claude/claude-observation.js";
 import type {
   ClaudeRuntimeFactsPort,
   ClaudeRuntimePinRequest,
@@ -64,7 +73,16 @@ export function refusedObservation(
  *  refusal that echoed one back is caught by name rather than by eye. */
 export const FORGED_PATH = "C:\\Users\\forged\\.local\\bin\\claude.exe";
 export const FORGED_DIGEST = "f".repeat(64);
-export const PLATFORM_SECRETS: readonly string[] = Object.freeze([FORGED_PATH, FORGED_DIGEST]);
+/** The executable a drifting runtime was swapped FOR. Distinct in both path and digest from the
+ *  observed pair above, so the swap changes the digest input rather than merely relabelling it. */
+export const SWAPPED_PATH = "C:\\Users\\forged\\.local\\bin\\claude-swapped.exe";
+export const SWAPPED_DIGEST = "a".repeat(64);
+export const PLATFORM_SECRETS: readonly string[] = Object.freeze([
+  FORGED_PATH,
+  FORGED_DIGEST,
+  SWAPPED_PATH,
+  SWAPPED_DIGEST,
+]);
 
 /** Reads the failure off the first verdict. Every refusal path in this contract refuses EVERY
  *  boundary, so verdict zero is representative — and the count is asserted, not assumed. */
@@ -172,10 +190,80 @@ export function pinRequest(platform: string, quote: unknown): ClaudeRuntimePinRe
   });
 }
 
-/** A quote whose digest was taken BEFORE the closure below was swapped, so it no longer covers
- *  its own fields — a runtime that drifted between observation and use. */
-export const DRIFTED_QUOTE = Object.freeze({
-  observationVersion: "moe-claude-runtime-observation/1",
+/**
+ * THE SEVEN-GUARD PROBLEM, and why the two quote fixtures below are built differently.
+ *
+ * `readQuote` (claude-runtime-pin-closure.ts:105-146) returns
+ * `CLAUDE_RUNTIME_QUOTE_INVALID` at the `RUNTIME` layer from SEVEN distinct branches. A case
+ * pinning only that code and that layer therefore cannot say WHICH guard answered, and a
+ * mutation deleting the drift comparison at :116 survives it — the quote simply refuses one
+ * guard later, or not at all, and the assertion stays green. The message is the only stable
+ * discriminator production exposes today, so both fixtures are paired with the exact message
+ * their intended branch returns (see `QUOTE_MESSAGES`) and asserted through `refusedExactly`.
+ */
+export const QUOTE_MESSAGES = Object.freeze({
+  /** claude-runtime-pin-closure.ts:114 — the digest could not even be recomputed. */
+  notCanonicalisable: "quoted observation is not canonicalisable",
+  /** claude-runtime-pin-closure.ts:117 — the drift branch. THE ONE this slice must reach. */
+  drifted: "quoted digest does not cover its own fields",
+  /** claude-runtime-pin-closure.ts:107 — not a record at all. */
+  notARecord: "quoted observation is not a record",
+});
+
+/** Builds a FULLY-FORMED observation whose digest genuinely covers its own fields, using
+ *  production's own `observationDigestInput` rather than a hand-authored hash — a hand-authored
+ *  digest on both sides of a comparison is a tautology, and one taken over a different field
+ *  list would refuse for the wrong reason. */
+function observedRuntime(closure: readonly RuntimeClosureEntry[]): ProviderRuntimeObservation {
+  const fields: Omit<ProviderRuntimeObservation, "observationDigest"> = {
+    observationVersion: CLAUDE_RUNTIME_OBSERVATION_VERSION,
+    providerId: "claude",
+    resolvedRuntimeClosure: closure,
+    reportedVersion: "1.0.0",
+    adapterCapabilitySchemaDigest: "b".repeat(64),
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
+    freshness: { observedAt: "2026-08-16T00:00:00.000Z" },
+    truthClass: "PROVEN",
+  };
+  return Object.freeze({
+    ...fields,
+    observationDigest: canonicalDigest(observationDigestInput(fields)),
+  });
+}
+
+/**
+ * THE NEGATIVE CONTROL. An honest, undrifted observation the digest gate ACCEPTS. Without one
+ * accepted value every refusal on this boundary is equally explained by a gate that refuses
+ * everything, and a gate that refuses everything holds no rule. Deliberately NOT recorded in
+ * the ledger: it is not a hostile input, and recording it would breach the no-admission
+ * invariant it exists to give meaning to.
+ */
+export const PINNED_QUOTE: ProviderRuntimeObservation = observedRuntime([
+  { kind: "EXECUTABLE", path: FORGED_PATH, sha256: FORGED_DIGEST },
+]);
+
+/**
+ * A runtime that DRIFTED between observation and use: the digest was taken over the closure in
+ * `PINNED_QUOTE`, then the executable underneath it was swapped for another path and another
+ * digest. Every OTHER field is valid and `observationDigest` is a real hex64, so it survives
+ * `isPlainRecord`, `observationDigestInput`, `isHex64`, the version, provider, truth-class,
+ * pinning-method and closure-shape guards — leaving `recomputed !== observation.observationDigest`
+ * as the ONLY guard that can answer. That is what makes deleting that comparison a red.
+ */
+export const DRIFTED_QUOTE: ProviderRuntimeObservation = Object.freeze({
+  ...PINNED_QUOTE,
+  resolvedRuntimeClosure: Object.freeze([
+    { kind: "EXECUTABLE", path: SWAPPED_PATH, sha256: SWAPPED_DIGEST } as const,
+  ]),
+});
+
+/** A quote missing `platformIdentity` and `freshness`, which `observationDigestInput` reads —
+ *  so `canonicalDigest` THROWS and the refusal comes from the catch at :114, one guard ABOVE
+ *  the drift comparison. Kept as its own fixture precisely so the drift case cannot be answered
+ *  by this branch without the message assertion noticing. */
+export const UNCANONICALISABLE_QUOTE = Object.freeze({
+  observationVersion: CLAUDE_RUNTIME_OBSERVATION_VERSION,
   providerId: "claude",
   truthClass: "PROVEN",
   pinningMethod: "CONTENT_ADDRESSED_COPY",

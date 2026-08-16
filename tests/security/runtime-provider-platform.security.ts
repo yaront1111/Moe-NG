@@ -1,10 +1,12 @@
 /**
  * HOSTILE COVERAGE — the PLATFORM AND RUNTIME-CLOSURE group of the runtime-provider axis.
  *
- * Six of the roster's twenty-two `axis: "runtime-provider"` boundaries; the other sixteen live
- * in `runtime-provider-launch.security.ts` and `runtime-provider-evidence.security.ts`. The
- * partition is declared once in `runtime-provider-ledger.ts` and its union is checked against
- * the roster's committed bytes in the evidence file, so a boundary owned by nobody reddens.
+ * Six of the roster's twenty-three `axis: "runtime-provider"` boundaries; the other seventeen
+ * live in `runtime-provider-launch.security.ts` and `runtime-provider-evidence.security.ts`.
+ * The partition is declared once in `runtime-provider-invariants.ts` and its union is checked
+ * against the roster's committed bytes in the evidence file, so a boundary owned by nobody
+ * reddens. `CLAUDE_RUNTIME_PIN_LAYER`'s cases live in `runtime-provider-pin-cases.ts` and
+ * register here through `describePinBoundary(ledger)`; they count in this file's ledger.
  *
  * NO CASE SKIPS, which matters more here than anywhere else on this axis: `PLATFORM_BOUNDARIES`
  * spans linux, macos and win32 and this suite runs on one host. It does not need to, because the
@@ -24,11 +26,6 @@
 
 import { describe, expect, it } from "vitest";
 
-import { prepareClaudeRuntimePin } from "../../packages/runner/src/providers/claude/claude-runtime-pin.js";
-import {
-  CLAUDE_RUNTIME_PIN_LAYER,
-  readQuote,
-} from "../../packages/runner/src/providers/claude/claude-runtime-pin-closure.js";
 import { PLATFORM_LINUX_LAYER } from "../../packages/runner/src/platform/linux-facts.js";
 import { observeLinuxPlatform } from "../../packages/runner/src/platform/linux-observation.js";
 import { PLATFORM_MACOS_LAYER } from "../../packages/runner/src/platform/macos/macos-facts.js";
@@ -43,9 +40,9 @@ import {
   describeSliceInvariants,
   hostile,
 } from "./runtime-provider-ledger.js";
+import { describePinBoundary } from "./runtime-provider-pin-cases.js";
 import {
   CONTRACT_LAYER as CONTRACT,
-  DRIFTED_QUOTE,
   FORGED_PATH,
   GOOD_LAUNCH,
   PLATFORM_SECRETS,
@@ -54,7 +51,6 @@ import {
   emptyFacts,
   firstFailure,
   onHost,
-  pinRequest,
   refusedObservation,
   seen,
   silentBroker,
@@ -352,47 +348,6 @@ describe("WINDOWS_PROCESS_LAYERS", () => {
   });
 });
 
-// ── CLAUDE_RUNTIME_PIN_LAYER ──────────────────────────────────────────────────────────────
-// The runtime closure. Drift is the point: a quote whose digest no longer covers its own
-// fields is a runtime that changed between observation and use.
-describe("CLAUDE_RUNTIME_PIN_LAYER", () => {
-  const boundary = "CLAUDE_RUNTIME_PIN_LAYER";
-  const invalid = { code: "CLAUDE_RUNTIME_QUOTE_INVALID", layer: CLAUDE_RUNTIME_PIN_LAYER };
+describePinBoundary(ledger);
 
-  it("BEFORE — a quote that is not a record cannot pin a runtime", async () => {
-    const outcome = await probeBefore(
-      BOUND,
-      async () => readQuote(FORGED_PATH),
-      async () => readQuote(null),
-    );
-    ledger.refused(boundary, "BEFORE", outcome.probe, invalid);
-    ledger.refused(boundary, "BEFORE", outcome.effect, invalid);
-  });
-
-  it("AFTER — a closure that drifted after the digest was taken is refused, not re-derived", async () => {
-    const outcome = await probeAfter(
-      BOUND,
-      async () => readQuote({ ...DRIFTED_QUOTE, resolvedRuntimeClosure: [] }),
-      async () => readQuote(DRIFTED_QUOTE),
-    );
-    ledger.refused(boundary, "AFTER", outcome.effect, invalid);
-    ledger.refused(boundary, "AFTER", outcome.probe, invalid);
-  });
-
-  it("RACE — the pin seam refuses an off-host request and a drifted quote with DISTINCT codes", async () => {
-    const outcome = await probeRacing(
-      BOUND,
-      async () => await prepareClaudeRuntimePin(pinRequest("linux", DRIFTED_QUOTE)),
-      async () => await prepareClaudeRuntimePin(pinRequest("win32", DRIFTED_QUOTE)),
-    );
-    // Same quote on both legs, so the ONLY difference is the host — which is what makes the
-    // platform arm provably the one that answered on the left.
-    ledger.refusedSide(boundary, outcome.left, {
-      code: "CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED",
-      layer: CLAUDE_RUNTIME_PIN_LAYER,
-    });
-    ledger.refusedSide(boundary, outcome.right, invalid);
-  });
-});
-
-describeSliceInvariants("platform group", ledger, OWNED, PLATFORM_SECRETS);
+describeSliceInvariants("platform group", ledger, OWNED, PLATFORM_SECRETS, 12);

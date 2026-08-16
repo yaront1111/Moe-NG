@@ -2,7 +2,7 @@
  * HOSTILE COVERAGE — the EVIDENCE, WORKSPACE, CONTAINMENT AND SUPERVISION group, and the
  * COMPLETENESS HOME for the whole runtime-provider axis.
  *
- * Nine of the roster's twenty-two entries live here; the other thirteen are in
+ * Nine of the roster's twenty-three entries live here; the other fourteen are in
  * `runtime-provider-platform.security.ts` and `runtime-provider-launch.security.ts`. This file is
  * the ONE place the union of the three partitions is checked against the roster's committed bytes,
  * in BOTH directions, so a boundary owned by nobody — or a name no roster entry carries — reddens
@@ -50,7 +50,7 @@ import {
   ESCAPE_FAMILY, EVIDENCE_SECRETS, POISON_PATH, artifactFs, scopeInput, verifierInput,
 } from "./runtime-provider-evidence-fixtures.js";
 import {
-  RUNTIME_BOUND as BOUND, RUNTIME_PROVIDER_PARTITION, assertRosterPartition, createLedger,
+  RUNTIME_BOUND as BOUND, RUNTIME_PROVIDER_PARTITION, createLedger, describeRosterCompleteness,
   describeSliceInvariants, hostile, layerOf, refusedWithoutLayer,
 } from "./runtime-provider-ledger.js";
 
@@ -390,11 +390,11 @@ describe("RUNNER_WORKSPACE_LAYER", () => {
 // rejected declaration in its message, which is the caller being told which of its paths was
 // refused rather than output leaving a failure path. Digest, base64 and hostile-value checks
 // still apply to it, and no provider-facing boundary is exempt from anything.
-describeSliceInvariants("evidence group", ledger, OWNED, EVIDENCE_SECRETS, ["SCOPE_OBSERVER_LAYERS"]);
+// TRUTH-BEARING COUNT IS 0, MEASURED not conceded: `grep -rn "truthClass:" packages/runner/src`
+// finds truth classes only on platform and provider-launch surfaces; `evidenceFailure` and
+// `processRefusal` name the CALLER'S class in their message and grant none. Pinned so one that
+// starts reporting a class reddens here rather than joining an unexamined sweep.
+describeSliceInvariants("evidence group", ledger, OWNED, EVIDENCE_SECRETS, 0, ["SCOPE_OBSERVER_LAYERS"]);
 
 // ── THE COMPLETENESS HOME FOR THE WHOLE AXIS ──────────────────────────────────────────────
-describe("runtime-provider axis — roster completeness", () => {
-  it("partitions exactly the roster's 22 runtime-provider entries, in BOTH directions", () => {
-    assertRosterPartition();
-  });
-});
+describeRosterCompleteness();
