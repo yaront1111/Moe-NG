@@ -12,11 +12,9 @@
  *
  * FIVE LAYERS CAN ANSWER the telemetry seam, and the contract's own comment says a code-only
  * assertion "would stay green once a different layer started answering first". Every stream
- * fixture is COHERENT at input, capture and the anomaly analyser and breaks exactly one thing,
- * so the arranged layer is provably the one that answered.
- *
- * NO TEST PRINTS PROVIDER OUTPUT. Poisoned bytes are never logged, and message hygiene is
- * asserted as a property over the WHOLE refusal set rather than one example.
+ * fixture is COHERENT at input, capture and the anomaly analyser and breaks exactly one thing, so
+ * the arranged layer is provably the one that answered. NO TEST PRINTS PROVIDER OUTPUT: poisoned
+ * bytes are never logged, and hygiene is a property over the WHOLE refusal set, not one example.
  */
 
 import { describe, expect, it } from "vitest";
@@ -36,6 +34,7 @@ import { PROVIDER_TELEMETRY_CODES, PROVIDER_TELEMETRY_LAYERS, PROVIDER_TELEMETRY
 import { PROVIDER_USAGE_LAYERS } from "../../packages/runner/src/providers/telemetry/provider-usage-contracts.js";
 import { normalizeProviderUsage } from "../../packages/runner/src/providers/telemetry/provider-usage-normalization.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import { describeBenchmarkProjectionBoundary } from "./runtime-provider-benchmark-cases.js";
 import { describeRenderBoundary } from "./runtime-provider-render-cases.js";
 import {
   AMBIGUOUS_STREAM, COHERENT_STREAM, GOOD_RUN_REF as REF, GOOD_SELECTION, LAUNCH_SECRETS,
@@ -396,4 +395,5 @@ describe("provider launch group — the blind-handoff trap", () => {
   });
 });
 
+describeBenchmarkProjectionBoundary(ledger);
 describeSliceInvariants("provider launch group", ledger, OWNED, LAUNCH_SECRETS);

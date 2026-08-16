@@ -54,6 +54,7 @@ export const RUNTIME_PROVIDER_PARTITION = Object.freeze({
   ] as const),
   /** Provider launch, render, telemetry and usage surfaces. */
   LAUNCH: Object.freeze([
+    "BENCHMARK_PROJECTION_LAYERS",
     "CLAUDE_LAUNCH_LAYERS",
     "CLAUDE_LAUNCH_SELECTION_LAYER",
     "CLAUDE_RENDER_LAYERS",
@@ -310,7 +311,7 @@ export function assertRosterPartition(): void {
   const roster = rosterRuntimeProvider();
   // A parse that silently matched nothing would make every set assertion below vacuous.
   expect(roster.length).toBeGreaterThan(0);
-  expect(roster).toHaveLength(22);
+  expect(roster).toHaveLength(23);
   const union: readonly string[] = [
     ...RUNTIME_PROVIDER_PARTITION.PLATFORM,
     ...RUNTIME_PROVIDER_PARTITION.LAUNCH,
