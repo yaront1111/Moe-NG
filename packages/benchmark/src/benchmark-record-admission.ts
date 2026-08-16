@@ -44,13 +44,21 @@ function isPlainRecord(value: unknown): value is PlainRecord {
 const isString = (value: unknown): boolean => typeof value === "string";
 const isRecordOrNull = (value: unknown): boolean => value === null || isPlainRecord(value);
 
-/** Wall seconds, boot identity and monotonic reading together, or an unobserved null. */
+/**
+ * Wall seconds, boot identity and monotonic reading together, or an unobserved null.
+ *
+ * FINITE, not merely `typeof "number"`. `NaN` and the infinities pass a typeof check and
+ * would then flow into the one place this package subtracts, publishing `NaN` as a KNOWN
+ * duration — a value present in no record, wearing the authority of an observation. A
+ * non-finite reading is not a reading, so this is a question about shape, not a judgement
+ * about whether the number is plausible.
+ */
 function isObservationOrNull(value: unknown): boolean {
   if (value === null) return true;
   if (!isPlainRecord(value)) return false;
-  return typeof value["serverWallSeconds"] === "number"
+  return Number.isFinite(value["serverWallSeconds"])
     && typeof value["bootId"] === "string"
-    && typeof value["monotonicObservation"] === "number";
+    && Number.isFinite(value["monotonicObservation"]);
 }
 
 /**
@@ -79,15 +87,19 @@ const RECORD_SHAPE: Readonly<Record<string, (value: unknown) => boolean>> = Obje
   recordDigest: isString,
 });
 
-/** The measurement fields a cost row is projected from. A row short of these has no basis. */
+/**
+ * The measurement fields a cost row is projected from. A row short of these has no basis.
+ * `quantity` is either an explicit `null` — unobserved, and projected as UNKNOWN — or a
+ * FINITE number; `NaN` is neither, and admitting it would publish it as a measurement.
+ */
 function hasMeasurementBasis(value: unknown): boolean {
   if (!isPlainRecord(value)) return false;
   const quantity = value["quantity"];
   return typeof value["meter"] === "string"
-    && (quantity === null || typeof quantity === "number")
+    && (quantity === null || Number.isFinite(quantity))
     && typeof value["coverage"] === "string"
     && typeof value["source"] === "string"
-    && typeof value["sequence"] === "number";
+    && Number.isFinite(value["sequence"]);
 }
 
 function isReadableUsageRow(value: unknown): boolean {

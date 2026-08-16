@@ -23,24 +23,43 @@ import type {
 } from "./benchmark-record-contracts.js";
 import { PROJECTED_RECORD_VERSION } from "./benchmark-record-contracts.js";
 
+/**
+ * DEEPLY FROZEN, for two reasons that both bite downstream.
+ *
+ * The constants below are shared across every caller, and the builders embed them in the
+ * records they return. An unfrozen shared fixture is the classic corruption footgun: one
+ * consumer mutating `record.usage[0].measurement` would silently change what every other
+ * consumer's "pristine" fixture means, and the failure would surface far from the edit.
+ *
+ * It is also the more faithful shape. `composeProviderRunRecord` freezes the record it
+ * commits, so a frozen fixture is what a real reader actually receives. Building variants
+ * by spreading is unaffected; only in-place mutation is refused, which is the point.
+ */
+function deepFreeze<T>(value: T): T {
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    if (typeof entry === "object" && entry !== null) deepFreeze(entry);
+  }
+  return Object.freeze(value);
+}
+
 /** An unobserved fact carrying the producing authority's own code and layer. */
 export function unknownFactFixture(code: string, layer: string): ProjectedFactUnknown {
-  return { known: false, code, layer };
+  return deepFreeze({ known: false, code, layer });
 }
 
 /** Same boot, monotonic delta 12, wall delta 30 — the two deltas must not agree. */
-export const FIXTURE_OBSERVED_START: ProjectedClockObservation = {
+export const FIXTURE_OBSERVED_START: ProjectedClockObservation = deepFreeze({
   serverWallSeconds: 1_000, bootId: "boot-a", monotonicObservation: 5_000,
-};
-export const FIXTURE_OBSERVED_END: ProjectedClockObservation = {
+});
+export const FIXTURE_OBSERVED_END: ProjectedClockObservation = deepFreeze({
   serverWallSeconds: 1_030, bootId: "boot-a", monotonicObservation: 5_012,
-};
+});
 /** Identical readings to FIXTURE_OBSERVED_END but a different boot, and nothing else. */
-export const FIXTURE_OBSERVED_END_OTHER_BOOT: ProjectedClockObservation = {
+export const FIXTURE_OBSERVED_END_OTHER_BOOT: ProjectedClockObservation = deepFreeze({
   serverWallSeconds: 1_030, bootId: "boot-b", monotonicObservation: 5_012,
-};
+});
 
-export const FIXTURE_USAGE_ROW: ProjectedUsageRow = {
+export const FIXTURE_USAGE_ROW: ProjectedUsageRow = deepFreeze({
   measurement: {
     meter: "input_tokens", quantity: 4, coverage: "COMPLETE", source: "PROVIDER_RESULT",
     providerRunRef: "run-1", sourceParserVersion: 2, sequence: 1,
@@ -51,10 +70,10 @@ export const FIXTURE_USAGE_ROW: ProjectedUsageRow = {
   },
   truncated: false,
   identity: "usage-1",
-};
+});
 
 /** A row whose quantity was never observed. `null` is unobserved and never a zero. */
-export const FIXTURE_USAGE_ROW_UNMEASURED: ProjectedUsageRow = {
+export const FIXTURE_USAGE_ROW_UNMEASURED: ProjectedUsageRow = deepFreeze({
   measurement: {
     meter: "output_tokens", quantity: null, coverage: "PARTIAL", source: "PROVIDER_RESULT",
     providerRunRef: "run-1", sourceParserVersion: 2, sequence: 2,
@@ -63,11 +82,11 @@ export const FIXTURE_USAGE_ROW_UNMEASURED: ProjectedUsageRow = {
   pricebookBinding: null,
   truncated: true,
   identity: "usage-2",
-};
+});
 
 /** Every field observed: the arm against which an incomplete record must stay distinct. */
 export function completeRunRecordFixture(): ProjectedRunRecord {
-  return {
+  return deepFreeze({
     recordVersion: PROJECTED_RECORD_VERSION,
     providerRunRef: {
       provider: "claude", runRef: "run-1", effectIntentId: "effect-1",
@@ -129,7 +148,7 @@ export function completeRunRecordFixture(): ProjectedRunRecord {
     stdoutReceiptDigest: { known: true, value: "c".repeat(64) },
     stderrReceiptDigest: { known: true, value: "d".repeat(64) },
     recordDigest: "e".repeat(64),
-  };
+  });
 }
 
 /**
@@ -139,7 +158,7 @@ export function completeRunRecordFixture(): ProjectedRunRecord {
 export function unobservedRunRecordFixture(): ProjectedRunRecord {
   const base = completeRunRecordFixture();
   const absent = unknownFactFixture("TELEMETRY_RESULT_ABSENT", "TELEMETRY_RESULT");
-  return {
+  return deepFreeze({
     ...base,
     declared: unknownFactFixture("TELEMETRY_DECLARED_SELECTION_UNREADABLE", "TELEMETRY_LAUNCH"),
     observedModel: { modelId: absent, snapshotKind: "ABSENT", snapshotEvidence: absent },
@@ -156,5 +175,5 @@ export function unobservedRunRecordFixture(): ProjectedRunRecord {
     usage: [FIXTURE_USAGE_ROW_UNMEASURED],
     stdoutReceiptDigest: absent,
     stderrReceiptDigest: absent,
-  };
+  });
 }

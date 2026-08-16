@@ -75,6 +75,28 @@ describe("every declared code has a producer", () => {
   });
 });
 
+describe("fixtures are shared, so they are frozen", () => {
+  it("refuses in-place mutation of a fixture at every depth", () => {
+    const record = completeRunRecordFixture();
+    expect(Object.isFrozen(record)).toBe(true);
+    expect(Object.isFrozen(record.usage)).toBe(true);
+    expect(Object.isFrozen(record.usage[0]?.measurement)).toBe(true);
+    expect(Object.isFrozen(FIXTURE_USAGE_ROW.pricebookBinding)).toBe(true);
+    // A shared fixture one consumer can mutate is a fixture every other consumer's
+    // "pristine" baseline silently drifts under.
+    expect(() => {
+      (record.usage[0]?.measurement as { meter: string }).meter = "tampered";
+    }).toThrow(TypeError);
+    expect(record.usage[0]?.measurement.meter).toBe("input_tokens");
+  });
+
+  it("still admits a fixture variant built by spreading", () => {
+    const base = completeRunRecordFixture();
+    const variant = { ...base, launch: { ...base.launch, startedAt: null } };
+    expect(projectBenchmarkRun(variant).ok).toBe(true);
+  });
+});
+
 describe("the version seam", () => {
   it("admits only the pinned record revision", () => {
     expect(PROJECTED_RECORD_VERSION).toBe("moe-provider-run-record/1");
@@ -134,6 +156,18 @@ describe("shape admission", () => {
       { ...base, usageRefusals: "none" },
       { ...base, recordDigest: 42 },
       { ...base, observedStart: 17 },
+      // A non-finite reading passes a bare `typeof "number"` check and would then flow
+      // into the one place this package subtracts, publishing NaN as a KNOWN duration.
+      {
+        ...base,
+        observedStart: { serverWallSeconds: 1_000, bootId: "boot-a", monotonicObservation: Number.NaN },
+      },
+      {
+        ...base,
+        observedEnd: {
+          serverWallSeconds: Number.POSITIVE_INFINITY, bootId: "boot-a", monotonicObservation: 5_012,
+        },
+      },
     ];
     let swept = 0;
     for (const input of malformed) {
@@ -152,6 +186,13 @@ describe("shape admission", () => {
       { ...base, usage: ["not-a-row"] },
       { ...base, usage: [{ ...FIXTURE_USAGE_ROW, measurement: null }] },
       { ...base, usage: [{ ...FIXTURE_USAGE_ROW, measurement: { meter: "input_tokens" } }] },
+      {
+        ...base,
+        usage: [{
+          ...FIXTURE_USAGE_ROW,
+          measurement: { ...FIXTURE_USAGE_ROW.measurement, quantity: Number.NaN },
+        }],
+      },
     ];
     let swept = 0;
     for (const input of rowless) {
