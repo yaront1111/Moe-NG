@@ -60,22 +60,31 @@
     {
       "stepId": "step-3",
       "description": "FREEZE THE UNKNOWN VOCABULARY — the open question three architects have deferred. The harness needs its own closed reason-code and layer lists for the cases where it cannot project a row, and they must be frozen arrays a test can ITERATE, not a type: a test cannot iterate a type, and a sweep needs every member at runtime. Follow the repo's established shape — `Object.freeze([...] as const)` plus a derived union type, as `COORDINATION_CODES`/`COORDINATION_LAYERS` and `PROVIDER_TELEMETRY_LAYERS` do.\nSCOPE IT TIGHTLY: codes for what the HARNESS cannot project — an unrecognised record version, a record whose required field is absent, a row whose basis is missing. NOT codes for what the run itself did; those already exist on the record as `terminal`, `infrastructure`, `upstreamRefusal` and `usageRefusals`, and duplicating them here would create a second vocabulary for one condition.\nNO CAMPAIGN SCORING, NO CLAIM DECISIONS. This vocabulary describes projection failures. A code that means \"this arm scored worse\" or \"this claim is unproven\" belongs to the campaign task, not here — that boundary is why this task is infrastructure-only.\nAssert the closed lists: every member reachable, a positive case count on any sweep over them, and no member declared without a producer. A code no layer can emit cannot fail closed — the same defect QA rejected on task-6cbff010 for exactly this reason.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/index.ts"
       ],
-      "startedAt": "2026-08-16T12:51:51.874Z"
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-projection-vocabulary.ts",
+        "packages/benchmark/src/benchmark-projection-vocabulary.js",
+        "packages/benchmark/src/benchmark-projection-vocabulary.test.ts",
+        "packages/benchmark/src/index.ts"
+      ],
+      "note": "Vocabulary frozen. THE GATE NOW PRINTS A REAL COUNT LINE for the first time in this task's history:\n  Test Files  1 passed (1)\n       Tests  7 passed (7)\n  EXIT=0\nCompare step 1's baseline (`No projects matched the filters`, EXIT=0, zero tests). Nonzero M is now on the record; step 7 still owes the positive control.\n\nTDD observed. Wrote benchmark-projection-vocabulary.test.ts FIRST and ran it: `Test Files 1 failed (1)` / `Tests no tests`, failing on the missing import of ./benchmark-projection-vocabulary.js — the module, not a typo. Then wrote the module; 7 passed.\n\nFIVE CODES, scoped to projection failures only:\n  BENCHMARK_RECORD_FIELD_ABSENT, BENCHMARK_RECORD_FIELD_MALFORMED,\n  BENCHMARK_RECORD_NOT_PLAIN_DATA, BENCHMARK_RECORD_VERSION_UNRECOGNISED,\n  BENCHMARK_ROW_BASIS_ABSENT\nFOUR LAYERS, ordered as they answer:\n  BENCHMARK_INPUT, BENCHMARK_VERSION, BENCHMARK_SHAPE, BENCHMARK_ROW\n\nTHE THREE EXCLUSIONS ARE WRITTEN INTO THE MODULE HEADER, since each is a code someone will later be tempted to add:\n1. NOT what the run did — terminal/infrastructure/upstreamRefusal/usageRefusals already say that in the runner's and scheduler's own vocabularies. A \"provider refused\" code here would be a second vocabulary for one condition.\n2. NOT what a campaign concluded — no \"scored worse\", no \"claim unproven\". That is task-8af4562f's, and a projector holding a verdict decides the claim it exists to measure.\n3. NOT a replacement for UNKNOWN — an unobserved reading is UNKNOWN on the row carrying the PRODUCING authority's code and layer, not a refusal here. These five fire only when the harness cannot emit the row at all. This distinction is the one most likely to be eroded later.\n\nPRODUCER MAP, one layer per code, no overlap (a code no layer can emit cannot fail closed — the defect QA rejected on task-6cbff010):\n  BENCHMARK_INPUT   -> NOT_PLAIN_DATA          (input is not a plain object at all)\n  BENCHMARK_VERSION -> VERSION_UNRECOGNISED    (runs before shape: an unrecognised schema means the harness cannot know which fields to expect)\n  BENCHMARK_SHAPE   -> FIELD_ABSENT, FIELD_MALFORMED (two codes, one layer, but DISTINCT codes so an assertion can still tell which answered)\n  BENCHMARK_ROW     -> ROW_BASIS_ABSENT        (admission accepts `usage` as an array in bulk; a row that is not a readable measurement is refused here)\nEvery layer has at least one producer and every code exactly one producing site. Step 4 turns this map into an executable producer-coverage sweep against the real admission/projection surface; step 5 makes it green. It could not be asserted in this step without the production surface existing, and asserting it against a test helper would be the \"property asserted against a reimplementation\" defect the epic rail names.\n\nSWEEP VACUITY GUARDED, per the rail that a sweep producing zero cases passes silently: every sweeping test counts its generated cases and asserts both the exact expected count AND `toBeGreaterThan(0)`. The refusal-minting sweep drives all 5 codes x 4 layers = 20 pairings and asserts swept === 20.\n\nOther assertions chosen to be mutation-resistant rather than structural theatre: both lists frozen and duplicate-free; codes asserted against a hand-written literal list (so a silent addition reddens rather than being absorbed); messages exhaustive in BOTH directions (`Object.keys(MESSAGES).sort()` equals the code list, so neither an unmessaged code nor an orphan message survives); messages mutually DISTINCT (a copy-paste onto a second code would make the two indistinguishable in durable bytes); and no message contains its own code or any of `$ { }` — pinning the no-echo rule the runner's own PROVIDER_TELEMETRY_MESSAGES states, so a failure path cannot start quoting record content.\n\nbenchmarkProjectionRefusal is the single mint point, returning a frozen flat {ok:false, code, layer, message}; a flat Object.freeze is a complete freeze here, no deepFreeze needed. Shape mirrors ProviderTelemetryRefusal but the vocabulary is disjoint by construction — that is what keeps the three refusal sources unflattenable.\n\npnpm --filter @moe/benchmark typecheck EXIT=0. Sizes by grep -c '': vocabulary 79, its test 85, contracts 209, index 52. All under 250.",
+      "startedAt": "2026-08-16T12:51:51.874Z",
+      "completedAt": "2026-08-16T12:53:59.582Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD RED — the non-merge rules, which are the harness's entire substance. Every one of these is a rule the RECORD's own comments already state; the harness must not undo them in projection. Write them before the projector exists.\n(a) DECLARED IS NOT OBSERVED. `declared` carries what was asked for (selected model, reasoning effort, profile revision); `observedModel` carries what the provider's bytes said. The record comment says merging them \"destroys the only evidence that the provider ran the model it was asked to run\". Assert the projection keeps them as separate fields and that an absent `observedModel` is NOT filled from `declared` — the old handoffs' \"do not substitute runtime/profile IDs for model snapshot or reasoning effort\" is exactly this.\n(b) TWO CLOCKS, NOT RECONCILED. `launch.startedAt`/`completedAt` are the LAUNCHER's wall stamps; `observedStart`/`observedEnd` are the daemon's own `ClockObservation`s. The comment says they are \"two observers, deliberately not reconciled\". Assert the projection reports both and derives no single timing from a mix of them.\n(c) A DURATION NEEDS ONE BOOT. A `ClockObservation` binds wall seconds, boot identity and monotonic reading together, because \"a duration derived from a pair without `bootId` is unfalsifiable\". Assert the harness emits a duration ONLY when both observations share a `bootId`, and UNKNOWN otherwise — with a case where the boot ids differ.\n(d) NULL IS NOT ZERO. \"`null` is an unobserved reading and never a zero.\" Assert no null observation, absent token count or missing usage row is ever rendered as 0, and that a `ProviderCountCoverage` short of complete is carried through rather than dropped.\n(e) A BINDING IS NOT A COST. Usage rows carry `pricebookBinding`, and \"a derived list price stays a binding and never becomes an actual-cost claim\". Assert the cost-class column reports the binding and never presents a derived price as an actual cost.\n(f) NO IMPUTATION ACROSS ARMS. Assert one record's UNKNOWN is never filled from another record's value — drive two records where one is complete and one is not, and assert the incomplete one stays incomplete.\nEvery refusal case pins the exact frozen code AND layer from step 3. Assert a positive generated-case count on any sweep.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/benchmark/src/run-projection.test.ts"
       ],
       "newFiles": [
         "packages/benchmark/src/run-projection.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T12:56:00.753Z"
     },
     {
       "stepId": "step-5",
@@ -147,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-16T12:51:51.874Z",
+  "updatedAt": "2026-08-16T12:56:00.753Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -160,7 +169,7 @@
     "firstClaimAt": "2026-08-13T16:00:55.803Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -200,7 +209,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T12:24:33.082Z",

@@ -1,0 +1,32 @@
+{
+  "id": "task-05b0a693c0af432897fb5b08ebb8af6d",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Wrapper can dispatch a second live CLI session against one claim",
+  "description": "Filed by governor-1a5aca5d 12:56Z under the human's standing sweep directive, from THREE measured occurrences in one session (2026-08-16):\n\nTHE DEFECT. The agent wrapper can start a second CLI session for a workerId whose previous session is still alive and holding a claim. Both sessions then execute the same task concurrently in the shared worktree. The registry cannot see the duplicate — moe.list_workers shows ONE worker on the task because both sessions share the workerId; presence/staleness is per-workerId, not per-session.\n\nOCCURRENCES, all disclosed in #general/#governors:\n1. task-48c0c0db ~12:29Z: two live sessions under worker-5678886b; the earlier stood down mid-race (msg-ebbb27c0), the later committed. Resolved by luck + discipline: the earlier session happened to notice the other's drill cycling via file hashes.\n2. task-6cbff010 ~12:55Z: same workerId, second session resumed at step-2 while the first had already LANDED the task into REVIEW (msg-7061495940) — the second session was working a stale plan state against moved bytes.\n3. (Earlier class, 00:16: the wrapper re-dispatched task-b785 to a fresh worker while the prior worker's claim state was ambiguous — logged as wrapper-can-dispatch-an-already-claimed-task.)\n\nBLAST RADIUS: duplicate mutation drills in the shared worktree, racing commits into one index, double complete_step calls, and QA grading a moving target. Only worker discipline (collision notes, stand-downs) prevented corruption each time.\n\nLIKELY SEAM: the wrapper's crash-resume path (\"CLI session ended N times... pausing auto-resume\") plus its fresh-dispatch path can both fire after an outage window; nothing fences session generation. Fix directions the planner should weigh (measure first): a per-session nonce/generation in the registry so heartbeat/claims from a superseded session are refused with a stable code; wrapper-side single-flight lock per workerId; or daemon-side rejection of a second concurrent session registration for a live workerId.\n\nVerification: a test that simulates two sessions under one workerId proves the second is refused (or fenced) with a stable reason code, and the first's claim/heartbeat continues unaffected.",
+  "definitionOfDone": [
+    "The double-dispatch seam is identified by measurement (wrapper resume path and/or daemon registration) and the chosen fencing mechanism is implemented so a second concurrent session for a live workerId is refused or superseded with a stable reason code — never silently co-active.",
+    "The superseded/refused session's tool calls (heartbeat, complete_step, chat_send) fail closed with that code rather than mutating task state.",
+    "A test simulates the two-session race and pins the refusal code and layer; a mutation drill removing the fence turns it red.",
+    "The three occurrence records above are cited in the completion note as the reproduced-class evidence."
+  ],
+  "taskRails": [
+    "Fail closed with stable reason codes; a fenced-out session must not be able to corrupt the claim, the worktree index, or the step ledger.",
+    "Do not break single-session resume-after-crash — the fence distinguishes a NEW session superseding a dead one (allowed, current behavior) from a second session co-existing with a LIVE one (refused).",
+    "Re-measure the wrapper dispatch/resume code paths on current bytes before planning; the occurrence timeline above is evidence, not a code map."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "HUMAN",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 111.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T12:56:00.476Z",
+  "updatedAt": "2026-08-16T12:56:00.476Z"
+}

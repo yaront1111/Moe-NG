@@ -57,6 +57,42 @@ export const BENCHMARK_PROJECTION_MESSAGES:
     BENCHMARK_ROW_BASIS_ABSENT: "a usage row carries no readable measurement basis",
   });
 
+/**
+ * WHY a projected cell is UNKNOWN. Distinct from the refusal codes above and never
+ * interchangeable with them: a refusal means the harness could not emit the row at all,
+ * while a basis means the row exists and this cell had nothing to observe.
+ *
+ * The benchmark requires every measurement to carry an exact source or an explicit
+ * UNKNOWN, so an unknown cell that could not say WHY would be the imputation hazard
+ * wearing a different hat — indistinguishable, one edit later, from a zero.
+ *
+ * `PRODUCER_DECLARED_UNKNOWN` is the only basis that carries a producing authority's own
+ * code and layer. The other four are the harness's own reading of the record's shape,
+ * and they carry no code, because attributing one to a producer that never spoke would
+ * be inventing evidence.
+ */
+export const BENCHMARK_UNKNOWN_BASES = Object.freeze([
+  "BOOT_IDENTITY_MISMATCH",
+  "OBSERVATION_ABSENT",
+  "PRODUCER_DECLARED_UNKNOWN",
+  "QUANTITY_ABSENT",
+  "SELECTION_UNREADABLE",
+] as const);
+export type BenchmarkUnknownBasis = (typeof BENCHMARK_UNKNOWN_BASES)[number];
+
+/**
+ * One projected cell. An unknown cell never carries a `value` key at all, so a reader
+ * cannot accidentally destructure a zero out of an unobserved reading.
+ */
+export type BenchmarkValue<T> =
+  | { readonly known: true; readonly value: T }
+  | {
+      readonly known: false;
+      readonly basis: BenchmarkUnknownBasis;
+      readonly code: string | null;
+      readonly layer: string | null;
+    };
+
 /** A refusal from this harness, disjoint by construction from every producer vocabulary. */
 export interface BenchmarkProjectionRefusal {
   readonly ok: false;

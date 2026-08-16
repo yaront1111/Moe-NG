@@ -21,11 +21,12 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE SUBSET FROM THE ROSTER — not from this task's own description, which predates the correction. `tests/security/boundary-roster.security.ts` is committed and its axis totals line reads `transport 15, integrity 13, durable-store 14, ...`. THIS TASK'S DESCRIPTION SAYS 13 AND IS WRONG; the roster is the authority every sibling slice was told to consume, and it also re-tagged members my original filing mis-assigned. Read the 15 transport-tagged entries off the roster and work from those:\nIDE_ADAPTER_LAYER and IDE_ADAPTER_LAYERS (adapters/ide-contract/src/index.ts); EFFORT_ADMISSION_LAYER, EFFORT_COLLECTOR_LAYER, EFFORT_LAYERS (apps/control-room/src/performance/effort-records.ts); TIMELINE_REFUSAL_LAYERS (apps/control-room/src/timeline/timeline-contract.ts); DAEMON_ENTRY_LAYER (apps/daemon/src/daemon-entry.ts); AFFORDANCE_SURFACE_LAYER (http/affordance-contract.ts); EVENT_STREAM_LAYER (http/event-stream-observation.ts); CONTROL_ROOM_LISTENER_LAYER (http/http-listener-guards.ts); DAEMON_INGRESS_LAYER (recovery/recovery-completion-evidence.ts); CONTROL_ROOM_TRANSPORT_LAYER (packages/control-room-client/src/client-transport.ts); COORDINATION_LAYERS (packages/coordination/src/coordination-contracts.ts); IMPORT_REFUSAL_LAYERS (packages/import/src/import-contract.ts); HTTP_SHUTDOWN_LAYER (packages/mcp/src/http/http-shutdown.ts).\nNote what MOVED off this axis: `SESSION_AUTHORITY_DAEMON_LAYERS` and `SESSION_AUTH_LAYERS` are NOT transport in the roster. Do not cover them here — another slice owns them, and covering them twice creates the overlap the partition exists to prevent.\nTHE HARNESS, committed at tests/security/hostile-harness.ts (248 lines): `probeBefore`, `probeAfter`, `probeRacing` (with `RaceOutcome`/`LegOutcome`/`RaceSide`), `hostileRoot`, `cleanupHostileRoots`, `withHostileRoot`, `assertRefusedWith(actual, expected: RefusalExpectation)`, and `MAX_BOUND_MS = 2_147_483_647`. `RefusalExpectation.layer` is NON-OPTIONAL at the type level AND re-checked at runtime, so a code-only assertion is a compile error and a cast is rejected too — use the helper rather than hand-rolling an assertion that would bypass both.\nGATE BASELINE: `pnpm test:security` — run it alone with its exit code captured (never `;`-chained, never piped into tail) and record the `Test Files`/`Tests` count line as your before-set. The lane typechecks first and sets `passWithNoTests: false`.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T12:54:51.317Z"
     },
     {
       "stepId": "step-2",
@@ -81,7 +82,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -93,7 +94,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:59:05.501Z",
-  "updatedAt": "2026-08-16T12:26:57.672Z",
+  "updatedAt": "2026-08-16T12:54:51.317Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:12:17.247Z",
     "plannedStepCount": 7,
@@ -132,7 +133,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-16T12:54:33.001Z",
+    "escalatedAt": "2026-08-16T12:54:33.001Z"
   },
-  "planApprovedAt": "2026-08-16T12:26:57.672Z"
+  "planApprovedAt": "2026-08-16T12:26:57.672Z",
+  "contextFetchedBy": [
+    "worker-5678886b"
+  ],
+  "workStartedAt": "2026-08-16T12:54:51.317Z"
 }
