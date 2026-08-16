@@ -21,11 +21,27 @@
  * from an app, so the type cannot be taken by reference. Admission therefore validates
  * SHAPE ONLY, answering "is this the schema I project?" and nothing more.
  *
- * THE VERSION SEAM. `PROJECTED_RECORD_VERSION` is "moe-provider-run-record/1", declared
- * here as its own literal and pinned against the daemon's `PROVIDER_RUN_RECORD_VERSION`.
- * Admission refuses every other value. When the record schema moves, this package
- * reddens rather than projecting a shape it no longer understands — which is the whole
- * reason the literal is duplicated instead of inferred.
+ * SHAPE MEANS EVERY FIELD THIS PACKAGE READS, AT EVERY DEPTH IT READS IT. Checking only
+ * the top-level KIND of a container the projector then reads INTO is not a shape check;
+ * it is a shape check that stops one level above where the reading happens. An empty
+ * object passes `isPlainRecord` and its absent members read back as `undefined`, which is
+ * not a refusal but a value — so `{known: true, value: undefined}` gets published, and
+ * missing evidence has gained an observation's authority in silence. Admission therefore
+ * guards each container down to the fields projected out of it, and no further: a field
+ * this package never reads is a field it has no standing to judge.
+ *
+ * THE VERSION SEAM, AND WHAT IT CANNOT REACH. `PROJECTED_RECORD_VERSION` is
+ * "moe-provider-run-record/1", declared here as its own literal and pinned against the
+ * daemon's `PROVIDER_RUN_RECORD_VERSION`. Admission refuses every other value, so when
+ * the RECORD schema moves this package reddens rather than projecting a shape it no
+ * longer understands — the whole reason the literal is duplicated instead of inferred.
+ *
+ * That seam pins one string, and the record is not the only producer. Its inner types —
+ * `ClaudeLaunchSelection`, `ProviderText`, `LayeredIssue` and their neighbours — belong to
+ * @moe/runner and @moe/scheduler and move on their OWN version lines. A renamed field
+ * inside one of them arrives with `recordVersion` untouched, so the version guard cannot
+ * see it and only the nested shape guards can. The two seams cover different drifts and
+ * neither substitutes for the other.
  *
  * THREE REFUSAL SOURCES, NEVER FLATTENED. `usageRefusals` are the scheduler's layered
  * issues, `upstreamRefusal` is the provider seam's, and this package's own frozen codes

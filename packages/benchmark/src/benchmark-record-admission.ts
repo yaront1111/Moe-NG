@@ -13,12 +13,27 @@
  *  2. BENCHMARK_VERSION — is it a revision I read? An unrecognised schema means the
  *     harness cannot know which fields to expect, so a field complaint would be noise
  *     about a shape it was never entitled to assume.
- *  3. BENCHMARK_SHAPE   — are the top-level fields present, and of the kind I project?
+ *  3. BENCHMARK_SHAPE   — is each field present, and is it the shape this projection
+ *     reads, TO THE DEPTH IT READS IT? The predicates live in `benchmark-container-shapes`
+ *     and each guards exactly the members projected out of its container.
  *  4. BENCHMARK_ROW     — is each usage row readable? Admission accepts `usage` in bulk
  *     as an array; the rows themselves are checked here so a single unreadable row is
  *     attributable to the row layer rather than to the record's shape.
+ *
+ * A NESTED FAILURE IS THE SAME CONDITION AS A TOP-LEVEL ONE, so it carries the same code.
+ * `launch: 42` and `launch: {}` are both "a required field is not the shape this
+ * projection reads"; splitting them into two codes would be a second vocabulary for one
+ * condition and would leave a member of the frozen list without a distinct producer.
  */
 
+import {
+  isConcurrency, isDeclaredSelection, isLaunchFacts, isObservedModel, isReadableUsageRow,
+  isRunRef, isStepObservations, isTokenObservations, isUpstreamRefusalOrNull,
+  isUsageRefusalList,
+} from "./benchmark-container-shapes.js";
+import {
+  isObservationOrNull, isPlainRecord, isProjectedQuantity, isProjectedText, isText,
+} from "./benchmark-field-primitives.js";
 import { benchmarkProjectionRefusal } from "./benchmark-projection-vocabulary.js";
 import type { BenchmarkProjectionRefusal } from "./benchmark-projection-vocabulary.js";
 import { PROJECTED_RECORD_KEYS, PROJECTED_RECORD_VERSION } from "./benchmark-record-contracts.js";
@@ -28,93 +43,46 @@ export type BenchmarkAdmission =
   | { readonly ok: true; readonly record: ProjectedRunRecord }
   | BenchmarkProjectionRefusal;
 
-type PlainRecord = Readonly<Record<string, unknown>>;
-
 /**
- * A plain record and nothing else. Arrays, functions and class instances are excluded:
- * the input is meant to be decoded durable data, and anything carrying behaviour did not
- * come from the store.
- */
-function isPlainRecord(value: unknown): value is PlainRecord {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value) as unknown;
-  return prototype === Object.prototype || prototype === null;
-}
-
-const isString = (value: unknown): boolean => typeof value === "string";
-const isRecordOrNull = (value: unknown): boolean => value === null || isPlainRecord(value);
-
-/**
- * Wall seconds, boot identity and monotonic reading together, or an unobserved null.
+ * The shape each top-level field must be. Every entry whose container the projector reads
+ * INTO carries a nested predicate rather than a bare kind check; the two that do not —
+ * `terminal` and `infrastructure` — are closed vocabularies owned elsewhere and are
+ * carried through as opaque strings this package has no standing to re-list.
  *
- * FINITE, not merely `typeof "number"`. `NaN` and the infinities pass a typeof check and
- * would then flow into the one place this package subtracts, publishing `NaN` as a KNOWN
- * duration — a value present in no record, wearing the authority of an observation. A
- * non-finite reading is not a reading, so this is a question about shape, not a judgement
- * about whether the number is plausible.
- */
-function isObservationOrNull(value: unknown): boolean {
-  if (value === null) return true;
-  if (!isPlainRecord(value)) return false;
-  return Number.isFinite(value["serverWallSeconds"])
-    && typeof value["bootId"] === "string"
-    && Number.isFinite(value["monotonicObservation"]);
-}
-
-/**
- * The kind each top-level field must be. `recordVersion` is absent by design: the
- * version seam above already settled it, and listing it here would let a shape complaint
- * answer for a schema move.
+ * `recordVersion` is absent by design: the version seam above already settled it, and
+ * listing it here would let a shape complaint answer for a schema move.
  */
 const RECORD_SHAPE: Readonly<Record<string, (value: unknown) => boolean>> = Object.freeze({
-  providerRunRef: isPlainRecord,
-  launch: isPlainRecord,
-  declared: isPlainRecord,
-  observedModel: isPlainRecord,
-  terminal: isString,
-  infrastructure: isString,
-  tokens: isPlainRecord,
-  steps: isPlainRecord,
-  sequence: isPlainRecord,
-  concurrency: isPlainRecord,
+  providerRunRef: isRunRef,
+  launch: isLaunchFacts,
+  declared: isDeclaredSelection,
+  observedModel: isObservedModel,
+  terminal: isText,
+  infrastructure: isText,
+  tokens: isTokenObservations,
+  steps: isStepObservations,
+  sequence: isProjectedQuantity,
+  concurrency: isConcurrency,
   observedStart: isObservationOrNull,
   observedEnd: isObservationOrNull,
   usage: Array.isArray,
-  usageRefusals: Array.isArray,
-  upstreamRefusal: isRecordOrNull,
-  stdoutReceiptDigest: isPlainRecord,
-  stderrReceiptDigest: isPlainRecord,
-  recordDigest: isString,
+  usageRefusals: isUsageRefusalList,
+  upstreamRefusal: isUpstreamRefusalOrNull,
+  stdoutReceiptDigest: isProjectedText,
+  stderrReceiptDigest: isProjectedText,
+  recordDigest: isText,
 });
-
-/**
- * The measurement fields a cost row is projected from. A row short of these has no basis.
- * `quantity` is either an explicit `null` — unobserved, and projected as UNKNOWN — or a
- * FINITE number; `NaN` is neither, and admitting it would publish it as a measurement.
- */
-function hasMeasurementBasis(value: unknown): boolean {
-  if (!isPlainRecord(value)) return false;
-  const quantity = value["quantity"];
-  return typeof value["meter"] === "string"
-    && (quantity === null || Number.isFinite(quantity))
-    && typeof value["coverage"] === "string"
-    && typeof value["source"] === "string"
-    && Number.isFinite(value["sequence"]);
-}
-
-function isReadableUsageRow(value: unknown): boolean {
-  if (!isPlainRecord(value)) return false;
-  return hasMeasurementBasis(value["measurement"])
-    && isRecordOrNull(value["pricebookBinding"])
-    && typeof value["truncated"] === "boolean"
-    && typeof value["identity"] === "string";
-}
 
 /**
  * Admits one record, or refuses with the exact code and layer of whichever guard
  * answered. The cast on the success arm is the documented boundary of this module: every
- * field has been checked to be present and of its projected kind, and nothing deeper is
- * asserted, because nothing deeper is this package's to assert.
+ * field the projection reads has been checked to be present and of its projected kind, at
+ * every depth the projection reads it, and nothing deeper is asserted, because nothing
+ * deeper is this package's to assert.
+ *
+ * NOTHING PAST THIS POINT MAY THROW ON A MALFORMED RECORD. `projectBenchmarkRun` takes
+ * `unknown`, so a crash escaping it would be a failure carrying no code and no layer —
+ * nothing a caller could pin, and not a refusal at all.
  */
 export function admitRunRecord(input: unknown): BenchmarkAdmission {
   if (!isPlainRecord(input)) {

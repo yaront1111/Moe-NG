@@ -96,8 +96,25 @@ export const BENCHMARK_COST_BASES = Object.freeze(["NO_BINDING", "PRICEBOOK_BIND
 export type BenchmarkCostBasis = (typeof BENCHMARK_COST_BASES)[number];
 
 /**
- * One projected cell. An unknown cell never carries a `value` key at all, so a reader
- * cannot accidentally destructure a zero out of an unobserved reading.
+ * One projected cell, and the two-directional invariant every cell must satisfy.
+ *
+ * AN UNKNOWN CELL NEVER CARRIES A `value` KEY at all, so a reader cannot accidentally
+ * destructure a zero out of an unobserved reading.
+ *
+ * AND THE MIRROR, which is the half that was once unwritten and therefore unenforced: a
+ * KNOWN cell always carries a `value`, and an unknown whose `basis` names a PRODUCER
+ * always carries that producer's non-null `code` and `layer`. Stating only the first half
+ * left `{known: true, value: undefined}` and `{known: false, code: undefined}` outside the
+ * rule — an observation with nothing behind it, and an unknown attributed to a producer
+ * that never spoke. Both are missing evidence wearing authority, which is the one thing
+ * this vocabulary exists to make impossible, so both directions are asserted by a walker
+ * over real projections rather than left to the type alone. The type cannot enforce it:
+ * `undefined` inhabits `T`, and no compiler check survives the `unknown` entry point.
+ *
+ * The invariant is UPHELD BY ADMISSION, not patched at the cell minters. A cell is built
+ * from a field that has already been guarded to the depth it is read, so the minters stay
+ * the four unconditional shapes they are; adding a re-check there would put a second
+ * authority downstream of the first and let the two disagree.
  */
 export type BenchmarkValue<T> =
   | { readonly known: true; readonly value: T }
