@@ -1,51 +1,47 @@
-# task-6cbff01023b14b26a78fc5e3eb1dd8a9 handoff
+# task-6cbff01023b14b26a78fc5e3eb1dd8a9 handoff (2026-08-16, REVIEW)
 
-Status 2026-08-16 11:48Z: all 7 steps COMPLETED, task submitted to REVIEW. Reopen (governor cascade 09:48Z) is closed.
+Status: REVIEW, assigned qa-c7cedba3. All 7 steps COMPLETED. Committed at `66ae6ef`
+(`fix(task-6cbff...): Durable Claude attempt dispatch (retry after qa_reject #1)`), which is a
+whole-tree hook commit — it also carries .moe json and other tasks' files. Earlier foreign sweeps
+`4d0a49f` (task-c690a7a0) and `b55b9f0` (task-9aca4b05) captured earlier states of the same files.
+Never amend/reset them; review by `git diff cf272f67..HEAD -- apps/daemon/src/work/foundation-attempt-*`.
 
 ## What the reopen demanded and what landed
-`FoundationAttemptDeps.runtimePorts` (caller/test-composed `clock|facts|fs`) is REMOVED. `dispatch()` now calls the bare-root
-`createClaudeRuntimePinRequest(request.launchTemplate.runtime)` from `@moe/runner` BEFORE any authority write and returns
-`foundationAttemptRefusal(runtime.code, runtime.layer)` on refusal — the runner's own codes at layer `RUNTIME`.
-`launchRequestBody(record, bound, template, runtime: object)` forwards the hydrated pin request WHOLE (no spread of
-`template.runtime` over it), so no request field can re-layer a minted capability.
+`FoundationAttemptDeps.runtimePorts` is GONE. `dispatch()` now calls bare-root
+`createClaudeRuntimePinRequest(request.launchTemplate.runtime)` BEFORE any durable write and returns
+`foundationAttemptRefusal(runtime.code, runtime.layer)` on failure (runner's own code, layer `RUNTIME`).
+`launchRequestBody(record, bound, template, runtime)` takes the hydrated pin request.
 
-Key surface facts (measured on committed bytes):
-- `createClaudeRuntimePinRequest` is published via `packages/runner/src/surface/claude-surface.ts`; it takes exactly
-  `{quotedObservation, installedRoot, pinRoot}` and MINTS fs/facts/clock. Its docstring names THIS task as the consumer.
-- `observeInstalledClaudeRuntime` stays WITHHELD from the root on purpose; the daemon must not reach it.
-- `pathShapeRejection` requires an absolute local-drive WINDOWS path (`C:\...`); hydration does NO I/O, so synthetic
-  `C:\installed` / `C:\pins` fixtures pass on Linux.
-- `readQuote` has no platform gate: version/provider/PROVEN/CONTENT_ADDRESSED_COPY/closure bounds + exactly one EXECUTABLE.
+Owned paths (10): foundation-attempt-{contracts,codec,store,service}.ts + their one-line .js bridges,
+foundation-attempt-service.test.ts, foundation-attempt-windows.test.ts.
+Line counts: contracts 215, codec 194, store 155, service 249 (cap 250 — NO margin left).
 
-## Test evidence
-- Focused daemon suite: 1 file / 25 tests passed (was 21). New cases: deps-supplied capability set never touched, quote-digest
-  drift -> `CLAUDE_RUNTIME_QUOTE_INVALID@RUNTIME`, control-char installedRoot -> `CLAUDE_RUNTIME_PATH_INVALID@RUNTIME`,
-  2-case closure sweep (PACKAGE-only, two EXECUTABLEs) with positive generated count. All assert zero events on BOTH aggregates.
-- RED before the change: 9 failed. Mutation drills, each verified applied and md5-restored: `bearing.length > 1 -> > 99`
-  reddened multi-node; disabling the REPLAYED-reservation gate reddened concurrent delivery; bypassing the hydration refusal
-  reddened EXACTLY the 3 new runtime cases.
-- Line counts: contracts 215, service 249, codec 194, store 155; four `.js` bridges 1 line each.
+## Gate, fresh at 14:51 local on committed bytes
+- focused daemon: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts src/work/foundation-attempt-windows.test.ts --maxWorkers=1 --no-file-parallelism` -> 2 files / 28 tests passed, exit 0.
+- `pnpm --filter @moe/runner test` 66 files / 2216 passed. `pnpm typecheck` exit 0.
+- FOREIGN reds, owned-path intersection empty: untracked peer `apps/daemon/src/activation/activation-run-commit.test.ts` (task-d3239529) breaks `pnpm --filter @moe/daemon typecheck` with TS2307 since ~14:50 (same leg was exit 0 at 14:48); `pnpm test` fails 3 in packages/store recovery-anchor + tests/integration/release-archive-cleanup; daemon suite fails 4 in src/activation/{activation-ledger-reader,foundation-launch-authority}.test.ts (`expected 6501 to be less than or equal to 8`). Nothing outside src/work/foundation-attempt* imports these modules.
 
-## Windows suite (NOT one of the owned paths)
-`foundation-attempt-windows.test.ts` can no longer use a fake `claude.exe`: production runs the real host observer, which
-executes the binary with `--version` through the shipped broker and demands `^\d+\.\d+\.\d+`. A `where.exe`/`node.exe` copy
-therefore refuses `CLAUDE_RUNTIME_OBSERVATION_INVALID@RUNTIME` — a code only reachable AFTER a real child ran (an absent
-broker answers `PROCESS_BOUNDARY_BROKER_UNRESOLVED`), so it is physical proof the boundary launched. A real installed Claude
-exists at `C:\Users\Yaron\.local\bin\claude.exe`; dispatching against it answers `CLAUDE_RUNTIME_OBSERVATION_CHANGED@RUNTIME`
-(quote vs fresh observation drift).
+## The open gap — filed as task-99cb56a74d1141c7a9ec31c604e25e77
+No public @moe/runner API can mint a `quotedObservation` production accepts: `observeInstalledClaudeRuntime`,
+`probeClaudeRuntime`, `createNodeClaudeRuntimeFs`, `ClaudeRuntimeFactsPort` are withheld
+(claude-surface.ts:85-92) and `capabilitySchemaDigestOf` / `canonicalDigest` are internal.
+`prepareClaudeRuntimePin` compares reportedVersion + adapterCapabilitySchemaDigest + platformIdentity
+(claude-runtime-pin.ts:130-141). So the physical PROVEN dispatch journey is unreachable for any consumer;
+do NOT fake it. See `mem:gotcha-a-caller-cannot-mint-a-runtime-quote`.
 
-## Concurrency hazard live during this session
-Another process repeatedly rewrote `foundation-attempt-windows.test.ts` (11:37Z, 11:41Z, 11:42Z) and briefly perturbed
-`foundation-attempt-service.ts` mid-typecheck (one transient TS6133 that did not reproduce). `moe.list_workers` showed only
-worker-5678886b on this task. I preserved every foreign byte and never reverted them.
+## Windows conformance suite (real Windows 10.0.26200, real broker, zero test capability)
+1. stand-in `where.exe` renamed claude.exe -> `CLAUDE_RUNTIME_OBSERVATION_INVALID@RUNTIME`, SUSPECT advisory persisted, replay adopts, cwd drift -> REPLAY_MISMATCH.
+2. real installed `claude.exe` 2.1.233 with a self-assembled quote -> `CLAUDE_RUNTIME_OBSERVATION_CHANGED@RUNTIME`.
+3. reservation abort -> pinRoot never created, zero dispatch rows.
+`REAL_CLAUDE` is discovered from `%USERPROFILE%\.local\bin\claude.exe` then PATH. argv MUST name the model
+and effort (`--version --model claude-opus-5 --effort high`) or the launch-selection gate answers first with
+`CLAUDE_LAUNCH_MODEL_UNPROVEN@TELEMETRY_CONFIGURATION`. `claude.exe --version ...` exits 0 in ~0.5s, no network.
 
-## Commit state
-Foreign whole-tree commit `b55b9f0 feat(task-9aca4b0524a648f1841237b40d4e345b)` swept this task's bytes. Not amended, not
-reset, not re-claimed. QA base-ref diff: `git diff 0f19e06..HEAD -- apps/daemon/src/work/foundation-attempt-*`.
+## Drills run (all byte-restored, hashes re-verified)
+hydrator bypass -> 5 red on exact RUNTIME codes; `bearing.length > 1` -> `> 99` -> multi-node red;
+`reserved.disposition === "REPLAYED"` -> false -> 4 red incl. a real physical relaunch (3.1s);
+dispatch identity narrowed to activation bytes -> 3 red on REPLAY_MISMATCH.
 
-## Foreign red at completion (none intersects owned paths)
-- daemon: activation-ledger-reader.test.ts (2) + foundation-launch-authority.test.ts (2) — released O(n) effect-binding task's
-  deliberately-red bounded-scan repros; windows.test.ts (1) — a peer's live `code:"DIAGNOSTIC"` probe.
-- store: `packages/store/src/recovery-anchor.test.ts` — a withheld symbol leaked onto the @moe/store root by another task.
-An earlier daemon run showed 30 failures / 10 files; re-running gave 5 / 3. The extra 25 were concurrent-writer interference
-(`index-surface` and `runtime-entrypoint` pass in isolation, 113 tests).
+## Hazard
+A SECOND CLI session wrote these owned files and called complete_task under my claim. See
+`mem:gotcha-a-parallel-session-can-write-your-owned-files`.

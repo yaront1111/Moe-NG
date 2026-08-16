@@ -23,11 +23,12 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE TWO DECISIONS THIS PLAN SETTLES. Re-measure at current HEAD first (measured at 0f19e06).\nTHE GAP IS REAL AND UNCHANGED: `createCoordinationAdapter` (coordination/coordination-adapter.ts:111) has three callers, all in `coordination-adapter.test.ts`; a grep for `coordination/` imports from production daemon modules OUTSIDE that directory returns ZERO. The registry (daemon-command-registry.ts, 320 lines) admits BOOTSTRAP_FAMILY (:48), REVIEW_FAMILY (:56), SESSION_FAMILY (:61), WORK_FAMILY (:66) plus effect.activate and recovery.complete. No coordination kind.\nDECISION 1 — WHICH KINDS. `CoordinationAdapter` (:81-91) exposes `send`, `acknowledge`, `read`, `replay`, `authenticate`, `recipients`, `resolveRecipient`, `resolveEffectBinding`, `sessions`. Register EXACTLY the two STATE CHANGES as command kinds: `coordination.send` and `coordination.acknowledge`. `read` and `replay` are reads and must NOT become registry kinds — every registry kind mints a durable command decision, and a read that writes a decision record is a defect, not a feature. If the canary later needs a read path, it goes through the affordance/read surface; say so rather than quietly adding a third kind.\nDECISION 2 — WHICH CAPABILITY. `CAPABILITIES` (:43-46) has exactly five: ADMIN `project.admin`, GOAL, PLANNING, REVIEW, WORK. Gate both coordination kinds on `CAPABILITIES.WORK` — coordination traffic runs between coder sessions and wrappers, which is work-adjacent; ADMIN is project/policy/session-LIFECYCLE and gating envelope traffic on it would hand every sender project-admin reach. Do NOT mint a sixth capability: that widens the authority model and is a separate decision. Assert `OPERATOR_CAPABILITIES` (:120) still lists exactly those five.\nGATES, each run separately with its own exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported): `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, recording the count line and every failing file as your before-set. Both are expected RED from foreign in-flight slices; repair none of it.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/coordination/coordination-adapter.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T11:49:42.474Z"
     },
     {
       "stepId": "step-2",
@@ -90,8 +91,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -103,7 +104,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:23:23.404Z",
-  "updatedAt": "2026-08-16T11:32:15.932Z",
+  "updatedAt": "2026-08-16T11:53:20.448Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T11:29:22.008Z",
     "plannedStepCount": 7,
@@ -128,5 +129,13 @@
   "budget": {
     "wallClockMs": 6300000
   },
-  "planApprovedAt": "2026-08-16T11:32:15.932Z"
+  "planApprovedAt": "2026-08-16T11:32:15.932Z",
+  "contextFetchedBy": [
+    "worker-5678886b"
+  ],
+  "workStartedAt": "2026-08-16T11:49:42.474Z",
+  "blockedReason": "GAP C cannot close inside the owned paths: `coordination.send`/`coordination.acknowledge` are not `RuntimeCommandKind`, and that vocabulary lives in @moe/contracts, unowned here. HEAD 66ae6ef.\n\n1. GAP REAL, UNCHANGED — both step-1 greps still zero.\n\n2. PROVEN BY COMPILED PROBE (deleted same command):\nsrc/__probe_kind.ts(2,14): error TS2322: Type '\"coordination.send\"' is not assignable to type '\"approval.decide\" | ... 84 more ... | \"work.resume\"'. Line 3 same for '\"coordination.acknowledge\"'.\n`CommandRegistryEntry.kind` is `RuntimeCommandKind` (http-contract.ts:176); `decodeRuntimeCommandEnvelopeBytes` refuses an unknown kind at `isCommandKind` (runtime-envelope.ts:142) BEFORE the registry is read (http-adapter.ts:196). One seam only — mcp-dispatch-port.ts:66 forwards to the same `handleCommandRequest`. An entry under a cast kind is permanently unreachable: gap open, diff looks closed.\n\n3. REQUIRED EDITS, all unowned:\n- packages/contracts/src/runtime/runtime-vocabulary.ts:85 RUNTIME_COMMAND_KINDS (+2)\n- packages/control-room-client/src/generated/generated-client.ts regenerate; generated-coverage.test.ts:71 asserts one builder per kind, :35/:36 pin GENERATED_FILE_SHA256 + CONTRACT_DIGEST\n- derived: packages/mcp stdio tools, packages/core identity-capability\n\n4. ALSO A DESIGN QUESTION. Section 17 enumerates the closed v1 surface (design lines 987-1010) with NO coordination operation; \"coordination\" appears ZERO times in the design doc.\n\nNEEDS: (a) a prerequisite task owning contracts + client regeneration to mint the two kinds, then re-plan this as the daemon consumer edge; or (b) name the non-command surface coordination travels and re-scope the DoD.\n\nBASELINE (foreign red, untouched): typecheck EXIT=1, 4 errors all src/activation/activation-run-commit.test.ts (TS2307, untracked peer red). test EXIT=1, \"Test Files 3 failed | 97 passed (100)\", \"Tests 4 failed | 2051 passed (2055)\", all src/activation/**.\n\nNo production file modified.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-16T11:53:20.448Z"
 }
