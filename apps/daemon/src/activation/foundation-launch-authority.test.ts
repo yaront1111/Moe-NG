@@ -876,7 +876,13 @@ describe("current effect/session binding", () => {
         void worker.terminate();
         resolve(result);
       };
-      const watchdog = setTimeout(() => finish({ kind: "WATCHDOG_TIMEOUT" }), 2_000);
+      // 8s, not 2s. The watchdog exists to make a HANG loud, not to bound how
+      // fast the scan runs - that is `pageReads` below. At 2s it was measuring
+      // worker startup under suite contention instead: the same case passed in
+      // 233ms run focused and timed out at 2,283ms inside the full 100-file run.
+      // 8s stays strictly under this case's 10s vitest timeout, so a real hang
+      // still fails as WATCHDOG_TIMEOUT rather than as an unexplained timeout.
+      const watchdog = setTimeout(() => finish({ kind: "WATCHDOG_TIMEOUT" }), 8_000);
       worker.once("message", (message: MovingScanResult) => finish(message));
       worker.once("error", (error) => {
         if (settled) return;
