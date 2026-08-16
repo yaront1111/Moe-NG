@@ -24,12 +24,15 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE IN-FLIGHT RULE FROM PRODUCTION — it is already written down, so do not invent one. This task's description flags \"how do we know an attempt is still in flight\" as the open design question. Planning it found the answer already stated in `foundation-attempt-service.ts:218-224`, in the dispatch replay path:\n  \"A REPLAYED reservation NEVER launches. It adopts the durable final record or says the dispatch is still in flight; a missing record is not an invitation to start a second process.\"\n  `if (reserved.disposition === \"REPLAYED\") { const adopted = readStoredFoundationAttempt(store, bound.target); return adopted.ok || adopted.code !== \"FOUNDATION_ATTEMPT_RECORD_ABSENT\" ? adopted : refuseLocal(\"FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS\"); }`\nTHE RULE, therefore: **a `FoundationDispatchReserved` with no `FoundationAttemptRecorded` in the same aggregate is still in flight.** That is production's existing semantics for one attempt; this task generalises it to all of them. Write that citation into the module comment — it is what stops a later reader re-deriving a different rule, and it is why this is not an inference from absence.\nRe-confirm on current bytes (measured at HEAD 0f19e06): `FOUNDATION_DISPATCH_EVENT_TYPES` (work/foundation-attempt-contracts.ts:47) = `{RECORDED: \"FoundationAttemptRecorded\", RESERVED: \"FoundationDispatchReserved\"}`, exactly two members; `commitFoundationPhase` (foundation-attempt-store.ts:99) writes them with `tag: \"RECORDED\" | \"RESERVED\"` onto `bound.target`; `InFlightAttempt` = `{attemptRef, situation}` (restart-reconciliation.ts:32) and still has ZERO producers.\nGATES, each run separately with its own exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported): `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, recording the count line and every failing file as your before-set. Both are expected RED from foreign in-flight slices; repair none of it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-store.ts",
         "apps/daemon/src/recovery/restart-reconciliation.ts"
-      ]
+      ],
+      "note": "BASELINE RE-MEASURED AT HEAD 381c025 (HEAD moved from 1ba0ce1 during this session; merge-base with main = cf272f6). Plan predicted RED from foreign slices — re-measured it is GREEN, so the path-attributed baseline before-set is EMPTY. Gates run separately, own exit codes, never ;-chained, never piped into tail:\n- `pnpm --filter @moe/daemon typecheck` -> TC_EXIT=0, output `$ tsc --project tsconfig.json`, no diagnostics.\n- `pnpm --filter @moe/daemon test` -> TEST_EXIT=0, COUNT LINE `Test Files  100 passed (100)` / `Tests  2071 passed (2071)`. Count line present, so the run actually executed (not a vacuous filter).\n\nIN-FLIGHT RULE TAKEN FROM PRODUCTION, NOT INVENTED. Confirmed verbatim at foundation-attempt-service.ts:218-224 (current bytes):\n  \"// A REPLAYED reservation NEVER launches. It adopts the durable final record / or says the dispatch is still in flight; a missing record is not an / invitation to start a second process.\"\n  `if (reserved.disposition === \"REPLAYED\") { const adopted = readStoredFoundationAttempt(store, bound.target); return adopted.ok || adopted.code !== \"FOUNDATION_ATTEMPT_RECORD_ABSENT\" ? adopted : refuseLocal(\"FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS\"); }`\nRULE: a `FoundationDispatchReserved` with no `FoundationAttemptRecorded` on the same aggregate is still in flight. Citation goes into the module header.\n\nVOCABULARY RE-CONFIRMED ON CURRENT BYTES:\n- `FOUNDATION_DISPATCH_EVENT_TYPES` (work/foundation-attempt-contracts.ts:47) = `{RECORDED: \"FoundationAttemptRecorded\", RESERVED: \"FoundationDispatchReserved\"}`, exactly two members.\n- `commitFoundationPhase` (work/foundation-attempt-store.ts:99) writes them onto `bound.target` with `tag: \"RECORDED\"|\"RESERVED\"`, eventType `FOUNDATION_DISPATCH_EVENT_TYPES[tag]`, correlation `${correlationId}:${tag}`, key.commandId `${commandId}:${tag}`.\n- `InFlightAttempt` = `{attemptRef, situation}` at recovery/restart-reconciliation.ts:32-35; `RestartReconciliationRequest.attempts` at :61.\n\nGAP STILL OPEN, MEASURED: `grep -rn \"InFlightAttempt\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.'` returns exactly 2 lines — restart-reconciliation.ts:32 (declaration) and :61 (request field). ZERO producers.\n\nAlso measured for step 3/4: `readEventsByTypeAfter(eventType, afterGlobalPosition, limit?, maxDecodedBytes?)` on SqliteEventStore (sqlite-event-store.ts:354) returning `CursorPage<StoredEvent,bigint>` = `{hasMore, items, nextCursor}`; `StoredEvent` carries `aggregateId`, `globalPosition`, `eventType`, `payload`, `decisionTrace?.projectId`. Existing bounded-walk precedent to mirror: `scanForEffect` + `FoundationBindingStore` port (activation/activation-ledger-reader.ts:126-133, 259-300) — horizon-bounded, cursor-advance checked, refuses rather than spinning. Cost-assertion precedent with a counting port: foundation-launch-authority.test.ts:1236-1262. Bridge guard: runtime-entrypoint.test.ts:177 requires bridge bytes exactly `export * from \"./<name>.ts\";\\n` and a module with its own .test.ts sibling seeds the runtime tier, so the bridge is REQUIRED (not \"unexpected\").",
+      "startedAt": "2026-08-16T12:17:06.985Z",
+      "completedAt": "2026-08-16T12:19:20.105Z"
     },
     {
       "stepId": "step-2",
@@ -83,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -95,16 +98,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:26:32.125Z",
-  "updatedAt": "2026-08-16T11:34:34.919Z",
+  "updatedAt": "2026-08-16T12:19:20.105Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T11:32:18.604Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:34:32.852Z",
   "planningNotes": {
@@ -123,5 +129,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-16T11:34:34.919Z"
+  "planApprovedAt": "2026-08-16T11:34:34.919Z",
+  "contextFetchedBy": [
+    "worker-5678886b"
+  ],
+  "workStartedAt": "2026-08-16T12:17:06.985Z"
 }

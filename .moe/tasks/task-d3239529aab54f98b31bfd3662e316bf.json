@@ -119,8 +119,8 @@
       "completedAt": "2026-08-16T12:01:59.436Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,12 +132,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:52:05.958Z",
-  "updatedAt": "2026-08-16T12:02:35.241Z",
+  "updatedAt": "2026-08-16T12:09:19.980Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:07:59.352Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T12:09:19.980Z",
+    "wallClockMs": 36080628
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -205,5 +207,8 @@
     "apps/daemon/src/activation/activation-run-commit.test.ts",
     "apps/daemon/src/activation/activation-run-commit.ts",
     "apps/daemon/src/activation/activation-run-commit.js"
-  ]
+  ],
+  "completedAt": "2026-08-16T12:09:19.980Z",
+  "reviewCompletedAt": "2026-08-16T12:09:19.980Z",
+  "reviewSummary": "HEAD 6149860. Files first swept into FOREIGN commit 89ec63d (known hazard, not a reject reason); hash-object == HEAD blob for all 3.\n\nGATES RE-RUN BY ME, separately: typecheck EXIT=0. daemon test EXIT=1, `Test Files 2 failed | 98 passed (100)` / `Tests 4 failed | 2067 passed (2071)`. Failing: activation-ledger-reader, foundation-launch-authority — both in the b55b9f0 before-set, and the new module has ZERO importers repo-wide so it cannot reach either. Delta over owned paths = EMPTY. Focused leg 16 passed (16).\n\nDoD1 OK: greps return call sites activation-run-commit.ts:242 (commitProviderRunRecord) and :133 (buildProviderRunRecord); both were zero.\nDoD2 OK: real SqliteEventStore, 11 openStore/11 finally/11 close. COMMITTED then REPLAYED, digests equal, 1 event; changed-byte resubmit PROVIDER_RUN_REPLAY_DIVERGED@LEDGER storeCode null; distinct command EXPECTED_VERSION_CONFLICT@LEDGER.\nDoD3: literal form IMPOSSIBLE, confirmed on disk — runner's ProviderRunRecord lacks providerRunRef/launch/declared/sequence/usageRefusals/receipt digests the codec REQUIRED_KEYS demands (validation.ts:30-34). Deviation forced and disclosed. I RAN THE DRILL: hand-built usage replacing the runner call reddens NAMED test \"routes the record through @moe/runner's buildProviderRunRecord, not a local build\" — expected 'PROVIDER_RUN_FIELD_INVALID' to be 'PROVIDER_RUN_HANDOFF_MALFORMED'.\nDoD4 OK: composition emits recordDigest \"\". MY DRILL: local sha256 reddens NAMED test \"mints no record digest\"; only that test moved, confirming the codec strips a caller digest.\nDoD5 OK: all four refusal arms read the aggregate back empty + getCommandDecision null.\nDoD6 OK: 249 lines by grep -c ''; bridge one LF line; index.ts unmodified.\nRails OK: ProviderRunStore names only 3 methods; commitWithApply absent.\n\nNot a reject: projectUsage's usage.ok arm untested — unreachable without an OBSERVED launch (CLAUDE_LAUNCHER_DEFAULTS + 4 ports comment-only in runner barrel; re-measured). Flagged for task-b937811e."
 }

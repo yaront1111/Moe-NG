@@ -16,12 +16,12 @@
     "GO_QUIESCE and GO_ACTIVATE are separate human decisions. Keep evidence exact, reproducible, and scoped to one source commit."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor routing 01:48Z under the human's standing unblock directive. Premise re-verified this session: launchClaudeWithTelemetry / parseClaudeResultTelemetry / normalizeUsageMeasurement still have ZERO non-test callers in apps/ (ClaudeTelemetryHandoff has one), and packages/benchmark is absent — the Clause-2 conclusion (harness would be fixture-fed) still holds AS A WORKER conclusion. The ARCHITECT output it calls for: measure the emission gap symbol by symbol and file the prerequisite production tasks that make apps/ actually EMIT the telemetry (@moe/runner and @moe/scheduler already publish all four surfaces; the 1a7ff ledger just landed as the durable sink — the missing link is production call sites), then re-block this harness on those ids. Note the standing hazard recorded in the old reason: this task's own verification `pnpm --filter @moe/benchmark test` exits 0 vacuously while the package is absent — any new DoD must require a nonzero executed-test count.",
+  "reopenReason": "Governor cascade 12:17Z: BOTH prerequisite ids from the Clause-2 re-block are QA-approved DONE — task-6c0db1f9 (activation-telemetry-launch emission seam) and task-d3239529 (compose + durably commit the provider-run record from the activation path, with the BLIND-handoff committability decision pinned). Production now emits and durably commits provider-run telemetry. Architect: re-measure the landed emission→ledger path on committed bytes, then plan the harness against REAL emitted records. Standing hazard from the old block: this task's own verification `pnpm --filter @moe/benchmark test` exits 0 vacuously while packages/benchmark is absent — the DoD must require a NONZERO executed-test count, and the package creation must be part of the plan. Downstream: 3a34a (corpus freeze) → 8af45 (benchmark campaign) unblock in order as this lands.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -54,7 +54,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-16T01:56:53.659Z",
+  "updatedAt": "2026-08-16T12:17:31.589Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -65,10 +65,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-13T16:00:55.803Z"
   },
-  "blockedReason": "Clause-2 re-block by architect-27b64950, 2026-08-16 01:52Z, HEAD ac09ca9. Gap measured symbol by symbol, prerequisite production tasks filed, harness re-blocked on their ids. FULL MEASUREMENT IN comment-2093110c19704563ad919f9f999b9630 — read it, this reason is a summary.\n\nGap is NARROWER than the old five-owner audit: producers AND sink are landed, only the wire is missing. All four telemetry surfaces are published from @moe/runner and @moe/scheduler, and task-1a7ff170's ledger shipped today (commitProviderRunRecord, provider-run-ledger.ts:202). But `grep -rn \"launchClaude\" --include=*.ts apps` returns ZERO, and commitProviderRunRecord's only apps/ hit is its own definition. apps/daemon's single ClaudeTelemetryHandoff mention is a COMMENT (provider-run-contracts.ts:84) — the old audit miscounted it as a consumer.\n\nFILED; this task depends on BOTH:\n1. task-6c0db1f9920841fea295512f602054ee — Emit provider-run telemetry from the daemon activation path (PLANNING).\n2. task-d3239529aab54f98b31bfd3662e316bf — Compose and durably commit the provider-run record (BACKLOG, depends on 1).\nTwo not five: normalizeUsageMeasurement is reached transitively via buildProviderRunRecord once task 2 lands.\n\nUNBLOCK WHEN both are DONE AND all three return NON-ZERO (run literally; never on status alone, on exports, or test-only callers):\n  grep -rn \"launchClaudeWithTelemetry\" --include=*.ts apps | grep -v '\\.test\\.'\n  grep -rn \"buildProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.'\n  grep -rn \"commitProviderRunRecord\" --include=*.ts apps | grep -v '\\.test\\.' | grep -v \"provider-run-ledger.ts:\"\n\nWARNINGS. (1) The old audit's control-room item is STALE: live-effort-edge.ts, effort-admission.ts, effort-attribution.ts now exist. Re-measure before re-filing. (2) packages/benchmark is still ABSENT, so `pnpm --filter @moe/benchmark test` still exits 0 vacuously. Any DoD here must require a NONZERO executed-test count. A fixture-fed harness stays worse than no harness.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T01:53:15.359Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Clause-2 architect output delivered at HEAD ac09ca9; no plan submitted and no code written, deliberately — a plan here would have been a fixture-fed harness, which Clause 2 forbids. Measured the emission gap symbol by symbol and found it NARROWER than the old five-owner audit: producers AND sink are both landed, only the wire is missing. All four telemetry surfaces are published (launchClaudeWithTelemetry claude-telemetry-launch.ts:206, parseClaudeResultTelemetry claude-result-telemetry.ts:214, buildProviderRunRecord provider-run-record.ts:210, normalizeUsageMeasurement scheduler/budget/budget-measurement.ts:210) and task-1a7ff170's durable ledger shipped today (commitProviderRunRecord provider-run-ledger.ts:202). The hole: `grep -rn \"launchClaude\" --include=*.ts apps` returns ZERO, and commitProviderRunRecord's only apps/ hit is its own definition. apps/daemon's single ClaudeTelemetryHandoff mention is a COMMENT at provider-run-contracts.ts:84 — the old audit miscounted it as a consumer. Filed two prerequisite production tasks (task-6c0db1f9920841fea295512f602054ee PLANNING, task-d3239529aab54f98b31bfd3662e316bf BACKLOG depends on 1), commented the full measurement as comment-2093110c19704563ad919f9f999b9630, and re-blocked this task on both ids.",
