@@ -14,7 +14,6 @@
 
 import { validateActivationCommit } from "@moe/runner";
 import { parseLeaseRecord } from "@moe/scheduler";
-import type { LeaseRecord } from "@moe/scheduler";
 import type { CursorPage, StoreHealth, StoredEvent } from "@moe/store";
 
 import { decodeActivationLedgerRecord } from "./activation-ledger-codec.js";
@@ -37,6 +36,13 @@ import type {
   FoundationBindingResult,
   FoundationTransition,
 } from "./foundation-activation-transition.js";
+import {
+  TRANSITION_ORDER,
+  bindsActivation,
+  isQueryText,
+  sameLease,
+  tracedProject,
+} from "./foundation-binding-predicates.js";
 
 /**
  * Answers with the record only when EVERY one of these agrees:
@@ -101,14 +107,7 @@ export function readActivationLedgerRecord(
  * effect would become authority over another.
  */
 
-const TRANSITION_ORDER = Object.freeze([
-  "GRANT_CONSUMED", "PREFLIGHT_REGISTERED", "PROCESS_OBSERVED",
-] as const);
-const SCAN_PAGE_SIZE = 100, SCAN_PAGE_LIMIT = BigInt(SCAN_PAGE_SIZE), MAX_QUERY_CHARS = 400;
-const LEASE_FIELDS = Object.freeze([
-  "leaseId", "kind", "ownerSessionRef", "leaseToken", "epoch", "state", "serverWallDeadline",
-  "bootId", "monotonicObservation", "authorityHashRef", "version",
-] as const);
+const SCAN_PAGE_SIZE = 100;
 
 export interface FoundationActivationHistory {
   readonly record: ActivationLedgerRecord;
@@ -120,44 +119,23 @@ export type FoundationHistoryResult =
   | { readonly ok: false; readonly result: FoundationBindingResult };
 
 /** The exact store surface the binding reader uses. Every commit method is
- *  absent BY CONSTRUCTION: a reader that cannot name a write cannot perform one. */
+ *  absent BY CONSTRUCTION: a reader that cannot name a write cannot perform one.
+ *  `maxDecodedBytes` is published by both pagers and declared by neither here,
+ *  exactly as the retired sibling had it: the reader never passes it, and a port
+ *  naming an argument its only caller does not use invites a fake to answer one. */
 export interface FoundationBindingStore {
   getHealth(): StoreHealth;
   readEventHorizon(): bigint;
   readEvents(aggregateId: string): readonly StoredEvent[];
-  readEventsAfter(afterGlobalPosition: bigint, limit?: number): CursorPage<StoredEvent, bigint>;
+  readEventsByTypeAfter(
+    eventType: string, afterGlobalPosition: bigint, limit?: number,
+  ): CursorPage<StoredEvent, bigint>;
 }
 
 type UnknownCode = Parameters<typeof foundationBindingUnknown>[0];
 
 const unknownHistory = (code: UnknownCode): FoundationHistoryResult =>
   Object.freeze({ ok: false as const, result: foundationBindingUnknown(code) });
-
-function tracedProject(event: StoredEvent, projectId: string): boolean {
-  return event.decisionTrace !== undefined && event.decisionTrace.projectId === projectId;
-}
-
-/** Rechecks one decoded transition against the committed activation it claims. */
-function bindsActivation(
-  transition: FoundationTransition, record: ActivationLedgerRecord,
-  previous: FoundationTransition | undefined,
-): boolean {
-  if (transition.activationDigest !== record.activationDigest) return false;
-  if (transition.grantId !== record.grant.grantId) return false;
-  if (transition.intentId !== record.effectIntent.intentId) return false;
-  if (transition.attemptId !== record.attempt.attemptId) return false;
-  if (transition.wrapperIdentity !== record.grant.wrapperIdentity) return false;
-  if (transition.tag === "GRANT_CONSUMED") return true;
-  if (transition.lockIdentity === null || transition.processIdentity === null) return false;
-  if (transition.bootstrapCredentialDigest === null || transition.registeredAt === null) return false;
-  if (transition.tag !== "PROCESS_OBSERVED") return true;
-  // The observed process must hold the lock its own preflight reserved, under a
-  // DIFFERENT process identity: a preflight re-presented under the observed tag
-  // would otherwise persist a reservation as process authority.
-  if (previous === undefined || previous.tag !== "PREFLIGHT_REGISTERED") return false;
-  return transition.lockIdentity === previous.lockIdentity
-    && transition.processIdentity !== previous.processIdentity;
-}
 
 export function readFoundationActivationHistory(
   aggregateId: string, events: readonly StoredEvent[], projectId: string,
@@ -206,15 +184,6 @@ export function readFoundationActivationHistory(
   });
 }
 
-function isQueryText(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_QUERY_CHARS
-    && value.isWellFormed();
-}
-
-function sameLease(left: LeaseRecord, right: LeaseRecord): boolean {
-  return LEASE_FIELDS.every((field) => left[field] === right[field]);
-}
-
 interface ScanOutcome {
   readonly aggregateId: string | null;
   readonly refusal: FoundationBindingResult | null;
@@ -223,9 +192,9 @@ interface ScanOutcome {
 /**
  * Reads the end of the stream ONCE, before any page.
  *
- * The horizon is what makes the walk finite. `readEventsAfter` takes a fresh
- * snapshot per page, so a concurrent writer can keep answering `hasMore` with a
- * strictly advancing cursor forever; a scan that trusts `hasMore` alone has no
+ * The horizon is what makes the walk finite. The pager takes a fresh snapshot
+ * per page, so a concurrent writer can keep answering `hasMore` with a strictly
+ * advancing cursor forever; a scan that trusts `hasMore` alone has no
  * termination proof at all, only a well-behaved store. Capturing the far end
  * first turns "walk until the store says stop" into "walk to a value the store
  * can no longer move".
@@ -248,18 +217,44 @@ function captureHorizon(store: FoundationBindingStore): bigint | UnknownCode {
  *
  * `CoordinationEffectQuery` carries an effectId but not the idempotency key the
  * aggregate id derives from, and schema work is out of scope, so the only honest
- * way to find the activation is to walk the public event stream and prove the
- * match is UNIQUE. Every page must make progress and every candidate must read;
- * a truncated, non-monotonic, thrown, or ambiguous scan is UNKNOWN, never the
- * ABSENT a caller would act on.
+ * way to find the activation is to page the public event stream and prove the
+ * match is UNIQUE. A truncated, non-monotonic, thrown, or ambiguous scan is
+ * UNKNOWN, never the ABSENT a caller would act on.
  *
- * BOUNDED BY THE CAPTURED HORIZON, NOT BY A PAGE COUNT. A fixed page cap bounds
- * TOTAL PROJECT EVENTS, past which every lookup for every effect refuses forever
- * - a refusal indistinguishable from a real authority answer. The horizon bounds
- * the WALK instead: `global_position` is contiguous from 1 by the store's own
- * integrity rule, so exactly `horizon` events must be read, each at exactly the
- * next position, and the last page must say it is the last. Growth past H is not
- * this answer's business; the scan neither reads it nor pretends it is absent.
+ * WHAT THIS PAGES, AND WHAT THAT COST BEFORE. It reads the EVENT-TYPE-FILTERED
+ * stream, so the work is proportional to committed ACTIVATIONS. The retired walk
+ * read every global position and discarded non-activations, making every
+ * effect-binding lookup O(total project events) and growing for the life of the
+ * project.
+ *
+ * THE COMPLETENESS PROOF CHANGED, AND IT GOT WEAKER. THIS IS THE HONEST TRADE.
+ * The retired walk proved completeness by POSITIONAL CONTIGUITY: it derived each
+ * expected position as cursor+1 and refused any disagreement, so it proved it
+ * had judged every event WITHOUT trusting the store. Under a type filter matches
+ * are sparse BY CONSTRUCTION, so contiguity is false on every healthy ledger and
+ * cannot be the proof. Completeness now RESTS ON THE PAGER'S OWN CONTRACT - it
+ * trusts `hasMore` where the old walk verified positions itself. What makes that
+ * sound is that the contract is pinned on the production surface, not assumed:
+ * `packages/store/src/event-read-model-contract.test.ts`, case "pages only exact
+ * event-type matches across an interleaved ledger", fixes that at the last match
+ * the filtered page reports `hasMore:false` with `nextCursor` at that match even
+ * when unfiltered rows still follow. Four guards carry what is left:
+ *   - STRICT INCREASE, replacing contiguity as the ordering guarantee: a repeated
+ *     or backwards position is INCOMPLETE.
+ *   - FILTER HONESTY: the event type is re-checked even though the store filters.
+ *     One comparison, and it is what keeps the guard honest if the filter ever
+ *     regresses into serving the unfiltered stream.
+ *   - THE CURSOR NAMES THE LAST RETURNED POSITION - not cursor + items.length,
+ *     which is what the retired check asserted and what a filtered page never is.
+ *   - AN EMPTY PAGE MAY NOT CLAIM MORE. With no item to advance on, a page that
+ *     says `hasMore` is the never-ending walk, and it is refused rather than
+ *     spun on.
+ *
+ * BOUNDED BY THE CAPTURED HORIZON, NOT BY A PAGE COUNT, exactly as before. A
+ * fixed page cap bounds TOTAL PROJECT EVENTS, past which every lookup for every
+ * effect refuses forever - a refusal indistinguishable from a real authority
+ * answer. Growth past H is not this answer's business: a match beyond H is
+ * neither returned nor counted toward ambiguity, and it refuses nothing.
  */
 function scanForEffect(store: FoundationBindingStore, effectId: string): ScanOutcome {
   const no = (code: UnknownCode): ScanOutcome =>
@@ -269,39 +264,40 @@ function scanForEffect(store: FoundationBindingStore, effectId: string): ScanOut
   let cursor = 0n;
   let found: string | null = null;
   while (cursor < horizon) {
-    const remaining = horizon - cursor;
     let read: CursorPage<StoredEvent, bigint>;
     try {
-      read = store.readEventsAfter(
-        cursor, Number(remaining < SCAN_PAGE_LIMIT ? remaining : SCAN_PAGE_LIMIT),
-      );
+      read = store.readEventsByTypeAfter(ACTIVATION_LEDGER_EVENT_TYPE, cursor, SCAN_PAGE_SIZE);
     } catch {
       return no("FOUNDATION_BINDING_EVIDENCE_UNREADABLE");
     }
     let position = cursor;
+    let beyondHorizon = false;
     for (const event of read.items) {
-      position += 1n;
-      // Contiguity IS the completeness proof: a skipped position is an event
-      // this scan never judged, and one past H is evidence outside the horizon.
-      if (event.globalPosition !== position || position > horizon) {
+      if (event.globalPosition <= position) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+      position = event.globalPosition;
+      if (position > horizon) { beyondHorizon = true; break; }
+      if (event.eventType !== ACTIVATION_LEDGER_EVENT_TYPE) {
         return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
       }
-      if (event.eventType !== ACTIVATION_LEDGER_EVENT_TYPE) continue;
       const candidate = readActivationLedgerRecord(event.aggregateId, [event]);
       if (!candidate.ok) return no("FOUNDATION_BINDING_EVIDENCE_MALFORMED");
       if (candidate.record.effectIntent.intentId !== effectId) continue;
-      // STILL NO EARLY RETURN ON A HIT: the walk runs to H even once a match is
-      // held, because the answer is not "one matched" but "exactly one did".
+      // STILL NO EARLY RETURN ON A HIT: the paging runs to the end of the matches
+      // even once one is held, because the answer is not "one matched" but
+      // "exactly one did". Cheap matches make this look like dead work; it is the
+      // uniqueness semantics, and losing it turns a refusal into a wrong answer.
       if (found !== null && found !== event.aggregateId) {
         return no("FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS");
       }
       found = event.aggregateId;
     }
-    if (position === cursor) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    if (beyondHorizon) break;
+    if (position === cursor) {
+      if (read.hasMore) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+      break;
+    }
     if (read.nextCursor !== position) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
-    // Below H the store must still have more; AT H it must say it is done. Both
-    // directions are refusals: the stream disagreed with the end it just named.
-    if (read.hasMore !== (position < horizon)) return no("FOUNDATION_BINDING_SCAN_INCOMPLETE");
+    if (!read.hasMore) break;
     cursor = position;
   }
   return { aggregateId: found, refusal: null };
