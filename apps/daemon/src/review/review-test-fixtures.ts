@@ -326,6 +326,8 @@ export function seedVerifierReceipt(
     })));
     if (!clean.ok) throw new Error(`clean review setup failed: ${clean.code}`);
   }
+  const sourceRound = readReviewLedger(store, projectId, subjectRef).rounds.at(-1);
+  if (sourceRound === undefined) throw new Error("missing verifier receipt source round");
   const receipt = recordVerifierReceipt(store, {
     authority: {
       calibration: calibration(),
@@ -340,6 +342,11 @@ export function seedVerifierReceipt(
       workspace: "/fixture-workspace",
     },
     projectId,
+    source: {
+      aggregateVersion: sourceRound.aggregateVersion,
+      decisionId: sourceRound.decisionId,
+      resultSha256: sourceRound.resultSha256,
+    },
     subjectRef,
   });
   if (!receipt.ok) throw new Error(`verifier receipt setup failed: ${receipt.code}`);

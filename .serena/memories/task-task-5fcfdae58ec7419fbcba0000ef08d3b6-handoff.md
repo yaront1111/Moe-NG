@@ -1,27 +1,71 @@
-# task-5fcfdae5 — approval authority composed into daemon (implementation committed, verification blocked)
+# task-5fcfdae5 — approval authority composed into daemon — QA APPROVED 2026-08-16 (DONE)
 
-Commit **ee28441** owns exactly:
-- apps/daemon/src/bootstrap/bootstrap-ledger.ts
-- apps/daemon/src/planning/approval-gate.ts + .js
-- apps/daemon/src/planning/planning-services.ts + .test.ts
+Deliverable commit **ee28441**, owned paths byte-identical at review HEAD 91fc622, worktree clean.
+Files: `apps/daemon/src/planning/approval-gate.ts` (107) + `.js` bridge,
+`planning-services.ts` (221), `planning-services.test.ts` (26 tests),
+`bootstrap/bootstrap-ledger.ts` (+2: `...APPROVAL_AUTHORITY_LAYERS` into frozen `SERVICE_REFUSED_BY`).
 
-What shipped:
-- Real daemon command is `approval.decide` (not description's `plan.approve`).
-- `plan.propose` persists an unsatisfied HumanAuthorityGate under the RUN_ID result's `workIdentity`, outside nested lifecycle `state`; later release -> reclaim -> repropose preserves it and caller null cannot clear it.
-- `decideApproval` reads that durable gate, calls the public `decideApprovalAuthority` after durable-run identification and before core approval/activation, and surfaces contract code/layer unchanged.
-- ABSENT vs UNREADABLE gate states are distinct; unreadable synthesizes an ungranted sentinel and fails closed.
-- Proposal ingress rejects caller-shaped granted gates (normalizes them to unreadable); otherwise a forged coherent HumanAuthorityGrant could override REQUIRE_HUMAN.
-- No timer exists in this daemon path. Zero delay is immediate; positive representable delay remains deferred; >2**31-1 becomes REQUIRE_HUMAN. Both non-immediate results refuse as APPROVAL_HUMAN_REVIEW_REQUIRED @ APPROVAL_POLICY rather than activating.
-- Corrupt/null persisted run state cannot be recreated: only undefined means absent.
+## What QA independently confirmed
+- Composition point: `decideApprovalAuthority` at planning-services.ts:192 — AFTER `durableRun`
+  identifies RUN_ID, BEFORE `applyApprovalCommand` and `activateInitialGraph`. Public entry only;
+  `checkHumanAuthority`/`refuseApprovalAuthority` never reached around.
+- Gate persisted at `workIdentity.humanAuthorityGate`, a SIBLING of the nested lifecycle `state`,
+  not inside it. `grep targetAggregateId/aggregateId` proves `proposePlan` (planning-services.ts:120)
+  is the ONLY writer of the run aggregate, so the gate cannot be dropped by another service.
+- `persistApprovalGate` never lets an existing slot be replaced or cleared; proposal ingress may
+  establish only an unsatisfied gate (`grant: null` forced) so a caller cannot mint a human.
+- UNREADABLE gate synthesises `unreadable-approval-gate:<workRef>` with `grant: null` -> fails closed
+  as APPROVAL_HUMAN_AUTHORITY_REQUIRED @ HUMAN_AUTHORITY_GATE.
+- delayMs: `approvalDelayDisposition` (2**31-1). 0 = IMMEDIATE, positive = DEFERRED, above the bound =
+  REQUIRE_HUMAN; handler refuses anything non-IMMEDIATE. No timer on this path, so DEFERRED and
+  REQUIRE_HUMAN are indistinguishable AT THE HANDLER — an honest equivalent mutant, documented in the
+  module comment, not a defect. The next consumer that adds a timer must keep the bound.
 
-Evidence:
-- TDD + six planned mutation drills recorded on task step 6; D6 split into code-only and layer-only mutants.
-- Fresh focused final: planning-services.test.ts **26/26 passed**.
-- Fresh core gate: **31 files / 781 tests passed**, exit 0.
-- Production LOC: planning-services.ts 221, approval-gate.ts 107.
-- Task paths clean after explicit-path commit ee28441.
+## Gates re-run by QA (fresh, at 91fc622)
+- owned suites (planning-services + bootstrap-services): 2 files / 37 tests, exit 0.
+- `@moe/core`: 31 files / 781 tests, exit 0. Commit touches ZERO core files -> DoD 4 intact.
+- scoped daemon tsc (needs `--ignoreConfig`, see `mem:gotcha-scoped-tsc-needs-ignoreconfig`): exit 0,
+  positive control with a planted `const probe: number = "nope"` returned TS2322 (probe in Temp,
+  outside the repo, deleted).
+- `pnpm --filter @moe/daemon typecheck` exit 1: exactly 2 TS2741, both `src/review/*`. Grep of the
+  output for owned paths: NONE.
+- `pnpm --filter @moe/daemon test` exit 1: 9 files / 28 tests; planning-services.test.ts is among the
+  88 PASSED.
+- `pnpm typecheck` exit 1 (same 2). `pnpm test` exit 1: runner claude-launcher.windows,
+  store recovery-anchor, tests/integration release-archive-cleanup. (store event-read-model-contract
+  is now GREEN — the worker's earlier baseline is stale.)
+- Delta (HEAD failing paths minus baseline) ∩ owned paths = EMPTY on every leg.
 
-BLOCKER:
-Exact daemon gates cannot become green while preserving foreign shared-tree WIP. `pnpm --filter @moe/daemon typecheck` fails on untracked provider-run-codec.test.ts importing absent provider-run-codec.js and foreign foundation-attempt-service.test.ts; exact daemon test similarly fails provider codec plus other foreign in-flight daemon mismatches/timeouts. The provider test pre-existed this task at start; task-fc658104 is WORKING 2/7 with no assigned worker. Governor acknowledged msg-7f22d719... and routed it to #workers. Do not delete/reset/stash foreign files or fabricate exit 0. Re-run exact daemon typecheck/test when foreign tasks land/clear, then complete step 7 and task.
+## The attribution, reproduced by QA not taken on trust
+5 of the 9 red daemon files die at the SAME `TypeError: Cannot read properties of undefined (reading
+'aggregateVersion')` in `recordVerifierReceipt src/review/verifier-receipt-ledger.ts:147` via
+`seedVerifierReceipt src/review/review-test-fixtures.ts:329`. Decisive:
+`git cat-file -e ee28441:apps/daemon/src/review/verifier-receipt-ledger.ts` ->
+"exists on disk, but not in 'ee28441'"; `git log --diff-filter=A` names foreign commit **c970f10**.
+The `runtime-entrypoint` bridge guard red names missing bridge `http\event-stream-ack-contract.ts`
+(also c970f10) — NOT approval-gate.js, which is present and correct. agent-spawner /
+foundation-launch-authority / foundation-attempt-windows are unrelated subsystems.
+`SERVICE_REFUSED_BY` widening is uncontested: only consumers are index.ts (re-export) and
+index-surface.test.ts (typeof + type equality), both green. review-refusal-vocabulary.test.ts does
+NOT reference it — grep confirmed, so its red masks no verdict on this change.
 
-Clause 1: this closes the real consumer edge for contract task-5d8f11c86a3a41b4a8a420ef0d52a444. Remaining consumers are not done: control-room approval surface task-6fcca7da... and orchestrator settings task-e4af0e6e... (the latter is currently blocked because the live settings/timer consumer is outside moe-next). A legitimate gate-grant writer remains for the control-room/authority-bearing consumer; proposal ingress deliberately cannot mint grants.
+## QA mutation drills (mine, all restored, `sha256sum -c` OK)
+- D1 neutralise the `decideApprovalAuthority` call -> "refuses every approval policy for gated work
+  before activation" red at `expect(outcome.ok).toBe(false)` (6 tests red).
+- D2 let a later propose clear the stored gate -> "keeps the human authority gate on work identity
+  across lifecycle transitions" red, `expected null to deeply equal { gateId: 'gate-plan-approval' }`
+  — the 2026-08-15 incident reproduced deliberately.
+- D3 delete the delayMs bound -> "requires human review instead of clamping an oversized
+  auto-approval delay" AND "does not execute a deferred policy decision without a daemon timer" red.
+
+## Open follow-ups for whoever picks this up
+- Clause 1 for contract task-5d8f11c86a3a41b4a8a420ef0d52a444 is CLOSED: real consumer edge, durable
+  call site. Still unbuilt: control-room approval surface (task-6fcca7da, its approval-gating.ts
+  reason channel stays PROVISIONAL) and orchestrator settings binding (task-e4af0e6e).
+- No legitimate grant writer exists yet. Proposal ingress deliberately cannot mint grants; whoever
+  builds one must carry the same expected-version discipline the approval commit uses.
+- A malformed/unknown `approvalPolicy` payload value is fail-closed by construction
+  (`{kind:"INVALID_POLICY"}` -> core `assertNever` -> APPROVAL_HUMAN_REVIEW_REQUIRED @ APPROVAL_POLICY)
+  but has NO daemon-level test. Not a DoD item here; worth an arm when the next consumer lands.
+- `bootstrap-ledger.ts` is 269 lines — over the 250 target, under the 400 split bar, 267 of them
+  predating this task. Not a rejection reason; split it if it grows again.

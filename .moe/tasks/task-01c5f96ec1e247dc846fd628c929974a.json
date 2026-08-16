@@ -70,7 +70,7 @@
     {
       "stepId": "step-4",
       "description": "Implement the shared real-host schedule driver using only Node built-ins and public package roots. Derive the executing host from `collectDoctorVersionReport()` plus `os.release()`, never a matrix/env claim. For each unique case, create unique effect/grant/process identities (the verifier registry is process-global), use production activation, and invoke the OS child launcher only after ACTIVATED. Before-activation schedules tombstone first, assert zero physical launch plus `EFFECT_TOMBSTONED` / `ACTIVATION` / `detail.leg=tombstoneWitness`, then classify an absent fact as `UNKNOWN` with `PLATFORM_FACT_ABSENT`, the exact OS layer, and exact boundary. After-activation crash schedules wait for a real `process.execPath` verifier child to start, SIGKILL and observe it, assert `VERIFIER_PROCESS_EXIT_AMBIGUOUS` / `CAPTURE` / source `PROCESS`, and feed production `classifyCrash`; cancellation schedules start the real child, request ACTIVE cancellation (`MUST_DRAIN`), abort/observe it, assert `VERIFIER_PROCESS_CANCELLED` / `CAPTURE` / source `PROCESS`, and feed production `reconcileClaudeRun`. Build each boundary fact through its owner: runtime observation from the actual Node executable bytes/closure, scope plus input manifest with at least one tracked path, a real temp symlink/lstat/realpath observation, activation commit lease binding, reconciliation, and crash classification. Invoke the appropriate production boundary classifier for every case and the production whole-platform observer for every seven-case schedule batch; record exact truth/code/layer/boundary and raw process/timing/digest facts. Use bounded waits and `finally` cleanup so no child or temp path survives.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/fault/cross-host/effect-schedule-driver.ts",
         "tests/fault/linux/effect-conformance.fault.ts",
@@ -79,12 +79,19 @@
       "newFiles": [
         "tests/fault/cross-host/effect-schedule-driver.ts"
       ],
-      "startedAt": "2026-08-16T00:35:05.757Z"
+      "modifiedFiles": [
+        "tests/fault/cross-host/effect-schedule-driver.ts",
+        "tests/fault/cross-host/effect-schedule-activation.ts",
+        "tests/fault/cross-host/effect-boundary-facts.ts"
+      ],
+      "note": "Real-host schedule driver landed, Node built-ins plus the two bare package roots only. Executing host derives from collectDoctorVersionReport().observed.platform plus os.release(); a slot that does not equal the measured OS returns CROSS_HOST_HOST_MISMATCH at CROSS_HOST_COLLECTOR before any effect. Per-case identities are `${process.pid}-${counter}` because the verifier run registry is process-global and one-use. CRASH_BEFORE_ACTIVATION runs production applyEffectTombstone, then activateEffect with the tombstone, and requires exactly EFFECT_TOMBSTONED + layer ACTIVATION + detail.leg=tombstoneWitness; the launcher is never reached so tombstonedLaunchCount is a MEASURED zero, and every boundary fact is null, which the OS classifier answers UNKNOWN/PLATFORM_FACT_ABSENT at the exact OS layer. CRASH_AFTER_ACTIVATION spawns a real process.execPath child that writes to stdout and SIGKILLs itself; CANCELLATION spawns a real long-lived child and aborts an AbortSignal 250ms after the launcher reported its pid. Both require source PROCESS and refuse the run if runVerifierProcess returns ok or a foreign refusal. VERIFIED LOCALLY BY DRILL (throwaway probe created, run, deleted in the same command; nothing tracked): tombstone -> EFFECT_TOMBSTONED/ACTIVATION with launches=0; cancellation -> VERIFIER_PROCESS_CANCELLED/CAPTURE with a real pid; runtime observation -> PROVEN/CONTENT_ADDRESSED_COPY from the actual node executable bytes. The drill also found and fixed two real defects: classifyCrash returned REFUSED/RECOVERY_OWNERSHIP_TRANSFER_UNPROVEN because adoption needs a real fence advance, so the record set now carries an advancedAuthority proof with epoch+1 AND a newly minted token (production then answers ADOPTED/ok); and pathFact threw EPERM on a filesystem that refuses symlinks, so it now fails closed to null and removes its temp tree in finally. Post-fix drill on this win32 host classified PROVIDER_LAUNCH, GIT_WORKSPACE, LOCK, SIGNAL_CANCELLATION, RUNTIME_CLOSURE and CRASH_RECOVERY as PROVEN and only PATH_SYMLINK as UNKNOWN/PLATFORM_FACT_ABSENT (Windows symlink EPERM plus the POSIX absolute-path rule) - that is a debugging measurement on win32 and is NOT offered as host proof for either row. Every case invokes the per-boundary classifier AND the whole-platform observer for its seven-case batch, and a disagreement between them refuses rather than picking one. PLAN DEVIATION: the driver was 397 physical lines, so activation/child-process work moved into effect-schedule-activation.ts; driver is now 222 and activation 200, both inside the per-file cap.",
+      "startedAt": "2026-08-16T00:35:05.757Z",
+      "completedAt": "2026-08-16T00:42:30.684Z"
     },
     {
       "stepId": "step-5",
       "description": "Finish the thin Linux/macOS suites and add the Node 24 collector/aggregator CLI. The Linux file must pin `linux`/`PLATFORM_LINUX`; the macOS file must pin `darwin`/`PLATFORM_MACOS`; on-host they run all 21 cases, assert the exact runner and platform outcomes, positive launch/case counts, and write only raw schedule evidence to a bounded requested directory. The `.mjs` CLI must call the real `buildReleaseSubject` (kept out of the TS import graph because `tsc -p tests/fault/tsconfig.json` otherwise raises TS7016), generate an ephemeral Ed25519 verification key, and retain only source-bound unsigned manifest/asset digests for cross-host identity—never compare key-dependent container/signature digests. Its `collect` mode combines an on-host raw schedule with fresh Git/release/doctor/runtime/file measurements and writes a content-addressed canonical receipt; its `aggregate` mode rebuilds the expected source/distribution from the checked-out commit, reads the two fixed slot directories, verifies both independently, always writes a canonical aggregate, and exits nonzero under `--require-complete` unless both rows are PROVEN. Invalid CLI/input paths must return a structured exact CROSS_HOST code/layer, not throw. Exercise both CLI modes from the fault test with temp directories; fixture-generated outputs are integrity tests only and are never labeled host proof.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/fault/cross-host/collect-and-aggregate.mjs",
         "tests/fault/cross-host/effect-evidence.fault.ts",
@@ -93,20 +100,36 @@
       ],
       "newFiles": [
         "tests/fault/cross-host/collect-and-aggregate.mjs"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/fault/linux/effect-conformance.fault.ts",
+        "tests/fault/macos/effect-conformance.fault.ts",
+        "tests/fault/cross-host/cross-host-evidence.mjs",
+        "tests/fault/cross-host/effect-evidence-contract.js",
+        "tests/fault/cross-host/effect-evidence-verify.js"
+      ],
+      "note": "Both OS suites and the collector/aggregator CLI landed; `pnpm test:fault` is EXIT=0 with Test Files 7 passed (7) and Tests 61 passed (61), up from the 4/47 merge-base baseline. Linux pins slot \"linux\" and layer PLATFORM_LINUX; macOS pins \"darwin\" and PLATFORM_MACOS. On-host each runs all 21 cases and asserts, per case, UNKNOWN + PLATFORM_FACT_ABSENT + the exact OS layer + a null pid for CRASH_BEFORE_ACTIVATION and PROVEN + null code + null layer + a positive pid for the two post-activation schedules, plus launchCount > 0, tombstonedLaunchCount === 0 and an inspected-count assertion of exactly 21 so a zero-case sweep cannot pass. Raw evidence goes only to MOE_CROSS_HOST_RAW when the caller sets it, and writeRawSchedule always prints executedCaseCount=<n> so a CI leg that exits 0 having run nothing is visible. CLI is Node 24 .mjs, outside the TS graph, calling the real buildReleaseSubject with a freshly generated ephemeral Ed25519 key. MEASURED, NOT ASSUMED: building the subject twice with two different ephemeral keys showed manifestDigest and containerDigest are key-DEPENDENT while assetDigests are stable, and componentCount is 6 (daemon, control-room, mcp-bridge, provider-claude, provider-codex, ide-adapter-jetbrains). The receipt therefore retains only key-independent source-bound digests: assetDigest = canonicalDigest(assetDigests) and manifestDigest = canonicalDigest of the unsigned source-bound manifest projection (componentId, componentKind, assetDigests, sourceSha). No container or signature digest is ever compared. collect refuses with an exact code and layer rather than throwing: unknown slot and host/schedule disagreement are CROSS_HOST_HOST_MISMATCH at CROSS_HOST_COLLECTOR, an unreadable or non-21-case schedule is CROSS_HOST_SCHEDULE_INCOMPLETE, an unpinned runtime is CROSS_HOST_RUNTIME_UNVERIFIABLE, and a distribution that will not rebuild is CROSS_HOST_DISTRIBUTION_MISMATCH. aggregate rebuilds source and distribution from the checked-out commit (or --expect for the fixture test), reads both fixed slot directories, verifies each independently, ALWAYS writes the canonical aggregate, and exits 1 under --require-complete when truthClass is not PROVEN. Three fault cases drive the CLI end to end with temp directories; all CLI-generated output in those cases is an integrity fixture and is never labelled host proof. PLAN DEVIATION: plain Node does not map a .js specifier onto a .ts file (measured: ERR_MODULE_NOT_FOUND on effect-evidence-contract.js), so two one-line .js bridges were added next to the TS modules, exactly the convention packages/runner/src already uses (`export * from \"./x.ts\";`). Without them the CLI cannot import the protocol and would have to re-implement it.",
+      "startedAt": "2026-08-16T00:42:33.242Z",
+      "completedAt": "2026-08-16T00:42:51.224Z"
     },
     {
       "stepId": "step-6",
       "description": "Extend (do not weaken or replace) the existing cross-host workflow with an independent `host-evidence` include-matrix whose exact job names are `host-evidence-linux` on `ubuntu-latest` and `host-evidence-darwin` on `macos-latest`, plus `cross-host-aggregate`. Keep pinned Node 24.16.0/pnpm 11.0.8, frozen install, `permissions: contents: read`, fail-fast false, and the existing broad gate unchanged so foreign baseline red remains visible. Each host job compiles the fault tree, runs only its matching fault file under the serial fault Vitest config, captures the real Vitest status through `PIPESTATUS[0]`, requires nonzero `Test Files` and `Tests` lines and the internal `executedCaseCount=21`, runs collector mode, and uploads `cross-host-{linux|darwin}-${{ github.sha }}` with upload-artifact v4 and `if-no-files-found:error`. The aggregate job depends only on the evidence matrix and uses `if: always()`: checkout the same SHA, download each artifact into its fixed expectation slot (transport names confer no authority), run the focused hostile contract test with nonzero counts, run aggregate mode `--require-complete`, and upload `cross-host-aggregate-${{ github.sha }}` even on refusal. No Windows source/test/workflow behavior is changed, and no off-host fixture or matrix variable can produce PROVEN.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         ".github/workflows/cross-host.yml"
-      ]
+      ],
+      "modifiedFiles": [
+        ".github/workflows/cross-host.yml"
+      ],
+      "note": "Workflow EXTENDED, never weakened: the existing `gate` job (ubuntu-latest + macos-latest, fail-fast false, pnpm typecheck, pnpm test) is byte-identical - the diff is pure append. Its foreign baseline red therefore stays visible instead of being deleted to buy a green run. Added `host-evidence` with an include-matrix producing exactly the API job names `host-evidence-linux` (ubuntu-latest) and `host-evidence-darwin` (macos-latest), plus `cross-host-aggregate`. Both new jobs pin pnpm 11.0.8 and Node 24.16.0, install --frozen-lockfile, declare `permissions: contents: read` per job (kept off the workflow root so `gate` behaviour is untouched), and the matrix sets fail-fast: false so a red Linux leg cannot cancel macOS. Each host job compiles the fault tree, runs ONLY its matching OS fault file under the serial fault Vitest config, and reads the real Vitest status out of ${PIPESTATUS[0]} because a `| tee` pipeline otherwise reports tee's status. Exit 0 alone is not accepted: the leg additionally requires a nonzero `Test Files N passed` line, a nonzero `Tests N passed` line, and the literal `executedCaseCount=21`. MEASURED, NOT ASSUMED: a throwaway probe (created, run, deleted in one command) confirmed Vitest forwards a worker `process.stdout.write` verbatim to the piped log, and the same probe with a broken file printed `Test Files 1 failed` / `Tests no tests`, which is exactly the vacuous shape these greps exist to catch. Receipts upload as cross-host-linux-${{ github.sha }} / cross-host-darwin-${{ github.sha }} with upload-artifact v4 and if-no-files-found: error. cross-host-aggregate needs only [host-evidence] and runs `if: always()`, checks out ${{ github.sha }}, downloads each artifact with continue-on-error into a FIXED slot directory (a missing artifact leaves that slot empty rather than failing the job), runs the focused hostile contract suite with the same nonzero-count and PIPESTATUS discipline, runs aggregate mode --require-complete, and uploads cross-host-aggregate-${{ github.sha }} with `if: always()` so a refusal still publishes evidence. The transport name confers no authority - the aggregator re-derives each row from the verified doctor identity inside the receipt, so a receipt filed into the wrong slot is CROSS_HOST_HOST_MISMATCH. No Windows source, test or workflow behaviour changed.",
+      "startedAt": "2026-08-16T00:43:02.049Z",
+      "completedAt": "2026-08-16T00:44:15.234Z"
     },
     {
       "stepId": "step-7",
       "description": "Perform the single adversarial review after implementation and before the final gate. Read the complete owned-path diff as an attacker; verify no test/helper reimplements platform, activation, cancellation, crash, doctor, or distribution authority; no caller-selected host, artifact name, elapsed quiet, classifier envelope, or missing fact can upgrade UNKNOWN; all children/temp paths are cleaned; and the existing broad/Windows behavior is intact. Re-run the hostile mutation sweep for extra/missing keys, host spoof, wrong source, one manifest and asset digest, doctor/runtime closure, schedule universe, one raw case, self-digest/filename, duplicate receipt, and each missing host, asserting positive mutation cardinality and the exact code/layer/slot. Temporarily mutate the owned verifier/driver production surface so a refusal maps to the wrong code or bypasses the imported production classifier, confirm the relevant test goes red, restore it, then confirm green. Check every non-test helper (`effect-evidence-contract.ts`, `effect-schedule-driver.ts`, and the `.mjs` CLI) is <=250 physical lines, no scratch/generated evidence is tracked, and `git diff --check` is clean. Stage only the seven explicit owned paths, remove any foreign staged entry, commit by explicit pathspec, verify `git show --stat`, and request authorized human/governor publication of the exact committed SHA; never push it yourself.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         ".github/workflows/cross-host.yml",
         "tests/fault/cross-host/effect-evidence-contract.ts",
@@ -115,13 +138,21 @@
         "tests/fault/cross-host/collect-and-aggregate.mjs",
         "tests/fault/linux/effect-conformance.fault.ts",
         "tests/fault/macos/effect-conformance.fault.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/fault/cross-host/effect-evidence-contract.ts",
+        "tests/fault/cross-host/effect-evidence.fault.ts"
+      ],
+      "note": "Adversarial review done; committed by explicit pathspec at 91fc622. MUTATION DRILLS, both red on the exact assertion then restored and re-greened. Drill A: changed identityRejection's refusal in effect-evidence-verify.ts from CROSS_HOST_HOST_MISMATCH to CROSS_HOST_RECEIPT_MALFORMED - three cases went red including \"refuses every generated mutation...\" failing precisely on {label: 'host spoof'}, proving the sweep is bound to the code and not merely to \"it refused\". Drill B: changed the driver's off-host refusal code - both OS suites went red (Tests 2 failed | 2 passed), proving the off-host branch is a real assertion rather than a skip. After restore `pnpm test:fault` is EXIT=0 with Test Files 7 passed and Tests 70 passed. Attacker read of the owned diff: no helper reimplements platform, activation, cancellation, crash, doctor or distribution authority - every verdict is the return value of an imported production function, and the only hand-built values are INPUT records (activation request, crash situation, stream record) whose judgement still belongs to production. A caller cannot upgrade UNKNOWN: the row derives from doctor.os inside digest-checked bytes and must equal both the requested slot and the receipt's own hostSlot; a receipt cross-filed into the wrong slot directory is refused; elapsed time and pid are recorded, never consulted; an absent fact is PLATFORM_FACT_ABSENT, never a pass. Cleanup verified: pathFact removes its temp tree in finally, the fault suite rmSyncs every temp root in afterAll, children die with the wrapper's kill/abort, and the cancellation abort is bounded at 250ms after the observed launch. Existing gate job byte-identical; no Windows behaviour changed. LINE COUNTS (physical): contract 224, verify 256, driver 222, activation 200, boundary-facts 239, CLI 238, linux 110, macos 110, fault suite 389 - all under the 400 hard cap; verify at 256 is 6 over the 250 target after moving its key sets into the contract, disclosed rather than hidden. `git diff --check` clean. DISCLOSED HAZARD, not caused by this diff: foreign whole-tree completion commits c970f10 (task-ff589abd) and 1576a44 (task-b7853ff1) captured my in-progress files while I worked, including the throwaway local drill probe tests/fault/cross-host/zzdrill.fault.ts. Per the standing rail I did not amend, reset or stash; my commit DELETES that scratch file so no probe remains tracked, and QA should review by base-ref diff over the owned paths. 91fc622 stages exactly 11 owned paths and no foreign entry (git show --stat verified). Publication requested from governor-1a5aca5d in chat; per the plan I did not push.",
+      "startedAt": "2026-08-16T00:44:24.213Z",
+      "completedAt": "2026-08-16T00:46:28.981Z"
     },
     {
       "stepId": "step-8",
       "description": "Run the one concentrated final gate on the exact committed/published SHA. First re-run every repo-wide command captured in step 1 and report the merge-base-vs-HEAD failing-path delta verbatim; completion requires no new failure intersecting the seven owned paths, while foreign baseline red is disclosed rather than called green. Then run this exact completion command and retain its fresh output (including nonzero local Vitest counts): `pnpm exec tsc -p tests/fault/tsconfig.json && pnpm exec vitest run --config tests/fault/vitest.config.ts cross-host/effect-evidence.fault.ts cross-host/production-surfaces.fault.ts && node --input-type=module -e 'import{execFileSync}from\"node:child_process\";const sha=execFileSync(\"git\",[\"rev-parse\",\"HEAD\"],{encoding:\"utf8\"}).trim(),base=\"https://api.github.com/repos/yaront1111/Moe-NG\",headers={Accept:\"application/vnd.github+json\",\"X-GitHub-Api-Version\":\"2022-11-28\"},get=async p=>{const r=await fetch(base+p,{headers});if(!r.ok)throw Error(`${r.status} ${p}`);return r.json()},requiredJobs=[\"host-evidence-linux\",\"host-evidence-darwin\",\"cross-host-aggregate\"];const runs=(await get(`/actions/workflows/cross-host.yml/runs?head_sha=${sha}&per_page=20`)).workflow_runs.filter(r=>r.head_sha===sha&&r.status===\"completed\");let proof=null;for(const run of runs){const jobs=(await get(`/actions/runs/${run.id}/jobs?per_page=100`)).jobs;if(requiredJobs.every(n=>jobs.some(j=>j.name===n&&j.status===\"completed\"&&j.conclusion===\"success\"))){proof={run,jobs};break}}if(!proof)throw Error(`no exact-SHA Linux/macOS/aggregate success for ${sha}`);const artifacts=(await get(`/actions/runs/${proof.run.id}/artifacts?per_page=100`)).artifacts,requiredArtifacts=[`cross-host-linux-${sha}`,`cross-host-darwin-${sha}`,`cross-host-aggregate-${sha}`];for(const n of requiredArtifacts){const a=artifacts.find(x=>x.name===n);if(!a||a.expired||a.size_in_bytes<=0||typeof a.digest!==\"string\"||!a.digest.startsWith(\"sha256:\"))throw Error(`missing/unverifiable artifact ${n}`)}console.log(JSON.stringify({sha,run:proof.run.html_url,jobs:requiredJobs,artifacts:requiredArtifacts}))'`. Inspect the three successful job logs and record their positive Vitest counts, both `executedCaseCount=21` lines, exact Linux/darwin receipt digests, and aggregate PROVEN rows. If the authorized exact-SHA publication/run is unavailable, or either host/aggregate job is not green, report blocked instead of substituting WSL, fixtures, an older SHA, or the overall workflow conclusion; after any fix, repeat steps 7-8 against the new committed SHA.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-16T00:46:32.023Z"
     }
   ],
   "status": "WORKING",
@@ -129,7 +160,7 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human directed additional unblocking. All four original hard dependencies are DONE; the later canonical inventory, public daemon doctor export, and QA-approved root bare @moe/runner/@moe/daemon edge are also DONE. A real Linux/macOS GitHub Actions runner/workflow has been accepted and executed previously, so the former no-host/no-consumer-edge blockers are lifted. Architect must remeasure current CI reachability and plan only production-surface, host-native evidence; no win32/mock substitute.",
+  "reopenReason": "Governor unblock 2026-08-16 00:58Z: the block premise (91fc622 unpushed; ls-remote showed 1576a44) is now FALSE — with the human's explicit approval I pushed moe/work-2026-08-08 to origin at 00:56; origin tip cf137c6 contains 91fc622 (verified ancestor). The push also triggered the cross-host workflow. Next session: resume step 8 only — run the exact-SHA verification query for 91fc6220d91e0774ec5ad19ea554f2a6b73c0c40 (host-evidence-linux, host-evidence-darwin, cross-host-aggregate green + three artifacts). Note the workflow may bind to tip cf137c6; if so, verify the run's checkout SHA and the byte-identity of the 11 owned paths at that SHA yourself before citing it. If the run is red on Linux/macOS, report the exact failing lines honestly — no mock/win32 substitution (standing instruction from 00:04 holds).",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -162,12 +193,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-16T00:35:05.757Z",
+  "updatedAt": "2026-08-16T00:57:26.372Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 3
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -207,7 +238,11 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T00:04:01.966Z",

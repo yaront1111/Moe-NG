@@ -121,7 +121,7 @@
       "completedAt": "2026-08-16T00:31:09.650Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -134,18 +134,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T23:20:07.255Z",
-  "updatedAt": "2026-08-16T00:32:46.587Z",
+  "updatedAt": "2026-08-16T00:43:14.850Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:20:54.104Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T00:43:14.850Z",
+    "wallClockMs": 4940746
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
     "worker-247da23f",
     "governor-a627169a",
-    "worker-5678886b"
+    "worker-5678886b",
+    "qa-c7cedba3"
   ],
   "stepsCompleted": [
     "step-1",
@@ -188,5 +191,8 @@
     "packages/runner/src/providers/claude/claude-runtime-source.ts",
     "packages/runner/src/providers/claude/claude-runtime-source.js",
     "packages/runner/src/providers/claude/claude-runtime-pin-closure.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T00:43:14.850Z",
+  "reviewCompletedAt": "2026-08-16T00:43:14.850Z",
+  "reviewSummary": "VERIFIED at HEAD 1576a44. Owned bytes are commit 1357062 (4 owned paths; closure.js needed no change).\n\nGATES I RE-RAN MYSELF\n- pnpm --filter @moe/runner typecheck -> EXIT 0.\n- pnpm --filter @moe/runner test -> Test Files 1 failed | 63 passed (64); Tests 1 failed | 2146 passed | 1 skipped. All 38 cases in claude-runtime-source.test.ts pass.\n- pnpm typecheck (repo) -> red ONLY in packages/store/src/event-read-model-contract.test.ts (22x TS2551 readEventsByTypeAfter). Foreign; not an owned path.\n- Caps: closure.ts 224, source.ts 250, both .js bridges exactly 1 line.\n\nATTRIBUTION (my own experiment, not the worker's word). The single runner red is claude-launcher.windows.test.ts > \"stays alive beyond the control poll slice\" (CLAUDE_LAUNCH_STREAM_ERROR @ OUTPUT), the deliberately-red pre-fix repro owned by task-7ba898f5f587453f80c1e93e93e4977c (WORKING). I restored claude-runtime-pin-closure.ts to 1357062^ (4d0a49f, 281 lines) and re-ran that file: IDENTICAL failure. HEAD-minus-baseline failing paths INTERSECT owned paths = EMPTY. Restored byte-exact; git status clean.\n\nMUTATION DRILLS I RAN (anchor count asserted =1 each, restored after each)\nA segmentRejection->null: 2 red (NOT_FILE became DIGEST_MISMATCH; MISSING became success).\nB canonical identity/containment->always pass: 1 red (SOURCE_DRIFT).\nB2 pre-read root containment removed: 2 red (ESCAPE became MISSING); one is a resolveSources case, so mutating the primitive in its OWN file reddens the consumer surface = composition proven.\nC streamDigest->constant: 11 red.\nD resolveSources expected-digest wiring dropped: 1 red.\nTree byte-identical to HEAD after all five.\n\nDoD 1-5 met. Closure keeps zero parallel path/reparse/digest policy (grep: no streamDigest/entryKind/realpath/segment). discoverSources absent from packages/runner/src/index.ts. Test digest literals recomputed independently and match. Consumer task-32eddfd3 named in all three files."
 }

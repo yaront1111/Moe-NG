@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { types } from "node:util";
 import { PROVIDER_RUN_RECORD_VERSION } from "./provider-run-contracts.js";
 import type { ProviderRunRecord } from "./provider-run-contracts.js";
+import { validateProviderRunRecordShape } from "./provider-run-codec.validation.js";
 import {
   PROVIDER_RUN_LEDGER_CODES,
   PROVIDER_RUN_LEDGER_LAYERS,
@@ -47,7 +48,6 @@ export interface ProviderRunDecodeSuccess {
   readonly digest: string;
   readonly record: ProviderRunRecord;
 }
-
 export type ProviderRunEncodeResult = ProviderRunEncodeSuccess | ProviderRunRefusal;
 export type ProviderRunDecodeResult = ProviderRunDecodeSuccess | ProviderRunRefusal;
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -71,7 +71,6 @@ function canonicalArray(value: readonly unknown[], stack: Set<object>): string |
   }
   return `[${parts.join(",")}]`;
 }
-
 function canonicalObject(value: Record<string, unknown>, stack: Set<object>): string | null {
   if (Object.getOwnPropertySymbols(value).length !== 0) return null;
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -85,7 +84,6 @@ function canonicalObject(value: Record<string, unknown>, stack: Set<object>): st
   }
   return `{${parts.join(",")}}`;
 }
-
 function canonicalJson(value: unknown, stack = new Set<object>()): string | null {
   if (value === null) return "null";
   if (typeof value === "string" || typeof value === "boolean") return JSON.stringify(value);
@@ -102,7 +100,6 @@ function canonicalJson(value: unknown, stack = new Set<object>()): string | null
     stack.delete(value);
   }
 }
-
 function withoutDigest(value: Record<string, unknown>): Record<string, unknown> | null {
   if (Object.getOwnPropertySymbols(value).length !== 0) return null;
   const descriptors = Object.getOwnPropertyDescriptors(value);
@@ -148,11 +145,12 @@ function seal(body: Uint8Array, recordDigest: string): Uint8Array | null {
 export function encodeProviderRunRecord(value: unknown): ProviderRunEncodeResult {
   try {
     if (!isPlainObject(value)) return providerRunRefusal("REFUSED", CODE.recordMalformed, LAYER);
+    const shape = validateProviderRunRecordShape(value);
+    if (shape === "RECORD") return providerRunRefusal("REFUSED", CODE.recordMalformed, LAYER);
+    if (shape === "FIELD") return providerRunRefusal("REFUSED", CODE.fieldInvalid, LAYER);
+    if (shape === "VERSION") return providerRunRefusal("REFUSED", CODE.versionUnsupported, LAYER);
     const reduced = withoutDigest(value);
     if (reduced === null) return providerRunRefusal("REFUSED", CODE.fieldInvalid, LAYER);
-    if (reduced[VERSION_KEY] !== PROVIDER_RUN_RECORD_VERSION) {
-      return providerRunRefusal("REFUSED", CODE.versionUnsupported, LAYER);
-    }
     const domain = canonicalJson(reduced);
     if (domain === null) return providerRunRefusal("REFUSED", CODE.fieldInvalid, LAYER);
     const recordDigest = digest(domain);

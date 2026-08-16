@@ -2,16 +2,16 @@
 project_doc_fallback_filenames = ["CLAUDE.md", ".codex/agent-instructions.md"]
 model_instructions_file = "agent-instructions.md"
 model_reasoning_effort = "xhigh"
-developer_instructions = """You are a worker agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly."""
-
+developer_instructions = """
+You are a worker agent in the Moe AI Workforce system. You MUST use Moe MCP tools (moe.*) for ALL task operations. Follow the Moe workflow strictly. Never edit .moe/ files directly.
+"""
 [mcp_servers.moe]
 command = "node"
-args = ["/mnt/c/Users/Yaron/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/proxy/index.js"]
+args = ["C:/Users/Yaron/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/proxy/index.js"]
 startup_timeout_sec = 120
 
 [mcp_servers.moe.env]
-MOE_PROJECT_PATH = "/mnt/d/projexts/moe-next"
-MOE_DAEMON_HOST = "172.26.208.1"
+MOE_PROJECT_PATH = "D:/projexts/moe-next"
 [mcp_servers.serena]
-command = "/home/sysadmin/.local/bin/serena"
-args = ["start-mcp-server", "--context", "codex", "--project", "/mnt/d/projexts/moe-next", "--enable-web-dashboard", "false", "--enable-gui-log-window", "false"]
+command = "C:/Users/Yaron/.local/bin/serena.exe"
+args = ["start-mcp-server", "--context", "codex", "--project", "D:/projexts/moe-next", "--enable-web-dashboard", "false", "--enable-gui-log-window", "false"]

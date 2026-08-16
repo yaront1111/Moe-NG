@@ -86,29 +86,34 @@
     {
       "stepId": "step-5",
       "description": "Single final verification gate: first run the same repo-wide baseline legs against HEAD and compute the HEAD-minus-merge-base failing-path delta, intersected with this task's two owned paths; disclose all foreign red verbatim and stop if this diff introduced any owned-path failure. Then run the exact completion command fresh in the foreground: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`. Require exit 0 from both chained legs and inspect daemon test output for a positive, nonzero test-file and test count (including the four focused tests); `No projects matched`, `No test files found`, `0 passed`, piped/tail exit status, or sibling-WIP-caused red is not a pass.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-contracts.ts",
         "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
       ],
-      "startedAt": "2026-08-15T22:23:17.757Z"
+      "note": "Rescoped governor-approved gate completed fresh at HEAD 91fc6220d91e0774ec5ad19ea554f2a6b73c0c40. Owned bytes remain clean and byte-exact: contracts 241 lines / bd568cf71cf6ce6f04e718e909171dfe410e81e118304e85c4d73156234727a8; focused test 61ee9dbc53f2f2510b41045f54378fece65e853ccffbc3442c57d4347323b150. Scoped daemon tsc, via a disposable extending config listing only the two owned roots with composite disabled, exited 0; the config was deleted. The initial composite-positive-control run had executed the files and reported TS6307 on their real transitive imports, so this was not an empty program. Fresh owned activation-ledger suite command exited 0: Test Files 4 passed (4), Tests 40 passed (40), including the focused 4/4. Repo/package HEAD legs were run and their red was not called green. pnpm typecheck, verify:foundation, and verify:store fail only at packages/store/src/event-read-model-contract.test.ts (missing foreign readEventsByTypeAfter). pnpm test executed 278 files/6579 tests and fails only foreign packages/store/src/event-read-model-contract.test.ts, packages/store/src/recovery-anchor.test.ts, and packages/runner/src/providers/claude/claude-launcher.windows.test.ts. @moe/daemon test executed 97 files/1990 tests and fails only foreign orchestrator/agent-spawner.test.ts, runtime-entrypoint.test.ts (missing http/event-stream-ack-contract.ts bridge), review/review-refusal-vocabulary.test.ts, review/review-acceptance.test.ts, bootstrap/bootstrap-durability.test.ts, goals/goal-services.test.ts, goals/j1-command-path.test.ts, activation/foundation-launch-authority.test.ts, and work/foundation-attempt-windows.test.ts. Daemon typecheck fails only foreign review/review-acceptance.test.ts:92 and review/review-test-fixtures.ts:329 with TS2741 missing source. Against the recorded merge-base/task-base failure set, the HEAD-minus-base failing-path delta intersected with the two owned paths is EMPTY; neither owned path appears in any failure. Exact task completion command remains raw exit 1 because the first leg sees the disclosed foreign review TS2741, so completion follows the human-approved path-attributed rescope rather than fabricating green.",
+      "startedAt": "2026-08-15T22:23:17.757Z",
+      "completedAt": "2026-08-16T00:50:23.363Z"
     },
     {
       "stepId": "step-6",
       "description": "Final adversarial self-review scoped to the base-ref diff for only the two owned paths: verify byte-for-byte legacy preservation at 512 and below, no global rekey, UTF-8-byte rather than character cutoff, complete namespaced framed preimage hashing, exact lowercase versioned output, normalized multibyte coverage through public parser, real reopened-store cardinality, collision-adversary cardinalities, file-handle cleanup, <=250 production lines, and absence of edits/staging in sibling-owned files. Confirm failure-prone assertions bind to the production surface and every generated case count is exact/nonzero. If review changes either owned file, rerun the exact final verification command before completion. Stage/commit only the two explicit owned pathspecs.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-contracts.ts",
         "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
-      ]
+      ],
+      "note": "Adversarial self-review completed against `git diff f4966b534ee5e9f9671668795d5dd1e844f0521b..HEAD -- <two owned paths>`; `git diff --check` exited 0. Production derivation is pure/deterministic under concurrent calls, retains the exact legacy namespace and code-unit length framing for every UTF-8 size <=512 (including literal 69-byte and exact 512-byte pins), measures the cutoff with Buffer.byteLength UTF-8, and hashes only overflow. The fallback marker is versioned and disjoint from the numeric legacy grammar; createHash receives the complete namespaced framed legacy string and digest('hex') is exact lowercase. Direct enormous inputs still require constructing the legacy preimage, matching the pre-change allocation class; runner-admitted inputs are capped and proven through the public parser. Tests bind to public parseEffectIntent plus production derive/commit and real file-backed SqliteEventStore. Literal cardinalities are pinned: 2 legacy, 2 maximum, 3 one-field variants per maximum, 2 swapped-length adversaries with bare-concatenation cardinality 1 and production cardinality 2, and 2 reopened-store rows with exactly 1 event each. Store handles close in finally before recursive cleanup, including reopened handles. No public exports/.js bridges, store/runner contracts, record bytes, schema, scan/replay behavior, or sibling-owned files changed. Production file is 241 lines. Owned worktree status and cached path list are empty; no scratch config remains. The bytes sit in foreign whole-tree commit 6ca5da07 for task-d92b1..., so per the whole-tree hazard rail I did not amend/reset/recommit or create an empty claim commit; QA must review the recorded base-ref diff.",
+      "startedAt": "2026-08-16T00:50:32.634Z",
+      "completedAt": "2026-08-16T00:51:19.121Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human directed additional unblocking. Steps 1-4 are complete, the two-path aggregate-id implementation and four-test/mutation evidence are committed/banked, and the recorded block is only a transient daemon final-gate wait. Resume at step 5: first remeasure the two owned paths and stop on any collision; otherwise run the exact daemon typecheck/test fresh. Do not touch d92 reader/commit/test paths or active human review WIP.",
+  "reopenReason": "Governor unblock, human-approved 2026-08-16 00:39Z: gate premise RESCOPED from \"raw @moe/daemon test exit 0\" to the global path-attributed baseline rail. Resume step 5 (4/6 banked; owned paths remeasured clean and byte-exact bd568cf7/61ee9dbc at 4d0a49f, production 241 lines) with this exact gate: (1) scoped daemon tsc + this task's own activation-ledger suites exit 0 with nonzero test counts; (2) repo/package legs judged by (HEAD-minus-merge-base failing-path delta) ∩ owned paths = EMPTY, foreign red quoted verbatim, never repaired or hidden. Known foreign red at rescope time: task-69 store residue, review slice TS2741, d92 activation reds (foundation-launch-authority — DISJOINT from this task's suites), agent-spawner WIP, runtime-entrypoint bridge guard, graph-preview timeout. Prior handoff (Serena + release note 00:09) carries owned hashes and the four foreign failing-path groups. QA reviews under the same rescoped rule.",
   "createdBy": "WORKER",
   "parentTaskId": "task-df29871bfc2441659efb3f763ddb23db",
   "priority": "HIGH",
@@ -116,24 +121,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:45:32.402Z",
-  "updatedAt": "2026-08-16T00:09:13.476Z",
+  "updatedAt": "2026-08-16T01:01:06.084Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:45:59.442Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T01:01:06.084Z",
+    "wallClockMs": 11706642
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
     "worker-83e6139a",
     "governor-a627169a",
-    "worker-5d4e2d6f"
+    "worker-5d4e2d6f",
+    "worker-2a50faca",
+    "qa-ce3ba361"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T21:55:31.933Z",
@@ -158,10 +169,10 @@
   },
   "planApprovedAt": "2026-08-15T21:55:33.995Z",
   "workStartedAt": "2026-08-15T21:58:06.953Z",
-  "blockedReason": "Human-directed unblocking retry completed on clean, byte-identical owned paths at HEAD 4d0a49f. Exact Node 24.16 command `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`: typecheck exit 0; daemon tests executed non-vacuously (97 files, 1,986 tests) but exit 1 with 6 failures, all foreign. Exact paths/failures: graph-preview-request.test.ts package-root child timed out (`status:null`); runtime-entrypoint.test.ts reports missing `.js` bridge for untracked `http/event-stream-ack-contract.ts`; activation/foundation-launch-authority.test.ts has 3 deliberate d92 TDD reds (`ABSENT` vs expected `UNKNOWN`, moving-scan watchdog timeout); untracked review/verifier-receipt-ledger.test.ts expects VERIFIER_RECEIPT_STALE but foreign production commits. Failing-path intersection with owned activation-ledger-contracts.ts / activation-ledger-aggregate-id.test.ts is empty. Owned hashes remain bd568cf7... / 61ee9dbc..., status clean, production 241 lines. Task requires the daemon package leg itself to exit 0, so foreign-red attribution cannot satisfy completion. Shared-tree rails forbid touching those paths; resume step 5 after WIP settles.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-16T00:04:22.403Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Reclaimed the banked task, read prior handoff/context, remeasured both owned paths clean and byte-exact (bd568cf7 / 61ee9dbc; production 241 lines), and ran the exact Node 24.16 daemon gate fresh. Typecheck passed; tests executed 97 files / 1,986 tests.",
@@ -181,5 +192,19 @@
       "releasedBy": "worker-83e6139a",
       "reason": "Explicit handoff after exact final gate was blocked by live foreign orchestrator WIP; freeing worker for another claimable task."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-16T00:53:17.853Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec tsc --ignoreConfig --noEmit --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --noUnusedLocals --noUnusedParameters --module NodeNext --moduleResolution NodeNext --target ES2024 --types node --skipLibCheck src/activation/activation-ledger-contracts.ts src/activation/activation-ledger-aggregate-id.test.ts && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/activation-ledger",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files  4 passed (4)\nTests  40 passed (40)\nDuration  2.48s (transform 5.56s, setup 0ms, import 7.24s, tests 659ms, environment 0ms)\nCombined scoped tsc + activation-ledger suite exit code: 0",
+    "reportedAt": "2026-08-16T00:53:17.853Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-ledger-contracts.ts",
+    "apps/daemon/src/activation/activation-ledger-aggregate-id.test.ts"
+  ],
+  "completedAt": "2026-08-16T01:01:06.084Z",
+  "reviewCompletedAt": "2026-08-16T01:01:06.084Z",
+  "reviewSummary": "APPROVED. Base-ref diff f4966b53..HEAD(376523c), owned paths only: 2 files +254/-14. Committed==gated bytes (bd568cf7/61ee9dbc); contracts 241 lines; owned status empty, no residue.\nDoD1 legacy byte-identical; I recomputed fixture=69B, boundary=512B, +1char=513B.\nDoD2 overflow ID 105B, grammar |aggregate|sha256:<64hex>, disjoint from digit-prefixed legacy. Recomputed all 4 pinned digests in a separate Node process over the FULL versioned+length-framed preimage: bdd4da67/c2c6dfea/2f8707d2/f5d4c1cb all match, so vectors are not production echoes.\nDoD3 both maxima go through public parseEffectIntent (non-null asserted), commit via production commitActivationLedgerRecord into a real file-backed SqliteEventStore, close, reopen, readEvents length 1 + eventType pinned. Bare package roots only.\nDoD4 literal cardinalities: 2 legacy, 2 maxima, 3 variants (Set 3), 2 swapped-length adversaries bare-concat Set 1 vs framed Set 2.\nDoD5 I RE-RAN both drills. D1 (drop 512B guard): named real-store test red with exact ACTIVATION_LEDGER_FIELD_INVALID / layer ACTIVATION_LEDGER / storeCode STORE_INPUT_INVALID. D2 (digest bare aggregateId+idempotencyKey): framing test red, expected 2f8707d2 received 1ff936e7. Restored byte-exact bd568cf7 both times.\nDoD6 pnpm --filter @moe/daemon typecheck exit 0 (foreign TS2741 now gone). Owned suites exit 0: Test Files 4 passed, Tests 40 passed. Scoped tsc exit 0 with positive control (--listFiles 530 files incl. both owned roots). Full daemon: 97 files/1993 tests, 10 failures in 4 foreign files (agent-spawner, provider-run-codec, foundation-launch-authority, foundation-attempt-windows). The two that consume deriveActivationAggregateId use short inputs (effect-aggregate-1/idem-key-1, agg-1/idem-1) whose legacy output is byte-identical pre/post, so this diff cannot cause them. Failing paths INTERSECT owned = EMPTY."
 }

@@ -89,6 +89,8 @@ function issueReceipt(
     policy: ReturnType<typeof policyInput>;
   }> = {},
 ) {
+  const latest = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds.at(-1);
+  if (latest === undefined) throw new Error("missing verifier receipt source round");
   const outcome = recordVerifierReceipt(store, {
     authority: {
       calibration: overrides.calibration ?? calibration(),
@@ -103,6 +105,11 @@ function issueReceipt(
       workspace: "/workspace",
     },
     projectId: PROJECT_ID,
+    source: {
+      aggregateVersion: latest.aggregateVersion,
+      decisionId: latest.decisionId,
+      resultSha256: latest.resultSha256,
+    },
     subjectRef: SUBJECT_REF,
   });
   return outcome;

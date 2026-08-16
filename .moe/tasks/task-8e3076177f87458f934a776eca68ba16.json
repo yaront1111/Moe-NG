@@ -112,20 +112,25 @@
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT.\n\nGATE (DoD 6) — each leg's exit code read SEPARATELY; a `&&`-chained run stops at the first red and reports one status for several legs, and a piped run reports the pipe's tail:\n1. `pnpm --filter @moe/daemon typecheck; echo \"TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"TEST_EXIT=$?\"`\nAlso run the runner and scheduler legs named in the task's verification line and record them separately — this slice does not import them at runtime, so a red there is almost certainly foreign; attribute it by path under the path-attributed-baseline rail (merge-base failures, HEAD failures, delta intersected with `apps/daemon/src/telemetry/**`, which must be EMPTY) and disclose it verbatim rather than repairing it.\n\n`grep -c ''` the production file: under 250 lines.\n\nADVERSARIAL SELF-REVIEW — invoke the adversarial-self-review skill, then check the items specific to this slice:\n1. Does the store port name `commitWithApply` or `commitExpectedVersionDecisionWithApply`? If yes, remove them — that guard is this slice's job and no later test can recover it.\n2. Are the two provenance vocabularies in SEPARATE record fields? If they share one, slice 3 cannot comply with task rail 2 and will have to reopen this task.\n3. Did any producer type get re-declared locally instead of imported from the package root? Re-declaring a modelled field is a silent duplicate.\n4. Is the unreadable-record code present, so slice 2 does not have to invent one?\n5. Does any comment claim a guarantee the code does not discharge?\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the three `apps/daemon/src/telemetry/provider-run-contracts.*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit has already swept your bytes in, do NOT amend, reset, or re-commit to claim it — hand QA the base-ref diff over the owned paths.\n\nHANDOFF MUST NAME THE CONSUMERS (Clause 1): this slice lands a contract with no runtime consumer yet, which is permitted ONLY by naming the tasks that will compose it — task-fc6581042426444a826981943f441908 (canonical codec) and task-1a7ff170ee544a3a8a10962c25e2ca5b (durable ledger), with task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize composition) as the third sibling. State plainly that DoD items 1, 3, 4 and the real-store half of 5 now belong to those siblings and that this task's DoD needs re-scoping to slice 1.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-contracts.ts",
         "apps/daemon/src/telemetry/provider-run-contracts.test.ts"
       ],
-      "startedAt": "2026-08-15T18:14:59.886Z"
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
+      ],
+      "note": "STEP 7 — GATE, ADVERSARIAL REVIEW, COMMIT. Resumed after handoff; re-verified everything from disk/git rather than trusting the prior session.\n\nRESUME RE-VERIFICATION FIRST. All four owned files are byte-identical to the handoff-recorded hashes AND to HEAD: contracts.ts e151af9295d7…, contracts.test.ts 48cd28ff0c68…, refusals.ts 7e4b9862ed24…, refusals.test.ts 2ed289482006… (pre-edit). `git status --porcelain -- apps/daemon/src/telemetry/` was empty. A peer had touched the mtimes; the bytes had not moved.\n\nGATE LEG 1 (rescoped, exit 0 required).\n- SCOPED daemon tsc over exactly the four owned .ts files: exit 0. POSITIVE CONTROL: `--listFiles` shows all four in a 521-file program and zero `provider-run-codec` files, so the scope neither ran vacuously nor pulled in slice 2's foreign file.\n- Owned telemetry suites: exit 0, `Test Files 2 passed (2)`, `Tests 32 passed (32)` (28 before my addition).\n\nGATE LEG 2 (path-attributed baseline). Owned paths = apps/daemon/src/telemetry/provider-run-{contracts,refusals}.{ts,js,test.ts}.\n- `pnpm --filter @moe/daemon typecheck` exit 1 — 2 errors, both foreign, both TS2741 \"Property 'source' is missing … but required in type 'RecordVerifierReceiptInput'\": src/review/review-acceptance.test.ts(92,48) and src/review/review-test-fixtures.ts(329,48). The human's active review slice.\n- `pnpm --filter @moe/daemon test` exit 1 — `Test Files 9 failed | 88 passed (97)`, `Tests 29 failed | 1961 passed (1990)`. Failing files: activation/foundation-launch-authority, bootstrap/bootstrap-durability, goals/goal-services, goals/j1-command-path, orchestrator/agent-spawner, review/review-acceptance, review/review-refusal-vocabulary, runtime-entrypoint, work/foundation-attempt-windows. Exactly the set the governor declared foreign.\n- `pnpm --filter @moe/runner test` exit 1 — 1 failed file, packages/runner/src/providers/claude/claude-launcher.windows.test.ts > \"stays alive beyond the control poll slice\": `expected { kind: 'OBSERVED', ok: true, …(6) } to match object …` with received code CLAUDE_LAUNCH_STREAM_ERROR / layer OUTPUT / truthClass UNKNOWN.\n- `pnpm --filter @moe/scheduler test` exit 0 — `Test Files 43 passed (43)`, `Tests 1326 passed (1326)`.\n- DELTA ∩ OWNED = EMPTY. Proven as a superset, which does not depend on a stale baseline: HEAD-failing-paths ∩ owned is already empty, and (HEAD − merge-base) ⊆ HEAD, so the delta intersection is empty too. No failing path lies under src/telemetry/.\n\nTWO MEASUREMENT HAZARDS HIT AND RESOLVED, recorded so QA does not re-chase them.\n1. The first typecheck run reported a third error in src/planning/zz-scope-probe.ts. That file does not exist on disk and is not tracked or ignored — a peer created and deleted a scope probe DURING my run. Re-ran; only the two review-slice errors remain.\n2. Daemon failing TESTS moved 28 -> 29 between my two runs while the failing FILE set stayed identical. Diffed the named failures: the new one is \"persists exact stream uncertainty and never relaunches\" in src/work/foundation-attempt-windows.test.ts — an `it.runIf(WINDOWS_ONLY)` real-Windows conformance case inside an already-red foreign file. Not mine, and no new failing file appeared.\n\nADVERSARIAL SELF-REVIEW (skill invoked; five slice-specific items plus the standard checklist).\n1. Store port names `commitWithApply`/`commitExpectedVersionDecisionWithApply`? NO. Both strings appear only in the docblock stating they are absent BY CONSTRUCTION; `ProviderRunStore` declares three methods.\n2. Two provenance vocabularies in SEPARATE fields? YES — `usageRefusals` (scheduler `LayeredIssue`) and `upstreamRefusal` (runner `ProviderTelemetryRefusal`), disjoint fields.\n3. Producer type re-declared locally? NO. Every producer shape is `import type` from `@moe/runner` / `@moe/scheduler` / `@moe/store`; only the record, the usage-refusal wrapper and the port are local.\n4. Unreadable-record code present for slice 2? YES — PROVIDER_RUN_RECORD_UNREADABLE, refusals.ts:61.\n5. Comment claiming an undischarged guarantee? ONE FOUND, AND FIXED — see below.\nChecklist: module is pure (types, two frozen arrays, two constructors, one deterministic derivation), no IO, no shared mutable state, no error paths to leak, so concurrency/cleanup/retry items are structurally N/A. Inputs: the derivation is length-framed before a domain-separated SHA-256, so huge, separator-bearing and empty components stay injective and the id stays fixed-size; it validates nothing and says so.\n\nTHE FIX (item 5). The refusals docblock claimed both vocabularies are disjoint from `@moe/store`'s `DurableStoreErrorCode` and `@moe/runner`'s `ProviderTelemetryCode`/`ProviderTelemetryLayer`. Nothing asserted it, so a later slice could have added a producer's name and the \"which authority refused this run\" guarantee — task rail 2 — would have decayed silently. Added four cases to provider-run-refusals.test.ts:\n- runner half swept at RUNTIME against `@moe/runner`'s published `PROVIDER_TELEMETRY_CODES`/`PROVIDER_TELEMETRY_LAYERS` (co",
+      "startedAt": "2026-08-15T18:14:59.886Z",
+      "completedAt": "2026-08-16T00:54:23.781Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Fresh read-only audit at HEAD 4d0a49f: daemon typecheck now exits 0 and owned telemetry paths are clean, but the exact raw daemon test gate still exits 1 (2 files/4 tests): missing runtime bridge in runtime-entrypoint.test.ts and three active d92 horizon/watchdog failures in foundation-launch-authority.test.ts. Task is unassigned; park rather than waste a worker. Re-unblock only after those foreign paths are green, then rerun all four named legs.",
+  "reopenReason": "Governor unblock, human-approved 2026-08-16 00:39Z: gate premise RESCOPED from \"raw @moe/daemon test exit 0\" to the global path-attributed baseline rail. Resume the final leg (6/7 steps banked, owned telemetry paths audited clean at 4d0a49f) with this exact gate: (1) scoped daemon tsc + this task's own telemetry suites exit 0 with nonzero test counts; (2) repo/package legs judged by (HEAD-minus-merge-base failing-path delta) ∩ owned paths = EMPTY, foreign red quoted verbatim, never repaired or hidden. Known foreign red at rescope time: task-69 store residue, review slice TS2741, d92 activation reds, agent-spawner WIP, runtime-entrypoint bridge guard. QA reviews under the same rescoped rule.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -152,12 +157,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-15T23:58:22.572Z",
+  "updatedAt": "2026-08-16T00:58:04.106Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
@@ -168,7 +173,9 @@
     "architect-09b5f32a",
     "governor-a627169a",
     "architect-d9dccf21",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "worker-5678886b",
+    "qa-c7cedba3"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -179,7 +186,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T17:59:23.685Z",
@@ -204,10 +212,10 @@
   },
   "planApprovedAt": "2026-08-15T17:59:25.756Z",
   "workStartedAt": "2026-08-15T17:59:58.379Z",
-  "blockedReason": "Fresh read-only audit at HEAD 4d0a49f: daemon typecheck now exits 0 and owned telemetry paths are clean, but the exact raw daemon test gate still exits 1 (2 files/4 tests): missing runtime bridge in runtime-entrypoint.test.ts and three active d92 horizon/watchdog failures in foundation-launch-authority.test.ts. Task is unassigned; park rather than waste a worker. Re-unblock only after those foreign paths are green, then rerun all four named legs.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T23:58:22.572Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "All task-owned implementation and adversarial repair are complete. Original contract commit 9d60091; bounded aggregate-id fix and strengthened refusal assertions are committed in foreign whole-tree commit f4966b5. Focused telemetry: 2 files/28 tests green; daemon typecheck green; scheduler 43 files/1326 tests green; runner owned failing-path delta empty. Serena handoff `task-task-8e3076177f87458f934a776eca68ba16-handoff` contains hashes, mutation evidence, consumers and QA diff.",
@@ -218,5 +226,24 @@
       "releasedBy": "worker-618633fa",
       "reason": "Explicit handoff after re-verifying the blocked raw daemon gate; user requested continued work and another WORKING task is available."
     }
+  ],
+  "reviewStartedAt": "2026-08-16T00:56:23.983Z",
+  "verification": {
+    "command": "printf %s '{\"extends\":\"./tsconfig.json\",\"compilerOptions\":{\"tsBuildInfoFile\":\"t8.tsbuildinfo\"},\"include\":[\"src/telemetry/provider-run-contracts*.ts\",\"src/telemetry/provider-run-refusals*.ts\"]}' > apps/daemon/tsconfig.t8.json; (cd apps/daemon && npx tsc -p tsconfig.t8.json); T=$?; rm -f apps/daemon/tsconfig.t8.json apps/daemon/t8.tsbuildinfo; [ $T = 0 ] && pnpm --filter @moe/daemon exec vitest run --root . --config package.json provider-run-contracts.test provider-run-refusals.test",
+    "exitCode": 0,
+    "outputTail": "FINAL_VERIFY_EXIT=0\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n\n Test Files  2 passed (2)\n      Tests  32 passed (32)\n   Start at  03:55:39\n   Duration  1.38s (transform 1.36s, setup 0ms, import 1.68s, tests 11ms, environment 0ms)\n\n=== no scratch left ===\nls: cannot access 'apps/daemon/tsconfig.t8.json': No such file or directory\nls: cannot access 'apps/daemon/t8.tsbuildinfo': No such file or directory\n\n[scoped tsc leg proven non-vacuous separately: --listFiles shows all four owned .ts in a 521-file program and ZERO provider-run-codec files]",
+    "reportedAt": "2026-08-16T00:56:23.983Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-ledger-contracts.ts",
+    "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+    "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+    "packages/scheduler/src/budget/budget-contract.ts",
+    "apps/daemon/src/telemetry/provider-run-contracts.test.ts",
+    "apps/daemon/src/telemetry/provider-run-contracts.ts",
+    "apps/daemon/src/telemetry/provider-run-refusals.ts",
+    "apps/daemon/src/telemetry/provider-run-contracts.js",
+    "apps/daemon/src/telemetry/provider-run-refusals.js",
+    "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
   ]
 }

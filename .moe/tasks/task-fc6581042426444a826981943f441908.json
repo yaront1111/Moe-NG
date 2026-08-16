@@ -94,29 +94,32 @@
     {
       "stepId": "step-6",
       "description": "GATE AND STRUCTURAL CHECKS (DoD 5, DoD 6), each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for two legs and a piped run reports the pipe's tail:\n1. `pnpm --filter @moe/daemon typecheck; echo \"TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"TEST_EXIT=$?\"`\nBoth must print 0. Record the vitest summary line and confirm a NONZERO executed test count — a run matching no files also exits 0.\n\nDoD 4, mechanically checkable: `grep -n 'PROVIDER_RUN_' apps/daemon/src/telemetry/provider-run-codec.ts` must show every code and layer arriving via IMPORT, with zero local re-definitions. Any bare string literal matching a member of PROVIDER_RUN_LEDGER_CODES or PROVIDER_RUN_LEDGER_LAYERS is a duplicate of the authority slice 1 owns.\n\nAlso confirm the codec selects only the SIX codes that belong to this stage — RECORD_MALFORMED, FIELD_INVALID, VERSION_UNSUPPORTED, BYTES_MALFORMED, DIGEST_MISMATCH, RECORD_UNREADABLE. Selecting REPLAY_DIVERGED, EXPECTED_VERSION_CONFLICT or a store code would put the codec's verdict in the ledger's vocabulary.\n\nStructural:\n- `provider-run-codec.js` exists with bytes exactly `export * from \"./provider-run-codec.ts\";` plus LF. Compare against the two sibling bridges rather than eyeballing, and confirm LF not CRLF.\n- `grep -c ''` provider-run-codec.ts: under 250.\n- `apps/daemon/src/index.ts` unchanged — index-surface.test.ts:267 pins EXPECTED_EXPORTS.length to 61.\n- Slice 1's files unchanged: `git status --porcelain apps/daemon/src/telemetry/provider-run-contracts.* apps/daemon/src/telemetry/provider-run-refusals.*` must show nothing from this task.\n\nFOREIGN RED: shared worktree, and slice 1's worker may still be finishing. Apply the path-attributed-baseline rail; the delta intersected with provider-run-codec.* must be EMPTY. Disclose foreign red verbatim, never repair it.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.ts",
+        "apps/daemon/src/telemetry/provider-run-codec.test.ts"
+      ],
+      "note": "Human-approved rescope applied exactly; no production bytes changed in this resumed step.\n\nOWNED LEGS (Node 24.16.0, pnpm 11.0.8):\n- Scoped daemon tsc over codec/contracts/refusals production + tests, with the daemon's strict NodeNext flags and `--ignoreConfig`: EXIT 0 (`SCOPED_TYPECHECK_EXIT=0`).\n- Focused Vitest: provider-run-codec.test.ts + provider-run-contracts.test.ts + provider-run-refusals.test.ts: EXIT 0, Test Files 3 passed (3), Tests 59 passed (59). Nonzero execution proven.\n\nPATH-ATTRIBUTED BASELINE:\n- Merge base 9d60091 was exported into a disposable non-worktree temp snapshot; offline frozen install EXIT 0; `pnpm --filter @moe/daemon typecheck` EXIT 0; daemon test EXIT 0 with Test Files 82 passed (82), Tests 1702 passed (1702). Snapshot fully removed.\n- HEAD raw daemon typecheck EXIT 1 only at foreign paths src/review/review-acceptance.test.ts:92 and src/review/review-test-fixtures.ts:329 (TS2741 missing `source`).\n- HEAD raw daemon test EXIT 1: Test Files 9 failed | 88 passed (97), Tests 29 failed | 1961 passed (1990). Exact failing paths: src/orchestrator/agent-spawner.test.ts (3); src/runtime-entrypoint.test.ts (1, missing http/event-stream-ack-contract.ts bridge); src/review/review-refusal-vocabulary.test.ts (1); src/review/review-acceptance.test.ts (7); src/bootstrap/bootstrap-durability.test.ts (1); src/goals/goal-services.test.ts (9); src/goals/j1-command-path.test.ts (2); src/activation/foundation-launch-authority.test.ts (3); src/work/foundation-attempt-windows.test.ts (2).\n- Merge-base failure set was empty. HEAD failure set contains no provider-run-codec.* path. Therefore (HEAD failures minus merge-base failures) intersect owned provider-run-codec.* paths = EMPTY. Foreign red is disclosed, not called green.\n\nSTRUCTURAL:\n- provider-run-codec.ts = 248 physical lines (<250); git diff --check clean.\n- PROVIDER_RUN_ grep shows version/codes/layers only via imports and indexed selections; zero local PROVIDER_RUN_ declarations. Selected indexes are exactly record malformed, field invalid, version unsupported, bytes malformed, digest mismatch, record unreadable.\n- Bridge is byte-exact LF form, 41 bytes, SHA-256 7b6742148af72b13515f875e11ef61c2831ab964773b6ef2192a4b28cf01d089, matching sibling bridge convention.\n- Owned paths and slice-1 contract/refusal paths are clean. The daemon index has foreign changes since merge base, but contains zero provider-run-codec reference/export; this task did not publish the codec and index-surface was not a HEAD failing path.\n- All three owned files are carried by foreign whole-tree commit f4966b534ee5e9f9671668795d5dd1e844f0521b; per rail, no amend/reset/recommit.",
+      "startedAt": "2026-08-15T21:37:41.252Z",
+      "completedAt": "2026-08-16T00:53:02.539Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL SELF-REVIEW, COMMIT, HANDOFF. Invoke the adversarial-self-review skill, then work this checklist — each item is how THIS slice fails while looking finished:\n\n1. Is `recordDigest` excluded from its own digest input? If not, the codec digests its own digest field and can bless a caller-supplied value. Re-read the domain and confirm D3 and D4 both reddened.\n2. Are the two decode guards genuinely independent? If disabling either one alone leaves the suite green, that guard is decorative and DoD 2 is unmet regardless of how green the run is.\n3. Does every failure assertion pin code AND layer AND outcome? Four stages can refuse in this family and the refusals module says a code-only test goes vacuous the moment another stage answers first.\n4. Was any code, layer or refusal shape re-declared locally instead of imported from provider-run-refusals.ts?\n5. Did the codec select a code belonging to the composition, ledger or reader stage?\n6. Can any input reach a partially adopted ProviderRunRecord, or cause a throw instead of a refusal?\n7. Is the undefined-vs-absent-vs-null rule DOCUMENTED and tested, not merely whatever JSON.stringify happened to do?\n8. Any probe, scratch or generated evidence file left behind? Epic rail 5.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the three `provider-run-codec.*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit already swept your bytes in, do NOT amend, reset or re-commit — hand QA the base-ref diff over the owned paths.\n\nHANDOFF (Clause 1): this slice lands a pure surface with no runtime caller yet, which is permitted only by naming the task that will compose it — task-1a7ff170ee544a3a8a10962c25e2ca5b (durable ledger), with task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize) as the remaining sibling. Record the digest-domain decision explicitly so the ledger slice inherits it rather than re-deriving it.",
       "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.ts",
         "apps/daemon/src/telemetry/provider-run-codec.test.ts"
       ],
-      "startedAt": "2026-08-15T21:37:41.252Z"
-    },
-    {
-      "stepId": "step-7",
-      "description": "ADVERSARIAL SELF-REVIEW, COMMIT, HANDOFF. Invoke the adversarial-self-review skill, then work this checklist — each item is how THIS slice fails while looking finished:\n\n1. Is `recordDigest` excluded from its own digest input? If not, the codec digests its own digest field and can bless a caller-supplied value. Re-read the domain and confirm D3 and D4 both reddened.\n2. Are the two decode guards genuinely independent? If disabling either one alone leaves the suite green, that guard is decorative and DoD 2 is unmet regardless of how green the run is.\n3. Does every failure assertion pin code AND layer AND outcome? Four stages can refuse in this family and the refusals module says a code-only test goes vacuous the moment another stage answers first.\n4. Was any code, layer or refusal shape re-declared locally instead of imported from provider-run-refusals.ts?\n5. Did the codec select a code belonging to the composition, ledger or reader stage?\n6. Can any input reach a partially adopted ProviderRunRecord, or cause a throw instead of a refusal?\n7. Is the undefined-vs-absent-vs-null rule DOCUMENTED and tested, not merely whatever JSON.stringify happened to do?\n8. Any probe, scratch or generated evidence file left behind? Epic rail 5.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the three `provider-run-codec.*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit already swept your bytes in, do NOT amend, reset or re-commit — hand QA the base-ref diff over the owned paths.\n\nHANDOFF (Clause 1): this slice lands a pure surface with no runtime caller yet, which is permitted only by naming the task that will compose it — task-1a7ff170ee544a3a8a10962c25e2ca5b (durable ledger), with task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize) as the remaining sibling. Record the digest-domain decision explicitly so the ledger slice inherits it rather than re-deriving it.",
-      "status": "PENDING",
-      "affectedFiles": [
-        "apps/daemon/src/telemetry/provider-run-codec.ts",
-        "apps/daemon/src/telemetry/provider-run-codec.test.ts"
-      ]
+      "startedAt": "2026-08-16T00:53:11.708Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-b5eea847",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "PARKED BY GOVERNOR at architect-7f301fa7's measured request, 2026-08-15T18:13Z. SERIAL SPIDR FAMILY — slice 2 of 4. DO NOT PROMOTE until the literal condition below is met; this was promoted ahead of its prerequisite once already and cost an architect a full claim-measure-block cycle.\n\nCHAIN (strictly serial, each slice imports the one before it, no parallelism to extract): contract task-8e3076177f87458f934a776eca68ba16 -> codec THIS -> normalize task-ea27beb6e1954d0e9dba8ad49cc1641e -> ledger task-1a7ff170ee544a3a8a10962c25e2ca5b.\n\nPROMOTE WHEN ALL THREE HOLD, re-run literally, not read off a status column:\n1. task-8e3076177f87458f934a776eca68ba16 is DONE, AND\n2. apps/daemon/src/telemetry/provider-run-contracts.ts EXISTS on disk, AND\n3. that file exports the provider-run record contract this slice imports.\nA DONE flag with an absent file has occurred on this board, which is why 2 and 3 are separate clauses from 1.\n\nMEASUREMENT AT PARK TIME: `ls -la apps/daemon/src/telemetry/` shows provider-run-contracts.test.ts (8654 bytes) and NO provider-run-contracts.ts. Slice 1's plan is TDD so its worker sits between step 2 and step 3 — a second worker planned into that directory is also a shared-worktree collision under epic rail 3, not merely premature.",
+  "reopenReason": "Governor unblock, human-approved 2026-08-16 00:39Z: gate premise RESCOPED from \"raw @moe/daemon test exit 0\" to the global path-attributed baseline rail. Codec implementation is complete and committed (three provider-run-codec.* paths swept into foreign whole-tree f4966b5; committed bytes verified byte-identical to gated bytes in the 23:58 audit — absence of a task-id commit is NOT a defect per the completion-hook rail). Resume remaining steps with this exact gate: (1) scoped daemon tsc + provider-run-codec/contracts/refusals suites exit 0 with nonzero counts; (2) repo/package legs judged by (HEAD-minus-merge-base delta) ∩ owned paths = EMPTY, foreign red quoted verbatim. Known foreign red at rescope time: task-69 store residue, review slice TS2741, d92 activation reds, agent-spawner WIP, runtime-entrypoint bridge guard. QA reviews under the same rescoped rule.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -124,17 +127,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-15T23:54:34.423Z",
+  "updatedAt": "2026-08-16T00:53:11.709Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
-  "blockedReason": "Codec implementation is complete and committed (foreign whole-tree commit f4966b5 swept the three owned provider-run-codec.* paths; per global rail 5 I did not amend/reset/recommit). Focused production evidence is green under exact Node 24.16.0: provider-run-codec.test.ts 1 file/27 tests, exit 0; source 248 lines; bridge byte-exact; all six mutation drills reddened named assertions and restored. Step 6 cannot truthfully complete because the required OWNED-PACKAGE legs are moving foreign-red. Latest exact typecheck reports only orchestrator/agent-spawner.test.ts:237,273,274,315 foreign options (`killProcessGroup`/`killGraceMs`) and implicit-any errors. Latest exact daemon test (92 files, 1922 tests discovered) reports 9 foreign failures: daemon-command-registry.test.ts session.open accepted instead of OPERATOR_PRINCIPAL_REQUIRED; runtime-entrypoint.test.ts missing orchestrator/verifier-process-runner.js plus package-root timeouts; goals/j1-command-path.test.ts GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED fixture drift; graph-preview/index-surface package-root timeouts; doctor NODE_RUNTIME mismatch when run under Node 24.18 (resolved locally by installing official SHA-verified Node 24.16.0 for the next run). The red moved between runs and no failure is under provider-run-codec.*. Do not delete/reset/stash foreign files. Unblock when `git status --short apps/daemon` shows peer WIP settled and both `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` exit 0 under Node 24.16.0 with a nonzero test count.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T21:50:41.657Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Steps 1-5 complete. Full codec/bridge/27-test implementation committed in foreign whole-tree commit f4966b5; owned paths clean. Focused suite 27/27 under exact Node 24.16.0. Six mutation drills passed. Source 248 lines, exact bridge, imported codes/layer only. Serena memory task-task-fc6581042426444a826981943f441908-handoff has full details.",
@@ -162,7 +165,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:27:47.869Z",
@@ -187,7 +191,8 @@
     "worker-682e25b5",
     "worker-83e6139a",
     "governor-a627169a",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "worker-b5eea847"
   ],
   "workStartedAt": "2026-08-15T20:13:25.699Z"
 }

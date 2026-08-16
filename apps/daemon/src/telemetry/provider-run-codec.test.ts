@@ -137,6 +137,13 @@ function withBody(text: string): Uint8Array {
 
 const bodyLength = (): number => authentic().byteLength - TAIL_BYTES - BODY_START;
 
+function paddedBody(value: Record<string, unknown>): string {
+  const empty = JSON.stringify({ ...value, __padding__: "" });
+  const padding = bodyLength() - new TextEncoder().encode(empty).byteLength;
+  expect(padding, "the malformed record must fit the production body frame").toBeGreaterThan(0);
+  return JSON.stringify({ ...value, __padding__: "x".repeat(padding) });
+}
+
 describe("encodeProviderRunRecord", () => {
   /**
    * Compared as BYTES. Asserting two encodings equal through their digests
@@ -235,6 +242,48 @@ describe("encodeProviderRunRecord", () => {
       expect(refusal.outcome).toBe("REFUSED");
     }
     expect(encodeProviderRunRecord(record()).ok).toBe(true);
+  });
+
+  it("refuses a partial plain object rather than adopting it as a record", () => {
+    const refusal = refused(
+      encodeProviderRunRecord({ recordVersion: PROVIDER_RUN_RECORD_VERSION }),
+    );
+    expect(refusal.code).toBe("PROVIDER_RUN_RECORD_MALFORMED");
+    expect(refusal.layer).toBe("PROVIDER_RUN_CODEC");
+    expect(refusal.outcome).toBe("REFUSED");
+  });
+
+  it("refuses every record missing a required identity or fact field", () => {
+    const required = [
+      "recordVersion", "providerRunRef", "launch", "declared", "observedModel",
+      "terminal", "infrastructure", "tokens", "steps", "sequence", "concurrency",
+      "usage", "usageRefusals", "stdoutReceiptDigest", "stderrReceiptDigest",
+    ] as const;
+    expect(required).toHaveLength(15);
+    for (const key of required) {
+      const incomplete = { ...record() } as Record<string, unknown>;
+      delete incomplete[key];
+      const refusal = refused(encodeProviderRunRecord(incomplete));
+      expect(refusal.code, key).toBe("PROVIDER_RUN_RECORD_MALFORMED");
+      expect(refusal.layer, key).toBe("PROVIDER_RUN_CODEC");
+      expect(refusal.outcome, key).toBe("REFUSED");
+    }
+  });
+
+  it("refuses a malformed nested record field", () => {
+    const malformed = [
+      record({ sequence: { known: true, value: "3" } as never }),
+      record({ launch: { ...record().launch, kind: "FORGED" as never } }),
+      record({ terminal: "FORGED" as never }),
+      record({ usage: [{} as never] }),
+    ];
+    expect(malformed).toHaveLength(4);
+    for (const candidate of malformed) {
+      const refusal = refused(encodeProviderRunRecord(candidate));
+      expect(refusal.code).toBe("PROVIDER_RUN_FIELD_INVALID");
+      expect(refusal.layer).toBe("PROVIDER_RUN_CODEC");
+      expect(refusal.outcome).toBe("REFUSED");
+    }
   });
 
   it("refuses a record version this codec does not write", () => {
@@ -346,6 +395,15 @@ describe("decodeProviderRunRecord refusals", () => {
     const refusal = refused(
       decodeProviderRunRecord(withBody(`"${"x".repeat(bodyLength() - 2)}"`)),
     );
+    expect(refusal.code).toBe("PROVIDER_RUN_RECORD_UNREADABLE");
+    expect(refusal.layer).toBe("PROVIDER_RUN_CODEC");
+    expect(refusal.outcome).toBe("UNKNOWN");
+  });
+
+  it("refuses a parsed partial object before either verification guard can answer", () => {
+    const partial = paddedBody({ recordVersion: PROVIDER_RUN_RECORD_VERSION });
+    expect(new TextEncoder().encode(partial).byteLength).toBe(bodyLength());
+    const refusal = refused(decodeProviderRunRecord(withBody(partial)));
     expect(refusal.code).toBe("PROVIDER_RUN_RECORD_UNREADABLE");
     expect(refusal.layer).toBe("PROVIDER_RUN_CODEC");
     expect(refusal.outcome).toBe("UNKNOWN");

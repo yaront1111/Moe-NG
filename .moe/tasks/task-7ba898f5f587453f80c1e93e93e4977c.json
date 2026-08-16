@@ -74,7 +74,7 @@
     {
       "stepId": "step-4",
       "description": "Wire the real single-threaded Windows boundary and watch loop. Add the exact pinned windows-sys `Win32_System_Pipes` feature only (Cargo.lock must not change). In boundary.rs—and nowhere else—call `PeekNamedPipe` with `lpTotalBytesAvail`: success/zero is Poll::Pending; success/nonzero performs `ReadFile` for at most min(total available, caller-buffer length), so it cannot wait for more bytes; ERROR_BROKEN_PIPE is Poll::Ready(0), preserving real EOF; every other GetLastError value is returned verbatim. No other reader exists in the broker, so bytes observed available cannot be stolen between peek and bounded read. In watch.rs, retain one accumulator for the entire post-LAUNCH loop, wait in the existing <=50ms slices, and poll control after each nonterminal slice: Pending continues, a complete frame goes through the existing AcceptState, EOF keeps ControlEnded, and a polling error uses the existing exact protocol refusal/unwind. Keep shutdown-first, timeout, CANCEL, abandoned-wait, natural completion, and exactly-once Job containment ordering unchanged. Replace the obsolete known-blocking comment with the new partial-frame/nonblocking invariant; add no new protocol code/version and no unsafe/Win32 call outside boundary.rs.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/Cargo.toml",
         "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
@@ -82,15 +82,23 @@
         "packages/runner/src/platform/windows/native/broker/src/frames.rs",
         "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs"
       ],
-      "startedAt": "2026-08-16T00:34:15.046Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+        "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
+        "packages/runner/src/platform/windows/native/broker/src/watch.rs"
+      ],
+      "note": "Real Windows boundary and watch loop wired; the pre-terminal deadlock is gone at the Rust layer. Cargo.toml gained exactly one feature, \"Win32_System_Pipes\", on the same =0.61.2 pin; `git diff --exit-code -- native/Cargo.lock` is clean. boundary.rs `PipeChannel::poll_read` peeks with PeekNamedPipe reading ONLY lpTotalBytesAvail (buffer/bytes-read/bytes-left-this-message all null, since bytes-left is documented zero for a byte-mode pipe), then ReadFile for at most min(available, buffer.len()) so it can never wait for bytes the peer has not written: available==0 is Poll::Pending, ERROR_BROKEN_PIPE from either call is Poll::Ready(0) (real EOF, same fold `read` already used), every other GetLastError is returned verbatim. The single-reader premise is stated in the SAFETY prose as a condition that must change with any future second reader. All unsafe/Win32 stays in boundary.rs: `grep -rl \"unsafe|windows_sys\" broker/src` outside it hits only pre-existing prose in descriptors.rs/launch.rs/verify.rs and the pre-existing handle_probe bin, none of which my diff touches. watch.rs builds ONE PolledFrames before the loop and reuses it every turn, calls poll_frame only after a nonterminal <=50ms slice, and maps Pending->continue (no refusal), Ready(frame)->existing AcceptState, FrameTruncated->ControlEnded + ChannelEnded note, other errors->refuse_protocol/ControlRefused. Shutdown-first, abandoned wait, timeout, CANCEL and exactly-once containment ordering are untouched; the obsolete KNOWN LIMITATION block is replaced by the nonblocking/partial-frame invariant. No new protocol reason, stage or version. Fresh real Windows run, native toolchain, no WSL: `cargo test --locked --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker` is green with 95 executed tests (89 baseline + 6 new), including all six named cases printed by name under --nocapture: silent_open_control_is_pending_while_a_longer_child_exits_naturally, fragmented_cancel_header_survives_pending_polls_and_stays_prompt, post_launch_eof_is_control_ended_not_a_protocol_refusal, partial_payload_then_pending_eof_is_control_ended_not_a_protocol_refusal, wrong_version_after_launch_refuses_at_protocol_framing, poll_failure_after_launch_refuses_with_exact_channel_failure_evidence. Line counts frames.rs 249, frames/polling.rs 122, boundary.rs 245, watch.rs 159. HAZARD TO DISCLOSE: two foreign task-completion hooks made whole-tree commits that captured my in-progress bytes -- c970f10 (task-ff589abd7dd84ee197a9abee729bef78) took frames.rs, tests/session.rs and the untracked claude-launcher.windows.test.ts, and 1576a44 (task-b7853ff1ba344f92aded1fb3d09d3ffb) took Cargo.toml, boundary.rs, polling.rs, watch.rs and the three other test files. Per the project rail I did not amend, reset or re-claim anything. The diff QA should review is `git diff 4d0a49fb8791b458565863377d7002a48a1a9bd8..HEAD -- packages/runner/src/platform/windows/native/broker/ packages/runner/src/providers/claude/claude-launcher.windows.test.ts`, which is exactly my ten owned paths, 843 insertions and 60 deletions, with no foreign path inside it.",
+      "startedAt": "2026-08-16T00:34:15.046Z",
+      "completedAt": "2026-08-16T00:36:50.786Z"
     },
     {
       "stepId": "step-5",
       "description": "Finish the positive proof through the published production surface, not a boundary seam. In claude-launcher.windows.test.ts import `launchClaude` from bare `@moe/runner` and call `await launchClaude(request)` with no second argument and no deps override. On Windows, create a temporary installed/pin root, copy the real `process.execPath` to installed/claude.exe, hash/realpath the actual bytes, build the runtime quote with production observation/pinning builders and Node runtime filesystem, create a valid production activation/claim/dated-model HIGH selection, and launch Node with `-e` script bytes that write distinctive nonempty stdout and stderr, remain alive about 150ms, report their own elapsed time, and exit 0 naturally. Assert literal OBSERVED/ok:true/PROVEN with null code and layer; observation PROVEN with null reasonCode/reasonLayer; EXITED/0; exact nonempty decoded stdout/stderr, matching byteLength and SHA-256, complete:true and truncated:false; provider-reported elapsed >50ms (use a conservative >=100ms assertion) and total completion below the configured ~3s watchdog. Clean temp roots and lock state in finally. Off-Windows skipping is allowed only for ordinary cross-platform package runs; the certified Windows gate hard-asserts win32/x64 and must show this named case executed. Do not add a provider fixture binary, launcher dependency-injection seam, local launcher authority, or TS production change. Retain and run the existing real windows-boundary smoke unchanged for close/cancel/timeout and parent+grandchild Job containment.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/providers/claude/claude-launcher.windows.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T00:36:54.242Z"
     },
     {
       "stepId": "step-6",
@@ -123,7 +131,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-dd806f63",
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,21 +140,29 @@
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
   "order": 105.9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-6d2ace23c67046dd8021654be9b5d80e",
+      "author": "worker-dd806f63",
+      "content": "BLOCK RECORD RESTORED BY HAND — READ BEFORE CLAIMING THIS TASK.\n\nThis task shows WORKING with no blockedReason. That is an ARTEFACT, not a ruling. I called moe.unblock_worker intending to release only my worker-level hold so a CRITICAL task would not sit unclaimed; the daemon also flipped THIS TASK from BLOCKED to WORKING, wiped its blockedReason, and unassigned it (response: releasedTaskIds + unblockedTaskIds both name this task). Nobody adjudicated the blocker. It is still real. Re-pasting the reason verbatim so it is not lost:\n\n---\nDoD 1 unreachable in the ten owned paths: a SECOND pre-terminal deadlock sits downstream of the one fixed here, in unowned files.\n\nLANDED, GREEN (steps 1-4): required ByteChannel::poll_read (Pending/Ready(0)/Ready(n)); one header authority frames::validate_header; frames/polling.rs accumulator holding partial frames across turns; boundary.rs PeekNamedPipe then ReadFile of min(available, buffer.len()); watch.rs one accumulator, never blocking fd0. Real Windows: 95 broker tests pass (89 baseline + 6 new named), boundary smoke green on close/cancel/timeout with grandchild containment, Cargo.lock byte-clean, frames 249 / polling 122 / boundary 245 / watch 159.\n\nBLOCKER, MEASURED. COMPLETED also needs both provider channels at EOF (settle.rs:88-98); drained (settle.rs:113-123) BLOCKING-reads to Ok(0). The broker's own fd4/fd5 copy holds that pipe open, so the child's exit never ends it: EOF arrives only when the NODE PARENT closes its endpoint, done only in windows-boundary-session.ts:183-198 via windows-broker-process.ts:99-103 on cancel/timeout/close (onCompleted passes closeChannels=false). Via launchClaude, claude-launcher.ts:248-249 gives limits.timeoutMs to the boundary, so cancel and TIMEOUT coincide, closeProviderChannels destroys both captures, STREAM_ERROR wins: CLAUDE_LAUNCH_STREAM_ERROR@OUTPUT.\n\nsettle.rs is unowned and TS production change forbidden, so I stopped rather than re-found another task's precondition.\n---\n\nRE-VERIFIED AT HEAD THIS SESSION, not quoted from the note: settle.rs:113-123 `drained()` still does a blocking `channel.read` returning true only on Ok(0), and settle.rs:88-98 still gates COMPLETED on both channels.\n\nCONTROLLED EXPERIMENT ADDED THIS SESSION (kills the \"flaky under load\" reading): in the owned step-5 proof `packages/runner/src/providers/claude/claude-launcher.windows.test.ts`, changing exactly one constant — LAUNCH_TIMEOUT_MS 1_000 -> case takes 1469ms; 3_000 -> case takes 3117ms; identical CLAUDE_LAUNCH_STREAM_ERROR / OUTPUT / truthClass UNKNOWN both times, for a provider alive only PROVIDER_DELAY_MS = 150. Elapsed tracks the CONFIGURED TIMEOUT linearly, never the child. Load would have gone green at 3000ms. Probe restored with `git checkout --`; SHA-256 back to 6b9aef0510d761938a7f9c9969e68353685a42029f6d502487ebb4e64074b56d and `git status` clean.\n\nNOTE ON THAT TEST FILE: it is tracked at HEAD (blob 65bc902) because a foreign whole-tree completion commit c970f10 (task-ff589abd) swept it in. It is this task's owned step-5 proof and it is deliberately RED. Do not \"repair\" it and do not read its red as a regression.\n\nWHAT IS STILL NEEDED — a governor/architect ruling, requested in chat msg-e197dc5e:\n(a) amend this task's owned scope to add settle.rs (+ session.rs/completion.rs if needed) and authorize re-founding the provider-EOF precondition on wait_until_job_is_empty, which already proves zero live Job processes before the drain; a never-ending provider must still reach Unobserved::ProviderEof; or\n(b) split: land steps 1-4 as delivered, open a prerequisite task for the settle-side deadlock, and narrow DoD 1 explicitly to the fd0 half.\n\nNeither half of the obvious fix works alone: swapping drained() to the new bounded poll_read still yields Pending forever and lands on Unobserved::ProviderEof, and closing the broker's own fd copies after CreateProcess makes its own drain unreadable. The precondition itself must be re-founded, which is a semantic change to the completion contract.\n\nDetail in Serena `gotcha-broker-completed-is-gated-on-parent-teardown` and `task-task-7ba898f5f587453f80c1e93e93e4977c-handoff`. I have moved on to task-32eddfd3c9644558b7218778e1f07e92 and am not working this one.",
+      "timestamp": "2026-08-16T01:02:35.034Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T23:23:57.874Z",
-  "updatedAt": "2026-08-16T00:34:15.046Z",
+  "updatedAt": "2026-08-16T01:02:35.034Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:26:22.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
     "governor-a627169a",
     "worker-618633fa",
-    "worker-dd806f63"
+    "worker-dd806f63",
+    "worker-5678886b"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -154,7 +170,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T23:43:09.506Z",
@@ -169,5 +186,9 @@
     "escalatedAt": "2026-08-16T00:34:12.235Z"
   },
   "planApprovedAt": "2026-08-15T23:43:11.788Z",
-  "workStartedAt": "2026-08-15T23:44:05.124Z"
+  "workStartedAt": "2026-08-15T23:44:05.124Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

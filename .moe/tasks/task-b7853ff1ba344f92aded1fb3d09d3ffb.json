@@ -86,7 +86,7 @@
       "completedAt": "2026-08-16T00:34:05.991Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -99,18 +99,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:11:50.144Z",
-  "updatedAt": "2026-08-16T00:35:29.101Z",
+  "updatedAt": "2026-08-16T00:50:06.887Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:25:32.793Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-16T00:50:06.887Z",
+    "wallClockMs": 12274094
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
     "governor-a627169a",
     "worker-83e6139a",
-    "worker-e47be2a7"
+    "worker-e47be2a7",
+    "qa-c7cedba3"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -168,5 +171,8 @@
   "filesModified": [
     "tests/integration/release-supply-chain.test.mjs",
     "scripts/release/supply-chain.mjs"
-  ]
+  ],
+  "completedAt": "2026-08-16T00:50:06.887Z",
+  "reviewCompletedAt": "2026-08-16T00:50:06.887Z",
+  "reviewSummary": "All 6 DoD verified at HEAD. Base-ref diff 4d0a49f..HEAD over the 2 owned paths: +221/-11, no foreign hunk; HEAD sha256 48724142.../cc5185c3... = gated bytes. Edge re-measured: root dep @moe/daemon workspace:*, lock importer link:apps/daemon, node_modules/@moe/daemon -> apps/daemon, daemon index.ts:182-183 exports fn+type; grep for deep-relative import = NONE; manifest/lock/daemon untouched. Gate re-run by QA on Windows: typecheck:release exit 0 (compiled proof - production bare-imports @moe/daemon under strict checkJs nodenext); test:integration exit 0, Vitest \"Test Files 4 passed (4)\"/\"Tests 209 passed (209)\", Node \"tests 66/pass 66/fail 0\" incl. the real in-process bare-root collector test. expectReleaseRefusal pins all three literals (RELEASE_SUPPLY_CHAIN_REFUSED/TOOLCHAIN_OBSERVATION_FAILED/RELEASE_SUPPLY_CHAIN) plus calls==[[]] and zero archive/buildSubject/publishEvidence. Cardinality pins executed: doctorFailureCases 3, refusalSites 10 with 9 distinct reasons, RELEASE_COMPONENTS.length 6, evidence.componentCount 6 vs doctor componentCount 2; releaseVerdict UNKNOWN, publicationAuthorized false. Three QA drills, each restored byte-exact to 48724142...: (A) former missingSymbol placeholder -> 3 named production-surface tests red incl. the real-port test; (Q1) JSON-replacer strip of nested \"layer\" -> preservation test red on the exact DOCTOR_VERSION_HOST arms; (Q2) doctor-site reason remapped to EVIDENCE_WRITE_INTERRUPTED -> 4 executed, 4 red on the exact reason while success tests stayed green, proving those tests bind to the doctor site. Production 314 lines. Whole-file \"pnpm\" guard exemption is narrow: asserts the DOCTOR_OBSERVED_KEYS declaration verbatim, strips that one non-global match, scans the rest. Commit 1576a44 bears this task id but carries only foreign files; owned bytes landed in foreign whole-tree commit c970f10 - per global rail, not a rejection reason."
 }

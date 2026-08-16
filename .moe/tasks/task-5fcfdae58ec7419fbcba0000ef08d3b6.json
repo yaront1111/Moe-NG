@@ -113,20 +113,29 @@
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Each leg's exit code read SEPARATELY — a `&&`-chained run reports one status for several legs:\n1. `pnpm --filter @moe/daemon typecheck; echo \"DAEMON_TYPECHECK_EXIT=$?\"`\n2. `pnpm --filter @moe/daemon test; echo \"DAEMON_TEST_EXIT=$?\"`\n3. `pnpm --filter @moe/core test; echo \"CORE_TEST_EXIT=$?\"` — the contract's own suite must stay green and UNMODIFIED; this task consumes it and does not change it.\nAll must print 0 with a NONZERO executed test count.\n\n`grep -c ''` planning-services.ts (was 183) and approval-gate.ts — both under 250.\n\nADVERSARIAL SELF-REVIEW — invoke the skill, then check what is specific here:\n1. Do the tests drive the REAL daemon handler, or did any of them decay into calling `decideApprovalAuthority` directly? The latter proves nothing this task was created to prove.\n2. Is the gate consulted before `activateInitialGraph`? D2 is the evidence; a gate after the single durable commit refuses while the graph is already active.\n3. Does an unreadable gate fail CLOSED?\n4. Is the authority refusal surfaced with its own code and layer, or restamped into a BOOTSTRAP_* code?\n5. Is the gate stored on the durable run record rather than beside a status field? D3 is the evidence.\n6. Was `checkHumanAuthority` or `refuseApprovalAuthority` reached around? They are unpublished on purpose.\n7. Did the contract itself change? Out of scope — this task composes it.\n8. Any probe or scratch file left behind? Epic rail 5 — the step-1 edge probe must be long gone.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the owned daemon paths. Never `git add -A` (epic rail 3).\n\nHANDOFF: record that this closes Clause 1 for task-5d8f11c86a3a41b4a8a420ef0d52a444 — the contract now has a real consumer edge with a durable call site, not merely an export. Note the two remaining consumers that are still unbuilt (the control-room approval surface, whose approval-gating.ts reason channel is PROVISIONAL pending this vocabulary, and the orchestrator settings binding) so they are not assumed done. Also record the command-name correction: the daemon's approval command is `approval.decide`, not `plan.approve`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
       ],
-      "startedAt": "2026-08-15T21:03:53.592Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts",
+        "apps/daemon/src/planning/approval-gate.ts",
+        "apps/daemon/src/planning/approval-gate.js",
+        "apps/daemon/src/bootstrap/bootstrap-ledger.ts"
+      ],
+      "note": "Step 7 closed under the governor's rescoped gate (human-approved 2026-08-16 00:39Z). No production byte written this session; owned paths are byte-identical to ee28441 (git diff ee28441..HEAD over the five paths is empty).\n\nLEG 1 — scoped daemon tsc, exit 0. Reproducible with NO scratch config (tsc ignores tsconfig.json once files are named, so --ignoreConfig is required):\n`pnpm --filter @moe/daemon exec tsc --ignoreConfig --noEmit --skipLibCheck --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --noImplicitOverride --noUnusedLocals --noUnusedParameters --noFallthroughCasesInSwitch --isolatedModules --verbatimModuleSyntax --module nodenext --target es2024 --types node src/planning/planning-services.ts src/planning/planning-services.test.ts src/planning/approval-gate.ts src/bootstrap/bootstrap-ledger.ts`\nPositive control: the identical command with a planted `export const probe: number = 'nope'` file reports `error TS2322` and exits 1, so exit 0 is a real check and not an empty program. --listFiles shows 367 files including all four owned sources and both core contract modules.\n\nLEG 2 — owned suites `src/planning/planning-services.test.ts` + `src/bootstrap/bootstrap-services.test.ts`: 2 files / 37 tests passed, exit 0.\nLEG 3 — `pnpm --filter @moe/core test`: 31 files / 781 tests passed, exit 0. Contract files byte-identical to cf272f6 and planning-run-submission.ts / planning-run-reducer.ts untouched (DoD 4).\nDoD 6 re-drilled at HEAD: substituting the decideApprovalAuthority call with a zero-delay success reddens \"refuses every approval policy for gated work before activation\" at expect(outcome.ok).toBe(false). Restored by inverse Edit, sha256sum -c OK.\nLine counts: planning-services.ts 221, approval-gate.ts 107. bootstrap-ledger.ts is 269 — over the 250 target, under the 400 bar, and 267 of those lines predate this task (my edit is +2).\n\nFOREIGN REDS, quoted, not repaired; (HEAD failing-path set) ∩ (five owned paths) = EMPTY on every leg:\n- `pnpm --filter @moe/daemon typecheck` exit 1 — 2 errors: `src/review/review-acceptance.test.ts(92,48): error TS2741: Property 'source' is missing ... required in type 'RecordVerifierReceiptInput'` and the same at `src/review/review-test-fixtures.ts(329,48)`.\n- `pnpm --filter @moe/daemon test` exit 1 — 9 files / 28 tests: runtime-entrypoint, bootstrap-durability, foundation-launch-authority, goal-services, j1-command-path, agent-spawner, foundation-attempt-windows, review-acceptance, review-refusal-vocabulary. planning-services.test.ts is among the 88 passing files.\n- `pnpm typecheck` exit 1 — only packages/store/src/event-read-model-contract.test.ts (task-69 residue).\n- `pnpm test` exit 1 — 3 files: packages/store event-read-model-contract, packages/store recovery-anchor, packages/runner claude-launcher.windows.\n\nATTRIBUTION (the part QA should check first): bootstrap-durability, goal-services, j1-command-path and review-refusal-vocabulary all die at the identical frame — `TypeError: Cannot read properties of undefined (reading 'aggregateVersion')` at `recordVerifierReceipt src/review/verifier-receipt-ledger.ts:147` via `seedVerifierReceipt src/review/review-test-fixtures.ts:329`. `git show ee28441:apps/daemon/src/review/verifier-receipt-ledger.ts` answers \"exists on disk, but not in 'ee28441'\" — the module arrived later in foreign whole-tree commit c970f10, so none of these can be caused by this task's bytes.\n\nADVERSARIAL REVIEW, the eight step-7 questions plus the checklist:\n1. Tests drive the real handler — 0 direct calls to decideApprovalAuthority in the test file; 42 hits on PLANNING_HANDLERS/approval.decide across 26 cases.\n2/5. Gate read inside durableRun, consulted before applyApprovalCommand and activateInitialGraph; stored under the result's `workIdentity`, not beside a status field.\n3. Unreadable gate fails closed (synthesized ungranted sentinel), and stored-null likewise reads UNREADABLE.\n4. Refusals surface the contract's own code and layer, never restamped to BOOTSTRAP_*.\n6. checkHumanAuthority / refuseApprovalAuthority: 0 occurrences anywhere in apps/daemon.\n7. Contract unchanged. 8. No probes left: the step-1 edge probe, this session's tsc positive-control file and its temporary tsconfig are all deleted; `git status --porcelain apps/daemon packages/core` is empty.\nHostile inputs on the delay boundary: NaN and negative both fall to DEFERRED and refuse; Infinity and >2**31-1 become REQUIRE_HUMAN; a missing delayMs also refuses. Non-object approvalPolicy becomes an invalid policy the core refuses; an object policy is validated by the core, not by the daemon.\nTwo theoretical notes for QA, neither actionable in this task's scope: (a) review-refusal-vocabulary.test.ts is the suite that would police a widened frozen daemon vocabulary, and my ledger edit widens SERVICE_REFUSED_BY — it currently imports only REVIEW_* vocabularies (index-surface.test.ts is the sole other consumer and is green), and its verdict is masked by the foreign crash; re-check",
+      "startedAt": "2026-08-15T21:03:53.592Z",
+      "completedAt": "2026-08-16T00:48:56.402Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Fresh shared daemon audit at HEAD 4d0a49f shows typecheck exit 0 but the exact daemon test leg required by step 7 still exits 1 (2 files/4 tests): missing event-stream runtime bridge and active d92 horizon/watchdog failures. Task remains unassigned and its committed approval-policy bytes are clean; park instead of feeding a worker into known foreign red. Re-unblock when the raw daemon package test is green.",
+  "reopenReason": "Governor unblock, human-approved 2026-08-16 00:39Z: gate premise RESCOPED from \"raw @moe/daemon test exit 0\" to the global path-attributed baseline rail. Resume step 7 with this exact gate: (1) scoped daemon tsc + this task's own suites (planning-services, approval-gate, bootstrap-ledger) exit 0 with nonzero test counts; (2) repo/package legs evaluated as (HEAD-minus-merge-base failing-path delta) ∩ owned paths = EMPTY, foreign red quoted verbatim with exact paths, never repaired or hidden. Known foreign red at rescope time: store contract test (task-69 residue), review slice TS2741, d92 foundation-launch-authority reds, agent-spawner WIP, runtime-entrypoint bridge guard, graph-preview timeout. Steps 1-6 committed at ee28441; owned paths were audited clean at 4d0a49f. QA reviews under the same rescoped rule.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -134,12 +143,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:13:42.384Z",
-  "updatedAt": "2026-08-15T23:58:53.358Z",
+  "updatedAt": "2026-08-16T00:56:59.464Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:14:31.645Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T00:56:59.464Z",
+    "wallClockMs": 16947819
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
@@ -147,7 +158,9 @@
     "worker-83e6139a",
     "governor-a627169a",
     "architect-d9dccf21",
-    "worker-827a27f6"
+    "worker-827a27f6",
+    "worker-e47be2a7",
+    "qa-c7cedba3"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -158,7 +171,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T20:18:08.901Z",
@@ -181,10 +195,10 @@
   },
   "planApprovedAt": "2026-08-15T20:18:10.962Z",
   "workStartedAt": "2026-08-15T20:20:17.519Z",
-  "blockedReason": "Fresh shared daemon audit at HEAD 4d0a49f shows typecheck exit 0 but the exact daemon test leg required by step 7 still exits 1 (2 files/4 tests): missing event-stream runtime bridge and active d92 horizon/watchdog failures. Task remains unassigned and its committed approval-policy bytes are clean; park instead of feeding a worker into known foreign red. Re-unblock when the raw daemon package test is green.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T23:58:37.486Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Prior implementation remains complete and clean at ee28441; steps 1-6 complete, step 7 only. Fresh read-only audit at HEAD 4d0a49fb8791 under Node 24.16/pnpm 11: daemon typecheck exit 0. No task byte edited in this resumption.",
@@ -203,5 +217,24 @@
       "releasedBy": "worker-83e6139a",
       "reason": "Explicit handoff while the final gate is blocked by unassigned prerequisite/shared-tree work; user requested continuation, so I am moving to the specific provider-codec blocker rather than modifying foreign files."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-08-16T00:49:21.784Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning/planning-services.test.ts src/bootstrap/bootstrap-services.test.ts && pnpm --filter @moe/core test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  2 passed (2)\n      Tests  37 passed (37)\n   Start at  03:47:12\n   Duration  1.27s\n\n$ vitest run --root ../.. packages/core/src\n RUN v4.1.10 D:/projexts/moe-next\n Test Files  31 passed (31)\n      Tests  781 passed (781)\n   Start at  03:47:14\n   Duration  844ms\nCOMBINED_EXIT=0\n\nScoped daemon tsc leg, run separately, exit 0:\npnpm --filter @moe/daemon exec tsc --ignoreConfig --noEmit --skipLibCheck --strict --exactOptionalPropertyTypes --noUncheckedIndexedAccess --noImplicitOverride --noUnusedLocals --noUnusedParameters --noFallthroughCasesInSwitch --isolatedModules --verbatimModuleSyntax --module nodenext --target es2024 --types node src/planning/planning-services.ts src/planning/planning-services.test.ts src/planning/approval-gate.ts src/bootstrap/bootstrap-ledger.ts\nLEG1_SCOPED_TSC_EXIT=0 (positive control with a planted type error: error TS2322, exit 1)",
+    "reportedAt": "2026-08-16T00:49:21.784Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "packages/core/src/index.ts",
+    "apps/daemon/src/planning/planning-services.test.ts",
+    "apps/daemon/src/planning/approval-gate.ts",
+    "apps/daemon/src/planning/approval-gate.js",
+    "apps/daemon/src/bootstrap/bootstrap-ledger.ts"
+  ],
+  "completedAt": "2026-08-16T00:56:59.464Z",
+  "reviewCompletedAt": "2026-08-16T00:56:59.464Z",
+  "reviewSummary": "HEAD 91fc622; owned paths byte-identical to ee28441 (diff ee28441..HEAD over the 5 paths empty, worktree clean).\n\nRE-RAN: owned suites (planning-services + bootstrap-services) 2 files/37 tests exit 0. @moe/core 31 files/781 tests exit 0 (DoD 4; commit touches zero core files). Scoped daemon tsc over the 4 owned .ts exit 0, with a planted-probe positive control returning TS2322 so the 0 is a real check (probe outside repo, deleted).\n\nRED, ALL ATTRIBUTED FOREIGN, delta n owned = EMPTY on every leg:\n- filter @moe/daemon typecheck exit 1: exactly 2x TS2741, both src/review/*; grep of the output for owned paths -> NONE.\n- filter @moe/daemon test exit 1: 9 files/28 tests; planning-services.test.ts is among the 88 PASSED. 5 red files die at recordVerifierReceipt verifier-receipt-ledger.ts:147 via review-test-fixtures.ts:329, and `git cat-file -e ee28441:...verifier-receipt-ledger.ts` -> \"exists on disk, but not in ee28441\"; added by foreign c970f10. runtime-entrypoint bridge guard names missing bridge `http\\event-stream-ack-contract.ts` (also c970f10), NOT approval-gate. agent-spawner/foundation-* unrelated.\n- pnpm typecheck exit 1 (same 2 review errors). pnpm test exit 1: runner claude-launcher.windows, store recovery-anchor, tests/integration release-archive-cleanup.\n\nMY OWN DRILLS, all restored + sha256sum -c OK:\nD1 remove decideApprovalAuthority -> \"refuses every approval policy for gated work before activation\" red at expect(outcome.ok).toBe(false).\nD2 let a later propose clear the stored gate -> \"keeps the human authority gate on work identity across lifecycle transitions\" red, expected null to equal the gate (2026-08-15 incident).\nD3 remove the delayMs bound -> \"requires human review instead of clamping an oversized auto-approval delay\" red.\n\nDoD 1-6 evidenced. Gate lives at workIdentity.humanAuthorityGate outside lifecycle `state`; grep confirms proposePlan is the ONLY writer of the run aggregate. Per-file LOC 221/107/269 (ledger +2, pre-existing, under 400)."
 }
