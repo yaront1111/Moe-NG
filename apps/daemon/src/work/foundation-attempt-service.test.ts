@@ -943,7 +943,10 @@ describe("foundation attempt dispatch — the PROVEN record is durable", () => {
     expect(durable["truthClass"]).toBe("PROVEN");
     expect(durable["reasonCode"]).toBeNull();
     expect(durable["reasonLayer"]).toBeNull();
-    // The runner's own result-manifest identity, bound to THIS daemon's sealed input.
+    // The runner's own result-manifest identity, bound to THIS daemon's sealed
+    // input. `null` here is precisely what every stored record carried before
+    // this branch was ever executed, so it gets its own assertion.
+    expect(durable["resultManifest"]).not.toBeNull();
     const manifest = nested(durable, "resultManifest");
     expect(manifest["sha256"]).toBe(expected.manifest.sha256);
     expect(manifest["manifestVersion"]).toBe("moe-workspace-result-manifest/1");
