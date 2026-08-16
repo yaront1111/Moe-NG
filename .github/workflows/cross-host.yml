@@ -16,6 +16,15 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Vitest colorizes on GitHub-hosted runners, wrapping the count digits in ANSI
+# escapes; the literal `Test Files N passed` greps below then miss a line that
+# is present, and the gate refuses a leg whose tests actually passed (observed
+# on run 31919018714: Tests 2 passed / executedCaseCount=21, refused as "ran no
+# test file"). NO_COLOR keeps the log bytes identical to the local runs the
+# greps were written against. It changes presentation only, never a condition.
+env:
+  NO_COLOR: "1"
+
 jobs:
   gate:
     name: gate (${{ matrix.os }})
