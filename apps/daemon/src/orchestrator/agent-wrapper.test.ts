@@ -1045,6 +1045,46 @@ describe("agent spawn admission truth", () => {
     }
   });
 
+  it("serialises overlapping passes instead of double-staffing one item", async () => {
+    const projectId = "proj-wrapper-admission-overlap";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      let admit: (() => void) | null = null;
+      const held = new Promise<void>((resolve) => { admit = resolve; });
+      const requests: string[] = [];
+      const overlapping = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `lap-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        // Admission parks until released, holding the first pass open across the
+        // exact window a second caller could interleave into.
+        spawnAgent: async (request) => {
+          requests.push(request.workItemId);
+          await held;
+          return { exit: new Promise<void>(() => undefined), ok: true };
+        },
+      });
+
+      // Both launched before either can finish: the second must queue behind the
+      // first, not read the same pre-staffing snapshot.
+      const first = overlapping.runOnce();
+      const second = overlapping.runOnce();
+      if (admit === null) throw new Error("no admission resolver captured");
+      (admit as () => void)();
+      const [one, two] = await Promise.all([first, second]);
+
+      expect(one.spawned.map((entry) => entry.outcome)).toEqual(["SPAWNED"]);
+      // The second pass sees the first pass's booking and staffs nothing.
+      expect(two.spawned).toHaveLength(0);
+      expect(requests).toHaveLength(1);
+      expect(overlapping.activeCount()).toBe(1);
+    } finally {
+      harness.dispose();
+    }
+  });
+
   it("cannot represent a refusal code outside the producer's vocabulary", () => {
     // The runtime assertions below can never fail; the compiler is the assertion.
     // `@ts-expect-error` FAILS `pnpm --filter @moe/daemon typecheck` if the

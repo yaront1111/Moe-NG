@@ -316,7 +316,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   };
 
   // Async ONLY to await startup admission; the child's exit is never awaited here.
-  const runOnce = async (): Promise<RunOnceReport> => {
+  const runPass = async (): Promise<RunOnceReport> => {
     const priorFailure = failureOutcome();
     if (priorFailure !== null) {
       return { active: active.size, spawned: [], surfaceOutcome: priorFailure };
@@ -345,6 +345,18 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (failureOutcome() !== null) break;
     }
     return { active: active.size, spawned, surfaceOutcome: failureOutcome() ?? "SURFACE" };
+  };
+
+  // ONE PASS AT A TIME. While `runOnce` was synchronous, overlapping passes were
+  // impossible; awaiting admission opens a window where two passes read the same
+  // surface snapshot and could staff one item twice or overshoot `maxAgents`.
+  // This serialises PASSES only — it never waits on a child's lifetime — and a
+  // failed pass is not allowed to poison the chain behind it.
+  let pending: Promise<unknown> = Promise.resolve();
+  const runOnce = (): Promise<RunOnceReport> => {
+    const next = pending.then(runPass, runPass);
+    pending = next.catch(() => undefined);
+    return next;
   };
 
   return Object.freeze({
