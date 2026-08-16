@@ -63,7 +63,22 @@ interface Refusal {
   readonly layer: string | null;
 }
 
-function refusalOf(result: unknown, label: string): Refusal {
+/** Long enough for a category sentence, far too short to carry an install path. */
+const MAX_REFUSAL_MESSAGE_CHARS = 200;
+
+/**
+ * A drive-qualified path, a UNC share, or a POSIX absolute path. Task rail 2
+ * says a refusal names a CATEGORY, never a location, so any of these shapes in a
+ * public message is a leak regardless of which path it happens to be.
+ */
+const PATH_SHAPED = /[A-Za-z]:[\\/]|\\\\[^\\]|\/(?:tmp|var|home|Users|private)\//u;
+
+/**
+ * `secrets` are the exact input strings this case fed in. The regex above catches
+ * the general shape; this catches an echo that arrives in some other form, which
+ * is the failure mode a shape check alone cannot see.
+ */
+function refusalOf(result: unknown, label: string, secrets: readonly string[] = []): Refusal {
   expect(typeof result, `${label}: result is not a record`).toBe("object");
   const record = result as Record<string, unknown>;
   expect(record["ok"], `${label}: a refusal must never report ok`).not.toBe(true);
@@ -71,8 +86,30 @@ function refusalOf(result: unknown, label: string): Refusal {
   expect(record["profile"], `${label}: a refusal must carry no capability profile`).toBeUndefined();
   expect(record["truthClass"], `${label}: a refusal must never be PROVEN`).not.toBe("PROVEN");
   expect(typeof record["code"], `${label}: refusal carries no stable code`).toBe("string");
+
+  // Task rail 2: the public message must not echo a runtime path, argv value,
+  // environment value or secret. Asserted HERE so every case in the sweep is
+  // covered by it rather than one bespoke test.
+  expect(typeof record["message"], `${label}: refusal carries no message`).toBe("string");
+  const message = record["message"] as string;
+  expect(message.length, `${label}: refusal message is empty`).toBeGreaterThan(0);
+  expect(message.length, `${label}: refusal message is unbounded`).toBeLessThanOrEqual(MAX_REFUSAL_MESSAGE_CHARS);
+  expect(PATH_SHAPED.test(message), `${label}: refusal message echoes a path: ${message}`).toBe(false);
+  for (const secret of secrets) {
+    if (secret.length === 0) continue;
+    expect(message.includes(secret), `${label}: refusal message echoes an input value: ${message}`).toBe(false);
+  }
+
   const layer = record["layer"];
   return { code: record["code"] as string, layer: typeof layer === "string" ? layer : null };
+}
+
+/** The input strings a case supplied, so a message can be checked for echoing them. */
+function inputSecrets(input: unknown): readonly string[] {
+  if (typeof input !== "object" || input === null) return [];
+  return Object.values(input as Record<string, unknown>).filter(
+    (value): value is string => typeof value === "string",
+  );
 }
 
 /** Windows-shaped even off Windows: the platform gate answers before any path is read. */
@@ -84,7 +121,28 @@ function fixtureRoot(): string {
   return root;
 }
 
+/**
+ * Blocks reads with a real deny ACE — the genuine host condition, not a stubbed
+ * fs error. Tracked so the ACE is lifted before cleanup: a denied entry that
+ * outlives the suite would strand the fixture tree in the user's temp directory.
+ */
+const deniedReads: string[] = [];
+
+function denyRead(path: string): void {
+  const user = process.env["USERNAME"];
+  if (typeof user !== "string" || user.length === 0) return;
+  execFileSync("icacls.exe", [path, "/deny", `${user}:(R)`], { stdio: "ignore" });
+  deniedReads.push(path);
+}
+
 afterAll(() => {
+  for (const path of deniedReads) {
+    try {
+      execFileSync("icacls.exe", [path, "/remove:d", process.env["USERNAME"] as string], { stdio: "ignore" });
+    } catch {
+      // Best effort: rmSync below still clears the tree via the parent directory.
+    }
+  }
   for (const root of roots) {
     rmSync(root, { force: true, recursive: true });
   }
@@ -216,6 +274,19 @@ function refusalCases(): readonly RefusalCase[] {
     "CLAUDE_RUNTIME_OBSERVATION_INVALID",
   );
 
+  // A real, contained, plain file that simply cannot be READ: every earlier rule
+  // passes, the file exists, and the inspection still cannot prove its bytes. An
+  // observation that cannot read its own closure must fail closed rather than
+  // report a digest it never computed.
+  const unreadable = nativeJoin(root, "unreadable.exe");
+  writeFileSync(unreadable, "fixture bytes");
+  denyRead(unreadable);
+  runtime(
+    "the executable cannot be read",
+    { installedRoot: root, executablePath: unreadable },
+    "CLAUDE_RUNTIME_PATH_MISSING",
+  );
+
   // A real file that is not a loadable image: every runtime-layer rule passes and
   // the WINDOWS layer is the one that answers, with its own code and its own layer.
   const notAnImage = nativeJoin(root, "not-an-image.exe");
@@ -234,7 +305,7 @@ const CASES = refusalCases();
 
 it("generated a positive number of fail-closed cases", () => {
   expect(CASES.length, "a sweep that generates zero cases passes while testing nothing").toBeGreaterThan(0);
-  expect(CASES.length).toBe(WIN ? 16 : 9);
+  expect(CASES.length).toBe(WIN ? 17 : 9);
 });
 
 for (const [index, testCase] of CASES.entries()) {
@@ -242,7 +313,7 @@ for (const [index, testCase] of CASES.entries()) {
     `fails closed when ${testCase.name}`,
     async () => {
       const result = await observe()(testCase.input);
-      const refusal = refusalOf(result, testCase.name);
+      const refusal = refusalOf(result, testCase.name, inputSecrets(testCase.input));
       // Off Windows the platform gate answers FIRST, by design; asserting the
       // real answer per host beats skipping, which would prove nothing at all.
       const expected = WIN ? testCase : PLATFORM_REFUSAL;
