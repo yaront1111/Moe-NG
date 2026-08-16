@@ -156,6 +156,17 @@ function useSettings(env: ApprovalEnv): void {
   useApprovalSettings(env[APPROVAL_MODE_ENV_KEY], env[SPEED_MODE_DELAY_ENV_KEY]);
 }
 
+/**
+ * TWO APPROVAL_POLICY BRANCHES ANSWER WITH THE SAME CODE: settings that state no policy, and
+ * settings that state a delay the consumer then bounds away from immediate. An arm asserting
+ * only APPROVAL_HUMAN_REVIEW_REQUIRED cannot say which one refused, so a decoder that quietly
+ * defaulted a missing delay to any non-zero number would keep it green. This pins the branch
+ * by reading the production decode for the settings actually in force.
+ */
+function expectUnstatedPolicy(): void {
+  expect(readApprovalPolicySettings(process.env)).toEqual({ kind: "REQUIRE_HUMAN" });
+}
+
 function proposeGatedWork(store: SqliteEventStore): void {
   driveThrough(store, "plan.propose");
   const outcome = send(store, envelope("plan.propose", 0, {
@@ -430,6 +441,7 @@ describe("approval decide", () => {
    */
   it("refuses gate-free approval when no settings authorise proceeding without a human", () => {
     useApprovalSettings(undefined, undefined);
+    expectUnstatedPolicy();
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
@@ -449,6 +461,7 @@ describe("approval decide", () => {
 
   it("surfaces an ungated require-human policy refusal unchanged", () => {
     useApprovalSettings("QUALITY", "0");
+    expectUnstatedPolicy();
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
@@ -465,6 +478,7 @@ describe("approval decide", () => {
 
   it("refuses a SPEED mode whose delay the settings never stated", () => {
     useApprovalSettings(SPEED_APPROVAL_MODE, undefined);
+    expectUnstatedPolicy();
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
@@ -525,6 +539,10 @@ describe("approval decide", () => {
 
   it("does not execute a deferred configured decision without a daemon timer", () => {
     useApprovalSettings(SPEED_APPROVAL_MODE, "25");
+    // The mirror of `expectUnstatedPolicy`: here the policy IS stated, so the refusal below
+    // must be the consumer's delay bound answering rather than an unstated-settings refusal.
+    expect(readApprovalPolicySettings(process.env))
+      .toEqual({ delayMs: 25, kind: "PROCEED_WITHOUT_HUMAN" });
     const store = openStore();
     driveThrough(store, "approval.decide");
 
@@ -558,6 +576,7 @@ describe("approval decide", () => {
    */
   it("ignores a permissive approval policy presented in the payload", () => {
     useApprovalSettings(undefined, undefined);
+    expectUnstatedPolicy();
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
