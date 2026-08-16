@@ -13,13 +13,18 @@
  * out of step with the names beside it.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
+
+import { PROVIDER_TELEMETRY_CODES, PROVIDER_TELEMETRY_LAYERS } from "@moe/runner";
+import type { DurableStoreErrorCode } from "@moe/store";
 
 import {
   PROVIDER_RUN_LEDGER_CODES,
   PROVIDER_RUN_LEDGER_LAYERS,
   providerRunRefusal,
   providerRunUnknown,
+  type ProviderRunCode,
+  type ProviderRunLayer,
 } from "./provider-run-refusals.js";
 
 const EXPECTED_CODES = [
@@ -86,6 +91,49 @@ describe("provider-run closed vocabularies", () => {
   it("freezes both vocabularies", () => {
     expect(Object.isFrozen(PROVIDER_RUN_LEDGER_CODES)).toBe(true);
     expect(Object.isFrozen(PROVIDER_RUN_LEDGER_LAYERS)).toBe(true);
+  });
+});
+
+/**
+ * The module docblock claims both vocabularies are DISJOINT from the producers
+ * underneath them, and that claim is the whole reason a consumer can read a code
+ * and know THIS family refused rather than the runner or the store. Nothing
+ * asserted it, so a later slice could have added a producer's name to either
+ * array and the guarantee would have decayed silently.
+ *
+ * THE RUNNER HALF IS ASSERTED AT RUNTIME against `@moe/runner`'s own published
+ * arrays — never against a copy of their contents here, which would only prove
+ * this file agrees with itself. The emptiness guard is not ceremony: a set built
+ * from an empty import makes every intersection empty and the sweep would pass
+ * while comparing nothing.
+ *
+ * THE STORE HALF IS ASSERTED AT TYPE LEVEL because `@moe/store` publishes
+ * `DurableStoreErrorCode` as a type with no runtime array behind it. Writing the
+ * members out for a runtime sweep would reimplement the production vocabulary
+ * inside a test, which epic rail 6 forbids; `Extract` reads the real union. It is
+ * checked by `tsc`, not by this run — the daemon `typecheck` leg is its gate.
+ */
+describe("provider-run vocabularies stay disjoint from the producers beneath them", () => {
+  it("sweeps a non-empty runner vocabulary rather than an empty import", () => {
+    expect(PROVIDER_TELEMETRY_CODES.length).toBeGreaterThan(0);
+    expect(PROVIDER_TELEMETRY_LAYERS.length).toBeGreaterThan(0);
+  });
+
+  it("shares no reason code with the runner's provider-telemetry codes", () => {
+    const runnerCodes: ReadonlySet<string> = new Set(PROVIDER_TELEMETRY_CODES);
+    const shared = PROVIDER_RUN_LEDGER_CODES.filter((code) => runnerCodes.has(code));
+    expect(shared).toEqual([]);
+  });
+
+  it("shares no layer with the runner's provider-telemetry layers", () => {
+    const runnerLayers: ReadonlySet<string> = new Set(PROVIDER_TELEMETRY_LAYERS);
+    const shared = PROVIDER_RUN_LEDGER_LAYERS.filter((layer) => runnerLayers.has(layer));
+    expect(shared).toEqual([]);
+  });
+
+  it("shares no reason code with the store's durable error vocabulary", () => {
+    expectTypeOf<Extract<ProviderRunCode, DurableStoreErrorCode>>().toEqualTypeOf<never>();
+    expectTypeOf<Extract<ProviderRunLayer, DurableStoreErrorCode>>().toEqualTypeOf<never>();
   });
 });
 
