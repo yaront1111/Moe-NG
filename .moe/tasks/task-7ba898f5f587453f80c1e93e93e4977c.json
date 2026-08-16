@@ -147,8 +147,8 @@
       "completedAt": "2026-08-16T01:28:35.768Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-ce3ba361",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,12 +167,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T23:23:57.874Z",
-  "updatedAt": "2026-08-16T01:30:55.157Z",
+  "updatedAt": "2026-08-16T01:36:38.917Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:26:22.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T01:36:38.917Z",
+    "wallClockMs": 7816780
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
@@ -230,5 +232,8 @@
     "packages/runner/src/platform/windows/native/broker/Cargo.toml",
     "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
     "packages/runner/src/platform/windows/native/broker/src/watch.rs"
-  ]
+  ],
+  "completedAt": "2026-08-16T01:36:38.917Z",
+  "reviewCompletedAt": "2026-08-16T01:36:38.917Z",
+  "reviewSummary": "APPROVED at HEAD 6954a8c. Re-ran everything; did not read and trust.\n\nGATE I RE-RAN: pwsh -File D:\\tmp\\task7ba-gate.ps1 -> GATE_EXIT=0, reproduces the report exactly. RUST_TESTS_PASSED=96, all 7 named cases EXECUTED_OK, BUILD_EXIT=0, TSC_EXIT=0, SMOKE_TESTS_PASSED=4, LINES 249/122/245/159, CARGO_LOCK_CLEAN. Audited the script first: counts from OUTPUT, \"No projects matched\" guard, tsc-invoked guard, zero-test smoke guard, exact `test <name> ... ok` execution proof. Honest gate, not narrowed.\n\nMY OWN DRILL: watch.rs:131 Ok(Poll::Pending) => return None -> Some(Stopped::ControlEnded). Exactly 3 named cases red (silent_open_control_is_pending, fragmented_cancel_header, partial_payload_then_pending_eof); session 33 passed | 3 failed. Readiness gate load-bearing; Pending distinguished from EOF. Restored from out-of-repo copy, sha 4cfddd10...f377 matches, HEAD unmoved. Post-restore 96 passed, exit 0.\n\nSANCTIONED RED reproduces as disclosed: CLAUDE_LAUNCH_STREAM_ERROR/OUTPUT/UNKNOWN at 1509ms vs a 1_000ms configured timeout with a 150ms child, so it resolves at the parent timeout, not the fd0 half owned here. 1 failed | 1 passed, not vacuous. Governor 01:14Z re-scoped DoD 1's natural-exit-PROVEN clause to task-d7b352e1.\n\nDoD 2/3/4/5 PASS. 4 by grep: no unsafe/Win32 outside boundary.rs in this diff (handle_probe.rs predates), no cfg(test) in production src, launchClaude(request) single-arg from bare @moe/runner, no DI seam.\n\nDROPPED LEGS justified: cargo fmt --check is a pre-existing repo-wide red (pinned 1.96.0 has no rustfmt component; rewrites ~30 unowned files); the launcher green is the re-scoped clause. Disclosed, not narrowed, including an honest GREEN drill (D1).\n\nCOMMITS: 83ae29b clean single-pathspec (session.rs +42). ce31a98 carries this task's message but zero owned paths, the platform sweep. Nine owned paths swept in by foreign c970f10/1576a44; tree == HEAD on all ten, so gated bytes are committed bytes."
 }

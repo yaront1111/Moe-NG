@@ -131,7 +131,7 @@
       "completedAt": "2026-08-16T01:28:56.924Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -157,21 +157,24 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:26:53.598Z",
-  "updatedAt": "2026-08-16T01:30:10.685Z",
+  "updatedAt": "2026-08-16T01:42:20.426Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:39:27.693Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-16T01:42:20.426Z",
+    "wallClockMs": 25372733
   },
   "contextFetchedBy": [
     "worker-83e6139a",
     "architect-d9dccf21",
     "governor-a627169a",
     "governor-1a5aca5d",
-    "worker-1fe6c848"
+    "worker-1fe6c848",
+    "qa-ce3ba361"
   ],
   "stepsCompleted": [
     "step-1",
@@ -222,7 +225,7 @@
     "apps/daemon/src/activation/activation-ledger-commit.ts",
     "apps/daemon/src/activation/activation-ledger-commit.test.ts"
   ],
-  "reviewCompletedAt": "2026-08-15T23:04:48.703Z",
+  "reviewCompletedAt": "2026-08-16T01:42:20.426Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 3 / objective: readCurrentEffectSessionBinding must keep answering as the store grows.",
@@ -335,5 +338,7 @@
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "completedAt": "2026-08-16T01:42:20.426Z",
+  "reviewSummary": "APPROVED at HEAD 6954a8c. Rejected defect fixed; I reproduced the hang myself.\n\nFIX: `for(;;)` -> `while (cursor < horizon)`, horizon captured ONCE before any page, plus per-event contiguity, exact nextCursor match, and both-direction hasMore-vs-horizon agreement. No arbitrary cap, no early return on a hit, so uniqueness survives. readEventHorizon is real production surface (sqlite-event-store.ts:342, event-read-model.ts:48, decision-ledger.ts:71).\n\nMY DRILL: reconstructed the pre-fix unbounded loop (for(;;) + dropped `position > horizon` + restored the unconditional `!hasMore` exit). Moving-stream test RED at 2021ms, `kind: 'WATCHDOG_TIMEOUT'` — the exact hang. Restored, sha 45fcc7a9...e26a matches, owned paths clean. Honest note: mutating ONLY the `while` header stays GREEN, an equivalent mutant, since the hasMore-vs-horizon guard still stops that fake; termination rests on the guard conjunction anchored to the horizon.\n\nREQUIRED TEST killable: isolated Worker, 2s watchdog, toStrictEqual pins code SCAN_INCOMPLETE, layer, kind \"RESULT\", pageReads 3, horizonReads 1.\n\nLEGS I RE-RAN: @moe/store typecheck EXIT=0; event-read-model-contract 1 file / 25 tests; daemon activation 7 files / 94 tests. Match the report.\n\nFOREIGN RED, disclosed not repaired: daemon typecheck EXIT=1, \"agent-spawner.test.ts(10,10): error TS2305: ... has no exported member 'claudeSpawner'\". Every error is in orchestrator/agent-spawner.ts + .test.ts, both UNCOMMITTED peer work, mtimes 04:38:40 / 04:36:05, AFTER the worker's 04:30:10 green, plus a cascade in agent-wrapper-main.ts. Zero errors name an owned path. Under the governor 01:22Z rescope, (failing-path delta) INTERSECT eight owned paths = EMPTY.\n\nDoD 2/3/4 anti-vacuity verified: the flood asserts it generated 6_500, the second match is asserted past the old ceiling, both activations are proven well-formed so no earlier guard answers, and code+layer are pinned."
 }

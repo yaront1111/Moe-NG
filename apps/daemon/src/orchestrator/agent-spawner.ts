@@ -1,12 +1,21 @@
 import { spawn as nodeSpawn } from "node:child_process";
-import type { ChildProcess, SpawnOptions } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 as windowsPath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { agentSpawnInvocation } from "./agent-spawn-invocation.js";
+import { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS, agentEnvironment,
+  trustedMcpOrigin } from "./agent-spawn-environment.js";
+import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
+import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
+  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SpawnAttempt } from "./agent-spawn-contract.js";
+import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+
+export { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
+export type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStart,
+  AgentSpawnStartResult, AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions } from "./agent-spawn-contract.js";
 
 /**
  * Spawns one `claude -p` process per staffed work item, wired to the moe-next
@@ -17,60 +26,6 @@ import type { SpawnRequest } from "./agent-wrapper.js";
  */
 const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
 
-/** Everything the spawner touches outside its own arguments, injectable for tests. */
-export interface AgentSpawnerOptions {
-  readonly command?: string;
-  /** Injectable parent environment; every MOE_* authority variable is stripped from the child. */
-  readonly environment?: NodeJS.ProcessEnv;
-  /** Injectable POSIX negative-pid signal boundary. */
-  readonly killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
-  /** Maximum wait for process close after requesting tree termination. */
-  readonly killGraceMs?: number;
-  readonly log?: (line: string) => void;
-  /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
-  readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
-  readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
-  /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
-  readonly timeoutMs?: number;
-  /** Platform override for the kill strategy (win32 needs a tree kill). */
-  readonly platform?: NodeJS.Platform;
-}
-
-export type AgentProcessContainmentReason =
-  | "CLOSE_NOT_OBSERVED"
-  | "PID_UNAVAILABLE"
-  | "TREE_KILL_FAILED";
-
-export class AgentProcessContainmentError extends Error {
-  readonly code = "AGENT_PROCESS_CONTAINMENT_FAILED";
-  readonly reason: AgentProcessContainmentReason;
-
-  constructor(reason: AgentProcessContainmentReason) {
-    super(`AGENT_PROCESS_CONTAINMENT_FAILED:${reason}`);
-    this.name = "AgentProcessContainmentError";
-    this.reason = reason;
-  }
-}
-
-export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_ERROR";
-
-export class AgentProcessFailureError extends Error {
-  readonly code = "AGENT_PROCESS_FAILED";
-  constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
-    readonly signal: NodeJS.Signals | null) {
-    super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
-      : signal !== null ? `:${signal}` : ""}`);
-    this.name = "AgentProcessFailureError";
-  }
-}
-
-/** Callable spawn boundary plus explicit ownership of every process it starts. */
-export interface AgentSpawner {
-  (request: SpawnRequest): Promise<void>;
-  readonly activeCount: () => number;
-  readonly close: () => Promise<void>;
-}
-
 /** Default agent lifetime: the claim TTL, so a hung agent frees its slot no later
  *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
@@ -80,70 +35,10 @@ process.once("exit", () => {
   for (const path of CONFIG_DIRS) rmSync(path, { force: true, recursive: true });
 });
 
-const CHAIN_TOOLS = "mcp__moe-next,mcp__moe-next__*";
-const CODING_TOOLS = `${CHAIN_TOOLS},Edit,Write,Read,Glob,Grep,Bash`;
-const CODING_BUILTIN_TOOLS = "Edit,Write,Read,Glob,Grep,Bash";
-
-const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
-  "ALL_PROXY", "APPDATA", "COLORTERM", "COMSPEC", "FORCE_COLOR", "HOMEDRIVE",
-  "HOMEPATH", "HOME", "HTTP_PROXY", "HTTPS_PROXY", "LANG", "LC_ALL", "LOCALAPPDATA",
-  "NODE_EXTRA_CA_CERTS", "NO_COLOR", "PATH", "PATHEXT", "PROGRAMDATA", "SHELL",
-  "SSL_CERT_DIR", "SSL_CERT_FILE", "SYSTEMROOT", "TEMP", "TERM", "TMP", "TMPDIR",
-  "USERPROFILE", "WINDIR",
-]);
-const PROVIDER_ENVIRONMENT_PREFIXES = Object.freeze([
-  "ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "GOOGLE_", "VERTEX_",
-] as const);
-const LOOPBACK_NO_PROXY = Object.freeze(["127.0.0.1", "localhost", "::1"] as const);
-
-const LOOPBACK_HOSTS: ReadonlySet<string> = new Set(["127.0.0.1", "[::1]", "localhost"]);
-
-function trustedMcpOrigin(value: string): string {
-  let parsed: URL;
-  try {
-    parsed = new URL(value);
-  } catch {
-    throw new Error("MCP_HTTP_ORIGIN_INVALID");
-  }
-  if (parsed.protocol !== "http:" || !LOOPBACK_HOSTS.has(parsed.hostname)
-    || parsed.username !== "" || parsed.password !== "" || parsed.origin !== value) {
-    throw new Error("MCP_HTTP_ORIGIN_INVALID");
-  }
-  return parsed.origin;
-}
-
-function agentEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const environment: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(source)) {
-    const normalized = key.toUpperCase();
-    if (normalized.startsWith("MOE_") || value === undefined) continue;
-    if (RUNTIME_ENVIRONMENT_KEYS.has(normalized)
-      || PROVIDER_ENVIRONMENT_PREFIXES.some((prefix) => normalized.startsWith(prefix))) {
-      environment[key] = value;
-    }
-  }
-  // Claude keeps provider credentials for its own API call but strips them
-  // from Bash, hooks and subprocess MCP servers. Scripted sessions also leave
-  // no resumable transcript containing mission or tool output.
-  environment["CLAUDE_CODE_SUBPROCESS_ENV_SCRUB"] = "1";
-  environment["CLAUDE_CODE_SKIP_PROMPT_HISTORY"] = "1";
-  // Claude honors standard proxy variables. Force its loopback MCP connection
-  // around any enterprise proxy so the scoped bearer never leaves this host.
-  const bypass = [source["NO_PROXY"], source["no_proxy"]]
-    .flatMap((value) => value?.split(/[\s,]+/u) ?? [])
-    .filter((value, index, values) => value !== "" && values.indexOf(value) === index);
-  for (const host of LOOPBACK_NO_PROXY) {
-    if (!bypass.includes(host)) bypass.push(host);
-  }
-  environment["NO_PROXY"] = bypass.join(",");
-  environment["no_proxy"] = bypass.join(",");
-  return environment;
-}
-
-export function claudeSpawner(
+function spawnRuntime(
   mcpOrigin: string,
-  options: AgentSpawnerOptions = {},
-): AgentSpawner {
+  options: AgentSpawnerOptions,
+): { readonly spawner: AgentSpawner; readonly starter: AgentSpawnStarter } {
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   CONFIG_DIRS.add(configDir);
@@ -163,22 +58,30 @@ export function claudeSpawner(
   const containmentFailures: AgentProcessContainmentError[] = [];
   let closed = false;
   let closing: Promise<void> | undefined;
-  // `async` makes every invocation refusal a rejection rather than escaping the poll tick.
-  const spawnAgent = async (request: SpawnRequest): Promise<void> => {
+  const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
     const coding = request.workspace !== null;
     // Build before writing the credential: Windows shell quoting can refuse the invocation.
-    const invocation = agentSpawnInvocation(command, [
-      "-p",
-      "--bare",
-      "--no-session-persistence",
-      "--strict-mcp-config",
-      "--mcp-config", mcpConfigPath,
-      "--tools", coding ? CODING_BUILTIN_TOOLS : "",
-      "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
-    ], platform);
+    let invocation;
+    try {
+      invocation = agentSpawnInvocation(command, [
+        "-p",
+        "--bare",
+        "--no-session-persistence",
+        "--strict-mcp-config",
+        "--mcp-config", mcpConfigPath,
+        "--tools", coding ? CODING_BUILTIN_TOOLS : "",
+        "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
+      ], platform);
+    } catch (error) {
+      // ONLY the landed typed refusal owns a stable code. Anything else — an
+      // unknown throw, or a structural lookalike — escapes unchanged rather than
+      // being relabelled as a refusal this layer never made.
+      if (!(error instanceof SpawnInvocationRefusal)) throw error;
+      return Object.freeze({ ok: false as const, code: error.code, layer: SPAWN_INVOCATION_LAYER });
+    }
     writeFileSync(mcpConfigPath, JSON.stringify({
       mcpServers: {
         "moe-next": {
@@ -191,6 +94,15 @@ export function claudeSpawner(
     let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
     let terminateOwned: () => void = () => undefined;
     let completedBeforeRegistration = false;
+    // Admission is only ever RESOLVED by the child's own `spawn` event. Every
+    // settlement reached while it is still pending denies it uncoded, so a start
+    // can neither hang nor acquire a stable code it did not earn.
+    let admit: () => void = () => undefined;
+    let denyStart: (error: unknown) => void = () => undefined;
+    const admitted = new Promise<void>((resolve, reject) => {
+      admit = resolve;
+      denyStart = reject;
+    });
     const done = new Promise<void>((resolve, reject) => {
       let child: ChildProcess;
       try {
@@ -203,6 +115,7 @@ export function claudeSpawner(
         });
       } catch (error) {
         rmSync(mcpConfigPath, { force: true });
+        denyStart(error);
         reject(error);
         return;
       }
@@ -224,6 +137,9 @@ export function claudeSpawner(
           killHelper = undefined;
         }
         rmSync(mcpConfigPath, { force: true });
+        // Reaching any settlement with admission still pending denies it. A
+        // resolved admission ignores this, so an accepted start is never rewritten.
+        denyStart(new Error("AGENT_SPAWN_NOT_ADMITTED"));
         if (owned !== undefined) active.delete(owned);
         else completedBeforeRegistration = true;
       };
@@ -339,11 +255,6 @@ export function claudeSpawner(
       };
       terminateOwned = beginTermination;
       const failInput = (): void => { beginTermination(); };
-      timer = setTimeout(() => {
-        log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
-        beginTermination();
-      }, timeoutMs);
-      if (typeof timer.unref === "function") timer.unref();
       child.on("close", (code, signal) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         childClosed = true;
@@ -351,12 +262,21 @@ export function claudeSpawner(
         else if (code === 0) finish();
         else failProcess(code === null ? "EXIT_SIGNAL" : "EXIT_NONZERO", code, signal);
       });
-      child.on("error", () => {
+      child.on("spawn", admit);
+      child.on("error", (error: unknown) => {
+        // Denied FIRST, so a start that was never admitted rejects with the
+        // error the runtime actually raised rather than a summary of it.
+        denyStart(error);
         if (settled || terminating) return;
         // A missing pid proves no owned process exists; otherwise contain its tree.
         if (child.pid === undefined) failProcess("SPAWN_ERROR", null, null);
         else beginTermination();
       });
+      timer = setTimeout(() => {
+        log(`[wrapper] ${request.workItemId} agent exceeded ${String(timeoutMs)}ms; killing`);
+        beginTermination();
+      }, timeoutMs);
+      if (typeof timer.unref === "function") timer.unref();
       // A child can exit after spawn() succeeds but before stdin is written.
       // Writable streams surface that race as an asynchronous EPIPE; without
       // a listener it escapes the promise and crashes the whole wrapper.
@@ -370,11 +290,35 @@ export function claudeSpawner(
     });
     owned = { done, terminate: terminateOwned };
     if (!completedBeforeRegistration) active.add(owned);
-    return done;
+    return { admitted, done };
   };
 
-  const callable = spawnAgent as AgentSpawner;
-  Object.defineProperties(callable, {
+  // `async` makes every refusal a rejection rather than escaping the poll tick.
+  const startAgent = async (request: SpawnRequest): Promise<AgentSpawnStartResult> => {
+    const attempt = attemptSpawn(request);
+    if (!("admitted" in attempt)) return attempt;
+    try {
+      await attempt.admitted;
+    } catch (error) {
+      // Nothing will await a lifetime that was never admitted.
+      void attempt.done.catch(() => undefined);
+      throw error;
+    }
+    return Object.freeze({ ok: true as const, exit: attempt.done });
+  };
+
+  const runAgent = async (request: SpawnRequest): Promise<void> => {
+    const attempt = attemptSpawn(request);
+    // The legacy contract is the process LIFETIME, so admission is deliberately
+    // not awaited here: a child that exits without ever emitting `spawn` still
+    // settles exactly as this caller has always observed.
+    if (!("admitted" in attempt)) throw new SpawnInvocationRefusal(attempt.code);
+    void attempt.admitted.catch(() => undefined);
+    return await attempt.done;
+  };
+
+  const own = <Callable extends object>(callable: Callable): Callable => {
+    Object.defineProperties(callable, {
     activeCount: { value: (): number => active.size },
     close: {
       value: (): Promise<void> => {
@@ -395,5 +339,24 @@ export function claudeSpawner(
       },
     },
   });
-  return callable;
+    return callable;
+  };
+
+  return {
+    spawner: own(runAgent as AgentSpawner),
+    starter: own(startAgent as AgentSpawnStarter),
+  };
+}
+
+/** The lifetime-shaped boundary every current caller already holds. */
+export function claudeSpawner(mcpOrigin: string, options: AgentSpawnerOptions = {}): AgentSpawner {
+  return spawnRuntime(mcpOrigin, options).spawner;
+}
+
+/** The admission-shaped boundary: a coded refusal, or a start with a separate exit. */
+export function claudeSpawnStarter(
+  mcpOrigin: string,
+  options: AgentSpawnerOptions = {},
+): AgentSpawnStarter {
+  return spawnRuntime(mcpOrigin, options).starter;
 }

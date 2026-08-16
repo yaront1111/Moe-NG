@@ -18,12 +18,12 @@
     "Keep each production source below 250 lines and commit only the five explicit owned paths; preserve foreign work in the shared tree."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 01:43Z: block premise (\"hard dependency task-32eddfd3 still PLANNING, not DONE\") is now FALSE — 32edd is QA-approved DONE (commit chain through its rail-2 rejection fix: observeInstalledClaudeRuntime landed in packages/runner/src/providers/claude/claude-host-runtime.{ts,js,test.ts} with path-free refusal messages). Architect: re-measure the three promised production symbols on committed bytes before naming them (stale-by-default rail), and note QA's rejection history on 32edd — refusal messages must not echo runtime paths; carry that rail into this consumer's tests. Downstream: 6cbff's chain completes when this task lands (its other prerequisite 7ba is DONE on the fd0 half, with the settle half in-flight as d7b352e1).",
   "createdBy": "WORKER",
   "parentTaskId": "task-6cbff01023b14b26a78fc5e3eb1dd8a9",
   "priority": "CRITICAL",
@@ -31,7 +31,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:56:27.313Z",
-  "updatedAt": "2026-08-15T23:23:29.250Z",
+  "updatedAt": "2026-08-16T01:42:52.779Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:04:01.496Z"
   },
@@ -39,10 +39,10 @@
     "architect-d9dccf21",
     "worker-827a27f6"
   ],
-  "blockedReason": "Fresh prerequisite measurement at committed HEAD 6ca5da07 blocks planning without speculation. Hard dependency task-32eddfd3c9644558b7218778e1f07e92 is still PLANNING (actively claimed by architect-09b5f32a), not DONE. Its three promised production files are all absent: packages/runner/src/providers/claude/claude-host-runtime.ts, its .js bridge, and claude-host-runtime.test.ts. Repo search finds no production host-runtime observer/factory/result symbol to compose; only the existing injectable ClaudeRuntimeFactsPort.observe in claude-runtime-pin.ts exists.\n\nThis task's three new request files are also correctly absent, while the two existing owned surface/test files are clean. The current task must consume task-32eddfd3's exact landed factory/result/refusal API and privately attach fresh host facts. Naming an observer, signature, success shape, or error mapping now would invent an API and risks either duplicating host authority or accepting a test facts port, both explicitly forbidden by task rail 1 and the project stale-dependency rail.\n\nLiteral unblock condition: task-32eddfd3 reaches DONE; its three committed files are present; grep confirms its production observer/factory and stable result/refusal symbols; read their exact signatures and tests; then re-measure that the factory can be imported internally without exposing fs/facts/process/clock, and plan createClaudeRuntimePinRequest against those actual bytes. No current-task bytes were written.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T23:05:37.746Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Read-only prerequisite audit; zero bytes. Reported BLOCKED and wrote Serena handoff. Verified task-32ed is PLANNING and all three producer files/symbols are absent.",

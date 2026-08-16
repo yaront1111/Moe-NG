@@ -6,9 +6,42 @@ import { PassThrough } from "node:stream";
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
+import * as spawnerModule from "./agent-spawner.js";
 import { claudeSpawner } from "./agent-spawner.js";
 import type { AgentSpawnerOptions } from "./agent-spawner.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+
+/**
+ * Startup admission and process lifetime are different facts, so they are
+ * different promises. Resolved through the module NAMESPACE rather than a named
+ * import: a missing named import fails the whole file to load and reports ZERO
+ * executed tests, which is indistinguishable from a suite that tested nothing.
+ */
+type AgentSpawnStartResult =
+  | { readonly ok: false; readonly code: string; readonly layer: string }
+  | { readonly ok: true; readonly exit: Promise<void> };
+type AgentSpawnStart = (request: SpawnRequest) => Promise<AgentSpawnStartResult>;
+
+function claudeSpawnStarter(origin: string, options: AgentSpawnerOptions): AgentSpawnStart {
+  const exported = (spawnerModule as unknown as Record<string, unknown>)["claudeSpawnStarter"];
+  expect(typeof exported, "production claudeSpawnStarter export is absent").toBe("function");
+  return (exported as (o: string, p: AgentSpawnerOptions) => AgentSpawnStart)(origin, options);
+}
+
+/** Every character cmd.exe reinterprets even inside quotes, per agent-spawn-invocation. */
+const UNQUOTABLE_TOKENS = Object.freeze(
+  ['"', "%", "!", "&", "(", ")", "|", "<", ">", "^", "\r", "\n"] as const,
+);
+
+const settledFlag = (promise: Promise<unknown>): { readonly settled: () => boolean } => {
+  let done = false;
+  void promise.then(() => { done = true; }, () => { done = true; });
+  return { settled: (): boolean => done };
+};
+
+const drainMicrotasks = async (): Promise<void> => {
+  await new Promise<void>((resolve) => { setImmediate(resolve); });
+};
 
 /**
  * A fake child: records what it was spawned with, exposes stdin as a real
@@ -78,18 +111,18 @@ afterAll(() => {
  * sandbox for the duration of the construction call. Node resolves tmpdir()
  * from TMPDIR/TMP/TEMP, so all three move together and are restored after.
  */
-function spawnerInSandbox(options: AgentSpawnerOptions): {
-  configDir: string;
-  spawner: (request: SpawnRequest) => Promise<void>;
-} {
+function inSandbox<Made>(
+  construct: (origin: string, options: AgentSpawnerOptions) => Made,
+  options: AgentSpawnerOptions,
+): { configDir: string; made: Made } {
   const sandbox = mkdtempSync(join(tmpdir(), "moe-spawner-case-"));
   sandboxes.push(sandbox);
   const keys = ["TMPDIR", "TMP", "TEMP"] as const;
   const saved = keys.map((key) => [key, process.env[key]] as const);
   for (const key of keys) process.env[key] = sandbox;
-  let spawner: (request: SpawnRequest) => Promise<void>;
+  let made: Made;
   try {
-    spawner = claudeSpawner(MCP_ORIGIN, options);
+    made = construct(MCP_ORIGIN, options);
   } finally {
     for (const [key, value] of saved) {
       if (value === undefined) delete process.env[key];
@@ -103,7 +136,15 @@ function spawnerInSandbox(options: AgentSpawnerOptions): {
   if (entries.length !== 1 || only === undefined) {
     throw new Error(`expected one config dir in ${sandbox}, got [${entries.join(", ")}]`);
   }
-  return { configDir: join(sandbox, only), spawner };
+  return { configDir: join(sandbox, only), made };
+}
+
+function spawnerInSandbox(options: AgentSpawnerOptions): {
+  configDir: string;
+  spawner: (request: SpawnRequest) => Promise<void>;
+} {
+  const { configDir, made } = inSandbox(claudeSpawner, options);
+  return { configDir, spawner: made };
 }
 
 describe("claudeSpawner", () => {
@@ -600,5 +641,162 @@ describe("claudeSpawner", () => {
       vi.doUnmock("node:url");
       vi.resetModules();
     }
+  });
+});
+
+describe("claudeSpawnStarter", () => {
+  it("refuses every cmd-unquotable token with the exact code and layer, before any credential exists", async () => {
+    // Pinned by length so a silently emptied table cannot pass, and driven
+    // through the production starter rather than through the quoting helper.
+    expect(UNQUOTABLE_TOKENS.length, "the token table generated no cases").toBe(12);
+    let executed = 0;
+    for (const token of UNQUOTABLE_TOKENS) {
+      const { calls, spawn } = fakeSpawn();
+      // `platform` is explicit because agentSpawnInvocation returns early off
+      // win32 — without it every case would reach no guard at all and pass.
+      const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+        command: `claude${token}`, log: () => undefined, platform: "win32", spawn,
+      });
+      const req = request();
+      const result = await start(req);
+
+      expect(result, `token ${JSON.stringify(token)} was not refused exactly`).toStrictEqual({
+        code: "SPAWN_ARGUMENT_UNQUOTABLE",
+        layer: "agent-spawn-invocation",
+        ok: false,
+      });
+      expect(calls, `token ${JSON.stringify(token)} reached process creation`).toEqual([]);
+      expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
+      expect(readdirSync(configDir), "a refused start left the credential directory non-empty").toEqual([]);
+      executed += 1;
+    }
+    expect(executed).toBe(UNQUOTABLE_TOKENS.length);
+  });
+
+  it("admits a start on the spawn event and hands back a still-pending exit", async () => {
+    const { calls, spawn } = fakeSpawn(4242);
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const req = request();
+    const pending = start(req);
+    const startState = settledFlag(pending);
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    const configPath = join(configDir, `${req.sessionId}.json`);
+
+    // Admission is NOT the synchronous return of spawn(): the child is alive and
+    // has emitted nothing, so a start that resolved here would be guessing.
+    await drainMicrotasks();
+    expect(startState.settled(), "start settled before the child was admitted").toBe(false);
+
+    child.emitter.emit("spawn");
+    const started = await pending;
+    if (!started.ok) throw new Error(`expected an accepted start, got ${started.code}`);
+
+    // The child is still held open: its lifetime is a SEPARATE fact, and the
+    // credential it needs is still on disk.
+    const exitState = settledFlag(started.exit);
+    await drainMicrotasks();
+    expect(exitState.settled(), "exit settled while the child was still running").toBe(false);
+    expect(existsSync(configPath)).toBe(true);
+
+    child.emitter.emit("close", 0, null);
+    await started.exit;
+    expect(existsSync(configPath), "the credential outlived its agent").toBe(false);
+  });
+
+  it("rejects a pre-admission child error with the original error, never the coded refusal", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const pending = start(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    // Shaped like the coded refusal on purpose: a structural lookalike must not
+    // be able to enter the coded arm, which only `instanceof` can decide.
+    const spoof = Object.assign(new Error("ENOENT"), {
+      code: "SPAWN_ARGUMENT_UNQUOTABLE",
+      layer: "agent-spawn-invocation",
+    });
+
+    child.emitter.emit("error", spoof);
+    await expect(pending).rejects.toBe(spoof);
+    expect(readdirSync(configDir), "a denied start left the credential behind").toEqual([]);
+  });
+
+  it("rejects a synchronous spawn failure unchanged and leaves no credential", async () => {
+    const boom = new Error("EACCES");
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude",
+      log: () => undefined,
+      spawn: () => { throw boom; },
+    });
+
+    await expect(start(request())).rejects.toBe(boom);
+    expect(readdirSync(configDir)).toEqual([]);
+  });
+
+  it("admits a child that spawns and exits in the same tick", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const req = request();
+    const pending = start(req);
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+
+    // Back to back, with no await between them: every listener is attached in
+    // the same synchronous block as process creation, so admission cannot be
+    // outrun by the exit that follows it.
+    child.emitter.emit("spawn");
+    child.emitter.emit("close", 0, null);
+
+    const started = await pending;
+    if (!started.ok) throw new Error(`expected an accepted start, got ${started.code}`);
+    await started.exit;
+    expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
+  });
+
+  it("denies a start uncoded when the lifetime ends before admission", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const pending = start(request());
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+
+    // A child that dies without ever emitting `spawn` was never admitted. The
+    // start must REJECT — hanging would strand the caller, and a stable code
+    // would claim a refusal no layer made.
+    child.emitter.emit("close", 0, null);
+    await expect(pending).rejects.toThrowError("AGENT_SPAWN_NOT_ADMITTED");
+    await expect(pending).rejects.not.toMatchObject({ code: "SPAWN_ARGUMENT_UNQUOTABLE" });
+    expect(readdirSync(configDir)).toEqual([]);
+  });
+
+  it("keeps an admitted start accepted when the child fails afterwards", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    const req = request();
+    const pending = start(req);
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+
+    child.emitter.emit("spawn");
+    const started = await pending;
+    if (!started.ok) throw new Error(`expected an accepted start, got ${started.code}`);
+
+    // A post-admission failure settles the LIFETIME. It cannot retroactively
+    // turn an observed admission into a refusal.
+    child.emitter.emit("error", new Error("died later"));
+    await expect(started.exit).rejects.toMatchObject({ code: "AGENT_PROCESS_FAILED" });
+    expect(started.ok).toBe(true);
+    expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
   });
 });

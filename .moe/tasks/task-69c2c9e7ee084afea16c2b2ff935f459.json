@@ -100,12 +100,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Emergency non-destructive collision park after three ignored stop notices. Active task-d92b1b15 has already modified the same four public-store paths and is blocked only on unrelated foreign daemon review WIP; task-69 then completed two RED steps in event-read-model-contract.test.ts on top of those bytes. Preserve all current bytes and assignment/handoff; do not reset/stash/delete. Resume only after d92 is type-clean, committed and DONE, then remeasure/replan 69 against its committed horizon API.",
+  "reopenReason": "Governor cascade 01:37Z: the emergency-park premise (\"Resume only after d92 is type-clean, committed and DONE, then remeasure/replan 69 against its committed horizon API\") is now fully TRUE — d92 is QA-approved DONE (commit f33d4a2; readEventHorizon + finite captured-horizon scan committed). Per the premise's own instruction this is a REMEASURE/REPLAN, not a resume: the old 8-step plan predates the horizon API, its steps 1-2 RED tests were removed from the shared contract test by the authorized restore (task-4b59f9cc, commit 376523c — content preserved in this task's plan text and handoff), and event-read-query.ts (+76) survives untouched as this task's disjoint WIP. Architect: re-measure the four store paths at current HEAD, plan the bounded event-type paging against the committed d20ffd077 index and the d92 horizon surface, and decide whether the preserved event-read-query.ts WIP is a starting point or debris. Downstream: 16d5b unblocks when this lands.",
   "createdBy": "WORKER",
   "parentTaskId": "task-16d5bc3a10864351adf5be10dfa7df00",
   "priority": "MEDIUM",
@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T22:26:01.838Z",
-  "updatedAt": "2026-08-16T00:14:01.215Z",
+  "updatedAt": "2026-08-16T01:37:18.239Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T22:26:30.426Z",
     "plannedStepCount": 8,
@@ -145,10 +145,10 @@
     "governor-a627169a",
     "worker-5243b3cb"
   ],
-  "blockedReason": "Emergency non-destructive collision park after three ignored stop notices. Active task-d92b1b15 has already modified the same four public-store paths and is blocked only on unrelated foreign daemon review WIP; task-69 then completed two RED steps in event-read-model-contract.test.ts on top of those bytes. Preserve all current bytes and assignment/handoff; do not reset/stash/delete. Resume only after d92 is type-clean, committed and DONE, then remeasure/replan 69 against its committed horizon API.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T23:51:52.881Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "stepsCompleted": [
     "step-1",
     "step-2"

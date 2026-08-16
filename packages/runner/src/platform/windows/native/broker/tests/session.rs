@@ -151,6 +151,21 @@ impl ScriptedCalls {
         calls
     }
 
+    /// The accounting call SUCCEEDS every time and keeps reporting a live
+    /// process, so the Job never empties within the core's poll bound. This is
+    /// what a provider that never ends actually looks like from the Job's side:
+    /// a process still holding the write end. Distinct from
+    /// `failing(QueryAccounting, _)`, which is the CALL failing rather than the
+    /// fact it reports being the wrong one.
+    ///
+    /// `u32::MAX` is chosen so the per-call decrement in `query_active_processes`
+    /// cannot reach zero within the core's 500 attempts.
+    fn reporting_a_job_that_never_empties() -> Self {
+        let calls = Self::healthy();
+        calls.active_remaining.set(u32::MAX);
+        calls
+    }
+
     /// Successive wait outcomes; the last repeats forever.
     fn waiting(&self, outcomes: &[WaitOutcome]) {
         *self.waits.borrow_mut() = outcomes.to_vec();
@@ -764,10 +779,20 @@ fn a_refused_launch_emits_a_refusal_carrying_only_layer_reason_and_code() {
 }
 
 // ---------------------------------------------------------------------------
-// DoD 3 — COMPLETED needs ALL FOUR preconditions. Four independent tests, as
-// the DoD requires in as many words: four separate tests, not one combined
-// path. Each fails exactly ONE leg, so the `Unobserved` variant each asserts
-// names the leg that test is about and cannot be answered by a neighbour.
+// DoD 3 — COMPLETED needs ALL THREE preconditions. Independent tests, as the DoD
+// requires in as many words: separate tests, not one combined path. Each fails
+// exactly ONE leg, so the `Unobserved` variant each asserts names the leg that
+// test is about and cannot be answered by a neighbour.
+//
+// This block held four legs until the provider-EOF one was deleted. The three
+// cases that failed it were removed with it rather than adapted, and NOT because
+// the change made them inconvenient: their fixture never exercised the
+// production path. `Pipe::never_ending` carries no poll script, so the double's
+// unscripted fallback answered the read bound regardless of which direction a
+// real handle faces. They stayed green under a candidate that made the leg
+// vacuous, which is the definition of an assertion that has detached from its
+// subject. What replaces them is further down, under "TERMINATION IS CARRIED BY
+// JOB-EMPTY".
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -797,48 +822,6 @@ fn completed_is_absent_when_the_exit_cannot_be_queried_exactly() {
 }
 
 #[test]
-fn completed_is_absent_when_a_provider_channel_never_reaches_eof() {
-    // fd4 always has one more byte. Everything else is healthy, so a session
-    // that treated EOF as optional would emit COMPLETED here.
-    let calls = ScriptedCalls::healthy();
-    let mut wired = wiring(a_launch_frame());
-    wired.provider_out = Pipe::never_ending();
-    let (outcome, wired) = run_with(&calls, wired, PATIENT_TIMEOUT_MS);
-
-    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 0);
-    assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::ProviderEof));
-}
-
-#[test]
-fn completed_is_absent_when_the_second_provider_channel_never_reaches_eof() {
-    // fd5, with fd4 already ended. A session that drained only the first
-    // provider — or that short-circuited on `out && err` — passes the test above
-    // and fails this one. Two channels are named by the DoD, so both are failed
-    // independently.
-    let calls = ScriptedCalls::healthy();
-    let mut wired = wiring(a_launch_frame());
-    wired.provider_err = Pipe::never_ending();
-    let (outcome, wired) = run_with(&calls, wired, PATIENT_TIMEOUT_MS);
-
-    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 0);
-    assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::ProviderEof));
-}
-
-#[test]
-fn a_provider_channel_that_fails_to_read_is_unobserved_not_ended() {
-    // A read error is not an end of stream. Treating a failed read as EOF is the
-    // plausible mistake here, and it would upgrade an unobservable leg into a
-    // definite one.
-    let calls = ScriptedCalls::healthy();
-    let mut wired = wiring(a_launch_frame());
-    wired.provider_out = Pipe::ended().failing_reads_with(6);
-    let (outcome, wired) = run_with(&calls, wired, PATIENT_TIMEOUT_MS);
-
-    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 0);
-    assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::ProviderEof));
-}
-
-#[test]
 fn completed_is_absent_when_the_job_does_not_report_zero_active_processes() {
     // The accounting CALL fails, so `wait_until_job_is_empty` refuses rather
     // than observing emptiness. Chosen over a nonzero count deliberately: the
@@ -855,24 +838,135 @@ fn completed_is_absent_when_the_job_does_not_report_zero_active_processes() {
     assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::JobActive));
 }
 
+// ---------------------------------------------------------------------------
+// TERMINATION IS CARRIED BY JOB-EMPTY, NOT BY A PROVIDER DRAIN.
+//
+// fd4 and fd5 are DUPLEX handles, and they are the SAME handles the child is
+// handed as its stdout and stderr (`main.rs` puts `values[4]`/`values[5]` in
+// both `Wiring` and `inherited`). A read on the session's side therefore faces
+// the direction only the NODE PARENT ever writes, and the parent never writes
+// there. The old provider-EOF precondition was not merely late: it was
+// structurally incapable of observing the child, so it waited on the parent's
+// teardown and made completion latency track the configured timeout instead of
+// the child.
+//
+// The empirical proof, which beats the handle reading: the drain returned on its
+// first poll with ZERO bytes available while the parent still captured
+// byte-exact stdout AND stderr. The drain DISCARDS what it reads, so had it
+// faced the child's output direction those bytes would have been eaten.
+//
+// The cases below pin what replaces it. A process that still holds a write end
+// is a process that has not left the Job, so the Job-empty proof already refuses
+// for it — explicitly, and on a member that names the observation that failed.
+// ---------------------------------------------------------------------------
+
+/// The channel pathologies the deleted precondition used to withhold COMPLETED
+/// for. Each is applied to otherwise-healthy wiring, and the name is carried
+/// into every assertion so a failure says which one broke.
+const PROVIDER_PATHOLOGIES: [(&str, fn(&mut Wiring<Pipe>)); 3] = [
+    ("fd4 never reaches end of stream", |w| w.provider_out = Pipe::never_ending()),
+    ("fd5 never reaches end of stream", |w| w.provider_err = Pipe::never_ending()),
+    ("fd4 fails every read", |w| w.provider_out = Pipe::ended().failing_reads_with(6)),
+];
+
 #[test]
-fn all_four_completion_preconditions_are_covered_by_the_four_tests_above() {
-    // WITHOUT THIS, ONE PRECONDITION COULD SILENTLY GO UNTESTED. Four named
-    // tests read exactly like four covered legs even when two of them fail the
-    // same leg; only comparing the produced set against the production
-    // vocabulary can tell those apart. `Precondition::ALL` carries its length in
-    // its type, so a fifth precondition fails to compile here.
+fn a_pathological_provider_channel_no_longer_withholds_completed() {
+    // A channel the session cannot read to an end is not evidence about the
+    // child, because it never faced the child. Everything a COMPLETED requires
+    // was observed here — root wait, exact exit query, empty Job — so withholding
+    // COMPLETED on the channel would be withholding it on an observation that
+    // could not be made.
+    let mut swept = 0usize;
+    for (case, break_it) in PROVIDER_PATHOLOGIES {
+        let calls = ScriptedCalls::healthy();
+        let mut wired = wiring(a_launch_frame());
+        break_it(&mut wired);
+        let (outcome, wired) = run_with(&calls, wired, PATIENT_TIMEOUT_MS);
+
+        assert_eq!(
+            completion(&outcome),
+            Completion::Completed(Completed::Exited(SCRIPTED_EXIT_CODE)),
+            "{case}: a provider channel is not a completion precondition"
+        );
+        assert_eq!(
+            count_of(&wired.status.written, Outbound::Completed),
+            1,
+            "{case}: exactly one COMPLETED frame"
+        );
+        swept += 1;
+    }
+
+    // A SWEEP THAT GENERATED NOTHING WOULD SATISFY EVERY ASSERTION ABOVE. The
+    // literal is spelled out as well as compared to the table, so emptying the
+    // table cannot quietly empty the test.
+    assert_eq!(swept, PROVIDER_PATHOLOGIES.len());
+    assert_eq!(swept, 3, "all three provider pathologies must actually have run");
+}
+
+#[test]
+fn a_job_that_never_empties_is_unknown_job_active_on_the_natural_path() {
+    // WHERE A NEVER-ENDING PROVIDER LANDS NOW. Both provider channels are
+    // perfectly ended, so nothing about them can answer; the only thing left
+    // unobserved is the Job's emptiness, and that is the member reported.
+    let calls = ScriptedCalls::reporting_a_job_that_never_empties();
+    let (outcome, wired) = run_launch(&calls);
+
+    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 0);
+    assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::JobActive));
+    // The core POLLS rather than sampling once, and this fixture is only honest
+    // if it actually exhausted that bound. A single accounting call would mean
+    // the refusal came from somewhere else and this case had stopped testing its
+    // subject.
+    assert!(
+        calls.count("accounting") > 1,
+        "the emptiness proof must have polled, not sampled once"
+    );
+}
+
+#[test]
+fn a_job_that_never_empties_is_unknown_job_active_on_the_termination_path() {
+    // The path a real never-ending provider takes: the child outlives the
+    // instructed timeout, so the session terminates it and reaps through
+    // `unwind_after_membership`. Job-empty carries termination on BOTH halves,
+    // not just the one an ordinary exit walks.
+    let calls = ScriptedCalls::reporting_a_job_that_never_empties();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let (outcome, wired) = run_with(&calls, wiring(a_launch_frame()), IMPATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::TimedOut, _)));
+    assert_eq!(
+        calls.count("terminate-job"),
+        1,
+        "this case is only about the termination path if it terminated"
+    );
+    assert_eq!(count_of(&wired.status.written, Outbound::Completed), 0);
+    assert_eq!(completion(&outcome), Completion::Unknown(Unobserved::JobActive));
+}
+
+#[test]
+fn all_three_completion_preconditions_are_covered_by_the_tests_above() {
+    // WITHOUT THIS, ONE PRECONDITION COULD SILENTLY GO UNTESTED. Named tests read
+    // exactly like covered legs even when two of them fail the SAME leg; only
+    // comparing the produced set against the production vocabulary can tell those
+    // apart. `Precondition::ALL` carries its length in its type, so a fourth
+    // precondition fails to compile here — and deleting one forced this test to
+    // be updated, which is the forcing function working rather than a nuisance.
     let mut covered: Vec<Precondition> = vec![
         unobserved_from(ScriptedCalls::failing(NativeOp::WaitForProcess, 6)),
         unobserved_from(ScriptedCalls::failing(NativeOp::QueryExitCode, 87)),
         unobserved_from(ScriptedCalls::failing(NativeOp::QueryAccounting, 5)),
-        unobserved_without_provider_eof(),
     ]
     .iter()
     .map(Unobserved::precondition)
     .collect();
     covered.sort();
     covered.dedup();
+
+    // AN EMPTY SET WOULD EQUAL AN EMPTY EXPECTATION. The count is asserted
+    // against the production vocabulary AND against a spelled-out literal, so
+    // neither side can collapse silently.
+    assert_eq!(covered.len(), Precondition::ALL.len());
+    assert_eq!(covered.len(), 3, "three distinct preconditions must have been failed");
 
     let mut expected = Precondition::ALL.to_vec();
     expected.sort();
@@ -982,16 +1076,6 @@ fn no_outbound_byte_ever_echoes_the_executable_argv_cwd_or_environment() {
 /// Runs one scenario to a launched child and returns why its end was unknown.
 fn unobserved_from(calls: ScriptedCalls) -> Unobserved {
     let (outcome, _) = run_launch(&calls);
-    unknown_of(&outcome)
-}
-
-/// The provider-EOF scenario, which needs custom wiring rather than a custom
-/// call table.
-fn unobserved_without_provider_eof() -> Unobserved {
-    let calls = ScriptedCalls::healthy();
-    let mut wired = wiring(a_launch_frame());
-    wired.provider_out = Pipe::never_ending();
-    let (outcome, _) = run_with(&calls, wired, PATIENT_TIMEOUT_MS);
     unknown_of(&outcome)
 }
 

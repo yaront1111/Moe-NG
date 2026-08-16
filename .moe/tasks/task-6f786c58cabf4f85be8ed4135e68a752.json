@@ -158,28 +158,33 @@
     {
       "stepId": "step-9",
       "description": "Mutation drills and the verification gate. Drill TWO production guards, one at a time, each restored from your own saved bytes before the next — NEVER `git checkout`, which reverts to HEAD and destroys uncommitted work in this shared worktree. Drill A, the digest comparison: remove or invert the production `digest === approval.exactRevisionHash` check and confirm the NAMED digest-mismatch test goes red on its exact code/layer assertion, not on a crash and not on a hang — bound the run, because a hang reads as a held guard. Drill B, the quarantine gate: make the QUARANTINED-item check a no-op and confirm the named quarantine test goes red; a guard whose body is a plain no-op has no operator to flip, so if the drill stays green make the body THROW instead to prove the hook is still on the production path. Confirm each drill reddens for the RIGHT reason — over-reddening across many unrelated tests means a broken environment, not a held guard. Restore and prove green. Then run the fresh gate `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`, `&&`-chained (a `;`-chained run masks a red leg) and never piped through tail (a piped run reports tail's exit code). A focused rerun needs `--root .` or it resolves the root config and finds zero tests, which exits 0 and reads as green. Compare against the step-1 merge-base baseline; the HEAD-minus-baseline failing-path set intersected with this task's owned paths must be EMPTY, and any foreign red — especially in the two registry files task-e33747f9 also edits — is reported verbatim with its exact failing lines, never hidden and never fabricated green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-completion.ts",
         "apps/daemon/src/recovery/recovery-completion-digest.ts",
         "apps/daemon/src/recovery/recovery-completion.test.ts"
       ],
-      "startedAt": "2026-08-15T21:37:47.246Z"
+      "note": "Drills re-run fresh this session at HEAD 6954a8c (Node v24.16.0, pnpm 11.0.8); both reddened the named test on its exact assertion, bounded at ~1s, no crash and no hang, and each was restored byte-exact by diff against a saved copy before the next.\n\nDRILL A (digest comparison, recovery-completion.ts:146). Condition neutered so the gate can never fire. Named test went red for the right reason: \"expected 'RECOVERY_COMPLETION_APPROVAL_INVALID' to be 'RECOVERY_COMPLETION_DIGEST_MISMATCH'\" at recovery-completion.test.ts:1049. Exactly 1 failed / 27 skipped - no over-reddening. Restored: sha1 42c1182a2be9a8381166c255182141a15b765d48, diff against saved copy empty.\n\nDRILL B (quarantine gate, recovery-completion-evidence.ts:377). Predicate made a no-op; no escalation to a throw was needed because the no-op alone reddened. The quarantined record became ACCEPTED: \"expected false to be true\" at recovery-completion.test.ts:1035, exactly 1 failed / 27 skipped. Restored byte-exact.\n\nOwned suite after restore: recovery-completion.test.ts 1 file passed / 28 tests passed, exit 0.\n\nGATE, fresh and &&-chained, never piped:\n`pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test`\n- typecheck exit 0 (tsc --project tsconfig.json).\n- test executed 97 files / 1994 tests: 95 files and 1990 tests passed. GATE_EXIT=1.\n\nPATH-ATTRIBUTED BASELINE. HEAD failing-path set is exactly two files, both foreign, neither in this task's owned paths, so the delta intersected with owned paths is EMPTY:\n1. src/orchestrator/agent-spawner.test.ts - 3 failures (\"hands only the scoped credential to loopback MCP...\", \"gives code-node agents file/exec tools...\", \"contains a fast-exiting agent's EPIPE...\"), e.g. \"AssertionError: expected [] to deeply equal [ '--tools', ... ]\" and \"expect(groupKills).toEqual([-4321])\" at agent-spawner.test.ts:537. This file went DIRTY in the worktree during my run - live peer WIP. Last committed by c970f10 task-ff589abd, which postdates this task's base cf272f6. It imports nothing I own.\n2. src/work/foundation-attempt-windows.test.ts - 1 failure, \"launches through the shipped broker once and adopts replay\", \"AssertionError: expected false to be true\" at foundation-attempt-windows.test.ts:284. Last committed by 4d0a49f task-c690a7a0, also after my base. packages/runner/.../broker/src/watch.rs was dirty at gate start and committed by a peer mid-run.\n\nThat second file is the only failing file that imports anything I own (restore-test-harness.js), so I did not assume - I base-probed it. My whole diff to that file since cf272f6 is +2 additive lines (a backupCursor field on RestoreHarness and on restoreHarness()'s frozen return); the failing test never calls restoreHarness. Reverting exactly those 2 lines and re-running gave the identical single failure (1 failed | 2 passed), proving my diff did not cause it. Bytes restored, git diff --stat empty.\n\nForeign red is disclosed verbatim above, never repaired and never fabricated green. No probe, scratch or drill file remains in the repo; all drill artifacts live under /tmp.",
+      "startedAt": "2026-08-15T21:37:47.246Z",
+      "completedAt": "2026-08-16T01:36:25.905Z"
     },
     {
       "stepId": "step-10",
       "description": "Adversarial self-review before complete_task. Load the `adversarial-self-review` skill and read the owned diff as an attacker. Concretely: can ANY path reach the commit without the digest comparison, the quarantine gate, or the R3/HUMAN/step-up gate — including a thrown-and-caught store error landing in a catch above a gate; can a caller supply `truthClass`, the accepted digest, the incarnation ref, or the witness hashes and have them honoured rather than server-derived; does a SYSTEM_POLICY approval, an R2 approval, a carried-forward approval from an earlier digest, or a step-up outside the 300s window get through; does replay ever produce a second ProjectRecovered event or a second transition; does any refusal write a decision, an event, or leave the project non-QUIESCED; is any refusal answered by an EARLIER guard than the one its test names — trace which branch answers for each code and confirm the step-9 drills reddened the intended guard rather than a sibling; do proxy, revoked-proxy, accessor, symbol-keyed, sparse and oversized inputs return a typed refusal rather than throwing (`Array.isArray` THROWS on a revoked proxy — ask `types.isProxy` first, as recovery-inventory-contract.ts already does); and does every asserted code actually appear in the test file, since a code absent from the file means that whole branch is unguarded. Confirm both .js bridges exist and re-export their .ts siblings, that no production file exceeds 400 physical lines by `grep -c ''`, and that no probe, scratch or generated evidence file remains. Then stage and commit ONLY this task's owned paths by explicit pathspec — never `git add -A`, reset or stash — and if the two registry files were swept into another task's whole-tree commit, report the base-ref diff `git diff <merge-base>..HEAD -- <owned paths>` instead of trying to repair the foreign commit.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/recovery-completion.ts",
         "apps/daemon/src/recovery/recovery-completion-digest.ts",
         "apps/daemon/src/recovery/recovery-completion.test.ts",
         "apps/daemon/src/index.ts",
         "apps/daemon/src/daemon-command-registry.ts"
-      ]
+      ],
+      "note": "Adversarial self-review of the owned diff, read as an attacker rather than as the author.\n\nBYPASS TRACE. No path reaches the commit past a skipped gate. runRecoveryCompleteCommand orders decode -> durable replay -> evidence+digest -> CAS -> approval -> reduceProject -> ONE commit, and `commit()` is called from exactly one site after every gate returned ok. The digest is compared twice on independent branches (recovery-completion.ts:146 and again inside boundApproval:123), so deleting either leaves the other. The quarantine gate sits inside readRecoveryCompletionEvidence, which runs before any approval work. Every store read is individually try/caught into a typed refusal; no catch sits above a gate in a way that could swallow it into the accept path.\n\nCALLER-SUPPLIED AUTHORITY. truthClass is a server literal at recovery-completion.ts:281; the witness hashes come from found.coverageProofHash and record.recordDigest/record.incarnationRef; the accepted digest is recomputed from server-read bytes. The envelope refuses an EXTRA payload key rather than dropping it, and the malformed sweep proves it with named \"smuggled payload key\" (truthClass) and \"smuggled witness\" cases - silently ignoring them would have looked like they were honoured.\n\nEXOTIC INPUTS. The revoked-proxy / accessor / symbol-key / sparse class is structurally unreachable, not merely untested: readEnvelope requires `input instanceof Uint8Array` and everything downstream is the output of JSON.parse via decodeBoundedJsonBytes, which bounds size too. Array.isArray can therefore never meet a revoked proxy here. Store-returned objects are re-snapshotted through own enumerable non-getter descriptors in projectStateOf, so an accessor cannot answer twice.\n\nWEAKER APPROVALS. A 7-case table pins R2, REJECT, an opaque step-up ref, absent and empty reason, DECIDED lifecycle and INVALIDATED validity, each with its exact code AND the layer that answered (3 at RECOVERY_COMPLETION, 4 verbatim at CORE_APPROVAL), and asserts its own length 7. A signed AGENT is refused at HUMAN_AUTHORITY_GATE; SYSTEM_POLICY has two separate cases, one where core answers first and one where core accepts and this layer refuses.\n\nREPLAY. answerRecoveryCompletionReplay returns before any evidence read, re-presents the exact stored event through the store's own idempotency, and requires disposition REPLAYED plus an equal decisionSha256. Changed request bytes raise IdempotencyConflictError -> RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT. The already-recovered test asserts recoveredCount stays 1. Every refusal asserts a null command decision, zero ProjectRecovered events, and the project still QUIESCED/recoveryRequired true.\n\nPRECEDENCE. Traced each code to the branch that answers. One case genuinely answers earlier than the plan's prose expected and the test says so out loud: a second completion is refused by the QUIESCED cross-check as RECOVERY_COMPLETION_EVIDENCE_MISMATCH before reduceProject sees it. DISCLOSED CONSEQUENCE: PROJECT_REDUCER_LAYER is therefore a defensive surfacing branch with no test of its own, because the reachable reducer refusals are all pre-empted by an earlier, stronger evidence guard. I did not manufacture an artificial fixture to reach it.\n\nONE FIX MADE. The stage-order TSDoc claimed \"nothing is written before (G)\". False: sessions.authenticate BURNS the single-use proof at stage (E) even when a later binding refuses - the suite already names that (\"burns the signed proof before refusing a mutated step-up assertion\"), so the comment contradicted a passing test. Corrected to state the exception and its scope (identity aggregate, never the project lifecycle). Comment only; committed alone as 9f6b7c5 by explicit pathspec.\n\nSECOND DISCLOSURE, behavioural not textual: policyRevisionOf refuses (ABSENT) if a project's ProjectActivated events ever carried two DIFFERENT policyRevisionHash values. That is fail-closed in the safe direction under epic rail 4, but it does mean a project whose activation policy legitimately changed cannot complete recovery until that is modelled. Flagging rather than widening scope.\n\nHYGIENE. All five .js bridges are exact one-line re-exports of their .ts siblings. Physical lines by `grep -c ''`: authority 185, replay 143, digest 255, completion 288, evidence 387, restore-controller 295, restore-contract 293, registry 320, index.ts 387 - all under 400. No NUL bytes, `git diff --check` clean, no probe/scratch/evidence file in the repo (drill artifacts live under /tmp). Every code in the closed vocabulary appears in the test file with a layer assertion; both sweeps assert their own exact non-zero case count and the field sweep asserts its key census equals the evidence key set.\n\nCOMMIT PROVENANCE. My earlier bytes were never committed by me: `--diff-filter=A` shows recovery-completion.ts and -evidence.ts added by cdd53e4 (task-e33747f9), -digest.ts and the suite by 98d6e72 (task-1eeb2dcc), and -authority.ts/-replay.ts by f4966b5 (task-6cbff010) - t",
+      "startedAt": "2026-08-16T01:36:28.359Z",
+      "completedAt": "2026-08-16T01:41:45.779Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -199,16 +204,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:08:18.169Z",
-  "updatedAt": "2026-08-16T01:31:14.515Z",
+  "updatedAt": "2026-08-16T01:42:48.701Z",
   "contextFetchedBy": [
     "governor-a627169a",
-    "worker-5d4e2d6f"
+    "worker-5d4e2d6f",
+    "worker-1fe6c848"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-15T18:02:20.406Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 18,
+    "executedStepCount": 20,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -228,7 +234,9 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10"
   ],
   "failedDodItems": [
     {
@@ -283,26 +291,33 @@
   },
   "planApprovedAt": "2026-08-15T18:12:51.902Z",
   "workStartedAt": "2026-08-15T18:21:37.278Z",
-  "reviewStartedAt": "2026-08-15T20:19:13.631Z",
+  "reviewStartedAt": "2026-08-16T01:42:48.701Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/recovery/recovery-completion.test.ts src/recovery/restore-controller.test.ts src/recovery/restore-controller-qa-regressions.test.ts src/daemon-command-registry.test.ts src/index-surface.test.ts src/activation/activation-embargo.test.ts",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  89 passed (89)\n      Tests  1823 passed (1823)\n   Start at  23:18:17\n   Duration  4.53s\n\nGATE_EXIT=0",
-    "reportedAt": "2026-08-15T20:19:13.631Z"
+    "outputTail": "$ tsc --project tsconfig.json\n\n Test Files  6 passed (6)\n      Tests  310 passed (310)\n   Start at  04:41:07\n   Duration  3.60s (transform 5.31s, setup 0ms, import 7.17s, tests 6.18s, environment 0ms)",
+    "reportedAt": "2026-08-16T01:42:48.701Z"
   },
   "filesModified": [
     "apps/daemon/src/recovery/recovery-completion.test.ts",
     "apps/daemon/src/recovery/recovery-completion-digest.ts",
     "apps/daemon/src/recovery/recovery-completion-digest.js",
-    "apps/daemon/src/recovery/recovery-completion.ts",
-    "apps/daemon/src/recovery/recovery-completion.js",
     "apps/daemon/src/recovery/recovery-completion-evidence.ts",
-    "apps/daemon/src/recovery/recovery-completion-evidence.js",
+    "apps/daemon/src/recovery/restore-controller-contract.ts",
+    "apps/daemon/src/recovery/restore-controller.ts",
+    "apps/daemon/src/recovery/restore-test-harness.ts",
+    "apps/daemon/src/recovery/restore-controller.test.ts",
+    "apps/daemon/src/recovery/restore-controller-qa-regressions.test.ts",
+    "apps/daemon/src/activation/activation-embargo.test.ts",
+    "apps/daemon/src/recovery/recovery-completion-authority.ts",
+    "apps/daemon/src/recovery/recovery-completion-authority.js",
+    "apps/daemon/src/recovery/recovery-completion-replay.ts",
+    "apps/daemon/src/recovery/recovery-completion-replay.js",
+    "apps/daemon/src/recovery/recovery-completion.ts",
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts",
     "apps/daemon/src/daemon-command-registry.ts",
-    "apps/daemon/src/daemon-command-registry.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts"
+    "apps/daemon/src/daemon-command-registry.test.ts"
   ],
   "reviewCompletedAt": "2026-08-15T20:40:26.507Z",
   "rejectionDetails": {

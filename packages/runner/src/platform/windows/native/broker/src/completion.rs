@@ -2,57 +2,65 @@
 //!
 //! # COMPLETED and UNKNOWN are ALTERNATIVES, not degrees of the same answer
 //!
-//! Four things must ALL hold before a terminal COMPLETED may be emitted: the
-//! retained root handle was waited, the exit was queried exactly, the provider
-//! channels reached end of stream, and the Job reported zero live processes.
-//! When any one of them could not be observed the result stays [`Unknown`], and
-//! nothing may upgrade it later — an unobserved leg is not a pessimistic
-//! reading of a known outcome, it is the absence of one.
+//! Three things must ALL hold before a terminal COMPLETED may be emitted: the
+//! retained root handle was waited, the exit was queried exactly, and the Job
+//! reported zero live processes. When any one of them could not be observed the
+//! result stays [`Unknown`], and nothing may upgrade it later — an unobserved
+//! leg is not a pessimistic reading of a known outcome, it is the absence of
+//! one.
 //!
 //! [`Unknown`]: Completion::Unknown
+//!
+//! # There was a fourth, and it was DELETED rather than weakened
+//!
+//! A provider-channel end-of-stream leg used to sit between the exit query and
+//! the Job. It is gone because the session cannot make that observation at all:
+//! fd4 and fd5 are DUPLEX handles and are the SAME handles the child receives as
+//! its stdout and stderr, so a read on the session's side faces the direction
+//! only the parent ever writes. An observation nothing can make is not an
+//! advisory check, it is a decorative one, and it withheld COMPLETED until the
+//! PARENT tore its end down.
+//!
+//! Termination is now carried EXPLICITLY by the Job-empty leg, which is the
+//! stronger statement anyway: a process still holding a write end has not left
+//! the Job. `settle.rs` carries the measurement. Do not restore the fourth.
 //!
 //! # Why this vocabulary is new rather than borrowed
 //!
 //! The core's `UnknownExit` already says why an EXIT is not knowable, and it is
 //! reused verbatim below rather than paraphrased. But it has nothing to say
-//! about a provider channel that never ended or a Job that still holds
-//! processes, because the core has no notion of either. Naming those two with
-//! `UnknownExit` variants would be a lie the type system would not catch. The
-//! session is the only thing that has four preconditions, so the vocabulary for
-//! them belongs here.
+//! about a Job that still holds processes, because that is not a reason an exit
+//! is unknowable — it is a different observation failing. Naming it with an
+//! `UnknownExit` variant would be a lie the type system would not catch, so the
+//! vocabulary for the session's own preconditions belongs here.
 
 use moe_windows_job_core::UnknownExit;
 
 use crate::refusal::Refused;
 use crate::status::Completed;
 
-/// The four things a terminal COMPLETED requires. Closed, with no catch-all.
+/// The three things a terminal COMPLETED requires. Closed, with no catch-all.
 ///
-/// Adding a fifth must be a compile error at [`Self::ALL`], whose length is part
-/// of its type, and at [`Unobserved::precondition`], whose match is exhaustive.
-/// That is the same forcing function `NativeOp`, `ProtocolReason` and
-/// `DescriptorReason` use, and it is what stops a new precondition from being
-/// added without a test that can fail it.
+/// Adding a fourth must be a compile error at [`Self::ALL`], whose length is
+/// part of its type, and at [`Unobserved::precondition`], whose match is
+/// exhaustive. That is the same forcing function `NativeOp`, `ProtocolReason`
+/// and `DescriptorReason` use, and it is what stops a new precondition from
+/// being added without a test that can fail it. It is also what forced this
+/// enum's consumers to be updated when the provider-EOF leg was deleted.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Precondition {
     /// The retained root handle was waited and the wait observed the process.
     RootWait,
     /// The exit was queried exactly, through the core's proof.
     ExitQuery,
-    /// Both provider channels reached end of stream.
-    ProviderEof,
     /// The Job reported `ActiveProcesses == 0`.
     JobEmpty,
 }
 
 impl Precondition {
     /// Every variant, in declaration order. The length is part of the type.
-    pub const ALL: [Precondition; 4] = [
-        Precondition::RootWait,
-        Precondition::ExitQuery,
-        Precondition::ProviderEof,
-        Precondition::JobEmpty,
-    ];
+    pub const ALL: [Precondition; 3] =
+        [Precondition::RootWait, Precondition::ExitQuery, Precondition::JobEmpty];
 }
 
 /// Which precondition was not observed, and the core's reason where it has one.
@@ -73,9 +81,12 @@ pub enum Unobserved {
     /// boundary. Distinct from [`Self::RootWait`]: there the answer is unknowable,
     /// here the question could not be asked.
     ExitQuery,
-    /// A provider channel did not reach end of stream within its read bound.
-    ProviderEof,
     /// The Job did not report zero live processes.
+    ///
+    /// THIS IS ALSO WHERE A PROVIDER THAT NEVER ENDS LANDS. A process still
+    /// holding a write end has not left the Job, so the emptiness proof refuses
+    /// for it — by name, and without claiming an observation of the channel
+    /// itself that the session could not make.
     JobActive,
 }
 
@@ -88,7 +99,6 @@ impl Unobserved {
         match self {
             Self::RootWait(_) => Precondition::RootWait,
             Self::ExitQuery => Precondition::ExitQuery,
-            Self::ProviderEof => Precondition::ProviderEof,
             Self::JobActive => Precondition::JobEmpty,
         }
     }
@@ -101,7 +111,7 @@ impl Unobserved {
 /// observation was missing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Completion {
-    /// All four preconditions held. The exit is the core's, proved by a
+    /// All three preconditions held. The exit is the core's, proved by a
     /// signalled wait it made itself.
     Completed(Completed),
     /// A precondition was not observed. Never upgraded.

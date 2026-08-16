@@ -16,12 +16,12 @@
     "IDE adapters are thin optional shells for the standalone control room. Keep files below 400 lines and use explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Human-approved scope amendment. Dependency condition measured satisfied: M4 epic is 10 DONE with zero other open tasks. The remaining gap was mechanical, not architectural — the task's declared verification leg `pnpm test:migration` exists in no package.json repo-wide while its owned paths excluded root package.json, so it could not create the gate it had to pass. Owned paths widened to include root package.json solely to define that script; defining it is step 1 and must run the real migration/legacy-import shadow comparison, not alias test:integration. Full amendment and the on-disk capability measurements are in comment-d6d930b06eeb4d40b76a557039b32638.",
+  "reopenReason": "Governor cascade 01:37Z: block premise (task-01c5 real Linux/macOS host evidence not DONE) is now FALSE — 01c5 is QA-approved DONE with PROVEN cross-host evidence at 6cd4c17 (run 31919185835: host-evidence-linux/darwin + cross-host-aggregate green, three artifacts). The aggregate receipt already names THIS task as consumer: consumerTaskId task-22cfca91..., aggregateDigest bea1c412…43ecd9 at source.commitSha 6cd4c17, linux/darwin rows PROVEN. Architect: worker-df297022 posted claimer caveats in #general (msg-57f3e34b thread) — read them before planning; verify the receipt chain against the committed workflow rather than the description's assumptions (stale-by-default rail).",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -54,7 +54,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-15T23:51:13.557Z",
+  "updatedAt": "2026-08-16T01:37:22.469Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",
@@ -67,10 +67,10 @@
   "metrics": {
     "firstClaimAt": "2026-08-12T08:05:08.213Z"
   },
-  "blockedReason": "Fresh board remeasurement invalidates the reopen note's claim that every M4 dependency is done. Five production-capability prerequisites are DONE, but task-01c5f96ec1e247dc846fd628c929974a (real Linux/macOS host evidence) remains PLANNING, and the cross-epic durable provider consumer task-6cbff01023b14b26a78fc5e3eb1dd8a9 remains BLOCKED. The first GitHub cross-host run is useful evidence but is red on both hosts and exposed real portability defects/test collection failures; it does not satisfy the acceptance gate. Planning a green portability manifest now would require UNKNOWN rows for absent/unaccepted provider and host evidence or a test-only substitute, forbidden by Clause 2. Resume after 01c5 and 6cb are DONE and re-probe their committed production/evidence surfaces; only then add the real nonempty test:migration lane and shadow comparison.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:36:17.973Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Read prior audit, current context, and human amendment; remeasured board: five capability prerequisites are DONE, but 01c5 cross-host evidence is PLANNING and 6cb durable provider dispatch remains BLOCKED; reported portability gate BLOCKED on both.",
