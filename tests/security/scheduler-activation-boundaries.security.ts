@@ -48,6 +48,9 @@ import {
   closeHostileStores,
   isAdmitted,
   readinessProbeRecords,
+  replayDurableRecord,
+  replayVersions,
+  spawnRefusalCodes,
   verifierLaunchCount,
 } from "./scheduler-activation-hostile-cases.js";
 import type {
@@ -186,6 +189,35 @@ describe("hostile race arms", () => {
     },
     CASE_BOUND_MS,
   );
+});
+
+/**
+ * Two properties no `{code, layer}` case can carry: what the DURABLE store held afterwards, and
+ * how many members a boundary's refusal vocabulary has. Both are places where a slice reads as
+ * complete while a real gap sits behind the refusal it did assert.
+ */
+describe("evidence a refusal code cannot carry", () => {
+  it("answers a diverging replay from the durable record rather than the caller's", () => {
+    const { first, presented } = replayVersions();
+    // THE FIXTURE FIRST. Equal versions would make "a materially different record" the same
+    // record, and the divergence refusal would hold against a ledger that compared nothing.
+    expect(presented).not.toBe(first);
+    const durable = replayDurableRecord() as {
+      readonly ok?: boolean;
+      readonly record?: { readonly attempt?: { readonly version?: number } };
+    } | null;
+    // Null means the case that stashes this never ran — a silently absent probe, not a pass.
+    expect(durable).not.toBeNull();
+    expect(durable?.ok).toBe(true);
+    expect(durable?.record?.attempt?.version).toBe(first);
+  });
+
+  it("pins the spawn refusal vocabulary at exactly one member", () => {
+    // The compile-time half lives in the case module: a mapped type over the union, so adding
+    // a member fails `tsc` there. This is the runtime half — together they catch a second
+    // member landing AND this list going stale.
+    expect(spawnRefusalCodes()).toEqual(["SPAWN_ARGUMENT_UNQUOTABLE"]);
+  });
 });
 
 /**
