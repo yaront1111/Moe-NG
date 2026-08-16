@@ -12,10 +12,8 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
-import {
-  GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
-  hasDurableGoalCloseReviewAcceptance,
-} from "./goal-close-prerequisite.js";
+import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import { qualifyGoalClosure } from "./goal-qualification.js";
 
 /**
  * Goal creation.
@@ -71,36 +69,38 @@ const createGoal: CommandHandler = (context): ServiceOutcome => {
  * Final acceptance — J1's third human action (design 1095): the human accepts the verified,
  * reviewed result and the goal reaches its accepted terminal state.
  *
- * Acceptance is evidence-bound BY CONSTRUCTION. BOTH witnesses are required here, not because
- * the daemon judges evidence — `validClosure` and `validZeroAuthority` own that — but because
- * the core's `close` moves a goal carrying only the closure witness to CLOSING, and a goal
- * parked mid-closure would need a fourth human action to leave. Requiring the pair is what
- * makes acceptance ONE action; the core is still the layer that decides whether either witness
- * actually holds, and its reason code is surfaced unchanged.
+ * BOTH WITNESSES ARE DERIVED, NEVER FORWARDED. `qualifyGoalClosure` reads the exact durable
+ * verification receipt, review acceptance, verifier receipt and activation ledger for every
+ * approved node and hashes THOSE into the two witnesses the core validates. The request's own
+ * `closureWitness` and `zeroAuthorityWitness` are still REQUIRED at ingress — the command
+ * registry lists both keys and wire compatibility is not this slice's to change — but their
+ * VALUES are inert: they reach neither `reduceGoal` nor any decision here. Proved in both
+ * directions by `goal-services.test.ts`: garbage refs still close when the durable records
+ * hold, and perfect refs still refuse when they do not.
+ *
+ * The pair is required because the core's `close` moves a goal carrying only the closure
+ * witness to CLOSING, and a goal parked mid-closure would need a fourth human action to leave.
  */
 const closeGoal: CommandHandler = (context): ServiceOutcome => {
   const { ledger, request, store } = context;
   const goalId = payloadRef(request.payload, "goalId");
-  const closureWitness = payloadObject(request.payload, "closureWitness");
-  const zeroAuthorityWitness = payloadObject(request.payload, "zeroAuthorityWitness");
-  if (goalId === null || closureWitness === null || zeroAuthorityWitness === null) {
+  const declaredClosure = payloadObject(request.payload, "closureWitness");
+  const declaredZeroAuthority = payloadObject(request.payload, "zeroAuthorityWitness");
+  if (goalId === null || declaredClosure === null || declaredZeroAuthority === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
-  if (!hasDurableGoalCloseReviewAcceptance(store, request.projectId, goalId)) {
-    return refuse(
-      request.kind,
-      GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
-      "DAEMON_PREREQUISITE",
-    );
+  const qualified = qualifyGoalClosure(store, request.projectId, goalId);
+  if (!qualified.ok) {
+    return refuse(request.kind, qualified.code, GOAL_PREREQUISITE_LAYER);
   }
 
   const prior = stateOf(ledger, goalId);
   const command = {
-    closureWitness,
+    closureWitness: qualified.closureWitness,
     commandId: request.commandId,
     expectedVersion: request.expectedVersion,
     kind: "goal.close",
-    zeroAuthorityWitness,
+    zeroAuthorityWitness: qualified.zeroAuthorityWitness,
   } as unknown as GoalCommand;
 
   const verdict = reduceGoal(

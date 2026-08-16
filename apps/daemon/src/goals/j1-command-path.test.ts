@@ -1,5 +1,4 @@
 import * as daemon from "@moe/daemon";
-import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -11,7 +10,11 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
-import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
+import {
+  cleanupGoalClosureFixtures,
+  seedReviewAcceptance,
+  seedVerifiedNode,
+} from "./goal-closure-test-fixtures.js";
 
 /**
  * J1's command path, driven end to end through the PUBLISHED `@moe/daemon` root.
@@ -24,8 +27,6 @@ import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
  */
 
 const encoder = new TextEncoder();
-const OPERATOR_CREDENTIAL = "j1-operator-credential";
-const OPERATOR_PRINCIPAL_ID = "j1-operator";
 
 /**
  * Design 1095: the per-goal happy path is EXACTLY three human actions. Restated by hand and in
@@ -62,50 +63,38 @@ function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcom
 }
 
 /**
- * Records the daemon-side review acceptance required before the third human action.
- * Production dispatch remains package-root-only; the deep import above supplies request data.
+ * The daemon-side evidence required before the third human action: a durable verification
+ * receipt for the approved node and its accepted review. Both are seeded by the SHARED fixture,
+ * which drives production code — the acceptance still traverses the published, authenticated
+ * package-root command path, and the receipt comes from a real verifier child process.
  */
-function acceptReviewedNode(store: SqliteEventStore, nodeRef = "node-1"): void {
-  // The daemon's background verifier is an internal producer. This fixture
-  // seeds that durable fact; acceptance itself still traverses the published,
-  // authenticated package-root command path below.
-  const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
-  const ports = daemon.createDaemonCommandPorts({
-    clock: () => "2026-08-16T00:00:00.000Z",
-    operatorPrincipalId: OPERATOR_PRINCIPAL_ID,
-    projectId: PROJECT_ID,
-    store,
-  });
-  const outcome = daemon.handleCommandRequest({
-    authenticator: {
-      authenticate: (credential) => credential === OPERATOR_CREDENTIAL
-        ? {
-          principal: {
-            capabilities: daemon.OPERATOR_CAPABILITIES,
-            principalId: OPERATOR_PRINCIPAL_ID,
-            projectId: PROJECT_ID,
-          },
-          verdict: "AUTHENTICATED" as const,
-        }
-        : { verdict: "UNAUTHENTICATED" as const },
-    },
-    ...ports,
-  }, {
-    body: encoder.encode(JSON.stringify({
-      commandId: `cmd-j1-review-accept-${nodeRef}`,
-      commandKind: "integration.accept_output",
-      correlationId: "corr-j1-review",
-      expectedVersion: receipt.currentVersion,
-      payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
-      requestDigest: "a".repeat(64),
-      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-      sessionCredential: OPERATOR_CREDENTIAL,
-      targetAggregateId: nodeRef,
-    })),
-    credential: OPERATOR_CREDENTIAL,
-    protocolVersion: daemon.WIRE_PROTOCOL_VERSION,
-  });
-  if (!outcome.ok) throw new Error(`authenticated review setup failed for ${nodeRef}`);
+async function qualifyClosure(store: SqliteEventStore, nodeRef = "node-1"): Promise<void> {
+  seedReviewAcceptance(store, nodeRef);
+  await seedVerifiedNode(store, nodeRef);
+}
+
+/**
+ * The review and evidence records as BYTES, so DoD 4's "earlier records remain readable and
+ * byte-identical" is a byte comparison rather than a claim. Two objects can be deep-equal while
+ * their canonical bytes differ, and it is the bytes closure hashed.
+ *
+ * The event type is restated by hand for the same reason `OWNED_KINDS` is: deriving it from the
+ * production constant would make the comparison agree with itself. The non-vacuity guard below
+ * is what catches a restatement that has gone stale.
+ */
+const RECEIPTED_EVENT_TYPE = "FoundationVerificationReceipted";
+
+function evidenceBytes(store: SqliteEventStore): Readonly<{
+  readonly acceptances: readonly string[];
+  readonly receipts: readonly string[];
+}> {
+  const acceptances = committedDecisions(store)
+    .filter((record) => record.commandKind === "integration.accept_output"
+      && record.effectDisposition === "EFFECTS_COMMITTED")
+    .map((record) => `${record.decisionId}:${record.resultSha256}`);
+  const receipts = store.readEventsByTypeAfter(RECEIPTED_EVENT_TYPE, 0n, 200).items
+    .map((event) => Buffer.from(event.payload).toString("hex"));
+  return Object.freeze({ acceptances, receipts });
 }
 
 /**
@@ -147,6 +136,7 @@ function isHumanAction(kind: string): boolean {
 }
 
 afterEach(closeStores);
+afterEach(cleanupGoalClosureFixtures);
 
 describe("J1 command vocabulary", () => {
   it("publishes exactly the ten owned kinds from the package root", () => {
@@ -161,14 +151,14 @@ describe("J1 command vocabulary", () => {
 });
 
 describe("J1 is exactly three human actions (design 1095)", () => {
-  it("reaches the accepted terminal state after the third, with no fourth action", () => {
+  it("reaches the accepted terminal state after the third, with no fourth action", async () => {
     const store = openStore();
     const sequence = bootstrapSequence();
     const humanKinds: string[] = [];
     let lifecycleAfterThird: string | undefined;
 
     for (const request of sequence) {
-      if (request.kind === "goal.close") acceptReviewedNode(store);
+      if (request.kind === "goal.close") await qualifyClosure(store);
       const outcome = drive(store, request);
       expect(outcome.ok, `${request.kind}: ${outcome.ok ? "" : outcome.code}`).toBe(true);
       if (!isHumanAction(request.kind)) continue;
@@ -183,7 +173,7 @@ describe("J1 is exactly three human actions (design 1095)", () => {
     // The accepted terminal state is reached BY the third action, so a fourth is never needed.
     expect(lifecycleAfterThird).toBe("COMPLETED");
     expect(goalLifecycle(store)).toBe("COMPLETED");
-  });
+  }, 90_000);
 
   it("activates the graph inside the approval, not as a separate human action", () => {
     const store = openStore();
@@ -207,14 +197,16 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
-  it.each(cases)("%s replays to the same decision and leaves one durable row", (kind, index) => {
+  it.each(cases)("%s replays to the same decision and leaves one durable row", async (
+    kind, index,
+  ) => {
     const store = openStore();
     for (const request of sequence.slice(0, index)) {
       expect(drive(store, request).ok, request.kind).toBe(true);
     }
     const request = sequence[index] as Envelope;
 
-    if (request.kind === "goal.close") acceptReviewedNode(store);
+    if (request.kind === "goal.close") await qualifyClosure(store);
 
     const first = drive(store, request);
     expect(first.ok, first.ok ? "" : first.code).toBe(true);
@@ -232,5 +224,35 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     // looks like, so the row count is read back out of the store.
     expect(rowsFor(store, request.commandId)).toBe(1);
     expect(kind).toBe(request.kind);
-  });
+  }, 90_000);
+});
+
+/**
+ * DoD 4's other half, which no existing case covered: the closure is not allowed to disturb the
+ * evidence it consumed. The composer reads the acceptance decision and the receipt row on the
+ * way through, so "it only reads" has to be proven against the BYTES on both sides of the one
+ * command that could rewrite them.
+ */
+describe("closure leaves earlier review and evidence records untouched (DoD 4)", () => {
+  it("keeps the acceptance decision and the receipt row byte-identical across goal.close",
+    async () => {
+      const store = openStore();
+      let before: ReturnType<typeof evidenceBytes> | undefined;
+
+      for (const request of bootstrapSequence()) {
+        if (request.kind === "goal.close") {
+          await qualifyClosure(store);
+          before = evidenceBytes(store);
+          // Non-vacuity: there really are records to be disturbed, and a stale event-type
+          // literal above would be caught here rather than passing as "nothing changed".
+          expect(before.acceptances.length).toBeGreaterThan(0);
+          expect(before.receipts.length).toBeGreaterThan(0);
+        }
+        expect(drive(store, request).ok, request.kind).toBe(true);
+      }
+
+      expect(goalLifecycle(store)).toBe("COMPLETED");
+      expect(before).toBeDefined();
+      expect(evidenceBytes(store)).toEqual(before);
+    }, 90_000);
 });

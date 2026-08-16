@@ -22,9 +22,11 @@ import {
   send,
 } from "./bootstrap-test-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
-import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
-import { runReviewCommand } from "../review/review-services.js";
-import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
+import {
+  cleanupGoalClosureFixtures,
+  seedReviewAcceptance,
+  seedVerifiedNode,
+} from "../goals/goal-closure-test-fixtures.js";
 
 /**
  * Durability behaviour of the nine bootstrap services: the command-driven sequence (DoD 1),
@@ -37,28 +39,16 @@ import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
  */
 
 afterEach(closeStores);
-
-const encoder = new TextEncoder();
+afterEach(cleanupGoalClosureFixtures);
 
 /**
- * Seeds the non-human review decision required before final goal acceptance. The fixture goes
- * through the production review pipeline so the close test cannot pass on a fabricated store
- * row that no real review command could produce.
+ * Seeds the whole non-human evidence chain required before final goal acceptance: a durable
+ * verification receipt for the approved node and its accepted review. Both go through the
+ * production pipelines, so the close case cannot pass on a fabricated store row.
  */
-function acceptReviewedNode(store: SqliteEventStore, nodeRef: string): void {
-  const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
-  const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
-    commandId: `cmd-bootstrap-review-accept-${nodeRef}`,
-    correlationId: "corr-bootstrap-review",
-    decidedAt: "2026-08-08T00:00:00.000Z",
-    expectedVersion: receipt.currentVersion,
-    kind: "integration.accept_output",
-    payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
-    principalId: "reviewer-1",
-    projectId: PROJECT_ID,
-    schemaVersion: REVIEW_SCHEMA_VERSION,
-  })));
-  if (!outcome.ok) throw new Error(`review setup failed for ${nodeRef}: ${outcome.code}`);
+async function qualifyClosure(store: SqliteEventStore, nodeRef: string): Promise<void> {
+  seedReviewAcceptance(store, nodeRef);
+  await seedVerifiedNode(store, nodeRef);
 }
 
 function registerAndBind(store: SqliteEventStore): void {
@@ -140,10 +130,10 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
 
   it.each(sequence.map((request, index) => [request.kind, index] as const))(
     "%s commits one decision and replays it exactly",
-    (kind, index) => {
+    async (kind, index) => {
       const store = openStore();
       driveThrough(store, kind);
-      if (kind === "goal.close") acceptReviewedNode(store, "node-1");
+      if (kind === "goal.close") await qualifyClosure(store, "node-1");
       const before = decisionCount(store);
 
       const request = sequence[index] as Envelope;
@@ -164,6 +154,7 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
       expect(second.decision.decisionSha256).toBe(first.decision.decisionSha256);
       expect(decisionCount(store)).toBe(before + 1);
     },
+    90_000,
   );
 });
 
