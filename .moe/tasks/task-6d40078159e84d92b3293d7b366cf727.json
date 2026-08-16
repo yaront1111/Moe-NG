@@ -1,0 +1,37 @@
+{
+  "id": "task-6d40078159e84d92b3293d7b366cf727",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Durably record terminal effect and resource refs for a released attempt",
+  "description": "Objective: produce the terminality facts `ExpansionReleaseEvidence` requires and nothing in production currently writes. Second producer repair for task-e62e3828df234c66969a99b8223487f4, per its rail 1: \"if it omits a named fact, repair that producer rather than reconstructing authority here.\"\n\nMEASURED GAP at HEAD fa39721 across apps/daemon/src (non-test). Four fields of `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:30,33-34) have NO production producer at all:\n- `effectsTerminal` — ZERO hits\n- `terminalEffectRefs` — ZERO hits\n- `terminalResourceRefs` — ZERO hits\n- `resourcesTerminal` — ONE hit, and it is `resourcesTerminalRef` inside apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:200, i.e. a fixture, not a producer.\n\nSo a reader asking \"were this attempt's effects and resources terminal when it released?\" has nothing durable to read. That question cannot be answered from a caller payload without handing an agent the ability to declare its own effects terminal.\n\nWHAT TO COMPOSE RATHER THAN REBUILD: effect terminality already has authority elsewhere — the activation ledger records effect disposition, and `packages/runner/src/supervisor/effect-kernel.ts` owns `SUPERVISOR_LAYERS`. Resource terminality likewise has scheduler-side authority. This task ENUMERATES what was terminal at release and records the refs durably; it must not re-decide terminality itself. If an effect's or resource's terminal state cannot be read from its own authority, that is UNKNOWN and the attempt is not releasable — never an assumed terminal.\n\nDeliverable: a durable record, written on the same production release path as task-740924b741754955b94a7ccf7fc16bb1, carrying `effectsTerminal`, `resourcesTerminal`, `terminalEffectRefs[]` and `terminalResourceRefs[]` derived from each item's own durable authority.\n\nNOTE THE ENUMERATION SHAPE, and reuse the pattern rather than inventing one: `apps/daemon/src/work/in-flight-attempts.ts` (task-48c0c0db) already establishes how to enumerate durable records bounded and index-backed via `readEventsByTypeAfter`, with ambiguity and decode drift refused rather than skipped. Follow it — an effect silently omitted from `terminalEffectRefs` is an effect nobody proved terminal, which is exactly the false-release this evidence exists to prevent.\n\nNOT in scope: release disposition, lease or slot state (task-740924b7), safe-boundary observation (its own producer task), the evidence reader itself (task-e62e3828), or deciding terminality.\n\nOwned paths: one new module under apps/daemon/src/work/ plus its .js bridge and focused test.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "`grep -rn \"terminalEffectRefs\\|terminalResourceRefs\\|effectsTerminal\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.' | grep -v fixtures` returns production producers where all three returned zero.",
+    "Each ref is derived from that item's OWN durable authority, not from a caller list: a test supplies a caller-claimed terminal ref for an effect whose durable state is not terminal and asserts the claim is refused or ignored, pinning the exact code and layer.",
+    "An effect or resource whose terminal state cannot be READ yields UNKNOWN and blocks release — it is never omitted from the list and never assumed terminal. A test drives an unreadable item and asserts release is not available, with the exact code and layer.",
+    "Enumeration is bounded and index-backed via `readEventsByTypeAfter` following the shape of apps/daemon/src/work/in-flight-attempts.ts; a test asserts the read count is proportional to the attempt's own items rather than to total project events, with a literal bound a full-stream walk would fail.",
+    "`effectsTerminal` and `resourcesTerminal` are TRUE only when every enumerated item is terminal, and a test with one non-terminal item asserts both the flag is false and the attempt is not releasable.",
+    "A mutation that skips an undecodable item instead of refusing turns a NAMED test red — a silently omitted effect is the false-release this record exists to prevent.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately, the test leg prints a nonzero count line, and the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "This record ENUMERATES terminality; it never DECIDES it. Each effect's and resource's terminal state comes from its own durable authority — the activation ledger for effects, the scheduler's resource authority for resources.",
+    "No caller-supplied terminal ref, terminal flag or item list may become authority. A caller may identify the attempt; it may never supply what was terminal.",
+    "Fail closed: an unreadable or undecodable item is UNKNOWN and blocks release. Never skip it — an omitted item is one nobody proved terminal, and the list would then read as complete.",
+    "Page with `readEventsByTypeAfter` and follow in-flight-attempts.ts's bounded, index-backed shape; do not walk all project events to filter in memory.",
+    "Real SqliteEventStore in tests, closed in a `finally` on every exit path. Target <=250 physical lines; commit only owned paths by explicit pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 78,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T15:04:32.945Z",
+  "updatedAt": "2026-08-16T15:04:32.945Z"
+}

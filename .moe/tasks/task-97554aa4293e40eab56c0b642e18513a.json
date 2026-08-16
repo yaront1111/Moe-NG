@@ -89,12 +89,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor routing 02:21Z under the human's standing unblock directive, ending the deliberate hold: the canary's step-1 gate found three capability gaps (comment-90116e38 has file:line evidence) and only gap A has owner tasks. ARCHITECT OUTPUT WANTED — the b9378/05ce9 pattern: (1) GAP A (pinned Claude production spawn): do NOT file anything — measure and record that it is owned by the in-flight ff589(DONE)→32edd(rework)→75ee4(planning)→6cbff chain plus d7b352e1; name those ids. (2) GAP B (restart reconciliation): reconcileOnRestart (recovery/restart-reconciliation.ts:235) has ONLY test-harness callers; startDaemon (daemon-entry.ts:162) runs no reconciliation sweep — re-measure, and if still unwired file the production wiring task with the gap measured symbol by symbol. (3) GAP C: re-derive from comment-90116e38 (its third capability), same treatment. Then RE-BLOCK this canary on the named prerequisite ids. Do not narrow the canary's DoD, do not plan a mock-backed journey, do not duplicate the 6cbff chain.",
+  "reopenReason": "Governor cascade 15:04Z — THE CANARY'S PREREQUISITE LIST IS COMPLETE. Post-descope prerequisites (comment-6785a05f): task-6cbff010 DONE (durable attempt dispatch; gap A chain fully landed: ff589→32edd→75ee4→6cbff + 7ba+d7b352e1 Windows proof) and task-3e54b466 DONE (gap B: startDaemon → reconcileOnRestart wired with the real enumerator, commit 1b62f99, QA-verified all seven DoD items). Gap C is descoped (extra-design, d17bb228 archived). ARCHITECT: re-measure the step-1 resume gate's seven capabilities on committed bytes — the three formerly-test-only gaps should now be production-called; re-scope any gap-C-dependent step/DoD language per the descope; then re-plan or resume the 8-step plan as measurement dictates. This is the Foundation Preview acceptance task — the epic's terminal deliverable.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -139,7 +139,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:50:16.163Z",
-  "updatedAt": "2026-08-16T12:21:31.059Z",
+  "updatedAt": "2026-08-16T15:03:29.208Z",
   "metrics": {
     "firstClaimAt": "2026-08-08T20:57:10.555Z",
     "plannedStepCount": 8,
@@ -188,10 +188,10 @@
     "governor-a627169a"
   ],
   "workStartedAt": "2026-08-08T20:59:42.000Z",
-  "blockedReason": "Re-blocked on named prerequisite ids by architect-27b64950, HEAD e881141, 2026-08-16 09:23Z. Architect output delivered as routed. Full detail in comment-0fda722c721b4e69a9aadae01421d73a.\n\nAll three gaps re-measured on disk, not trusted from comment-90116e38. All three still open.\n\nGAP A — pinned Claude production spawn. NOT FILED, per instruction. Owned by the in-flight chain: ff589abd (DONE) -> 32eddfd3 (DONE, `observeInstalledClaudeRuntime` at claude-host-runtime.ts:201) -> 75ee4a84 (planned, `createClaudeRuntimePinRequest`, the factory replacing 6cbff010's temporary runtimePorts) -> 6cbff010 (BLOCKED), plus d7b352e1 (broker completion; sibling 7ba898f5 DONE on the fd0 half only).\n\nGAP B — restart reconciliation. STILL UNWIRED: `reconcileOnRestart` (restart-reconciliation.ts:235) callers are continuation-test-harness.ts:6,73 (a harness by name and fact), two test files, one doc comment. Zero production. `startDaemon` (daemon-entry.ts:162) = resolveDependencies -> mint CSRF -> startControlRoomListener -> freeze/return, no sweep. FILED **task-3e54b466da3d4385ae9fbbf886a45464**, which also exposes `evaluateContinuationCommandBytes` through the registry.\n\nGAP C — durable coordination. STILL UNWIRED: `createCoordinationAdapter` (coordination-adapter.ts:111) has three callers, all its own test; a grep for `coordination/` imports from production daemon modules outside that directory returns ZERO. Registry admits BOOTSTRAP/REVIEW/SESSION/WORK plus effect.activate and recovery.complete — no coordination kind. FILED **task-d17bb228d6324beb83aa59ad9f6e6521**.\n\nBoth filed tasks are CONSUMER-EDGE ONLY and forbidden from editing what they compose, so the gap cannot be relocated into the producer.\n\nDoD NOT narrowed, no mock journey substituted — testkit's foundation-model-j3j4.ts would make a green J3/J4 trivial to fake.\n\nUNBLOCK WHEN all four are DONE. Re-run the three caller greps literally then.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T09:24:23.321Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Architect output delivered for all three step-1 gaps at HEAD e881141; no plan submitted and no code written, which is correct for a Clause-2 acceptance gate whose subjects are absent. Re-measured every gap on disk rather than trusting comment-90116e38 — all three unchanged. GAP A: not filed, per routing; recorded as owned by ff589abd(DONE) -> 32eddfd3(DONE) -> 75ee4a84(planned) -> 6cbff010(BLOCKED), plus d7b352e1 with sibling 7ba898f5 DONE on the fd0 half only. GAP B: filed task-3e54b466da3d4385ae9fbbf886a45464 (Run restart reconciliation from the daemon boot path). GAP C: filed task-d17bb228d6324beb83aa59ad9f6e6521 (Register the coordination command kind so typed envelopes cross MCP). Re-blocked the canary on all four ids; full evidence in comment-0fda722c721b4e69a9aadae01421d73a.",

@@ -104,17 +104,23 @@
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — and read the count line; strictly above the step-1 baseline, and say by how many. Then, because drills 1-4 edit three packages, re-run `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/core test` and `pnpm --filter @moe/scheduler test` and confirm each is back to its baseline; the daemon suite is expected RED from foreign in-flight slices, so attribute rather than absorb. Then `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty.\nADVERSARIAL REVIEW: (a) does the union of the three files' swept boundaries equal the roster's 23 entries in BOTH directions? (b) does the `ACTIVATION_LEDGER_LAYER` replay case present a MATERIALLY DIFFERENT record and assert the FIRST record's durable bytes come back? (c) do the grant and slot cases assert EXACTLY ONE admission with the durable state read back, rather than just a refusal code? (d) does the expansion/supersession group carry real AFTER cases — valid decision, subject moved, presented again — rather than BEFORE-only coverage? (e) is the arranged layer named per case where two sit in series (ingress/slot/budget, kernel/disposition, core/scheduler expansion)? (f) is the UNKNOWN-never-zero-never-imputed rule asserted as a property over the scheduler group? (g) does the `SPAWN_INVOCATION_LAYER` sweep assert its one-member vocabulary and a positive case count? (h) is every race bounded well below `MAX_BOUND_MS`, terminating, asserted per-side, order-independent? (i) is the whole-slice invariant present across all three files? (j) are `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` untouched? (k) is each file under 400 lines by `grep -c ''`? (l) does `git status --porcelain` show only owned paths, with every production drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after count lines, name the test that reddened for each drill, state whether drill 1 revealed a previously-vacuous assertion, and record that this satisfies the `scheduler-activation` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242 — the LAST of the five axes, so that ratchet becomes plannable once this lands. Keep verification.command under 500 characters.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/activation-boundaries.security.ts",
         "tests/security/expansion-boundaries.security.ts",
         "tests/security/scheduler-boundaries.security.ts"
       ],
-      "startedAt": "2026-08-16T14:48:36.002Z"
+      "modifiedFiles": [
+        "tests/security/scheduler-activation-boundaries.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ],
+      "note": "GATE GREEN, ADVERSARIAL REVIEW CLOSED TWO REAL GAPS, COMMITTED.\n\nGATES, each run alone with its exit code captured separately — never `;`-chained, never piped into tail:\n- `pnpm test:security` => `Test Files 9 passed (9)` / `Tests 462 passed (462)`, EXIT=0.\n  BASELINE, and the step-1 figure is stale so I re-measured: step 1 read `Tests 4 failed | 342 passed (346)`, EXIT=1, and those 4 were foreign (roster 87-vs-89) and have since been fixed at 5988463. The honest attribution is by subtraction: the lane WITHOUT my two files stood at 349 (the runtime-provider slice's final figure) and now stands at 462 — **+113, exactly this slice's case count**, and the lane went from EXIT=1 to EXIT=0.\n- `pnpm --filter @moe/core test` => 781 passed (781), EXIT=0.\n- `pnpm --filter @moe/scheduler test` => 1326 passed (1326), EXIT=0.\n- `pnpm --filter @moe/daemon test` => 2144 passed (2144), EXIT=0 — the plan expected this one RED from foreign in-flight slices; it is not, so there is nothing to attribute.\n- `pnpm typecheck` repo-wide => EXIT=0, ZERO `error TS`. The HEAD-minus-merge-base failing-path delta intersected with my owned paths is therefore EMPTY trivially — there are no failing paths at all. No foreign red to quote.\n\nADVERSARIAL REVIEW — (a)-(l), and two items were NOT satisfied when I first checked them:\n(b) FAILED ON FIRST READ. `replayLedger` computed `{answer, durable}` and the case returned only `.answer`; the durable side was dead code and \"the FIRST record's bytes come back\" was unasserted. CLOSED: the case now stashes the durable read and the suite asserts `attempt.version` off the aggregate. Proven to discriminate — flipping the expected operand to the presented value reddens `expected 8 to be 49`, so it reads production's durable bytes rather than restating the fixture, and it checks `presented !== first` before trusting the divergence at all.\n(g) FAILED ON FIRST READ. The one-member spawn vocabulary was never asserted; only the generic positive case count was. `SpawnInvocationRefusalCode` is a TYPE, so nothing can count it at runtime. CLOSED with both halves: a mapped type `{[K in SpawnInvocationRefusalCode]: true}` under `satisfies` (renaming the key gives `TS2353`, verified by drill, so a second union member cannot land unswept) plus a runtime `toEqual([\"SPAWN_ARGUMENT_UNQUOTABLE\"])` — the type check cannot see a stale test and the runtime check cannot see the union.\n(a) both directions green, 24 entries. (c) grant and slot both assert exactly one admission with `durableAdmissions` read back. (d) real AFTER cases — drill 3 proved the recheck, not the initial validation, is what answers. (e) `arranged` per case, and the suite requires the observed layer to equal it. (f) the UNKNOWN rule is a property over the group with three positive controls. (h) bounded by `CASE_BOUND_MS = Math.min(15_000, MAX_BOUND_MS)`, per-side, order-independent. (i) whole-slice invariant present. (j) `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` all show EMPTY `git diff --numstat` — untouched.\n\nROSTER RE-READ AT THE GATE, not only at planning: still 24, `git diff --numstat` on the roster empty. It did move once mid-task (23 -> 24, FOUNDATION_VERIFICATION_LAYERS onto this axis) and that entry is covered.\n\nTWO DISCLOSURES, both deliberate, for QA to judge rather than re-derive:\n1. (k) IS NOT SATISFIED as literally written: the case module is 1737 lines. The owned-paths clause allows the suite plus AT MOST ONE sibling, so a further split would breach it; the project rail scopes the 250/400 cap to PRODUCTION files; and the sibling integrity slice landed `integrity-hostile-cases.ts` at 1208. The suite itself is 317. I did not split further.\n2. Races drive production's synchronous calls directly rather than through `probeRacing`, for the reason recorded in step 4.\n\nCOMMIT — and the deliverable is SPLIT ACROSS TWO COMMITS through no choice of mine. Between two `git status` calls my files flipped from `??` to ` M`: **c7013ad (task-3e54b466, \"Run restart reconciliation from the daemon boot path\") swept both untracked files into a foreign commit.** Verified by `git log -1 -- <path>`. Only the last 32 lines remained, committed by explicit pathspec as fa39721 — never `git add -A`, never a bare commit. `git show --stat` confirms 1 file, 32 insertions. Both files are now reachable at HEAD (`git rev-parse HEAD:<path>` succeeds for each) and `git diff --numstat HEAD` is empty for both, so HEAD's bytes are the bytes I verified. Working tree is clean apart from daemon-owned `.moe/` bookkeeping.\n\nThis satisfies the `scheduler-activation` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242 — the LAST of the five axes, so that ratchet is now plannable.",
+      "startedAt": "2026-08-16T14:48:36.002Z",
+      "completedAt": "2026-08-16T14:54:53.233Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-ad55ab67",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -126,7 +132,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:01.224Z",
-  "updatedAt": "2026-08-16T14:48:36.002Z",
+  "updatedAt": "2026-08-16T14:59:48.848Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -135,7 +141,9 @@
     "firstClaimAt": "2026-08-16T13:03:39.610Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T14:59:48.848Z",
+    "wallClockMs": 6969238
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -145,7 +153,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:05:27.670Z",
@@ -172,7 +181,24 @@
   },
   "planApprovedAt": "2026-08-16T13:05:29.730Z",
   "contextFetchedBy": [
-    "worker-ad55ab67"
+    "worker-ad55ab67",
+    "qa-ce3ba361"
   ],
-  "workStartedAt": "2026-08-16T13:56:17.867Z"
+  "workStartedAt": "2026-08-16T13:56:17.867Z",
+  "reviewStartedAt": "2026-08-16T14:55:37.398Z",
+  "verification": {
+    "command": "pnpm test:security",
+    "exitCode": 0,
+    "outputTail": "$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n Test Files  9 passed (9)\n      Tests  462 passed (462)\n   Start at  17:53:47\n   Duration  8.88s (transform 2.03s, setup 0ms, import 3.24s, tests 4.84s, environment 0ms)",
+    "reportedAt": "2026-08-16T14:55:37.398Z"
+  },
+  "filesModified": [
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/hostile-harness.ts",
+    "tests/security/scheduler-activation-hostile-cases.ts",
+    "tests/security/scheduler-activation-boundaries.security.ts"
+  ],
+  "completedAt": "2026-08-16T14:59:48.848Z",
+  "reviewCompletedAt": "2026-08-16T14:59:48.848Z",
+  "reviewSummary": "APPROVED at HEAD fa39721. Owned files 317 + 1737 lines, tree clean vs HEAD.\n\nGATE, both legs run separately (the `tsc && vitest` chain hides the count line when leg one dies): tsc EXIT=0, ZERO errors — the 6 TS errors I measured in these files 25 min ago are fixed. vitest EXIT=0, 9 files / 462 tests vs an EXIT=1 baseline. DoD 7 met; owned-path failing delta empty.\n\nDoD 1: roster count asserted >0 AND toHaveLength(24) — I re-derived 24 from the committed roster. Set equality BOTH directions, and it.each per constant asserts arms.length >0 plus toContain BEFORE, AFTER, RACE individually.\n\nDoD 4, drilled — the survivor the worker disclosed. Re-applying `quantity: (item.quantity ?? 0)` at budget-contract.ts:226 now reddens exactly \"keeps the accepted unmeasured quantity null rather than storing it as zero\" (1 failed | 112 passed). Widened coverage genuinely closed it.\n\nDoD 5 + 3, drilled: disabling the slot ceiling in work-slot-ceiling.ts reddens the NAMED test \"WORK_LAYERS RACE: two attempts racing for the last provider slot admit exactly one...\" on the intended assertion — \"at most 1 may be admitted: expected 2 to be 1\" — plus the whole-slice invariant. Races assert per side, never on an aggregate, and durableAdmissions() reads the store back, so \"two admitted, one lied to\" cannot pass.\n\nI also drilled GRANT_ALREADY_CONSUMED in foundation-launch-authority.ts: stayed green, but that file is not among the rostered 24, so it is outside the covered set and not a DoD 5 miss.\n\nDoD 2: assertRefusedWith compares code AND layer and throws on an empty layer, so a code-only assertion cannot exist; the series check pins expected.layer to the independently declared `arranged` layer, proving the fixture reached its intended layer.\nDoD 6: every case carries CASE_BOUND_MS = min(15000, MAX_BOUND_MS) as its it-timeout.\n\nThree drilled production files restored, hash-verified == HEAD; lane re-run green 462/462."
 }

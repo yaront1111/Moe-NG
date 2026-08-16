@@ -1,0 +1,36 @@
+{
+  "id": "task-ded026d6587442eabc28ff2609d231aa",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Durably record the safe-boundary observation for a released attempt",
+  "description": "Objective: produce the safe-boundary facts `ExpansionReleaseEvidence` requires and nothing in production currently writes. Third producer repair for task-e62e3828df234c66969a99b8223487f4, per its rail 1: \"if it omits a named fact, repair that producer rather than reconstructing authority here.\"\n\nMEASURED GAP at HEAD fa39721 across apps/daemon/src (non-test). Two fields of `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:31,33) have ZERO production producers:\n- `safeBoundaryObserved` — ZERO hits anywhere in apps/daemon.\n- `observationRef` — ZERO hits.\n\nTHE WIRE KIND ALREADY EXISTS. `safe_boundary.observe` is a member of the frozen `RUNTIME_COMMAND_KINDS` (packages/contracts/src/runtime/runtime-vocabulary.ts:85), so this capability was designed in and reserved a command kind — it simply has no daemon producer and no registry entry. That is a meaningful difference from the coordination surface, whose kind was never in the union at all: here the union already permits it, so this task does NOT need a contracts expansion and is not blocked by the M5 closed-union ruling. Verify that membership yourself before planning, and note that `runtime-envelope.ts:142` refuses any kind outside the union before `http-adapter.ts:196` reads the registry — so a kind already present is exactly what makes this reachable.\n\nDeliverable: a durable safe-boundary observation for an attempt, recorded by production, carrying `safeBoundaryObserved` and the `observationRef` that identifies the observation. An observation is a FACT ABOUT WHAT WAS SEEN, not a declaration that things are safe: an agent must not be able to assert its own boundary was observed, which is the whole reason this field exists separately from the terminality flags.\n\nConsider whether the observation is best produced by registering `safe_boundary.observe` in the daemon command registry (it is already in the union, already gated by capability), by the release path observing the boundary itself, or both. State the choice and its reason; if a registry entry is the answer, follow the shape `RECOVERY_COMPLETION_COMMAND_KIND` already uses as a singleton kind with its own capability, payload allow-list and family entry.\n\nNOT in scope: release disposition, lease or slot state (task-740924b7); terminal effect and resource refs (task-6d400781); the evidence reader itself (task-e62e3828); creating a hold, PlanningRun, or scheduler admission.\n\nOwned paths: one new module under apps/daemon/src/ plus its .js bridge and focused test, and — only if the registry route is chosen — apps/daemon/src/daemon-command-registry.ts.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code.",
+  "definitionOfDone": [
+    "`grep -rn \"safeBoundaryObserved\\|observationRef\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.' | grep -v fixtures` returns production producers where both returned zero.",
+    "The observation records WHAT WAS SEEN, not what a caller asserted: a test supplies a caller-claimed `safeBoundaryObserved: true` for a boundary that was not observed and asserts the claim is refused with an exact code and layer, never recorded.",
+    "An unobserved or unreadable boundary yields `safeBoundaryObserved: false` or a typed UNKNOWN and blocks release — never an assumed true. A test drives each and pins the exact code and layer.",
+    "`observationRef` identifies a durable observation that can be read back; a test resolves the ref and asserts it returns the same observation, and a ref pointing at nothing is refused rather than accepted as an identifier.",
+    "If the registry route is chosen: the command uses the ALREADY-PRESENT `safe_boundary.observe` kind from the frozen union — no contracts expansion — with its own capability and payload allow-list, and a test asserts an unauthenticated or malformed send is refused with its exact code and layer.",
+    "A mutation that defaults `safeBoundaryObserved` to true when the observation is missing turns a NAMED test red.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately, the test leg prints a nonzero count line, and the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "An observation is a fact about what was SEEN. No caller-supplied `safeBoundaryObserved`, observation ref or boundary claim may become authority — this field exists precisely so an agent cannot declare its own boundary safe.",
+    "Use the `safe_boundary.observe` kind already present in the frozen `RUNTIME_COMMAND_KINDS`; do NOT add a new kind. The union is closed for M5 by human decision, and an unknown kind is refused at `runtime-envelope.ts:142` before the registry is read.",
+    "Fail closed: unobserved or unreadable is false or UNKNOWN and blocks release, never an assumed true. A default-true is the single defect this record exists to prevent.",
+    "Real SqliteEventStore in tests, closed in a `finally` on every exit path. Target <=250 physical lines per production source; commit only owned paths by explicit pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 79,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T15:05:06.503Z",
+  "updatedAt": "2026-08-16T15:05:06.503Z"
+}

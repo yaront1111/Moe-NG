@@ -17,7 +17,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-27b64950",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -26,10 +26,17 @@
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
   "order": 9,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ac1ce804865642cd8d78429c958aaf91",
+      "author": "architect-27b64950",
+      "content": "RAIL-1 MEASUREMENT, architect-27b64950 at HEAD fa39721. The open question two prior architects left — \"does the completed prerequisite retain every named fact?\" — is answered: **no, and it never had them.** task-6cbff010 landed attempt dispatch, but the release-evidence facts have no production producer at all.\n\nFIELD BY FIELD across apps/daemon/src, non-test. `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:27-36) declares 17 fields. Producer hit counts:\n\nZERO hits — `effectsTerminal`, `leaseState`, `observationRef`, `providerSlotState`, `receiptRef`, `safeBoundaryObserved`, `terminalEffectRefs`, `terminalResourceRefs`. Also `WORK_RELEASE_OR_PAUSE`: zero.\n\nONE OR TWO HITS, **all inside `*-test-fixtures.ts`** — `strongestReason` and `terminalTarget` at recovery-test-fixtures.ts:107-108; `attemptState` at :123,142; `leaseRef` at bootstrap-test-fixtures.ts:191; `providerSlotRef` at :192; `resourcesTerminalRef` at :200. And all 14 `DAEMON_VERIFIED` hits are in bootstrap-test-fixtures.ts.\n\nThat last line is the finding. The only place these facts exist in the daemon is exactly the place this task's own rails forbid drawing authority from: *\"Do not reconstruct safe-release authority from caller payload, DAEMON_VERIFIED fields, or fixtures; omitted producer facts require producer repair.\"*\n\nWHY IT MATTERS RATHER THAN BEING A NAMING ACCIDENT: core's acceptance predicate (expansion-planning-hold.ts:210-213) admits release evidence only when `truthClass === \"DAEMON_VERIFIED\"` AND `reason === \"WORK_RELEASE_OR_PAUSE\"` AND `disposition.strongestReason === \"WORK_RELEASE_OR_PAUSE\"` AND `disposition.terminalTarget === \"RELEASED\"`. The drain vocabulary exists — packages/runner/src/supervisor/drain-table.ts, with the design-765 note that \"only an unchanged strongest WORK_RELEASE_OR_PAUSE result makes the run resumable\" — but no daemon path records it durably for an attempt. A reader written today could only satisfy that predicate by inventing the values.\n\nWHAT DOES EXIST, so the repairs compose rather than rebuild: a work-claim lifecycle with RELEASED (work-claim-read-model.ts:15, work-lifecycle.ts:33-35, CONTEXT_LEGAL_STATES incl. DRAINING). That is the CLAIM's release, not the attempt-plus-lease-plus-slot-plus-terminality bundle the evidence needs.\n\nFILED, three producer repairs:\n1. **task-740924b741754955b94a7ccf7fc16bb1** — release disposition with lease and provider-slot state (PLANNING). Covers reason, disposition{resumable,strongestReason,terminalTarget}, attemptState, leaseRef/leaseState, providerSlotRef/providerSlotState.\n2. **task-6d40078159e84d92b3293d7b366cf727** — terminal effect and resource refs (BACKLOG). Covers effectsTerminal, resourcesTerminal, terminalEffectRefs, terminalResourceRefs. Enumerates terminality from each item's own authority; never decides it.\n3. **task-ded026d6587442eabc28ff2609d231aa** — safe-boundary observation (BACKLOG). Covers safeBoundaryObserved, observationRef. **Note `safe_boundary.observe` is ALREADY in the frozen `RUNTIME_COMMAND_KINDS`**, so unlike the coordination surface this needs no contracts expansion and is not blocked by the M5 closed-union ruling.\n\nONE FIELD I DID NOT FILE FOR: `receiptRef` (zero producers). task-44d4873e (Durable verification receipt dispatch) is in flight and persists an immutable `EvidenceReceipt` with a read model — that is plausibly its producer. Whoever unblocks this task should re-measure `receiptRef` against 44d4873e's landed surface rather than assuming either way; if it is still absent, it needs a fourth repair.\n\nRe-blocking this task on all three ids. Its rail 1 is doing exactly what it was written to do.",
+      "timestamp": "2026-08-16T15:05:30.828Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-16T13:01:34.558Z",
+  "updatedAt": "2026-08-16T15:05:30.828Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },

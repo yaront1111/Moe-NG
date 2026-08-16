@@ -130,8 +130,8 @@
       "completedAt": "2026-08-16T14:48:27.843Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -143,12 +143,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:22:50.898Z",
-  "updatedAt": "2026-08-16T14:49:37.728Z",
+  "updatedAt": "2026-08-16T14:54:07.673Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T09:24:50.921Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T14:54:07.672Z",
+    "wallClockMs": 19756751
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -223,5 +225,8 @@
     "apps/daemon/src/daemon-command-registry.test.ts",
     "apps/daemon/src/daemon-command-registry-continuation.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T14:54:07.672Z",
+  "reviewCompletedAt": "2026-08-16T14:54:07.672Z",
+  "reviewSummary": "Verified at HEAD 1b62f99, everything re-run by me.\n\nGATES, legs separate: daemon typecheck EXIT 0; daemon test EXIT 0, `Test Files 105 passed (105)` / `Tests 2144 passed (2144)`. `git status --porcelain -- packages adapters` empty BEFORE and AFTER, so no peer write is inside this green. Both legs green, so owned-path failing delta EMPTY (DoD 7).\n\nDoD 6 - my own two drills on daemon-entry.ts, snapshotted outside the repo, restored byte-identical (sha256 3d204f10 both ends):\n(1) removed the runBootReconciliation call + return: 8 red, incl. \"classifies every in-flight attempt on the real boot path and lands one durable record each\" -> expected +0 to be 2.\n(2) kept the call, dropped `if (swept !== null) return swept`: 5 red, a DIFFERENT set - \"does not accept connections after a conflict refuses the sweep\" -> expected true to be false - while the classification test STAYS GREEN. Neither test answers for the other.\n\nDoD 1 - production caller at recovery/boot-reconciliation.ts:76, reached from startDaemon (daemon-entry.ts:204) before startControlRoomListener.\nDoD 2 - records read back from the store via readReconciliationRecords, not the return value.\nDoD 3 - EXPECTED_VERSION_CONFLICT/DURABLE_STORE and FOUNDATION_ATTEMPT_DISPATCH_SUSPECT/DAEMON_FOUNDATION_ATTEMPT, both by toStrictEqual; not-ready asserted by real TCP connect on BOTH arms, never by the verdict.\nDoD 4 - second-boot no-duplicate test; drill 1 reddened it (expected +0 to be 1).\nDoD 5 - authenticated receipt + durable binding; unauth AUTHENTICATION_FAILED/AUTHENTICATE; server-fact payload INPUT_INVALID/PAYLOAD_SHAPE. `stage` is this surface's layer field (http-contract.ts:47).\n\nRAILS: restart-reconciliation.ts and continuation-service.ts 0 changes; no production path through continuation-test-harness.ts; tests drive the real createStoreDependencies. Commit is 14 files all under apps/daemon/src, foreign activation-ledger-commit.ts excluded, both .js bridges landed. All files under 400 lines."
 }

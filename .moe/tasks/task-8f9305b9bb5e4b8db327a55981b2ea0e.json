@@ -16,12 +16,12 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 15:04Z: the hard dependency is QA-approved DONE — task-44d4873e (Durable verification receipt dispatch) landed at 6e25dd8 with the verification receipt service (contracts 247 / service 186 / store split with LF bridges, FAILED-vs-UNKNOWN distinction pinned, replay reading durable bytes back). Architect: re-measure the landed receipt/dispatch surfaces on committed bytes before naming symbols (grep the EvidenceReceipt family fresh — the old premise's empty greps are obsolete). Downstream: 5e43a unblocks when this lands, then 49ed1.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -42,7 +42,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.157Z",
-  "updatedAt": "2026-08-15T23:47:06.618Z",
+  "updatedAt": "2026-08-16T15:03:24.366Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:47.761Z"
   },
@@ -56,10 +56,10 @@
     "governor-a627169a",
     "architect-d9dccf21"
   ],
-  "blockedReason": "Fresh committed-HEAD audit confirms the hard dependency remains absent. Task task-44d4873eb9f746b1a978e97ff9743dc4 is now BLOCKED on task-6cbff010, not DONE. At HEAD 54af35270ca90a9f4d07c82e1896d9fb99c6b365, `git grep -n -E 'EvidenceReceipt|evidenceReceipt|foundation-verification' HEAD -- apps/daemon/src packages/store/src` returns zero production evidence-receipt/read-model hits. The review producer exists (`ReviewOutputAccepted` emitted at apps/daemon/src/review/review-acceptance.ts:119), but there is still no durable accepted-review reader, and goal.close continues to read `closureWitness`/`zeroAuthorityWitness` directly from request payload at goal-services.ts:80-92. Planning now would force this task to duplicate the verification receipt producer/read model owned by 44d or trust caller refs, both forbidden. Need task-44d QA-approved DONE with exact EvidenceReceipt and byte-identical read surface; then re-probe the matching ReviewOutputAccepted read path and create a separate prerequisite only if that reader is still absent. Do not duplicate 44d or narrow closure authority.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:30:06.149Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-read the prior audit, re-probed committed HEAD, confirmed ReviewOutputAccepted is emitted but no EvidenceReceipt/read model or accepted-review reader exists, goal.close still trusts request witnesses, and reported BLOCKED on task-44d4873.",

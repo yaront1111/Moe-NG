@@ -1,0 +1,37 @@
+{
+  "id": "task-740924b741754955b94a7ccf7fc16bb1",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Durably record attempt release disposition with lease and provider-slot state",
+  "description": "Objective: produce the release facts `ExpansionReleaseEvidence` requires and nothing in production currently writes. Producer repair for task-e62e3828df234c66969a99b8223487f4, whose rail 1 states: \"if it omits a named fact, repair that producer rather than reconstructing authority here.\"\n\nMEASURED GAP at HEAD fa39721, field by field across apps/daemon/src (non-test). `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:27-36) declares 17 fields. These six have NO production producer — every occurrence in apps/daemon is inside a `*-test-fixtures.ts` file:\n- `reason` and `disposition{resumable, strongestReason, terminalTarget}` — `strongestReason` and `terminalTarget` appear once each, both in apps/daemon/src/recovery/recovery-test-fixtures.ts:107-108.\n- `attemptState` — twice, both recovery-test-fixtures.ts:123,142.\n- `leaseRef` — once, apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts:191. `leaseState` — ZERO.\n- `providerSlotRef` — once, bootstrap-test-fixtures.ts:192. `providerSlotState` — ZERO.\n- `WORK_RELEASE_OR_PAUSE` — ZERO hits anywhere in apps/daemon.\n\nThat last one is load-bearing: core's acceptance predicate (expansion-planning-hold.ts:210-213) admits release evidence only when `truthClass === \"DAEMON_VERIFIED\"` AND `reason === \"WORK_RELEASE_OR_PAUSE\"` AND `disposition.strongestReason === \"WORK_RELEASE_OR_PAUSE\"` AND `disposition.terminalTarget === \"RELEASED\"`. The vocabulary exists in packages/runner/src/supervisor/drain-table.ts (`WORK_RELEASE_OR_PAUSE`, rank 20, terminalTarget RELEASED, with the design-765 note that \"only an unchanged strongest WORK_RELEASE_OR_PAUSE result makes the run resumable\"), but no daemon path records it durably for an attempt.\n\nWHAT ALREADY EXISTS AND MUST BE COMPOSED, NOT REBUILT: a work-claim lifecycle with RELEASED already exists — `work-claim-read-model.ts:15` (`status: \"OPEN\" | \"RELEASED\"`), `work-lifecycle.ts:33-35` (`authority: \"CLAIM_RELEASED\"`, `successorState: \"RELEASED\"`), and `CONTEXT_LEGAL_STATES` including ACTIVE/SUSPECT/DRAINING/RELEASED. That is the CLAIM's release. What is missing is the attempt-level release disposition bundled with the lease and provider-slot state.\n\nDeliverable: a durable record, written on the production release path, carrying the attempt's release disposition (reason, resumable, strongestReason, terminalTarget), its `attemptState`, and the lease and provider-slot refs with their states. Facts only — this task creates no hold, no PlanningRun, and grants no authority.\n\nNOT in scope: terminal effect/resource enumeration (its own producer task), safe-boundary observation (its own producer task), the evidence reader itself (task-e62e3828), scheduler admission, or approval.\n\nOwned paths: one new module under apps/daemon/src/work/ plus its .js bridge and focused test.\n\nVerification: pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test — read the OUTPUT count line, not the exit code. Daemon gates are red at baseline from foreign slices; apply the path-attributed baseline over the owned paths.",
+  "definitionOfDone": [
+    "The release disposition is written by the PRODUCTION release path, not by a fixture: `grep -rn \"WORK_RELEASE_OR_PAUSE\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.' | grep -v fixtures` returns a producer where it returned zero.",
+    "The record carries `reason`, `disposition{resumable, strongestReason, terminalTarget}`, `attemptState`, `leaseRef`, `leaseState`, `providerSlotRef` and `providerSlotState`, and a test reads every one back from durable bytes rather than from the writing call's return value.",
+    "The drain reason is taken from the production vocabulary in packages/runner/src/supervisor/drain-table.ts through the package root — never a locally retyped string — and a test asserts an unrecognised reason is refused with an exact code and layer rather than recorded.",
+    "A release that is NOT an unchanged strongest `WORK_RELEASE_OR_PAUSE` records its true reason and does NOT present as resumable; a test drives at least one other drain reason and asserts the disposition differs, so the resumable path cannot be reached by default.",
+    "Lease and provider-slot states are read from their own durable authority, not asserted by the caller: a test supplies a caller-claimed state that contradicts the durable one and asserts the durable value wins, pinning the exact code and layer of whichever layer refused.",
+    "A mutation that hardcodes `terminalTarget: \"RELEASED\"` or `resumable: true` turns a NAMED test red.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run with exit codes captured separately, the test leg prints a nonzero count line, and the HEAD-minus-merge-base failing-path delta over the owned paths is EMPTY."
+  ],
+  "taskRails": [
+    "No caller-supplied release state, drain reason, lease state or slot state may become authority. A caller may identify WHICH attempt; it may never supply WHAT happened to it.",
+    "Compose the existing work-claim lifecycle (work-lifecycle.ts, work-claim-read-model.ts) rather than rebuilding a second release concept. If it cannot express attempt-level release, say so explicitly rather than forking it.",
+    "Take the drain vocabulary from `@moe/runner`'s package root; do not retype `WORK_RELEASE_OR_PAUSE` or the terminal targets locally, or the two definitions will drift and core's predicate will start refusing silently.",
+    "Fail closed: an unreadable lease, slot or disposition stays UNKNOWN and never becomes a recorded release. Real SqliteEventStore in tests, closed in a `finally` on every exit path.",
+    "Target <=250 physical lines per production source; commit only owned paths by explicit pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 77,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-16T15:03:57.516Z",
+  "updatedAt": "2026-08-16T15:03:57.516Z"
+}
