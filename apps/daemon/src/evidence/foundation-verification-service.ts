@@ -113,12 +113,22 @@ export function createFoundationVerificationService(deps: FoundationVerification
       // A replay answers from the DURABLE row, never from the caller's request,
       // and a materially different candidate is a conflict rather than an
       // overwrite: the first receipt's bytes stay exactly where they are.
+      // candidateRoot is compared BECAUSE IT IS WHAT RAN — dropping it would let
+      // a request naming an unverified root be answered by the prior receipt.
       return prior.row["recipeSha256"] === sealed.recipe.sha256
         && prior.row["recordDigest"] === request["expectedRecordDigest"]
         && prior.row["attemptAggregateId"] === request["attemptAggregateId"]
+        && prior.row["candidateRoot"] === request["candidateRoot"]
         ? prior
         : refuseVerification(
           "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
+    }
+    if (!commitPhase(store, who, aggregate, "ACTIVATED", {
+      attemptAggregateId: request["attemptAggregateId"],
+      recipeSha256: sealed.recipe.sha256, verificationId,
+    }, eventsOf(store, aggregate).length, "ACTIVATED")) {
+      return refuseVerification(
+        "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED", "DAEMON_VERIFICATION_ACTIVATION");
     }
     const run: RunVerifierProcessResult = await runVerifierProcess({
       activation: {
@@ -156,14 +166,18 @@ export function createFoundationVerificationService(deps: FoundationVerification
     const verdict: FoundationVerificationVerdict =
       run.execution.disposition === "COMPLETED" ? "PASSED" : "FAILED";
     const committed = commitPhase(store, who, aggregate, "RECEIPTED", verificationReceiptBody({
-      attemptAggregateId: request["attemptAggregateId"] as string, capture: run.capture,
+      attemptAggregateId: request["attemptAggregateId"] as string,
+      candidateRoot: request["candidateRoot"] as string, capture: run.capture,
       receipt: receipt.receipt, recipeAggregateId: request["recipeAggregateId"] as string,
       recordDigest: request["expectedRecordDigest"] as string, verdict, verificationId,
     }), eventsOf(store, aggregate).length, "RECEIPTED");
+    // ZERO rows written, which is NOT the ">1 row" AMBIGUOUS reads: sharing one
+    // code would leave a reviewer unable to tell an empty aggregate from a
+    // doubled one, and the two demand opposite repairs.
     return committed
       ? readStoredReceipt(store, verificationId)
       : refuseVerification(
-        "FOUNDATION_VERIFICATION_RECEIPT_AMBIGUOUS", "DAEMON_VERIFICATION_RECEIPT");
+        "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED", "DAEMON_VERIFICATION_RECEIPT");
   }
 
   return {

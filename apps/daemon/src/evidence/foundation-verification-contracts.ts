@@ -1,7 +1,6 @@
 /**
  * Durable verification receipt dispatch: this service's own vocabulary, the
  * identities a caller may name, and the shape of the one durable receipt row.
- *
  * Every code below is raised by THIS service and by nothing else. A refusal from
  * the attempt store, the verifier process wrapper, its supervisor or the evidence
  * builder travels through `carry*Refusal` with ITS OWN code and layer intact:
@@ -31,11 +30,10 @@ export const FOUNDATION_VERIFICATION_EVENT_TYPES = Object.freeze({
   REFUSED: "FoundationVerificationRefused",
 } as const);
 
-/** Ordered by when they can answer: REQUEST/IDENTITY/ACTIVATION are all strictly
+/** Ordered by when they can answer: REQUEST/IDENTITY/ACTIVATION are strictly
  *  before any process starts, RECEIPT covers writing the row and reading it back.
- *  There is deliberately no EXECUTION layer: every post-run refusal on this path
- *  belongs to the wrapper, the evidence builder or the store, and carries THEIR
- *  layer — a daemon layer nothing could emit would be an orphan. */
+ *  No EXECUTION layer: every post-run refusal belongs to the wrapper, the
+ *  evidence builder or the store and carries THEIRS, so ours would be an orphan. */
 export const FOUNDATION_VERIFICATION_LAYERS = Object.freeze([
   "DAEMON_VERIFICATION_REQUEST",
   "DAEMON_VERIFICATION_IDENTITY",
@@ -51,13 +49,13 @@ export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS
  * its own — the same reason ACTIVATION_UNCOMMITTED is not folded in either.
  *
  * Deliberately absent: spawn, timeout, output-overflow, receipt-binding,
- * truncated-capture, unverified-execution and candidate-changed codes.
- * `runVerifierProcess` refuses the moment a stream passes its bound and only
- * ever answers `ok` with disposition COMPLETED or FAILED; a durable attempt
- * record is IMMUTABLE, a second RECORDED event making the STORE refuse under
- * ITS code. Each would be an orphan no layer could emit. DoD 3 is met by
- * carrying the producer's refusal, recording truncation on the UNKNOWN row, and
- * asserting no-authoritative-pass as a property.
+ * truncated-capture, unverified-execution and candidate-changed codes. The
+ * wrapper refuses the moment a stream passes its bound and only ever answers
+ * `ok` with disposition COMPLETED or FAILED, and a durable attempt record is
+ * IMMUTABLE, a second RECORDED event making the STORE refuse under ITS code, so
+ * each would be an orphan. DoD 3 is met by carrying the producer's refusal,
+ * recording truncation on the UNKNOWN row, and asserting no-authoritative-pass
+ * as a property.
  */
 export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_REQUEST_MALFORMED",
@@ -145,8 +143,7 @@ export function carryEvidenceRefusal(
  * input manifest, result manifest, runtime observation, recipe body or receipt:
  * a substitute for durable state is UNREPRESENTABLE rather than validated away,
  * so no later refactor can stop calling the check. `expectedRecordDigest` is the
- * caller's belief about WHICH record it verifies, never a replacement for it.
- */
+ * caller's belief about WHICH record it verifies, never a replacement. */
 export interface FoundationVerificationRequest {
   readonly attemptAggregateId: string;
   readonly candidateRoot: string;
@@ -199,10 +196,9 @@ export interface FoundationVerificationReceiptParts {
 /** The durable row: the runner's immutable receipt, plus the stdout/stderr/exit
  *  bindings the receipt itself does not carry. Field order is irrelevant — the
  *  codec canonicalizes — but the field SET is what review and closure hash.
- *  `candidateRoot` is part of that set because it is WHAT WAS VERIFIED: a replay
- *  can only be told apart from a different candidate by a field the row holds,
- *  and a root that never reaches durable state is a root nothing can conflict
- *  with. Compare `foundation-verification-service.ts`'s replay clause. */
+ *  `candidateRoot` is in that set because it is WHAT WAS VERIFIED: a root that
+ *  never reaches durable state is a root nothing can conflict with, so the
+ *  replay clause in the sibling service would be unable to see it. */
 export function verificationReceiptBody(
   parts: FoundationVerificationReceiptParts,
 ): Record<string, unknown> {

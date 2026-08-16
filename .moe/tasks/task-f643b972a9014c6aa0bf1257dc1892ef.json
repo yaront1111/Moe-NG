@@ -98,11 +98,17 @@
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — and read the OUTPUT: the count line must be strictly above the step-1 baseline, and say by how many. `passWithNoTests: false` catches an empty lane, but a lane collecting only the roster, smoke, transport and integrity files still exits 0. Then `pnpm --filter @moe/store test` and `pnpm --filter @moe/daemon test`, since drills 1-3 touch production in both packages — confirm they are back to their baselines. Then `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty; quote any foreign red verbatim without repairing it.\nADVERSARIAL REVIEW: (a) does the swept set equal the roster's 14 durable-store entries in BOTH directions, with no member from another axis? (b) is the LANE BOUNDARY honoured — does the file header state the security-vs-fault distinction, and does each boundary say which question its cases ask, with nothing that merely re-runs a disaster-restore case? (c) does EVERY inventory assertion pin the upstream tuple as well as the code and layer? (d) does every refusal arm read the durable aggregate back and assert no fragment? (e) is every commit against a REAL SqliteEventStore, closed in a `finally` on every exit path? (f) are `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent from the diff? (g) is every race bounded well below `MAX_BOUND_MS`, terminating, asserted per-side, order-independent? (h) is the whole-slice invariant present — no committed record, installed anchor, advanced succession, or truth class above UNKNOWN? (i) are `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` untouched? (j) is each file under 400 lines by `grep -c ''`? (k) does `git status --porcelain` show only owned paths, with every production drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after count lines, name the test that reddened for each drill, state how you kept this slice distinct from task-0c89476b's fault coverage, and record that this satisfies the `durable-store` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242. Keep verification.command under 500 characters.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/durable-store-boundaries.security.ts"
       ],
-      "startedAt": "2026-08-16T13:22:18.943Z"
+      "modifiedFiles": [
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts"
+      ],
+      "note": "Gate and adversarial review complete. Exact named gate `pnpm test:security` fresh at HEAD 5988463: exit 0, Test Files 8 passed (8), Tests 349 passed (349), versus pre-task baseline exit 1 / Tests 2 failed|46 passed (48); focused owned suite executes 72 tests (plus 31 imported-roster tests skipped by the name filter). `pnpm --filter @moe/store test` remains foreign baseline red only at packages/store/src/recovery-anchor.test.ts:694 (`RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root`), 1 failed|526 passed. Current `pnpm --filter @moe/daemon test` and `pnpm typecheck` are foreign-red in apps/daemon/src/evidence/foundation-verification-service{.test,}.ts (9 test failures; TS2741 missing candidateRoot), with no owned-path intersection; daemon had passed 103 files/2122 tests before that foreign completion delta. Adversarial review found the initializer/closed-probe handles were not syntactically guarded by finally; fixed them and reran focused 72/72 plus full security 349/349. Both owned files are clean at HEAD, 252 and 296 lines, no raw DatabaseSync apply helpers, no `any`, and tests/fault untouched. Races use two real worker-thread SqliteEventStore writers with bounded PREOPEN/READY/RESULT gates, assert both side outcomes, exactly one COMMITTED, exact EXPECTED_VERSION_CONFLICT@DURABLE_STORE, and one complete durable event. Inventory pins upstream tuple; every refusal reads production durable state; whole-slice invariant is present. Drills reddened named tests: AFTER RECOVERY_ANCHOR_LAYER identity guard; BEFORE RECOVERY_INVENTORY_LEDGER_LAYER tuple; BEFORE DURABLE_INVENTORY_ADAPTER_LAYER partial write; RACE DURABLE_STORE_LAYER both-admit; generated anchor case count; CHANGED-BYTE REPLAY DURABLE_STORE_LAYER echo branch. This lane tests hostile caller input, not disaster-restore crash-point coherence. Explicit-path commits were attempted; foreign whole-tree hooks 0237cfc then 5988463 captured the owned bytes. Per rail no amend/reset/empty claim commit; QA review is `git diff 7086e54..HEAD -- tests/security/durable-store-boundaries.security.ts tests/security/durable-store-boundary-scenarios.ts`. Satisfies durable-store axis for ratchet task-3b1cbdf9bd39405bb32230552d3ab242.",
+      "startedAt": "2026-08-16T13:22:18.943Z",
+      "completedAt": "2026-08-16T14:02:59.757Z"
     }
   ],
   "status": "WORKING",
@@ -118,7 +124,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:02.653Z",
-  "updatedAt": "2026-08-16T13:22:18.943Z",
+  "updatedAt": "2026-08-16T14:02:59.757Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -127,14 +133,15 @@
     "firstClaimAt": "2026-08-16T12:59:29.245Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:01:27.239Z",

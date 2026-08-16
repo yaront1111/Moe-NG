@@ -1012,6 +1012,66 @@ describe("foundation verification — replay leaves one run, and the read model 
         .filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED)).toHaveLength(1);
     });
 
+  it("refuses a replay that varies ONLY the candidate root", async () => {
+    const ground = provenGround("replay-root");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-root", EXIT_ZERO)).ok).toBe(true);
+    // The positive control for the clause above. recipeAggregateId, the sealed
+    // recipe and expectedRecordDigest are IDENTICAL across the two calls, so the
+    // recipeSha256, recordDigest and attemptAggregateId clauses CANNOT answer;
+    // only candidateRoot differs. A guard blind to it hands back the prior
+    // PASSED receipt for a root it never verified, with no run and no conflict —
+    // which is why varying candidateRoot alongside the recipe proves nothing.
+    const fixed = {
+      attemptAggregateId: ground.attemptAggregateId,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-root",
+      verificationId: "verify-root",
+    };
+    const first = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-a") });
+    expect(first.ok).toBe(true);
+    const aggregate = deriveVerificationAggregateId("verify-root");
+    const before = receiptBytes(ground.store, aggregate);
+
+    const second = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-b") });
+
+    expectDaemonRefusal(
+      second, "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
+    // The verified root is durable, so the conflict is decidable at all.
+    if (first.ok) expect(typeof first.row["candidateRoot"]).toBe("string");
+    expect(Buffer.from(receiptBytes(ground.store, aggregate)).equals(Buffer.from(before)))
+      .toBe(true);
+    expect(eventTypes(ground.store, aggregate)
+      .filter((type) => type === FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED)).toHaveLength(1);
+  });
+
+  it("refuses RECEIPT_UNCOMMITTED, not AMBIGUOUS, when zero receipt rows land", async () => {
+    const ground = provenGround("receipt-uncommitted");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-uncommitted", EXIT_ZERO)).ok).toBe(true);
+    const aggregate = deriveVerificationAggregateId("verify-uncommitted");
+    // Burn the exact event id the RECEIPT commit will use: the run happens, the
+    // receipt builds, and only the WRITE fails. Zero rows is the OPPOSITE
+    // durable state from the ">1 row" AMBIGUOUS names, and the two demand
+    // opposite repairs, so one code for both would tell a reviewer nothing.
+    burnEventId(ground.store, `${aggregate}:RECEIPTED`);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId,
+      candidateRoot: candidateDir("receipt-uncommitted"),
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-uncommitted",
+      verificationId: "verify-uncommitted",
+    });
+
+    expectDaemonRefusal(
+      outcome, "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED", "DAEMON_VERIFICATION_RECEIPT");
+    expect(eventTypes(ground.store, aggregate))
+      .not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+    // And the read model still says ABSENT: nothing was written to be ambiguous.
+    expectDaemonRefusal(
+      svc.readReceipt("verify-uncommitted"), "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
+      "DAEMON_VERIFICATION_RECEIPT");
+  });
+
   it("returns a prior receipt byte-identically to what was persisted", async () => {
     const ground = provenGround("read-bytes");
     const svc = realService(ground.store);

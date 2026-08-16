@@ -23,12 +23,13 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, RE-MEASURE THE ENUMERATOR, AND SETTLE THE COMPOSITION ROOT — the open question this task was blocked on.\nTHE ENUMERATOR LANDED (task-48c0c0db, DONE): `apps/daemon/src/work/in-flight-attempts.ts`, 169 lines, exporting `readInFlightFoundationAttempts` (:145), the `InFlightAttemptSweep` result union (:56) and `IN_FLIGHT_SITUATION_KEYS` (:51). Its header records the rule and its provenance: \"A `FoundationDispatchReserved` WITH NO `FoundationAttemptRecorded` ON THE SAME AGGREGATE IS STILL IN FLIGHT — a decided property of the committed record, not an inference from absence plus a clock, and no timeout is consulted anywhere below\", lifted from `foundation-attempt-service.ts:218-224`. Read the whole header before wiring; it also states how a RECORDED-without-RESERVED aggregate is treated, which your sweep must not contradict.\n`InFlightAttemptSweep` is a UNION — the sweep can refuse. That is the shape the boot path must handle, not an array.\nTHE COMPOSITION ROOT IS `startDaemon`, not the store-dependency root. Measured: `daemon-entry.ts` (206 lines) declares `DAEMON_ENTRY_LAYER` (:41), a frozen `DAEMON_ENTRY_REFUSAL_CODES` (:44) and `refuseEntry` (:97), and `startDaemon` (:162) is where readiness is decided — so a refusal there can actually stop the listener. `createStoreDependencies` (daemon-store-dependencies.ts:94) holds the store handle but has no way to refuse startup, so a sweep failure there could not fail closed. Put the sweep in `startDaemon`, after `resolveDependencies` and BEFORE `startControlRoomListener`.\nCHECK WHETHER A REFUSAL CODE EXISTS: read `DAEMON_ENTRY_REFUSAL_CODES` in full. If it has no member for a failed reconciliation sweep, add ONE, and give it a producer and a code+layer test in the same task — a declared code no layer can emit cannot fail closed, which is what task-6cbff010 was rejected for.\nGATES, each separate with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`. Record count lines and every failing file; the daemon legs are expected RED from foreign slices.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/work/in-flight-attempts.ts",
         "apps/daemon/src/daemon-entry.ts",
         "apps/daemon/src/daemon-store-dependencies.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T14:02:47.022Z"
     },
     {
       "stepId": "step-2",
@@ -75,7 +76,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0cd13358",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -87,7 +88,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:22:50.898Z",
-  "updatedAt": "2026-08-16T13:14:18.362Z",
+  "updatedAt": "2026-08-16T14:02:47.022Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T09:24:50.921Z",
     "plannedStepCount": 6,
@@ -125,7 +126,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T14:02:33.602Z",
+    "escalatedAt": "2026-08-16T14:02:33.602Z"
   },
-  "planApprovedAt": "2026-08-16T13:14:18.362Z"
+  "planApprovedAt": "2026-08-16T13:14:18.362Z",
+  "contextFetchedBy": [
+    "worker-0cd13358"
+  ],
+  "workStartedAt": "2026-08-16T14:02:47.022Z"
 }
