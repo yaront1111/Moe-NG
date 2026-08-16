@@ -517,6 +517,9 @@ describe("provider-run codec vocabulary", () => {
     ];
 
     expect(emitted.length).toBe(7);
+    expect(emitted.map((refusal) => refusal.outcome)).toEqual([
+      "REFUSED", "REFUSED", "REFUSED", "UNKNOWN", "UNKNOWN", "UNKNOWN", "UNKNOWN",
+    ]);
     for (const refusal of emitted) {
       expect(PROVIDER_RUN_LEDGER_CODES).toContain(refusal.code);
       expect(PROVIDER_RUN_LEDGER_LAYERS).toContain(refusal.layer);
