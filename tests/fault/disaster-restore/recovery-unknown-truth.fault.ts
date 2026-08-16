@@ -312,6 +312,11 @@ describe("a missing inventory, artifact proof or key proof keeps recovery UNKNOW
     );
   });
 
+  // ORDER-DEPENDENT BY DESIGN, and it fails closed. This case reads what cases
+  // 1-3 observed, so running it alone (`.only`, a name filter, a shuffled
+  // sequence) leaves the map short and the size assertion below reddens. That is
+  // the intended direction: without the three cases there is nothing to compare,
+  // and a silent pass on an empty set is the exact defect this replaced.
   it("keeps the three absences distinguishable by upstream, not by code", () => {
     // Read from what production RETURNED in cases 1-3, never from restated
     // literals: a local array of three distinct strings is distinct under every
