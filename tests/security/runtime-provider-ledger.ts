@@ -131,6 +131,11 @@ export interface Ledger {
   /** As `refused`, for ONE side of a race. Asserted per side: an aggregate assertion over a
    *  race can hide a double admit, which is the one defect a race case exists to find. */
   refusedSide: <T>(boundary: string, side: LegOutcome<T>, expected: RefusalExpectation) => void;
+  /** Record a non-admission whose code the CASE already asserted against the production value
+   *  and whose surface reports no layer of its own. Never a shortcut around `refused`: the only
+   *  callers are the render contracts, whose layer vocabulary lives on the accepted envelope's
+   *  manifest and is exercised by a manifest-attributed case on the same boundary. */
+  record: (boundary: string, arm: Arm, message: string) => void;
 }
 
 export function createLedger(): Ledger {
@@ -140,6 +145,9 @@ export function createLedger(): Ledger {
     refused(boundary, arm, actual, expected) {
       assertRefusedWith(actual, expected);
       entries.push({ admitted: false, arm, boundary, message: messageOf(actual) });
+    },
+    record(boundary, arm, message) {
+      entries.push({ admitted: false, arm, boundary, message });
     },
     refusedSide(boundary, side, expected) {
       expect(side.status).toBe("fulfilled");

@@ -55,14 +55,20 @@
     {
       "stepId": "step-3",
       "description": "TDD RED, PART 1 — identity loading and the refusals that must happen BEFORE any process starts. Create `foundation-verification-service.test.ts` against the not-yet-existing service, driving a REAL SqliteEventStore opened per test and closed in a `finally` on every exit path (a held handle kills the vitest worker).\nDoD 1 CASES, each asserting the exact code AND layer: the durable input manifest, result manifest, runtime observation and sealed recipe are loaded BY IDENTITY through the landed readers (`readStoredFoundationAttempt`, `readFoundationAttemptRecord`, `readDurableFoundationObservation`); an identity that resolves to nothing refuses; a hash that no longer matches the durable record refuses; a recipe whose seal fails `recipeSealMatches` refuses.\nTHE ORDERING ASSERTION IS THE POINT OF THIS STEP: every one of those refusals must occur BEFORE the process wrapper is invoked. Assert it observably — drive with a launcher that records invocations and assert ZERO invocations on every refusal path, the same shape task-6cbff010's `forgedCalls 0` assertion used. A refusal that happens after a process already ran is not a refusal, it is a cleanup.\nAND ASSERT THE ATOMIC ACTIVATION ORDERING from DoD 2: the verification activation is committed BEFORE the wrapper runs. Read the durable state back and assert that, for a refusal after activation, an activation exists with no run — never a run with no activation. That direction matters: a run without a committed activation is an effect nothing authorised.\nEvery fixture valid at the earlier layers so the intended refusal answers — the store, the dispatch readers, the recipe seal and this service can each refuse, and a code-only assertion detaches the moment a different one answers first.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/evidence/foundation-verification-service.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/evidence/foundation-verification-service.test.ts"
       ],
-      "startedAt": "2026-08-16T13:27:37.789Z"
+      "modifiedFiles": [
+        "apps/daemon/src/evidence/foundation-verification-service.test.ts",
+        "apps/daemon/src/evidence/foundation-verification-contracts.ts"
+      ],
+      "note": "TDD RED LANDED, and red for the RIGHT reason. Focused run: `cd apps/daemon && pnpm exec vitest run --root . --config package.json src/evidence` -> EXIT=1, \"Test Files  1 failed (1)\", and the single cause quoted verbatim: \"Error: Cannot find module './foundation-verification-service.js' imported from D:/projexts/moe-next/apps/daemon/src/evidence/foundation-verification-service.test.ts\". Nothing is asserted-green against a service that does not exist. `pnpm --filter @moe/daemon typecheck` reports exactly ONE error in my files, the same missing module (TS2307) — no other type error anywhere in the new test file.\n\nNOTE ON THE FOCUSED-RUN COMMAND, because the obvious form silently tests nothing: `vitest run --root . <path>` finds ZERO files here (the ROOT config's include is adapters/**, packages/**, tests/** and does not reach apps/daemon/src). The daemon's vitest config lives in its package.json, so the run needs `--root . --config package.json` and a filter that REPLACES the script's own `src` argument.\n\nEIGHT CASES, every refusal pinning an exact code AND layer, never merely \"refused\": frozen-vocabulary iteration (asserts a positive member count, that both lists are duplicate-free, and that no member restates a VERIFIER_PROCESS_/RUNNER_EVIDENCE_ prefix); malformed request; attempt identity resolving to nothing; a record digest that no longer matches; a recipe identity that resolves to nothing; a durably stored recipe whose seal no longer re-derives; a durable record that is not PROVEN; and the activation-ordering case.\n\nTHE ORDERING ASSERTION IS OBSERVABLE, NOT NARRATIVE. Every pre-execution refusal is driven with a recording ProcessLauncher and asserts `recorder.launches` has length 0 — the `forgedCalls 0` shape the dispatch slice used. The recorder proves ABSENCE only; it never stands in for a successful run, and its returned process resolves after a bounded 50ms rather than never, so an ordering bug surfaces as a bounded failure instead of a hang that reads as a slow suite.\n\nACTIVATION-BEFORE-RUN pinned in the safe direction: the ordering case drives a RELATIVE candidateRoot, which THIS service deliberately does not validate — the wrapper's launch gate owns that guard — so the refusal necessarily lands after activation. It asserts the durable verification aggregate contains ACTIVATED and does NOT contain RECEIPTED, and that the refusal carries the wrapper's own VERIFIER_PROCESS_WORKSPACE_INVALID / LAUNCH_GATE unrestamped under source VERIFIER_PROCESS.\n\nTWO DEFECTS I WROTE AND THEN REMOVED BEFORE RUNNING, disclosed because both are exactly what the rails forbid. (1) The broken-seal case first called a `corruptSealForTest` hook on the service — test-owned authority, banned by task rail 2. Replaced with `sealTamperedRecipe`, which injects the corruption at the DURABLE layer through the store's own `commitExpectedVersionDecision` port (the same port the service writes through), committing a genuinely built recipe whose stored sha256 has been replaced, so the bytes decode cleanly and only `recipeSealMatches` can catch it. (2) The not-PROVEN case originally ran against a PROVEN fixture and asserted `expect(outcome.ok).not.toBe(undefined)` — a tautology that passes forever. Replaced with a real `unprovenGround`, which drives the SAME production writer `recordProvenFoundationAttempt` with a capture answer missing its required keys so the writer takes its own advisory branch and persists truthClass UNKNOWN; the case asserts the durable record really reads UNKNOWN before asserting the refusal, so it cannot be answered by a different layer.\n\nFIXTURES ARE PRODUCTION-CHAIN ONLY. Nothing hand-forges an activation: the ground runs the real activation ingress, then the real `createFoundationLauncherAuthority` GRANT_CONSUMED -> PREFLIGHT_REGISTERED -> PROCESS_OBSERVED tail, then the real `readDurableFoundationObservation`, then the real `recordProvenFoundationAttempt`; the input manifest comes from the runner's `buildInputManifest` and the scope observation from `observeScope`, never hand-written. The record digest is always read back through `readFoundationAttemptRecord` rather than taken from the writer's return value — the UNKNOWN ground's writer answers with a refusal and carries no digest.\n\nONE HAZARD FOUND WHILE WRITING, worth the next reader's attention: `runVerifierProcess` keeps a MODULE-LEVEL run registry keyed by grantId, so two cases sharing an effect intent would share a grant and the second would silently ADOPT the first one's run instead of starting its own. Every case therefore derives its own intent, aggregate and grant from its label. This will matter again in step 6's replay cases, where adoption is the behaviour under test rather than an accident.\n\nCONTRACTS TOUCHED AGAIN, and why. Writing the tests proved the plan's surface incomplete: the wrapper's launch gate requires a PROVEN `ProviderRuntimeObservation`, but the durable attempt record carries only its DIGESTS (quotedRuntimeDigest/freshRuntimeDiges",
+      "startedAt": "2026-08-16T13:27:37.789Z",
+      "completedAt": "2026-08-16T13:34:52.341Z"
     },
     {
       "stepId": "step-4",
@@ -125,12 +131,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-16T13:27:37.789Z",
+  "updatedAt": "2026-08-16T13:34:52.341Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:08.863Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-db2146e3",
@@ -170,7 +176,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:08:31.639Z",
