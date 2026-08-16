@@ -23,23 +23,27 @@
     {
       "stepId": "step-1",
       "description": "BASELINE, AND TAKE THE COMMITTABILITY DECISION — the reopenReason demands it be decided and pinned, so it is settled here rather than left to the worker.\nLANDED PREREQUISITE, re-measured at HEAD 0f19e06: `apps/daemon/src/activation/activation-telemetry-launch.ts` (97 lines) exports `launchActivationProviderRun(input): Promise<ClaudeTelemetryLaunchResult>` (:90), `ActivationTelemetryLaunchInput` (:72), and `ActivationProviderRunIdentity` (:59) — the five keying facts `{provider:\"claude\", runRef, effectIntentId, attemptRef, epoch}`. It returns the runner's result UNCHANGED, deliberately, so the UNKNOWNs survive.\nCOMPOSITION TARGETS, re-confirm each: `buildProviderRunRecord` (packages/runner/.../provider-run-record.ts:210, published at surface/provider-record-surface.ts:24); `commitProviderRunRecord` (apps/daemon/src/telemetry/provider-run-ledger.ts:202); `deriveProviderRunEventId` (:89); `ProviderRunCommitInput` = `{correlationId, decidedAt, key: CommandDecisionKey, record: unknown, requestBytes}` (:63) — `record` is `unknown` BY DESIGN, \"the codec is the only authority on what is a record\"; `ProviderRunCommitResult` = `{ok:true, aggregateId, digest, disposition: \"COMMITTED\"|\"REPLAYED\", record}` | `ProviderRunRefusal` (:72-80).\nTHE DECISION. `launchClaudeWithTelemetry` has three outcomes, not two:\n(1) `ok:false` — reachable ONLY for a malformed run ref (`TELEMETRY_RUN_REF_MALFORMED` at `TELEMETRY_INPUT`). **DO NOT COMMIT.** There is no valid five-fact identity, so `deriveProviderRunEventId` has nothing to key on and no aggregate exists. Return the refusal unchanged.\n(2) `ok:true` with a BLIND handoff — launcher refused, or nothing attempted; facts UNKNOWN, `telemetryRefusal` populated. **COMMIT IT.** Epic rail 4 says missing or unverifiable evidence stays UNKNOWN and never gains authority — it does NOT say it goes unrecorded. A committed record whose `terminal` and `infrastructure` read UNKNOWN is an honest record of an unobservable run; withholding it instead leaves the ledger unable to distinguish a refused launch from a launch that never happened, which is the evidence gap the benchmark harness (task-b937811e) exists to close.\n(3) `ok:true` OBSERVED — commit normally.\nSo the durable falsehood the reopenReason warns about is NOT \"committing a blind handoff\". It is committing one AS IF OBSERVED. `buildProviderRunRecord` already maps blind handoffs to UNKNOWN facts, so committing preserves the truth; step 2 asserts nothing can read such a record as a success.\nGATES, each run separately with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, recording the count line and every failing file as your before-set. Both expected RED from foreign slices; repair none of it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/telemetry/provider-run-ledger.ts",
         "packages/runner/src/providers/telemetry/provider-run-record.ts"
-      ]
+      ],
+      "note": "BASELINE at HEAD b55b9f0. `pnpm --filter @moe/daemon typecheck` EXIT=0 (clean). `pnpm --filter @moe/daemon test` EXIT=1, count line `Test Files 3 failed | 96 passed (99)` / `Tests 5 failed | 2050 passed (2055)`. BEFORE-SET of failing files, all foreign, none owned: src/activation/activation-ledger-reader.test.ts (2), src/activation/foundation-launch-authority.test.ts (2), src/work/foundation-attempt-windows.test.ts (1 — also uncommitted-modified in git status). Repairing none.\n\nGAP CONFIRMED OPEN, both greps: `commitProviderRunRecord` non-test in apps returns ONLY provider-run-ledger.ts:202 (its own definition); `buildProviderRunRecord` non-test in apps returns ONLY provider-run-ledger.ts:9, a COMMENT. Zero real callers of either.\n\nPREREQUISITE RE-MEASURED ON DISK, not trusted from status: apps/daemon/src/activation/activation-telemetry-launch.ts, 97 lines, exports launchActivationProviderRun (:90), ActivationTelemetryLaunchInput (:72), ActivationProviderRunIdentity (:59). Returns the runner's ClaudeTelemetryLaunchResult unchanged.\n\n=== DEVIATION FINDING 1 (material; step 4 as written cannot compile) ===\nTHERE ARE TWO DIFFERENT `ProviderRunRecord` TYPES AND THEY ARE NOT INTERCHANGEABLE. The plan assumed buildProviderRunRecord's output can be handed straight to commitProviderRunRecord. It cannot; the codec would refuse EVERY such record.\n- runner ProviderRunRecord (provider-run-record.ts:97) keys: recordVersion, provider, identity, model, observedModel, decisionDigests, runtimeEvidence, startedAt, completedAt, terminal, infrastructure, tokens, steps, concurrency, usage (a ProviderUsageResult object), telemetryRefusal.\n- daemon ProviderRunRecord (provider-run-contracts.ts:94) keys: recordVersion, providerRunRef, launch, declared, observedModel, terminal, infrastructure, tokens, steps, sequence, concurrency, observedStart, observedEnd, usage (a dense NormalizedMeasurement ARRAY), usageRefusals, upstreamRefusal, stdoutReceiptDigest, stderrReceiptDigest, recordDigest.\n- The codec's admission list is hard: provider-run-codec.validation.ts:30-34 REQUIRED_KEYS demands providerRunRef, launch, declared, sequence, usageRefusals, stdoutReceiptDigest, stderrReceiptDigest — none of which the runner record has — so validateProviderRunRecordShape returns \"RECORD\" and encodeProviderRunRecord refuses PROVIDER_RUN_RECORD_MALFORMED at the codec layer. Also steps is {count,coverage} in the runner vs {turns,coverage} in the daemon.\nRESOLUTION, keeping the objective intact and reimplementing no authority: the daemon record is a PROJECTION of the handoff (providerRunRef, launch, declared, observedModel, terminal, infrastructure, tokens, steps, sequence, concurrency, stdoutReceiptDigest, stderrReceiptDigest, upstreamRefusal=telemetryRefusal all travel VERBATIM from ClaudeTelemetryHandoff), and buildProviderRunRecord is the sole source of the one field the handoff does NOT carry — normalized `usage`, via its internal normalizeProviderUsage -> @moe/scheduler normalizeUsageMeasurement. So buildProviderRunRecord stays load-bearing and gets its real first apps/ call site; DoD 3's drill becomes \"replace the runner call with a hand-built usage/refusal projection\" and must redden a named test.\n\n=== DEVIATION FINDING 2 (DoD 4's drill is an equivalent mutant as written) ===\n\"a mutation supplying a local digest turns a NAMED test red\" is unsatisfiable literally: provider-run-codec.ts:152-157 strips recordDigest via withoutDigest BEFORE digesting and then overwrites it, so a caller-supplied digest is provably unobservable. Killable replacement, asserted on the production surface: the composition emits recordDigest \"\" (no local opinion) and a named test pins that, so computing one locally reddens; separately the committed digest is asserted equal to the digest decoded from the DURABLE event payload.\n\n=== DEVIATION FINDING 3 (step 2c OBSERVED arm unreachable) ===\nRe-verified independently, not taken from memory: grep over packages/runner/src/index.ts + surface/*.ts finds prepareClaudeRuntimePin, registerLaunchLock, resolveDuplicateDelivery, intakeProcessObservation and CLAUDE_LAUNCHER_DEFAULTS ONLY inside comments — zero exports — and claude-launcher.ts uses `entry.deps ?? CLAUDE_LAUNCHER_DEFAULTS`, all-or-nothing. So reaching the OBSERVED arm from apps/** requires spawning a real claude.exe, and minting a handoff by hand is reimplementing withheld runner authority (snapshotRunRef/unknownFact/telemetryRefusal are all internal). Disclosed, not silently narrowed; the same disclosure was made and QA-ACCEPTED on the prerequisite task-6c0db1f9. Blind arms (REFUSED, NOT_ATTEMPTED) and the ok:false malformed-ref arm remain fully reachable and are what the tests drive.\n\n=== COMMITTABILITY DECISION, PINNED AS THE PLAN REQUIRES ===\n(1) ok:false (TELEMETRY_RUN_REF_MALFORMED at TELEMETRY_INPUT, the only route) -> DO NOT COMMIT, return unchanged, no invented identity, aggregate stays empty.\n(2) ok:true BLIND (TELEMETRY_LAUNCH_REFUSED / TELEMETRY_LAUNCH_NOT_A",
+      "startedAt": "2026-08-16T11:42:36.417Z",
+      "completedAt": "2026-08-16T11:45:20.431Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED, PART 1 — pin the three arms of the committability decision. Create the module's test against the not-yet-existing composition and let it fail to resolve. Then:\n(a) MALFORMED RUN REF -> the launch's `ok:false` is returned unchanged with `TELEMETRY_RUN_REF_MALFORMED` at `TELEMETRY_INPUT`, and NOTHING is written: read the aggregate back through the ledger's port and assert it is empty. Committing here is impossible anyway — there is no valid identity — so the assertion is that the code does not try and does not invent one.\n(b) BLIND HANDOFF -> a record IS committed, and its `terminal` and `infrastructure` read UNKNOWN with `telemetryRefusal` populated, read back from the durable bytes rather than from the in-memory value. Cover BOTH blind shapes separately — `TELEMETRY_LAUNCH_REFUSED` and `TELEMETRY_LAUNCH_NOT_ATTEMPTED` — and assert they remain distinguishable in the committed record; collapsing them loses which happened.\n(c) OBSERVED -> a record is committed carrying the runner's real facts.\nTHEN THE ASSERTION THAT MAKES (b) SAFE: no committed blind record can be read as a success. Assert across the whole file that a record whose facts are UNKNOWN never presents a truth class above UNKNOWN and never carries a terminal outcome that a consumer could mistake for a completed run. This is what separates \"honest record of an unobservable run\" from \"durable falsehood\", and it is the reason (b) is committable at all.\nEvery refusal assertion pins the exact stable code AND the answering layer — the codec, the ledger and the store can each refuse, so a code-only assertion detaches the moment a different one answers first. Build each fixture valid at the earlier layers so the intended one speaks.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-run-commit.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/activation/activation-run-commit.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T11:45:25.724Z"
     },
     {
       "stepId": "step-3",
@@ -82,7 +86,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0cd13358",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -94,11 +98,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:52:05.958Z",
-  "updatedAt": "2026-08-16T11:36:48.060Z",
+  "updatedAt": "2026-08-16T11:45:25.724Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:07:59.352Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -118,7 +123,9 @@
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:36:46.001Z",
   "planningNotes": {
@@ -135,7 +142,13 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-16T11:41:42.499Z",
+    "escalatedAt": "2026-08-16T11:41:42.499Z"
   },
-  "planApprovedAt": "2026-08-16T11:36:48.060Z"
+  "planApprovedAt": "2026-08-16T11:36:48.060Z",
+  "contextFetchedBy": [
+    "worker-0cd13358"
+  ],
+  "workStartedAt": "2026-08-16T11:42:36.417Z"
 }

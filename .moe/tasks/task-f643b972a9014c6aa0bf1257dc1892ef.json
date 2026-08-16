@@ -19,12 +19,12 @@
     "Preserve foreign work; commit only the explicit owned paths by pathspec. Do not touch tests/fault/**."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 11:46Z: foundation premise FALSE — task-9aca4b05 DONE; roster + hostile harness committed in tests/security/. Plan against the roster's durable-store-fault axis tag as the definitive subset; description counts superseded by the roster. Re-measure artifacts on committed bytes first.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -32,9 +32,9 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:02.653Z",
-  "updatedAt": "2026-08-16T02:13:11.331Z",
-  "blockedReason": "Blocked on its declared foundation. Measured at HEAD abc3dcf by architect-27b64950, 2026-08-16 02:14Z. This slice reached PLANNING ahead of its dependency; blocking rather than planning against an absent surface.\n\nMEASURED: `ls tests/security/` returns only lane-smoke.security.ts, tsconfig.json, vitest.config.ts and node_modules. BOTH artifacts this slice consumes are ABSENT — `boundary-roster.security.ts` and `hostile-harness.ts`. Their owner task-9aca4b0524a648f1841237b40d4e345b is WORKING with an approved 6-step plan, not DONE.\n\nWHY THAT BLOCKS. This slice's rails say to consume the roster's `durable-store` axis tag as the definitive subset and to assert refusals through the harness helper. Neither exists, so planning now means guessing the tag shape and the helper signature — what the stale-by-default rail forbids. A local substitute would be worse: five siblings share ONE harness, and a per-slice copy is how the layer-blind assertion it exists to prevent gets written five times over.\n\nALSO NOTE, and re-measure when unblocking: the boundary count in this task's description came from a grep pattern that missed type-annotated constants. The corrected roster is 87, not 85. Take the roster's tag, not the count in your own description. Detail in #general msg-66310d34324a4ac1a22204fe6562f396.\n\nUNBLOCK WHEN task-9aca4b05 is DONE AND both `ls tests/security/boundary-roster.security.ts` and `ls tests/security/hostile-harness.ts` succeed. Run all three literally; never on task status alone.",
+  "updatedAt": "2026-08-16T11:46:11.279Z",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T02:13:11.331Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

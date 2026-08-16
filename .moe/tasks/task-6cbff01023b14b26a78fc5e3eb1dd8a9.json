@@ -121,7 +121,7 @@
     {
       "stepId": "step-6",
       "description": "Adversarial self-review — read the complete five-file diff as an attacker and check concurrent double delivery, replay identity, null/empty/huge/proxy inputs, cross-project/session/attempt drift, PREFLIGHT-vs-STARTED confusion, activation/result commit ambiguity, port throw/rejection/thenable behavior, manifest substitution, secret/message echo, Windows/Linux path handling, frozen output and cleanup. Run byte-restored mutation drills against production: allow a second execution-bearing node, let a REPLAYED reservation launch, or answer replay from candidate bytes; require the named production-surface tests to go red on the exact code/layer/count assertion, confirm each mutation actually applied, then restore hashes exactly. Remove every probe/artifact and keep only owned paths.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
@@ -129,23 +129,39 @@
         "apps/daemon/src/work/foundation-attempt-service.js",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
       ],
-      "startedAt": "2026-08-15T22:23:57.955Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-contracts.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "note": "Adversarial review closed the reopen gap: FoundationAttemptDeps.runtimePorts (caller/test-composed clock/facts/fs) is GONE. dispatch() now calls bare-root createClaudeRuntimePinRequest(request.launchTemplate.runtime) BEFORE any authority write and keeps the runner's own code + RUNTIME layer; launchRequestBody forwards that hydrated pin request whole, so no template field can re-layer a minted capability. RED first: 3 new production-surface cases (quote-digest drift, control-char installedRoot, sweep of 2 non-single-EXECUTABLE closures with a positive generated count) plus a deps-level hostile capability set that must never be touched — 9 tests red before the change, 25 green after. Byte-restored mutation drills, each verified applied and each restored by md5: (1) bearing.length>1 -> >99 reddened the multi-node case; (2) REPLAYED-reservation gate disabled reddened the concurrent-delivery case; (3) hydration refusal bypassed reddened exactly the 3 new runtime cases. Windows suite re-founded on the shipped observer: the old fake-facts fixture is deleted, and the fake claude.exe now refuses CLAUDE_RUNTIME_OBSERVATION_INVALID@RUNTIME — a code only reachable AFTER a real broker child ran and its stdout was read — with pinRoot/marker absent, SUSPECT advisory persisted, replay answered from stored bytes and cwd drift refused REPLAY_MISMATCH. Production line counts: contracts 215, codec 194, store 155, service 249. NOTE: foundation-attempt-windows.test.ts received edits at 11:37Z that I did not author (concurrent writer in the shared worktree); I preserved them and built on top.",
+      "startedAt": "2026-08-15T22:23:57.955Z",
+      "completedAt": "2026-08-16T11:41:20.237Z"
     },
     {
       "stepId": "step-7",
       "description": "Verification — from a fresh foreground shell run exactly: `pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck && pnpm test && pnpm verify:foundation && pnpm verify:store && git diff --check && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-contracts.ts)\" -le 250 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-service.ts)\" -le 250 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-contracts.js)\" -eq 1 && test \"$(wc -l < apps/daemon/src/work/foundation-attempt-service.js)\" -eq 1`. Record positive `Test Files`/test counts for both filtered suites (no `No projects matched`, `No test files found`, or zero-test output). Compare repo-wide failing paths at the task merge-base with HEAD under the path-attributed baseline rail; owned-package legs must exit 0 and any foreign red must be quoted verbatim with an empty new-owned-path intersection. Confirm `git status --porcelain` has no staged foreign path, then commit only the five explicit owned paths with `git commit -- <five paths>` and verify `git show --stat` contains nothing else.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-attempt-contracts.ts",
         "apps/daemon/src/work/foundation-attempt-contracts.js",
         "apps/daemon/src/work/foundation-attempt-service.ts",
         "apps/daemon/src/work/foundation-attempt-service.js",
         "apps/daemon/src/work/foundation-attempt-service.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-contracts.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ],
+      "note": "Fresh foreground chain, CHAIN_EXIT=0: `pnpm --filter @moe/runner test` (66 files / 2216 passed, 1 skipped) && `pnpm --filter @moe/daemon typecheck` (Done) && focused daemon suite `src/work/foundation-attempt-service.test.ts` (1 file / 25 tests passed) && `pnpm typecheck` (18 projects Done) && `pnpm verify:foundation` (32 files / 661 passed). `git diff --check` clean. Line counts: contracts.ts 215, service.ts 249, codec.ts 194, store.ts 155; all four .js bridges exactly 1 line.\n\nFOREIGN RED, quoted and attributed (path-attributed baseline rail; NONE intersects this task's owned paths, and my owned paths do not appear in any failing set):\n- `pnpm --filter @moe/daemon test` -> 3 files / 5 tests failed: activation-ledger-reader.test.ts \"reads a number of events bounded by the MATCHES, not by the stream\" + \"ignores an activation committed past the captured horizon\"; foundation-launch-authority.test.ts \"answers from the real store without reading the whole global stream\" + \"bounds a continuously advancing scan to the captured horizon\" — the released O(n) effect-binding task's deliberately-red repros. Third: foundation-attempt-windows.test.ts \"launches the installed Claude once and adopts replay\", which asserts `toMatchObject({code:\"DIAGNOSTIC\", ok:true})` — a peer's live diagnostic probe; actual production answer is CLAUDE_RUNTIME_OBSERVATION_CHANGED@RUNTIME against the really installed Claude.\n- `pnpm test` / `pnpm verify:store` -> 1 failed: packages/store/src/recovery-anchor.test.ts \"publishes exactly the anchor surface a restore controller composes\" (a withheld symbol leaked onto the @moe/store root by another task). 6645 passed elsewhere.\nAn earlier daemon run showed 30 failures across 10 files; re-run gave 5/3 — the extra 25 were concurrent-writer interference, and index-surface/runtime-entrypoint pass in isolation (113 tests).\n\nCOMMIT: nothing left to commit. A foreign whole-tree commit b55b9f0 feat(task-9aca4b05...) swept this task's bytes (contracts.ts, service.ts, service.test.ts, windows.test.ts). Per project rail I did not amend, reset or claim it. QA should review `git diff 0f19e06..HEAD -- apps/daemon/src/work/foundation-attempt-*` (contracts +14/-, service +24/-, service.test +150/-, windows.test 217 changed). Working tree for every owned path is byte-identical to HEAD (`git diff --quiet HEAD` exit 0).",
+      "startedAt": "2026-08-16T11:46:27.043Z",
+      "completedAt": "2026-08-16T11:47:49.061Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-5678886b",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -230,19 +246,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:10.949Z",
-  "updatedAt": "2026-08-16T11:29:21.361Z",
+  "updatedAt": "2026-08-16T11:48:50.425Z",
   "contextFetchedBy": [
     "governor-a627169a",
     "worker-827a27f6",
     "architect-09b5f32a",
     "architect-d9dccf21",
-    "worker-5678886b"
+    "worker-5678886b",
+    "qa-c7cedba3"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:18:26.663Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -293,7 +310,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -342,19 +361,22 @@
   },
   "planApprovedAt": "2026-08-15T20:43:14.202Z",
   "workStartedAt": "2026-08-15T20:53:21.801Z",
-  "reviewStartedAt": "2026-08-15T21:43:25.810Z",
+  "reviewStartedAt": "2026-08-16T11:48:45.634Z",
   "verification": {
-    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts && ! pnpm --filter @moe/daemon typecheck 2>&1 | grep -F \"src/work/foundation-attempt\"",
+    "command": "pnpm --filter @moe/runner test && pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/work/foundation-attempt-service.test.ts && pnpm typecheck && pnpm verify:foundation",
     "exitCode": 0,
-    "outputTail": "RUN  v4.1.10 /mnt/d/projexts/moe-next/apps/daemon\n\n Test Files  1 passed (1)\n      Tests  16 passed (16)\n   Start at  00:40:40\n   Duration  44.97s (transform 36.68s, setup 0ms, import 37.79s, tests 485ms, environment 0ms)\n\nOWNED_SCOPE_GATE_EXIT=0\n\n(Second leg: `pnpm --filter @moe/daemon typecheck` emits ZERO diagnostics naming src/work/foundation-attempt; the grep-negated leg exits 0. Additional legs run separately: `pnpm test:store` -> Test Files 42 passed / Tests 501 passed, exit 0. `git diff --check` exit 0.)",
-    "reportedAt": "2026-08-15T21:43:25.810Z"
+    "outputTail": "runner: Test Files 66 passed (66) | Tests 2216 passed | 1 skipped (2217)\napps/daemon typecheck: Done\ndaemon focused: Test Files 1 passed (1) | Tests 25 passed (25)\npnpm typecheck: 18 workspace projects Done\nverify:foundation: Test Files 32 passed (32) | Tests 661 passed (661)\nCHAIN_EXIT=0",
+    "reportedAt": "2026-08-16T11:48:45.634Z"
   },
   "filesModified": [
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/src/work/foundation-attempt-contracts.ts",
-    "apps/daemon/src/work/foundation-attempt-contracts.js",
+    "apps/daemon/src/work/foundation-attempt-codec.ts",
+    "apps/daemon/src/work/foundation-attempt-codec.js",
     "apps/daemon/src/work/foundation-attempt-service.ts",
-    "apps/daemon/src/work/foundation-attempt-service.js"
+    "apps/daemon/src/work/foundation-attempt-store.ts",
+    "apps/daemon/src/work/foundation-attempt-store.js",
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts"
   ],
   "reviewCompletedAt": "2026-08-15T21:51:11.966Z",
   "rejectionDetails": {

@@ -113,8 +113,8 @@
       "completedAt": "2026-08-16T11:40:27.519Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -126,12 +126,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:58:36.221Z",
-  "updatedAt": "2026-08-16T11:41:01.927Z",
+  "updatedAt": "2026-08-16T11:45:43.627Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:09:19.141Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T11:45:43.627Z",
+    "wallClockMs": 34584486
   },
   "stepsCompleted": [
     "step-1",
@@ -195,5 +197,8 @@
     "tests/security/boundary-roster.security.ts",
     "tests/security/hostile-harness.ts",
     "apps/daemon/src/http/event-stream-observation.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T11:45:43.627Z",
+  "reviewCompletedAt": "2026-08-16T11:45:43.627Z",
+  "reviewSummary": "APPROVED. Gate re-run by QA, exit captured separately (no pipe, no ;-chain): `pnpm test:security` EXIT=0, `Test Files 2 passed (2)`, `Tests 48 passed (48)` vs lane-smoke-only baseline 1 file/17 tests (17+31=48). DoD6 met.\n\nENUMERATION RE-MEASURED INDEPENDENTLY: my own grep gives 89 raw, 87 after the exclusion rule, removing exactly EXPECTED_REFUSAL_LAYERS (.test-fixtures.ts) and CORE_FAULT_BOUNDARIES (testkit); distribution matched EXPECTED_DISTRIBUTION key-for-key. The description's 85 is wrong; 87 is right. Axis counts match the claim siblings consume (15/13/14/22/23=87).\n\n7 DRILLS RUN BY QA, each alone, reverted and git-clean before the next:\n1) rename EVENT_STREAM_LAYER to a non-matching name in production source -> EXIT=1, 2 NAMED tests red, failure names constant AND file. DoD5 met.\n1b) QA-ADDED: rename to a name the regex STILL matches -> scan-minus-roster reds naming the new constant. Worker's drill 1 never exercised this direction; DoD1 both-directions genuinely met.\n3) SCAN_ROOTS narrowed to [\"apps\"] -> 4 red incl. cardinality. DoD2 met.\n4/4b) each exclusion loosened -> its NAMED exclusion test reds.\n5) annotation group dropped from regex -> both PLATFORM_LINUX/MACOS cases red.\n6) layer check neutralised in assertRefusedWith -> \"REJECTS an expectation carrying only a code\" reds, so DoD4 is not vacuous.\n7) roster entry deleted -> cardinality + distribution + scan-minus-roster + axis-sum red.\n\nDIFF: numstat merge-base cf272f6..HEAD returns EXACTLY the two owned files (roster 578/0, harness 248/0). vitest.config.ts, tsconfig.json, lane-smoke untouched; drill-1 production edit reverted; worktree byte-identical to HEAD. Ratchet verified OPEN (no coverage-completeness assertion) so the five siblings are not blocked. Harness holds no authority. hostile-harness.ts 248 lines by grep -c '' (under 250); roster's 578 is a TEST file, cap is per PRODUCTION file."
 }

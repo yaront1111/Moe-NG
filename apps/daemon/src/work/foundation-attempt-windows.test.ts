@@ -155,8 +155,7 @@ function captureAnswer(): Record<string, unknown> {
  * is physical evidence that no launch was ever attempted.
  */
 interface WindowsFixture {
-  readonly marker: string; readonly pinRoot: string;
-  readonly request: Record<string, unknown>;
+  readonly pinRoot: string; readonly request: Record<string, unknown>;
   readonly root: string; readonly store: SqliteEventStore;
 }
 
@@ -206,7 +205,10 @@ function windowsFixture(label: string, options: FixtureOptions): WindowsFixture 
     PATH: process.env["Path"] ?? join(systemRoot, "System32"),
     SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
   };
-  const argv = [...options.argv ?? ["--version"]];
+  // `--version` exits by itself in about half a second and never opens a
+  // session; the model and effort flags are what the launch-selection gate
+  // proves the argv against, so they are not decoration.
+  const argv = [...options.argv ?? ["--version", "--model", "claude-opus-5", "--effort", "high"]];
   const pinRoot = join(root, "pins");
   const timeoutMs = options.timeoutMs;
   const launchTemplate = {
@@ -221,7 +223,18 @@ function windowsFixture(label: string, options: FixtureOptions): WindowsFixture 
     graphSnapshot: structuredClone(GRAPH), inputManifest: structuredClone(INPUT_MANIFEST),
     launchTemplate,
   };
-  return { marker, pinRoot, request, root, store: readyStore(root) };
+  return { pinRoot, request, root, store: readyStore(root) };
+}
+
+/** A harmless real Windows executable under a Claude name. It is a genuine
+ *  binary the broker can start, and production observation still refuses it —
+ *  which is the point of the case that uses it. */
+function standIn(root: string): string {
+  const installed = join(root, "installed");
+  mkdirSync(installed);
+  const executable = join(installed, CLAUDE_EXE);
+  copyFileSync(join(process.env["SystemRoot"] ?? "C:\\Windows", "System32", "where.exe"), executable);
+  return realpathSync(executable);
 }
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
@@ -261,7 +274,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
    * physical evidence that the boundary launched, not that it was skipped.
    */
   it.runIf(WINDOWS_ONLY)("refuses a runtime the shipped observer cannot prove, and never relaunches", async () => {
-    const fixture = windowsFixture("unproven-runtime", null, 10_000);
+    const fixture = windowsFixture("unproven-runtime", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
       captureResult: () => { throw new Error("capture must not run"); },
       launchOptions: { platform: "win32" }, store: fixture.store,
@@ -270,9 +283,8 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const outcome = await service.dispatch(fixture.request);
 
     expectRefusal(outcome, "CLAUDE_RUNTIME_OBSERVATION_INVALID", "RUNTIME");
-    // Nothing was pinned and no provider process ever started.
+    // Nothing was pinned, so no provider process was ever started from one.
     expect(existsSync(fixture.pinRoot)).toBe(false);
-    expect(existsSync(fixture.marker)).toBe(false);
     const stored = readFoundationAttemptRecord(fixture.store, ACTIVATION_AGGREGATE);
     expect(stored.ok && stored.record).toMatchObject({
       advisoryOnly: true, reasonCode: "CLAUDE_RUNTIME_OBSERVATION_INVALID", reasonLayer: "RUNTIME",
@@ -300,7 +312,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
   }, 60_000);
 
   it.runIf(WINDOWS_ONLY)("reservation failure reaches no runtime or physical launch", async () => {
-    const fixture = windowsFixture("reservation-abort", null, 10_000);
+    const fixture = windowsFixture("reservation-abort", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       store: abortingStore(fixture.store, 2),
@@ -309,11 +321,58 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const outcome = await service.dispatch(fixture.request);
 
     expectRefusal(outcome, "FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE", DAEMON_FOUNDATION_ATTEMPT);
-    // The pinned copy is the runner's FIRST physical act; the marker is the
-    // provider's. Neither exists, so nothing was launched under a lost reservation.
+    // The pinned copy is the runner's FIRST physical act, and it never happened:
+    // nothing was launched under a reservation this dispatch never won.
     expect(existsSync(fixture.pinRoot)).toBe(false);
-    expect(existsSync(fixture.marker)).toBe(false);
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
     expect(eventTypes(fixture.store, DISPATCH_AGGREGATE)).toHaveLength(0);
   });
+
+  /**
+   * THE ANTI-FORGERY CASE, against the Claude this host really installed.
+   *
+   * The binary is genuine, its bytes are hashed for real and the closure it
+   * declares is the one on disk — everything a caller CAN assemble is true here.
+   * It is still refused, because `adapterCapabilitySchemaDigest` and the reported
+   * version can only come from an observation @moe/runner made itself, and this
+   * quote was assembled outside it. `CLAUDE_RUNTIME_OBSERVATION_CHANGED` is
+   * reachable only AFTER the shipped broker ran the real `--version` probe and
+   * the fresh facts were compared, so it is physical evidence of the comparison,
+   * not of a skipped one.
+   *
+   * That is also why no case here reaches PROVEN: the public surface withholds
+   * `observeInstalledClaudeRuntime`, `probeClaudeRuntime` and
+   * `capabilitySchemaDigestOf`, so NO consumer can mint a quote production would
+   * accept. Faking one would mean reimplementing that authority in a test, and a
+   * green PROVEN bought that way would certify nothing. The gap is reported as a
+   * prerequisite instead.
+   */
+  it.runIf(REAL_CLAUDE !== null)("refuses a self-assembled quote for the real installed Claude", async () => {
+    expect(REAL_CLAUDE).not.toBeNull();
+    expect(existsSync(REAL_CLAUDE as string)).toBe(true);
+    const fixture = windowsFixture(
+      "real-claude-quote", { executable: REAL_CLAUDE as string, timeoutMs: 120_000 });
+    const service = createFoundationAttemptService({
+      captureResult: () => { throw new Error("capture must not run"); },
+      launchOptions: { platform: "win32" }, store: fixture.store,
+    });
+
+    const outcome = await service.dispatch(fixture.request);
+
+    expectRefusal(outcome, "CLAUDE_RUNTIME_OBSERVATION_CHANGED", "RUNTIME");
+    const stored = readFoundationAttemptRecord(fixture.store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      advisoryOnly: true, reasonCode: "CLAUDE_RUNTIME_OBSERVATION_CHANGED", reasonLayer: "RUNTIME",
+      resultManifest: null, truthClass: "SUSPECT",
+    });
+    const activation = eventTypes(fixture.store, ACTIVATION_AGGREGATE);
+    expect(activation).not.toContain("FoundationLaunchProcessObserved");
+    expect(eventTypes(fixture.store, DISPATCH_AGGREGATE))
+      .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+
+    const replay = await service.dispatch(structuredClone(fixture.request));
+
+    expect(replay.ok && replay.digest).toBe(stored.ok ? stored.digest : "");
+    expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(activation);
+  }, 300_000);
 });
