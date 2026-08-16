@@ -2,7 +2,7 @@
 //! core has not proved.
 //!
 //! SCOPE. The session's vocabulary, the launch sequence, and the outbound
-//! emission every layer shares. The run loop is in `watch.rs` and the four
+//! emission every layer shares. The run loop is in `watch.rs` and the three
 //! completion preconditions are in `settle.rs` — split by responsibility, not by
 //! reformatting, exactly as the core splits `process.rs` from `spec.rs`.
 //!
@@ -59,9 +59,16 @@ pub trait ShutdownSignal {
 /// The channels one session speaks over.
 ///
 /// fd3 is not here: it is handed to the child as its standard input and the
-/// session never reads it. fd4 and fd5 appear only because their END is a
-/// completion precondition — their bytes are drained and discarded, never parsed
-/// as control. There is no path from a provider channel to the control decoder.
+/// session never reads it. fd4 and fd5 ARE here, and the session never reads
+/// them either — they are the child's stdout and stderr, they belong to the
+/// parent, and `settle.rs` explains why nothing this side could read from them
+/// is evidence about the child. They are named rather than dropped so the
+/// session's view of the descriptor trio stays complete, and so the test that
+/// proves a pathological provider channel cannot withhold COMPLETED has a
+/// channel to make pathological.
+///
+/// There is no path from a provider channel to the control decoder, and now not
+/// even a read.
 pub struct Wiring<B: ByteChannel> {
     /// fd0, inbound control.
     pub control: B,
@@ -69,7 +76,7 @@ pub struct Wiring<B: ByteChannel> {
     pub status: B,
     /// fd2, outbound non-authoritative diagnostics.
     pub diagnostics: B,
-    /// fd4 as the session sees it: read only to observe its end.
+    /// fd4 as the session sees it: held, never consulted.
     pub provider_out: B,
     /// fd5, likewise.
     pub provider_err: B,
@@ -136,7 +143,7 @@ impl<'c, C: Win32Calls + ProcessCalls> Session<'c, C> {
 
         let (stopped, observed) =
             watch(self.calls, wiring, shutdown, contained, accept, self.timeout_ms);
-        let completion = settle(self.calls, wiring, job, contained, stopped, observed);
+        let completion = settle(self.calls, job, contained, stopped, observed);
         if let Completion::Completed(completed) = completion {
             let _ = Status::Completed(completed).emit(&mut wiring.status);
         }

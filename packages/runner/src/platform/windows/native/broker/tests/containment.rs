@@ -444,22 +444,38 @@ fn provider_bytes_that_are_a_valid_control_frame_never_reach_the_control_path() 
     // before the control loop ran even once, and the test would be asserting
     // separation against a broker that never went looking for an instruction.
     // TimedOut-then-Signalled makes it read fd0 (finding it empty, hence
-    // `ControlEnded`) and still reach the provider drain afterwards.
+    // `ControlEnded`) and settle afterwards.
     let calls = ScriptedCalls::new(vec![WaitOutcome::TimedOut, WaitOutcome::Signalled]);
     let (outcome, wires) = run_session(&calls, &[], &hostile, 10_000);
 
-    // 2. THEY ENTERED THE BROKER. If the provider channels were never read, "the
-    //    bytes never reached control" would be true of bytes that never went
-    //    anywhere at all — the vacuous pass this file has to rule out.
-    assert_eq!(
-        Tape::consumed(&wires.provider_out),
-        hostile,
-        "fd4 was never read, so nothing was actually offered to the broker"
+    // 2. THEY WERE OFFERED FOR THE WHOLE RUN AND THE SESSION NEVER TOOK THEM.
+    //    This assertion used to say the opposite — that the settling drain had
+    //    CONSUMED fd4 and fd5 — because a provider-EOF precondition existed to
+    //    read them. That leg is deleted (see `settle.rs`: the observation was
+    //    structurally impossible from this side), so the separation is now
+    //    STRONGER rather than weaker: no provider byte is read at all.
+    //
+    //    The vacuity this file exists to rule out is closed by asserting BOTH
+    //    halves. "Nothing was consumed" alone would also be true of a tape that
+    //    never held anything, so the hostile frame is asserted still sitting
+    //    there in full — present and readable for the entire run, and declined.
+    assert!(
+        Tape::consumed(&wires.provider_out).is_empty(),
+        "the session read fd4; no provider byte may be consumed at all"
+    );
+    assert!(
+        Tape::consumed(&wires.provider_err).is_empty(),
+        "the session read fd5; no provider byte may be consumed at all"
     );
     assert_eq!(
-        Tape::consumed(&wires.provider_err),
+        Tape::unread(&wires.provider_out),
         hostile,
-        "fd5 was never read, so nothing was actually offered to the broker"
+        "fd4 never actually held the hostile frame, so declining it proves nothing"
+    );
+    assert_eq!(
+        Tape::unread(&wires.provider_err),
+        hostile,
+        "fd5 never actually held the hostile frame, so declining it proves nothing"
     );
 
     // 3. THE ASSERTION DoD 4 NAMES: on the control path's RECORDED INPUT. The
@@ -819,6 +835,16 @@ impl Tape {
 
     fn consumed(tape: &Arc<Mutex<Self>>) -> Vec<u8> {
         tape.lock().expect("a tape lock is never poisoned").consumed.clone()
+    }
+
+    /// What the tape still holds and nobody has taken.
+    ///
+    /// The counterpart to [`Self::consumed`], and the reason both exist: "the
+    /// session never read this" is only interesting about bytes that were
+    /// genuinely there to read.
+    fn unread(tape: &Arc<Mutex<Self>>) -> Vec<u8> {
+        let tape = tape.lock().expect("a tape lock is never poisoned");
+        tape.pending[tape.read_at..].to_vec()
     }
 
     fn written(tape: &Arc<Mutex<Self>>) -> Vec<u8> {

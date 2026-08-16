@@ -30,8 +30,29 @@ import {
 const MODEL = "claude-opus-5-20260514";
 const EFFORT = "high";
 const PROVIDER_DELAY_MS = 150;
-const LAUNCH_TIMEOUT_MS = 1_000;
-const WATCHDOG_MS = 3_000;
+/// Deliberately far above anything this run needs. The defect being guarded
+/// against made completion latency TRACK this constant linearly (measured
+/// 1000ms -> 1488ms, 2500ms -> 2996ms, 6000ms -> 6017ms) against a child that
+/// lives 150ms, so the larger it is the wider the gap between the two
+/// behaviours — and the more headroom the bound below has.
+const LAUNCH_TIMEOUT_MS = 6_000;
+/// The bound DoD 1 asks for: completion must be CHILD-driven, not timeout-driven.
+///
+/// EXACTLY HALF THE CONFIGURED TIMEOUT, and chosen from measurement rather than
+/// taste. Correct behaviour on this host measured 959ms and 993ms end to end,
+/// almost all of it the launcher's own content-addressed runtime pin rather than
+/// the child; the defect would land near 6_490ms. So this passes the real
+/// numbers with roughly 3x headroom and fails the defect by about 3.5 seconds.
+///
+/// THE VERDICT ALONE WOULD NOT CATCH THE REGRESSION. A broker that still
+/// eventually returns PROVEN, but only once the parent tears its endpoint down,
+/// satisfies every `truthClass` assertion below. Latency is the only assertion
+/// that can tell "the child was observed" from "the timeout was waited out".
+const CHILD_DRIVEN_BOUND_MS = 3_000;
+/// The hang guard, kept ABOVE the defect's expected latency on purpose: a
+/// regression should fail on the latency bound with a readable number, not be
+/// swallowed by a watchdog throw that says only "something took too long".
+const WATCHDOG_MS = 10_000;
 const WINDOWS_HOST = process.platform === "win32";
 const WINDOWS_CASES = Object.freeze([
   Object.freeze({ name: "stays alive beyond the control poll slice", delayMs: PROVIDER_DELAY_MS }),
@@ -206,12 +227,18 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
         complete: true,
         truncated: false,
       });
+      // The child really did outlive the 50ms control-poll slice, so the case is
+      // exercising the scenario it is named for rather than a child that had
+      // already exited before the first poll.
       expect(existsSync(elapsedReport)).toBe(true);
       expect(Number(readFileSync(elapsedReport, "utf8"))).toBeGreaterThanOrEqual(100);
+
+      // DoD 1's second half. See CHILD_DRIVEN_BOUND_MS for why this literal.
+      expect(totalElapsed).toBeLessThan(CHILD_DRIVEN_BOUND_MS);
       expect(totalElapsed).toBeLessThan(WATCHDOG_MS);
     } finally {
       rmSync(lockPath, { force: true });
       rmSync(root, { recursive: true, force: true });
     }
-  }, 10_000);
+  }, 25_000);
 });

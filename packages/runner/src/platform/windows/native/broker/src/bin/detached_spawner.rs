@@ -31,9 +31,13 @@
 //!
 //! The broker hands fd3/fd4/fd5 to its provider as standard input, output and
 //! error. If the grandchild inherited fd4 or fd5 it would hold their write ends
-//! open, `settle`'s provider drain would never observe end of stream, and the
-//! session would stall in a way that reads as a broker defect. Nulling all three
-//! is what keeps the detachment about process lifetime rather than about pipes.
+//! open, and this test would quietly become one about pipe lifetime rather than
+//! process lifetime. Nulling all three is what keeps it about process lifetime.
+//!
+//! It used to say something stronger — that `settle`'s provider drain would then
+//! never observe end of stream and the session would stall. That drain has been
+//! DELETED (see `settle.rs`: the observation was structurally impossible from the
+//! broker's side), so the reason is now the narrower one above.
 //!
 //! # IT RESTATES NO SYSCALL (taskRail 5)
 //!
