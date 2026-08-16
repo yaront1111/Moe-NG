@@ -518,6 +518,24 @@ describe("foundation attempt dispatch — authority gates", () => {
     expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
   });
 
+  it("refuses a graph the scheduler admits that bears no execution node at all", async () => {
+    const store = readyStore("no-bearing-node");
+    const run = harness(store);
+    // The scheduler ADMITS this graph — nothing is malformed about it — so the
+    // refusal has to be this daemon's own, under its own layer.
+    const inert = {
+      completionNodeKey: NODE_KEY, edges: [],
+      nodes: [{ executionBearing: false, nodeKey: NODE_KEY }],
+    };
+
+    const outcome = await run.service.dispatch(dispatchRequest({ graphSnapshot: inert }));
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_NODE_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    expect(run.captureCalls).toHaveLength(0);
+    expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+    expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+  });
+
   it("refuses a node the graph does not bear and a session the activation does not hold", async () => {
     const store = readyStore("binding");
     const run = harness(store);

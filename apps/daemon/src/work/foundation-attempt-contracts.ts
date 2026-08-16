@@ -48,9 +48,13 @@ export const FOUNDATION_DISPATCH_EVENT_TYPES = Object.freeze({
   RECORDED: "FoundationAttemptRecorded", RESERVED: "FoundationDispatchReserved",
 } as const);
 /**
- * Closed. A refusal raised by the activation ingress, the scheduler, the runner
- * or the store keeps ITS OWN code and layer verbatim — flattening them here
- * would make a graph fault indistinguishable from a consumed grant.
+ * Closed, and every member has a producer in this package. A refusal raised by
+ * the activation ingress, the scheduler, the runner or the store keeps ITS OWN
+ * code and layer verbatim — flattening them here would make a graph fault
+ * indistinguishable from a consumed grant. That is also why there is no daemon
+ * code for a refused result manifest: `buildResultManifest` answers that under
+ * the runner's own code at `RUNNER_WORKSPACE_LAYER`, and a second vocabulary for
+ * one condition would only make the two indistinguishable again.
  */
 export const FOUNDATION_ATTEMPT_CODES = Object.freeze([
   "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", "FOUNDATION_ATTEMPT_RECORD_ABSENT",
@@ -60,8 +64,7 @@ export const FOUNDATION_ATTEMPT_CODES = Object.freeze([
   "FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS", "FOUNDATION_ATTEMPT_DISPATCH_SUSPECT",
   "FOUNDATION_ATTEMPT_REPLAY_MISMATCH",
   "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN", "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN",
-  "FOUNDATION_ATTEMPT_RESULT_MANIFEST_INVALID", "FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS",
-  "FOUNDATION_ATTEMPT_RECORD_DRIFT",
+  "FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS", "FOUNDATION_ATTEMPT_RECORD_DRIFT",
 ] as const);
 export type FoundationAttemptCode = (typeof FOUNDATION_ATTEMPT_CODES)[number];
 export interface FoundationAttemptRefused {
