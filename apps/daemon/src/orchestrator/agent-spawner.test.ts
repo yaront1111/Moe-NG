@@ -172,6 +172,10 @@ describe("claudeSpawner", () => {
         moe_daemon_credential: "mixed-case-secret-must-not-reach-agent",
       },
       log: (l) => logs.push(l),
+      // POSIX argv semantics: on win32 the argv collapses into ONE shell line
+      // and `child.args` is empty, so the argv assertions below would be
+      // unreachable on a Windows runner and would pass while testing nothing.
+      platform: "linux",
       spawn,
     });
     const req = request();
@@ -231,8 +235,11 @@ describe("claudeSpawner", () => {
 
   it("gives code-node agents file/exec tools and runs them in their workspace", async () => {
     const { calls, spawn } = fakeSpawn();
+    // POSIX argv semantics are what this case asserts: on win32 the whole argv
+    // collapses into ONE shell line and `child.args` is empty, so without an
+    // explicit platform these assertions are unreachable on a Windows runner.
     const spawner = claudeSpawner(MCP_ORIGIN, {
-      command: "claude", log: () => undefined, spawn,
+      command: "claude", log: () => undefined, platform: "linux", spawn,
     });
     const done = spawner(request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
@@ -560,6 +567,9 @@ describe("claudeSpawner", () => {
       killGraceMs: 30,
       killProcessGroup: (pid) => { groupKills.push(pid); },
       log: () => undefined,
+      // The POSIX negative-pid group kill this case asserts; win32 takes the
+      // taskkill path instead and records nothing here.
+      platform: "linux",
       spawn,
     });
     try {
