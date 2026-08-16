@@ -186,34 +186,44 @@ const recordProperties = (value: unknown): Pick<RefusalCaseResult, "authority" |
   return { authority: record["authority"], truth: record["truth"] };
 };
 
-async function boundaryRefusal(
+type BoundaryOutcome = {
+  readonly refusal: unknown;
+  readonly primary?: RefusalCaseResult["primary"];
+  readonly upstream?: RefusalCaseResult["upstream"];
+};
+
+function closedStoreRefusal(root: string, phase: HostilePhase): BoundaryOutcome {
+  const closed = SqliteEventStore.openForProject(join(root, "closed.sqlite"), "security-project");
+  try { closed.getAggregateVersion("pre-close-probe"); }
+  finally { closed.close(); }
+  let failure: unknown;
+  try {
+    closed.getAggregateVersion(`closed-reader-${phase.toLowerCase()}`);
+    throw new Error("closed store unexpectedly answered");
+  } catch (error) {
+    failure = error;
+  }
+  const primary = storeUnavailable(failure);
+  if (primary.upstream === null) throw new Error("closed store did not preserve its upstream refusal");
+  return { refusal: primary.upstream, primary: { code: primary.code, refusedBy: primary.refusedBy } };
+}
+
+async function recoveryRefusal(
   hostileCase: RefusalCase,
   store: SqliteEventStore,
   root: string,
-): Promise<{ refusal: unknown; primary?: RefusalCaseResult["primary"]; upstream?: RefusalCaseResult["upstream"] }> {
+): Promise<BoundaryOutcome | null> {
   const { boundary, phase } = hostileCase;
   if (boundary === "DOCTOR_VERSION_LAYERS") {
-    return { refusal: compareRangePin("ENGINES_NODE", { known: true, value: "*" }, { known: true, value: "22.0.0" }).declared };
+    const value = phase === "BEFORE" ? "*" : "workspace:*";
+    return { refusal: compareRangePin("ENGINES_NODE", { known: true, value }, { known: true, value: "22.0.0" }).declared };
   }
   if (boundary === "DURABLE_INVENTORY_ADAPTER_LAYER") {
-    const refusal = appendDurableInventoryObservation(store, {}, {}, {}, {});
+    const record = phase === "BEFORE" ? {} : { observedAt: "sealed-window" };
+    const refusal = appendDurableInventoryObservation(store, record, {}, {}, {});
     return { refusal, upstream: refusal.ok ? undefined : refusal.upstream };
   }
-  if (boundary === "DURABLE_STORE_LAYER") {
-    const closed = SqliteEventStore.openForProject(join(root, "closed.sqlite"), "security-project");
-    try { /* The hostile operation below deliberately receives a closed production handle. */ }
-    finally { closed.close(); }
-    let failure: unknown;
-    try {
-      closed.getAggregateVersion("closed-reader-probe");
-      throw new Error("closed store unexpectedly answered");
-    } catch (error) {
-      failure = error;
-    }
-    const primary = storeUnavailable(failure);
-    if (primary.upstream === null) throw new Error("closed store did not preserve its upstream refusal");
-    return { refusal: primary.upstream, primary: { code: primary.code, refusedBy: primary.refusedBy } };
-  }
+  if (boundary === "DURABLE_STORE_LAYER") return closedStoreRefusal(root, phase);
   if (boundary === "RECOVERY_INCARNATION_LAYER") {
     const service = createRecoveryIncarnationService(createNodeRecoveryCryptoPort());
     if (phase === "BEFORE") return { refusal: await service.mint({}) };
@@ -237,7 +247,19 @@ async function boundaryRefusal(
     };
     return { refusal: await service.succeed(store, request) };
   }
-  if (boundary === "RESTORE_CONTROLLER_LAYER") return { refusal: runRestoreQuiesce(store, {}) };
+  return null;
+}
+
+async function remainingRefusal(
+  hostileCase: RefusalCase,
+  store: SqliteEventStore,
+  root: string,
+): Promise<BoundaryOutcome> {
+  const { boundary, phase } = hostileCase;
+  if (boundary === "RESTORE_CONTROLLER_LAYER") {
+    const request = phase === "BEFORE" ? {} : { restoreCommandId: "stale-restore" };
+    return { refusal: runRestoreQuiesce(store, request) };
+  }
   if (boundary === "RESTORE_REFUSAL_LAYERS") {
     return { refusal: phase === "BEFORE"
       ? restoreRefusal("DURABLE_STORE", "STORE_CLOSED")
@@ -250,10 +272,12 @@ async function boundaryRefusal(
     return { refusal: await prepareRecoveryAnchor(anchorRequest(root, "restore-other", "incarnation-a")) };
   }
   if (boundary === "RECOVERY_BINDING_CODEC_LAYER") {
-    const bytes = new TextEncoder().encode("hostile-unknown-codec");
+    const bytes = new TextEncoder().encode(`hostile-unknown-codec-${phase.toLowerCase()}`);
     return { refusal: decodeRecoveryBinding(bytes, recoveryBindingDigest(bytes)) };
   }
-  if (boundary === "RECOVERY_INSTALL_LAYERS") return { refusal: store.installRecoveryBinding({}) };
+  if (boundary === "RECOVERY_INSTALL_LAYERS") {
+    return { refusal: store.installRecoveryBinding(phase === "BEFORE" ? {} : { slot: "ACTIVE" }) };
+  }
   if (phase === "BEFORE") {
     const unscoped = SqliteEventStore.open(join(root, "unscoped.sqlite"));
     try { return { refusal: unscoped.installRecoveryBinding(binding("ACTIVE", "b")) }; }
@@ -262,6 +286,15 @@ async function boundaryRefusal(
   const installed = store.installRecoveryBinding(binding("ACTIVE", "b"));
   if (!installed.ok) throw new Error(`install setup refused: ${installed.code}`);
   return { refusal: store.installRecoveryBinding(binding("PENDING", "c")) };
+}
+
+async function boundaryRefusal(
+  hostileCase: RefusalCase,
+  store: SqliteEventStore,
+  root: string,
+): Promise<BoundaryOutcome> {
+  return await recoveryRefusal(hostileCase, store, root)
+    ?? remainingRefusal(hostileCase, store, root);
 }
 
 export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalCaseResult> {

@@ -4,8 +4,8 @@
  * This is deliberately not disaster-recovery fault coverage.  The fault lane
  * asks whether interrupted execution leaves coherent state; this security lane
  * asks whether forged, stale, replayed, or racing caller input is denied by the
- * production boundary that owns the decision.  Fault injection is therefore
- * used only as a race latch, never as a crash-point sweep.
+ * production boundary that owns the decision.  Race gates hold hostile callers
+ * at admission; this file never performs a crash-point sweep.
  */
 
 import { join } from "node:path";
@@ -110,7 +110,7 @@ async function runRaceCase(hostileCase: RaceCase): Promise<RaceCaseResult> {
   const root = hostileRoot(`race-${hostileCase.boundary.toLowerCase()}`);
   const databasePath = join(root, "events.sqlite");
   const initializer = SqliteEventStore.openForProject(databasePath, "moe-test-project");
-  try { /* Initialize the shared schema before either hostile writer opens it. */ }
+  try { initializer.getAggregateVersion("race-schema-probe"); }
   finally { initializer.close(); }
   const gate = new SharedArrayBuffer(8);
   const gateView = new Int32Array(gate);
