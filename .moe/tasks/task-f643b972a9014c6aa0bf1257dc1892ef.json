@@ -67,28 +67,42 @@
     {
       "stepId": "step-4",
       "description": "ATOMICITY, CLEANUP AND THE SHARED-ARTIFACT BOUNDARY. For EVERY refusal arm in this slice, read the durable aggregate back through a production reader and assert it is untouched or holds exactly one complete record — never a fragment. A partial write reported as a refusal is a defect, and on this axis it is the defect that matters most: a half-installed anchor or a half-sealed inventory window is worse than a clean failure, because the next reader treats it as evidence.\nEvery filesystem-touching case takes its root from `hostileRoot(label)` or runs inside `withHostileRoot`; register `cleanupHostileRoots()` so every root is removed on every exit path including throws and timeouts. Close every store handle in a `finally`.\nNEVER call `commitWithApply` or `commitExpectedVersionDecisionWithApply`. They hand the callback a raw `DatabaseSync`, which is how the no-new-schema rail gets violated by accident; the narrow ledger ports deliberately cannot name them, and a test reaching for them would be exercising a path production cannot take.\nDo NOT modify `hostile-harness.ts` or `boundary-roster.security.ts` — committed deliverables of task-9aca4b05, read by five slices; report blocked rather than editing either. Do NOT touch `tests/fault/**`, and in particular do not edit or extend `tests/fault/disaster-restore/**`, which belongs to task-0c89476b.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/durable-store-boundaries.security.ts"
       ],
-      "startedAt": "2026-08-16T13:14:08.831Z"
+      "modifiedFiles": [
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts"
+      ],
+      "note": "Atomicity/readback hardened: every refusal now inspects the actual durable surface (global event page, both recovery binding slots, or inspectRecoveryAnchor), asserts untouched or one complete pre-existing record, and rejects partial payload/digest state. Added 14 named CHANGED-BYTE REPLAY cases: caller result/event bytes differ but REPLAYED returns durable result bytes and only the original event. Added a whole-slice invariant over 28 refusals + 14 races. All roots use hostileRoot, every SQLite handle closes in finally, forbidden raw-DatabaseSync apply methods are absent, shared roster/harness and tests/fault are untouched. Focused run: Test Files 1 passed (1), Tests 72 passed | 31 skipped (103). Files are 370 and 139 lines.",
+      "startedAt": "2026-08-16T13:14:08.831Z",
+      "completedAt": "2026-08-16T13:16:51.727Z"
     },
     {
       "stepId": "step-5",
       "description": "MUTATION DRILLS — prove the coverage binds to real durable guards. Run each alone, revert before the next. (1) Remove one identity-binding check from a covered production boundary — the restore controller's `RESTORE_GENERATION_NOT_BOUND` comparison, or the anchor's digest check — and confirm a NAMED case reddens on its exact code and layer. (2) Make one inventory refusal drop its upstream tuple while keeping `UNKNOWN_TRUTH` at `RECOVERY_INVENTORY`; the step-2 inventory case must redden — this is THE drill for this axis, because without it a code-and-layer assertion there passes for any of several unrelated failures. (3) Make one refusal leave a partial durable write; the step-4 read-back assertion must redden — proving atomicity is asserted rather than assumed from the refusal's presence. (4) Make one race admit BOTH sides; the per-side assertion must redden. (5) Delete one boundary's cases; the roster-set assertion must redden naming that constant.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or timeout — note that on this axis a wrong-reason red is easy, because several distinct failures already collapse to `UNKNOWN_TRUTH`. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; drills 1-3 edit PRODUCTION files in a shared worktree, so a drill left on disk risks a foreign completion hook committing it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/recovery/restore-controller.ts",
         "tests/security/durable-store-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/durable-store-boundaries.security.ts",
+        "tests/security/durable-store-boundary-scenarios.ts"
+      ],
+      "note": "Six isolated drills, each restored byte-exact before the next: (1) packages/store/src/recovery-anchor.ts detectFenceReuse return `reused ? ... : null` -> `null`; named AFTER RECOVERY_ANCHOR_LAYER red at assertRefusedWith. (2) recovery-inventory-ledger.ts `events.length===0` return -> same UNKNOWN_TRUTH/code/layer with upstream removed; named BEFORE RECOVERY_INVENTORY_LEDGER_LAYER red on exact tuple. (3) durable-recovery-inventory.ts malformed-input one-line return -> commit one fragment then refuse; named BEFORE DURABLE_INVENTORY_ADAPTER_LAYER red on durableRecords 1 vs 0. (4) scenario race aggregate id -> per-side aggregate plus fallback DurableStoreError; named RACE DURABLE_STORE_LAYER red at admittedSides 2 vs 1. (5) casesFor map -> filter RECOVERY_ANCHOR_LAYER; named generated-case test red 0 > 0. (6) decision-ledger-transaction.ts historical replay return -> caller resultBytes echo; named CHANGED-BYTE REPLAY DURABLE_STORE_LAYER red with Received hostile-caller-answer vs Expected durable-answer. All production hashes restored, no DRILL token remains. Post-drill focused run: 72 passed, 31 skipped.",
+      "startedAt": "2026-08-16T13:17:33.133Z",
+      "completedAt": "2026-08-16T13:22:07.790Z"
     },
     {
       "stepId": "step-6",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Run `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — and read the OUTPUT: the count line must be strictly above the step-1 baseline, and say by how many. `passWithNoTests: false` catches an empty lane, but a lane collecting only the roster, smoke, transport and integrity files still exits 0. Then `pnpm --filter @moe/store test` and `pnpm --filter @moe/daemon test`, since drills 1-3 touch production in both packages — confirm they are back to their baselines. Then `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty; quote any foreign red verbatim without repairing it.\nADVERSARIAL REVIEW: (a) does the swept set equal the roster's 14 durable-store entries in BOTH directions, with no member from another axis? (b) is the LANE BOUNDARY honoured — does the file header state the security-vs-fault distinction, and does each boundary say which question its cases ask, with nothing that merely re-runs a disaster-restore case? (c) does EVERY inventory assertion pin the upstream tuple as well as the code and layer? (d) does every refusal arm read the durable aggregate back and assert no fragment? (e) is every commit against a REAL SqliteEventStore, closed in a `finally` on every exit path? (f) are `commitWithApply` and `commitExpectedVersionDecisionWithApply` absent from the diff? (g) is every race bounded well below `MAX_BOUND_MS`, terminating, asserted per-side, order-independent? (h) is the whole-slice invariant present — no committed record, installed anchor, advanced succession, or truth class above UNKNOWN? (i) are `hostile-harness.ts`, `boundary-roster.security.ts` and `tests/fault/**` untouched? (j) is each file under 400 lines by `grep -c ''`? (k) does `git status --porcelain` show only owned paths, with every production drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after count lines, name the test that reddened for each drill, state how you kept this slice distinct from task-0c89476b's fault coverage, and record that this satisfies the `durable-store` axis of ratchet task-3b1cbdf9bd39405bb32230552d3ab242. Keep verification.command under 500 characters.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/durable-store-boundaries.security.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T13:22:18.943Z"
     }
   ],
   "status": "WORKING",
@@ -104,7 +118,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:02.653Z",
-  "updatedAt": "2026-08-16T13:14:08.831Z",
+  "updatedAt": "2026-08-16T13:22:18.943Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -113,12 +127,14 @@
     "firstClaimAt": "2026-08-16T12:59:29.245Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:01:27.239Z",

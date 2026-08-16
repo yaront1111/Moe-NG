@@ -23,33 +23,45 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND TAKE THE 22 FROM THE ROSTER. Its own comment settles the authority question: \"Axis totals for the sibling slices: transport 15, integrity 13, durable-store 14, runtime-provider 22, scheduler-activation 23 — sums to 87. These tags, NOT the subset counts in the siblings' own descriptions, are the authority.\" This task's description says 20; the roster says 22 and wins.\nTHE TWO IT GAINED are the ones a ` = `-only enumeration pattern missed because they carry type annotations: `PLATFORM_LINUX_LAYER` (packages/runner/src/platform/linux-facts.ts) and `PLATFORM_MACOS_LAYER` (packages/runner/src/platform/macos/macos-facts.ts). Both are real boundaries and both are yours.\nTHE FULL 22: PROVIDER_RUN_LEDGER_LAYERS (daemon/telemetry/provider-run-refusals.ts); RUNNER_WORKSPACE_LAYER (daemon/work/foundation-attempt-contracts.ts); then packages/runner — ARTIFACT_ENUMERATION_LAYERS, EVIDENCE_REFUSAL_LAYERS, VERIFIER_PROCESS_LAYERS, MATERIALIZATION_REFUSAL_LAYERS, PLATFORM_LINUX_LAYER, PLATFORM_MACOS_LAYER, PLATFORM_BOUNDARIES, PLATFORM_LAYERS, WINDOWS_PROCESS_LAYERS, CLAUDE_LAUNCH_SELECTION_LAYER, CLAUDE_LAUNCH_LAYERS, CLAUDE_RENDER_LAYERS, CLAUDE_RUNTIME_PIN_LAYER, CODEX_RENDER_LAYERS, PROVIDER_TELEMETRY_LAYERS, PROVIDER_USAGE_LAYERS, RECOVERY_INVENTORY_LAYERS, RECOVERY_LAYERS, SCOPE_OBSERVER_LAYERS, SUPERVISOR_LAYERS.\nSIZE: 22 boundaries x 3 arms is 66+ cases. Plan to SPLIT from the start — up to three `*.security.ts` files under tests/security/, grouped by concern (platform, provider/launch, evidence/workspace), with the roster-set completeness assertion living in exactly ONE of them so the check has a single home. Each file under 400 physical lines by `grep -c ''`.\nHOST PRECONDITIONS, measured earlier this session and worth re-confirming: `claude.exe` is installed at `C:\\Users\\Yaron\\.local\\bin\\claude.exe`, and the release broker is built at `dist/windows-job-native/release/moe-windows-job-broker.exe` — note that path is relative to the WORKSPACE ROOT because the gate passes `--target-dir`; `native/target/release` does not exist and gives a false \"not built\" reading.\nGATE BASELINE: `pnpm test:security` alone with its exit code captured — never `;`-chained, never piped into tail — recording the count line.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/hostile-harness.ts"
-      ]
+      ],
+      "note": "BASELINE + ROSTER TAKEN AT HEAD 81a9f30.\n\nRoster authority confirmed on committed bytes: `grep -c 'axis: \"runtime-provider\"' tests/security/boundary-roster.security.ts` = 22 (not the description's 20). The two extras are PLATFORM_LINUX_LAYER (packages/runner/src/platform/linux-facts.ts:41) and PLATFORM_MACOS_LAYER (packages/runner/src/platform/macos/macos-facts.ts:45) — both verified present.\n\nGATE BASELINE, run alone, exit code captured separately (never `;`-chained, never piped):\n- `pnpm test:security` -> EXIT=1. Dies at the `tsc -p tests/security/tsconfig.json` leg, so ZERO tests ran and NO count line was printed.\n- Foreign failing paths, verbatim: `apps/daemon/src/recovery/recovery-inventory-contract.ts(274,3): error TS6133` + `(277,3): error TS2322`; `tests/security/integrity-hostile-cases.ts` (TS2305 x2, TS2724, TS2307, TS7006); `tests/security/transport-hostile-cases.ts(30,34): error TS2307: Cannot find module '@moe/store'`. The two tests/security files are UNTRACKED peer in-flight work (`git status --porcelain -uall`), the daemon one is committed-broken at HEAD. None is mine.\n- Count-line baseline measured with the tsc leg bypassed (`npx vitest run --config tests/security/vitest.config.ts`): `Test Files 3 failed | 1 passed (4)` / `Tests 7 failed | 144 passed (151)`, EXIT=1. All 7 reds foreign: roster scan cardinality x2 (a peer landed a new boundary constant), durable-store peer x3, transport peer's missing `./transport-boundary-registry.js`.\n\nMEASURED PRODUCTION SURFACES (grep/read, not assumed):\n- observeLinuxPlatform / observeMacosPlatform are PURE — no process.platform, no child_process. They classify caller-supplied facts, so BOTH platform arms EXECUTE on this win32 host; the platform-unsupported refusal is PLATFORM_HOST_MISMATCH @ PLATFORM_LINUX / PLATFORM_MACOS. No skip is needed anywhere.\n- openWindowsProcessBoundary takes `deps.platform` injectable, so PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED @ WINDOWS_PROCESS_REQUEST also EXECUTES. Confirmed SYNCHRONOUS on the refusal path; DEFAULT_TIMEOUT_MS is 30 min so every case passes an explicit bound.\n- Never-terminating provider is reachable through the real production seam: `deps.spawn: BrokerSpawn` is injectable and the session cancels on timeout via endControl(), settling PROCESS_BOUNDARY_LAUNCH_TIMED_OUT @ WINDOWS_PROCESS_TRANSPORT (windows-boundary-session.ts:221, windows-boundary-failure.ts:14).\n- launchClaudeWithTelemetry `ok:true` trap re-confirmed at claude-telemetry-launch.ts:206-224.\n- runVerifierProcess takes an injectable `launcher: ProcessLauncher` and `clock`, so the hung-verifier case drives production rather than a mock of it.\n\nSPLIT PLAN (each file well under 400 lines): platform group 6, provider/launch group 7, evidence/workspace group 9. Lane is `isolate: true` + `pool: \"forks\"`, so module state is NOT shared across files — the partition and the ledger machinery therefore live in one shared non-`.security.ts` helper (same pattern the durable-store slice uses with durable-store-boundary-scenarios.ts), and the roster-set union assertion has exactly one home.",
+      "startedAt": "2026-08-16T13:15:06.728Z",
+      "completedAt": "2026-08-16T13:19:39.719Z"
     },
     {
       "stepId": "step-2",
       "description": "PLATFORM ARMS — and the no-skip rule, which matters more on this axis than anywhere else. `PLATFORM_BOUNDARIES`, `PLATFORM_LAYERS`, `PLATFORM_LINUX_LAYER`, `PLATFORM_MACOS_LAYER` and `WINDOWS_PROCESS_LAYERS` span three operating systems, and this suite runs on one of them.\nNO CASE MAY SKIP. A case that quietly skips on the current host generates zero cases and passes while proving nothing — the sweep-generated-nothing defect the project rail names. Every platform arm must either EXECUTE, or assert that platform's stable UNSUPPORTED refusal with its exact code and layer. Assert each of the linux, macos and windows arms individually, and assert a positive executed-case count per arm so an arm that silently produced nothing reddens.\nHOSTILE INPUT PER BOUNDARY: a platform observation whose host identity fields are forged or exceed `MAX_PLATFORM_IDENTITY_CHARS`; a fact envelope whose truth class is asserted rather than observed; a boundary name outside `PLATFORM_BOUNDARIES`; for `WINDOWS_PROCESS_LAYERS`, a launch request with sparse or over-long argv, a disallowed environment key, an oversized payload, and a broker frame that is truncated, over-length or carries an unknown opcode — `WINDOWS_PROCESS_CODES` has 22 members covering exactly these, so pin against it rather than inventing expectations.\nTWO MEASURED TRAPS on the Windows side. First, `openWindowsProcessBoundary` is SYNCHRONOUS on its refusal path and returns `WindowsProcessBoundary | WindowsProcessUnknown` — a case awaiting a rejected promise will wait forever for a refusal that already returned. Second, its `DEFAULT_TIMEOUT_MS` is 30 MINUTES; a case that inherits it turns a hung boundary into a half-hour stall rather than a red, and this lane runs `fileParallelism: false`. Pass an explicit bounded timeout, well below `MAX_BOUND_MS` (2**31-1, where `setTimeout` clamps to 1ms).\nAlso: `recovery-anchor-fs.ts:18` gates directory fsync behind `process.platform !== \"win32\"`, so do NOT assert POSIX durability side effects in a case that runs on Windows — assert the refusal semantics, which hold everywhere.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/platform-boundaries.security.ts"
       ],
       "newFiles": [
         "tests/security/platform-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/runtime-provider-ledger.ts",
+        "tests/security/runtime-provider-platform-fixtures.ts",
+        "tests/security/runtime-provider-platform.security.ts"
+      ],
+      "note": "PLATFORM ARMS LANDED — 22 cases, all green, ZERO skips.\n\n`npx vitest run --config tests/security/vitest.config.ts runtime-provider-platform` -> EXIT=0, `Test Files 1 passed (1)` / `Tests 22 passed (22)`. Lane tsc clean on my files.\n\nNO ARM SKIPS, and it never needed to. Measured rather than assumed: observeLinuxPlatform/observeMacosPlatform are PURE classifiers of caller-supplied facts (no process.platform, no child_process), so both EXECUTE on this win32 host. The linux, macos and windows arms are asserted individually:\n- linux: PLATFORM_HOST_MISMATCH @ PLATFORM_LINUX (win32 and darwin fixtures), PLATFORM_ARCH_UNSUPPORTED @ PLATFORM_LINUX (s390x, riscv64 — both well-formed linux hosts so the neutral shape gate provably cannot answer first).\n- macos: PLATFORM_HOST_MISMATCH @ PLATFORM_MACOS, PLATFORM_ARCH_UNSUPPORTED @ PLATFORM_MACOS, PLATFORM_FACT_ABSENT @ PLATFORM_MACOS. The RACE case runs a linux fixture and a darwin fixture side by side and pins each to ITS OWN layer, so an inherited judgement would redden.\n- windows: PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED @ WINDOWS_PROCESS_REQUEST via injected `deps.platform`, with `expect(calls).toEqual([])` proving ZERO process calls.\n`assertPositiveCounts` requires a positive count per boundary AND per arm, so an arm that silently produced nothing reddens (drill 4's target).\n\nNEVER-TERMINATING PROVIDER, BOUNDED, REACHING A STABLE REFUSAL: a broker stub that emits no status frame, driven through the REAL `openWindowsProcessBoundary` session with `timeoutMs: 150` (four orders below DEFAULT_TIMEOUT_MS, far below MAX_BOUND_MS) plus the harness's 2s bound. It settles PROCESS_BOUNDARY_LAUNCH_TIMED_OUT @ WINDOWS_PROCESS_TRANSPORT and the case asserts `calls` contains `endControl` — proof it TERMINATED rather than the bound expiring. Nothing awaits the synchronous refusal path.\n\nLAYER DISAMBIGUATION where two layers can answer: every PLATFORM_LAYERS fixture is malformed in a way no adapter can reach (unusable host record), and every PLATFORM_BOUNDARIES fixture carries a usable host so the neutral gate cannot answer. The CLAUDE_RUNTIME_PIN_LAYER race runs the SAME drifted quote on both legs and varies ONLY the host, so PLATFORM_UNSUPPORTED vs QUOTE_INVALID is attributable to the host and nothing else.\n\nCLOSURE DRIFT: `readQuote` on a quote whose observationDigest was taken before its closure was swapped -> CLAUDE_RUNTIME_QUOTE_INVALID @ RUNTIME (\"quoted digest does not cover its own fields\").\n\nFILES (all under the 400-line rail by `grep -c ''`):\n- tests/security/runtime-provider-ledger.ts (275) — shared partition, ledger, and the four per-slice invariants. Not a `*.security.ts` file, so it registers no empty suite. The partition lives here because the lane is `isolate: true` + `pool: \"forks\"`: three copies would drift and a boundary could fall between two of them.\n- tests/security/runtime-provider-platform-fixtures.ts (186) — hostile inputs and injectable ports only; it decides nothing, and its ports THROW on any call the gate under test must not reach.\n- tests/security/runtime-provider-platform.security.ts (398).\n\nMEASURED TRAP worth recording: `probeAfter(bound, effect, probe)` returns `{effect, probe}` where `effect` is the FIRST callback. Three cases were initially written with the assertions reversed and reddened on the code mismatch — the harness caught it, which is what a code+layer assertion is for.",
+      "startedAt": "2026-08-16T13:19:42.116Z",
+      "completedAt": "2026-08-16T13:29:12.480Z"
     },
     {
       "stepId": "step-3",
       "description": "PROVIDER AND LAUNCH ARMS — `CLAUDE_LAUNCH_LAYERS`, `CLAUDE_LAUNCH_SELECTION_LAYER`, `CLAUDE_RENDER_LAYERS`, `CLAUDE_RUNTIME_PIN_LAYER`, `CODEX_RENDER_LAYERS`, `PROVIDER_TELEMETRY_LAYERS`, `PROVIDER_USAGE_LAYERS`, `PROVIDER_RUN_LEDGER_LAYERS`.\nTHE TRAP THAT WILL OTHERWISE MAKE HALF THESE CASES VACUOUS, measured: `launchClaudeWithTelemetry` returns `ok: true` for a launcher that REFUSED and for a delivery that was NOT ATTEMPTED. Both carry a BLIND handoff whose facts are UNKNOWN and whose `telemetryRefusal` field is populated; the ONLY route to `ok: false` is a malformed run ref (`TELEMETRY_RUN_REF_MALFORMED` at `TELEMETRY_INPUT`). So a hostile case asserting `ok === false` will never fire for launch refusals. Assert on `handoff.telemetryRefusal`, `handoff.terminal` and `handoff.infrastructure`, and pin the two blind shapes (`TELEMETRY_LAUNCH_REFUSED` vs `TELEMETRY_LAUNCH_NOT_ATTEMPTED`) as DISTINCT — collapsing them loses which happened.\nFIVE LAYERS CAN ANSWER on the telemetry seam — `PROVIDER_TELEMETRY_LAYERS` = TELEMETRY_INPUT, TELEMETRY_LAUNCH, TELEMETRY_CAPTURE, TELEMETRY_SCHEMA, TELEMETRY_RESULT, and the contract's own comment says a test pinning only the code \"would stay green once a different layer started answering first\". Build each fixture valid at the earlier layers and name the arranged layer in a comment.\nHOSTILE INPUT: poison provider output; a capture that is truncated or whose bytes do not decode to their declared digest; interleaved or out-of-order stream records; a result record claiming a schema the parser does not support; a runtime closure that drifts between observation and use; an unresolvable or swapped executable; a render request carrying argv or environment injection.\nMESSAGE HYGIENE IS A PRODUCTION RULE AND A TEST RULE. `PROVIDER_TELEMETRY_MESSAGES` are deliberately static and non-interpolating because \"a message quoting the captured bytes, the model or a digest would echo provider output back out of a failure path\". Assert as a PROPERTY over this file's refusals that no message contains a path, argv, environment value, digest or captured byte — and do not let a test print provider output to demonstrate rejection.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/provider-boundaries.security.ts"
       ],
       "newFiles": [
         "tests/security/provider-boundaries.security.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T13:29:15.793Z"
     },
     {
       "stepId": "step-4",
@@ -83,7 +95,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0cd13358",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -95,7 +107,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:00:34.185Z",
-  "updatedAt": "2026-08-16T13:03:36.024Z",
+  "updatedAt": "2026-08-16T13:29:15.793Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -103,12 +115,16 @@
   "metrics": {
     "firstClaimAt": "2026-08-16T13:01:31.586Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:03:33.961Z",
   "planningNotes": {
@@ -129,5 +145,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-16T13:03:36.024Z"
+  "planApprovedAt": "2026-08-16T13:03:36.024Z",
+  "contextFetchedBy": [
+    "worker-0cd13358"
+  ],
+  "workStartedAt": "2026-08-16T13:15:06.728Z"
 }

@@ -19,16 +19,23 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND RE-MEASURE BOTH PRODUCERS — the cascade cleared only ONE of this task's two hard dependencies, so confirm both. Measured at HEAD f65fbde: `task-69f2b6f785ca4ba3a932a8256b0edfb8` (Verification process wrapper) is DONE and `task-6cbff01023b14b26a78fc5e3eb1dd8a9` (Durable Claude attempt dispatch) is DONE. `apps/daemon/src/evidence/` does NOT exist — this task creates it.\nTHE WRAPPER SURFACE, all published from the `@moe/runner` ROOT via surface/evidence-surface.ts, so every import is a bare specifier and no deep import is needed (task rail 2): `buildVerificationRecipe`, `recipeSealMatches`; `runVerifierProcess`, `createNodeProcessLauncher`, `RunVerifierProcessInput/Ok/Refused/Result`, `VerifierLaunchSpec`, `VerifierExitObservation`, `LaunchedProcess`, `ProcessLauncher`; `buildEvidenceReceipt`, `receiptDigestInput`, `EvidenceReceipt`, `EvidenceReceiptBody`, `BuildEvidenceReceiptInput/Result`, `ReceiptTimestamps`; `canonicalObligations`, `ObligationContext`; `EXECUTION_DISPOSITIONS`, `observedExecutionRejection`, `ObservedVerifierExecution`, `ObservedOutput`; `VERIFIER_PROCESS_ERROR_CODES`, `VERIFIER_PROCESS_LAYERS`, `MAX_VERIFIER_OUTPUT_BYTES`, `MAX_VERIFIER_RUN_MS`, `VERIFIER_REAP_GRACE_MS`, `hermeticVerifierEnvironment`, `VerifierActivation`, `VerifierCapture`, `VerifierClock`; `VerificationRecipe`, `VerificationRecipeBody`, `VerifierIdentity`.\nTHE DISPATCH READ SURFACE, daemon-local in apps/daemon/src/work/foundation-attempt-store.ts (235 lines after the round-2 refactor — LINE NUMBERS MOVED, so re-read rather than citing an old note): `readStoredFoundationAttempt` (:132), `readFoundationAttemptRecord` (:153), `readDurableFoundationObservation` (:77), `settleFoundationAttempt` (:165), `recordProvenFoundationAttempt` (:203), `FoundationAttemptCapture` (:181). The service is 213 lines and exports `createFoundationAttemptService` (:97).\nVERIFY THE CROSS-PACKAGE EDGE per the workspace-dep rail: apps/daemon declares `@moe/runner: workspace:*`, pnpm-lock carries the importer, and a compiled probe inside apps/daemon imports one evidence symbol from the BARE specifier and typechecks exit 0 — probe deleted in the same command. A root-barrel grep does not satisfy leg (c).\nGATES, each run separately with its own exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/runner test`, `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`. Record count lines and every failing file as your before-set; the daemon legs are expected RED from foreign in-flight slices.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/surface/evidence-surface.ts",
         "apps/daemon/src/work/foundation-attempt-store.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/surface/evidence-surface.ts",
+        "apps/daemon/src/work/foundation-attempt-store.ts"
+      ],
+      "note": "BASELINE at HEAD 81a9f30. Nothing written; both files listed were READ only.\n\nBOTH PRODUCERS CONFIRMED LANDED ON COMMITTED BYTES. apps/daemon/src/work/foundation-attempt-{store,service,contracts}.ts measured by `grep -c ''` at 235 / 213 / 218 lines — matching the plan's post-round-2 figures. `apps/daemon/src/evidence/` does NOT exist; this task creates it.\n\nDISPATCH READ SURFACE re-read rather than cited; every line number in the plan still holds exactly: readDurableFoundationObservation(:77), commitFoundationPhase(:103), readFoundationReservationDigest(:119), readStoredFoundationAttempt(:132), readFoundationAttemptRecord(:153), settleFoundationAttempt(:165), FoundationAttemptCapture(:181), recordProvenFoundationAttempt(:203); service exports createFoundationAttemptService(:97). Semantics worth carrying into step 5: readStoredFoundationAttempt is the one that re-encodes the decoded payload and refuses FOUNDATION_ATTEMPT_RECORD_DRIFT on byte drift (:145-148) — that is the discipline DoD 5's read model must copy; readFoundationAttemptRecord derives the dispatch aggregate id and refuses FOUNDATION_ATTEMPT_REQUEST_MALFORMED on an empty/non-string id; settleFoundationAttempt is the SINGLE writer of the one RECORDED event, committing at expectedVersion 1 under an event id COPIED from the grant.\n\nWRAPPER SURFACE verified present in packages/runner/src/surface/evidence-surface.ts (112 lines) and reachable from the ROOT: packages/runner/src/index.ts:164 `export * from \"./surface/evidence-surface.js\"`, package exports {\".\": \"./src/index.ts\"}. Every symbol the plan named is on the seam — buildVerificationRecipe, recipeSealMatches, runVerifierProcess, createNodeProcessLauncher, buildEvidenceReceipt, receiptDigestInput, canonicalObligations, EXECUTION_DISPOSITIONS, observedExecutionRejection, VERIFIER_PROCESS_ERROR_CODES, VERIFIER_PROCESS_LAYERS, MAX_VERIFIER_OUTPUT_BYTES, MAX_VERIFIER_RUN_MS, VERIFIER_REAP_GRACE_MS, hermeticVerifierEnvironment, plus the full type closure. No deep import is needed anywhere in this task.\n\nCROSS-PACKAGE EDGE proven on all three legs, not by root-barrel grep: (a) apps/daemon/package.json:20 declares \"@moe/runner\": \"workspace:*\"; (b) pnpm-lock.yaml:114 carries the apps/daemon importer, specifier workspace:*, version link:../../packages/runner; (c) a compiled probe apps/daemon/src/__bare_specifier_probe.ts importing buildEvidenceReceipt, recipeSealMatches and VERIFIER_PROCESS_ERROR_CODES from the BARE specifier \"@moe/runner\" ran `pnpm --filter @moe/daemon typecheck` at EXIT=0 with zero TS2307/TS6059, and the probe was deleted in the SAME command (absence re-confirmed by ls).\n\nGATES, each run separately with its own exit code captured — never `;`-chained into one status, never piped into tail:\n- `pnpm --filter @moe/runner test` EXIT=0 — \"Test Files  66 passed (66)\" / \"Tests  2216 passed | 1 skipped (2217)\".\n- `pnpm --filter @moe/daemon typecheck` EXIT=0.\n- `pnpm --filter @moe/daemon test` EXIT=0 — \"Test Files  102 passed (102)\" / \"Tests  2101 passed (2101)\".\n- `pnpm typecheck` (repo-wide) EXIT=0, every workspace project reporting Done.\nCounts are nonzero on both test legs, so neither filter silently matched no package.\n\nDEVIATION FROM THE PLAN'S PREMISE, disclosed rather than assumed: step 1 predicted \"the daemon legs are expected RED from foreign in-flight slices\". They are not. The failing-file BEFORE-SET IS EMPTY on all four gates. The foreign in-flight security-lane files that were reddening the repo earlier today live under tests/security/** and are not reached by any of these four gates. Consequence for step 7, and it makes this task STRICTER not looser: the path-attributed baseline is empty, so ANY red at the final gate is mine and there is no foreign red to quote or excuse. I will re-measure the baseline at step 7 rather than trusting this one, since peers are actively writing in this worktree.",
+      "startedAt": "2026-08-16T13:20:17.848Z",
+      "completedAt": "2026-08-16T13:22:33.566Z"
     },
     {
       "stepId": "step-2",
       "description": "CONTRACTS FIRST — create `apps/daemon/src/evidence/foundation-verification-contracts.ts` plus its one-line `.js` bridge (`export * from \"./foundation-verification-contracts.ts\";`, LF ending; apps/daemon requires a physical bridge per production module and the guard byte-compares).\nIt declares this service's own frozen reason-code and layer vocabularies — `Object.freeze([...] as const)` plus derived union types, the shape every contract in this repo uses, so a test can ITERATE them at runtime. Scope them to what THIS service can refuse: an identity that does not resolve, a stale or replaced hash, an activation that could not be committed, a candidate that changed between load and execution, a replay conflict. Do NOT restate the wrapper's own codes — `VERIFIER_PROCESS_ERROR_CODES` and `VERIFIER_PROCESS_LAYERS` already cover execution failures and travel through unchanged. Two vocabularies for one condition is the defect that got a sibling task rejected.\nEVERY DECLARED CODE MUST HAVE A PRODUCER. A code no layer can emit cannot fail closed; task-6cbff010 was rejected in round 2 for exactly three such orphans. Before the gate, grep each member and confirm a production emit site plus a code+layer test — or drop it.\nAlso declare the service's input and result types. The input names identities, never payloads: the durable attempt's identity, the sealed recipe's identity, and the verification's own correlation. Anything the caller could supply as a REPLACEMENT for durable state must be structurally absent from the input type — that is DoD 1's \"caller-supplied replacements refuse\", enforced by making them unrepresentable rather than validated away.\nKeep under 250 physical lines by `grep -c ''` (PowerShell `Measure-Object -Line` undercounts).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/evidence/foundation-verification-contracts.ts",
         "apps/daemon/src/evidence/foundation-verification-contracts.js"
@@ -36,18 +43,26 @@
       "newFiles": [
         "apps/daemon/src/evidence/foundation-verification-contracts.ts",
         "apps/daemon/src/evidence/foundation-verification-contracts.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/evidence/foundation-verification-contracts.ts",
+        "apps/daemon/src/evidence/foundation-verification-contracts.js"
+      ],
+      "note": "CONTRACTS LANDED. apps/daemon/src/evidence/ created; foundation-verification-contracts.ts measured by `grep -c ''` at 239 lines (under the 250 target); the .js bridge is exactly one LF line, `od -c` verified byte-for-byte against the sibling convention in work/foundation-attempt-store.js, with no CR and no NUL (9696 raw bytes == 9696 after `tr -d '\\000'`). `pnpm --filter @moe/daemon typecheck` EXIT=0.\n\nVOCABULARIES. FOUNDATION_VERIFICATION_CODES holds 12 frozen members, FOUNDATION_VERIFICATION_LAYERS 5, both `Object.freeze([...] as const)` with derived union types so a test can ITERATE them at runtime. Codes: REQUEST_MALFORMED, ATTEMPT_UNPROVEN, RECIPE_UNRESOLVED, RECIPE_SEAL_INVALID, CANDIDATE_STALE, ACTIVATION_UNCOMMITTED, CANDIDATE_CHANGED, REPLAY_CONFLICT, CAPTURE_TRUNCATED, EXECUTION_UNVERIFIED, RECEIPT_AMBIGUOUS, RECEIPT_UNREADABLE. Layers: DAEMON_VERIFICATION_{REQUEST,IDENTITY,ACTIVATION,EXECUTION,RECEIPT}. I am carrying all 12 as a debt to discharge at step 7: the plan's rule is that a code no layer can emit cannot fail closed, so each gets a production emit site plus a code+layer test, or it gets dropped from the frozen list before the gate. The two that most need watching are CANDIDATE_STALE and CANDIDATE_CHANGED, which look like one condition and are not: STALE is the caller's expectedRecordDigest disagreeing with the durable record at LOAD, CHANGED is the durable record moving BETWEEN load and execution. Different producers, different times, and step 4's mismatched-candidate case pins the second. If step 5 cannot produce both distinctly, the weaker one gets dropped rather than left orphaned.\n\nNO RESTATEMENT OF THE WRAPPER'S CODES, which is the defect that got the sibling task rejected. There is deliberately no daemon code for a failed spawn, a timeout, an output overflow or a receipt-binding fault: VERIFIER_PROCESS_ERROR_CODES and RUNNER_EVIDENCE_ERROR_CODES already name those. Pass-through is structural, not conventional — FoundationVerificationRefused is a union discriminated by a `source` field over FOUNDATION_VERIFICATION_REFUSAL_SOURCES (DAEMON_VERIFICATION, FOUNDATION_ATTEMPT, VERIFIER_PROCESS, RUNNER_SUPERVISOR, RUNNER_EVIDENCE), and each arm is typed to ITS OWN authority's code and layer unions. `carryWrapperRefusal` is total over the wrapper's three-way refusal union and re-codes nothing; `carryAttemptRefusal` copies the store's code and reads its layer from `refusedBy`, which is how that record spells it. A restamp is now a type error rather than a review catch.\n\nDoD 1 ENFORCED BY THE TYPE, NOT BY A VALIDATOR. FoundationVerificationRequest carries exactly five fields — attemptAggregateId, candidateRoot, expectedRecordDigest, recipeAggregateId, verificationId. There is NO field for an input manifest, result manifest, runtime observation, recipe body or receipt, so a caller-supplied replacement for durable state is unrepresentable rather than validated away, and a later refactor cannot quietly stop calling the check. expectedRecordDigest is the caller's belief about WHICH record it is verifying, never a substitute for the record.\n\nDESIGN DECISION THAT THE PLAN DID NOT SETTLE, disclosed rather than assumed. DoD 1 requires the sealed recipe to be loaded BY IDENTITY, but I measured that no durable recipe store exists anywhere: `buildVerificationRecipe`/`VerificationRecipe` have zero non-test references in apps/daemon/src and packages/store/src, the durable attempt record body carries no recipe field (attemptRecordBody spells inputManifest, resultManifest, observation, registration, the identity set and the stdout/stderr digests, and nothing else), and the two daemon files matching /recipe/ are the orchestrator's older NodeMission-based verifier runner, an unrelated lane. So \"load the recipe by identity\" has nothing to load from unless this task also makes a recipe durable. I therefore declared FoundationRecipeRegistration: declaring a recipe is how one is CREATED, and from the sealed event onward it is loaded by identity and never again accepted from a caller. This keeps DoD 1 honest instead of quietly letting the caller pass a recipe body on the verify path. If the epic intends recipe sealing to belong to a different task, this is the seam to move and I want it flagged now rather than at QA.\n\nCONSUMED RATHER THAN REIMPLEMENTED: the canonical-bytes primitives (encodeFoundationPayload/decodeFoundationPayload/sha256Hex/sameBytes/isRecord/textOf/exactKeys) already exist in work/foundation-attempt-codec.ts and will be imported by the service at step 5, not rewritten — a second canonical form would be a second definition of the bytes review and closure hash. That file belongs to task-6cbff010 and stays untouched.",
+      "startedAt": "2026-08-16T13:22:39.480Z",
+      "completedAt": "2026-08-16T13:27:28.764Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED, PART 1 — identity loading and the refusals that must happen BEFORE any process starts. Create `foundation-verification-service.test.ts` against the not-yet-existing service, driving a REAL SqliteEventStore opened per test and closed in a `finally` on every exit path (a held handle kills the vitest worker).\nDoD 1 CASES, each asserting the exact code AND layer: the durable input manifest, result manifest, runtime observation and sealed recipe are loaded BY IDENTITY through the landed readers (`readStoredFoundationAttempt`, `readFoundationAttemptRecord`, `readDurableFoundationObservation`); an identity that resolves to nothing refuses; a hash that no longer matches the durable record refuses; a recipe whose seal fails `recipeSealMatches` refuses.\nTHE ORDERING ASSERTION IS THE POINT OF THIS STEP: every one of those refusals must occur BEFORE the process wrapper is invoked. Assert it observably — drive with a launcher that records invocations and assert ZERO invocations on every refusal path, the same shape task-6cbff010's `forgedCalls 0` assertion used. A refusal that happens after a process already ran is not a refusal, it is a cleanup.\nAND ASSERT THE ATOMIC ACTIVATION ORDERING from DoD 2: the verification activation is committed BEFORE the wrapper runs. Read the durable state back and assert that, for a refusal after activation, an activation exists with no run — never a run with no activation. That direction matters: a run without a committed activation is an effect nothing authorised.\nEvery fixture valid at the earlier layers so the intended refusal answers — the store, the dispatch readers, the recipe seal and this service can each refuse, and a code-only assertion detaches the moment a different one answers first.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/evidence/foundation-verification-service.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/evidence/foundation-verification-service.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T13:27:37.789Z"
     },
     {
       "stepId": "step-4",
@@ -91,7 +106,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-5678886b",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -110,11 +125,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.053Z",
-  "updatedAt": "2026-08-16T13:08:33.716Z",
+  "updatedAt": "2026-08-16T13:27:37.789Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:23:08.863Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 7
+    "plannedDistinctFileCount": 7,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-db2146e3",
@@ -122,7 +138,8 @@
     "governor-7c5e6be6",
     "architect-94dd1835",
     "governor-a627169a",
-    "architect-27b64950"
+    "architect-27b64950",
+    "worker-5678886b"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -151,7 +168,10 @@
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T13:08:31.639Z",
   "planningNotes": {
@@ -169,7 +189,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 6300000
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-16T13:19:14.899Z",
+    "escalatedAt": "2026-08-16T13:19:14.899Z"
   },
-  "planApprovedAt": "2026-08-16T13:08:33.716Z"
+  "planApprovedAt": "2026-08-16T13:08:33.716Z",
+  "workStartedAt": "2026-08-16T13:20:17.848Z"
 }

@@ -1,11 +1,9 @@
 import { join } from "node:path";
 
 import {
-  DurableStoreError,
   RECOVERY_BINDING_CODEC_VERSION,
   SqliteEventStore,
 } from "../../packages/store/src/index.js";
-import type { CommitResult } from "../../packages/store/src/index.js";
 import { recoveryBindingDigest } from "../../packages/store/src/recovery-install-codec.js";
 
 import { compareRangePin } from "../../apps/daemon/src/recovery/doctor-version-contract.js";
@@ -24,8 +22,8 @@ import { runRestoreQuiesce } from "../../apps/daemon/src/recovery/restore-contro
 import { restoreRefusal } from "../../apps/daemon/src/recovery/restore-controller-contract.js";
 import { inspectRecoveryAnchor, prepareRecoveryAnchor } from "../../packages/store/src/recovery-anchor.js";
 import { decodeRecoveryBinding } from "../../packages/store/src/recovery-install-codec.js";
-import { hostileRoot, probeRacing } from "./hostile-harness.js";
-import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
+import { hostileRoot } from "./hostile-harness.js";
+import type { RefusalExpectation } from "./hostile-harness.js";
 
 export const DURABLE_BOUNDARY_NAMES = Object.freeze([
   "DOCTOR_VERSION_LAYERS",
@@ -58,6 +56,7 @@ export interface RefusalCase {
 
 export interface RefusalCaseResult {
   readonly authority: unknown;
+  readonly durableComplete: boolean;
   readonly durableRecords: number;
   readonly primary?: Readonly<{ code: string; refusedBy: string }> | undefined;
   readonly refusal: unknown;
@@ -132,11 +131,14 @@ const casesFor = (phase: HostilePhase): readonly RefusalCase[] =>
     boundary,
     expected: expectations(boundary, phase),
     phase,
-    preexistingRecords: boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER" && phase === "AFTER" ? 1 : 0,
+    preexistingRecords: phase === "AFTER" && (
+      boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER" || boundary === "RECOVERY_ANCHOR_LAYER"
+    ) ? 1 : 0,
     question: questions[boundary][phase === "BEFORE" ? 0 : 1],
     ...(boundary === "DURABLE_INVENTORY_ADAPTER_LAYER"
       ? { upstream: { code: "RECOVERY_INVENTORY_INPUT_INVALID", layer: "INVENTORY_ADAPTER" } }
-      : boundary === "RECOVERY_INVENTORY_LEDGER_LAYER" || boundary === "RECOVERY_INVENTORY_UPSTREAM_LAYERS"
+      : boundary === "RECOVERY_INVENTORY_LAYER" || boundary === "RECOVERY_INVENTORY_LEDGER_LAYER"
+        || boundary === "RECOVERY_INVENTORY_UPSTREAM_LAYERS"
         ? { upstream: LEDGER_UPSTREAM }
         : {}),
   })));
@@ -148,15 +150,6 @@ export interface RaceCase {
   readonly boundary: DurableBoundaryName;
   readonly expected: RefusalExpectation;
   readonly question: string;
-}
-
-export interface RaceCaseResult {
-  readonly admittedSides: number;
-  readonly durableEvents: number;
-  readonly outcome: RaceOutcome<CommitResult, CommitResult>;
-  readonly refusal: unknown;
-  readonly winner: "left" | "right";
-  readonly winnerPayloads: readonly string[];
 }
 
 export const hostileRaceCases: readonly RaceCase[] = Object.freeze(
@@ -190,7 +183,7 @@ const anchorRequest = (root: string, command = "restore-anchor", incarnation = "
 
 const recordProperties = (value: unknown): Pick<RefusalCaseResult, "authority" | "truth"> => {
   const record = typeof value === "object" && value !== null ? value as Record<string, unknown> : {};
-  return { authority: record["authority"] ?? "NONE", truth: record["truth"] ?? "UNKNOWN" };
+  return { authority: record["authority"], truth: record["truth"] };
 };
 
 async function boundaryRefusal(
@@ -207,10 +200,11 @@ async function boundaryRefusal(
     return { refusal, upstream: refusal.ok ? undefined : refusal.upstream };
   }
   if (boundary === "DURABLE_STORE_LAYER") {
-    store.close();
+    const closed = SqliteEventStore.openForProject(join(root, "closed.sqlite"), "security-project");
+    closed.close();
     let failure: unknown;
     try {
-      store.getAggregateVersion("closed-reader-probe");
+      closed.getAggregateVersion("closed-reader-probe");
       throw new Error("closed store unexpectedly answered");
     } catch (error) {
       failure = error;
@@ -272,81 +266,30 @@ async function boundaryRefusal(
 export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalCaseResult> {
   const root = hostileRoot(`${hostileCase.phase.toLowerCase()}-${hostileCase.boundary.toLowerCase()}`);
   const path = join(root, "events.sqlite");
-  let store: SqliteEventStore | null = SqliteEventStore.openForProject(path, "security-project");
+  const store = SqliteEventStore.openForProject(path, "security-project");
   try {
     const outcome = await boundaryRefusal(hostileCase, store, root);
-    if (hostileCase.boundary === "DURABLE_STORE_LAYER") store = null;
-    const reader = store ?? SqliteEventStore.openForProject(path, "security-project");
-    try {
-      const durableRecords = hostileCase.boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER"
-        ? (reader.readRecoveryBinding("ACTIVE").outcome === "FOUND" ? 1 : 0)
-        : reader.readAggregateEvents(`security:${hostileCase.boundary}`, 0, 2).items.length;
-      return { ...recordProperties(outcome.refusal), durableRecords, ...outcome };
-    } finally {
-      if (reader !== store) reader.close();
+    const reader = store;
+    let durableRecords: number;
+    let durableComplete: boolean;
+    if (hostileCase.boundary === "RECOVERY_ANCHOR_LAYER") {
+      const inspected = await inspectRecoveryAnchor(root);
+      if (!inspected.ok) throw new Error(`anchor readback refused: ${inspected.code}`);
+      durableRecords = inspected.outcome === "ABSENT" ? 0 : 1;
+      durableComplete = inspected.outcome === "ABSENT" || inspected.anchor.anchorDigest.length === 64;
+    } else if (hostileCase.boundary.includes("RECOVERY_INSTALL")) {
+      const bindings = [reader.readRecoveryBinding("ACTIVE"), reader.readRecoveryBinding("PENDING")]
+        .filter((entry) => entry.outcome === "FOUND");
+      durableRecords = bindings.length;
+      durableComplete = bindings.every((entry) => entry.outcome === "FOUND"
+        && entry.binding.payload.byteLength > 0 && entry.bindingDigest.length === 64);
+    } else {
+      const events = reader.readEventsAfter(0n, 100).items;
+      durableRecords = events.length;
+      durableComplete = events.every((event) => event.eventId.length > 0 && event.payload.byteLength > 0);
     }
+    return { ...recordProperties(outcome.refusal), durableComplete, durableRecords, ...outcome };
   } finally {
-    store?.close();
-  }
-}
-
-const raceCommit = (
-  store: SqliteEventStore,
-  boundary: DurableBoundaryName,
-  side: "left" | "right",
-): Promise<CommitResult> => new Promise((resolve, reject) => {
-  setImmediate(() => {
-    try {
-      resolve(store.commit({
-        aggregateId: `security-race:${boundary}`,
-        commandBytes: new TextEncoder().encode(`command-${side}`),
-        commandId: `race-${boundary}-${side}`,
-        committedAt: "2026-08-16T00:00:00.000Z",
-        events: [{
-          eventId: `race-${boundary}-${side}:event`,
-          eventType: "SecurityRaceContender",
-          payload: new TextEncoder().encode(side),
-        }],
-        expectedVersion: 0,
-      }));
-    } catch (error) {
-      reject(error);
-    }
-  });
-});
-
-export async function runRaceCase(hostileCase: RaceCase): Promise<RaceCaseResult> {
-  const root = hostileRoot(`race-${hostileCase.boundary.toLowerCase()}`);
-  const path = join(root, "events.sqlite");
-  const left = SqliteEventStore.openForProject(path, "security-project");
-  const right = SqliteEventStore.openForProject(path, "security-project");
-  try {
-    const outcome = await probeRacing(
-      { label: `race-${hostileCase.boundary}`, timeoutMs: 2_000 },
-      () => raceCommit(left, hostileCase.boundary, "left"),
-      () => raceCommit(right, hostileCase.boundary, "right"),
-    );
-    const admittedSides = Number(outcome.left.status === "fulfilled")
-      + Number(outcome.right.status === "fulfilled");
-    const rejected = outcome.left.status === "rejected" ? outcome.left.reason
-      : outcome.right.status === "rejected" ? outcome.right.reason : null;
-    if (!(rejected instanceof DurableStoreError)) {
-      throw new Error(`race ${hostileCase.boundary} did not expose a durable refusal`);
-    }
-    const mapped = storeUnavailable(rejected);
-    if (mapped.upstream === null) throw new Error("durable refusal lost its stable store code");
-    const winner = outcome.left.status === "fulfilled" ? "left" as const : "right" as const;
-    const events = left.readEvents(`security-race:${hostileCase.boundary}`);
-    return {
-      admittedSides,
-      durableEvents: events.length,
-      outcome,
-      refusal: mapped.upstream,
-      winner,
-      winnerPayloads: events.map((event) => new TextDecoder().decode(event.payload)),
-    };
-  } finally {
-    right.close();
-    left.close();
+    store.close();
   }
 }
