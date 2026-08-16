@@ -3,7 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  CLAUDE_LAUNCHER_VERSION, buildProviderRuntimeObservation, observeScope,
+  CLAUDE_LAUNCHER_VERSION, buildInputManifest, buildProviderRuntimeObservation,
+  buildResultManifest, observeScope,
 } from "@moe/runner";
 import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
@@ -22,14 +23,16 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES,
-  decodeFoundationAttemptRequest, decodeFoundationPayload, deriveDispatchAggregateId,
-  encodeFoundationPayload, sameBytes,
+  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES, FOUNDATION_RESERVATION_VERSION,
+  RUNNER_WORKSPACE_LAYER, decodeFoundationAttemptRequest, decodeFoundationPayload,
+  deriveDispatchAggregateId, encodeFoundationPayload, sameBytes,
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
-import { readDurableFoundationObservation } from "./foundation-attempt-store.js";
+import {
+  commitFoundationPhase, readDurableFoundationObservation, recordProvenFoundationAttempt,
+} from "./foundation-attempt-store.js";
 
 /**
  * Foundation attempt dispatch over a REAL SqliteEventStore and the REAL
@@ -835,6 +838,212 @@ describe("foundation attempt dispatch — the runtime closure is server-minted",
     }
     expect(generated).toBe(closures.length);
     expect(generated).toBeGreaterThan(0);
+  });
+});
+
+/** Exactly the reservation body `foundation-attempt-service.ts` commits. The
+ *  record commit is pinned at `expectedVersion` 1, so the dispatch aggregate has
+ *  to reach version 1 first — and this is production store authority doing it,
+ *  not a hand-written row. */
+function reserveDispatch(
+  store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
+): void {
+  const reservation = encodeFoundationPayload({
+    activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
+    attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey: bound.nodeKey,
+    recordVersion: FOUNDATION_RESERVATION_VERSION, requestDigest: DIGEST_A,
+    sessionId: bound.sessionId,
+  });
+  if (!reservation.ok) throw new Error(`reservation fixture refused: ${reservation.code}`);
+  const written = commitFoundationPhase(
+    store, bound, "RESERVED", reservation.bytes, 0, `${record.grant.grantId}:RESERVED`);
+  if (written === null || written.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error("reservation fixture was not committed");
+  }
+}
+
+/** The sealed input manifest THIS daemon would hand the result builder, from the
+ *  runner's own `buildInputManifest` — never hand-written. */
+function sealedInput(): Record<string, unknown> {
+  const built = buildInputManifest({
+    baseIdentity: HEAD, entries: INPUT_MANIFEST.entries as never,
+  });
+  if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
+  return built.manifest as unknown as Record<string, unknown>;
+}
+
+interface ProvenGround {
+  readonly bound: FoundationAttemptBound; readonly observation: unknown;
+  readonly record: ActivationLedgerRecord; readonly registration: unknown;
+  readonly store: SqliteEventStore;
+}
+
+/**
+ * The durable precondition for a PROVEN record, with NO launcher anywhere: the
+ * GRANT_CONSUMED -> PREFLIGHT_REGISTERED -> PROCESS_OBSERVED tail is built by
+ * production `createFoundationLauncherAuthority`, and the (observation,
+ * registration) pair below is whatever production
+ * `readDurableFoundationObservation` validated against it — never a caller's copy.
+ */
+function provenGround(label: string): ProvenGround {
+  const fixture = durableObservedFixture(label);
+  const observed = readDurableFoundationObservation(
+    fixture.store, fixture.bound, fixture.record, fixture.value);
+  if (observed === null) throw new Error("durable observation fixture was refused");
+  reserveDispatch(fixture.store, fixture.bound, fixture.record);
+  return {
+    bound: fixture.bound, observation: observed[0], record: fixture.record,
+    registration: observed[1], store: fixture.store,
+  };
+}
+
+describe("foundation attempt dispatch — the PROVEN record is durable", () => {
+  it("persists result-manifest identity, the durable registration and raw stream digests", () => {
+    const ground = provenGround("proven-record");
+    const input = sealedInput();
+    const answer = captureAnswer();
+    const expected = buildResultManifest({
+      authoredPaths: answer["authoredPaths"] as never,
+      declaredArtifactRefs: answer["declaredArtifactRefs"] as never,
+      inputManifest: input as never, resultTreeEntries: answer["resultTreeEntries"] as never,
+      scopeObservation: answer["scopeObservation"] as never,
+    });
+    expect(expected.ok).toBe(true);
+    if (!expected.ok) return;
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      { answer, observation: ground.observation, registration: ground.registration });
+
+    expect(outcome.ok).toBe(true);
+    // Every assertion below reads the RE-DECODED, byte-compared durable bytes.
+    const stored = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+    expect(stored.ok).toBe(true);
+    if (!stored.ok) return;
+    const durable = stored.record;
+    // The shape only the PROVEN branch can produce.
+    expect(durable["truthClass"]).toBe("PROVEN");
+    expect(durable["reasonCode"]).toBeNull();
+    expect(durable["reasonLayer"]).toBeNull();
+    // The runner's own result-manifest identity, bound to THIS daemon's sealed input.
+    const manifest = nested(durable, "resultManifest");
+    expect(manifest["sha256"]).toBe(expected.manifest.sha256);
+    expect(manifest["manifestVersion"]).toBe("moe-workspace-result-manifest/1");
+    expect(manifest["inputManifestSha256"]).toBe(input["sha256"]);
+    expect(manifest["scopeObservationSha256"])
+      .toBe((answer["scopeObservation"] as ScopeObservation).sha256);
+    expect(manifest["baseIdentity"]).toBe(HEAD);
+    expect(manifest["authoredPaths"]).toStrictEqual(["pkg/src/authored.ts"]);
+    // The registration is the durable PROCESS_OBSERVED one, not the PREFLIGHT one.
+    // Spread into a fresh literal: the durable bytes decode onto a NULL
+    // prototype, which `toStrictEqual` reports as an invisible difference.
+    expect({ ...nested(durable, "registration") }).toStrictEqual({ ...REGISTRATION });
+    expect(nested(durable, "registration")["processIdentity"])
+      .not.toBe(`pending:${ground.record.grant.wrapperIdentity}`);
+    expect({ ...nested(durable, "observation") }).toStrictEqual({
+      completedAt: "2026-08-15T00:00:02.000Z", consumedGrantDigest: DIGEST_A,
+      freshRuntimeDigest: DIGEST_C, observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
+      quotedRuntimeDigest: DIGEST, registrationDigest: DIGEST_C, runtimeBindingDigest: DIGEST,
+      startedAt: "2026-08-15T00:00:01.000Z",
+    });
+    // Raw evidence digests, exact values — "a digest is there" would pass for the wrong one.
+    expect(durable["stdoutSha256"]).toBe(DIGEST_A);
+    expect(durable["stderrSha256"]).toBe(DIGEST_B);
+    expect(durable["activationDigest"]).toBe(ground.record.activationDigest);
+    expect(durable["grantId"]).toBe(ground.record.grant.grantId);
+    expect(durable["attemptId"]).toBe(ground.record.attempt.attemptId);
+    const persisted = nested(durable, "inputManifest");
+    expect(persisted["sha256"]).toBe(input["sha256"]);
+    expect(persisted["manifestVersion"]).toBe(input["manifestVersion"]);
+    expect(persisted["baseIdentity"]).toBe(HEAD);
+    expect(persisted["entries"]).toHaveLength(1);
+    // One record, committed under an event id COPIED from the grant.
+    const events = ground.store.readEvents(DISPATCH_AGGREGATE);
+    expect(events.map((event) => event.eventType))
+      .toStrictEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+    expect(events[1]?.eventId).toBe(`${ground.record.grant.grantId}:RECORDED`);
+
+    // A byte-identical replay adopts the one record it already wrote.
+    const again = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      { answer, observation: ground.observation, registration: ground.registration });
+    expect(again.ok && again.digest).toBe(stored.digest);
+    expect(ground.store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(2);
+
+    // A DIFFERING record cannot overwrite it: the aggregate has moved past
+    // `expectedVersion` 1 and the grant's own event id is already spent.
+    const conflicting = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      {
+        answer: { authoredPaths: [] }, observation: ground.observation,
+        registration: ground.registration,
+      });
+
+    expectRefusal(conflicting, "FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS", DAEMON_FOUNDATION_ATTEMPT);
+    expect(ground.store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(2);
+    const settled = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+    expect(settled.ok && settled.digest).toBe(stored.digest);
+  });
+
+  it("refuses a sealed input manifest of the wrong shape as the DAEMON's own fact", () => {
+    const ground = provenGround("proven-input-manifest");
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, { baseIdentity: HEAD, entries: [] },
+      {
+        answer: captureAnswer(), observation: ground.observation,
+        registration: ground.registration,
+      });
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_INPUT_MANIFEST_INVALID", DAEMON_FOUNDATION_ATTEMPT);
+    const stored = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "FOUNDATION_ATTEMPT_INPUT_MANIFEST_INVALID",
+      reasonLayer: DAEMON_FOUNDATION_ATTEMPT, resultManifest: null, truthClass: "UNKNOWN",
+    });
+  });
+
+  it("keeps the RUNNER's own code and layer when its builder refuses the manifest", () => {
+    const ground = provenGround("proven-runner-manifest");
+    // Shape-valid, so the daemon's structural fence admits it; the digest no
+    // longer recomputes, so the RUNNER is the layer that answers. Two questions,
+    // two layers — a test pinning only a code could not tell them apart.
+    const drifted = { ...sealedInput(), sha256: DIGEST_C };
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, drifted,
+      {
+        answer: captureAnswer(), observation: ground.observation,
+        registration: ground.registration,
+      });
+
+    expectRefusal(outcome, "RUNNER_WORKSPACE_INPUT_MANIFEST_INVALID", RUNNER_WORKSPACE_LAYER);
+    const stored = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "RUNNER_WORKSPACE_INPUT_MANIFEST_INVALID", reasonLayer: RUNNER_WORKSPACE_LAYER,
+      resultManifest: null, truthClass: "UNKNOWN",
+    });
+  });
+
+  it("persists an honest UNKNOWN when the capture answer is not the exact shape", () => {
+    const ground = provenGround("proven-capture-unknown");
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, sealedInput(),
+      {
+        answer: { authoredPaths: [] }, observation: ground.observation,
+        registration: ground.registration,
+      });
+
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    const stored = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", reasonLayer: DAEMON_FOUNDATION_ATTEMPT,
+      resultManifest: null, truthClass: "UNKNOWN",
+    });
+    // The durable registration and observation are still recorded honestly.
+    expect({ ...nested(stored.ok ? stored.record : {}, "registration") })
+      .toStrictEqual({ ...REGISTRATION });
   });
 });
 

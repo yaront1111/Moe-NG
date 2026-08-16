@@ -121,8 +121,8 @@
       "completedAt": "2026-08-16T12:32:19.164Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -141,12 +141,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:26:32.125Z",
-  "updatedAt": "2026-08-16T12:36:25.561Z",
+  "updatedAt": "2026-08-16T12:38:19.232Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T11:32:18.604Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T12:38:19.232Z",
+    "wallClockMs": 3960628
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -197,5 +199,8 @@
     "apps/daemon/src/work/in-flight-attempts.test.ts",
     "apps/daemon/src/work/in-flight-attempts.ts",
     "apps/daemon/src/work/in-flight-attempts.js"
-  ]
+  ],
+  "completedAt": "2026-08-16T12:38:19.232Z",
+  "reviewCompletedAt": "2026-08-16T12:38:19.232Z",
+  "reviewSummary": "APPROVED. Commit 30e16c9 = exactly the 3 owned paths. `git diff --numstat HEAD -- <3 paths>` EMPTY, so committed bytes == gated bytes; `git rev-parse HEAD:<path>` resolves all three.\n\nGATES RE-RUN BY ME, exit codes captured separately via ${PIPESTATUS[0]}: typecheck EXIT=0; test EXIT=0, `Test Files 102 passed (102)`, `Tests 2096 passed (2096)` — count line present, provably executed. The worker's disclosed baseline RED had CLEARED by review time (peer's approval-policy-settings.ts landed in eb08be1 after completion); I re-measured rather than repeat a stale red. Owned-path failing delta EMPTY.\n\n7 MUTATION DRILLS, each applied alone, each verified to have changed the file by git hash-object before/after, each restored to the HEAD blob: (1) invert rule -> :165 red; (2) drift skipped -> :230 red ONLY; (3) duplicate picks first -> :191+:204 red; (4) full-stream walk -> `expected 168 to be less than or equal to 8` at :334; (5) caller projectId into situation -> :260 red; (6) absorb RECORDED-without-RESERVED -> :179 DISPATCH_SUSPECT red; (7) clock into situation -> :260 red. All on the INTENDED assertion.\n\nDoD1 producer grep shows :147/:161 beyond declaration and request field; was 0. DoD2 rule cited in header :5-23 (foundation-attempt-service.ts:218-224), all four states asserted by exact attemptRefs. DoD3 proven by drill 4's 21x margin plus aggregateReads === 0. DoD4/6 drift refused not skipped; the fixture is valid at the STORE layer and decodes ok, so the re-encode comparison is provably the answering layer. DoD5 held under drills 5 and 7. DoD7 real store per test closed in finally, 169 lines by `grep -c ''`, bridge 41 bytes ending `;\\n`, index.ts untouched. Rails: the three forbidden files untouched, pathspec commit, no scratch files.\n\nNot a reject: `typeof horizon !== \"bigint\"` (:150) is unkilled — all fakes return a real bigint. Worker disclosed it; no DoD item requires it and it fails closed."
 }

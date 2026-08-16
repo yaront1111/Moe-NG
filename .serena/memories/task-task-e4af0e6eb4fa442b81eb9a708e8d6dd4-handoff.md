@@ -1,24 +1,64 @@
-# task-e4af0e6e handoff — BLOCKED during planning
+# task-e4af0e6e handoff — DONE (REVIEW), commit ec29d0d
 
-Task: Bind the orchestrator settings to the typed approval policy.
+Bind the orchestrator settings to the typed approval policy. Previously BLOCKED for
+"no settings load path exists"; a human resolved it with option (a) — apps/daemon owns
+the loader plus a real call site. Planning then found the call site ALREADY EXISTED and
+was sourcing its policy wrongly, so this was a repair, not a greenfield add.
 
-## Outcome
-Reported BLOCKED via Moe; no implementation plan was submitted. The real settings load/use path is absent from `moe-next`, and inventing an exported decoder would violate the required real consumer edge.
+## The defect that was closed (the thing to remember)
 
-## Fresh measurements
-- At committed HEAD ddb4753:
-  - `git grep -n -I -E 'approvalMode|speedModeDelayMs' HEAD -- apps packages scripts tools` => zero.
-  - No production reader of `.moe/project.json` exists in this repo.
-- `docs/REPOSITORY_HYGIENE.md:13-16` states the `.moe` producer is the external transitional daemon; line 34 classifies `.moe/project.json` as its durable settings.
-- The actual implementation is in sibling repo `/mnt/d/projexts/moes/packages/moe-daemon/src/tools/submitPlan.ts`: reads `approvalMode` and defaults `speedModeDelayMs || 2000` at lines 105 and 436. `state/persistence.ts:87,113` also defaults missing values. That repo is outside epic rail 2 and its package has no `@moe/core` dependency.
-- The only moe-next durable settings contract is different and closed: `packages/contracts/src/configuration/project-configuration-parser.ts` has exact `SETTINGS_KEYS` isolation/limits/network/orchestrationSource/policy/schemaVersions/selection and exact policy keys with no delay. Using it requires the explicitly out-of-scope contract change and still does not reach transitional auto-approval.
-- `readWrapperKnobs(process.env)` is unrelated, has no approval vocabulary, and does not decide plan approval.
-- Authoritative design line 46 says there are no global speed modes.
-- `apps/daemon` already has the legal `@moe/core` manifest/lock edge and a bare-specifier compiled probe passed, but there is no settings-load/auto-approval consumer edge to attach to.
+`planning-services.ts` called `decideApprovalAuthority({gate, policy: approvalPolicy(payload)})`.
+`approvalPolicy` returned a module-level `DEFAULT_APPROVAL_POLICY = {kind:"PROCEED_WITHOUT_HUMAN",
+delayMs: 0}` when the payload key was absent — and `PAYLOAD_KEYS["approval.decide"]` never
+allow-listed `approvalPolicy`, so it was ALWAYS absent in production. Every gate-free approval
+proceeded immediately on a delay nobody stated: the 2026-08-15 incident's exact mechanism.
+See `mem:gotcha-a-default-policy-constant-is-the-live-authority`.
 
-## Required prerequisite
-Either:
-1. migrate the transitional settings loader plus plan auto-approval scheduler into a permitted moe-next workspace package, with explicit `approvalMode` + required delay decoding and a real consumer; or
-2. explicitly relocate/authorize the task in the sibling `moes` repo and provide a legal dependency boundary to `@moe/core`.
+## What landed
 
-Then re-plan this task. Do not substitute a standalone exported decoder, mock-backed journey, a wrapper-env mapping, or edits to live `.moe` state.
+- `apps/daemon/src/planning/approval-policy-settings.ts` (82 lines) + LF `.js` bridge + test.
+  - `decodeApprovalPolicy(settings: unknown)` — single decision point. PROCEED_WITHOUT_HUMAN is
+    constructed from the stated delay and nothing else.
+  - `readApprovalPolicySettings(env)` — reads `approvalMode` / `speedModeDelayMs` off
+    `MOE_APPROVAL_MODE` / `MOE_SPEED_MODE_DELAY_MS`, following `readStoreDependencyEnv`.
+    Converts ONLY on `/^\d+$/u`, else hands the raw value to the decoder to be refused, so
+    `Number()` cannot invent a delay from "", " 25 ", "1e3", "0x10".
+  - Exports: `APPROVAL_MODE_ENV_KEY`, `SPEED_MODE_DELAY_ENV_KEY`, `SPEED_APPROVAL_MODE`,
+    `ApprovalModeSettings`, `decodeApprovalPolicy`, `readApprovalPolicySettings`.
+- `planning-services.ts` 221 -> 214 lines: `DEFAULT_APPROVAL_POLICY` and `approvalPolicy(payload)`
+  DELETED outright. Delay bound already lived at the consumer (`approvalDelayDisposition`,
+  approval-gate.ts:104-107) and REFUSES rather than clamps; only a comment was added.
+- Test-tier: `bootstrap-test-fixtures.ts` and `http/affordance-read.test.ts` now STATE their
+  approval settings (`process.env[KEY] ??= ...`, SPEED / "0"). Both drive an approval through the
+  production handler; their setup throws once it stops defaulting.
+
+## Traps found here, each cost real time
+
+1. **The unit seam bypasses the registry allow-list.** `bootstrap-test-fixtures.send()` calls
+   `runBootstrapCommand(store, bytes, ALL_HANDLERS)` directly, so 7 planning tests were pinning a
+   payload branch production can never reach. If you delete a payload branch, expect those to move.
+2. **`bootstrapSequence()` includes `approval.decide`, and `driveThrough` THROWS on a setup
+   refusal.** Any change making gate-free approval refuse reddens goal-services (7 sites),
+   bootstrap-durability, j1-command-path in SETUP, not in an assertion.
+3. **A satisfied `HumanAuthorityGate` is unreachable through proposal ingress by design**
+   (`proposalGate` requires `grant === null`). To test the granted path, seed the durable run:
+   `seedPlanningRunResult(store, {state:{goalRef,lifecycle}, submissionHash, workIdentity:{humanAuthorityGate}})`.
+4. **Two APPROVAL_POLICY branches answer with the same code+layer** — see
+   `mem:gotcha-two-same-layer-refusal-branches-make-a-code-assertion-vacuous`.
+
+## Gate shape
+
+- `pnpm --filter @moe/daemon typecheck` — EXIT 0.
+- Owned-path leg used as the completion verification:
+  `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning src/bootstrap src/goals src/http`
+  -> "Test Files 12 passed (12)" / "Tests 206 passed (206)".
+- Package-wide `pnpm --filter @moe/daemon test` was EXIT 1 from task-48c0c0db's live TDD loop in
+  `src/work/foundation-attempt-service.test.ts`; delta over merge-base intersected with owned
+  paths was EMPTY.
+
+## Still open / next
+
+- Nothing in this task. The daemon wiring (task-5fcfdae5) and the control-room surface
+  (task-6fcca7da) remain separate consumers of the same `@moe/core` contract.
+- `decodeApprovalPolicy` is exported and takes `unknown`; a revoked Proxy would throw at
+  `Array.isArray`. Unreachable from the env path (fresh object literal). Noted, not fixed.

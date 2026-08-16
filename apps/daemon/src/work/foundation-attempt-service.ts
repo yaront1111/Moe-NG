@@ -1,8 +1,6 @@
 /** Durable single-node dispatch. Binding -> activation -> reservation -> launch -> advisory. */
 
-import {
-  buildInputManifest, buildResultManifest, createClaudeRuntimePinRequest,
-} from "@moe/runner";
+import { buildInputManifest, createClaudeRuntimePinRequest } from "@moe/runner";
 import type { ClaudeLaunchOptions } from "@moe/runner";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
@@ -12,20 +10,21 @@ import type { ActivationLedgerRecord } from "../activation/activation-ledger-con
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { createFoundationClaudeLauncher } from "../activation/foundation-launch-authority.js";
 import {
-  CAPTURE_KEYS, CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT,
+  CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT,
   FOUNDATION_RESERVATION_VERSION, RUNNER_WORKSPACE_LAYER,
-  admitSingleExecutionNode, attemptRecordBody, decodeFoundationAttemptRequest,
+  admitSingleExecutionNode, decodeFoundationAttemptRequest,
   deriveDispatchAggregateId, encodeFoundationPayload,
   exactKeys, foundationAttemptRefusal, identifyFoundationDispatch, isRecord,
   launchRequestBody, preActivationBindingMatches, refuseLocal, textOf,
 } from "./foundation-attempt-contracts.js";
 import type {
-  FoundationAttemptBound, FoundationAttemptRecordParts, FoundationAttemptRefused,
+  FoundationAttemptBound, FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation,
   readFoundationReservationDigest, readStoredFoundationAttempt,
+  recordProvenFoundationAttempt, settleFoundationAttempt,
 } from "./foundation-attempt-store.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
@@ -100,54 +99,19 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
 } {
   const { store } = deps;
 
-  function settle(
-    bound: FoundationAttemptBound, record: ActivationLedgerRecord,
-    input: Record<string, unknown>, parts: FoundationAttemptRecordParts,
-    refusal: FoundationAttemptRefused | null,
-  ): FoundationAttemptOutcome {
-    const encoded = encodeFoundationPayload(attemptRecordBody(bound, record, input, parts));
-    if (!encoded.ok) return encoded;
-    const written = commitFoundationPhase(
-      store, bound, "RECORDED", encoded.bytes, 1, `${record.grant.grantId}:RECORDED`);
-    if (written === null || written.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-      return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
-    }
-    const stored = readStoredFoundationAttempt(store, bound.target);
-    return !stored.ok ? stored : refusal ?? stored;
-  }
-
-  /** PROVEN launch only: capture, then the runner's own result-manifest builder
-   *  over the input manifest THIS service sealed. Nothing else may supply one. */
+  /** PROVEN launch only. The capture port's answer is CONTAINED here and handed
+   *  on raw: the store owns fencing its shape, building the result manifest over
+   *  the input manifest THIS service sealed, and persisting the record. */
   async function capture(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, observation: unknown, registration: unknown,
   ): Promise<FoundationAttemptOutcome> {
-    const base = { observation, registration, truthClass: "UNKNOWN" as const };
-    const answer = exactKeys(await contained(() => deps.captureResult({
+    const answer = await contained(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
       nodeKey: bound.nodeKey, observation, sessionId: bound.sessionId,
-    }), false), CAPTURE_KEYS);
-    if (answer === null) {
-      const code = "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN";
-      return settle(bound, record, input, {
-        ...base, reasonCode: code, reasonLayer: DAEMON_FOUNDATION_ATTEMPT, resultManifest: null,
-      }, refuseLocal(code));
-    }
-    const built = buildResultManifest({
-      authoredPaths: answer["authoredPaths"] as never, inputManifest: input as never,
-      declaredArtifactRefs: answer["declaredArtifactRefs"] as never,
-      resultTreeEntries: answer["resultTreeEntries"] as never,
-      scopeObservation: answer["scopeObservation"] as never,
-    });
-    if (!built.ok) {
-      return settle(bound, record, input, {
-        ...base, reasonCode: built.code, reasonLayer: RUNNER_WORKSPACE_LAYER, resultManifest: null,
-      }, foundationAttemptRefusal(built.code, RUNNER_WORKSPACE_LAYER));
-    }
-    return settle(bound, record, input, {
-      observation, reasonCode: null, reasonLayer: null, registration,
-      resultManifest: built.manifest as unknown as Record<string, unknown>, truthClass: "PROVEN",
-    }, null);
+    }), false);
+    return recordProvenFoundationAttempt(
+      store, bound, record, input, { answer, observation, registration });
   }
 
   /** Not PROVEN: persist the honest advisory fact under the runner's own code and
@@ -158,7 +122,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   ): FoundationAttemptOutcome {
     const code = textOf(result, "code") ?? "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN";
     const layer = textOf(result, "layer") ?? DAEMON_FOUNDATION_ATTEMPT;
-    return settle(bound, record, input, {
+    return settleFoundationAttempt(store, bound, record, input, {
       observation: result?.["observation"] ?? null, reasonCode: code, reasonLayer: layer,
       registration: result?.["registration"] ?? null, resultManifest: null,
       truthClass: result?.["truthClass"] === "UNSUPPORTED" ? "UNKNOWN" : "SUSPECT",

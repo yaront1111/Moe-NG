@@ -1,4 +1,7 @@
-import { CLAUDE_LAUNCHER_VERSION } from "@moe/runner";
+import {
+  CLAUDE_LAUNCHER_VERSION, WORKSPACE_INPUT_MANIFEST_VERSION, buildResultManifest,
+} from "@moe/runner";
+import type { WorkspaceInputManifest } from "@moe/runner";
 import type { CommandDecisionResponse, SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
@@ -6,12 +9,13 @@ import type { ActivationLedgerRecord } from "../activation/activation-ledger-con
 import { snapshotFoundationRecord } from "../activation/foundation-activation-transition.js";
 import type { FoundationTransition } from "../activation/foundation-activation-transition.js";
 import {
-  FOUNDATION_DISPATCH_COMMAND_KIND, FOUNDATION_DISPATCH_EVENT_TYPES,
-  decodeFoundationPayload, deriveDispatchAggregateId, encodeFoundationPayload,
-  refuseLocal, sameBytes, textOf,
+  CAPTURE_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_COMMAND_KIND,
+  FOUNDATION_DISPATCH_EVENT_TYPES, RUNNER_WORKSPACE_LAYER, attemptRecordBody,
+  decodeFoundationPayload, deriveDispatchAggregateId, encodeFoundationPayload, exactKeys,
+  foundationAttemptRefusal, refuseLocal, sameBytes, textOf,
 } from "./foundation-attempt-contracts.js";
 import type {
-  FoundationAttemptBound, FoundationAttemptRefused,
+  FoundationAttemptBound, FoundationAttemptRecordParts, FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
 
 export interface FoundationAttemptRecordAnswer {
@@ -152,4 +156,80 @@ export function readFoundationAttemptRecord(
   return typeof attemptAggregateId === "string" && attemptAggregateId.length > 0
     ? readStoredFoundationAttempt(store, deriveDispatchAggregateId(attemptAggregateId))
     : refuseLocal("FOUNDATION_ATTEMPT_REQUEST_MALFORMED");
+}
+
+/** The one writer of the single RECORDED event, whatever the outcome: compose ->
+ *  encode -> commit at `expectedVersion` 1 under an event id COPIED from the
+ *  grant, never minted -> answer from RE-DECODED durable bytes. The copied id is
+ *  what makes a reused grant refuse on store-wide event-id uniqueness. */
+export function settleFoundationAttempt(
+  store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
+  input: Record<string, unknown>, parts: FoundationAttemptRecordParts,
+  refusal: FoundationAttemptRefused | null,
+): FoundationAttemptOutcome {
+  const encoded = encodeFoundationPayload(attemptRecordBody(bound, record, input, parts));
+  if (!encoded.ok) return encoded;
+  const written = commitFoundationPhase(
+    store, bound, "RECORDED", encoded.bytes, 1, `${record.grant.grantId}:RECORDED`);
+  if (written === null || written.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuseLocal("FOUNDATION_ATTEMPT_RECORD_AMBIGUOUS");
+  }
+  const stored = readStoredFoundationAttempt(store, bound.target);
+  return !stored.ok ? stored : refusal ?? stored;
+}
+
+export interface FoundationAttemptCapture {
+  readonly answer: unknown; readonly observation: unknown; readonly registration: unknown;
+}
+
+/** Structural only, and deliberately so: this asks whether the record THIS
+ *  daemon sealed is even the shape the runner's builder may be handed. Whether
+ *  its digest still recomputes is the RUNNER's question and stays the RUNNER's
+ *  to answer, so the two refusals never collapse into one code. */
+const sealedInputManifest = (value: Record<string, unknown>): boolean =>
+  value["manifestVersion"] === WORKSPACE_INPUT_MANIFEST_VERSION
+  && typeof value["baseIdentity"] === "string" && typeof value["sha256"] === "string"
+  && Array.isArray(value["entries"]);
+
+/**
+ * PROVEN launch only: the runner's OWN result-manifest builder, over the input
+ * manifest this daemon sealed and the freshly observed workspace answer. The
+ * observation and registration are the pair `readDurableFoundationObservation`
+ * validated, never a caller's copy.
+ *
+ * Every refusal here still persists an honest UNKNOWN and refuses with the same
+ * pair, so a reserved dispatch never ends with no durable fact at all.
+ */
+export function recordProvenFoundationAttempt(
+  store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
+  input: Record<string, unknown>, capture: FoundationAttemptCapture,
+): FoundationAttemptOutcome {
+  const base = {
+    observation: capture.observation, registration: capture.registration,
+    resultManifest: null, truthClass: "UNKNOWN" as const,
+  };
+  const advisory = (code: string, layer: string): FoundationAttemptOutcome =>
+    settleFoundationAttempt(store, bound, record, input,
+      { ...base, reasonCode: code, reasonLayer: layer },
+      foundationAttemptRefusal(code, layer));
+  const answer = exactKeys(capture.answer, CAPTURE_KEYS);
+  if (answer === null) {
+    return advisory("FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+  }
+  if (!sealedInputManifest(input)) {
+    return advisory("FOUNDATION_ATTEMPT_INPUT_MANIFEST_INVALID", DAEMON_FOUNDATION_ATTEMPT);
+  }
+  const built = buildResultManifest({
+    authoredPaths: answer["authoredPaths"] as never,
+    inputManifest: input as unknown as WorkspaceInputManifest,
+    declaredArtifactRefs: answer["declaredArtifactRefs"] as never,
+    resultTreeEntries: answer["resultTreeEntries"] as never,
+    scopeObservation: answer["scopeObservation"] as never,
+  });
+  if (!built.ok) return advisory(built.code, RUNNER_WORKSPACE_LAYER);
+  return settleFoundationAttempt(store, bound, record, input, {
+    observation: capture.observation, reasonCode: null, reasonLayer: null,
+    registration: capture.registration,
+    resultManifest: built.manifest as unknown as Record<string, unknown>, truthClass: "PROVEN",
+  }, null);
 }

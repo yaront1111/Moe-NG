@@ -20,12 +20,12 @@
     "Preserve foreign work; commit only the explicit owned paths by pathspec — never a bare `git commit`, never `git add -A`."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor cascade 12:38Z: the sub-gap prerequisite is QA-approved DONE — task-48c0c0db landed the in-flight attempt enumerator (apps/daemon/src/work/in-flight-attempts.ts: RESERVED-without-RECORDED rule taken from production replay semantics, index-backed via readEventsByTypeAfter, cost-bound proven by drill at 168-vs-≤8, 12 tests). Architect: plan the boot-path wiring — startDaemon calls reconcileOnRestart with the enumerator's real output — re-measuring the enumerator's exported surface on committed bytes first. This is GAP B of canary 97554; when this lands, the canary's prerequisite list (post-descope: 6cbff + this) is one task from complete.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "CRITICAL",
@@ -33,14 +33,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T09:22:50.898Z",
-  "updatedAt": "2026-08-16T09:27:17.175Z",
+  "updatedAt": "2026-08-16T12:38:38.708Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T09:24:50.921Z"
   },
-  "blockedReason": "Blocked by architect-27b64950 at HEAD e881141, 09:26Z, on a sub-gap found while planning this task — I filed it 20 minutes ago and planning it surfaced a dependency the filing measurement missed.\n\nTHE SUB-GAP. `reconcileOnRestart` takes `RestartReconciliationRequest` = `{attempts: readonly InFlightAttempt[], correlationId, decidedAt, principalId, projectId}` (restart-reconciliation.ts:60-66), where `InFlightAttempt` = `{attemptRef, situation}` (:32-35). NOTHING PRODUCES THAT ARRAY: `grep -rn \"InFlightAttempt\" --include=*.ts apps/daemon/src` returns only the declaration and the request field. The boot sweep has nothing to sweep.\n\nChecked for it under other names first. foundation-attempt-store.ts has four readers — :73, :115, :128, :149 — ALL keyed by a known id, so none enumerate. The other `inFlight` hits are unrelated (an in-memory map in recovery-incarnation.ts; scheduler capacity units).\n\nWHY NOT ABSORB IT HERE. This task is a CONSUMER EDGE — call a complete capability, fail closed, register a command. An enumerator is NEW production capability with its own fold, refusals and tests; absorbing it would make this task edit what it composes, which its own rails forbid. A sweep with no source is unbuildable, not merely awkward.\n\nFILED: **task-48c0c0db613f400b98d525629f1cd434** — Enumerate in-flight foundation attempts from the durable store (CRITICAL, PLANNING). It carries the measured vocabulary (FOUNDATION_DISPATCH_EVENT_TYPES = RECORDED/RESERVED) and names the real design question: that map has NO terminal member, so \"still in flight\" must be decided from committed evidence, never inferred from absence — inference would classify every finished attempt as a crash.\n\nUNBLOCK WHEN task-48c0c0db is DONE AND `grep -rn \"InFlightAttempt\" --include=*.ts apps/daemon/src | grep -v '\\.test\\.'` shows a producer beyond the declaration and the request field. Run both literally.\n\nUpstream: this is GAP B of canary task-97554aa4.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T09:26:59.428Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Planning measurement at HEAD e881141; no plan submitted. Confirmed GAP B is still real (reconcileOnRestart has zero production callers; startDaemon runs no sweep), then found a sub-gap the filing measurement missed: NOTHING produces the `InFlightAttempt[]` that `reconcileOnRestart` requires. Filed task-48c0c0db613f400b98d525629f1cd434 (Enumerate in-flight foundation attempts from the durable store) and blocked this task on it.",

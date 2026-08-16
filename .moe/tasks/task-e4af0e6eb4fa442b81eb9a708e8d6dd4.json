@@ -95,28 +95,45 @@
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove the fail-closed direction is real and not incidental. Run each alone, revert before the next. (1) RESTORE `DEFAULT_APPROVAL_POLICY` as the fallback when settings are unreadable; the step-3(a) regression test MUST redden — this is the drill for the live defect, and if it stays green the regression test never exercised the defect at all. (2) Make the loader default a missing delay to any number while keeping `PROCEED_WITHOUT_HUMAN`; the SPEED-without-delay case must redden — proving the contract's \"cannot be constructed without naming its delay\" is enforced here rather than assumed from the type. (3) Remove the consumer-side delay bound and pass `delayMs` straight to the timer; the 2**31-1 case must redden — and note it must redden on the INVERSION (an immediate proceed), not merely on a wrong number. (4) Re-add a payload read for `approvalPolicy`; the no-policy-from-payload case must redden at the HANDLER, proving the guarantee does not depend on the registry allow-list. (5) Make one loader refusal answer `PROCEED_WITHOUT_HUMAN`; the whole-set property assertion must redden — proving that property is a real sweep and not a list of hand-picked cases.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash or compile error. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next; a foreign whole-tree completion hook can otherwise commit a drill left on disk.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-policy-settings.ts",
         "apps/daemon/src/planning/planning-services.ts"
       ],
-      "startedAt": "2026-08-16T12:35:41.685Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/planning-services.test.ts"
+      ],
+      "note": "FIVE MUTATION DRILLS, each applied alone and restored before the next. RESTORE PROTOCOL DEVIATION, forced: `git checkout --` would have DESTROYED uncommitted work (nothing of mine was committed at drill time), so every file was snapshotted byte-exact to /tmp/moe-drill-aEiML8 (outside the repo) and restored by copy, each restore verified by sha256 against the snapshot.\n\n(1) DEFAULT RESTORED AS A FALLBACK. planning-services.ts:181-184, `policy: readApprovalPolicySettings(process.env)` -> `decoded.kind === \"REQUIRE_HUMAN\" ? {delayMs: 0, kind: \"PROCEED_WITHOUT_HUMAN\"} : decoded`. RED on \"refuses gate-free approval when no settings authorise proceeding without a human\": AssertionError \"expected true to be false\" at :440 — the approval proceeded. Restored, sha256 5326edf8.\n\n(2) LOADER DEFAULTS A MISSING DELAY. approval-policy-settings.ts:58-59, `statedDelay(...); if null return REQUIRE_HUMAN` -> `statedDelay(...) ?? 2000`. RED on \"refuses every settings value that does not state a SPEED delay\", and the failure message NAMES the intended case: 'SPEED with the delay ABSENT: expected { delayMs: 2000, …(1) } to deeply equal { kind: \"REQUIRE_HUMAN\" }'. Restored, sha256 ccbf2cce.\n\nDEFECT THIS DRILL FOUND IN MY OWN TESTS, then fixed: the handler arm \"refuses a SPEED mode whose delay the settings never stated\" stayed GREEN under drill 2, because a defaulted 2000ms delay is refused by the consumer's delay bound with the IDENTICAL code and layer (APPROVAL_HUMAN_REVIEW_REQUIRED / APPROVAL_POLICY) as an unstated policy. Two APPROVAL_POLICY branches answer the same way, so the arm could not say which one refused — one added layer from vacuous. Added `expectUnstatedPolicy()`, which pins the branch by reading the production decode for the settings in force, to that arm plus the regression arm, the unrecognised-mode arm and the permissive-payload arm; and its mirror to the deferred arm, which asserts the decode IS {delayMs: 25, PROCEED_WITHOUT_HUMAN} so its refusal is provably the bound answering. Drill 2 was then RE-RUN: the consumer arm now reddens — \"expected { delayMs: 2000, …(1) } to deeply equal { kind: 'REQUIRE_HUMAN' }\" at :167.\n\n(3) CONSUMER DELAY BOUND REMOVED. planning-services.ts:189, `approvalDelayDisposition(...) !== \"IMMEDIATE\"` -> `=== \"DEFERRED\"`, so an oversized delay falls through to proceed exactly as passing it to a timer would. RED on \"requires human review instead of clamping an oversized configured delay\": \"expected true to be false\" at :520 — the red lands on THE INVERSION (an immediate proceed), not on a wrong number. Restored, sha256 5326edf8.\n\n(4) PAYLOAD READ RE-ADDED. planning-services.ts:181-184 gained `const presented = request.payload[\"approvalPolicy\"]` with the caller's object cast through. RED on \"ignores a permissive approval policy presented in the payload\": \"expected true to be false\" at :589 — at the HANDLER, so the guarantee does not depend on the registry allow-list. Restored, sha256 5326edf8.\n\n(5) ONE LOADER REFUSAL TURNED PERMISSIVE. approval-policy-settings.ts:42-44, statedDelay gained a numeric-string arm. Ran the property test ALONE by name so the red is unambiguous: \"never proceeds without a human unless the delay was explicitly stated\" RED with 'delay numeric string: expected \"string\" to be \"number\"'. The property is a real sweep over the whole set. Restored, sha256 ccbf2cce.\n\nFOREIGN WHOLE-TREE COMMIT HAZARD, DISCLOSED, NOT REPAIRED BY ME: two foreign commits for task-48c0c0db613f400b98d525629f1cd434 (eb08be1, then da99185) committed the whole tree mid-task. eb08be1 captured my new files and test edits; da99185 landed WHILE DRILL 2 WAS ON DISK and committed the `?? 2000` mutation into HEAD — `git show HEAD:apps/daemon/src/planning/approval-policy-settings.ts | grep \"?? 2000\"` hits at line 58. Per the rail I did not amend, reset or touch either commit. My working tree holds the correct bytes and my step-7 commit repairs HEAD forward by explicit pathspec.\n\nPOST-DRILL STATE: `git diff --numstat HEAD -- apps packages` = 2/1 approval-policy-settings.ts (the drill repair) and 19/0 planning-services.test.ts (the branch pins); nothing else. `pnpm --filter @moe/daemon typecheck` EXIT=0. `pnpm --filter @moe/daemon test` EXIT=0, \"Test Files  102 passed (102)\" / \"Tests  2096 passed (2096)\".",
+      "startedAt": "2026-08-16T12:35:41.685Z",
+      "completedAt": "2026-08-16T12:40:56.487Z"
     },
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained, never piped into tail: `pnpm --filter @moe/daemon typecheck`, then `pnpm --filter @moe/daemon test` reading the `Test Files`/`Tests` COUNT LINE rather than the exit code (exit 0 with no count line ran nothing). Both stay RED from the foreign slices recorded in step 1. Apply the path-attributed baseline — HEAD failing paths minus merge-base failing paths, intersected with your owned files, MUST be empty — and quote the remaining foreign red verbatim.\nPROVE THE GAP CLOSED: `grep -rn \"approvalMode\\|speedModeDelayMs\" --include=*.ts apps packages` now returns production hits where it returned ZERO before — that grep has been the standing unblock test across three prior audits, so quote it.\nADVERSARIAL REVIEW: (a) is `DEFAULT_APPROVAL_POLICY` GONE, not merely unused — `grep` it and expect nothing? (b) is `approvalPolicy(payload)` gone, so a payload-sourced policy is unrepresentable at the handler rather than blocked by a distant allow-list? (c) can ANY input produce `PROCEED_WITHOUT_HUMAN` without an explicitly stated delay? (d) is `delayMs` bounded where the timer lives, with the 2**31-1 inversion covered? (e) does a satisfied human gate still proceed at `delayMs: 0` carrying its grant, unchanged? (f) is `packages/core/**` untouched? (g) does every existing refusal keep its exact `APPROVAL_AUTHORITY_CODES` member and layer? (h) is the loader under 250 lines by `grep -c ''`, the bridge one LF line, index.ts unmodified? (i) does `git status --porcelain` show only owned paths with every drill reverted?\nCommit by explicit pathspec naming each owned file — never a bare `git commit`, never `git add -A`; the index is shared state in this single working directory. Verify with `git show --stat`. In the completion: quote the count lines and the closing grep verbatim, name the test that reddened for each drill, and STATE THE DEFECT THIS CLOSED — that before this task every gate-free approval decision in the daemon used `{kind:\"PROCEED_WITHOUT_HUMAN\", delayMs:0}`, because the payload key that could override it was never allow-listed. That is the finding QA should verify, not just the loader's existence. Keep verification.command under 500 characters.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-policy-settings.ts",
         "apps/daemon/src/planning/approval-policy-settings.js",
         "apps/daemon/src/planning/approval-policy-settings.test.ts",
         "apps/daemon/src/planning/planning-services.ts",
         "apps/daemon/src/planning/planning-services.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-policy-settings.ts",
+        "apps/daemon/src/planning/approval-policy-settings.js",
+        "apps/daemon/src/planning/approval-policy-settings.test.ts",
+        "apps/daemon/src/planning/planning-services.ts",
+        "apps/daemon/src/planning/planning-services.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+        "apps/daemon/src/http/affordance-read.test.ts"
+      ],
+      "note": "GATE + ADVERSARIAL REVIEW + COMMIT.\n\nCOMMIT ec29d0d, by explicit pathspec naming only the two files that still differed from HEAD (the other five owned files were already in HEAD, captured by foreign whole-tree commits eb08be1/da99185). `git show --stat`: 2 files changed, 21 insertions(+), 1 deletion(-). `git diff --numstat HEAD` over all seven owned paths is EMPTY — committed bytes ARE the gated bytes. The peer's three dirty paths under src/work were not staged.\n\nGATES, each run separately with its own exit code, never ;-chained, never piped into tail without PIPESTATUS:\n1) `pnpm --filter @moe/daemon typecheck` EXIT=0, clean.\n2) `pnpm --filter @moe/daemon test` EXIT=1. COUNT LINE: \"Test Files  1 failed | 101 passed (102)\" / \"Tests  3 failed | 2097 passed (2100)\". Sole failing file src/work/foundation-attempt-service.test.ts, all three under \"the PROVEN record is durable\": persists-result-manifest-identity, refuses-a-sealed-input-manifest-of-the-wrong-shape, persists-an-honest-UNKNOWN. That is a peer's TDD loop live in the shared worktree (task-48c0c0db; src/work/foundation-attempt-{service,store}.ts are uncommitted and MOVING — the same leg read 4 failed a minute earlier and typecheck read TS2305 'no exported member recordProvenFoundationAttempt' before the peer landed the export).\n3) OWNED-PATH LEG, the verification submitted: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning src/bootstrap src/goals src/http` EXIT=0, \"Test Files  12 passed (12)\" / \"Tests  206 passed (206)\". A real count line, so it executed.\n\nPATH-ATTRIBUTED BASELINE: merge-base 3e52753 failing paths {src/work/in-flight-attempts.test.ts}; HEAD failing paths {src/work/foundation-attempt-service.test.ts}; delta {src/work/foundation-attempt-service.test.ts}; intersected with my owned paths (apps/daemon/src/planning/**, bootstrap-test-fixtures.ts, http/affordance-read.test.ts) = EMPTY. The step-1 baseline red CLEARED mid-task and is not quoted as if it still stood.\n\nSTANDING UNBLOCK GREP, closed: `grep -rn \"approvalMode\\|speedModeDelayMs\" --include=*.ts apps packages` was 0 hits at baseline and is now 27, of which 9 are PRODUCTION (approval-policy-settings.ts lines 9, 10, 15, 29, 30, 57, 58, 79, 80) — including the two decode sites `stated.approvalMode !== SPEED_APPROVAL_MODE` (:57) and `statedDelay(stated.speedModeDelayMs)` (:58).\n\nADVERSARIAL REVIEW:\n(a) DEFAULT_APPROVAL_POLICY: GONE. The only surviving occurrence repo-wide is prose inside a test doc comment describing the defect closed (planning-services.test.ts:437).\n(b) approvalPolicy(payload): GONE. `grep 'payload\\[\"approvalPolicy\"\\]'` over apps+packages returns nothing. A payload-sourced policy is unrepresentable at the handler, and two handler arms prove it in BOTH directions.\n(c) No input can produce PROCEED_WITHOUT_HUMAN without a stated delay: one construction site (approval-policy-settings.ts:60), reachable only past `if (delayMs === null) return REQUIRE_HUMAN`. Asserted as a property over 22 settings cases and 14 env cases.\n(d) delayMs bounded where the timer lives: approvalDelayDisposition (approval-gate.ts:104-107) REFUSES rather than clamps; a comment now says which and why. Drill 3 proves the red lands on the inversion.\n(e) Satisfied gate unchanged: proceeds at delayMs 0 carrying the grant, proven under the most restrictive settings.\n(f) packages/core/**: untouched — `git status --porcelain -- packages/core` empty.\n(g) Every existing refusal keeps its exact code and layer: no `refuse(...)` call site changed; all pre-existing arms still assert their APPROVAL_AUTHORITY_CODES member and layer and pass.\n(h) Loader 82 lines by `grep -c ''`; bridge `cat -A` = `export * from \"./approval-policy-settings.ts\";$`, one LF line; apps/daemon/src/index.ts unmodified.\n(i) `git status --porcelain -- apps packages` shows only the peer's three src/work paths. Every drill reverted, each verified by sha256.\n\nDoD 5, stated precisely rather than overclaimed: the defaulting-decoder drill turns \"refuses a SPEED mode whose delay the settings never stated\" — a named test that asserts both the exact code and the exact layer — RED. The red lands on that arm's branch pin (`expectUnstatedPolicy`), not on the code string itself, because a defaulted 2000ms delay is refused by the consumer's delay bound with the IDENTICAL code and layer. That pin is what makes the code-and-layer assertion non-vacuous; without it the arm stayed green under the drill, which is exactly how the drill earned its keep. Both drilled files restored byte-exact and verified by hash (ccbf2cce / 5326edf8).\n\nTHEORETICAL, not fixed, for QA's judgement: (i) `decodeApprovalPolicy` is exported and takes `unknown`, so a revoked Proxy would throw at `Array.isArray` — unreachable from the env path, which builds a fresh object literal; (ii) the handler reads process.env per call, so a runtime env mutation changes the policy without a restart — the same property `readWrapperKnobs` has, and reading fresh beats c",
+      "startedAt": "2026-08-16T12:41:00.916Z",
+      "completedAt": "2026-08-16T12:44:35.658Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-0cd13358",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -128,17 +145,18 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T20:14:28.557Z",
-  "updatedAt": "2026-08-16T12:35:41.685Z",
+  "updatedAt": "2026-08-16T12:46:00.034Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T20:43:56.252Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
     "governor-a627169a",
-    "worker-0cd13358"
+    "worker-0cd13358",
+    "qa-c7cedba3"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -172,7 +190,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T11:40:17.052Z",
@@ -195,5 +215,23 @@
     "escalatedAt": "2026-08-16T12:21:07.172Z"
   },
   "planApprovedAt": "2026-08-16T11:40:19.159Z",
-  "workStartedAt": "2026-08-16T12:21:39.493Z"
+  "workStartedAt": "2026-08-16T12:21:39.493Z",
+  "reviewStartedAt": "2026-08-16T12:45:31.368Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/planning src/bootstrap src/goals src/http",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  12 passed (12)\n      Tests  206 passed (206)\n   Start at  15:45:01\n   Duration  2.03s (transform 5.98s, setup 0ms, import 8.17s, tests 1.96s, environment 1ms)\n\nEXIT=0",
+    "reportedAt": "2026-08-16T12:45:31.368Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "packages/core/src/planning/approval-policy.ts",
+    "apps/daemon/src/planning/approval-policy-settings.test.ts",
+    "apps/daemon/src/planning/planning-services.test.ts",
+    "apps/daemon/src/planning/approval-policy-settings.ts",
+    "apps/daemon/src/planning/approval-policy-settings.js",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/http/affordance-read.test.ts"
+  ]
 }
