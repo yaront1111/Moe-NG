@@ -48,6 +48,7 @@ import type {
   DaemonCommandPorts,
   DaemonDependencyProvider,
   DaemonEntryRefusalCode,
+  BootReconciliationRefused,
   DaemonEntryRefused,
   DaemonStartOptions,
   DaemonStartResult,
@@ -431,8 +432,12 @@ describe("daemon package-root type closure", () => {
       .toEqualTypeOf<Promise<StartListenerResult>>();
     expectTypeOf<(typeof daemon.DAEMON_ENTRY_REFUSAL_CODES)[number]>()
       .toEqualTypeOf<DaemonEntryRefusalCode>();
+    // Four arms, not three: a refused boot reconciliation keeps the producer's own
+    // code and layer rather than being re-stamped as a DAEMON_ENTRY refusal.
     expectTypeOf<DaemonStartResult>()
-      .toEqualTypeOf<DaemonEntryRefused | ListenerRefused | StartedDaemon>();
+      .toEqualTypeOf<
+        BootReconciliationRefused | DaemonEntryRefused | ListenerRefused | StartedDaemon
+      >();
     expectTypeOf<DaemonStartOptions["dependencies"]>()
       .toEqualTypeOf<DaemonDependencyProvider | null | undefined>();
     expectTypeOf<ReturnType<StartedDaemon["shutdown"]>>().toEqualTypeOf<Promise<ShutdownResult>>();

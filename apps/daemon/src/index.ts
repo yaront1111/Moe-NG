@@ -113,6 +113,8 @@ export {
   refuseEntry,
   startControlRoomListener,
   startDaemon,
+  type BootReconciliationPort,
+  type BootReconciliationRefused,
   type ControlRoomListener,
   type DaemonDependencyProvider,
   type DaemonEntryRefusalCode,

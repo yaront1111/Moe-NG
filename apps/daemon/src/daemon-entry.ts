@@ -8,6 +8,9 @@ import type {
   OptionalDaemonPortProvider,
   ResolvedOptionalDaemonPorts,
 } from "./daemon-entry-port-resolution.js";
+import type {
+  BootReconciliationPort, BootReconciliationRefused,
+} from "./recovery/boot-reconciliation.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
 import type { ListenerRefused } from "./http/http-listener.js";
@@ -27,6 +30,11 @@ export type {
   StartListenerOptions,
   StartListenerResult,
 } from "./http/http-listener.js";
+// An arm of `DaemonStartResult` and the port a provider supplies, re-exported so
+// a consumer can switch on a refused start without a deep import.
+export type {
+  BootReconciliationPort, BootReconciliationRefused,
+} from "./recovery/boot-reconciliation.js";
 
 /**
  * What makes the daemon a startable PROCESS rather than a library.
@@ -83,8 +91,14 @@ export interface StartedDaemon {
  * A listener refusal travels out UNCHANGED. `PortRefusal`'s contract is that the
  * seam holds no translation table, so the layer that made the security decision
  * stays visible instead of being flattened into a generic entry code.
+ *
+ * A boot reconciliation refusal travels out the same way and for the same reason:
+ * re-stamping `EXPECTED_VERSION_CONFLICT` at `DURABLE_STORE` or the sweep's
+ * refusal at `DAEMON_FOUNDATION_ATTEMPT` with `DAEMON_ENTRY` would make an
+ * unreadable attempt set indistinguishable from a lost write.
  */
-export type DaemonStartResult = DaemonEntryRefused | ListenerRefused | StartedDaemon;
+export type DaemonStartResult =
+  | BootReconciliationRefused | DaemonEntryRefused | ListenerRefused | StartedDaemon;
 
 export interface DaemonStartOptions {
   readonly csrfToken?: string;
@@ -153,6 +167,25 @@ function resolveDependencies(provider: DaemonDependencyProvider): ResolvedDepend
   return Object.freeze({ deps: provided, ok: true, ...ports.ports } as const);
 }
 
+/**
+ * Reconciliation of what was in flight when the process last died, run ONCE per
+ * start and BEFORE anything binds. `null` means carry on — the provider wires no
+ * sweep, or the sweep succeeded; every other answer stops the boot. A port that
+ * THROWS is the one condition named here, under the EXISTING provider code: a
+ * dead port is a broken provider with no durable code or layer to preserve.
+ */
+function runBootReconciliation(
+  port: BootReconciliationPort | undefined,
+): BootReconciliationRefused | DaemonEntryRefused | null {
+  if (port === undefined) return null;
+  try {
+    const outcome = port.sweep();
+    return outcome.ok ? null : outcome;
+  } catch {
+    return refuseEntry("DAEMON_ENTRY_PROVIDER_THREW");
+  }
+}
+
 const ALREADY_STOPPED = Object.freeze({
   code: "DAEMON_ENTRY_ALREADY_STOPPED",
   layer: DAEMON_ENTRY_LAYER,
@@ -165,6 +198,11 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
 
   const resolved = resolveDependencies(dependencies);
   if (!resolved.ok) return resolved;
+
+  // BEFORE the listener, never after: a daemon that becomes ready while the last
+  // crash is still unclassified is the exact failure this sweep exists to stop.
+  const swept = runBootReconciliation(resolved.reconciliation);
+  if (swept !== null) return swept;
 
   // Minted here when unsupplied and returned IN PROCESS only. Design 19.2 keeps
   // credentials out of URLs and logs, so this value is never written to the log

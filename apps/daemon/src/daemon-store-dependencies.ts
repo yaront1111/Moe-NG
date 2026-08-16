@@ -15,6 +15,8 @@ import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-bindin
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
+import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js";
+import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
@@ -154,11 +156,26 @@ export function createStoreDependencies(
     readLatest: (projectId: string) => readLatestDocumentWorkDossier(store, projectId),
   });
 
+  /**
+   * Built over the store and the durable configuration this root already holds —
+   * the only place where the project and the operator principal are FACTS rather
+   * than something a caller passed to `startDaemon`. The correlation and the
+   * decision time are minted per sweep, here, for the same reason.
+   */
+  const reconciliation = (): BootReconciliationPort => createBootReconciliationPort({
+    clock,
+    correlationId: () => `daemon-boot-reconcile:${randomUUID()}`,
+    principalId: config.principalId,
+    projectId: config.projectId,
+    store,
+  });
+
   return Object.freeze({
     affordances,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
     provide,
+    reconciliation,
     restore: () => createRestorePort(store, config.projectId),
     subscriptions,
   });
@@ -183,6 +200,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     return port();
   },
   provide: () => fromEnv().provide(),
+  reconciliation: () => {
+    const port = fromEnv().reconciliation;
+    if (port === undefined) throw new Error("unreachable: reconciliation is always wired");
+    return port();
+  },
   restore: () => fromEnv().restore(),
   subscriptions: () => {
     const port = fromEnv().subscriptions;

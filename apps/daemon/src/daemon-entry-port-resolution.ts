@@ -1,3 +1,4 @@
+import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -6,12 +7,19 @@ export interface OptionalDaemonPortProvider {
   /** Every port is optional; absence is surfaced by its listener route. */
   affordances?(): AffordancePort;
   documentDossiers?(): DocumentDossierReadPort;
+  /**
+   * The restart reconciliation sweep. Absent only for a provider with no durable
+   * store — the fixture provider has none, and a sweep it cannot run is not a
+   * sweep it may skip: `createStoreDependencies` always wires this one.
+   */
+  reconciliation?(): BootReconciliationPort;
   subscriptions?(): SubscriptionPort;
 }
 
 export interface ResolvedOptionalDaemonPorts {
   readonly affordances?: AffordancePort;
   readonly documentDossiers?: DocumentDossierReadPort;
+  readonly reconciliation?: BootReconciliationPort;
   readonly subscriptions?: SubscriptionPort;
 }
 
@@ -20,7 +28,7 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "documentDossiers",
+  "subscriptions", "affordances", "documentDossiers", "reconciliation",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -70,9 +78,18 @@ export function resolveOptionalDaemonPorts(
     if (documentDossiers !== undefined && !hasMethods(documentDossiers, ["readLatest"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const reconciliationFactory = provider.reconciliation;
+    if (reconciliationFactory !== undefined && typeof reconciliationFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const reconciliation = reconciliationFactory?.call(provider);
+    if (reconciliation !== undefined && !hasMethods(reconciliation, ["sweep"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
+      ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(subscriptions === undefined ? {} : { subscriptions }),
     });
     return Object.freeze({ ok: true, ports } as const);

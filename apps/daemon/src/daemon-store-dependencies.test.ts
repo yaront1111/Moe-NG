@@ -365,7 +365,9 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         commandId: "cmd-child-register", disposition: "DECIDED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
       },
-      providerKeys: ["affordances", "documentDossiers", "provide", "restore", "subscriptions"],
+      providerKeys: [
+        "affordances", "documentDossiers", "provide", "reconciliation", "restore", "subscriptions",
+      ],
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
@@ -377,7 +379,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "policy.validate", "project.activate", "project.bind_repository", "project.register",
         "provider.probe", "qualification.replan", "recovery.complete", "review.submit",
         "session.close", "session.open", "session.renew", "work.claim", "work.release",
-        "work.renew",
+        "work.renew", "work.resume",
       ],
       sameEffect: true,
       second: {

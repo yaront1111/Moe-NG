@@ -98,6 +98,11 @@ const ROWS: readonly Row[] = [
     layer: INGRESS, payloadKeys: ["workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.renew",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
+  // An empty payload carries neither ref, so the assembled request has six keys
+  // where the continuation gate demands exactly eight — CONTINUATION answers.
+  { agent: [WORK], capability: WORK, code: "CONTINUATION_REQUEST_SHAPE_INVALID",
+    kind: "work.resume", layer: "CONTINUATION",
+    payloadKeys: ["attemptRef", "successorRef"] },
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -159,11 +164,11 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-two characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-three characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(22);
-    expect(deps.registry.size).toBe(22);
+    expect(ROWS).toHaveLength(23);
+    expect(deps.registry.size).toBe(23);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -411,7 +416,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(22);
+    expect(ports.registry.size).toBe(23);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });

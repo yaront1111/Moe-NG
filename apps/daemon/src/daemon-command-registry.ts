@@ -15,6 +15,8 @@ import type { SessionOutcome } from "./identity/session-ledger.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
+import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS, runContinuationCommand }
+  from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND,
   RECOVERY_COMPLETION_SCHEMA_VERSION } from "./recovery/recovery-completion-digest.js";
 import { runRecoveryCompleteCommand, type RecoveryCompletionOutcome }
@@ -70,13 +72,17 @@ const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freez
 
 type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
-  | typeof EFFECT_ACTIVATE_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
+  | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
+  | typeof RECOVERY_COMPLETION_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
   if (kind === EFFECT_ACTIVATE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Resuming an interrupted attempt is work authority, not admin: the human-only
+  // gate on this path is the runner's boundary admission, not a wider capability.
+  if (kind === CONTINUATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
@@ -96,6 +102,7 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
 const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
   Object.freeze({
     "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
+    [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
@@ -229,6 +236,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
+    const continuation = kind === CONTINUATION_COMMAND_KIND;
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
@@ -252,6 +260,24 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           403,
         );
       }
+      // Its request shape is exact and disjoint from `requestOf`'s envelope
+      // record, so it is assembled by its own edge rather than trimmed here.
+      if (continuation) {
+        const outcome = runContinuationCommand(store, {
+          correlationId: envelope.correlationId,
+          decidedAt: clock(),
+          payload: envelope.payload,
+          principalId: principal.principalId,
+          projectId,
+        });
+        if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.message);
+        return Object.freeze({
+          commandId: envelope.commandId,
+          disposition: outcome.replayed ? "REPLAYED" : "DECIDED",
+          effectId: outcome.bindingRef,
+          resultCode: outcome.resultCode,
+        });
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (recovery) {
@@ -274,7 +300,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation
+    const requiredCapability = activation || continuation
       ? CAPABILITIES.WORK
       : recovery
         ? CAPABILITIES.ADMIN
