@@ -124,8 +124,8 @@
       "completedAt": "2026-08-16T13:28:37.647Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -137,12 +137,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:59:05.501Z",
-  "updatedAt": "2026-08-16T13:29:32.780Z",
+  "updatedAt": "2026-08-16T13:35:50.905Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T02:12:17.247Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T13:35:50.905Z",
+    "wallClockMs": 41013658
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -217,5 +219,8 @@
     "tests/security/transport-boundaries.security.ts",
     "tests/security/transport-hostile-cases.ts",
     "tests/security/transport-hostile-fixtures.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T13:35:50.905Z",
+  "reviewCompletedAt": "2026-08-16T13:35:50.905Z",
+  "reviewSummary": "APPROVED. Re-ran both gates. Focused run EXIT=0, Tests 51 passed (51), matching task.verification. `pnpm test:security` alone, exit captured, unpiped -> EXIT=1, Tests 4 failed | 278 passed (282), strictly above the 48 baseline. That EXIT=1 is FOREIGN and attributed: all 4 failures are the same two roster-scan tests in boundary-roster.security.ts and durable-store-boundaries.security.ts, caused by two unrostered PRODUCTION constants from peers, FOUNDATION_VERIFICATION_LAYERS (apps/daemon/src/evidence) and BENCHMARK_PROJECTION_LAYERS (packages/benchmark): \"expected [...89] to have a length of 87 but got 89\". This diff adds zero production constants. HEAD-minus-merge-base failing-path delta = {durable-store-boundaries.security.ts}, a peer file; intersected with owned paths = EMPTY.\n\nTWO INDEPENDENT DRILLS, on different lines than the worker's. (a) Deleted the guard at effort-admission.ts:177 -> 2 NAMED tests red (EFFORT_ADMISSION_LAYER BEFORE, EFFORT_LAYERS RACE), landing on the intended assertion: \"refusal code mismatch: expected EFFORT_SOURCE_ABSENT, observed EFFORT_OBSERVATION_UNPARSEABLE\", not a crash. (b) affordance-read.ts:141 sessions.unreadable -> false -> 3 named AFFORDANCE tests red PLUS \"admits nothing\" red with 4x admitted:true, proving the slice-wide invariant is not vacuous. Both production files restored, git diff --quiet CLEAN.\n\nDoD: 45 cases = 15 roster transport boundaries x BEFORE/AFTER/RACE; per-boundary positive counts and both-direction set equality asserted; every refusal via assertRefusedWith with code AND a layer read via layerOf() off the boundary's own constant; races bounded at 2s, per-side, order-independent. Rails: roster read from committed bytes (grep -c 'axis: \"transport\"' = 15); real production surfaces driven; files 177/397/334 lines, all <400; harness, roster, tests/fault/** untouched; worktree byte-identical to 5217ddb."
 }

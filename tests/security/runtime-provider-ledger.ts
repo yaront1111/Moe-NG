@@ -162,6 +162,30 @@ export function createLedger(): Ledger {
   };
 }
 
+/**
+ * Record a refusal from a surface that reports NO LAYER OF ITS OWN.
+ *
+ * Some production surfaces are that by design — `claudeFailure`/`codexFailure` and
+ * `scopeFailure` return `{ok, code, message}`, and their layer vocabulary is spelled elsewhere
+ * (a render manifest entry, a thrown `ScopeObserverError`). The layer's ABSENCE is asserted
+ * rather than assumed, so a layer that starts being reported reddens here and forces the case
+ * to pin it; and every boundary using this ALSO carries a layer-attributed case, so its layer
+ * vocabulary is never left unexercised.
+ */
+export function refusedWithoutLayer(
+  ledger: Ledger,
+  boundary: string,
+  arm: Arm,
+  actual: unknown,
+  expectedCode: string,
+): void {
+  const record = actual as Record<string, unknown>;
+  expect(record["ok"]).toBe(false);
+  expect(record["code"]).toBe(expectedCode);
+  expect(record["layer"] ?? record["reasonLayer"]).toBeUndefined();
+  ledger.record(boundary, arm, String(record["message"] ?? ""));
+}
+
 /** Every boundary in `owned` swept, nothing outside it swept, and all three arms present. */
 export function assertSweepsExactly(ledger: Ledger, owned: readonly string[]): void {
   const covered = new Set(ledger.entries.map((entry) => entry.boundary));
@@ -214,15 +238,31 @@ const ECHO_PATTERNS: readonly (readonly [string, RegExp])[] = Object.freeze([
   ["a secret-shaped environment value", /\b(?:SECRET|TOKEN|API_KEY|PASSWORD)\b\s*[:=]/u],
 ]);
 
-export function assertMessagesEchoNothing(ledger: Ledger, secrets: readonly string[]): void {
+export function assertMessagesEchoNothing(
+  ledger: Ledger,
+  secrets: readonly string[],
+  /**
+   * Boundaries exempt from the PATH patterns only, and never from the digest, base64 or
+   * hostile-value checks below. One exemption exists and it is narrow: `scopeFailure` carries
+   * the CALLER'S OWN declared path as a field and names it in the message, which is the caller
+   * being told which of its declarations was rejected — not provider output leaving a failure
+   * path. Every provider-facing boundary is checked with no exemption at all.
+   */
+  pathExempt: readonly string[] = [],
+): void {
   expect(ledger.entries.length).toBeGreaterThan(0);
   const offences: string[] = [];
   for (const entry of ledger.entries) {
     for (const [what, pattern] of ECHO_PATTERNS) {
+      const isPathPattern = what.endsWith("path");
+      if (isPathPattern && pathExempt.includes(entry.boundary)) continue;
       if (pattern.test(entry.message)) offences.push(`${entry.boundary}#${entry.arm}: ${what}`);
     }
+    // The separator-stripped form too. A message that interpolated a path through a layer which
+    // ate its backslashes still published it, and the drive-path pattern above would miss that.
+    const stripped = entry.message.replaceAll("\\", "");
     for (const secret of secrets) {
-      if (secret !== "" && entry.message.includes(secret)) {
+      if (secret !== "" && (entry.message.includes(secret) || stripped.includes(secret.replaceAll("\\", "")))) {
         // The offending bytes are NOT quoted: printing them here would publish exactly what
         // the rail forbids production from publishing.
         offences.push(`${entry.boundary}#${entry.arm}: a hostile input value`);
@@ -243,6 +283,7 @@ export function describeSliceInvariants(
   ledger: Ledger,
   owned: readonly string[],
   secrets: readonly string[],
+  pathExempt: readonly string[] = [],
 ): void {
   describe(`${group} — completeness and the no-admission invariant`, () => {
     it("sweeps exactly this slice's partition, in BOTH directions, with all three arms", () => {
@@ -255,7 +296,7 @@ export function describeSliceInvariants(
       assertAdmittedNothing(ledger);
     });
     it("echoes nothing: no refusal message carries a path, a digest or a hostile value", () => {
-      assertMessagesEchoNothing(ledger, secrets);
+      assertMessagesEchoNothing(ledger, secrets, pathExempt);
     });
   });
 }

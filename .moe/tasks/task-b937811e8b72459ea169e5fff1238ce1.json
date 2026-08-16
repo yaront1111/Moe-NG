@@ -19,7 +19,7 @@
     {
       "stepId": "step-1",
       "description": "CREATE THE PACKAGE AND INSTALL IT — first, because the dependency-edge rail requires the manifest edit and workspace install to be step 1 with both files owned, and because the gate is vacuous until the package resolves.\nBASELINE THE HAZARD FIRST so it is on the record: `pnpm --filter @moe/benchmark test` today prints `No projects matched the filters in \"D:\\projexts\\moe-next\"` and EXITS 0. Reproduce that and quote it. It is the reason this task's own verification command has been unfalsifiable across three prior audits.\nCreate `packages/benchmark/package.json` and `packages/benchmark/tsconfig.json`, copying the shape of an existing workspace package rather than inventing one — `packages/coordination/package.json` is the template: `{name, version 0.0.0, private true, type module, exports {\".\": \"./src/index.ts\"}, scripts: {typecheck: \"tsc --project tsconfig.json\", test: \"vitest run --root ../.. packages/benchmark/src\"}}`, and its tsconfig extends `../../tsconfig.base.json` with `rootDir: \"src\"`, its own `tsBuildInfoFile`, and `types: [\"node\"]`. The `--root ../..` in the test script is what makes vitest print a real count line; a script that resolves no files would restore the exact vacuity being fixed.\nRun the workspace install so `pnpm-lock.yaml` gains the importer entry. BOTH the new manifest and the lockfile are owned paths of this task — declare them and commit them.\nTHEN PROVE THE GATE IS NO LONGER VACUOUS, before writing any harness code: `pnpm --filter @moe/benchmark test` must now RESOLVE the package. With no tests yet it will report zero, which is fine at this step — what must change is that it stops printing \"No projects matched the filters\". Record both outputs side by side; that pair is the evidence the hazard is closed.\nDEPENDENCIES: keep them minimal and justified. This package projects evidence; it does not read a store. Do NOT add `@moe/store` or reach for apps/daemon — a package cannot import from an app, which is the constraint step 2 is built around.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/package.json",
         "packages/benchmark/tsconfig.json",
@@ -28,72 +28,129 @@
       "newFiles": [
         "packages/benchmark/package.json",
         "packages/benchmark/tsconfig.json"
-      ]
+      ],
+      "note": "FIX ROUND (reopen 1). Package already exists and the gate is already real — re-verified, not re-created. `pnpm --filter @moe/benchmark test` at session start: `Test Files 4 passed (4)` / `Tests 50 passed (50)`. The step-1 baseline pair (`No projects matched the filters` EXIT=0 -> a real count line) was closed in the prior round and QA re-confirmed it with a negative control; nothing here reopens it.\n\nReproduced ALL SIX QA findings by running production `projectBenchmarkRun` on spread variants of the shipped fixture (throwaway probe deleted in the same bash invocation, `git status --porcelain -- packages/benchmark` clean after):\n- `launch:{}` -> ok:true, `launcherStartedAt`/`launcherCompletedAt` = `{known:true, value:undefined}` (plus the 7 reproducibility digests reading the same container).\n- `declared:{known:true, selection:{selectedModelId:\"m\"}}` -> `reasoningEffort`/`profileRevisionId` = `{known:true, value:undefined}`.\n- `sequence:{}` and `stdoutReceiptDigest:{}` -> `{known:false, basis:\"PRODUCER_DECLARED_UNKNOWN\", code:undefined, layer:undefined}`.\n- `providerRunRef:{}` -> `runIdentity:{}`.\n- `declared:{known:true}` -> `TypeError: Cannot read properties of undefined (reading 'selectedModelId')`; `observedModel:{}` and `tokens:{}` -> same on `'known'`.\n(vitest swallows console.log in a passing test — forced the values out through an assertion diff with an `undefined -> \"<<undefined>>\"` replacer, per mem:gotcha-container-guarded-by-kind-only-leaks-known-undefined.)",
+      "startedAt": "2026-08-16T13:37:31.818Z",
+      "completedAt": "2026-08-16T13:38:58.022Z"
     },
     {
       "stepId": "step-2",
       "description": "SETTLE THE INPUT BOUNDARY, which is the design question this task has never answered. The records the harness projects are `ProviderRunRecord`s declared at `apps/daemon/src/telemetry/provider-run-contracts.ts:94`. A PACKAGE CANNOT IMPORT FROM AN APP, so the harness cannot take that type by reference.\nTHE ANSWER: the harness accepts BOUNDED PLAIN DATA and validates SHAPE ONLY. It pins `recordVersion` against `PROVIDER_RUN_RECORD_VERSION` (`\"moe-provider-run-record/1\"`, contracts.ts:57) as a literal it declares itself, and refuses anything else. That literal is the seam — when the record schema moves, this package reddens instead of silently projecting a shape it no longer understands.\nAND THE LINE IT MUST NOT CROSS: the harness PROJECTS, it never DECIDES. It re-derives no fact the codec already established, recomputes no digest, and mints no measurement. Shape validation answers \"is this the schema I project?\" and nothing more. A second validator that re-judged the evidence would be a competing authority over records the daemon's codec already sealed — exactly what the codec's own comment (\"the codec is the only authority on what is a record\") forecloses.\nWrite that boundary into the package's index header, with the version literal and the reason, so the next reader can tell projection from adjudication at a glance.\nCONSUMER EDGE (Clause 1): this package is infrastructure and lands with a named consumer rather than a call site — task-3a34adcabd03489e84f8dfbec913633a (corpus freeze), which the governor's cascade records as unblocking as this lands, followed by task-8af4562ff1ae41b28876aaee63f05ea3 (benchmark campaign). Record both ids in the completion.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/index.ts"
       ],
       "newFiles": [
         "packages/benchmark/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/index.ts"
+      ],
+      "note": "Boundary unchanged in substance (bounded plain data, shape only, version literal pinned) but CORRECTED where QA proved it was overclaimed. Two additions to the index header:\n\n1. \"SHAPE MEANS EVERY FIELD THIS PACKAGE READS, AT EVERY DEPTH IT READS IT.\" The prior header let \"shape only\" be read as \"top-level kind only\", which is what shipped. Now states the failure explicitly: an empty object passes `isPlainRecord`, its absent members read back as `undefined`, and `undefined` is not a refusal but a value — so `{known:true, value:undefined}` publishes and missing evidence gains an observation's authority. Bounded in the same sentence: guard down to the fields projected, and no further, because a field this package never reads is one it has no standing to judge. That bound is what keeps this a projector rather than a second validator.\n\n2. \"THE VERSION SEAM, AND WHAT IT CANNOT REACH.\" QA's point, verified against the producers: `PROJECTED_RECORD_VERSION` pins ONE string, the daemon's record schema. The inner types are foreign and separately versioned — `ClaudeLaunchSelection` (packages/runner/src/providers/claude/claude-launch-selection.ts:93), `ProviderText`/`ProviderFactUnknown` (provider-telemetry-contracts.ts:132-138), `LayeredIssue` (packages/scheduler/src/budget/budget-measurement.ts:40). A runner-side field rename lands with `recordVersion` untouched. The two seams cover different drifts; neither substitutes for the other.\n\nProducer shapes read at source to size the guards, not guessed. One finding that changes the implementation: `ClaudeTelemetryLaunchFacts` carries an `exit: ClaudeLaunchExit | null` field the harness mirror deliberately does not project, so the launch guard must iterate a fixed key list and ignore unlisted fields rather than demanding an exact key set — otherwise it would refuse every real record.\n\nConsumers unchanged: task-3a34adcabd03489e84f8dfbec913633a (corpus freeze) then task-8af4562ff1ae41b28876aaee63f05ea3 (campaign).",
+      "startedAt": "2026-08-16T13:39:03.694Z",
+      "completedAt": "2026-08-16T13:39:35.370Z"
     },
     {
       "stepId": "step-3",
       "description": "FREEZE THE UNKNOWN VOCABULARY — the open question three architects have deferred. The harness needs its own closed reason-code and layer lists for the cases where it cannot project a row, and they must be frozen arrays a test can ITERATE, not a type: a test cannot iterate a type, and a sweep needs every member at runtime. Follow the repo's established shape — `Object.freeze([...] as const)` plus a derived union type, as `COORDINATION_CODES`/`COORDINATION_LAYERS` and `PROVIDER_TELEMETRY_LAYERS` do.\nSCOPE IT TIGHTLY: codes for what the HARNESS cannot project — an unrecognised record version, a record whose required field is absent, a row whose basis is missing. NOT codes for what the run itself did; those already exist on the record as `terminal`, `infrastructure`, `upstreamRefusal` and `usageRefusals`, and duplicating them here would create a second vocabulary for one condition.\nNO CAMPAIGN SCORING, NO CLAIM DECISIONS. This vocabulary describes projection failures. A code that means \"this arm scored worse\" or \"this claim is unproven\" belongs to the campaign task, not here — that boundary is why this task is infrastructure-only.\nAssert the closed lists: every member reachable, a positive case count on any sweep over them, and no member declared without a producer. A code no layer can emit cannot fail closed — the same defect QA rejected on task-6cbff010 for exactly this reason.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-projection-vocabulary.ts"
+      ],
+      "note": "NO NEW CODES, and that is a decision with a reason rather than an omission. Every nested-shape failure QA found is the same condition the existing vocabulary already names: a required field is present but is not the shape this projection reads = `BENCHMARK_RECORD_FIELD_MALFORMED@BENCHMARK_SHAPE`. Minting `BENCHMARK_NESTED_FIELD_MALFORMED` would be a second code for one condition and would split a sweep that currently proves every member has a producer — the same conclusion the prior round reached for the NaN hardening, and the same defect QA rejected on task-6cbff010 (a code no layer can emit). The four frozen lists (5 codes, 4 layers, 5 unknown bases, 2 cost bases) are unchanged, and both direction-assertions over them still hold.\n\nWhat DID change is the `BenchmarkValue<T>` doc, which QA's issue 5 identified as stating the invariant in one direction only. vocabulary:99-101 said \"an unknown cell never carries a `value` key\" and nothing about the mirror, so `{known:true, value:undefined}` and `{known:false, code:undefined}` were outside the written rule — which is exactly why every leak stayed green. The comment now states both halves and names why the TYPE cannot enforce either: `undefined` inhabits `T`, and no compile-time check survives the `unknown` entry point, so the rule has to be asserted by a walker over real projections.\n\nIt also fixes WHERE the invariant is upheld: at admission, not at the cell minters. A cell is built from a field already guarded to the depth it is read, so the four minters stay unconditional. Re-checking inside `producerUnknownCell` would put a second authority downstream of the first and let the two disagree about the same field — QA's own \"smallest correct fix is one guard family in admission, not a rewrite\".",
+      "startedAt": "2026-08-16T13:39:40.978Z",
+      "completedAt": "2026-08-16T13:40:02.796Z"
     },
     {
       "stepId": "step-4",
       "description": "TDD RED — the non-merge rules, which are the harness's entire substance. Every one of these is a rule the RECORD's own comments already state; the harness must not undo them in projection. Write them before the projector exists.\n(a) DECLARED IS NOT OBSERVED. `declared` carries what was asked for (selected model, reasoning effort, profile revision); `observedModel` carries what the provider's bytes said. The record comment says merging them \"destroys the only evidence that the provider ran the model it was asked to run\". Assert the projection keeps them as separate fields and that an absent `observedModel` is NOT filled from `declared` — the old handoffs' \"do not substitute runtime/profile IDs for model snapshot or reasoning effort\" is exactly this.\n(b) TWO CLOCKS, NOT RECONCILED. `launch.startedAt`/`completedAt` are the LAUNCHER's wall stamps; `observedStart`/`observedEnd` are the daemon's own `ClockObservation`s. The comment says they are \"two observers, deliberately not reconciled\". Assert the projection reports both and derives no single timing from a mix of them.\n(c) A DURATION NEEDS ONE BOOT. A `ClockObservation` binds wall seconds, boot identity and monotonic reading together, because \"a duration derived from a pair without `bootId` is unfalsifiable\". Assert the harness emits a duration ONLY when both observations share a `bootId`, and UNKNOWN otherwise — with a case where the boot ids differ.\n(d) NULL IS NOT ZERO. \"`null` is an unobserved reading and never a zero.\" Assert no null observation, absent token count or missing usage row is ever rendered as 0, and that a `ProviderCountCoverage` short of complete is carried through rather than dropped.\n(e) A BINDING IS NOT A COST. Usage rows carry `pricebookBinding`, and \"a derived list price stays a binding and never becomes an actual-cost claim\". Assert the cost-class column reports the binding and never presents a derived price as an actual cost.\n(f) NO IMPUTATION ACROSS ARMS. Assert one record's UNKNOWN is never filled from another record's value — drive two records where one is complete and one is not, and assert the incomplete one stays incomplete.\nEvery refusal case pins the exact frozen code AND layer from step 3. Assert a positive generated-case count on any sweep.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/run-projection.test.ts"
       ],
       "newFiles": [
         "packages/benchmark/src/run-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-nested-shape-admission.test.ts"
+      ],
+      "note": "TDD RED, written before any production change, in a NEW file so the two existing test files stay under the per-file target. The step-4 rules (a)-(f) were landed and drilled last round and are untouched; this round adds the rule whose absence QA proved.\n\nRED IS REAL AND NAMES EVERY CASE. `pnpm --filter @moe/benchmark test` -> `Tests 3 failed | 52 passed (55)` EXIT=1:\n- 21/21 partial containers leak. 16 came back `PROJECTED` (launch:{}, truncated declared, sequence:{}, stdout/stderrReceiptDigest, providerRunRef:{} and epoch-as-text, launch.startedAt as a number, declared unknown missing code and/or layer, observedModel modelId known-with-no-value, token count as text, sequence unknown missing layer, concurrency.achieved:{}, upstreamRefusal:{}, usageRefusals:[{}]) and 5 came back `THREW:TypeError` (declared:{known:true}, observedModel:{}, tokens:{}, steps:{}, concurrency:{}).\n- Both cost-row cases leak: `pricebookBinding:{}` and a text unit price both `PROJECTED`.\n\nTHE OUTCOME IS RENDERED AS ONE STRING PER CASE — `PROJECTED` / `THREW:TypeError` / `CODE@LAYER` — compared as a single map. That is what makes a crash and a refusal visibly different rather than both reading as \"not ok\": QA issue 4 is precisely that a throw carries no code and no layer, so a test asserting only \"did not project\" would have passed on it.\n\nTWO CASES I ADDED BEYOND QA'S LIST, same defect class, disclosed rather than folded in silently. `upstreamRefusal:{}` and `usageRefusals:[{}]` publish a refusal column whose `code`/`layer` are `undefined` — a refusal naming no authority, which is manifestation 2 in the refusal columns instead of the cells. `pricebookBinding:{}` makes `costBasis` report PRICEBOOK_BINDING against a binding naming no pricebook revision — a cost basis with nothing bound to it, and a cost-class DoD item. It is pinned to BENCHMARK_ROW, not BENCHMARK_SHAPE, because the row layer is where usage rows are read.\n\nTWO CORRECTIONS THE RED ITSELF FORCED, both mine, both caught before implementation:\n1. My first `invariantOf` demanded a value from EVERY cell, which inverts half the rule — the walker immediately reddened on `settings.achievedConcurrency` and `costClass[1].quantity`, two legitimately unknown cells. The rule is directional and is now one field, `valueKeyMatchesKnown`: known must carry a value, unknown must carry no `value` key. A separate test pins that discriminator in both directions over five hand-written cells, including `{known:true, value:undefined}` (the exact leak shape, which `Object.hasOwn` alone would call satisfied) and `{known:false, value:0}`.\n2. Pinned cell count was 126 by arithmetic slip; the run reported 127 and my independent hand count agrees (32 complete + 31 unobserved, which carries one usage row rather than two, + 32 + 32). Corrected to 127 against the hand count, not fitted to the output.\n\nThe walker also asserts a non-zero cell count per arm: a walker over zero cells asserts nothing and passes.",
+      "startedAt": "2026-08-16T13:41:09.687Z",
+      "completedAt": "2026-08-16T13:43:16.611Z"
     },
     {
       "stepId": "step-5",
       "description": "IMPLEMENT THE PROJECTION. Create the projector under `packages/benchmark/src/` — one module per concern if it would otherwise exceed 250 physical lines, measured with `grep -c ''` (PowerShell `Measure-Object -Line` undercounts). It turns a validated record into the harness's row set: run identity, cost class, timing, effort, settings, evidence receipt, reproducibility.\nEach column carries its own provenance and its own UNKNOWN. Run identity comes from `providerRunRef` verbatim — \"never three hand-rolled ids\". Effort and settings come from `declared`, model evidence from `observedModel`, and the two stay separate columns. Timing carries the launcher pair and the daemon pair separately, with a derived duration only under a shared `bootId`. Cost class reports each usage row's `pricebookBinding` alongside its measurement, never a computed total presented as actual. Evidence receipt carries `stdoutReceiptDigest`/`stderrReceiptDigest` and `recordDigest` verbatim. Reproducibility carries `launch`'s runtime and profile digests verbatim.\nRefusals stay disjoint exactly as the record keeps them: `usageRefusals` are the scheduler's layered issues, `upstreamRefusal` is the provider seam's, and the harness's own frozen codes cover only what IT could not project. Three sources, never flattened — flattening would make a scheduler issue indistinguishable from a provider refusal, which is the same defect the record's own comment guards against.\nNO CORPUS BYTES, NO SCORING, NO CLAIM DECISIONS. This module reads one record and emits its rows. Comparing arms, ranking them, or deciding a claim belongs to the campaign task.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/run-projection.ts",
         "packages/benchmark/src/index.ts"
       ],
       "newFiles": [
         "packages/benchmark/src/run-projection.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-field-primitives.ts",
+        "packages/benchmark/src/benchmark-field-primitives.js",
+        "packages/benchmark/src/benchmark-container-shapes.ts",
+        "packages/benchmark/src/benchmark-container-shapes.js",
+        "packages/benchmark/src/benchmark-record-admission.ts",
+        "packages/benchmark/src/benchmark-nested-shape-admission.test.ts",
+        "packages/benchmark/src/benchmark-cell-invariant.test.ts"
+      ],
+      "note": "GREEN. `pnpm --filter @moe/benchmark test` -> `Test Files 6 passed (6)` / `Tests 55 passed (55)` EXIT=0. `pnpm --filter @moe/benchmark typecheck` EXIT=0.\n\nTHE FIX IS ONE GUARD FAMILY IN ADMISSION, exactly as QA scoped it — no projector change, no cell-minter change. `benchmark-run-projection.ts`, `benchmark-projection-cells.ts` and `benchmark-cost-projection.ts` are byte-identical to what QA reviewed. Putting a re-check inside `producerUnknownCell` would have been a second authority downstream of the first, free to disagree with it about the same field.\n\nTwo new modules rather than a fatter admission, because admission at 142 lines could not absorb ~20 predicates:\n- `benchmark-field-primitives.ts` (97 lines): isPlainRecord, text/nullable-text helpers, isProducerUnknown, isProjectedText, isProjectedQuantity, isObservationOrNull.\n- `benchmark-container-shapes.ts` (166 lines): one predicate per container the projector reads into.\n- `benchmark-record-admission.ts` drops 142 -> 110 and now holds only the guard ORDER and the table. Both new modules got the repo's one-line `.js` bridge.\n\nRECORD_SHAPE now carries a nested predicate for every container the projector reads into: providerRunRef, launch, declared, observedModel, tokens, steps, sequence, concurrency, stdout/stderrReceiptDigest — plus usageRefusals, upstreamRefusal and (at the ROW layer) pricebookBinding. Only `terminal` and `infrastructure` remain bare `isText`: closed vocabularies owned by @moe/runner, which this package deliberately does not re-list.\n\nTHE GUARDS IGNORE UNLISTED FIELDS, and that is load-bearing rather than laziness. `ClaudeTelemetryLaunchFacts` carries an `exit` field this package does not project; a guard demanding an exact key set would refuse every record the daemon commits. A test drives a launch carrying `exit` and asserts it still PROJECTS, so the over-strict direction is pinned too, not just the under-strict one.\n\nNO NEW CODES. Every nested failure is `BENCHMARK_RECORD_FIELD_MALFORMED@BENCHMARK_SHAPE`; the pricebook one is `BENCHMARK_ROW_BASIS_ABSENT@BENCHMARK_ROW` because rows are read at the row layer. All five frozen codes still have distinct producers and the both-directions vocabulary sweep still passes.\n\nThe predicates are NOT exported from index.ts on purpose: they are how this package decides what it can read, and a consumer building a second admission path from them would be the competing authority the boundary exists to prevent.\n\nTest file split at 297 lines to respect the per-file target: sweep stays in `benchmark-nested-shape-admission.test.ts` (181), walker moved to `benchmark-cell-invariant.test.ts` (142). Max file in the package is now 247 (an existing test, untouched); every production source is <=213.",
+      "startedAt": "2026-08-16T13:43:37.640Z",
+      "completedAt": "2026-08-16T13:47:10.498Z"
     },
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove each non-merge rule is enforced rather than merely described. Run each alone, revert before the next. (1) Fill an absent `observedModel` from `declared`; the step-4(a) case must redden — this is the drill for the substitution three handoffs warned about, and the one most likely to look like a helpful default. (2) Derive a duration from `launch.startedAt` and `observedEnd` — one stamp from each observer; the step-4(b) case must redden. (3) Emit a duration when the two `ClockObservation`s carry DIFFERENT `bootId`s; the step-4(c) case must redden — and confirm the red is about the boot mismatch, not about a missing field, since both produce an UNKNOWN and only one is the rule under test. (4) Render a null observation or an absent token count as 0; the step-4(d) case must redden. (5) Present a `pricebookBinding`-derived price as an actual cost; the step-4(e) case must redden. (6) Bump `PROVIDER_RUN_RECORD_VERSION` in the record fixture without changing the harness's pinned literal; the step-2 version guard must redden — proving the seam catches a schema move instead of projecting a shape it no longer understands.\nFor EVERY drill record the exact replaced range you edited: a drill that applied nothing reads as green and proves nothing. Confirm each red lands on the INTENDED assertion, not an unrelated crash. Restore with `git checkout -- <the one drilled file>` (never by hand) and verify `git status --short` shows it clean before the next.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/src/run-projection.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-record-admission.ts",
+        "packages/benchmark/src/benchmark-field-primitives.ts",
+        "packages/benchmark/src/benchmark-container-shapes.ts",
+        "packages/benchmark/src/benchmark-projection-cells.ts",
+        "packages/benchmark/src/benchmark-cell-invariant.test.ts"
+      ],
+      "note": "EIGHT DRILLS, ALL RED ON THE INTENDED ASSERTION, each applied alone and restored before the next. Every drill printed its replaced char count and aborted if its anchor did not match EXACTLY once, so none can have applied nothing.\n\n| # | mutation | reddened |\n|---|---|---|\n| D1 | `launch: isLaunchFacts` -> `isPlainRecord` | the partial-container sweep |\n| D2 | `declared: isDeclaredSelection` -> `isPlainRecord` | same sweep |\n| D3 | `isProducerUnknown` drops the code/layer string checks | same sweep |\n| D4 | `isProjectedText` known arm accepts a missing value | same sweep |\n| D5 | `providerRunRef: isRunRef` -> `isPlainRecord` | same sweep |\n| D6 | `isPricebookBindingOrNull` -> `return true` | the ROW-layer cost-row test |\n| D7 | launch guard reverted AND the walker handed `launch:{}` | BOTH the sweep and the walker |\n| D8 | `nullableCell` null -> `knownCell(0)` (prior-round regression check) | 4 tests, incl. \"renders no unobserved reading anywhere in the projection as a zero\" |\n\nATTRIBUTION, because \"the sweep went red\" is not enough when one assertion covers 21 cases. D1's diff flips EXACTLY two entries and no others: `\"launch:{}\": \"PROJECTED\"` and `\"launch startedAt is a number\": \"PROJECTED\"`. D6 reddens only the ROW test, confirming the pricebook guard sits at the row layer and not the shape layer.\n\nD7 IS THE DRILL QA ASKED FOR, and it answers the question the sweep alone cannot: does the walker independently catch the leak, or is the guard the only thing standing? With the launch guard reverted and `launch:{}` handed to the walker, the walker names the nine leaked cells one by one — `projection.timing.launcherStartedAt`, `projection.timing.launcherCompletedAt`, and all seven `projection.reproducibility.*` digests — each with `valueKeyMatchesKnown: false`. That is exactly the nine cells QA measured. It is a two-file drill (production guard + walker input) and is disclosed as such: the walker cannot reach `launch:{}` post-fix because admission refuses it first, which is the design, so exercising the walker on that input requires re-opening the door the guard closes.\n\nD8 was run as a regression check on the PRIOR round's rules, not as new evidence: the refactor moved every shape predicate out of admission, so I re-drilled the one QA had verified themselves. It still reddens on the same four assertions, so the earlier guards survived the move.\n\nRESTORE WAS NOT DONE WITH `git checkout`. Four deliverables are UNTRACKED, so they have no HEAD blob and `git checkout -- <path>` would have silently left the mutation live (mem:untracked-deliverable-cannot-be-drill-restored-by-git). Snapshotted all 25 sources to a directory outside the repo and restored by copy. Verified with `cmp` per file: zero differ. `git status --porcelain -- packages/benchmark` shows the same 9 lines before and after every drill (3 modified, 6 untracked), and the gate is green again: `Test Files 6 passed (6)` / `Tests 55 passed (55)` EXIT=0.\n\nTWO WINDOWS TOOLING HAZARDS HIT LIVE, both worth the next agent's time. (1) The drill harness first crashed decoding vitest's output as cp1252 (`UnicodeDecodeError` on the `×` marker), which killed the script mid-drill and LEFT D1's mutation on disk — a drill runner that dies after applying is strictly worse than one that never ran. (2) Bash's `/tmp` and Windows Python's `/tmp` resolve to DIFFERENT directories, so the first snapshot restore was a silent no-op writing nowhere. Fixed by pinning an absolute path both resolve identically and by forcing utf-8 on subprocess capture and stdout.",
+      "startedAt": "2026-08-16T13:47:30.820Z",
+      "completedAt": "2026-08-16T13:49:53.327Z"
     },
     {
       "stepId": "step-7",
       "description": "GATE, ADVERSARIAL REVIEW, COMMIT. Legs, each run separately with its own captured exit code — never `;`-chained (only the last status survives), never piped into tail (tail's status is reported).\nTHE GATE THAT HAS NEVER BEEN REAL: `pnpm --filter @moe/benchmark test` must now print a `Test Files N passed` / `Tests M passed` count line with M NONZERO. Exit 0 alone is NOT evidence and never was — quote the count line. POSITIVE CONTROL, mandatory: run the identical command shape against a package that certainly has tests (`pnpm --filter @moe/coordination test`) and confirm it prints its own count line, which discriminates a real run from a filter that silently matched nothing. Also quote the step-1 baseline (`No projects matched the filters`, EXIT 0) beside the new output — that before/after pair is the closing evidence for a hazard three audits carried.\nThen `pnpm --filter @moe/benchmark typecheck` exit 0, and `pnpm typecheck` repo-wide with the path-attributed baseline: HEAD failing paths minus merge-base failing paths, intersected with your owned paths, MUST be empty. Quote any foreign red verbatim; do not repair it.\nADVERSARIAL REVIEW: (a) does the harness import from apps/** or depend on @moe/store — it must not? (b) does it re-derive, recompute or adjudicate ANY fact rather than projecting? (c) is `recordVersion` pinned as a literal the package declares, with drill 6 proving the seam? (d) are `declared` and `observedModel` separate columns with no defaulting between them? (e) are the launcher and daemon clock pairs unreconciled, and is a duration emitted only under a shared `bootId`? (f) is any null, absent count or missing row rendered as 0 anywhere? (g) does a `pricebookBinding` ever present as an actual cost? (h) are the three refusal sources kept disjoint? (i) does the frozen vocabulary cover only projection failures, with no scoring or claim codes? (j) is every source under 250 lines by `grep -c ''`? (k) does `git status --porcelain` show only owned paths — including `pnpm-lock.yaml` — with every drill reverted?\nCommit by explicit pathspec naming each owned file including the lockfile — never a bare `git commit`, never `git add -A`. Verify with `git show --stat`. In the completion: quote the before/after gate outputs and the positive control verbatim, name the test that reddened for each drill, and record the named consumers task-3a34adcabd03489e84f8dfbec913633a (corpus freeze) then task-8af4562ff1ae41b28876aaee63f05ea3 (campaign). Keep verification.command under 500 characters.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/benchmark/package.json",
         "packages/benchmark/src/index.ts",
         "packages/benchmark/src/run-projection.ts",
         "packages/benchmark/src/run-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/benchmark/src/benchmark-projection-vocabulary.ts",
+        "packages/benchmark/src/benchmark-record-admission.ts",
+        "packages/benchmark/src/index.ts",
+        "packages/benchmark/src/benchmark-cell-invariant.test.ts",
+        "packages/benchmark/src/benchmark-container-shapes.ts",
+        "packages/benchmark/src/benchmark-container-shapes.js",
+        "packages/benchmark/src/benchmark-field-primitives.ts",
+        "packages/benchmark/src/benchmark-field-primitives.js",
+        "packages/benchmark/src/benchmark-nested-shape-admission.test.ts"
+      ],
+      "note": "FIVE LEGS, each run separately with its own captured exit code — never `;`-chained, never piped into tail.\n\n| leg | output | exit |\n|---|---|---|\n| `pnpm --filter @moe/benchmark test` | `Test Files 6 passed (6)` / `Tests 55 passed (55)` | 0 |\n| POSITIVE CONTROL `@moe/coordination test` | `Test Files 2 passed (2)` / `Tests 42 passed (42)` | 0 |\n| NEGATIVE CONTROL `@moe/definitely-absent-pkg test` | `No projects matched the filters in \"D:\\projexts\\moe-next\"` | 0 |\n| `pnpm --filter @moe/benchmark typecheck` | `tsc --project tsconfig.json`, no diagnostics | 0 |\n| repo-wide `pnpm typecheck` | `apps/daemon typecheck: Done`, zero `error TS` | 0 |\n\nThe negative control is what makes the first leg mean anything: an absent package also EXITS 0, so the exit code discriminates nothing and the `Tests N passed` count line is the only evidence a run happened. Baseline for the record: this task's own command printed `No projects matched the filters` at EXIT 0 across three prior audits, before the package existed.\n\nRepo-wide typecheck is EXIT 0, so the path-attributed baseline is trivially satisfied: HEAD failing paths minus merge-base failing paths is empty and there is no foreign red to disclose. NOT fabricated — the run enumerated every workspace project and ended `Done`.\n\nADVERSARIAL REVIEW, all eleven: (a) no import from apps/** and no @moe/store, @moe/runner or @moe/scheduler dependency — grep for import lines returns nothing; the package still has no deps block. (b) nothing re-derived: the fix adds only predicates, and the projector, cell minters and cost module are byte-identical to what QA reviewed. (c) `PROJECTED_RECORD_VERSION` still the package's own literal; the index header now also states what that seam CANNOT reach. (d) `declared` and `observedModel` remain separate columns, each with its own guard, with no defaulting. (e) the two clock pairs are unreconciled and the duration still requires a shared `bootId`. (f) nothing renders as 0 — re-proved by drill D8. (g) no `pricebookBinding` presents as a cost, and it is now guarded so a binding cannot be empty while `costBasis` claims one. (h) three refusal sources still disjoint. (i) the vocabulary is unchanged and still projection-only. (j) every production source <=213 lines by `grep -c ''`, max file in the package 247 (an existing test). (k) tree clean before commit with all eight drills reverted, verified by per-file `cmp` against the snapshot.\n\nI ALSO WENT PAST THE CHECKLIST AND VERIFIED THE GUARDS AGAINST THE REAL PRODUCERS, because the failure mode of this fix is the mirror image of the defect: a guard demanding a field the producer never emits would refuse every real record, and no fixture in this package would catch it. Read at source and matched field by field — `ProviderRunRef`, `ClaudeTelemetryLaunchFacts`, `ClaudeLaunchSelection`, `ClaudeObservedModel`, `ClaudeTokenObservations`, `ClaudeStepObservations`, `LayeredIssue`, `ProviderTelemetryRefusal`, `PricebookBinding` — then confirmed at the composition site (`activation-run-commit.ts:200-218`) that the daemon writes exactly this shape, taking each field verbatim from the handoff. One live consequence: `ClaudeTelemetryLaunchFacts` carries `exit`, which this package does not project, so the guards ignore unlisted fields and a test drives a launch carrying `exit` and asserts it still projects.\n\nTWO THINGS DISCLOSED RATHER THAN REPAIRED. (1) A theoretical crash remains: a revoked Proxy makes `Array.isArray` throw inside `isPlainRecord`, so it would escape `projectBenchmarkRun` without a code. It is unreachable from the documented input domain — decoded durable data cannot be a proxy — and the available fix is a catch-all that would report an internal projector bug as `FIELD_MALFORMED`, blaming the input for the harness's own fault. Misattributed evidence is worse than a crash here, so I left it and am naming it instead. (2) @moe/runner exports its OWN `ProviderRunRecord` (provider-run-record.ts:210) with a different shape — `identity`, `model`, `decisionDigests`, `runtimeEvidence` — that shares the `PROVIDER_RUN_RECORD_VERSION` string with the daemon's. Two record types, one version string, in foreign packages. This harness mirrors the daemon's, which is the one committed, and the daemon uses the runner builder only for `.usage`. Not mine to repair; flagged because it weakens the version seam repo-wide.\n\nCOMMIT `f70786f`, by explicit pathspec naming all 9 owned files. Untracked deliverables were `git add`ed first — a commit pathspec alone stages nothing for an untracked file. `git show --name-only` filtered for non-benchmark paths returns EMPTY, so no foreign work was captured, which matters because the tree also holds a parallel session's changes under apps/daemon/src/evidence, packages/runner and tests/security. Those are untouched and uncommitted by me. `pnpm-lock.yaml` needed no change: its `packages/benchmark: {}` importer is already in HEAD at line 124 and the file is absent from my porcelain.\n\n`git",
+      "startedAt": "2026-08-16T13:51:30.850Z",
+      "completedAt": "2026-08-16T13:53:07.491Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c7cedba3",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -130,15 +187,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:57:17.328Z",
-  "updatedAt": "2026-08-16T13:22:27.552Z",
+  "updatedAt": "2026-08-16T13:55:12.126Z",
   "contextFetchedBy": [
-    "qa-ce3ba361"
+    "qa-ce3ba361",
+    "worker-ad55ab67",
+    "qa-c7cedba3"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-13T16:00:55.803Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -178,7 +237,15 @@
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
   "failedDodItems": [
     {
       "item": "Every required measurement has exact source/basis or explicit UNKNOWN; UNKNOWN is never zero or imputed across arms.",
@@ -218,31 +285,27 @@
   },
   "planApprovedAt": "2026-08-16T12:24:35.163Z",
   "workStartedAt": "2026-08-16T12:47:43.922Z",
-  "reviewStartedAt": "2026-08-16T13:14:05.406Z",
+  "reviewStartedAt": "2026-08-16T13:54:58.143Z",
   "verification": {
     "command": "pnpm --filter @moe/benchmark test",
     "exitCode": 0,
-    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  4 passed (4)\n      Tests  50 passed (50)\n   Start at  16:12:08\n   Duration  178ms (transform 179ms, setup 0ms, import 248ms, tests 18ms, environment 0ms)\n\nPOSITIVE CONTROL, identical command shape against a package that certainly has tests:\n$ pnpm --filter @moe/coordination test -> Test Files 2 passed (2) / Tests 42 passed (42), EXIT=0\n\nBASELINE BEFORE THIS TASK (step 1, verbatim):\n$ pnpm --filter @moe/benchmark test\nNo projects matched the filters in \"D:\\projexts\\moe-next\"\nEXIT=0  <- zero tests, silently green\n\nOTHER LEGS, each run separately with its own captured exit code:\n$ pnpm --filter @moe/benchmark typecheck -> EXIT=0\n$ pnpm typecheck (repo-wide) -> EXIT=0, zero failing paths at HEAD",
-    "reportedAt": "2026-08-16T13:14:05.406Z"
+    "outputTail": "$ vitest run --root ../.. packages/benchmark/src\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n\n Test Files  6 passed (6)\n      Tests  55 passed (55)\n   Start at  16:53:13\n   Duration  196ms (transform 335ms, setup 0ms, import 472ms, tests 25ms, environment 0ms)",
+    "reportedAt": "2026-08-16T13:54:58.143Z"
   },
   "filesModified": [
     "packages/benchmark/package.json",
     "packages/benchmark/tsconfig.json",
     "pnpm-lock.yaml",
-    "packages/benchmark/src/benchmark-record-contracts.ts",
-    "packages/benchmark/src/benchmark-record-contracts.js",
     "packages/benchmark/src/index.ts",
     "packages/benchmark/src/benchmark-projection-vocabulary.ts",
-    "packages/benchmark/src/benchmark-projection-vocabulary.js",
-    "packages/benchmark/src/benchmark-projection-vocabulary.test.ts",
-    "packages/benchmark/src/benchmark-run-projection.test.ts",
-    "packages/benchmark/src/benchmark-cost-projection.test.ts",
-    "packages/benchmark/src/benchmark-record-admission.test.ts",
-    "packages/benchmark/src/benchmark-record-fixture.ts",
+    "packages/benchmark/src/benchmark-nested-shape-admission.test.ts",
+    "packages/benchmark/src/benchmark-field-primitives.ts",
+    "packages/benchmark/src/benchmark-field-primitives.js",
+    "packages/benchmark/src/benchmark-container-shapes.ts",
+    "packages/benchmark/src/benchmark-container-shapes.js",
     "packages/benchmark/src/benchmark-record-admission.ts",
-    "packages/benchmark/src/benchmark-projection-cells.ts",
-    "packages/benchmark/src/benchmark-cost-projection.ts",
-    "packages/benchmark/src/benchmark-run-projection.ts"
+    "packages/benchmark/src/benchmark-cell-invariant.test.ts",
+    "packages/benchmark/src/benchmark-projection-cells.ts"
   ],
   "reviewCompletedAt": "2026-08-16T13:21:07.907Z",
   "rejectionDetails": {

@@ -4,73 +4,47 @@
  * `runtime-provider-ledger.ts` and its union is checked against the roster in the evidence file.
  *
  * THE TRAP THAT WOULD OTHERWISE MAKE HALF THIS FILE VACUOUS, measured at
- * `claude-telemetry-launch.ts:206`: `launchClaudeWithTelemetry` returns `ok: true` for a
- * launcher that REFUSED and for a delivery that was NOT ATTEMPTED. Both carry a BLIND handoff
- * whose facts are UNKNOWN and whose `telemetryRefusal` is populated; the ONLY route to
- * `ok: false` is a malformed run ref. Nothing here branches on `ok` — the cases assert
- * `handoff.telemetryRefusal`, `handoff.terminal` and `handoff.infrastructure`, and pin
+ * `claude-telemetry-launch.ts:206`: `launchClaudeWithTelemetry` returns `ok: true` for a launcher
+ * that REFUSED and for a delivery that was NOT ATTEMPTED, both carrying a BLIND handoff whose
+ * facts are UNKNOWN; the ONLY route to `ok: false` is a malformed run ref. Nothing here branches
+ * on `ok` — the cases assert `telemetryRefusal`, `terminal` and `infrastructure`, and pin
  * `TELEMETRY_LAUNCH_REFUSED` and `TELEMETRY_LAUNCH_NOT_ATTEMPTED` as DISTINCT shapes.
  *
  * FIVE LAYERS CAN ANSWER the telemetry seam, and the contract's own comment says a code-only
- * assertion "would stay green once a different layer started answering first". Every fixture
- * below is built from `capture(...)`, which is coherent at TELEMETRY_INPUT and TELEMETRY_CAPTURE,
- * and breaks exactly ONE thing — so the arranged layer is provably the one that answered.
+ * assertion "would stay green once a different layer started answering first". Every stream
+ * fixture is COHERENT at input, capture and the anomaly analyser and breaks exactly one thing,
+ * so the arranged layer is provably the one that answered.
  *
- * NO TEST PRINTS PROVIDER OUTPUT. Poisoned bytes are never logged, and the message-hygiene
- * property runs over the WHOLE refusal set rather than one example: `PROVIDER_TELEMETRY_MESSAGES`
- * are static and non-interpolating precisely so a failure path cannot echo a captured byte, a
- * model name or a digest back out.
+ * NO TEST PRINTS PROVIDER OUTPUT. Poisoned bytes are never logged, and message hygiene is
+ * asserted as a property over the WHOLE refusal set rather than one example.
  */
 
 import { describe, expect, it } from "vitest";
 
-import {
-  PROVIDER_RUN_LEDGER_LAYERS,
-  providerRunRefusal,
-} from "../../apps/daemon/src/telemetry/provider-run-refusals.js";
-import {
-  decodeProviderRunRecord,
-  encodeProviderRunRecord,
-} from "../../apps/daemon/src/telemetry/provider-run-codec.js";
+import { PROVIDER_RUN_LEDGER_LAYERS, providerRunUnknown } from "../../apps/daemon/src/telemetry/provider-run-refusals.js";
+import { decodeProviderRunRecord, encodeProviderRunRecord } from "../../apps/daemon/src/telemetry/provider-run-codec.js";
 import { launchClaude } from "../../packages/runner/src/providers/claude/claude-launcher.js";
-import {
-  CLAUDE_LAUNCH_LAYERS,
-  CLAUDE_LAUNCH_SELECTION_LAYER,
-} from "../../packages/runner/src/providers/claude/claude-launcher-contract.js";
+import { CLAUDE_LAUNCH_LAYERS, CLAUDE_LAUNCH_SELECTION_LAYER } from "../../packages/runner/src/providers/claude/claude-launcher-contract.js";
 import { verifyLaunchSelection } from "../../packages/runner/src/providers/claude/claude-launch-verify.js";
 import { CLAUDE_RENDER_LAYERS, renderClaudeContext } from "../../packages/runner/src/providers/claude/claude-render.js";
 import type { RenderClaudeContextInput } from "../../packages/runner/src/providers/claude/claude-render.js";
 import { CODEX_RENDER_LAYERS, renderCodexContext } from "../../packages/runner/src/providers/codex/codex-render.js";
 import type { RenderCodexContextInput } from "../../packages/runner/src/providers/codex/codex-render.js";
 import { parseClaudeResultTelemetry } from "../../packages/runner/src/providers/telemetry/claude-result-telemetry.js";
-import { PROVIDER_TELEMETRY_LAYERS } from "../../packages/runner/src/providers/telemetry/provider-telemetry-contracts.js";
+import { launchClaudeWithTelemetry } from "../../packages/runner/src/providers/telemetry/claude-telemetry-launch.js";
+import { PROVIDER_TELEMETRY_CODES, PROVIDER_TELEMETRY_LAYERS, PROVIDER_TELEMETRY_MESSAGES } from "../../packages/runner/src/providers/telemetry/provider-telemetry-contracts.js";
 import { PROVIDER_USAGE_LAYERS } from "../../packages/runner/src/providers/telemetry/provider-usage-contracts.js";
 import { normalizeProviderUsage } from "../../packages/runner/src/providers/telemetry/provider-usage-normalization.js";
-import type { ClaudeTelemetryHandoff } from "../../packages/runner/src/providers/telemetry/claude-telemetry-launch.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
+import { describeRenderBoundary } from "./runtime-provider-render-cases.js";
 import {
-  AMBIGUOUS_STREAM,
-  LAUNCH_SECRETS,
-  OUT_OF_ORDER_STREAM,
-  POISON_DIGEST,
-  POISON_PATH,
-  GOOD_RUN_REF as REF,
-  UNSUPPORTED_SCHEMA_STREAM,
-  capture,
-  initLine,
-  refusedByManifestLayer,
-  refusedTelemetry,
-  renderInput,
-  resultLine,
-  skillSnapshot,
+  AMBIGUOUS_STREAM, COHERENT_STREAM, GOOD_RUN_REF as REF, GOOD_SELECTION, LAUNCH_SECRETS,
+  OUT_OF_ORDER_STREAM, POISON_DIGEST, POISON_PATH, RESUMED_STREAM, UNSUPPORTED_SCHEMA_STREAM,
+  capture, refusedTelemetry, renderInput, usageHandoff as handoff,
 } from "./runtime-provider-launch-fixtures.js";
 import {
-  RUNTIME_BOUND as BOUND,
-  RUNTIME_PROVIDER_PARTITION,
-  createLedger,
-  describeSliceInvariants,
-  hostile,
-  layerOf,
+  RUNTIME_BOUND as BOUND, RUNTIME_PROVIDER_PARTITION, createLedger, describeSliceInvariants,
+  hostile, layerOf,
 } from "./runtime-provider-ledger.js";
 
 const OWNED = RUNTIME_PROVIDER_PARTITION.LAUNCH;
@@ -79,19 +53,13 @@ const ledger = createLedger();
 const CAPTURE = layerOf(PROVIDER_TELEMETRY_LAYERS, "TELEMETRY_CAPTURE");
 const INPUT = layerOf(PROVIDER_TELEMETRY_LAYERS, "TELEMETRY_INPUT");
 const SCHEMA = layerOf(PROVIDER_TELEMETRY_LAYERS, "TELEMETRY_SCHEMA");
+const RESULT = layerOf(PROVIDER_TELEMETRY_LAYERS, "TELEMETRY_RESULT");
 const USAGE_INPUT = layerOf(PROVIDER_USAGE_LAYERS, "USAGE_INPUT");
 const CODEC = layerOf(PROVIDER_RUN_LEDGER_LAYERS, "PROVIDER_RUN_CODEC");
 const LAUNCHER = layerOf(CLAUDE_LAUNCH_LAYERS, "LAUNCHER");
 
 const parse = (stdout: unknown, providerRunRef: unknown = REF): unknown =>
   parseClaudeResultTelemetry(hostile({ providerRunRef, stdout }));
-
-/** The excluded SKILLS_ADVISORY entry off a production manifest, or undefined if the render
- *  refused outright — which the caller asserts rather than tolerates. */
-const advisoryEntry = (result: { ok: boolean; rendered?: { layerManifest: readonly unknown[] } }): unknown =>
-  result.rendered?.layerManifest.find(
-    (entry) => (entry as { layer?: string }).layer === "SKILLS_ADVISORY",
-  );
 
 // ── PROVIDER_TELEMETRY_LAYERS ─────────────────────────────────────────────────────────────
 // Poisoned provider output. Every fixture is a COHERENT capture with exactly one thing broken,
@@ -100,7 +68,7 @@ describe("PROVIDER_TELEMETRY_LAYERS", () => {
   const boundary = "PROVIDER_TELEMETRY_LAYERS";
 
   it("BEFORE — bytes that do not decode to their declared digest are refused at CAPTURE", async () => {
-    const good = capture(`${initLine("claude-a")}\n${resultLine()}`);
+    const good = capture(COHERENT_STREAM);
     const outcome = await probeBefore(
       BOUND,
       // Digest swapped, everything else coherent: TELEMETRY_INPUT cannot answer.
@@ -112,7 +80,7 @@ describe("PROVIDER_TELEMETRY_LAYERS", () => {
   });
 
   it("AFTER — a truncated and an unfinished capture keep DISTINCT codes at the same layer", async () => {
-    const good = capture(resultLine());
+    const good = capture(COHERENT_STREAM);
     const outcome = await probeAfter(
       BOUND,
       async () => parse({ ...good, truncated: true }),
@@ -123,17 +91,49 @@ describe("PROVIDER_TELEMETRY_LAYERS", () => {
     refusedTelemetry(ledger, boundary, "AFTER", outcome.probe, "TELEMETRY_CAPTURE_INCOMPLETE", CAPTURE);
   });
 
+  it("AFTER — disagreeing and interleaved records never resolve into an admitted model", async () => {
+    const outcome = await probeAfter(
+      BOUND,
+      // Both captures are coherent at INPUT and CAPTURE, so neither can answer here.
+      async () => parse(capture(AMBIGUOUS_STREAM)),
+      async () => parse(capture(OUT_OF_ORDER_STREAM)),
+    );
+    // The ambiguous stream PARSES. That is the point: provider output is admitted as bytes and
+    // still confers nothing — the model fact stays UNKNOWN with its own code and layer rather
+    // than one of the two disagreeing records being picked as authority.
+    const parsed = outcome.effect as { ok: boolean; telemetry: { observedModel: { modelId: unknown } } };
+    expect(parsed.ok).toBe(true);
+    refusedTelemetry(
+      ledger, boundary, "AFTER", parsed.telemetry.observedModel.modelId,
+      "TELEMETRY_MODEL_AMBIGUOUS", RESULT,
+    );
+    refusedTelemetry(
+      ledger, boundary, "AFTER", outcome.probe, "TELEMETRY_STREAM_ANOMALOUS", SCHEMA,
+    );
+  });
+
+  it("AFTER — a record resuming a session this capture never held is refused as anomalous", async () => {
+    const outcome = await probeAfter(
+      BOUND,
+      async () => parse(capture(RESUMED_STREAM)),
+      async () => parse(capture(UNSUPPORTED_SCHEMA_STREAM)),
+    );
+    // Same layer, DISTINCT codes: a resume discontinuity is not an unsupported schema, and
+    // pinning them together would let either answer for the other.
+    refusedTelemetry(ledger, boundary, "AFTER", outcome.effect, "TELEMETRY_STREAM_ANOMALOUS", SCHEMA);
+    refusedTelemetry(ledger, boundary, "AFTER", outcome.probe, "TELEMETRY_SCHEMA_UNSUPPORTED", SCHEMA);
+  });
+
   it("RACE — a malformed run ref and an unsupported schema answer at DIFFERENT layers", async () => {
     const outcome = await probeRacing(
       BOUND,
       // Capture coherent, ref hostile: TELEMETRY_INPUT is arranged to answer.
-      async () => parse(capture(resultLine()), { runRef: 1 }),
+      async () => parse(capture(COHERENT_STREAM), { runRef: 1 }),
       async () => parse(capture(UNSUPPORTED_SCHEMA_STREAM)),
     );
     ledger.refusedSide(boundary, outcome.left, { code: "TELEMETRY_RUN_REF_MALFORMED", layer: INPUT });
     ledger.refusedSide(boundary, outcome.right, {
-      code: "TELEMETRY_SCHEMA_UNSUPPORTED",
-      layer: SCHEMA,
+      code: "TELEMETRY_SCHEMA_UNSUPPORTED", layer: SCHEMA,
     });
   });
 });
@@ -155,21 +155,28 @@ describe("CLAUDE_LAUNCH_LAYERS", () => {
     ledger.refused(boundary, "BEFORE", outcome.effect, malformed);
   });
 
-  it("AFTER — a hostile launch operand answers at the SELECTION layer, not the launcher's", async () => {
-    const trap = { get argv(): never { throw new Error("reflection must not run"); } };
+  it("AFTER — a reflection trap is CONTAINED, and no trap ever runs", async () => {
+    let ran = false;
+    const trap = {
+      get argv(): never {
+        ran = true;
+        throw new Error("reflection must not run");
+      },
+    };
     const outcome = await probeAfter(
       BOUND,
       async () => await launchClaude(hostile(trap)),
       async () => await launchClaude(hostile(new Proxy({}, {}))),
     );
-    // Pinned INDIVIDUALLY and at DIFFERENT layers: a proxy is read as hostile before any
-    // property is touched and answers at the selection layer, while a throwing accessor is
-    // contained by the snapshot and answers as the launcher's own malformed request.
+    // A trap that HAS run has already had its effect whatever the guard decides afterwards, so
+    // containment is asserted by the accessor never firing, not by the refusal alone.
+    expect(ran).toBe(false);
+    // Both answer as the launcher's own malformed request. The other members of this composed
+    // vocabulary — CLAUDE_LAUNCH_SELECTION_LAYER, CLAUDE_RUNTIME_PIN_LAYER and the
+    // WINDOWS_PROCESS_LAYERS — are separate roster entries with their own blocks, so pinning
+    // LAUNCHER here does not leave them unexercised.
     ledger.refused(boundary, "AFTER", outcome.effect, malformed);
-    ledger.refused(boundary, "AFTER", outcome.probe, {
-      code: "CLAUDE_LAUNCH_SELECTION_MALFORMED",
-      layer: CLAUDE_LAUNCH_SELECTION_LAYER,
-    });
+    ledger.refused(boundary, "AFTER", outcome.probe, malformed);
   });
 
   it("RACE — two hostile launches contend and neither reports a launched process", async () => {
@@ -192,17 +199,7 @@ describe("CLAUDE_LAUNCH_LAYERS", () => {
 describe("CLAUDE_LAUNCH_SELECTION_LAYER", () => {
   const boundary = "CLAUDE_LAUNCH_SELECTION_LAYER";
   const layer = CLAUDE_LAUNCH_SELECTION_LAYER;
-  const selection = {
-    provider: "claude",
-    selectedModelId: "claude-opus-5",
-    modelSnapshotKind: "DATED_SNAPSHOT",
-    modelSnapshotEvidence: "2026-05-01",
-    reasoningEffort: "high",
-    profileRevisionId: "profile-1",
-    concurrencyCeiling: 4,
-    launchSelectionDigest: POISON_DIGEST,
-    resolvedRuntimeDigest: POISON_DIGEST,
-  };
+  const selection = GOOD_SELECTION;
 
   it("BEFORE — a selection that is not exact bounded plain data cannot prove anything", async () => {
     const outcome = await probeBefore(
@@ -244,157 +241,32 @@ describe("CLAUDE_LAUNCH_SELECTION_LAYER", () => {
   });
 });
 
-// ── CLAUDE_RENDER_LAYERS ──────────────────────────────────────────────────────────────────
-// The render contracts refuse WITHOUT a layer by production design and spell their layer
-// vocabulary on the accepted envelope's manifest. `refusedByManifestLayer` owes both halves and
-// asserts the refusal really carries no layer, so a layer that starts being reported reddens.
-describe("CLAUDE_RENDER_LAYERS", () => {
-  const boundary = "CLAUDE_RENDER_LAYERS";
-  const advisory = layerOf(CLAUDE_RENDER_LAYERS, "SKILLS_ADVISORY");
-  const render = (overrides: Record<string, unknown> = {}): ReturnType<typeof renderClaudeContext> =>
-    renderClaudeContext(hostile<RenderClaudeContextInput>(renderInput(overrides)));
-
-  /** An advisory too large for the bound: the mandatory layers still fit, so the render
-   *  SUCCEEDS and the advisory layer is the one excluded — a layer-attributed refusal. */
-  const oversizedAdvisory = {
-    skillSnapshot: skillSnapshot({
-      skills: [
-        {
-          skillId: "hostile",
-          files: [
-            {
-              path: "big.md",
-              sha256: POISON_DIGEST,
-              byteLength: 8_192,
-              contentBase64: Buffer.alloc(8_192, 0x61).toString("base64"),
-            },
-          ],
-        },
-      ],
-    }),
-  };
-
-  it("BEFORE — a skill snapshot claiming authority is refused, never sanitised", async () => {
-    const outcome = await probeBefore(
-      BOUND,
-      async () => render({ skillSnapshot: skillSnapshot({ authority: "PROVEN" }) }),
-      async () => render(oversizedAdvisory),
-    );
-    refusedWithoutLayer(
-      ledger, boundary, "BEFORE", outcome.probe, "CLAUDE_RENDER_SKILL_SNAPSHOT_NOT_ADVISORY",
-    );
-    // The layer vocabulary IS exercised on this boundary: the oversized advisory excludes its
-    // own layer, and both the code and the layer below are read off the production manifest.
-    refusedByManifestLayer(ledger, boundary, "BEFORE", advisoryEntry(outcome.effect), advisory);
-  });
-
-  it("AFTER — an unsupported renderer input version is refused before any byte is framed", async () => {
-    const outcome = await probeAfter(
-      BOUND,
-      async () => render({ skillSnapshot: skillSnapshot({ rendererInputVersion: "forged/9" }) }),
-      async () => render({ taskContext: { taskRef: "", bodyBytes: Buffer.alloc(0) } }),
-    );
-    // Version is checked BEFORE the advisory/task gates, so the first fixture provably could
-    // not have been answered by either of them.
-    refusedWithoutLayer(
-      ledger, boundary, "AFTER", outcome.effect, "CLAUDE_RENDER_SKILL_SNAPSHOT_VERSION_UNSUPPORTED",
-    );
-    refusedWithoutLayer(
-      ledger, boundary, "AFTER", outcome.probe, "CLAUDE_RENDER_TASK_CONTEXT_INVALID",
-    );
-  });
-
-  it("RACE — an unbounded advisory and an unknowable context limit are both refused", async () => {
-    const outcome = await probeRacing(
-      BOUND,
-      async () => render({ contextLimit: { kind: "EXACT_TOKENS", tokens: 10 }, tokenizer: null }),
-      async () => render(oversizedAdvisory),
-    );
-    expect(outcome.left.status).toBe("fulfilled");
-    refusedWithoutLayer(
-      ledger,
-      boundary,
-      "RACE",
-      (outcome.left as { value: unknown }).value,
-      "CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN",
-    );
-    refusedByManifestLayer(
-      ledger,
-      boundary,
-      "RACE",
-      advisoryEntry((outcome.right as { value: never }).value),
-      advisory,
-    );
-  });
+// ── CLAUDE_RENDER_LAYERS AND CODEX_RENDER_LAYERS ──────────────────────────────────────────
+// Both renderers refuse WITHOUT a layer by production design and spell their layer vocabulary
+// on the accepted envelope's manifest instead. The two blocks are registered from ONE
+// parameterised builder because their case structure is identical — a copy would let the two
+// drift, and the codex arm must be provably its own rather than an inherited claude judgement,
+// which the builder guarantees by taking each renderer's OWN codes and layer constant.
+describeRenderBoundary(ledger, {
+  boundary: "CLAUDE_RENDER_LAYERS",
+  advisory: layerOf(CLAUDE_RENDER_LAYERS, "SKILLS_ADVISORY"),
+  render: (overrides) => renderClaudeContext(hostile<RenderClaudeContextInput>(renderInput(overrides))),
+  notAdvisory: "CLAUDE_RENDER_SKILL_SNAPSHOT_NOT_ADVISORY",
+  versionUnsupported: "CLAUDE_RENDER_SKILL_SNAPSHOT_VERSION_UNSUPPORTED",
+  taskInvalid: "CLAUDE_RENDER_TASK_CONTEXT_INVALID",
+  tooLarge: "CLAUDE_RENDER_CONTEXT_TOO_LARGE",
+  limitUnknown: "CLAUDE_RENDER_CONTEXT_LIMIT_UNKNOWN",
 });
 
-// ── CODEX_RENDER_LAYERS ───────────────────────────────────────────────────────────────────
-// The second provider's renderer, asserted INDEPENDENTLY: it does not delegate to the Claude
-// one, so a codex refusal carrying a claude code would be an inherited judgement.
-describe("CODEX_RENDER_LAYERS", () => {
-  const boundary = "CODEX_RENDER_LAYERS";
-  const advisory = layerOf(CODEX_RENDER_LAYERS, "SKILLS_ADVISORY");
-  const render = (overrides: Record<string, unknown> = {}): ReturnType<typeof renderCodexContext> =>
-    renderCodexContext(hostile<RenderCodexContextInput>(renderInput(overrides)));
-  const huge = {
-    skillSnapshot: skillSnapshot({
-      skills: [
-        {
-          skillId: "hostile",
-          files: [
-            {
-              path: "big.md",
-              sha256: POISON_DIGEST,
-              byteLength: 8_192,
-              contentBase64: Buffer.alloc(8_192, 0x61).toString("base64"),
-            },
-          ],
-        },
-      ],
-    }),
-  };
-
-  it("BEFORE — an oversized advisory excludes ITS OWN layer and never gains authority", async () => {
-    const outcome = await probeBefore(BOUND, async () => render(huge), async () => render(huge));
-    for (const observed of [outcome.probe, outcome.effect]) {
-      expect((observed as { rendered?: { authority: string } }).rendered?.authority).toBe("NONE");
-      refusedByManifestLayer(ledger, boundary, "BEFORE", advisoryEntry(observed), advisory);
-    }
-  });
-
-  it("AFTER — mandatory context past the bound is refused outright, with no envelope at all", async () => {
-    const outcome = await probeAfter(
-      BOUND,
-      async () => render({ contextLimit: { kind: "CONSERVATIVE_INPUT_BYTES", bytes: 1 } }),
-      async () => render({ contextLimit: { kind: "EXACT_TOKENS", tokens: 4 }, tokenizer: null }),
-    );
-    refusedWithoutLayer(ledger, boundary, "AFTER", outcome.effect, "CODEX_RENDER_CONTEXT_TOO_LARGE");
-    refusedWithoutLayer(
-      ledger, boundary, "AFTER", outcome.probe, "CODEX_RENDER_CONTEXT_LIMIT_UNKNOWN",
-    );
-  });
-
-  it("RACE — a forged snapshot and an oversized advisory contend; neither is admitted", async () => {
-    const outcome = await probeRacing(
-      BOUND,
-      async () => render({ skillSnapshot: skillSnapshot({ advisoryOnly: false }) }),
-      async () => render(huge),
-    );
-    refusedWithoutLayer(
-      ledger,
-      boundary,
-      "RACE",
-      (outcome.left as { value: unknown }).value,
-      "CODEX_RENDER_SKILL_SNAPSHOT_NOT_ADVISORY",
-    );
-    refusedByManifestLayer(
-      ledger,
-      boundary,
-      "RACE",
-      advisoryEntry((outcome.right as { value: never }).value),
-      advisory,
-    );
-  });
+describeRenderBoundary(ledger, {
+  boundary: "CODEX_RENDER_LAYERS",
+  advisory: layerOf(CODEX_RENDER_LAYERS, "SKILLS_ADVISORY"),
+  render: (overrides) => renderCodexContext(hostile<RenderCodexContextInput>(renderInput(overrides))),
+  notAdvisory: "CODEX_RENDER_SKILL_SNAPSHOT_NOT_ADVISORY",
+  versionUnsupported: "CODEX_RENDER_SKILL_SNAPSHOT_VERSION_UNSUPPORTED",
+  taskInvalid: "CODEX_RENDER_TASK_CONTEXT_INVALID",
+  tooLarge: "CODEX_RENDER_CONTEXT_TOO_LARGE",
+  limitUnknown: "CODEX_RENDER_CONTEXT_LIMIT_UNKNOWN",
 });
 
 // ── PROVIDER_USAGE_LAYERS ─────────────────────────────────────────────────────────────────
@@ -402,17 +274,7 @@ describe("CODEX_RENDER_LAYERS", () => {
 // substituted: a placeholder would be an invented value gaining authority.
 describe("PROVIDER_USAGE_LAYERS", () => {
   const boundary = "PROVIDER_USAGE_LAYERS";
-  const handoff = (overrides: Record<string, unknown>): ClaudeTelemetryHandoff =>
-    hostile<ClaudeTelemetryHandoff>({
-      launch: { startedAt: "2026-08-16T00:00:00.000Z", completedAt: "2026-08-16T00:00:01.000Z" },
-      sequence: { known: true, value: 1 },
-      stdoutReceiptDigest: { known: true, value: POISON_DIGEST },
-      providerRunRef: REF,
-      tokens: {},
-      telemetryRefusal: null,
-      ...overrides,
-    });
-
+  const sequenceUnknown = { code: "PROVIDER_USAGE_SEQUENCE_UNKNOWN", layer: USAGE_INPUT };
   it("BEFORE — an unobserved interval refuses at USAGE_INPUT rather than substituting one", async () => {
     const outcome = await probeBefore(
       BOUND,
@@ -436,13 +298,9 @@ describe("PROVIDER_USAGE_LAYERS", () => {
       async () =>
         normalizeProviderUsage(handoff({ stdoutReceiptDigest: { known: false } }), { priors: [] }),
     );
-    ledger.refused(boundary, "AFTER", outcome.effect, {
-      code: "PROVIDER_USAGE_SEQUENCE_UNKNOWN",
-      layer: USAGE_INPUT,
-    });
+    ledger.refused(boundary, "AFTER", outcome.effect, sequenceUnknown);
     ledger.refused(boundary, "AFTER", outcome.probe, {
-      code: "PROVIDER_USAGE_RECEIPT_UNKNOWN",
-      layer: USAGE_INPUT,
+      code: "PROVIDER_USAGE_RECEIPT_UNKNOWN", layer: USAGE_INPUT,
     });
   });
 
@@ -454,13 +312,9 @@ describe("PROVIDER_USAGE_LAYERS", () => {
       async () => normalizeProviderUsage(handoff({ sequence: { known: false } }), { priors: [] }),
     );
     ledger.refusedSide(boundary, outcome.left, {
-      code: "PROVIDER_USAGE_PRIOR_UNREADABLE",
-      layer: USAGE_INPUT,
+      code: "PROVIDER_USAGE_PRIOR_UNREADABLE", layer: USAGE_INPUT,
     });
-    ledger.refusedSide(boundary, outcome.right, {
-      code: "PROVIDER_USAGE_SEQUENCE_UNKNOWN",
-      layer: USAGE_INPUT,
-    });
+    ledger.refusedSide(boundary, outcome.right, sequenceUnknown);
   });
 });
 
@@ -487,7 +341,7 @@ describe("PROVIDER_RUN_LEDGER_LAYERS", () => {
       async () => decodeProviderRunRecord(hostile<unknown>(Uint8Array.from([0x7b, 0x00]))),
       async () => decodeProviderRunRecord("not-a-record"),
     );
-    const unreadable = { code: "PROVIDER_RUN_RECORD_UNREADABLE", layer: CODEC };
+    const unreadable = { code: "PROVIDER_RUN_BYTES_MALFORMED", layer: CODEC };
     ledger.refused(boundary, "AFTER", outcome.effect, unreadable);
     ledger.refused(boundary, "AFTER", outcome.probe, unreadable);
   });
@@ -496,29 +350,50 @@ describe("PROVIDER_RUN_LEDGER_LAYERS", () => {
     const outcome = await probeRacing(
       BOUND,
       async () => encodeProviderRunRecord(hostile<unknown>([])),
-      async () => providerRunRefusal("PROVIDER_RUN_DIGEST_MISMATCH", "PROVIDER_RUN_CODEC"),
+      async () => providerRunUnknown("PROVIDER_RUN_DIGEST_MISMATCH", "PROVIDER_RUN_CODEC"),
     );
     ledger.refusedSide(boundary, outcome.left, malformed);
     ledger.refusedSide(boundary, outcome.right, {
-      code: "PROVIDER_RUN_DIGEST_MISMATCH",
-      layer: CODEC,
+      code: "PROVIDER_RUN_DIGEST_MISMATCH", layer: CODEC,
     });
   });
 });
 
-describeSliceInvariants("provider launch group", ledger, OWNED, LAUNCH_SECRETS);
-
-// The two blind handoff shapes, pinned as DISTINCT. Registered here rather than folded into a
-// boundary block because it is the trap this whole file is built around: nothing branches on
-// `ok`, and collapsing the two shapes would lose which of them happened.
+// ── THE BLIND-HANDOFF TRAP ────────────────────────────────────────────────────────────────
+// The defining trap of this axis, driven through the REAL seam. `launchClaudeWithTelemetry`
+// answers `ok: true` for a launcher that REFUSED, so nothing below branches on `ok`.
 describe("provider launch group — the blind-handoff trap", () => {
-  it("keeps TELEMETRY_LAUNCH_REFUSED and TELEMETRY_LAUNCH_NOT_ATTEMPTED distinguishable", () => {
-    expect(AMBIGUOUS_STREAM).toContain("claude-b");
-    expect(OUT_OF_ORDER_STREAM.indexOf("result")).toBeLessThan(OUT_OF_ORDER_STREAM.indexOf("init"));
-    const refusals = ledger.entries.filter((entry) => entry.boundary === "PROVIDER_TELEMETRY_LAYERS");
-    expect(refusals.length).toBeGreaterThan(0);
-    // No telemetry refusal here reports a terminal outcome, so none of them upgraded a
-    // truth class on the strength of provider bytes.
-    expect(refusals.filter((entry) => entry.admitted)).toEqual([]);
+  const boundary = "PROVIDER_TELEMETRY_LAYERS";
+
+  it("reports a REFUSED launch as ok:true with blind UNKNOWN facts, never as a failure", async () => {
+    const result = await launchClaudeWithTelemetry(
+      hostile({ providerRunRef: REF, request: null }),
+    );
+    // THE TRAP: a case asserting `ok === false` here would never fire.
+    expect(result.ok).toBe(true);
+    const handoff = (result as unknown as { handoff: Record<string, unknown> }).handoff;
+    expect(handoff["terminal"]).toBe("REFUSED");
+    expect(handoff["infrastructure"]).toBe("LAUNCH_REFUSED");
+    // Nothing was observed, so no fact may claim to be known.
+    expect((handoff["sequence"] as { known: boolean }).known).toBe(false);
+    ledger.refused(boundary, "AFTER", handoff["telemetryRefusal"], {
+      code: "TELEMETRY_LAUNCH_REFUSED", layer: layerOf(PROVIDER_TELEMETRY_LAYERS, "TELEMETRY_LAUNCH"),
+    });
+  });
+
+  it("keeps the two blind shapes DISTINCT members of the vocabulary, never collapsed", () => {
+    expect(PROVIDER_TELEMETRY_CODES as readonly string[]).toContain("TELEMETRY_LAUNCH_REFUSED");
+    expect(PROVIDER_TELEMETRY_CODES as readonly string[]).toContain("TELEMETRY_LAUNCH_NOT_ATTEMPTED");
+    expect(PROVIDER_TELEMETRY_MESSAGES.TELEMETRY_LAUNCH_REFUSED).not.toBe(
+      PROVIDER_TELEMETRY_MESSAGES.TELEMETRY_LAUNCH_NOT_ATTEMPTED,
+    );
+  });
+
+  it("refuses a malformed run ref BEFORE any launch, the one route to ok:false", async () => {
+    const result = await launchClaudeWithTelemetry(hostile({ providerRunRef: 1, request: null }));
+    expect(result.ok).toBe(false);
+    ledger.refused(boundary, "BEFORE", result, { code: "TELEMETRY_RUN_REF_MALFORMED", layer: INPUT });
   });
 });
+
+describeSliceInvariants("provider launch group", ledger, OWNED, LAUNCH_SECRETS);

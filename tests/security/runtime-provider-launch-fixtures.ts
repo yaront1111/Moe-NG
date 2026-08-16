@@ -13,8 +13,13 @@ import { createHash } from "node:crypto";
 
 import { expect } from "vitest";
 
+import type { ClaudeTelemetryHandoff } from "../../packages/runner/src/providers/telemetry/claude-telemetry-launch.js";
 import type { ProviderTelemetryLayer } from "../../packages/runner/src/providers/telemetry/provider-telemetry-contracts.js";
+import { refusedWithoutLayer } from "./runtime-provider-ledger.js";
 import type { Arm, Ledger } from "./runtime-provider-ledger.js";
+
+/** Re-exported so the render cases import their two recorders from one place. */
+export { refusedWithoutLayer };
 
 /** A hostile capture the parser will refuse. Fields mirror `ClaudeStreamEvidence` exactly, so
  *  a case can flip ONE of them and leave the earlier gates satisfied. */
@@ -44,32 +49,72 @@ export function capture(text: string): Capture {
  *  telemetry case that is NOT about the input layer carries this, so `TELEMETRY_INPUT` cannot
  *  answer first and the arranged layer is provably the one that did. */
 export const GOOD_RUN_REF = Object.freeze({
+  provider: "claude",
   runRef: "run-hostile-0001",
   effectIntentId: "intent-hostile-0001",
   attemptRef: "attempt-hostile-0001",
+  epoch: 1,
 });
 
-/** One well-formed claude stream line. `type`/`subtype` are what the parser frames on. */
-export const initLine = (model: string): string =>
-  JSON.stringify({ type: "system", subtype: "init", model });
+/** A well-formed launch selection: exactly the keys `snapshotLaunchSelection` accepts, with
+ *  every digest a real 64-hex. Cases mutate ONE field so the shape gate cannot answer first. */
+export const GOOD_SELECTION = Object.freeze({
+  provider: "claude",
+  selectedModelId: "claude-opus-5",
+  modelSnapshotKind: "DATED_SNAPSHOT",
+  modelSnapshotEvidence: "2026-05-01",
+  reasoningEffort: "high",
+  profileRevisionId: "profile-1",
+  configurationDigest: "b".repeat(64),
+  policyDigest: "c".repeat(64),
+  orchestrationDigest: "d".repeat(64),
+  concurrencyCeiling: 4,
+});
 
-export const resultLine = (extra: Record<string, unknown> = {}): string =>
-  JSON.stringify({ type: "result", subtype: "success", ...extra });
+/** One well-formed claude stream record. `seq` and `schemaVersion` are load-bearing: a record
+ *  without them is a MALFORMED_RECORD anomaly, which would answer for every case below and make
+ *  the deeper layers unreachable. Every stream here is therefore coherent at TELEMETRY_CAPTURE
+ *  and at the anomaly analyser unless the case deliberately breaks one thing. */
+const SCHEMA_VERSION = "claude-stream-json/1";
 
-/** Two init records naming DIFFERENT models: admitted records that disagree, which is a
- *  distinct fact from no record naming a model at all. */
-export const AMBIGUOUS_STREAM = `${initLine("claude-a")}\n${initLine("claude-b")}\n${resultLine()}`;
+export const initLine = (seq: number, model: string, extra: Record<string, unknown> = {}): string =>
+  JSON.stringify({ seq, schemaVersion: SCHEMA_VERSION, type: "system", subtype: "init", model, ...extra });
 
-/** Interleaved and out of order: a terminal result before the stream that produced it. */
-export const OUT_OF_ORDER_STREAM = `${resultLine()}\n${initLine("claude-a")}`;
+export const resultLine = (seq: number, extra: Record<string, unknown> = {}): string =>
+  JSON.stringify({ seq, schemaVersion: SCHEMA_VERSION, type: "result", subtype: "success", ...extra });
+
+/** A stream nothing is wrong with. Cases derive from it so what they break is the only thing
+ *  broken and the layers above the one under test provably cannot answer. */
+export const COHERENT_STREAM = `${initLine(1, "claude-a")}
+${resultLine(2, { num_turns: 1 })}
+`;
+
+/** Two admitted init records naming DIFFERENT models. The stream PARSES — which is the point:
+ *  the model fact stays UNKNOWN rather than one of the two being picked as authority. */
+export const AMBIGUOUS_STREAM =
+  `${initLine(1, "claude-a")}
+${initLine(2, "claude-b")}
+${resultLine(3, { num_turns: 1 })}
+`;
+
+/** Interleaved: sequence 5 arrives before sequence 3. */
+export const OUT_OF_ORDER_STREAM =
+  `${initLine(1, "claude-a")}
+${resultLine(5, { num_turns: 1 })}
+${initLine(3, "claude-a")}
+`;
 
 /** A record claiming a schema this parser version does not accept. */
-export const UNSUPPORTED_SCHEMA_STREAM = JSON.stringify({
-  type: "system",
-  subtype: "init",
-  schemaVersion: "moe-claude-stream/99",
-  model: "claude-a",
-});
+export const UNSUPPORTED_SCHEMA_STREAM =
+  `${initLine(1, "claude-a", { schemaVersion: "moe-claude-stream/99" })}
+${resultLine(2, { num_turns: 1 })}
+`;
+
+/** A record claiming to resume a session this capture never contained. */
+export const RESUMED_STREAM =
+  `${initLine(1, "claude-a", { resumedFrom: "sess-0" })}
+${resultLine(2, { num_turns: 1 })}
+`;
 
 /**
  * Record a telemetry refusal. `layer` is REQUIRED and taken from the boundary's own vocabulary
@@ -116,33 +161,23 @@ export function refusedByManifestLayer(
   );
 }
 
-/**
- * Record a refusal from a surface that reports NO layer of its own.
- *
- * Both render contracts are exactly that by production design: `claudeFailure`/`codexFailure`
- * return `{ok, code, message}` and the layer vocabulary lives on the accepted envelope's
- * manifest instead. The absence is ASSERTED rather than assumed, so a layer that starts being
- * reported reddens here and forces the case to pin it; and every such boundary ALSO carries a
- * manifest-attributed case above, so its layer vocabulary is never left unexercised.
- */
-export function refusedWithoutLayer(
-  ledger: Ledger,
-  boundary: string,
-  arm: Arm,
-  actual: unknown,
-  expectedCode: string,
-): void {
-  const record = actual as Record<string, unknown>;
-  expect(record["ok"]).toBe(false);
-  expect(record["code"]).toBe(expectedCode);
-  expect(record["layer"] ?? record["reasonLayer"]).toBeUndefined();
-  // No envelope at all: a refused render must not hand back a partially rendered one.
-  expect(record["rendered"]).toBeUndefined();
-  ledger.record(boundary, arm, String(record["message"] ?? ""));
-}
-
 /** An advisory skill snapshot. Cases mutate ONE field so the gate above the one under test
  *  cannot answer: version, then advisory-authority, then task ref, then bounds. */
+export const OVERSIZED_SKILL = Object.freeze({
+  skillId: "hostile",
+  version: "1",
+  origin: "hostile",
+  bundleDigest: "e".repeat(64),
+  files: Object.freeze([
+    Object.freeze({
+      path: "big.md",
+      sha256: createHash("sha256").update(Buffer.alloc(8_192, 0x61)).digest("hex"),
+      byteLength: 8_192,
+      contentBase64: Buffer.alloc(8_192, 0x61).toString("base64"),
+    }),
+  ]),
+});
+
 export const skillSnapshot = (overrides: Record<string, unknown> = {}): unknown => ({
   rendererInputVersion: "moe-skill-renderer-input/1",
   authority: "NONE",
@@ -159,6 +194,19 @@ export const renderInput = (overrides: Record<string, unknown> = {}): unknown =>
   tokenizer: null,
   ...overrides,
 });
+
+/** A provider-run handoff whose interval, sequence and receipt are ALL observed, so the usage
+ *  normalizer's earlier arms provably cannot answer. Cases blank exactly one of them. */
+export const usageHandoff = (overrides: Record<string, unknown>): ClaudeTelemetryHandoff =>
+  ({
+    launch: { startedAt: "2026-08-16T00:00:00.000Z", completedAt: "2026-08-16T00:00:01.000Z" },
+    sequence: { known: true, value: 1 },
+    stdoutReceiptDigest: { known: true, value: POISON_DIGEST },
+    providerRunRef: GOOD_RUN_REF,
+    tokens: {},
+    telemetryRefusal: null,
+    ...overrides,
+  }) as unknown as ClaudeTelemetryHandoff;
 
 /** Hostile values re-checked by the message-hygiene property. */
 export const POISON_PATH = "C:\\Users\\forged\\provider\\stdout.jsonl";

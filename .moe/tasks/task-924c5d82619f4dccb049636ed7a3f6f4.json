@@ -110,8 +110,8 @@
       "completedAt": "2026-08-16T13:33:12.685Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-ce3ba361",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -123,7 +123,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T01:59:34.102Z",
-  "updatedAt": "2026-08-16T13:34:39.079Z",
+  "updatedAt": "2026-08-16T13:44:16.279Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
@@ -132,7 +132,9 @@
     "firstClaimAt": "2026-08-16T12:27:00.619Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T13:44:16.279Z",
+    "wallClockMs": 4635660
   },
   "stepsCompleted": [
     "step-1",
@@ -180,5 +182,8 @@
     "tests/security/hostile-harness.ts",
     "tests/security/integrity-boundaries.security.ts",
     "tests/security/integrity-hostile-cases.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T13:44:16.279Z",
+  "reviewCompletedAt": "2026-08-16T13:44:16.279Z",
+  "reviewSummary": "APPROVED at HEAD f7755b1. Re-ran task.verification verbatim: EXIT=0, Tests 58 passed (58), matching the recorded outputTail. `pnpm test:security` EXIT=1 but dies at its tsc leg on a peer's live-edited runtime-provider-launch.security.ts, so I ran the vitest leg alone: Tests 13 failed | 298 passed (311) vs the 48 baseline. All 13 failures foreign (roster ratchet owned by tasks 44d48/b9378 per governor 13:36; 9 in the peer's runtime-provider slice). Zero failures in the owned suite. `pnpm typecheck` EXIT=1 with exactly one error TS, in the peer's foundation-verification-service.test.ts. HEAD-minus-merge-base failing paths intersected with owned paths = EMPTY. THREE INDEPENDENT DRILLS (different boundaries from the worker's five), each restored and blob-hash-verified: (1) recovery-completion.ts:151 digest binding dropped -> named forgery case red, \"expected RECOVERY_COMPLETION_DIGEST_MISMATCH, observed RECOVERY_COMPLETION_APPROVAL_INVALID\", landing on assertRefusedWith AFTER the reseal half passed; (2) authenticate-session.ts:204 isCurrentGeneration killed -> named case + per-side race assertion + THE WHOLE-SLICE INVARIANT red (\"expected [ { ok: true, facts: ... } ] to deeply equal []\"), proving it is not vacuous; (3) one boundary's cases dropped -> roster sweep red naming RECOVERY_KEY_PROVIDER_LAYER, proving completeness reads the roster. DoD 1-6 evidenced: 13 roster entries x BEFORE/AFTER/RACE with per-constant arm counts and both-direction set equality; every layer via layerOf/soleLayer over the boundary's own constant; 7 forgeries reseal through production with the two-half assertion and a pinned reseal set; asLayered is a spread-preserving projection, so no admission launders past the invariant. Shared artifacts untouched. No secret asserted or logged; 0 leaked hostile roots in the real Node tmpdir after a failing run. 213+1208 lines: the cap is per PRODUCTION file. f7755b1 is the hook's whole-tree commit carrying no owned path."
 }

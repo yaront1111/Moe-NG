@@ -1,131 +1,142 @@
-# task-b937811e — Benchmark telemetry harness — DELIVERED (was: blocked twice)
+# task-b937811e — Benchmark telemetry harness — FIX ROUND DELIVERED (reopen 1)
 
-Landed 2026-08-16 by worker-0cd13358. Commits `f65fbde` (harness) + `002497c` (hardenings).
-Gate: `pnpm --filter @moe/benchmark test` -> **`Test Files 4 passed (4)` / `Tests 50 passed (50)`**, EXIT=0.
+Fixed 2026-08-16 by worker-ad55ab67. Commit `f70786f` (9 files, benchmark-only).
+Gate: `pnpm --filter @moe/benchmark test` -> **`Test Files 6 passed (6)` / `Tests 55 passed (55)`** EXIT=0.
+Prior round's memory (harness design, 8 original drills, the vacuous-gate closure) is in
+this file's git history and remains accurate — **do not re-litigate the gate, it is closed.**
 
-## THE VACUOUS GATE IS CLOSED — quote this pair, it is the whole point
+## What QA rejected, and what fixed it
 
-| when | output | exit |
-|---|---|---|
-| before | `No projects matched the filters in "D:\projexts\moe-next"` | **0** |
-| after | `Test Files 4 passed (4)` / `Tests 50 passed (50)` | 0 |
+`RECORD_SHAPE` guarded only the top-level KIND of containers the projector then read INTO.
+See `mem:gotcha-container-guarded-by-kind-only-leaks-known-undefined` for the defect shape.
 
-Three prior audits carried this hazard. `packages/benchmark` simply did not exist, and
-`pnpm --filter` on an absent package exits 0. Positive control run every time:
-`pnpm --filter @moe/coordination test` -> `Tests 42 passed (42)`. See
-`mem:pnpm-filter-nonexistent-package-exits-0`.
+**All six findings reproduced against production before touching code** — a throwaway
+`.test.ts` spreading variants of `completeRunRecordFixture()` through `projectBenchmarkRun`,
+values forced out via an assertion diff with an `undefined -> "<<undefined>>"` replacer
+(vitest swallows `console.log` in a passing test, and plain `JSON.stringify` erases the
+finding entirely).
 
-## The design question nobody had answered: the INPUT BOUNDARY
-
-`ProviderRunRecord` lives at `apps/daemon/src/telemetry/provider-run-contracts.ts:94`.
-**A package cannot import from an app**, so the harness cannot take it by reference.
-
-Resolution shipped: the harness accepts **bounded plain data** and validates **shape only**,
-pinning `PROJECTED_RECORD_VERSION = "moe-provider-run-record/1"` as *its own literal*.
-That duplication IS the seam — drill 6 (bump the fixture's version, leave the literal)
-reddens **37 tests**, all `BENCHMARK_RECORD_VERSION_UNRECOGNISED@BENCHMARK_VERSION`.
-
-Deliberately inverted from the daemon's rule ("type every field from its producing
-package's root"). That rule protects bytes being WRITTEN; this package only READS bytes
-already sealed. Closed vocabularies (`terminal`, `coverage`, `truthClass`) are typed
-`string`, never re-listed — re-listing would entitle this package to an opinion the codec
-already formed.
-
-## Package shape (zero dependencies, by design)
-
-`packages/benchmark`, no deps block at all. Every import is a relative sibling or `vitest`.
-No `@moe/store`, no reach into `apps/**`. Scripts copied from `packages/coordination`:
-`test: "vitest run --root ../.. packages/benchmark/src"` — the `--root ../..` is
-load-bearing (`mem:gotcha-store-focused-vitest-needs-root-two-up`).
+**Fix = one guard family in admission.** The projector, cell minters and cost module are
+BYTE-IDENTICAL to what QA reviewed. Deliberately NOT patched at `producerUnknownCell`:
+that would put a second authority downstream of the first, free to disagree about one field.
 
 | module | lines | role |
 |---|---|---|
-| `benchmark-record-contracts.ts` | 209 | plain-data mirror + version literal + `PROJECTED_RECORD_KEYS` |
-| `benchmark-projection-vocabulary.ts` | 130 | 5 codes, 4 layers, 5 unknown-bases, 2 cost-bases, `BenchmarkValue<T>` |
-| `benchmark-record-admission.ts` | 142 | the four guards |
-| `benchmark-projection-cells.ts` | 62 | **every UNKNOWN in the package is built here** |
-| `benchmark-cost-projection.ts` | 87 | cost rows + counts |
-| `benchmark-run-projection.ts` | 213 | `projectBenchmarkRun`, the column types |
-| `benchmark-record-fixture.ts` | 179 | deeply-frozen admissible fixtures |
+| `benchmark-field-primitives.ts` | 97 | isPlainRecord, text/nullable helpers, isProducerUnknown, isProjectedText/Quantity, isObservationOrNull |
+| `benchmark-container-shapes.ts` | 166 | one predicate per container the projector reads into |
+| `benchmark-record-admission.ts` | 142 -> 110 | now only the guard ORDER and its table |
 
-Each `.ts` has the repo's one-line `.js` bridge; `index.ts` is the entry and takes none.
+**No new codes.** A nested failure is the same condition as a top-level one:
+`BENCHMARK_RECORD_FIELD_MALFORMED@BENCHMARK_SHAPE`; the cost-row binding is
+`BENCHMARK_ROW_BASIS_ABSENT@BENCHMARK_ROW` because rows are read at the row layer.
+Splitting them would leave a frozen member without a distinct producer.
 
-## Guard order is load-bearing
+## THE TRAP IN THIS FIX — read before touching the guards
 
-`INPUT` (plain record?) -> `VERSION` -> `SHAPE` (present, then kind) -> `ROW`.
-`recordVersion` is **deliberately absent from the shape table** so a field complaint can
-never answer for a schema move. Version-before-shape because an unrecognised schema means
-the harness cannot know which fields to expect.
+The mirror-image failure of the defect: **a guard demanding a field the producer never
+emits refuses every real record, and no fixture in this package would catch it.** Every
+fixture here is hand-written, so over-strictness is invisible to the suite.
 
-## Fixture constants are chosen to be DISCRIMINATING
+`ClaudeTelemetryLaunchFacts` carries an `exit` field this package does NOT project.
+The guards therefore iterate a **fixed key list and ignore unlisted fields** — never an
+exact key-set check. A test drives a launch carrying `exit` and asserts it still PROJECTS,
+pinning the over-strict direction too.
 
-- daemon monotonic delta **12**, wall delta **30** — a wall-derived duration is a different number
-- launcher stamps hours from the daemon's — a mixed-observer duration came out **-1786873370**
-- quantity **4** x **1500** micros — a derived **6000** appears nowhere in the record
+Verified field-by-field at source, not inferred: `ProviderRunRef`,
+`ClaudeTelemetryLaunchFacts`, `ClaudeLaunchSelection`, `ClaudeObservedModel`,
+`ClaudeTokenObservations`, `ClaudeStepObservations`, `LayeredIssue`,
+`ProviderTelemetryRefusal`, `PricebookBinding` — then confirmed at the composition site
+`apps/daemon/src/activation/activation-run-commit.ts:200-218`, which writes exactly this
+shape taking each field verbatim from the handoff.
 
-Without that separation drills 2 and 5 could have passed by coincidence.
+## Three cases I added BEYOND QA's list, same defect class
+
+- `upstreamRefusal:{}` and `usageRefusals:[{}]` — a refusal column whose `code`/`layer` are
+  `undefined` names no authority. Manifestation 2, relocated into the refusal columns.
+- `pricebookBinding:{}` — `costBasis` reports PRICEBOOK_BINDING against a binding naming no
+  pricebook revision. A cost basis with nothing bound to it; a cost-class DoD item.
+
+## Tests: two halves, and neither works alone
+
+- `benchmark-nested-shape-admission.test.ts` (181) — 21-case sweep, each pinning exact
+  code+layer. Outcome rendered as ONE STRING per case: `PROJECTED` / `THREW:TypeError` /
+  `CODE@LAYER`, compared as a single map. **That rendering is the point** — a test
+  asserting only "did not project" passes on a crash, and QA issue 4 is precisely that a
+  throw carries no code and no layer. See `mem:a-crash-is-not-a-refusal`.
+- `benchmark-cell-invariant.test.ts` (142) — walker asserting the invariant in BOTH
+  directions at any depth, over a pinned cell count of **127** (32 complete + 31 unobserved
+  + 32 + 32; the unobserved arm carries one usage row, not two).
+
+A sweep enumerates only the shapes someone thought of; a walker over complete fixtures can
+never see a hole. Both, or the rule detaches.
+
+**The walker caught a bug in its own first draft**: I required a value from EVERY cell,
+which inverts half the rule. It reddened immediately on `settings.achievedConcurrency` and
+`costClass[1].quantity`. The rule is directional and is now ONE field,
+`valueKeyMatchesKnown` — known must carry a value, unknown must carry no `value` key.
 
 ## Eight drills, all red on the intended assertion
 
-| # | mutation | reddened |
+D1 launch guard -> bare kind (sweep; diff flips EXACTLY `launch:{}` and
+`launch startedAt is a number`, nothing else) · D2 declared guard -> bare kind · D3
+`isProducerUnknown` drops code/layer · D4 `isProjectedText` known arm accepts missing value ·
+D5 `isRunRef` -> bare kind · D6 `isPricebookBindingOrNull` -> `return true` (reddens ONLY the
+ROW test, confirming layer attribution) · **D7 = QA's requested drill** · D8 regression
+re-run of the prior round's `nullableCell` -> `knownCell(0)`, still reddens 4 tests.
+
+**D7 is the one that matters.** Post-fix the walker CANNOT see `launch:{}` — admission
+refuses it first, by design — so exercising the walker on that input requires reverting the
+guard. Two-file drill, disclosed as such: with the launch guard reverted AND `launch:{}`
+added to the walker's arms, the walker names all nine leaked cells individually —
+`timing.launcherStartedAt`, `timing.launcherCompletedAt`, and the seven
+`reproducibility.*` digests, each `valueKeyMatchesKnown: false`. Exactly QA's nine.
+
+## Disclosed, NOT repaired
+
+1. **Theoretical crash**: a revoked Proxy makes `Array.isArray` throw inside
+   `isPlainRecord`, escaping `projectBenchmarkRun` without a code. Unreachable from decoded
+   durable data. The available fix is a catch-all that would report an internal projector
+   bug as `FIELD_MALFORMED` — blaming the input for the harness's own fault. Misattributed
+   evidence is worse than a crash, so it stays.
+2. **Two record types, one version string.** @moe/runner exports its OWN
+   `ProviderRunRecord` (`packages/runner/src/providers/telemetry/provider-run-record.ts:210`)
+   with a different shape (`identity`, `model`, `decisionDigests`, `runtimeEvidence`) sharing
+   `PROVIDER_RUN_RECORD_VERSION` with the daemon's. This harness mirrors the DAEMON's, which
+   is the one committed; the daemon uses the runner builder only for `.usage`. Foreign, but
+   it weakens the version seam repo-wide.
+
+## Gate legs, each run separately
+
+| leg | output | exit |
 |---|---|---|
-| 1 | fill absent `observedModel` from `declared` | "never fills an absent observed model from the declared selection" |
-| 2 | mix `launch.startedAt` with `observedEnd` | "derives its one duration from the daemon monotonic pair and from nothing else" (`-1786873370` vs `12`) |
-| 3 | delete the `bootId` guard | "refuses a duration when the two observations carry different boot identities" |
-| 4 | `nullableCell` null -> `knownCell(0)` | "renders no unobserved reading anywhere in the projection as a zero" (+3 more) |
-| 5 | add `actualCostMicros` | "exposes no derived price on a cost row" (key-set) |
-| 6 | bump fixture `recordVersion` | 37 tests, all the version seam |
-| 7 | `Number.isFinite` -> `typeof "number"` | "refuses a required field that is present but the wrong shape" |
-| 8 | drop `deepFreeze` | "refuses in-place mutation of a fixture at every depth" |
+| `--filter @moe/benchmark test` | `Test Files 6 passed (6)` / `Tests 55 passed (55)` | 0 |
+| positive control `@moe/coordination` | `Tests 42 passed (42)` | 0 |
+| negative control, absent package | `No projects matched the filters` | **0** |
+| `--filter @moe/benchmark typecheck` | no diagnostics | 0 |
+| repo-wide `pnpm typecheck` | zero `error TS` | 0 |
 
-**Drill 3 attribution matters**: the red carried `value: 12` — a *real* monotonic delta —
-proving both observations were present, so the failure is the boot rule and not a missing
-field. Both conditions yield UNKNOWN, so a red for the wrong reason would have left the
-rule untested. The test asserts `daemonStart.known`/`daemonEnd.known` are true *before*
-asserting the duration is unknown, which is what forces that.
+Repo-wide is EXIT 0, so the path-attributed baseline is trivially empty — no foreign red.
 
-Drill 4 reddening four guards at once is the payoff of building every UNKNOWN in one
-function — one edit, four independent assertions answer.
+## Commit hygiene
 
-## Two holes adversarial review found (neither was in the plan)
-
-1. **Non-finite readings.** `typeof x === "number"` accepts `NaN`. A NaN monotonic would
-   have flowed into the one subtraction and published `{known:true, value:NaN}` — a value
-   in no record, wearing an observation's authority. Now `Number.isFinite` on both clock
-   readings, measurement quantity and row sequence. It needed **no new codes**: a bad
-   observation is `FIELD_MALFORMED@SHAPE`, a bad row is `ROW_BASIS_ABSENT@ROW`.
-2. **Shared mutable fixtures.** The `FIXTURE_*` constants were embedded by reference in
-   every returned record. Now deeply frozen — which is also the more faithful shape, since
-   `composeProviderRunRecord` freezes what it commits.
-
-## FOREIGN SWEEP — disclosed, not repaired
-
-`git log --diff-filter=A` names **`11b78f2`** (`task-6cbff010`) as the ADDER of my
-package.json, tsconfig.json, contracts, vocabulary and index — a whole-tree commit that
-captured them while untracked. My `pnpm-lock.yaml` importer went with it and IS in HEAD
-(`git show HEAD:pnpm-lock.yaml` line 124, `packages/benchmark: {}`). Per project rail:
-never amend, never reset, never mint a claiming commit.
-
-**QA must review by base-ref diff, not by commit:**
-```
-git diff cf272f67c3e34fe1d8c4dd00675512c67f165c05..HEAD -- packages/benchmark pnpm-lock.yaml
-```
+`f70786f`, explicit pathspec, 9 files. Untracked deliverables were `git add`ed FIRST —
+a commit pathspec alone stages nothing untracked
+(`mem:git-commit-pathspec-cannot-name-untracked-file`). `git show --name-only` filtered for
+non-benchmark paths returns EMPTY. The tree also held a parallel session's work under
+apps/daemon/src/evidence, packages/runner and tests/security — untouched.
+`pnpm-lock.yaml` needed no change; its `packages/benchmark: {}` importer is already in HEAD.
+`git status --porcelain -- packages/benchmark` EMPTY after commit, so committed bytes ARE
+the gated bytes.
 
 ## For the next agent
 
-Consumers named at planning time (Clause 1): **task-3a34adca** (corpus freeze) then
-**task-8af4562f** (campaign). Both are now unblocked on this.
+Public surface unchanged: `projectBenchmarkRun(input: unknown)`. The new predicates are
+**deliberately NOT exported from index.ts** — a consumer building a second admission path
+from them would be the competing authority the boundary exists to prevent.
 
-Public surface: `projectBenchmarkRun(input: unknown)` -> `{ok:true, projection}` or a
-refusal carrying `code`+`layer`. Columns: `runIdentity`, `modelEvidence`, `effort`,
-`settings`, `timing`, `counts`, `costClass`, `evidenceReceipt`, `reproducibility`,
-`refusals{scheduler,provider}`.
+**Do not add scoring to this package.** Consumers, unchanged: **task-3a34adca** (corpus
+freeze) then **task-8af4562f** (campaign).
 
-**Do not add scoring to this package.** No ranking, no claim decisions, no corpus bytes.
-A projector holding a verdict decides the claim it exists to measure. That boundary is
-written into the index header on purpose.
-
-Residual from `mem:task-task-d3239529aab54f98b31bfd3662e316bf-handoff` is still open and
-is NOT this task's: `projectUsage`'s `usage.ok` arm is unreachable without an OBSERVED
-launch, so no real `NormalizedMeasurement` has ever reached durable bytes. This harness
-projects that shape correctly from fixtures, but nothing yet proves production emits it.
+Residual still open and NOT this task's: `projectUsage`'s `usage.ok` arm is unreachable
+without an OBSERVED launch, so no real `NormalizedMeasurement` has reached durable bytes.
+This harness projects that shape correctly from fixtures; nothing proves production emits it.
