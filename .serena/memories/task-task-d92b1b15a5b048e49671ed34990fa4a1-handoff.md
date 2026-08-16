@@ -1,25 +1,35 @@
-# task-d92b1b15a5b048e49671ed34990fa4a1 architect handoff
+# task-d92b1b15a5b048e49671ed34990fa4a1 handoff (worker-1fe6c848, 2026-08-16 reopen 1)
 
-Approved six-step/eight-file reopen plan at HEAD `e9b379681545ed38da88da17c76f477db4f03191`.
+Steps 1-5 DONE and green. Step 6 (final gate) BLOCKED on foreign red inside the two owned packages.
 
-Fresh measurements:
-- All eight owned paths were clean.
-- Prior d92 behavior is committed in `2e688c9`: replay filters to activation events and preserves digest comparison; real file-backed literal 6,500-event BOUND and late-second-match ambiguity tests already exist.
-- `activation-ledger-reader.ts` still has the rejected unbounded `for (;;)`; a production-surface advancing fake timed out (`timeout` exit 124).
-- No `readEventHorizon` exists. Add it via `EventReadModelStore` -> `DecisionLedgerCore` -> `SqliteEventStore`, using `readSnapshotOperation`, binding assertion, and lossless `CAST(COALESCE(MAX(global_position),0) AS TEXT)`.
-- Daemon edge already exists in manifest + lock; after API lands, a trap-deleted in-app bare `@moe/store` probe must typecheck.
-- Capture H exactly once and scan contiguously through it. Explicit QA contract: gaps, >H, premature end, or `hasMore=true` at H => literal `UNKNOWN / FOUNDATION_BINDING_SCAN_INCOMPLETE / FOUNDATION_ACTIVATION_BINDING`; thrown horizon/page => EVIDENCE_UNREADABLE. H=3 moving fake must stop after one horizon read and three pages; deleting the guard must watchdog-timeout/red.
-- Preserve exactly-one activation, no early success, tail replay, >6,400 reach, and late ambiguity.
-- Collision: `task-69c2c9e7ee084afea16c2b2ff935f459` owns the same four store files. Architect/governor were messaged to serialize it after d92 DONE.
-- Near hard caps: reader 335 lines, sqlite-event-store 368; keep compact and <400.
+## What landed this session (steps 3-5)
 
-Exact final gate and mutation drills are embedded in the approved plan. Performance/index follow-up remains `task-16d5bc3a10864351adf5be10dfa7df00`.
+Working tree at HEAD `d447a34`, task merge-base `e9b3796`. Two owned files modified, UNCOMMITTED:
+- `apps/daemon/src/activation/activation-ledger-reader.ts` sha256 `45fcc7a963612578e87ce5c46e35efd3f42d36ce761d668faadf5c88fb62e26a`, 375 physical lines
+- `apps/daemon/src/activation/foundation-launch-authority.test.ts` sha256 `7e9ac12ec050ade280f4f4408a4a59a618711cd8fb8be9b4b9dd90c8ba59a3de`
 
-## Reopen worker progress (worker-ce29ffa9, 2026-08-16)
+Out-of-repo byte copies: `/d/tmp/d92-drills/reader.mine.ts` and `/d/tmp/d92-drills/foundation-launch-authority.test.mine.ts`. If a foreign whole-tree commit sweeps them, that is the known hazard - verify by `git diff e9b3796..HEAD -- apps/daemon/src/activation`, not by looking for a commit bearing this task id.
 
-- Steps 1-2 completed on current shared HEAD lineage. Owned WIP is limited to the two horizon tests plus the three store production facades; activation reader remains untouched.
-- TDD RED was nonvacuous: store named horizon test failed `readEventHorizon is not a function`; daemon 3-case run failed ABSENT-vs-UNKNOWN twice and the moving Worker hit its 2s watchdog.
-- Store GREEN: `readEventHorizon()` uses one `readSnapshotOperation`, cached project binding, exact TEXT MAX query, zero special-case, and `requireStoredPositiveBigIntText`; facade forwarding is landed in WIP. Store contract 24/24 and store typecheck exit 0.
-- Step 3 dependency facts (a)/(b) are present: daemon manifest `@moe/store: workspace:*`; lock importer `link:../../packages/store`.
-- Mandatory trap-cleaned bare-import probe was created under `apps/daemon/src`, compiled through the exact daemon typecheck command, and confirmed deleted. The command cannot exit 0 because foreign untracked `apps/daemon/src/review/verifier-receipt-ledger.test.ts` has TS2322 at 46/76. Ownership query got no owner; worker-618633fa independently classified it as foreign and a real raw-gate blocker.
-- Resume step 3 only after that foreign file is type-clean/removed by its owner. Re-run the same trap-cleaned probe to exit 0 before adding `readEventHorizon` to `FoundationBindingStore` or editing `scanForEffect`. Preserve current tests and all foreign bytes.
+Design: `captureHorizon()` reads `store.readEventHorizon()` EXACTLY ONCE (throw -> EVIDENCE_UNREADABLE; non-bigint or negative -> SCAN_INCOMPLETE). The rejected `for (;;)` became `while (cursor < horizon)` requesting `min(SCAN_PAGE_SIZE, H-cursor)`. Per item: position must be exactly the next contiguous value and <= H. Per page: non-empty/progress, `nextCursor === last position`, `hasMore === (position < H)`. No early return on a hit, so a second distinct aggregate still refuses EVIDENCE_AMBIGUOUS.
+
+## Cross-package edge (step 3, all three re-measured fresh)
+(a) `apps/daemon/package.json:22` `"@moe/store": "workspace:*"`. (b) lock importer `apps/daemon` -> `'@moe/store' version: link:../../packages/store`. (c) trap-cleaned probe under `apps/daemon/src` importing the BARE `@moe/store` typechecked exit 0 and was deleted (PROBE_DELETED=YES). The old blockedReason (foreign TS2322 in `apps/daemon/src/review/verifier-receipt-ledger.test.ts`) is DEAD - that file is gone and daemon tsc is exit 0.
+
+## Mutation drills (all restored byte-exact by `cp` from out-of-repo copies, never `git checkout`)
+Baselines: reader `45fcc7a9...`, commit `832cdc13...`.
+1. commit.ts `activations` -> `events`: tailed replay test RED, "TWO activation events as AMBIGUOUS" stayed GREEN.
+2. 64-page ceiling reinstated: literal 6,500-event test RED on `FOUNDATION_BINDING_SCAN_INCOMPLETE`.
+3. all three captured-H comparisons removed: moving-stream test RED at 2021ms `WATCHDOG_TIMEOUT` - QA's exit-124 hang reproduces exactly.
+4a/4b. continuity clause / overshoot clause dropped: hostile-shape test RED both times ('ABSENT' vs 'UNKNOWN').
+4c. contiguity guard's refusal code swapped: RED on the literal code assertion.
+5. return on first match: late-second-match test RED, lost the AMBIGUOUS refusal.
+
+Adversarial review found the five committed hostile cases left BOTH halves of the per-item guard as surviving mutants. Added "positions mislabelled" and "overshoots horizon" and raised the cardinality literal 5 -> 7.
+
+## Why step 6 blocked
+Owned-package typechecks are 0; owned-package TEST legs are 1, both from foreign deterministic red. See `mem:gotcha-foreign-red-inside-your-own-owned-package`. Base probe (my production file reverted to HEAD bytes) reproduced the daemon failures IDENTICALLY, so none of it is mine.
+
+## For the next agent
+Do NOT redo steps 1-5 and do NOT weaken the horizon contract. Re-run the plan's exact gate; if `packages/store/src/recovery-anchor.test.ts` and the two daemon files are green, complete_task immediately with that output. Follow-up performance/index task is `task-16d5bc3a10864351adf5be10dfa7df00`; no index was added here.
+
+Disclosed trade-off (pinned by QA and the approved plan, not a deviation): requiring `hasMore === false` AT H means a concurrent append during a scan makes that lookup refuse UNKNOWN/SCAN_INCOMPLETE rather than answer. Fails closed, retry succeeds; worth weighing in the index follow-up.

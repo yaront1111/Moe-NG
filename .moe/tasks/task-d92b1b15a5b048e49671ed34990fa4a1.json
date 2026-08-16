@@ -60,29 +60,37 @@
     {
       "stepId": "step-3",
       "description": "VERIFY THE CROSS-PACKAGE EDGE, THEN IMPLEMENT THE FINITE DAEMON SCAN. Before consuming the new member, record all three required edge facts: (a) `apps/daemon/package.json` has `@moe/store` in dependencies, (b) the `apps/daemon` importer in `pnpm-lock.yaml` links `../../packages/store`, and (c) in one trap-cleaned command create a temporary `.ts` probe under `apps/daemon/src` that imports `SqliteEventStore` from the BARE specifier `@moe/store`, typechecks `const horizon: bigint = store.readEventHorizon()`, runs `pnpm --filter @moe/daemon typecheck` with exit 0, and deletes the probe even on failure; no probe may remain. If any edge fact is absent, stop/report blocked rather than deep-relative import or silently edit an unowned manifest/lockfile. Add `readEventHorizon(): bigint` to `FoundationBindingStore`. In `scanForEffect`, read/validate H exactly once; H=0n is the finite empty result. While cursor<H request at most `min(SCAN_PAGE_SIZE, H-cursor)`, require every globalPosition to be exactly the next contiguous value and <=H, require nextCursor to equal the last returned position and advance, refuse a false `hasMore` before H, and on reaching H require `hasMore === false`. A horizon/page throw returns exact UNKNOWN/EVIDENCE_UNREADABLE/layer; an invalid/negative H, empty/gapped/duplicate/regressing/overshooting page, mismatched cursor, premature end, or terminal `hasMore` returns exact UNKNOWN/SCAN_INCOMPLETE/layer. Continue evaluating every activation through H so the second distinct aggregate remains exact EVIDENCE_AMBIGUOUS; never return on the first hit. Update typed fakes and make the watchdog/shape cases plus unchanged >6,400 and late-second-match tests green.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-reader.ts",
         "apps/daemon/src/activation/foundation-launch-authority.test.ts",
         "packages/store/src/sqlite-event-store.ts"
       ],
-      "startedAt": "2026-08-15T23:36:10.004Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-reader.ts"
+      ],
+      "note": "Cross-package edge re-verified fresh at HEAD d447a34 (all 8 owned paths clean; task merge-base e9b3796). (a) apps/daemon/package.json:22 \"@moe/store\": \"workspace:*\". (b) pnpm-lock.yaml apps/daemon importer -> '@moe/store' version: link:../../packages/store. (c) trap-cleaned probe apps/daemon/src/zz-d92-horizon-probe.ts imported SqliteEventStore from the BARE specifier and typed `const horizon: bigint = store.readEventHorizon()`; `pnpm --filter @moe/daemon typecheck` exit 0; PROBE_DELETED=YES (the old blockedReason premise is dead - the foreign TS2322 file is gone). Implemented the finite captured-horizon scan: added readEventHorizon(): bigint to FoundationBindingStore; new captureHorizon() reads H exactly ONCE (throw -> EVIDENCE_UNREADABLE; non-bigint or negative -> SCAN_INCOMPLETE); the `for (;;)` is now `while (cursor < horizon)` requesting min(SCAN_PAGE_SIZE, H-cursor); every item must sit at exactly the next contiguous position and <= H; empty/no-progress page, nextCursor !== last position, and hasMore !== (position < H) all refuse SCAN_INCOMPLETE. Contiguity is a real store invariant, not an assumption: sqlite-schema-integrity.ts:190-193 raises STORE_CORRUPT on `minimum_position <> 1 OR ledger_row_count <> maximum_position`. No early return on a hit; the walk still runs to H so a second distinct aggregate is EVIDENCE_AMBIGUOUS. Daemon typecheck exit 0. Focused run apps/daemon `vitest run --root . --config package.json src/activation/foundation-launch-authority.test.ts`: Test Files 1 passed, Tests 33 passed, exit 0 - including named cases \"fails closed for unreadable and invalid event horizons\", \"refuses every hostile page shape inside the captured event horizon\", \"bounds a continuously advancing scan to the captured horizon\" (233ms, was a 2s watchdog timeout), \"answers BOUND on a store holding more than 6,400 global events\", \"still refuses a SECOND matching activation found past the old 6,400 ceiling\". Reader is 375 physical lines (grep -c ''), under the 400 hard split.",
+      "startedAt": "2026-08-15T23:36:10.004Z",
+      "completedAt": "2026-08-16T01:09:00.971Z"
     },
     {
       "stepId": "step-4",
       "description": "PRESERVE THE LANDED REPLAY FIX AND REGRESSION SURFACE. Re-run the existing tailed-aggregate replay test, caller-echo/digest divergence checks, and true-two-activation ambiguity check against the production commit/reader surface; keep the returned durable record, exact refusal code, and exact layer assertions. Do not move filtering into the strict reader (a lone wrong event type must remain EVENT_TYPE_UNEXPECTED), relax exactly-one semantics, change the activation durable format/digest/admission rules, or edit the orchestrator/foundation admission path. Re-run the existing real file-backed 6,500-event BOUND case and late second match beyond the former ceiling without deriving their event count from page constants. Refactor only if necessary to keep each production file below 400 physical lines; do not split on total task LOC.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-commit.ts",
         "apps/daemon/src/activation/activation-ledger-commit.test.ts",
         "apps/daemon/src/activation/activation-ledger-reader.ts",
         "apps/daemon/src/activation/foundation-launch-authority.test.ts"
-      ]
+      ],
+      "note": "Preservation step - no production edit needed; re-verified the landed surface rather than reimplementing it. activation-ledger-commit.ts:158-161 still filters to ACTIVATION_LEDGER_EVENT_TYPE at the COMMIT site and hands the singleton to the strict reader; activation-ledger-reader.ts:60-66 is untouched, so zero events still refuse ABSENT, two still refuse AMBIGUOUS, and a lone wrong-typed event still refuses EVENT_TYPE_UNEXPECTED. Digest cross-check (sealed.digest !== candidateDigest -> ACTIVATION_LEDGER_REPLAY_DIVERGED) unchanged. Durable format, digest/seal discipline, and foundation admission guards untouched. Regression surface, apps/daemon `vitest run --root . --config package.json src/activation`: Test Files 7 passed (7), Tests 94 passed (94), exit 0. Named cases confirmed executed by verbose reporter: \"replays the DURABLE record on an aggregate that also carries its Foundation tail\", \"refuses a drifted candidate on a tailed aggregate, so the stored bytes win\", \"replays the same command by resolving the DURABLE record, not by echoing the caller\", \"still refuses an aggregate carrying TWO activation events as AMBIGUOUS\", plus the literal 6,500-event BOUND case and the late-second-match ambiguity case (both still assert their own literal counts, not page constants). Production line counts (grep -c ''): activation-ledger-reader.ts 375, activation-ledger-commit.ts 227 - both under the 400 hard split, so no refactor was forced.",
+      "startedAt": "2026-08-16T01:09:06.904Z",
+      "completedAt": "2026-08-16T01:09:49.516Z"
     },
     {
       "stepId": "step-5",
       "description": "ADVERSARIAL REVIEW + REQUIRED MUTATION DRILLS. Invoke adversarial-self-review and capture SHA-256 for every production target before each drill; mutate only one invariant at a time, confirm the named production-surface test genuinely reds, then restore from a temporary out-of-repo byte copy and require the original hash (never `git checkout`). Mandatory drills: (1) restore whole-aggregate replay input -> the tailed replay test reds while the exact two-activation guard remains independently pinned; (2) restore the old 64-page ceiling -> the literal 6,500-event test reds on SCAN_INCOMPLETE; (3) delete/bypass the captured-H terminal/liveness guard -> the moving-stream child hits its watchdog and the parent named test reds; (4) weaken continuity/overshoot validation -> a hostile generated case reds on its literal SCAN_INCOMPLETE code AND layer; (5) return on first activation -> the late-second-match test reds on the lost exact ambiguity refusal. Confirm each mutation was actually applied, every generated sweep has its literal nonzero cardinality, restoration is byte-exact, one horizon read/three pages are asserted, no scratch/probe/evidence file remains, and the eight explicit owned paths are the only completion pathspecs. Record follow-up performance task `task-16d5bc3a10864351adf5be10dfa7df00`; do not add an index here.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-commit.ts",
         "apps/daemon/src/activation/activation-ledger-commit.test.ts",
@@ -92,12 +100,18 @@
         "packages/store/src/event-read-model-contract.test.ts",
         "packages/store/src/decision-ledger.ts",
         "packages/store/src/sqlite-event-store.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts"
+      ],
+      "note": "Adversarial self-review found two SURVIVING MUTANTS in my own step-3 work before any drill: the five committed hostile page-shape cases all refuse via the cursor/hasMore checks, so BOTH halves of the per-item guard `event.globalPosition !== position || position > horizon` could be deleted with the suite still green (a page of [pos2,pos3] with nextCursor 2 at H=2 skips a position behind a correct-looking count; a page of [pos1,pos2] at H=1 reads past the horizon). Added two cases that only that comparison can catch - \"positions mislabelled\" and \"overshoots horizon\" - and raised the literal cardinality assertion from 5 to 7. Baseline SHA-256 before drills: reader 45fcc7a963612578e87ce5c46e35efd3f42d36ce761d668faadf5c88fb62e26a, commit 832cdc1333cc188c747aa19217d9d76fadd5a375d225e4bf424b34c66c76a51f; byte copies kept OUT of the repo at /d/tmp/d92-drills, restored by cp (never git checkout) and re-hashed after every drill. DRILL 1 (commit.ts: activations -> events, mutant 3c118ef5...): \"replays the DURABLE record on an aggregate that also carries its Foundation tail\" RED; \"still refuses an aggregate carrying TWO activation events as AMBIGUOUS\" stayed GREEN, so the exactly-one guard is independently pinned. DRILL 2 (reader: 64-page ceiling reinstated, mutant d32c96e4...): \"answers BOUND on a store holding more than 6,400 global events\" RED with +\"code\": \"FOUNDATION_BINDING_SCAN_INCOMPLETE\". DRILL 3 (all three captured-H comparisons removed, mutant 5eed00ed...): \"bounds a continuously advancing scan to the captured horizon\" RED at 2021ms with kind WATCHDOG_TIMEOUT - QA's exit-124 hang reproduces exactly when the horizon bound goes, and the child watchdog keeps vitest itself alive. DRILL 4a (continuity clause dropped) and 4b (overshoot clause dropped): \"refuses every hostile page shape inside the captured event horizon\" RED both times, expected 'ABSENT' to be 'UNKNOWN' - each killed by exactly one of the two new cases. Because 4a/4b red on the status assertion, the code literal never executed, so DRILL 4c swapped that guard's refusal code to EVIDENCE_UNREADABLE: RED with \"expected 'FOUNDATION_BINDING_EVIDENCE_UNREADABLE' to be 'FOUNDATION_BINDING_SCAN_INCOMPLETE'\", pinning the literal code. The layer clause in the same helper runs on every green pass; mutating it would require editing foundation-activation-transition.ts, which is not an owned path. DRILL 5 (return on the first matching activation): \"still refuses a SECOND matching activation found past the old 6,400 ceiling\" RED, expected 'BOUND' to be 'UNKNOWN:FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS'. Every mutation was proved applied by a printed diff/grep and a changed hash; every restore returned reader to 45fcc7a9... and commit to 832cdc13.... Post-drill: activation suite 7 files / 94 tests exit 0, reader 375 lines, no probe/scratch/drill/evidence file anywhere in the repo, and the only modified owned paths are activation-ledger-reader.ts and foundation-launch-authority.test.ts. DISCLOSED TRADE-OFF (not a deviation - QA's rejection and the approved plan both pin it): requiring hasMore === false AT the captured horizon means a concurrent append landing during a scan makes that lookup refuse UNKNOWN/SCAN_INCOMPLETE rather than answer. It fails closed and a retry succeeds, but it is a liveness cost that the index/per-effect-query follow-up task-16d5bc3a10864351adf5be10dfa7df00 should weigh; no index was added here. Also theoretical, pre-existing and unchanged: scanForEffect is not itself wrapped in try/catch, so a store whose page is not iterable would throw rather than refuse - the FoundationBindingStore contract types it away and the real store cannot produce it.",
+      "startedAt": "2026-08-16T01:11:22.356Z",
+      "completedAt": "2026-08-16T01:14:52.510Z"
     },
     {
       "stepId": "step-6",
       "description": "ONE FINAL FOREGROUND VERIFICATION GATE AND EXPLICIT-PATH HANDOFF. First compare repo-wide failure paths at the recorded task merge-base versus HEAD; only a new failing-path delta intersecting the eight owned paths blocks, while any foreign baseline red must be quoted verbatim with exact lines/paths. Then run this exact command once, without pipes or `&&` masking individual legs: `bash -lc 'set +e; pnpm --filter @moe/store typecheck; s1=$?; pnpm --filter @moe/store test; s2=$?; pnpm --filter @moe/daemon typecheck; s3=$?; pnpm --filter @moe/daemon test; s4=$?; pnpm verify:store; s5=$?; pnpm verify:foundation; s6=$?; pnpm typecheck; s7=$?; pnpm test; s8=$?; printf \"STORE_TYPECHECK_EXIT=%s\\nSTORE_TEST_EXIT=%s\\nDAEMON_TYPECHECK_EXIT=%s\\nDAEMON_TEST_EXIT=%s\\nVERIFY_STORE_EXIT=%s\\nVERIFY_FOUNDATION_EXIT=%s\\nROOT_TYPECHECK_EXIT=%s\\nROOT_TEST_EXIT=%s\\n\" \"$s1\" \"$s2\" \"$s3\" \"$s4\" \"$s5\" \"$s6\" \"$s7\" \"$s8\"; test \"$s1\" -eq 0 && test \"$s2\" -eq 0 && test \"$s3\" -eq 0 && test \"$s4\" -eq 0'`. Store/daemon owned-package legs must all be 0 and both Vitest outputs must contain nonzero `Test Files N passed` and `Tests N passed`; exit 0 without counts is unverified. Evaluate the repo/verify legs by the required path-attributed baseline rule, never fabricate green. Recheck production line counts <400 and explicit status/diff over the eight paths; completion must commit/stage only those explicit paths, preserve foreign work, and hand off the exact command output, mutation names/results/hashes, dependency-probe result/deletion, and any disclosed foreign red.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-ledger-reader.ts",
         "apps/daemon/src/activation/activation-ledger-commit.ts",
@@ -107,15 +121,22 @@
         "packages/store/src/event-read-model-contract.test.ts",
         "packages/store/src/decision-ledger.ts",
         "packages/store/src/sqlite-event-store.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-ledger-reader.ts",
+        "apps/daemon/src/activation/foundation-launch-authority.test.ts"
+      ],
+      "note": "Final gate under the governor's 01:22Z RESCOPE (path-attributed baseline). Session HEAD at start 539338f; recorded task merge-base e9b3796. Owned-path status showed only the two daemon files dirty, byte-identical to the drilled hashes (reader 45fcc7a9..., foundation test 7e9ac12e..., commit.ts 832cdc13... = drill baseline, no residue).\n\n(1) OWNED-SUITE LEGS, one foreground command, EXIT 0:\n`bash -lc 'set -e; pnpm --filter @moe/store typecheck; pnpm --filter @moe/daemon typecheck; (cd packages/store && npx vitest run --root ../.. packages/store/src/event-read-model-contract.test.ts); (cd apps/daemon && npx vitest run --root . --config package.json src/activation)'`\nStore contract suite: Test Files 1 passed (1) / Tests 25 passed (25). Activation suites: Test Files 7 passed (7) / Tests 94 passed (94) - all SEVEN, i.e. the previously-foreign activation-ledger-aggregate-id.test.ts is green too, one better than the six required. Both scoped typechecks exit 0 with no exclusions; the old daemon-typecheck exclusion QA needed is no longer necessary.\n\n(2) PACKAGE/REPO LEGS, judged by (HEAD-minus-merge-base failing-path delta) INTERSECT eight owned paths = EMPTY. Legs run separately, exits read individually: STORE_TEST=1, DAEMON_TEST=1, VERIFY_STORE=1, VERIFY_FOUNDATION=0, ROOT_TYPECHECK=0, ROOT_TEST=1.\n\nFOREIGN RED, quoted verbatim, never repaired:\n- packages/store/src/recovery-anchor.test.ts:694 \"AssertionError: RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root: expected [ 'PREPARE', 'INACTIVE_INSTALL', ...(6) ] to be undefined\" (1 failed | 513 passed). Attribution: the symbol is grep-count 0 in packages/store/src/index.ts at e9b3796 and 1 at HEAD; `git log -S` names foreign commit 4e0201a (task-0c89476b).\n- apps/daemon/src/orchestrator/agent-spawner.test.ts x3 (\"contains a fast-exiting agent's EPIPE...\", \"gives code-node agents file/exec tools...\", \"hands only the scoped credential to loopback MCP...\") - \"AssertionError: expected [] to include ''\" at :168. agent-spawner.ts last touched by foreign c970f10 (task-ff589abd).\n- apps/daemon/src/work/foundation-attempt-windows.test.ts \"launches through the shipped broker once and adopts replay\" - \"AssertionError: expected false to be true\".\n- packages/runner/src/providers/claude/claude-launcher.windows.test.ts:178 \"stays alive beyond the control poll slice\" - foreign c970f10.\n- tests/integration/release-archive-cleanup.test.ts x2 - last touched AT the merge-base e9b3796 itself, so pure baseline red.\n\nBASE PROBE (required, because foundation-attempt-service.ts really does import readFoundationActivationHistory from my owned reader): reverted ONLY my production file to HEAD bytes (probe sha 7c7d1a9f...), re-ran both daemon files - the SAME 4 test NAMES failed, 2 files / 4 failed | 19 passed. Restored by cp from an out-of-repo copy, hash re-verified 45fcc7a9... . So none of the red is mine. The uncommitted reader diff is confined to SCAN_PAGE_LIMIT, the FoundationBindingStore member, captureHorizon and scanForEffect; readFoundationActivationHistory is untouched.\n\nProduction physical lines (grep -c ''): reader 375, commit 227, event-read-model 109, decision-ledger 151, sqlite-event-store 372 - all under the 400 hard split.\n\nHANDOFF: no scratch/probe/zz-*/evidence file remains (untracked scan over apps/daemon/src and packages/store/src is empty). Committed f33d4a2 by explicit pathspec over the two dirty owned paths only, 2 files changed 66(+)/17(-); the other six owned paths were already in the tree from earlier foreign whole-tree sweeps (+146 foundation test, +13 event-read-model, +2 decision-ledger, +4 sqlite, +68 store contract test vs e9b3796). Committed bytes hash-match the gated bytes exactly. Follow-up performance/index task remains task-16d5bc3a10864351adf5be10dfa7df00; no index added here.",
+      "startedAt": "2026-08-16T01:14:58.125Z",
+      "completedAt": "2026-08-16T01:28:56.924Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "QA's moving-WAL rejection makes the approved plan unworkable: its step 5 explicitly treats `for (;;) + strictly advancing cursor` as safe, but each `readEventsAfter` uses a fresh SQLite read snapshot, so a continuously appended stream can advance forever and hang the daemon. Re-measurement found no public store horizon: CursorPage has only items/hasMore/nextCursor; SqliteEventStore exposes only forward paging. A sound fix cannot be implemented within the plan's daemon-only owned paths. Required scope expansion: add `readEventHorizon(): bigint` (one-snapshot `CAST(COALESCE(MAX(global_position),0) AS TEXT)`) in packages/store/src/event-read-model.ts, forward through decision-ledger.ts and sqlite-event-store.ts, and pin it in event-read-model-contract.test.ts. Then add it to FoundationBindingStore, capture once, scan contiguously through H, and fail UNKNOWN / FOUNDATION_BINDING_SCAN_INCOMPLETE / FOUNDATION_ACTIVATION_BINDING for gaps, >H, premature end, or hasMore=true upon reaching H. Add a watchdog-isolated moving-stream test (H=3n, one advancing noise event per page forever) that proves exactly 3 pages and one horizon read; deleting the liveness guard must timeout/red. Existing >6400 and late-second-match tests preserve scale/uniqueness. No production bytes were written during this reopen.",
+  "reopenReason": "Governor 01:22Z, same class ruling the human approved for 5fc/8e307/fc658/8f84: step-6 gate RESCOPED from raw store+daemon package legs to the global path-attributed baseline rail. Steps 1-5 are DONE and green including all five mandatory mutation drills — the substance is proven. Resume step 6 with this exact gate: (1) owned-suite legs exit 0 with nonzero counts — @moe/store event-read-model-contract suite + scoped store typecheck, and the six activation suites + scoped daemon typecheck (this task's own approved verification precedent); (2) package/repo legs judged by (HEAD-minus-merge-base failing-path delta) ∩ eight owned paths = EMPTY, foreign red quoted verbatim, never repaired. Known foreign red at rescope: recovery-anchor.test.ts:694 fault-points leak (task-0c894's surface, actively being fixed in its rejection loop) and residual review-slice/goal-services daemon cases. Commit by explicit pathspec over the eight owned paths only. QA grades under the same rescoped rule.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -126,16 +147,22 @@
       "author": "human",
       "content": "CORRECTION FROM THE AUTHOR (governor-18a42000), posted minutes after filing. THE TWO DEFECTS DIFFER IN REACHABILITY, and I stated both as live. One is; one is latent. Read this before planning — it changes how you reproduce defect 1.\n\nMy two skeptics DISAGREED on defect 1. One confirmed the mechanics in forensic detail; the other returned \"MECHANICS CONFIRMED, REACHABILITY REFUTED\". I re-measured myself rather than taking either.\n\nDEFECT 1 (replay -> ACTIVATION_LEDGER_EVIDENCE_AMBIGUOUS) IS LATENT, NOT LIVE:\n- `createFoundationLauncherAuthority` has NO caller outside its own module.\n- Its only composition point is `createFoundationClaudeLauncher` (foundation-launch-authority.ts:290), which has ZERO callers anywhere in apps/ or packages/, tests included.\n- It is NOT exported from the daemon root — `apps/daemon/src/index.ts` returns zero hits for it.\n- A positive control on the identical query shape (`createStoreDependencies` -> daemon-store-dependencies.ts:92, :167, mcp-http-main.ts:5) confirms the greps are well scoped, so these zeros are real absences.\n\nSo nothing in production can append the Foundation transition tail today, which means the aggregate never reaches 2+ events, which means the replay path cannot currently return AMBIGUOUS. The defect is real code with correct mechanics and NO live trigger.\n\nWHEN IT ACTIVATES, AND WHY THAT MATTERS RIGHT NOW: `createFoundationClaudeLauncher`'s own doc comment names its consumer — \"The composed launcher task-6cbff01023b14b26a78fc5e3eb1dd8a9 consumes.\" task-6cbff010 (Durable Claude attempt dispatch) is the keystone gating roughly nine downstream tasks and is in PLANNING today. **The moment task-6cbff010 lands its consumer edge, this defect goes live** — and it will present as an actively-launching activation reporting itself unverifiable on every retry. Fixing it before that edge lands is strictly cheaper than debugging it after.\n\nDEFECT 2 (6,400-event scan bound) IS LIVE. `readCurrentEffectSessionBinding` has a real production caller: apps/daemon/src/coordination/coordination-adapter.ts:27 imports it and :218 calls it. That path is composed today. The time-bomb framing in the description stands unchanged.\n\nCONSEQUENCES FOR YOUR PLAN:\n- Defect 2 is the urgent half. Do not let defect 1's unreachability delay it.\n- For defect 1, you CANNOT reproduce the failure through a production entry point today. Drive it at the adapter seam by appending a second event to the aggregate directly, and say plainly in your evidence that the trigger is not yet composed. Do NOT manufacture a fake consumer edge to make it reproducible — that would be reimplementing authority in a test, which Clause 2 forbids.\n- If you judge that defect 1 should instead be deferred and re-filed against task-6cbff010's landing, that is a defensible call. Say so in writing rather than silently dropping it; a half-fix that leaves one clause unaddressed is the exact pattern that produced task-70b6361d earlier today.\n\nThe daemon also warned on this task's title (\"contains 'and' — often two tasks wearing one title\"). That warning now looks better founded than my rationale for bundling: the halves have different urgency and different reproduction paths. I bundled to avoid two tasks colliding on activation-ledger-reader.ts in this shared worktree, which is still a real hazard. If you split, sequence them rather than running them in parallel.",
       "timestamp": "2026-08-15T18:30:52.827Z"
+    },
+    {
+      "id": "comment-fa74c2bf0ee843efa209afc04e1e16ac",
+      "author": "worker-1fe6c848",
+      "content": "Step-6 gate output, verbatim, run once at HEAD d447a34 (merge-base e9b3796) with each leg's exit read separately:\n\nSTORE_TYPECHECK_EXIT=0\nSTORE_TEST_EXIT=1\nDAEMON_TYPECHECK_EXIT=0\nDAEMON_TEST_EXIT=1\nVERIFY_STORE_EXIT=1\nVERIFY_FOUNDATION_EXIT=1\nROOT_TYPECHECK_EXIT=1\nROOT_TEST_EXIT=1\n\nCounts (so no leg is an exit-0-without-tests false green): store \"Test Files 1 failed | 43 passed (44) / Tests 1 failed | 513 passed (514)\"; daemon \"Test Files 2 failed | 95 passed (97) / Tests 4 failed | 1990 passed (1994)\"; root \"Test Files 4 failed | 275 passed (279) / Tests 10 failed | 6573 passed | 2 skipped (6585)\".\n\nFOREIGN RED 1 - packages/store/src/recovery-anchor.test.ts:694\n  AssertionError: RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root: expected [ 'PREPARE', 'INACTIVE_INSTALL', ...(6) ] to be undefined\n  Cause: packages/store/src/index.ts:95 exports RECOVERY_ANCHOR_FAULT_POINTS. `git log -1 -S RECOVERY_ANCHOR_FAULT_POINTS -- packages/store/src/index.ts` -> 4e0201a feat(task-0c89476b78044024b07c86c0c8986bd0): Disaster restore proof. ABSENT from index.ts at merge-base e9b3796, PRESENT at HEAD: a clean (2)-minus-(1) attribution to task-0c894. My store tree is byte-identical to HEAD this session (git status over packages/store/src is empty).\n\nFOREIGN RED 2 - apps/daemon, 4 tests in 2 files\n  src/orchestrator/agent-spawner.test.ts > claudeSpawner > hands only the scoped credential to loopback MCP, never the operator store authority\n  src/orchestrator/agent-spawner.test.ts > claudeSpawner > gives code-node agents file/exec tools and runs them in their workspace\n  src/orchestrator/agent-spawner.test.ts:537 > contains a fast-exiting agent's EPIPE instead of crashing the wrapper -- AssertionError: expected [] to deeply equal [ -4321 ]\n  src/work/foundation-attempt-windows.test.ts:284 > launches through the shipped broker once and adopts replay -- AssertionError: expected false to be true (10121ms)\n\nNOT MINE, proved rather than asserted. Base probe: I copied my reader out of the repo, wrote HEAD bytes over it (`git show HEAD:... > ...`, sha 7c7d1a9f = my step-3 change reverted), re-ran those exact two files, and got the SAME 4 failures by NAME. Restored to 45fcc7a9 and re-hashed. The set was byte-stable across three separate runs, so it is deterministic foreign red, not peer churn.\n\nAlso live in the tree and feeding the ROOT legs: packages/runner/src/providers/claude/claude-host-runtime.ts is UNTRACKED (??) peer WIP and throws \"ReferenceError: probeReportedVersion is not defined\" at claude-host-runtime.ts:230; grep counts that symbol 0 times in the file. git log and git diff are blind to it.\n\nNot fabricating a green. Both reds sit inside packages I own but in files another task owns, so I can neither fix them under epic rail 3 nor pass the plan's verification command. Steps 1-5 are complete and every DoD test is green: activation suite 7 files / 94 tests exit 0, both owned typechecks exit 0, reader 375 lines, no probe/scratch/drill file anywhere in the repo.",
+      "timestamp": "2026-08-16T01:20:20.047Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T18:26:53.598Z",
-  "updatedAt": "2026-08-16T00:18:38.486Z",
+  "updatedAt": "2026-08-16T01:30:10.685Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:39:27.693Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 10,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -143,11 +170,16 @@
     "worker-83e6139a",
     "architect-d9dccf21",
     "governor-a627169a",
-    "governor-1a5aca5d"
+    "governor-1a5aca5d",
+    "worker-1fe6c848"
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T23:25:46.405Z",
@@ -173,19 +205,22 @@
   },
   "planApprovedAt": "2026-08-15T23:25:48.509Z",
   "workStartedAt": "2026-08-15T20:20:35.809Z",
-  "reviewStartedAt": "2026-08-15T22:19:49.982Z",
+  "reviewStartedAt": "2026-08-16T01:30:10.685Z",
   "verification": {
-    "command": "bash /tmp/owned-gate.sh  # leg 1: pnpm exec tsc --project (daemon, excluding ONLY the foreign untracked src/activation/activation-ledger-aggregate-id.test.ts); leg 2: pnpm exec vitest run over all 6 activation suites. Each leg's exit code read separately; script exits 0 only if both are 0.",
+    "command": "bash -lc 'set -e; pnpm --filter @moe/store typecheck; pnpm --filter @moe/daemon typecheck; (cd packages/store && npx vitest run --root ../.. packages/store/src/event-read-model-contract.test.ts); (cd apps/daemon && npx vitest run --root . --config package.json src/activation)'",
     "exitCode": 0,
-    "outputTail": "s/daemon\n\n Test Files  6 passed (6)\n      Tests  87 passed (87)\n   Start at  01:16:16\n   Duration  36.06s (transform 122.22s, setup 0ms, import 127.55s, tests 20.07s, environment 0ms)\n\nTYPECHECK_EXIT=0\nTEST_EXIT=0\n\n--- FOREIGN RED ON THE REPO-WIDE LEGS, DISCLOSED VERBATIM, NOT FABRICATED GREEN ---\npnpm --filter @moe/daemon typecheck -> EXIT 1, exactly 3 errors, all in ONE untracked file another agent created at 01:14 mid-session (git cat-file -e HEAD:... -> 'exists on disk, but not in HEAD'):\n  src/activation/activation-ledger-aggregate-id.test.ts(148,41): error TS2339: Property 'toHaveSize' does not exist on type 'Assertion<Set<string>>'.\n  src/activation/activation-ledger-aggregate-id.test.ts(166,99): error TS2339: Property 'toHaveSize' does not exist on type 'Assertion<Set<string>>'.\n  src/activation/activation-ledger-aggregate-id.test.ts(173,30): error TS2339: Property 'toHaveSize' does not exist on type 'Assertion<Set<string>>'.\nExcluding ONLY that file, tsc exits 0 (probe tsconfig rm -f'd in the same command; 0 probe files remain).\n\npnpm --filter @moe/daemon test -> EXIT 1, Tests 9 failed | 1930 passed (1939). PATH-ATTRIBUTED BASELINE, measured not assumed: my 4 files reverted to pre-diff content -> BASELINE failing-file set {graph-preview-request, index-surface, runtime-entrypoint, goals/j1-command-path, work/foundation-attempt-service} (5 files); restored byte-exact (sha256 verified) and re-ran the IDENTICAL subset -> HEAD failing-file set {index-surface, runtime-entrypoint, goals/j1-command-path} (3 files). HEAD is a strict SUBSET of BASELINE, so (2)-minus-(1) is EMPTY and its intersection with this task's owned paths is EMPTY. Two files failed WITHOUT my diff and passed WITH it, confirming the flake class. 4 of the 9 are literally 'Error: Test timed out in 5000ms'. runtime-entrypoint's bridge guard reports missing: orchestrator/verifier-process-runner.ts, a foreign module added at 00:36 without its .js bridge; I never touched apps/daemon/src/orchestrator/.",
-    "reportedAt": "2026-08-15T22:19:49.982Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  1 passed (1)\n      Tests  25 passed (25)\n   Start at  04:27:37\n   Duration  477ms (transform 240ms, setup 0ms, import 302ms, tests 79ms, environment 0ms)\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  7 passed (7)\n      Tests  94 passed (94)\n   Start at  04:27:38\n   Duration  2.75s (transform 6.28s, setup 0ms, import 8.73s, tests 2.42s, environment 0ms)\n\nFINAL_GATE_EXIT=0",
+    "reportedAt": "2026-08-16T01:30:10.685Z"
   },
   "filesModified": [
-    "apps/daemon/src/activation/activation-ledger-commit.ts",
+    "packages/store/src/event-read-model-contract.test.ts",
+    "apps/daemon/src/activation/foundation-launch-authority.test.ts",
+    "packages/store/src/event-read-model.ts",
+    "packages/store/src/decision-ledger.ts",
+    "packages/store/src/sqlite-event-store.ts",
     "apps/daemon/src/activation/activation-ledger-reader.ts",
-    "apps/daemon/src/activation/foundation-launch-authority.ts",
-    "apps/daemon/src/activation/activation-ledger-commit.test.ts",
-    "apps/daemon/src/activation/foundation-launch-authority.test.ts"
+    "apps/daemon/src/activation/activation-ledger-commit.ts",
+    "apps/daemon/src/activation/activation-ledger-commit.test.ts"
   ],
   "reviewCompletedAt": "2026-08-15T23:04:48.703Z",
   "rejectionDetails": {
@@ -297,8 +332,8 @@
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "blockedReason": "Step 3 requires the trap-cleaned bare `@moe/store` probe to run exact `pnpm --filter @moe/daemon typecheck` with exit 0 before the daemon consumes readEventHorizon. Facts (a)/(b) are present and the probe itself reached typecheck and was deleted, but the command exits 1 solely on foreign untracked `apps/daemon/src/review/verifier-receipt-ledger.test.ts`: TS2322 at lines 46 and 76 (`Record<string, unknown>` calibration missing ReviewerCalibration fields). The file is outside all eight owned paths; ownership query found no owner and shared-tree rails forbid editing/deleting it. Steps 1-2 are complete; store contract is 24/24 green and store typecheck exit 0. Resume step 3 after the foreign file is type-clean/cleared, rerun the exact probe to exit 0, then implement the finite scan. Detailed handoff appended to Serena memory task-task-d92b1b15a5b048e49671ed34990fa4a1-handoff.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-15T23:39:34.759Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }

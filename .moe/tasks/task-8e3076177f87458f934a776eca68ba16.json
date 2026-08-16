@@ -125,8 +125,8 @@
       "completedAt": "2026-08-16T00:54:23.781Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-c7cedba3",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,12 +157,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:24:26.165Z",
-  "updatedAt": "2026-08-16T00:58:04.106Z",
+  "updatedAt": "2026-08-16T01:04:06.467Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T17:47:20.052Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T01:04:06.467Z",
+    "wallClockMs": 26206415
   },
   "contextFetchedBy": [
     "architect-7f301fa7",
@@ -245,5 +247,8 @@
     "apps/daemon/src/telemetry/provider-run-contracts.js",
     "apps/daemon/src/telemetry/provider-run-refusals.js",
     "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-16T01:04:06.467Z",
+  "reviewCompletedAt": "2026-08-16T01:04:06.467Z",
+  "reviewSummary": "APPROVED. Scope = governor 2026-08-15T18:01Z: slice 1 is DoD 2 + DoD 6 only (1/3 -> task-ea27beb6; 4 + real-store half of 5 -> task-1a7ff170). Gate judged under the human-approved rescope of 2026-08-16 00:39Z.\n\nGATE RE-RUN BY ME. Leg 1 (exit 0 required): scoped daemon tsc over the 4 owned .ts -> exit 0, non-vacuity proven with --listFiles (all 4 in a 521-file program, zero codec files); owned suites -> exit 0, Test Files 2 passed (2), Tests 32 passed (32). Leg 2 (path-attributed; owned = provider-run-{contracts,refusals}.* under apps/daemon/src/telemetry): daemon typecheck exit 0 (worker's 2 review TS2741 since fixed by peers); daemon test exit 1, Files 3 failed | 94 passed, Tests 7 failed | 1986 passed - foundation-launch-authority, agent-spawner, foundation-attempt-windows, none under src/telemetry/; runner test exit 1, 1 file claude-launcher.windows.test.ts > \"stays alive beyond the control poll slice\" (zero runner bytes changed here; task-ff589abd owns it); scheduler test exit 0, 43 files / 1326 tests. HEAD-failing-paths INTERSECT owned = EMPTY, so the delta intersection is empty.\n\nMY DRILLS: deleting PROVIDER_RUN_EVIDENCE_AMBIGUOUS reddened both membership cases (expected 16 to be 17) - list is hand-written, not self-derived. Adding \"STORE_BUSY\" reddened scoped tsc at provider-run-refusals.test.ts(135,69) TS2554 - the type-level store-disjointness guard bites. Both restored, sha256 verified, owned paths clean.\n\nDoD 2 vs grepped producers: providerRunRef whole; declared (reasoningEffort, profileRevisionId) separate from observedModel; launch runtime digests + wall stamps; observedStart/End = ClockObservation (wall + monotonic + bootId); terminal/infra/tokens.coverage/steps.coverage/concurrency; usage NormalizedMeasurement[] with pricebookBinding; both receipt digests; recordDigest; all readonly. Port has no *WithApply; no producer type re-declared; UNREADABLE code present. 204/104 lines; bridges exact LF bytes."
 }

@@ -106,8 +106,8 @@
       "completedAt": "2026-08-16T00:58:00.592Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-ce3ba361",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -119,12 +119,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T00:40:22.991Z",
-  "updatedAt": "2026-08-16T01:02:12.372Z",
+  "updatedAt": "2026-08-16T01:08:06.317Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T00:46:02.637Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-16T01:08:06.316Z",
+    "wallClockMs": 1323679
   },
   "contextFetchedBy": [
     "architect-27b64950",
@@ -171,5 +173,8 @@
     "packages/store/src/event-read-model-contract.test.ts",
     "apps/daemon/src/runtime-entrypoint.test.ts",
     "apps/daemon/src/http/event-stream-ack-contract.js"
-  ]
+  ],
+  "completedAt": "2026-08-16T01:08:06.316Z",
+  "reviewCompletedAt": "2026-08-16T01:08:06.316Z",
+  "reviewSummary": "APPROVED. Re-ran every leg myself at HEAD 4e0201a. 376523c = exactly 2 files, +1/-105.\n\nDoD1a store typecheck EXIT 0, \"error TS\" count 0 (baseline 22). DoD1b store test EXIT 1: Test Files 1 failed|43 passed(44), Tests 1 failed|513 passed(514); sole red recovery-anchor.test.ts:694 \"RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root\". Attributed independently, not on the worker's word: that name in packages/store/src/index.ts = 0 at cf137c6 (merge-base), 0 at 376523c, 1 at 4e0201a (task-0c89476b, LATER commit, already DONE); index.ts has ZERO `export *`, all named, so no other route exists. Delta n owned = EMPTY. Graded under governor msg-16839e37 + the 00:40 rescoped gate rule.\n\nDoD2 `git diff --numstat cf137c6 HEAD` on the test file = 0 105 - zero ADDED lines, so every surviving line is byte-identical BY CONSTRUCTION. readEventsByTypeAfter = 0 in-file and 0 repo-wide, so no coverage lost: the 13 deleted cases exercised a symbol defined nowhere. d20ffd07 composite-index test survives (line 235), d92 horizon test (line 115). event-read-query.ts diff vs cf137c6 = 0 lines.\n\nDoD3 bridge 48 bytes, od -c = `export * from \"./event-stream-ack-contract.ts\";` + one LF. Focused run from apps/daemon with its own config: EXIT 0, Test Files 1 passed(1), Tests 4 passed(4). Guard at runtime-entrypoint.test.ts:180-213 builds `missing` by set-difference over a live walk and asserts runtime.size>0, so it is provably attached; .js absent at cf137c6 while the .ts was present and imported at event-stream-contract.ts:6,114 (runtime-tier), so it was necessarily in `missing`.\n\nDoD4 commit touches nothing else. Committed bridge = disclosed Drift 2; the untracked-.ts premise is false (tracked, blob 1539ee7 at cf137c6), governor-accepted. Daemon now 3 files/7 tests red (foundation-launch-authority, agent-spawner, foundation-attempt-windows) - none owned, none repaired.\n\nFollow-up, not a reject: INVALID_READS (line 264) has no cardinality assertion; sweep silently shrank 30 rows to 19."
 }

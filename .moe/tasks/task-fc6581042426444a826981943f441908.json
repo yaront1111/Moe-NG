@@ -106,16 +106,24 @@
     {
       "stepId": "step-7",
       "description": "ADVERSARIAL SELF-REVIEW, COMMIT, HANDOFF. Invoke the adversarial-self-review skill, then work this checklist — each item is how THIS slice fails while looking finished:\n\n1. Is `recordDigest` excluded from its own digest input? If not, the codec digests its own digest field and can bless a caller-supplied value. Re-read the domain and confirm D3 and D4 both reddened.\n2. Are the two decode guards genuinely independent? If disabling either one alone leaves the suite green, that guard is decorative and DoD 2 is unmet regardless of how green the run is.\n3. Does every failure assertion pin code AND layer AND outcome? Four stages can refuse in this family and the refusals module says a code-only test goes vacuous the moment another stage answers first.\n4. Was any code, layer or refusal shape re-declared locally instead of imported from provider-run-refusals.ts?\n5. Did the codec select a code belonging to the composition, ledger or reader stage?\n6. Can any input reach a partially adopted ProviderRunRecord, or cause a throw instead of a refusal?\n7. Is the undefined-vs-absent-vs-null rule DOCUMENTED and tested, not merely whatever JSON.stringify happened to do?\n8. Any probe, scratch or generated evidence file left behind? Epic rail 5.\n\nCOMMIT BY EXPLICIT PATHSPEC naming only the three `provider-run-codec.*` paths. Never `git add -A` (epic rail 3). If a foreign whole-tree commit already swept your bytes in, do NOT amend, reset or re-commit — hand QA the base-ref diff over the owned paths.\n\nHANDOFF (Clause 1): this slice lands a pure surface with no runtime caller yet, which is permitted only by naming the task that will compose it — task-1a7ff170ee544a3a8a10962c25e2ca5b (durable ledger), with task-ea27beb6e1954d0e9dba8ad49cc1641e (normalize) as the remaining sibling. Record the digest-domain decision explicitly so the ledger slice inherits it rather than re-deriving it.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-codec.ts",
         "apps/daemon/src/telemetry/provider-run-codec.test.ts"
       ],
-      "startedAt": "2026-08-16T00:53:11.708Z"
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-codec.ts",
+        "apps/daemon/src/telemetry/provider-run-codec.test.ts",
+        "apps/daemon/src/telemetry/provider-run-codec.validation.ts",
+        "apps/daemon/src/telemetry/provider-run-codec.validation.js"
+      ],
+      "note": "Adversarial self-review completed against the entire base-ref diff and the new validation diff.\n\nREAL RISK FOUND AND FIXED:\n- The original codec accepted `{recordVersion}` and malformed nested facts as a ProviderRunRecord, so decode could return a partially adopted typed record. TDD added three named red paths: partial encode was accepted, malformed nested encode was accepted, and decoded partial JSON answered DIGEST_MISMATCH instead of RECORD_UNREADABLE.\n- Added focused `provider-run-codec.validation.ts` plus exact LF `.js` bridge (scope growth remains inside provider-run-codec.* and was required to keep both production files below 250 lines rather than trim validation). It validates required identity/fact fields, descriptor-safe dense shapes, and all available imported runner/scheduler vocabularies before encode can seal or decode can adopt.\n- Generated missing-field sweep asserts 15 cases were actually generated and pins RECORD_MALFORMED + PROVIDER_RUN_CODEC + REFUSED. Nested sweep asserts four generated cases and pins FIELD_INVALID + layer + outcome. Decoded partial object pins RECORD_UNREADABLE + codec layer + UNKNOWN before either verification guard.\n- Mutation drill removed only the required-field guard: named partial and generated-required tests reddened on the stable reason-code assertions (FIELD_INVALID/VERSION_UNSUPPORTED instead of RECORD_MALFORMED), then byte hash restored and suite returned green.\n- Vocabulary sweep now also pins the exact REFUSED/UNKNOWN outcome sequence; no failure-family assertion is outcome-blind.\n\nCHECKLIST:\n1. recordDigest remains excluded from the reduced digest domain; earlier D3/D4 drills both reddened and restored.\n2. Guard A (recomputed digest) and guard B (canonical body bytes) remain independent; earlier D1/D2 drills each reddened its named test alone.\n3. Failure tests pin code, layer, and outcome, including generated cases with nonzero-count assertions.\n4. Codec reason codes/layer still come only from imported slice-1 arrays. The validation module imports producer vocabularies rather than minting their reason codes/layers.\n5. Codec selects only its six allowed stage codes.\n6. Structural validation closes the partially adopted record path; outer containment still converts traps/throws to stable refusals.\n7. Undefined refuses, absent nullable observations remain absent, and null remains data; documented and tested.\n8. No probe/scratch/generated evidence remains in owned paths. Codec is 246 lines; validation is 231; both bridges byte-exact LF.\nConcurrency/side effects: pure stateless encode/decode only; no check-then-act state, handles, writes, clocks, or retry side effects.\n\nGATES AT FINAL BYTES:\n- scoped strict NodeNext tsc EXIT 0; focused codec/contracts/refusals Vitest EXIT 0, Test Files 3 passed (3), Tests 63 passed (63).\n- raw @moe/daemon typecheck EXIT 0.\n- raw @moe/daemon test foreign red: Test Files 3 failed | 94 passed (97), Tests 7 failed | 1987 passed (1994): src/orchestrator/agent-spawner.test.ts (3), src/activation/foundation-launch-authority.test.ts (3), src/work/foundation-attempt-windows.test.ts (1). Merge-base 9d60091 was 82/82 files and 1702/1702 tests green; no HEAD failure path intersects provider-run-codec.*.\n\nCOMMIT/HANDOFF:\n- Foreign whole-tree completion d447a34153eaa0e9c4c4a61b9f194f69c604c51c (task-0c894...) swept the validation change and updated original codec/test while this review was running. Per rail, no amend/reset/recommit. Final outcome assertion was committed by explicit pathspec as 7da2a1a.\n- QA review surface: `git diff 9d60091..HEAD -- apps/daemon/src/telemetry/provider-run-codec*`; owned paths are clean and committed bytes equal gated bytes.\n- Clause-1 consumer remains task-1a7ff170ee544a3a8a10962c25e2ca5b (durable ledger). The earlier sibling task-ea27beb6e1954d0e9dba8ad49cc1641e was human-archived because @moe/runner.normalizeProviderUsage already owns that capability. Ledger must preserve the digest-domain decision: canonical record minus recordDigest, then attach the computed digest.",
+      "startedAt": "2026-08-16T00:53:11.708Z",
+      "completedAt": "2026-08-16T01:07:19.298Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b5eea847",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -127,12 +135,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T17:56:06.596Z",
-  "updatedAt": "2026-08-16T00:53:11.709Z",
+  "updatedAt": "2026-08-16T01:18:22.085Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T18:05:23.587Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7,
+    "doneAt": "2026-08-16T01:18:22.085Z",
+    "wallClockMs": 25978498
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -166,7 +176,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T18:27:47.869Z",
@@ -192,7 +203,28 @@
     "worker-83e6139a",
     "governor-a627169a",
     "worker-827a27f6",
-    "worker-b5eea847"
+    "worker-b5eea847",
+    "qa-ce3ba361"
   ],
-  "workStartedAt": "2026-08-15T20:13:25.699Z"
+  "workStartedAt": "2026-08-15T20:13:25.699Z",
+  "reviewStartedAt": "2026-08-16T01:09:27.890Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec tsc -p C:\\Users\\Yaron\\AppData\\Local\\Temp\\fc658-provider-run-codec.verify.json; $t=$LASTEXITCODE; \"SCOPED_TSC_EXIT=$t\"; if ($t) { exit $t }; pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/telemetry/provider-run-codec.test.ts src/telemetry/provider-run-contracts.test.ts src/telemetry/provider-run-refusals.test.ts; $v=$LASTEXITCODE; \"SCOPED_TEST_EXIT=$v\"; exit $v",
+    "exitCode": 0,
+    "outputTail": "SCOPED_TSC_EXIT=0\nTest Files  3 passed (3)\nTests  63 passed (63)\nSCOPED_TEST_EXIT=0",
+    "reportedAt": "2026-08-16T01:09:27.890Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/telemetry/provider-run-contracts.ts",
+    "apps/daemon/src/telemetry/provider-run-refusals.ts",
+    "apps/daemon/src/activation/activation-ledger-codec.ts",
+    "apps/daemon/src/telemetry/provider-run-codec.test.ts",
+    "apps/daemon/src/telemetry/provider-run-codec.ts",
+    "apps/daemon/src/telemetry/provider-run-codec.js",
+    "apps/daemon/src/telemetry/provider-run-codec.validation.ts",
+    "apps/daemon/src/telemetry/provider-run-codec.validation.js"
+  ],
+  "completedAt": "2026-08-16T01:18:22.085Z",
+  "reviewCompletedAt": "2026-08-16T01:18:22.085Z",
+  "reviewSummary": "APPROVED at HEAD 1c9e46c. Re-ran everything myself.\n\nGATES (exits read separately): `pnpm --filter @moe/daemon typecheck` EXIT 0 (FULL package, stronger than the rescoped leg). `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/telemetry` EXIT 0, Test Files 3 passed, Tests 63 passed — nonzero count, matches task.verification's tail exactly. Full daemon test EXIT 1: 2 failed | 95 passed (97), 4 failed | 1990 passed (1994). Foreign red: orchestrator/agent-spawner.test.ts (3, \"expected [] to deeply equal ['--tools',…]\") and work/foundation-attempt-windows.test.ts (1, load-sensitive WINDOWS_ONLY real-process case). Path-attributed: neither file has one occurrence of `telemetry`/`provider-run` (grep 0/0), nothing outside the codec dir imports provider-run-codec -> delta ∩ owned = EMPTY.\n\nSIX QA DRILLS, byte-restored (sha 57af635e…, FINAL==ORIG, no residue): D1 disable ONLY guard B -> exactly one red, \"refuses a non-canonical encoding … guard B\" (codec accepted). D2 disable ONLY guard A -> \"refuses bytes whose carried digest does not match…: guard A\". Neither guard decorative — DoD 2 met by demonstration. D3 fold recordDigest into its own domain -> \"excludes recordDigest from the bytes it digests\" red. D4 trust caller digest -> \"overwrites a caller-supplied recordDigest\" red. D5 LAYERS[1]->[2] -> red ON THE LAYER assertion ('PROVIDER_RUN_LEDGER' vs 'PROVIDER_RUN_CODEC'). D6 UNKNOWN->REFUSED -> red ON THE OUTCOME assertion.\n\nDoD 4: zero bare code/layer literals in either production file; positive control — same grep hits 29x in the test. DoD 5: both bridges byte-exact by od -c vs sibling; index.ts has zero provider-run occurrences, index-surface green. DoD 6: codec.ts 246, validation.ts 231 by `grep -c ''`, both <250. Slice-1 untouched by this task (contracts.ts 40/32 is slice-1's own aggregate-id hardening swept by foreign f4966b5). Clause 1: consumer task-1a7ff170… verified present on the board."
 }
