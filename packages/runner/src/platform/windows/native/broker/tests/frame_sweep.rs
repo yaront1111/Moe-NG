@@ -12,6 +12,7 @@
 //! double serves bytes in configurable chunks precisely so that assumption
 //! cannot survive.
 
+use core::task::Poll;
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -130,6 +131,15 @@ impl ByteChannel for Scripted {
         buffer[..take].copy_from_slice(&self.inbound[self.read_at..self.read_at + take]);
         self.read_at += take;
         Ok(take)
+    }
+
+    /// A prepared script has no waiting in it: every byte this channel will ever
+    /// hold is there from the start, so readiness answers exactly what `read`
+    /// answers and a drained script is an end of stream rather than a silent open
+    /// channel. This file sweeps the BLOCKING decoder; the method is here because
+    /// the trait requires it of every channel.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<Poll<usize>, u32> {
+        self.read(buffer).map(Poll::Ready)
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<usize, u32> {

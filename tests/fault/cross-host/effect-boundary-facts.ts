@@ -118,7 +118,7 @@ function workspaceFact(context: FactContext): unknown {
   const manifest = buildInputManifest({
     baseIdentity: context.headSha,
     entries: [
-      { path: context.trackedPath, sha256: sha256Hex(bytes), byteLength: bytes.byteLength, producer: "BASE" },
+      { path: context.trackedPath, sha256: sha256Hex(bytes), byteLength: bytes.byteLength, producer: { kind: "BASE" } },
     ],
   });
   if (scope.ok !== true || manifest.ok !== true) {

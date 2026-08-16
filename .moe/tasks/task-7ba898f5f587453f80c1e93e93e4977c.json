@@ -47,7 +47,7 @@
     {
       "stepId": "step-3",
       "description": "Implement the minimum nonblocking byte/framing contract without a fail-open default. Add required `ByteChannel::poll_read(&mut self, &mut [u8]) -> Result<core::task::Poll<usize>, u32>`: Pending means silent/open, Ready(0) means real EOF, Ready(n>0) means exactly n bytes were consumed. Keep blocking `read` only for the initial LAUNCH and other already-bounded phases. Add private child module frames/polling.rs with a stateful frame accumulator retained across wait slices; it incrementally fills the fixed six-byte header and then the already-bounded payload, returns Pending without losing partial bytes, maps Ready(0) at any incomplete stage to the existing FrameTruncated path, maps syscall errors through ProtocolError::channel, rejects a channel reporting more bytes than offered, and never allocates from the declared length until the shared version/cap validator has accepted it. Factor that header validation once in frames.rs so blocking and polled decoding cannot disagree; preserve zero-length payloads and every existing reason/stage. Use `core::task::Poll` so no new root vocabulary/lib.rs edit is needed. Update all four non-production ByteChannel implementors explicitly—frame_sweep, session, idempotence, containment—rather than adding a default that could silently block a future production channel. Keep frames.rs and the new child each <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/src/frames.rs",
         "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs",
@@ -59,19 +59,30 @@
       "newFiles": [
         "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs"
       ],
-      "startedAt": "2026-08-16T00:11:55.069Z"
+      "modifiedFiles": [
+        "packages/runner/src/platform/windows/native/broker/src/frames.rs",
+        "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/session.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/idempotence.rs",
+        "packages/runner/src/platform/windows/native/broker/tests/containment.rs"
+      ],
+      "note": "Nonblocking byte/framing contract landed with no fail-open default. ByteChannel gained REQUIRED `poll_read(&mut self, &mut [u8]) -> Result<core::task::Poll<usize>, u32>` (Pending = silent/open, Ready(0) = real EOF, Ready(n) = n consumed); blocking `read` kept for LAUNCH. Header judgement factored once into `frames::validate_header` -> Result<(u8, usize)>, used by both decoders, so version-before-cap order cannot drift. New private child `frames/polling.rs` holds `PolledFrames`: a per-channel accumulator that keeps partial header/payload across Pending turns, sizes its read request as (FRAME_HEADER_BYTES + kind.max_payload()) - held so a peer cannot grow it, maps Ready(0) at any incomplete stage to FrameTruncated, maps poll syscall errors through ProtocolError::channel, refuses a channel reporting more bytes than offered with channel(0), and never allocates from a declared length before validate_header accepts it. Zero-length payloads still decode. All four non-production implementors updated explicitly (session/frame_sweep/idempotence/containment) with semantics matching each harness: scripted PollStep table in session (panics by name if the script runs dry, falls back to `read` only when unscripted), read-equivalent in frame_sweep/containment (a drained tape is a closed peer, so existing empty-fd0 ControlEnded cases keep meaning), and bytes-before-ended-else-Pending in idempotence so the three-way race stays a race. Line counts: frames.rs 249, frames/polling.rs 119 (both <=250). `cargo check -p moe-windows-job-broker --all-targets` now reports exactly one error, the deliberate step-4 gap: `not all trait items implemented, missing: poll_read` at boundary.rs:119. INCIDENT, FULLY REVERTED, AND EVIDENCE FOR STEP 7: an exploratory `cargo fmt --all --manifest-path <native>/Cargo.toml` reformatted 30 files across the native workspace, 24 of them foreign. Every one was restored to exact HEAD bytes (verified: git status now lists only tests/session.rs modified plus the untracked src/frames/ dir), and tests/session.rs was rebuilt from unformatted HEAD plus my step-2/step-3 hunks so no fmt churn survives in it either. The measurement that matters: the native workspace was ALREADY not rustfmt-clean at HEAD. `cargo fmt --all --manifest-path packages/runner/src/platform/windows/native/Cargo.toml -- --check` over a pristine `git archive HEAD` extract exits 1 with 3925 diff lines across ~30 files including foreign paths (broker/src/session.rs, native/src/handle.rs, native/tests/job_sweep.rs, ...). The repo is hand-formatted in a compact ~100-col style rustfmt does not reproduce; also note native/rust-toolchain.toml pins 1.96.0, whose install has NO rustfmt component, so `cargo fmt` inside that directory errors outright and only resolves from the repo root (stable, rustfmt 1.9.0). The step-7 gate's `cargo fmt --all ... -- --check` leg is therefore a pre-existing repo-wide baseline red that my diff neither causes nor can clear; owned files are written in the surrounding house style, not rustfmt output.",
+      "startedAt": "2026-08-16T00:11:55.069Z",
+      "completedAt": "2026-08-16T00:34:12.189Z"
     },
     {
       "stepId": "step-4",
       "description": "Wire the real single-threaded Windows boundary and watch loop. Add the exact pinned windows-sys `Win32_System_Pipes` feature only (Cargo.lock must not change). In boundary.rs—and nowhere else—call `PeekNamedPipe` with `lpTotalBytesAvail`: success/zero is Poll::Pending; success/nonzero performs `ReadFile` for at most min(total available, caller-buffer length), so it cannot wait for more bytes; ERROR_BROKEN_PIPE is Poll::Ready(0), preserving real EOF; every other GetLastError value is returned verbatim. No other reader exists in the broker, so bytes observed available cannot be stolen between peek and bounded read. In watch.rs, retain one accumulator for the entire post-LAUNCH loop, wait in the existing <=50ms slices, and poll control after each nonterminal slice: Pending continues, a complete frame goes through the existing AcceptState, EOF keeps ControlEnded, and a polling error uses the existing exact protocol refusal/unwind. Keep shutdown-first, timeout, CANCEL, abandoned-wait, natural completion, and exactly-once Job containment ordering unchanged. Replace the obsolete known-blocking comment with the new partial-frame/nonblocking invariant; add no new protocol code/version and no unsafe/Win32 call outside boundary.rs.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/runner/src/platform/windows/native/broker/Cargo.toml",
         "packages/runner/src/platform/windows/native/broker/src/boundary.rs",
         "packages/runner/src/platform/windows/native/broker/src/watch.rs",
         "packages/runner/src/platform/windows/native/broker/src/frames.rs",
         "packages/runner/src/platform/windows/native/broker/src/frames/polling.rs"
-      ]
+      ],
+      "startedAt": "2026-08-16T00:34:15.046Z"
     },
     {
       "stepId": "step-5",
@@ -124,12 +135,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T23:23:57.874Z",
-  "updatedAt": "2026-08-16T00:16:10.683Z",
+  "updatedAt": "2026-08-16T00:34:15.046Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T23:26:22.137Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-d9dccf21",
@@ -142,7 +153,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T23:43:09.506Z",
@@ -153,7 +165,8 @@
   },
   "budget": {
     "wallClockMs": 3600000,
-    "warnedAt": "2026-08-16T00:16:10.410Z"
+    "warnedAt": "2026-08-16T00:16:10.410Z",
+    "escalatedAt": "2026-08-16T00:34:12.235Z"
   },
   "planApprovedAt": "2026-08-15T23:43:11.788Z",
   "workStartedAt": "2026-08-15T23:44:05.124Z"

@@ -37,6 +37,7 @@
 //! `close_handle`. The test supplies the lookup the core withholds and restates
 //! none of the authority it keeps (taskRail 5).
 
+use core::task::Poll;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
@@ -847,6 +848,15 @@ impl ByteChannel for Recorder {
         let taken = buffer[..take].to_vec();
         tape.consumed.extend_from_slice(&taken);
         Ok(take)
+    }
+
+    /// A tape holds every byte it will ever hold from the moment it is built, so
+    /// a drained tape is a peer that CLOSED rather than one that has gone quiet.
+    /// Kept identical to `read` for exactly that reason: these cases assert that
+    /// an empty fd0 ends the run, and answering Pending would retire that into an
+    /// instructed timeout with every assertion still passing.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<Poll<usize>, u32> {
+        self.read(buffer).map(Poll::Ready)
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<usize, u32> {

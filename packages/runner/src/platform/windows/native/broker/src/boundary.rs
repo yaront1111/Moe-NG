@@ -13,6 +13,7 @@ use windows_sys::Win32::Foundation::{
 use windows_sys::Win32::Storage::FileSystem::{
     GetFileType, ReadFile, WriteFile, FILE_TYPE_PIPE, FILE_TYPE_UNKNOWN,
 };
+use windows_sys::Win32::System::Pipes::PeekNamedPipe;
 use windows_sys::Win32::System::Threading::{GetStartupInfoW, STARTUPINFOW};
 
 use crate::descriptors::DescriptorError;
@@ -145,6 +146,77 @@ impl ByteChannel for PipeChannel {
             return Err(code);
         }
         Ok(taken as usize)
+    }
+
+    /// Asks the pipe what it HAS, and takes no more than that.
+    ///
+    /// TWO CALLS, AND THE FIRST ONE IS THE WHOLE POINT. `PeekNamedPipe` reports
+    /// how many bytes are readable and RETURNS IMMEDIATELY — Microsoft documents
+    /// it as non-blocking, and it supports anonymous pipes, which is what these
+    /// six descriptors are. `ReadFile` is then asked for at most that many, so it
+    /// cannot wait for bytes the peer has not written. Peeking without reading
+    /// would be useless (the bytes stay), and reading without peeking is exactly
+    /// the block this method exists to avoid.
+    ///
+    /// SAFE ONLY BECAUSE THIS PROCESS HAS ONE READER. The broker is
+    /// single-threaded and nothing else reads fd0, so bytes counted by the peek
+    /// cannot be taken by anyone before the read. A second reader would make the
+    /// count stale and the read able to block; if one is ever added, this method
+    /// has to change with it.
+    ///
+    /// A count of zero is `Pending`, NOT an end of stream: the writer is simply
+    /// silent, and answering `Ready(0)` would fabricate an EOF that ends a run
+    /// the parent never ended. Only `ERROR_BROKEN_PIPE` — the writer's end
+    /// actually closed, the same signal `read` folds to zero — is the end.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<core::task::Poll<usize>, u32> {
+        let mut available: u32 = 0;
+        // SAFETY: the handle is one this process verified as a pipe, `available`
+        // is a live out-parameter, and every other parameter is null because this
+        // call is asked ONLY for the byte count: no buffer to fill, no bytes-read
+        // count, and no bytes-left-this-message, which is documented as zero for
+        // a byte-mode pipe and would say nothing here anyway.
+        let ok = unsafe {
+            PeekNamedPipe(
+                self.raw as HANDLE,
+                core::ptr::null_mut(),
+                0,
+                core::ptr::null_mut(),
+                &mut available,
+                core::ptr::null_mut(),
+            )
+        };
+        if ok == 0 {
+            // SAFETY: read immediately after the failed call, before anything
+            // else on this thread can overwrite it.
+            let code = unsafe { GetLastError() };
+            if code == ERROR_BROKEN_PIPE {
+                return Ok(core::task::Poll::Ready(0));
+            }
+            return Err(code);
+        }
+        if available == 0 {
+            return Ok(core::task::Poll::Pending);
+        }
+
+        // BOUNDED BY WHAT IS ALREADY THERE, then by what the caller offered.
+        // Either bound alone would be wrong: the first without the second
+        // overruns the buffer, the second without the first waits.
+        let capacity = u32::try_from(buffer.len()).unwrap_or(u32::MAX).min(available);
+        let mut taken: u32 = 0;
+        // SAFETY: same contract as `read` above, with a capacity no larger than
+        // the buffer and no larger than the bytes the peek just counted.
+        let ok = unsafe {
+            ReadFile(self.raw as HANDLE, buffer.as_mut_ptr(), capacity, &mut taken, core::ptr::null_mut())
+        };
+        if ok == 0 {
+            // SAFETY: read immediately after the failed call.
+            let code = unsafe { GetLastError() };
+            if code == ERROR_BROKEN_PIPE {
+                return Ok(core::task::Poll::Ready(0));
+            }
+            return Err(code);
+        }
+        Ok(core::task::Poll::Ready(taken as usize))
     }
 
     /// Writes what the pipe accepts, which may be less than it was offered.

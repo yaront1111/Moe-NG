@@ -48,10 +48,15 @@ moe-windows-job-core = { path = ".." }
 #
 # We pass a null overlapped pointer, which selects the synchronous form, but the
 # feature still gates the declaration.
+#
+# Win32_System_Pipes is REQUIRED for `PeekNamedPipe`, which is how fd0 is asked
+# whether it has bytes WITHOUT waiting for them. Its own module, not
+# Storage_FileSystem, despite reading a handle that module opened.
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "=0.61.2", features = [
   "Win32_Foundation",
   "Win32_Storage_FileSystem",
   "Win32_System_IO",
+  "Win32_System_Pipes",
   "Win32_System_Threading",
 ] }

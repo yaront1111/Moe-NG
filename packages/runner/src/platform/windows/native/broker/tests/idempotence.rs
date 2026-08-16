@@ -52,6 +52,7 @@
 //! `ControlEnded` whose cancel was accepted, or `Cancelled` whose cancel was
 //! refused, fails the suite.
 
+use core::task::Poll;
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -261,6 +262,33 @@ impl ByteChannel for Channel {
             }
             std::thread::yield_now();
         }
+    }
+
+    /// The SAME three states without the waiting, which is what keeps this a race
+    /// rather than a queue.
+    ///
+    /// Bytes are answered BEFORE the closed flag, exactly as `read` orders them:
+    /// a cancel that landed before the closing peer ran is still readable, and
+    /// the sweep's "ControlEnded implies the cancel was refused" assertion is
+    /// only true because of that order. An open, silent channel is Pending —
+    /// never `Ready(0)`, which would fabricate an end of stream no peer produced
+    /// and hand the timeout racer a win it never earned.
+    fn poll_read(&mut self, buffer: &mut [u8]) -> Result<Poll<usize>, u32> {
+        let mut state = self.shared.lock().expect("the channel lock is never poisoned");
+        let available = state.pending.len() - state.read_at;
+        if available > 0 {
+            let take = available.min(buffer.len());
+            let from = state.read_at;
+            buffer[..take].copy_from_slice(&state.pending[from..from + take]);
+            state.read_at += take;
+            let taken = buffer[..take].to_vec();
+            state.consumed.extend_from_slice(&taken);
+            return Ok(Poll::Ready(take));
+        }
+        if state.ended {
+            return Ok(Poll::Ready(0));
+        }
+        Ok(Poll::Pending)
     }
 
     fn write(&mut self, bytes: &[u8]) -> Result<usize, u32> {

@@ -72,16 +72,22 @@
     {
       "stepId": "step-5",
       "description": "Single final verification and delivery step. First rerun the same repo-wide `pnpm typecheck` and `pnpm test` legs separately, compare their failing-path sets with the pre-edit baseline, intersect the HEAD-minus-baseline delta with the two owned paths, stop for any owned red, and quote foreign red verbatim without touching it. Then run this exact fresh foreground completion command with no pipe/status masking: `export PATH=/home/sysadmin/.npm/_npx/32bdabe214bd28ec/node_modules/node/bin:/tmp/moe-node2416-bin:$PATH; export pnpm_config_verify_deps_before_run=; pnpm typecheck:release && pnpm test:integration`. Require exit 0 and inspect output for a nonzero Vitest `Test Files`/`Tests` count and a nonzero Node `tests`/`pass` count; no count, zero tests, or only a final-command status is not evidence. Record command/exit/output tail, exact six-component assertions, and production line count. Verify diff/status is restricted to the two owned paths; before commit unstage any foreign entry, commit only by explicit pathspec `git commit -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs`, and confirm `git show --stat` contains only them. If a foreign whole-tree commit captured the bytes, do not amend/reset/recommit; report the base-ref owned-path diff per the global rail.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "scripts/release/supply-chain.mjs",
         "tests/integration/release-supply-chain.test.mjs"
       ],
-      "startedAt": "2026-08-16T00:28:45.761Z"
+      "modifiedFiles": [
+        "scripts/release/supply-chain.mjs",
+        "tests/integration/release-supply-chain.test.mjs"
+      ],
+      "note": "Path-attributed repo-wide comparison, fresh gate, and delivery. Repo-wide legs were rerun separately on the pinned toolchain. pnpm typecheck exit 1, failing path set {packages/store/src/event-read-model-contract.test.ts} (TS7022/TS2551 on readEventsByTypeAfter). pnpm test exit 1, Test Files 2 failed | 276 passed, Tests 14 failed | 6563 passed | 2 skipped, failing path set {packages/runner/src/providers/claude/claude-launcher.windows.test.ts, packages/store/src/event-read-model-contract.test.ts}. Step-1 baseline was typecheck red only at apps/control-room/src/live/live-event-feed.test.ts and 18 failed test files / 43 failed tests. The HEAD-minus-baseline delta is entirely foreign, is quoted verbatim above, was not touched, and its intersection with the two owned paths is EMPTY. Neither owned path can even enter those legs: root vitest includes only adapters/packages/tests **/*.test.ts (my file is .mjs) and no package tsconfig covers scripts/release. Late review finding fixed before the gate: the production observed-key list had been written [\"p\",\"npm\"].join(\"\") purely to slip past the whole-file guard assert.doesNotMatch(source, /\"pnpm\"/) - obfuscation to dodge an assertion. Production now reads the plain literal [\"arch\",\"node\",\"platform\",\"pnpm\"] and the guard exempts exactly that one declaration (asserting it is present verbatim) so it stays a whole-file scan instead of being narrowed to a call site. Drill E proved the repaired guard still bites: replacing command(process.execPath,[entry,...args]) with command(\"pnpm\",args) reddened the named Corepack test; restored byte-exact. Drill A rerun after the change stayed 7 executed / 7 red. Fresh foreground completion gate, no pipe or status masking: `pnpm typecheck:release && pnpm test:integration` exit 0. Executed-count evidence: Vitest `Test Files 4 passed (4)` and `Tests 209 passed (209)`; Node `tests 66 / suites 4 / pass 66 / fail 0 / skipped 0`. The real end-to-end leg ran the actual package script on win32 (17.4s) and published evidence carrying the genuine host report: doctor.reportVersion moe-doctor-version-report/1, doctor.componentCount 18 equal to components.length, observed {arch x64, node v24.16.0, platform win32, pnpm 11.0.8}, four pins all SATISFIED, declared engines/nodeVersionFile/packageManager known, Object.hasOwn(doctor,\"missingSymbol\") false, while release componentCount is 6, templateCount 3, operation RECORDED, releaseVerdict UNKNOWN and publicationAuthorized false. Production is 314 lines. Delivery: my explicit-pathspec commit could not run because a foreign whole-tree completion commit c970f106736acd4755777f8e2699062fb6e02ce1 (task-ff589abd7dd84ee197a9abee729bef78) captured the working tree first, so `git commit -- <owned paths>` reported \"nothing to commit, working tree clean\". Per the global rail I did not amend, reset or recommit. The committed bytes are byte-identical to the gated bytes: git show HEAD:scripts/release/supply-chain.mjs is sha256 48724142dedb786b23a75afd0e3620772acfadeba72f42ca0641933f873463f0 and git show HEAD:tests/integration/release-supply-chain.test.mjs is cc5185c35d5afc62b37e169597268146062411b70a4223e29ecb509ff13fb7b4, matching the worktree hashes at gate time. QA should review by base-ref diff: `git diff 4d0a49fb8791b458565863377d7002a48a1a9bd8..HEAD -- scripts/release/supply-chain.mjs tests/integration/release-supply-chain.test.mjs`, which is +221/-11 across exactly those two files and contains no foreign hunk. No probe, backup or evidence file remains in the repo; dist/ is gitignored and all scratch lived in Windows Temp and WSL /tmp.",
+      "startedAt": "2026-08-16T00:28:45.761Z",
+      "completedAt": "2026-08-16T00:34:05.991Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-e47be2a7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -93,12 +99,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-15T21:11:50.144Z",
-  "updatedAt": "2026-08-16T00:28:45.761Z",
+  "updatedAt": "2026-08-16T00:35:29.101Z",
   "metrics": {
     "firstClaimAt": "2026-08-15T21:25:32.793Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-09b5f32a",
@@ -125,7 +131,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-15T23:43:24.126Z",
@@ -150,5 +157,16 @@
     "escalatedAt": "2026-08-15T23:43:26.303Z"
   },
   "planApprovedAt": "2026-08-15T23:43:26.199Z",
-  "workStartedAt": "2026-08-15T23:43:47.385Z"
+  "workStartedAt": "2026-08-15T23:43:47.385Z",
+  "reviewStartedAt": "2026-08-16T00:35:29.101Z",
+  "verification": {
+    "command": "pnpm typecheck:release && pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "Test Files  4 passed (4)\n     Tests  209 passed (209)\n  Duration  33.19s\n\n> node --test tests/integration/release-supply-chain.test.mjs\n  ok runs pnpm through a validated Corepack JavaScript entrypoint (0.3101ms)\n  ok collects the CycloneDX document from a file, never from stdout (0.1381ms)\n  ok pins checked release scripts and the local CycloneDX generator (0.1322ms)\n  ok records truthful evidence through the actual package script (17377.4818ms)\nrelease package command (17378.1746ms)\ntests 66\nsuites 4\npass 66\nfail 0\ncancelled 0\nskipped 0\ntodo 0\nduration_ms 18282.2411\nGATE_EXIT=0",
+    "reportedAt": "2026-08-16T00:35:29.101Z"
+  },
+  "filesModified": [
+    "tests/integration/release-supply-chain.test.mjs",
+    "scripts/release/supply-chain.mjs"
+  ]
 }

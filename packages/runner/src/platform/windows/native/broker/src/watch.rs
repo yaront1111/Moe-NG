@@ -20,35 +20,37 @@
 //! further instruction can be trusted from fd0 — so they share one outcome
 //! rather than the second being dressed up as a protocol violation.
 //!
-//! # KNOWN LIMITATION: [`take_instruction`] BLOCKS ON A REAL PIPE
+//! # FD0 IS OBSERVED, NEVER WAITED ON
 //!
-//! `ByteChannel::read` is synchronous, and a real Win32 pipe with no data
-//! pending BLOCKS until bytes arrive or the writer closes. So on a real parent
-//! that sends LAUNCH and then holds fd0 open and silent, this loop reaches
-//! `take_instruction` after the first slice and stays there — and a child that
-//! exits meanwhile is not observed until the parent writes or closes.
+//! `ByteChannel::read` is synchronous: a real Win32 pipe with no data pending
+//! BLOCKS in it until bytes arrive or the writer closes. A parent that sends
+//! LAUNCH and then holds fd0 open and silent — which is what an ordinary
+//! provider run looks like — would strand this loop there, and a child exiting
+//! meanwhile would not be observed until the parent wrote or closed. The run
+//! then died at the instructed timeout with the child's real exit unseen.
 //!
-//! NO TEST CAN SEE THIS, which is why it is written down rather than left to be
-//! rediscovered: the scripted channel returns from every read immediately, so
-//! the suite exercises the intended interleaving and a real pipe does not
-//! produce it. The shipped binary is unaffected TODAY only because the sole
-//! real-parent path in the crate (tests/node_loadability.rs) sends nothing at
-//! all and takes `Outcome::NoInstruction` without entering this loop.
+//! So this loop uses `poll_read` and NEVER `read`. Its three answers are kept
+//! distinct here: `Pending` is a silent open fd0 and continues the loop with no
+//! refusal of any kind, an end of stream stays `ControlEnded`, and a readiness
+//! failure stays an exact protocol refusal.
 //!
-//! The fix is an I/O-model change, not a reordering: fd0 must be read through
-//! overlapped I/O, or by a reader thread, or gated on `PeekNamedPipe`. Each adds
-//! a Win32 surface and concurrency this task deliberately does not own. Reversing
-//! the order here does not help — waiting the full timeout before reading fd0
-//! makes CANCEL cost a whole timeout instead, which is the same defect wearing
-//! the other hat.
+//! # THE ACCUMULATOR OUTLIVES THE SLICE
+//!
+//! One [`PolledFrames`] is built before the loop and reused by every turn,
+//! because a frame can arrive in pieces: readiness says only that SOME bytes are
+//! there, so a CANCEL split across turns is assembled across turns. Building it
+//! inside the loop, or dropping it on `Pending`, would re-read a frame's tail as
+//! a header and refuse a legal CANCEL as a version mismatch.
 
 use moe_windows_job_core::{
     wait_for_process, ContainedProcess, ProcessCalls, Waited, Win32Calls,
 };
 
+use core::task::Poll;
+
 use crate::control::{AcceptState, Accepted};
 use crate::diagnostics::DiagnosticNote;
-use crate::frames::{read_frame, ByteChannel, ChannelKind};
+use crate::frames::{polling::PolledFrames, ByteChannel, ChannelKind};
 use crate::protocol::{ProtocolError, ProtocolReason};
 use crate::completion::Stopped;
 use crate::session::{note, refuse_protocol, ShutdownSignal, Wiring};
@@ -77,6 +79,9 @@ where
     S: ShutdownSignal,
 {
     let mut remaining = timeout_ms;
+    // BUILT ONCE, OUTSIDE THE LOOP. See the module docs: a per-turn accumulator
+    // would lose the half of a frame that arrived in the previous turn.
+    let mut frames = PolledFrames::on(ChannelKind::Control);
     loop {
         // CHECKED FIRST, so a helper already asked to stop never starts another
         // wait it would have to be interrupted out of.
@@ -101,24 +106,30 @@ where
         if remaining == 0 {
             return (Stopped::TimedOut, Some(waited));
         }
-        if let Some(stopped) = take_instruction(wiring, accept) {
+        if let Some(stopped) = take_instruction(wiring, &mut frames, accept) {
             return (stopped, Some(waited));
         }
     }
 }
 
-/// Reads one frame from fd0 and reports whether it ends the run.
+/// Takes one frame from fd0 IF ONE IS THERE, and reports whether it ends the
+/// run.
 ///
-/// Returns `None` only when fd0 produced something that leaves the run going,
-/// which today is nothing at all — every legal frame after a launch is terminal.
-/// The shape is kept so a future non-terminal command has somewhere to land
-/// without restructuring the loop.
+/// Returns `None` when fd0 produced nothing terminal — either no complete frame
+/// yet (`Pending`), or, in a future protocol, a command that leaves the run
+/// going. Today every legal frame after a launch is terminal; the shape is kept
+/// so a non-terminal command has somewhere to land without restructuring the
+/// loop.
 fn take_instruction<B: ByteChannel>(
     wiring: &mut Wiring<B>,
+    frames: &mut PolledFrames,
     accept: &mut AcceptState,
 ) -> Option<Stopped> {
-    let frame = match read_frame(&mut wiring.control, ChannelKind::Control) {
-        Ok(frame) => frame,
+    let frame = match frames.poll_frame(&mut wiring.control) {
+        // NOT AN OUTCOME AND NOT A REFUSAL: fd0 is open and has said nothing, so
+        // the run continues and the next slice waits on the child again.
+        Ok(Poll::Pending) => return None,
+        Ok(Poll::Ready(frame)) => frame,
         Err(error) if error.reason() == ProtocolReason::FrameTruncated => {
             note(wiring, DiagnosticNote::ChannelEnded, error.code());
             return Some(Stopped::ControlEnded);

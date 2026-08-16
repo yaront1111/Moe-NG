@@ -28,7 +28,7 @@
     {
       "stepId": "step-2",
       "description": "Start RED with hostile contract/aggregation tests and two hand-written host suites. In the cross-host fault test, specify exact-key immutable receipt/aggregate versions, canonical bytes and self-digest rules, fixed expected host slots (`linux`, `darwin`), and frozen failure layers `CROSS_HOST_COLLECTOR` / `CROSS_HOST_AGGREGATOR` with exact codes `CROSS_HOST_RECEIPT_MALFORMED`, `CROSS_HOST_HOST_UNVERIFIABLE`, `CROSS_HOST_HOST_MISMATCH`, `CROSS_HOST_SOURCE_MISMATCH`, `CROSS_HOST_DISTRIBUTION_MISMATCH`, `CROSS_HOST_RUNTIME_UNVERIFIABLE`, `CROSS_HOST_SCHEDULE_INCOMPLETE`, `CROSS_HOST_SCHEDULE_DIGEST_MISMATCH`, `CROSS_HOST_RAW_RECEIPT_MISMATCH`, `CROSS_HOST_RECEIPT_DIGEST_MISMATCH`, `CROSS_HOST_RECEIPT_MISSING`, and `CROSS_HOST_RECEIPT_DUPLICATE`. Generate tamper cases for every binding, assert the generated count is positive, and assert exact code, layer, host slot, and `UNKNOWN` rather than only failure. In each OS suite, independently hand-name the production seven-boundary tuple and three schedules (`CRASH_BEFORE_ACTIVATION`, `CRASH_AFTER_ACTIVATION`, `CANCELLATION`), assert the 7x3 product is exactly 21 unique cases, and make the matching-host path fail until the real driver exists; a wrong host must assert `CROSS_HOST_HOST_MISMATCH` at `CROSS_HOST_COLLECTOR`, emit no PROVEN receipt, and never be skipped as proof.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/fault/cross-host/effect-evidence.fault.ts",
         "tests/fault/linux/effect-conformance.fault.ts",
@@ -39,24 +39,38 @@
         "tests/fault/linux/effect-conformance.fault.ts",
         "tests/fault/macos/effect-conformance.fault.ts"
       ],
-      "startedAt": "2026-08-16T00:27:06.545Z"
+      "modifiedFiles": [
+        "tests/fault/cross-host/effect-evidence.fault.ts",
+        "tests/fault/linux/effect-conformance.fault.ts",
+        "tests/fault/macos/effect-conformance.fault.ts"
+      ],
+      "note": "RED first, observed. Wrote tests/fault/cross-host/effect-evidence.fault.ts plus the two hand-written OS suites before any protocol code existed; `pnpm exec tsc -p tests/fault/tsconfig.json` failed with TS2307 on ./effect-evidence-contract.js and ./effect-schedule-driver.js, which is the RED for this step. The hostile suite pins the exact-key receipt/aggregate versions, canonical sorted-key bytes, the fixed slots [\"linux\",\"darwin\"], both frozen layers, and all 12 exact codes as a 12-member unique tuple. The tamper sweep generates 14 mutations (extra key, missing key, host spoof, doctor arch, kernel release, wrong source commit, one manifest digest, one asset digest, runtime truthClass, runtime pinningMethod, schedule universe, one raw case, schedule digest, self digest), asserts the generated count is positive AND exactly 14, and asserts exact code + exact layer + exact host slot per case rather than only that it failed. Thirteen of the fourteen are RE-SEALED through the production sealing function before verification, so each is the forgery an attacker would actually present and not merely a broken checksum; only the self-digest case is left unsealed. Aggregation cases pin PROVEN/PROVEN, missing-slot, duplicate-slot and cross-filed-slot behaviour and assert the other slot's valid row survives. Each OS suite hand-names the seven boundaries and three schedules independently, asserts them against the imported production PLATFORM_BOUNDARIES and CROSS_HOST_SCHEDULES, and asserts the 7x3 product is exactly 21 unique cases; the off-host branch is a real assertion (CROSS_HOST_HOST_MISMATCH at CROSS_HOST_COLLECTOR, no receipt) and never `it.skip`.",
+      "startedAt": "2026-08-16T00:27:06.545Z",
+      "completedAt": "2026-08-16T00:34:10.901Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement the typed evidence protocol, not a replacement platform classifier. Provide sorted-key UTF-8 canonical encoding, SHA-256 projection/digest helpers, total exact-key decoders, deep-frozen accepted values, content-addressed receipt/aggregate filenames, `verifyHostReceipt(expectedSlot, bytes, expectedSourceAndDistribution)`, and an aggregator over the fixed Linux/darwin slots. A receipt must bind Git source SHA/object format; all six canonical distribution components with manifest and asset digests plus a common aggregate digest; production doctor OS/arch/Node/pnpm report and its digest; kernel; production provider runtime observation/closure and digest; schedule/fixture/config/workflow/lockfile digests; canonical timestamps; exactly 21 raw case records and their digests; receipt version/digest; and consumer `task-22cfca91c5134b24aaf3e5734444fb93`. Verification must recompute every digest and derive the row from verified doctor/runtime identity rather than a caller host claim or artifact name. A missing, malformed, duplicate, stale-source, distribution-divergent, runtime-unverifiable, incomplete, or tampered input yields a frozen UNKNOWN row with the exact code/layer; one bad or absent slot must not erase the other slot's valid row.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/fault/cross-host/effect-evidence-contract.ts",
         "tests/fault/cross-host/effect-evidence.fault.ts"
       ],
       "newFiles": [
         "tests/fault/cross-host/effect-evidence-contract.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/fault/cross-host/effect-evidence-contract.ts",
+        "tests/fault/cross-host/effect-evidence-verify.ts"
+      ],
+      "note": "GREEN for the protocol: the 7 non-CLI cases of cross-host/effect-evidence.fault.ts now pass (3 CLI cases stay red until step 5). effect-evidence-contract.ts holds vocabulary and canonical encoding only: sorted-key recursive UTF-8 canonical JSON, sha256Hex/canonicalDigest, frozen slots/layers/12 codes, exact-key decoder, sealHostReceipt, and content-addressed receipt-<digest>.json. effect-evidence-verify.ts holds verification and aggregation. PLAN DEVIATION, deliberate and per-file-cap driven: the plan named verifyHostReceipt inside effect-evidence-contract.ts, but a single module would have exceeded the 250-line per-file cap (contract is 196 physical lines, verify is 253 - see step 7 for the split I still owe on verify). Splitting them also keeps the contract free of any import cycle, since verify imports contract and never the reverse. Bindings a receipt carries, all exact-key: source {commitSha, objectFormat}; distribution {componentCount, components[{name, manifestDigest, assetDigest}], aggregateDigest}; doctor {os, arch, nodeVersion, pnpmVersion, reportDigest}; kernel {release}; runtime {closureKind, pinningMethod, observationDigest, truthClass}; schedule {scheduleDigest, fixtureDigest, configDigest, workflowDigest, lockfileDigest}; timestamps {startedAt, completedAt}; 21 cases; caseDigest; receiptVersion; hostSlot; consumerTaskId task-22cfca91c5134b24aaf3e5734444fb93; plus the self receiptDigest. Gate order is load-bearing: shape, then self-digest recompute, then doctor/kernel identity, then derived-slot equality, then source, then distribution, then runtime, then the raw schedule. The row is DERIVED from the verified doctor.os inside the digest-checked bytes and must equal both the requested slot and the receipt's own hostSlot - a caller hostSlot field, a file name or a download directory never decides it. scheduleDigest covers only the case UNIVERSE (boundary/schedule pairs) while caseDigest covers the full case records, so tampering one case record is CROSS_HOST_RAW_RECEIPT_MISMATCH and cannot hide behind the schedule digest. Aggregation verifies each fixed slot independently: 0 receipts is CROSS_HOST_RECEIPT_MISSING, >1 is CROSS_HOST_RECEIPT_DUPLICATE, and a bad or absent slot leaves the other slot's PROVEN row standing; aggregate truth is AND over a length-checked row set so a truncated row list cannot read as PROVEN.",
+      "startedAt": "2026-08-16T00:34:13.408Z",
+      "completedAt": "2026-08-16T00:34:28.319Z"
     },
     {
       "stepId": "step-4",
       "description": "Implement the shared real-host schedule driver using only Node built-ins and public package roots. Derive the executing host from `collectDoctorVersionReport()` plus `os.release()`, never a matrix/env claim. For each unique case, create unique effect/grant/process identities (the verifier registry is process-global), use production activation, and invoke the OS child launcher only after ACTIVATED. Before-activation schedules tombstone first, assert zero physical launch plus `EFFECT_TOMBSTONED` / `ACTIVATION` / `detail.leg=tombstoneWitness`, then classify an absent fact as `UNKNOWN` with `PLATFORM_FACT_ABSENT`, the exact OS layer, and exact boundary. After-activation crash schedules wait for a real `process.execPath` verifier child to start, SIGKILL and observe it, assert `VERIFIER_PROCESS_EXIT_AMBIGUOUS` / `CAPTURE` / source `PROCESS`, and feed production `classifyCrash`; cancellation schedules start the real child, request ACTIVE cancellation (`MUST_DRAIN`), abort/observe it, assert `VERIFIER_PROCESS_CANCELLED` / `CAPTURE` / source `PROCESS`, and feed production `reconcileClaudeRun`. Build each boundary fact through its owner: runtime observation from the actual Node executable bytes/closure, scope plus input manifest with at least one tracked path, a real temp symlink/lstat/realpath observation, activation commit lease binding, reconciliation, and crash classification. Invoke the appropriate production boundary classifier for every case and the production whole-platform observer for every seven-case schedule batch; record exact truth/code/layer/boundary and raw process/timing/digest facts. Use bounded waits and `finally` cleanup so no child or temp path survives.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/fault/cross-host/effect-schedule-driver.ts",
         "tests/fault/linux/effect-conformance.fault.ts",
@@ -64,7 +78,8 @@
       ],
       "newFiles": [
         "tests/fault/cross-host/effect-schedule-driver.ts"
-      ]
+      ],
+      "startedAt": "2026-08-16T00:35:05.757Z"
     },
     {
       "stepId": "step-5",
@@ -147,12 +162,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:59:41.305Z",
-  "updatedAt": "2026-08-16T00:27:06.546Z",
+  "updatedAt": "2026-08-16T00:35:05.757Z",
   "metrics": {
     "firstClaimAt": "2026-08-14T10:44:43.255Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-8b21d0bb",
@@ -190,7 +205,9 @@
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-16T00:04:01.966Z",
