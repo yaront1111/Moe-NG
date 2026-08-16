@@ -330,6 +330,14 @@ enum PollStep {
     Bytes(usize),
     End,
     Error(u32),
+    /// A channel that LIES ABOUT ITS OWN COUNT: it reports one byte more than
+    /// the buffer it was handed, having placed nothing.
+    ///
+    /// Not reachable by writing bytes, which is why it is a step rather than a
+    /// script: no peer can make an honest channel over-report, so only a broken
+    /// implementation produces it, and the decoder must refuse it rather than
+    /// index past the buffer it owns.
+    Overreports,
 }
 
 /// A scripted pipe: hands out a prepared byte script, records everything
@@ -429,6 +437,7 @@ impl ByteChannel for Pipe {
             PollStep::Pending => Ok(Poll::Pending),
             PollStep::End => Ok(Poll::Ready(0)),
             PollStep::Error(code) => Err(code),
+            PollStep::Overreports => Ok(Poll::Ready(buffer.len() + 1)),
             PollStep::Bytes(count) => {
                 let take = count
                     .min(buffer.len())
@@ -1161,6 +1170,39 @@ fn poll_failure_after_launch_refuses_with_exact_channel_failure_evidence() {
     );
     assert_eq!(RefusalLayer::Protocol.wire(), 2);
     assert_eq!(ProtocolReason::ChannelFailed.ordinal(), 3);
+    assert_eq!(
+        ProtocolReason::ChannelFailed.stage(),
+        ProtocolStage::Framing
+    );
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
+
+/// A readiness answer LARGER than the buffer offered is a broken channel, and it
+/// is refused with the same channel evidence a syscall failure carries — not
+/// trusted into a slice that would panic on a length the channel invented.
+///
+/// The OS code is 0 because there is no OS code: nothing failed, the channel
+/// simply reported an impossible count, so the refusal says ChannelFailed with
+/// the absence spelled out rather than a number borrowed from somewhere else.
+#[test]
+fn a_poll_claiming_more_than_it_was_offered_refuses_as_a_broken_channel() {
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut]);
+    let control = Pipe::of(&a_launch_frame()).with_poll_steps(&[PollStep::Overreports]);
+    let (outcome, wired) = run_with(&calls, wiring_with_control(control), PATIENT_TIMEOUT_MS);
+
+    assert!(matches!(outcome, Outcome::Ran(Stopped::ControlRefused, _)));
+    assert_eq!(wired.control.poll_calls, 1);
+    assert_eq!(wired.control.polled_bytes, 0);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (
+            RefusalLayer::Protocol.wire(),
+            ProtocolReason::ChannelFailed.ordinal() as u16,
+            0
+        ),
+    );
     assert_eq!(
         ProtocolReason::ChannelFailed.stage(),
         ProtocolStage::Framing
