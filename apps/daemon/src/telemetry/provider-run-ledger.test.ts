@@ -26,7 +26,7 @@ import { SqliteEventStore } from "@moe/store";
 import type { CommandDecisionKey, StoredEvent } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
-import { encodeProviderRunRecord } from "./provider-run-codec.js";
+import { decodeProviderRunRecord, encodeProviderRunRecord } from "./provider-run-codec.js";
 import {
   PROVIDER_RUN_EVENT_TYPE,
   PROVIDER_RUN_RECORD_VERSION,
@@ -214,6 +214,32 @@ describe("commitProviderRunRecord — first commit", () => {
     }
   });
 
+  /**
+   * One aggregate per run is what makes expectedVersion 0 a conflict check rather
+   * than a blanket "only one run ever". Without this, a derivation that collapsed
+   * every run onto a constant identity would still pass every single-run case.
+   */
+  it("keeps two distinct runs on separate aggregates, each committing at version 0", () => {
+    const store = openStore();
+    try {
+      const second = record({ providerRunRef: { ...REF, attemptRef: "attempt-2" } });
+      const first = accepted(commitProviderRunRecord(store, input()));
+      const other = accepted(
+        commitProviderRunRecord(
+          store,
+          input({ key: { ...KEY, commandId: "command-2" }, record: second }),
+        ),
+      );
+
+      expect(other.disposition).toBe("COMMITTED");
+      expect(other.aggregateId).not.toBe(first.aggregateId);
+      expect(store.readEvents(first.aggregateId)).toHaveLength(1);
+      expect(store.readEvents(other.aggregateId)).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+
   it("derives the event id deterministically from the run identity, never the digest", () => {
     const store = openStore();
     try {
@@ -343,17 +369,25 @@ describe("commitProviderRunRecord — unreadable durable evidence", () => {
   const UNREADABLE = [
     {
       name: "malformed",
+      codecCode: "PROVIDER_RUN_BYTES_MALFORMED",
       payload: () => new TextEncoder().encode("{not json at all"),
     },
     {
+      // Shares the codec code with `malformed`, and that is the honest result
+      // rather than a weaker test: a truncated frame IS a framing failure. The
+      // per-fixture assertion below records that instead of implying three
+      // distinct reasons where the codec only has two.
       name: "truncated",
+      codecCode: "PROVIDER_RUN_BYTES_MALFORMED",
       payload: () => sealed(record()).bytes.subarray(0, 40),
     },
     {
+      // An authentic frame whose trailing digest has been swapped for another
+      // valid-looking one: it survives framing and refuses on the digest, which
+      // is what makes it a genuinely different failure from the two above.
       name: "digest-mismatched",
+      codecCode: "PROVIDER_RUN_DIGEST_MISMATCH",
       payload: () => {
-        // An authentic frame whose trailing digest has been swapped for another
-        // valid-looking one: it survives framing and refuses on the digest.
         const bytes = Uint8Array.from(sealed(record()).bytes);
         bytes.set(new TextEncoder().encode("a".repeat(64)), bytes.byteLength - 64);
         return bytes;
@@ -362,6 +396,25 @@ describe("commitProviderRunRecord — unreadable durable evidence", () => {
   ] as const;
 
   expect(UNREADABLE.length, "the unreadable sweep must generate cases").toBe(3);
+
+  /**
+   * The ledger deliberately collapses all three to RECORD_UNREADABLE, so the
+   * codec is the ONLY place their difference is observable. Without this the
+   * sweep below could be one failure wearing three names — which is what a first
+   * draft of it actually was, until this assertion said so.
+   */
+  it("refuses each unreadable fixture at the codec with its own recorded code", () => {
+    const codes = UNREADABLE.map((durable) => {
+      const decoded = decodeProviderRunRecord(durable.payload());
+      if (decoded.ok) throw new Error(`${durable.name} must not decode`);
+      expect(decoded.layer, durable.name).toBe("PROVIDER_RUN_CODEC");
+      expect(decoded.code, durable.name).toBe(durable.codecCode);
+      return decoded.code;
+    });
+    // Two, not three: truncation and garbage both fail framing. Pinned so that a
+    // fixture drifting onto an already-covered path shows up here.
+    expect(new Set(codes).size, "the sweep must cover more than one codec path").toBe(2);
+  });
 
   for (const durable of UNREADABLE) {
     it(`answers UNKNOWN for ${durable.name} durable bytes without gaining authority`, () => {
