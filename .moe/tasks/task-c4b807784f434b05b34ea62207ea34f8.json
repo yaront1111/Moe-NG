@@ -16,7 +16,7 @@
     "Wait for dec-64b2391cb80f4c0cbb6e88353017cc65; never label scheduler graphIdentity as graphContentHash. TDD and explicit-path discipline apply."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:35:32.638Z",
-  "updatedAt": "2026-08-16T22:35:32.638Z"
+  "updatedAt": "2026-08-17T11:18:06.656Z"
 }

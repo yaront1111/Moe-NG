@@ -10,6 +10,7 @@ import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
+import { readAttemptRelease } from "./attempt-release-disposition.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
@@ -758,6 +759,16 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     });
     // The grant was never consumed: the activation aggregate carries no tail.
     expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
+    // COMPOSITION, not export: the same production dispatch also wrote the
+    // attempt's release disposition. An unproven launch is a cancellation, so it
+    // must NOT present as resumable — the resumable path is unreachable here.
+    const released = readAttemptRelease(store, ACTIVATION_AGGREGATE);
+    expect(released.ok && released.record["reason"]).toBe("WORK_CANCEL");
+    expect(released.ok && released.record["disposition"]).toEqual({
+      resumable: false, strongestReason: "WORK_CANCEL", terminalTarget: "CANCELLED",
+    });
+    // Read from the DURABLE activation, never from a caller claim.
+    expect(released.ok && released.record["leaseState"]).toBe("ACTIVE");
   });
 
   it("refuses a read for an aggregate that has no dispatch record", () => {

@@ -16,7 +16,7 @@
     "One durable decision must cover the complete authority move; no compensating second commit, mock-backed accepted path or caller-supplied current state. TDD and per-file line caps apply."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:34:57.261Z",
-  "updatedAt": "2026-08-16T22:34:57.261Z"
+  "updatedAt": "2026-08-17T11:18:02.703Z"
 }

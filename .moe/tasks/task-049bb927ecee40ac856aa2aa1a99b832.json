@@ -19,12 +19,12 @@
     "Own only the projection matrix test and at most two focused fixture/helper files under tests/integration/portability."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (portability shadow matrix), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -32,5 +32,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:35.974Z",
-  "updatedAt": "2026-08-16T23:02:35.974Z"
+  "updatedAt": "2026-08-17T11:20:06.454Z"
 }

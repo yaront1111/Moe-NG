@@ -17,12 +17,12 @@
     "Do not implement the reader or edit @moe/import production sources in this task."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (daemon importer dependency edge), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-80fce1d1d625453098bd526d61c5ddb8",
   "priority": "HIGH",
@@ -30,5 +30,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.565Z",
-  "updatedAt": "2026-08-16T23:03:29.565Z"
+  "updatedAt": "2026-08-17T11:20:08.262Z"
 }

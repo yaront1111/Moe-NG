@@ -18,12 +18,12 @@
     "Own only the transport/host matrix test and at most two focused fixture/helper files under tests/integration/portability; TDD with an accepted control and production-surface mutation drill."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (daemon transport / JetBrains host matrix), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -31,5 +31,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-16T23:06:17.977Z"
+  "updatedAt": "2026-08-17T11:20:30.671Z"
 }

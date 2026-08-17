@@ -17,12 +17,12 @@
     "Preserve foreign work and commit only explicit tests/security paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (GOAL_PREREQUISITE_LAYER security axis cover), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-3b1cbdf9bd39405bb32230552d3ab242",
   "priority": "HIGH",
@@ -30,5 +30,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-16T22:57:50.708Z"
+  "updatedAt": "2026-08-17T11:20:16.516Z"
 }

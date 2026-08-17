@@ -17,12 +17,12 @@
     "Own only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml; commit by explicit pathspec and preserve foreign lockfile changes."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (acceptance entrypoints and package edges), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -30,5 +30,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:03.062Z",
-  "updatedAt": "2026-08-16T23:06:03.062Z"
+  "updatedAt": "2026-08-17T11:20:32.395Z"
 }

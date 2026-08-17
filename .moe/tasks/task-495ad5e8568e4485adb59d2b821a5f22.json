@@ -88,8 +88,8 @@
       "completedAt": "2026-08-16T23:37:03.371Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -101,12 +101,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:23:10.075Z",
-  "updatedAt": "2026-08-16T23:38:28.211Z",
+  "updatedAt": "2026-08-16T23:53:14.335Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:19:54.453Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-16T23:53:14.335Z",
+    "wallClockMs": 5599882
   },
   "stepsCompleted": [
     "step-1",
@@ -164,5 +166,8 @@
     "outputTail": "[scenario A] dirty peer files are never captured\n[scenario A] ok\n[scenario B] a peer's pre-staged index entry never rides along\n[scenario B] ok\n[scenario C] empty owned-path set refuses with MOE_COMMIT_REFUSED_NO_OWNED_PATHS\n[scenario C] ok\n[scenario D] all owned paths missing refuses with MOE_COMMIT_REFUSED_OWNED_PATH_MISSING\n[scenario D] ok\n[scenario E] a glob in filesModified cannot widen the commit\n[scenario E] ok\ncommit-scope scenarios run: 5\nPASS postflight.sh\n[scenario A] dirty peer files are never captured\n[scenario A] ok\n[scenario B] a peer's pre-staged index entry never rides along\n[scenario B] ok\n[scenario C] empty owned-path set refuses with MOE_COMMIT_REFUSED_NO_OWNED_PATHS\n[scenario C] ok\n[scenario D] all owned paths missing refuses with MOE_COMMIT_REFUSED_OWNED_PATH_MISSING\n[scenario D] ok\n[scenario E] a glob in filesModified cannot widen the commit\n[scenario E] ok\ncommit-scope scenarios run: 5\nPASS postflight.ps1\nGATE_EXIT=0",
     "reportedAt": "2026-08-16T23:38:21.716Z"
   },
-  "filesModified": []
+  "filesModified": [],
+  "completedAt": "2026-08-16T23:53:14.335Z",
+  "reviewCompletedAt": "2026-08-16T23:53:14.335Z",
+  "reviewSummary": "APPROVED at b6c0a7e (D:/projexts/moes). Gates re-run by me, separately so neither leg masks the other: bash postflight.sh 5 scenarios PASS exit 0; pwsh postflight.ps1 5 scenarios PASS exit 0.\n\nDoD 1-3 verified by my own drills, not the fix note. Four mutants, all KILLED with NAMED scenarios:\n- bare `git commit` in moe-agent.sh -> \"SCENARIO B FAILED: commit must contain ONLY owned-a.txt; got [owned-a.txt peer-staged.txt]\". The defect itself, reproduced.\n- restore `git add -A` -> SCENARIO C red. DoD 3's literal requirement.\n- refusal branch made to fail OPEN -> SCENARIO C red.\n- bare `git commit` in the moe-agent.ps1 TWIN -> SCENARIO B red, same message. Twin parity proven, not assumed.\nBoth scripts restored byte-exact (SHA256 vs pre-drill snapshots); moes scripts/ clean. Live wrapper, so I checked.\n\nRoot-cause work is the strongest part. Three causes, all measured: the record was read from .moe/tasks/task-<id>.json while the id already carries the prefix, so filesModified was ALWAYS empty and `add -A` ran on EVERY completion (309 task files, zero named task-task-*); a BARE commit commits the SHARED INDEX, which no dirty-tree test can see; and a pathspec is a GLOB, so `*` walked back out to whole-tree - now `:(literal)`. This explains the sweeps I graded all night, including 54ad5e8. Scope stayed inside the 4 authorized files.\n\nDoD 4 - one half is not closeable by the worker, flagged rather than held against them. The rail update is PROPOSED, not applied: prop-1ed3e82b, MODIFY_RAIL/GLOBAL, PENDING. GOVERNOR/HUMAN ACTION NEEDED; until then the rail still reads \"Until the hook is fixed\". The proposed text is accurate and keeps pre-fix guidance for sweeps already in history.\n\nTwo non-blocking notes: the 8 occurrence ids are cited in the completion commit but not the board-side handoff note, where a moe-next reader looks. And \"do not break push-on-completion\" is preserved in code (a refusal still pushes) but no scenario covers push."
 }

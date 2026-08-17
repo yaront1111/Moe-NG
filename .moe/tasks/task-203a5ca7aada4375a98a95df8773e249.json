@@ -18,7 +18,7 @@
     "TDD exact codes/layers, real SqliteEventStore, target <=250 lines per production source, explicit owned-path commits."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:53:18.945Z",
-  "updatedAt": "2026-08-16T22:53:18.945Z"
+  "updatedAt": "2026-08-17T11:18:14.512Z"
 }

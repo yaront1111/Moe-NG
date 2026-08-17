@@ -20,6 +20,7 @@ import {
 import type {
   FoundationAttemptBound, FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
+import { recordAttemptRelease } from "./attempt-release-disposition.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation,
@@ -94,10 +95,38 @@ function narrowLaunchOptions(
   });
 }
 
+/**
+ * PROPOSED, never asserted. Design 765 makes only an unchanged strongest
+ * `WORK_RELEASE_OR_PAUSE` resumable, so a settle that did not prove its result
+ * is a cancellation and may not present as one. `recordAttemptRelease` decides
+ * whether either shape is recordable — through @moe/runner's own monotonicity
+ * predicate — and refuses rather than repairs.
+ */
+const SETTLE_DISPOSITIONS = Object.freeze({
+  PROVEN: { reasons: ["WORK_RELEASE_OR_PAUSE"], strongestReason: "WORK_RELEASE_OR_PAUSE",
+    terminalTarget: "RELEASED" },
+  UNPROVEN: { reasons: ["WORK_CANCEL"], strongestReason: "WORK_CANCEL",
+    terminalTarget: "CANCELLED" },
+} as const);
+
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   dispatch(input: unknown): Promise<FoundationAttemptOutcome>;
 } {
   const { store } = deps;
+
+  /** The attempt's release disposition, durable beside the dispatch record and
+   *  derived from what the settle ACTUALLY answered. Facts only: a release row
+   *  that cannot be written changes no dispatch answer and grants no authority,
+   *  so its own refusal is deliberately not folded into the outcome. */
+  function noteRelease(
+    bound: FoundationAttemptBound, record: ActivationLedgerRecord,
+    settled: FoundationAttemptOutcome,
+  ): FoundationAttemptOutcome {
+    const disposition = settled.ok ? SETTLE_DISPOSITIONS.PROVEN : SETTLE_DISPOSITIONS.UNPROVEN;
+    recordAttemptRelease(store, bound, record,
+      { disposition, reason: disposition.strongestReason });
+    return settled;
+  }
 
   /** PROVEN launch only. The capture port's answer is CONTAINED here and handed
    *  on raw: the store owns fencing its shape, building the result manifest over
@@ -110,8 +139,8 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
       nodeKey: bound.nodeKey, observation, sessionId: bound.sessionId,
     }), false);
-    return recordProvenFoundationAttempt(
-      store, bound, record, input, { answer, observation, registration });
+    return noteRelease(bound, record, recordProvenFoundationAttempt(
+      store, bound, record, input, { answer, observation, registration }));
   }
 
   /** Not PROVEN: persist the honest advisory fact under the runner's own code and
@@ -122,11 +151,11 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   ): FoundationAttemptOutcome {
     const code = textOf(result, "code") ?? "FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN";
     const layer = textOf(result, "layer") ?? DAEMON_FOUNDATION_ATTEMPT;
-    return settleFoundationAttempt(store, bound, record, input, {
+    return noteRelease(bound, record, settleFoundationAttempt(store, bound, record, input, {
       observation: result?.["observation"] ?? null, reasonCode: code, reasonLayer: layer,
       registration: result?.["registration"] ?? null, resultManifest: null,
       truthClass: result?.["truthClass"] === "UNSUPPORTED" ? "UNKNOWN" : "SUSPECT",
-    }, foundationAttemptRefusal(code, layer));
+    }, foundationAttemptRefusal(code, layer)));
   }
 
   async function dispatch(input: unknown): Promise<FoundationAttemptOutcome> {

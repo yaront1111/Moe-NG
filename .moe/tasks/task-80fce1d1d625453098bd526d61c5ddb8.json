@@ -18,12 +18,12 @@
     "Keep each production source <=250 physical lines and split before 400; exact one-line LF .js bridges where root-reachable; stage/commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (shadow projection adapter), BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -38,5 +38,5 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:01:28.873Z",
-  "updatedAt": "2026-08-16T23:07:03.627Z"
+  "updatedAt": "2026-08-17T11:20:14.166Z"
 }

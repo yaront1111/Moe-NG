@@ -116,10 +116,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 113.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-233c54766bb640f797678b3ffa0b8b5a",
+      "author": "governor-7610ed5a",
+      "content": "Governor correction to the 11:19Z handoff note recorded on this task: its \"whatIsDone: steps 1-2, no production code\" describes the state at the 22:27Z stop order and is superseded by the task's own blockedReason — the worker actually reached steps 1-4 and produced graph-content surface bytes that the blockedReason instructs the next owner to PRESERVE. Trust the blockedReason over the handoff note where they disagree. The handoff note's pitfalls section (do not equate graphContentHash with ValidatedGraph.graphIdentity; authoritative GraphRevisionContent covers repo base/parent/policy/budget/author) remains correct.",
+      "timestamp": "2026-08-17T11:21:21.436Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:16:46.823Z",
-  "updatedAt": "2026-08-16T22:34:01.596Z",
+  "updatedAt": "2026-08-17T11:21:21.436Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:17:07.456Z",
     "plannedStepCount": 6,
@@ -158,5 +165,16 @@
   "blockedReason": "Authoritative-design remeasurement invalidated the plan after steps 1-4: GraphRevisionContent hash includes repository base, parent, policy, decomposition budget and author in addition to graph structure. The produced graph-content surface and tests currently claim structural graphIdentity is graphContentHash, which would redefine the authority contract. Preserve current bytes for the next owner; do not commit/reset. Resume only after dec-64b2391 is resolved and rewrite the task/plan accordingly.",
   "blockedResourceId": null,
   "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T22:34:01.596Z"
+  "blockedAt": "2026-08-16T22:34:01.596Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 of the retracted 6-step plan: baseline audit (validateGraphSnapshot surface, no graph-content codec exists, @moe/scheduler baseline 43 files / 1326 tests) and RED tests in graph-content.test.ts specifying encode/decode/permutation-identity behavior.",
+      "whatRemains": "Full re-plan by architect-f956ffe1 on the corrected premise: canonical GraphSnapshot with a SEPARATE snapshotIdentity, core graphContentHash retained as distinct provenance — or a full GraphRevisionContent producer/codec prerequisite. The existing RED tests encode the WRONG hash-equivalence and must be rewritten or discarded by the new plan, not inherited as-is.",
+      "pitfalls": "Do not derive or label graphContentHash from ValidatedGraph.graphIdentity; do not ship a codec claiming that equivalence. Authoritative design line 197 is the contract source.",
+      "openQuestions": "Structural-slice (separate snapshotIdentity) vs full GraphRevisionContent producer — architect decision in the new plan.",
+      "releasedAt": "2026-08-17T11:18:41.538Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Human-approved re-plan handoff (TUI, 22:27Z): plan author architect-f956ffe1 retracted the submitted premise — graphContentHash must not be equated with ValidatedGraph.graphIdentity; authoritative GraphRevisionContent covers repo base/parent/policy/budget/author. Worker stopped after steps 1-2 (baseline + RED tests, no production code). Releasing claim ahead of PLANNING flip."
+    }
+  ]
 }

@@ -18,7 +18,7 @@
     "Use real SqliteEventStore, TDD exact codes/layers, bounded index reads, target <=250 lines per production source, and explicit owned-path commits."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:48:12.501Z",
-  "updatedAt": "2026-08-16T22:48:12.501Z"
+  "updatedAt": "2026-08-17T11:18:12.572Z"
 }

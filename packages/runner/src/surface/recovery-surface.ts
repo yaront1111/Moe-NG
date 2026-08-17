@@ -40,7 +40,22 @@ export {
   type ResumeVerdict,
 } from "../recovery/safe-boundary.js";
 
-export { type DrainDisposition } from "../supervisor/drain-disposition.js";
+/**
+ * The disposition VALIDATOR travels with the type, and only the validator. A
+ * consumer that must record a drain disposition durably has to be able to
+ * refuse an incoherent one; publishing the vocabulary alone would leave it
+ * naming the reasons while retyping the coherence check, which is precisely the
+ * drift this seam exists to prevent. `drainRank`, `drainTargetOf` and
+ * `DRAIN_TABLE_ROWS` stay internal — `isMonotonicDisposition` already compares
+ * the terminal target against the strongest reason's own target, so a consumer
+ * needs none of them, and a caller able to rank reasons itself could mint the
+ * "strongest" answer this seam is here to check.
+ */
+export {
+  isMonotonicDisposition,
+  parseDrainDisposition,
+  type DrainDisposition,
+} from "../supervisor/drain-disposition.js";
 export {
   DRAIN_REASONS,
   DRAIN_TERMINAL_TARGETS,

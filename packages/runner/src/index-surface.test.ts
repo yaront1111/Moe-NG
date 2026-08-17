@@ -239,6 +239,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["RESTART_POST_STATES", "array"], ["admitResume", "function"],
   ["admitSuccessorOverlap", "function"], ["advanceRecoveryDrain", "function"],
   ["classifyCrash", "function"],
+  // The disposition VALIDATOR half of that seam. A daemon that must record a
+  // drain disposition durably has to be able to refuse an incoherent one; with
+  // only the vocabulary published it could name the reasons but never check
+  // them, and would end up retyping the check — the exact drift this seam
+  // exists to prevent. `drainRank`, `drainTargetOf` and `DRAIN_TABLE_ROWS` stay
+  // internal: `isMonotonicDisposition` performs the target comparison itself.
+  ["isMonotonicDisposition", "function"], ["parseDrainDisposition", "function"],
   // evidence/: contract vocabulary, recipe, receipt, rematerialization, obligations, execution.
   ["EVIDENCE_OBLIGATION_KINDS", "array"], ["EVIDENCE_RECEIPT_VERSION", "string"],
   ["EVIDENCE_REFUSAL_LAYERS", "array"], ["EXECUTION_DISPOSITIONS", "array"],
@@ -364,7 +371,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(230);
+  expect(EXPECTED_EXPORTS.length).toBe(232);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
