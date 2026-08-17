@@ -157,8 +157,8 @@
       "completedAt": "2026-08-17T11:44:07.194Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a83aecdf",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -170,7 +170,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:29:07.687Z",
-  "updatedAt": "2026-08-17T11:44:07.194Z",
+  "updatedAt": "2026-08-17T11:46:21.371Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T11:18:47.827Z",
     "plannedStepCount": 8,
@@ -210,5 +210,23 @@
   "contextFetchedBy": [
     "worker-a83aecdf"
   ],
-  "workStartedAt": "2026-08-17T11:22:27.190Z"
+  "workStartedAt": "2026-08-17T11:22:27.190Z",
+  "reviewStartedAt": "2026-08-17T11:46:21.371Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "apps/daemon typecheck: Done\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  111 passed (111)\n      Tests  2246 passed (2246)\n   Start at  14:43:32\n   Duration  6.32s (transform 40.49s, setup 0ms, import 92.80s, tests 58.96s, environment 9ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-17T11:46:21.371Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/review/review-read-model.test.ts",
+    "apps/daemon/src/review/review-read-model.ts",
+    "apps/daemon/src/review/review-round-items.ts",
+    "apps/daemon/src/review/review-round-items.js",
+    "apps/daemon/src/review/review-services.test.ts",
+    "apps/daemon/src/review/review-services.ts",
+    "apps/daemon/src/review/review-package-restore.ts",
+    "apps/daemon/src/review/review-package-restore.js",
+    "apps/daemon/src/review/review-package-restore.test.ts"
+  ]
 }
