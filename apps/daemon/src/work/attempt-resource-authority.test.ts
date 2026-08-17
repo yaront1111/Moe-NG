@@ -1,3 +1,4 @@
+import { grantSuccessorCapacity } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -167,6 +168,16 @@ describe("attempt resource authority — the bind arm", () => {
       upstreamCode: null,
     });
     expectNoDurableSet(fixture);
+    // WHY THIS CHECK IS THE DAEMON'S OWN AND HAS TO EXIST. The reducer ACCEPTS
+    // the duplicate set — `parseRows` does not dedupe — and hands back three rows
+    // carrying only two distinct ids. Without the daemon's check those bytes
+    // become durable, and a consumer folding by resourceId then sees a two-member
+    // set where three resources were declared. The control is run against the
+    // production reducer, not restated as a literal.
+    const admitted = grantSuccessorCapacity(duplicateRows(), null);
+    if (!admitted.ok) throw new Error("the reducer was expected to admit duplicates");
+    expect(admitted.value.rows).toHaveLength(3);
+    expect(new Set(admitted.value.rows.map((row) => row.resourceId)).size).toBe(2);
   });
 
   it("refuses a set that is not entirely ACTIVE, on the scheduler's own field", () => {

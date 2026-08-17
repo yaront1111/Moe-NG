@@ -2,23 +2,21 @@
  * The durable per-attempt resource authority: which resources one attempt holds,
  * and what the scheduler last decided about each of them.
  *
- * THE AUTHORITY RULE, and it is the whole module. A caller may identify WHICH
- * attempt and WHICH resources it is declaring; it may never supply what STATE
- * those resources are in, and no value it passed is ever what gets persisted.
- *   - Membership is admitted through the public `grantSuccessorCapacity` reducer,
- *     and the rows written are the reducer's own frozen rebuilt rows. The
- *     caller's array is used to ask the question and is then discarded.
- *   - `grantSuccessorCapacity(rows, null)` is called with NO PROOF on purpose.
- *     Given a proof ref that reducer CLEARS quarantines to RELEASED, so a
- *     proof-carrying bind could launder a quarantined resource into a released
- *     one inside durable bytes. With null it refuses the set instead.
- *   - attemptRef, effectIntentRef and the project fence all come from the
- *     COMMITTED activation, re-read from the store. The binding argument names an
- *     aggregate and a project; it cannot assert what that activation contains.
- *   - Transitions are persisted ONLY from an accepted reducer result. RELEASED
- *     versus QUARANTINED survives because those rows are what gets encoded —
- *     nothing here re-derives a state, re-implements a transition or repairs a
- *     row.
+ * THE AUTHORITY RULE, and it is the whole module. A caller identifies WHICH
+ * attempt and WHICH resources it declares; it never supplies what STATE they are
+ * in, and no value it passed is what gets persisted.
+ *   - Membership is admitted through the public `grantSuccessorCapacity` reducer
+ *     and the rows written are that reducer's own frozen rebuilt rows; the
+ *     caller's array only asks the question and is then discarded.
+ *   - The reducer is called with NO PROOF on purpose: given a proof ref it CLEARS
+ *     quarantines to RELEASED, so a proof-carrying bind could launder a
+ *     quarantined resource into a released one inside durable bytes.
+ *   - attemptRef, effectIntentRef and the project fence come from the COMMITTED
+ *     activation, re-read from the store; see `bodyOf` for the one field that
+ *     originates in the binding and what actually fences it.
+ *   - Transitions persist ONLY an accepted reducer result. RELEASED versus
+ *     QUARANTINED survives because those rows are what gets encoded; nothing here
+ *     re-derives a state, re-implements a transition or repairs a row.
  *
  * FAIL CLOSED. Every refusal writes nothing and grants nothing, and a refusal
  * raised upstream keeps its own code and its own layer.
@@ -49,9 +47,8 @@ export { readAttemptResources } from "./attempt-resource-reader.js";
 
 type SchedulerResult = ReturnType<typeof grantSuccessorCapacity>;
 
-/** The activation as the STORE holds it, never as the caller describes it. This
- *  is also the foreign-project fence on the WRITE side: the history reader's own
- *  `tracedProject` check refuses a project mismatch, and its code is preserved. */
+/** The activation as the STORE holds it, never as the caller describes it, and
+ *  the write-side foreign-project fence: `tracedProject` refuses a mismatch. */
 function durableActivation(
   store: SqliteEventStore, binding: AttemptResourceBinding,
 ): ActivationLedgerRecord | AttemptResourceRefused {
@@ -65,32 +62,29 @@ function durableActivation(
   return refuseLocalResource("ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE", upstream);
 }
 
-/** A reducer refusal keeps ITS code as `upstreamCode` and the SCHEDULER's layer:
- *  flattening it would make a malformed row indistinguishable from a quarantined
- *  one, and those need different repairs. */
+/** A reducer refusal keeps ITS code as `upstreamCode` and the SCHEDULER's layer;
+ *  flattening it would confuse a malformed row with a quarantined one. */
 function schedulerRefusal(outcome: SchedulerResult | null): AttemptResourceRefused {
   const upstream = outcome === null || outcome.ok ? null : outcome.issues[0]?.code ?? null;
   return refuseAttemptResource(
     "ATTEMPT_RESOURCE_SET_REFUSED", SCHEDULER_RESOURCE_AUTHORITY, upstream);
 }
 
-/**
- * A CRASH IS NOT A REFUSAL. The reducers parse own data properties but do not
- * guard reflection themselves, and a revoked proxy throws from `Array.isArray`
- * and from a prototype read rather than returning falsy. So a thrown reducer is
- * contained and reported as a refusal with no upstream code — never allowed to
- * escape as an exception a caller would see instead of a decision.
- */
+/** A CRASH IS NOT A REFUSAL. The reducers parse own data properties but do not
+ *  guard reflection, and a revoked proxy THROWS from `Array.isArray` and from a
+ *  prototype read rather than returning falsy. A thrown reducer is contained and
+ *  reported as a refusal, never allowed to escape as an exception a caller would
+ *  see instead of a decision. */
 function runReducer(run: () => SchedulerResult): SchedulerResult | null {
   try { return run(); } catch { return null; }
 }
 
 /**
  * `allActive` is READ off the accepted result, not recomputed: a second
- * derivation of "is this set live" would be a second definition of the same
- * scheduler rule. The duplicate check IS this module's own, because `parseRows`
- * does not dedupe — and it refuses rather than collapsing two rows into one,
- * since a set that silently loses a member is exactly what this record prevents.
+ * derivation would be a second definition of the same scheduler rule. The
+ * duplicate check IS this module's own, because `parseRows` does not dedupe, and
+ * it refuses rather than collapsing two rows into one — a set that silently loses
+ * a member is exactly what this record exists to prevent.
  */
 function admitBind(rows: unknown): AcquisitionSet | AttemptResourceRefused {
   const outcome = runReducer(() => grantSuccessorCapacity(rows, null));
@@ -102,18 +96,28 @@ function admitBind(rows: unknown): AcquisitionSet | AttemptResourceRefused {
     ? value : refuseLocalResource("ATTEMPT_RESOURCE_MEMBER_DUPLICATE");
 }
 
-const isRefusal = <T extends object>(
-  value: T | AttemptResourceRefused,
-): value is AttemptResourceRefused => "ok" in value && (value as { ok: unknown }).ok === false;
+const isRefusal = <T extends object>(value: T | AttemptResourceRefused):
+  value is AttemptResourceRefused => "ok" in value && (value as { ok: unknown }).ok === false;
 
-/** The reducer's rows, field by field. Nothing is spread from a caller record.
+/** The reducer's rows, field by field; nothing is spread from a caller record.
  *  `ResourceRow` is assignable to the member type, so one projection serves both
- *  the reducer's output and the durable members handed back to a reducer. */
+ *  directions. */
 const memberOf = (row: AttemptResourceMember): Record<string, unknown> => ({
   capacityUnits: row.capacityUnits, effectIntentRef: row.effectIntentRef, epoch: row.epoch,
   external: row.external, fenceable: row.fenceable, resourceId: row.resourceId, state: row.state,
 });
 
+/**
+ * `projectId` IS THE ONE PERSISTED FIELD ORIGINATING IN THE BINDING, stated
+ * exactly rather than glossed. `ActivationLedgerRecord` carries no project — it
+ * lives in each event's decision trace — so it cannot be read off `durable`. What
+ * fences it is that `durableActivation` already handed this same value to
+ * `readFoundationActivationHistory`, whose `tracedProject` requires
+ * `event.decisionTrace.projectId === projectId` for EVERY event. A caller cannot
+ * write a project of its choosing: it names the one the committed activation is
+ * traced to, or the activation read refuses first. Every other field comes from
+ * the durable record or the reducer's own returned rows.
+ */
 function bodyOf(
   durable: ActivationLedgerRecord, projectId: string, rows: readonly AttemptResourceMember[],
 ): Record<string, unknown> {
@@ -129,24 +133,22 @@ function bodyOf(
 }
 
 interface CommitInput {
-  readonly binding: AttemptResourceBinding;
-  readonly bytes: Uint8Array;
-  readonly eventId: string;
-  readonly eventType: string;
-  readonly expectedVersion: number;
-  readonly kind: string;
+  readonly binding: AttemptResourceBinding; readonly bytes: Uint8Array;
+  readonly eventId: string; readonly eventType: string;
+  readonly expectedVersion: number; readonly kind: string;
 }
 
 /**
- * One event, at an expected version the caller measured. A concurrent writer
- * observes a different head and is rejected rather than appending beside us, and
- * the command key is suffixed so it can never collide with the activation's own.
+ * One event, at an expected version the caller measured; a concurrent writer sees
+ * a different head and is rejected rather than appending beside us. The command
+ * key is suffixed with `:RESOURCES:<version>` so it cannot collide with the
+ * activation's own key, and the suffix parses unambiguously from the right even
+ * if a commandId contains the delimiter.
  *
- * THE STORE'S OWN CODE IS PRESERVED. `null` means committed; anything else is the
- * upstream reason verbatim, because an idempotency conflict, an expected-version
- * conflict, a reused event id and a closed store are four different repairs and
- * flattening them into one boolean tells a caller to retry a fault that will
- * never succeed.
+ * THE STORE'S OWN CODE IS PRESERVED — `null` means committed, anything else is
+ * the upstream reason verbatim. An idempotency conflict, an expected-version
+ * conflict, a reused event id and a closed store are four different repairs, and
+ * one boolean would tell a caller to retry a fault that can never succeed.
  */
 function commitResourceEvent(store: SqliteEventStore, input: CommitInput): string | null {
   const { binding, expectedVersion } = input;
@@ -197,11 +199,9 @@ export function bindAttemptResources(
   return readAttemptResources(store, binding.activationAggregateId, binding.projectId);
 }
 
-/**
- * Exactly ONE public reducer per report, over the DURABLE members. The report
- * says which resource and what the adapter said; the resulting states are the
- * reducer's, and its returned rows are what gets encoded.
- */
+/** Exactly ONE public reducer per report, over the DURABLE members. The report
+ *  says which resource and what the adapter said; the resulting states are the
+ *  reducer's, and its returned rows are what gets encoded. */
 function reduceReport(
   members: readonly unknown[], report: AttemptResourceReport,
 ): SchedulerResult | null {
@@ -214,10 +214,8 @@ function reduceReport(
   });
 }
 
-/**
- * The TRANSITION arm. The predecessor members are read through the durable
- * reader, never taken from a caller list, so a report cannot smuggle in a set.
- */
+/** The TRANSITION arm. Predecessor members are read through the durable reader,
+ *  never taken from a caller list, so a report cannot smuggle in a set. */
 export function applyAttemptResourceReport(
   store: SqliteEventStore, binding: AttemptResourceBinding, report: AttemptResourceReport,
 ): AttemptResourceOutcome {

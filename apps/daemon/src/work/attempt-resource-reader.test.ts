@@ -44,7 +44,9 @@ const read = (fixture: ResourceFixture, projectId = PROJECT_ID): AttemptResource
   readAttemptResources(fixture.store, ACTIVATION_AGGREGATE, projectId);
 
 /** One valid bind, planted so the tail cases have a legitimate head to follow. */
-function plantedBind(label: string, overrides: Readonly<Record<string, unknown>> = {}): ResourceFixture {
+function plantedBind(
+  label: string, overrides: Readonly<Record<string, unknown>> = {},
+): ResourceFixture {
   const fixture = hostFixture(label);
   plantResourceEvent(fixture.store, ATTEMPT_RESOURCE_BOUND_EVENT_TYPE,
     canonicalBytes(resourceBody(overrides)), 0, `${label}-bind`);

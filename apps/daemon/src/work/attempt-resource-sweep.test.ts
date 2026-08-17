@@ -1,7 +1,9 @@
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
+import {
+  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses,
+} from "../recovery/restore-test-harness.js";
 import {
   ATTEMPT_RESOURCE_CODES, ATTEMPT_RESOURCE_MEMBER_KEYS, DAEMON_ATTEMPT_RESOURCE,
   SCHEDULER_RESOURCE_AUTHORITY, deriveAttemptResourceAggregateId,
@@ -252,7 +254,9 @@ describe("attempt resource authority — generated hostile sweep", () => {
     // refuses everything, including what it should accept.
     const fixture = hostFixture("sweep-control");
     for (const testCase of sweepCases()) {
-      try { bindAttemptResources(fixture.store, fixture.binding, testCase.rows); } catch { /* recorded above */ }
+      // A throw here is already reported by name in the case above.
+      try { bindAttemptResources(fixture.store, fixture.binding, testCase.rows); }
+      catch { /* the sweep above is what judges a crash */ }
     }
     const outcome = bindAttemptResources(fixture.store, fixture.binding, cleanRows());
     expect(outcome.ok).toBe(true);
