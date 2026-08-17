@@ -130,16 +130,22 @@
     {
       "stepId": "step-8",
       "description": "Mutation drills and adversarial review, then stop. THREE drills, each restored before the next, each naming the test that reddens: (i) hardcode `terminalTarget: \"RELEASED\"` in the recorded row — DoD 6 names this one explicitly; (ii) hardcode `resumable: true` — the non-resumable case from step 4(f) must redden, and if it does not, the case is testing nothing; (iii) delete the `isMonotonicDisposition` call so a downgraded disposition is accepted — the step 3(b) and 3(c) cases must redden, and they must redden for DIFFERENT assertions, which is what proves those two codes are not one code wearing two names. A drill that reddens the WRONG test, or that hangs, is not a pass. Drills run in a SHARED worktree: snapshot each file's hash before mutating and restore by content, never by `git checkout` — a peer's task-completion hook can commit a whole tree and swallow the drill while `git status` reads clean. Then run the `adversarial-self-review` skill over the diff, specifically: a second release recorded concurrently on the same attempt aggregate; an activation record whose lease or providerSlot is missing entirely; an empty `reasons` array; and per-file line counts (foundation-attempt-service.ts must still be under 250, and the new module under 250).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/attempt-release-disposition.ts",
         "apps/daemon/src/work/attempt-release-disposition.test.ts"
       ],
-      "startedAt": "2026-08-17T11:40:01.366Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/attempt-release-disposition.ts",
+        "apps/daemon/src/work/attempt-release-disposition.test.ts"
+      ],
+      "note": "FIVE mutation drills, each applied by binary-safe byte replacement with a single-anchor assertion, each restored by CONTENT from a pre-drill copy (never git checkout), each verified restored by sha256 == 3d000525641f0df802bffcbf0893ad2bf5fd106f90733f80bb81d9dededf4893. Every drill exited 1; none hung.\n\n(i) terminalTarget: disposition.terminalTarget -> \"RELEASED\". RED, 2 named:\n  - attempt-release-disposition.test.ts > \"records a NON-RESUMABLE release under a different drain reason\"\n  - foundation-attempt-service.test.ts > \"reports the real runner's own UNSUPPORTED refusal on a non-Windows platform\"\n(ii) resumable: isResumable(disposition) -> true. RED, the same two named cases. The step-4(f) case is therefore testing something.\n(iii) delete the isMonotonicDisposition guard. RED, exactly:\n  - \"refuses a DOWNGRADED disposition whose strongest reason is not its highest\"\n  - \"refuses a RETARGETED disposition under its own distinct code\"\n(iv) ADDED, because (iii) alone does not prove the two codes are two. Under (iii) both cases die at the shared refusalOf helper, which would look identical if DOWNGRADED and TARGET_MISMATCH were one string. So drill (iv) COLLAPSES the discriminator — coherenceRefusal returns DOWNGRADED unconditionally. Result: ONLY \"refuses a RETARGETED disposition under its own distinct code\" reddens, on its own code assertion, 1 failed | 47 passed. That is what proves the two codes are not one code wearing two names.\n(v) unwire the CONSUMER edge: replace noteRelease(...) in unproven() with a bare settleFoundationAttempt. RED, exactly the composition case, 1 failed | 29 passed. Restored by content, hash verified. So the production edge is load-bearing, not decorative.\n\nADVERSARIAL SELF-REVIEW over the diff. Four findings, two fixed in code, two recorded.\n\nFIXED 1 — aliased caller array. parseDrainDisposition validates a COPY of `reasons` via readList but RETURNS exactRecord's output, whose `reasons` slot still aliases the caller's own array object. Its `includes` and `Symbol.iterator` are own-overridable and neither is a key the parser inspects, so `[...disposition.reasons]` could have smuggled an unvalidated member into the durable row. Now the set is re-read as DRAIN_REASONS.filter(r => Array.prototype.includes.call(disposition.reasons, r)) — frozen vocabulary plus a borrowed builtin, emitted in drain precedence order. New test \"reads the reason set through the frozen vocabulary, not the caller's array\" plants an own `includes` that always returns true and an own iterator yielding \"NOT_A_DRAIN_REASON\": the row carries [\"WORK_RELEASE_OR_PAUSE\"], and the lying includes still does not admit an un-unioned reason.\n\nFIXED 2 — concurrency. New test \"cannot append a SECOND release to an attempt that already released\": the second call carries a DIFFERENT disposition so a second row would be observable, and is refused ATTEMPT_RELEASE_COMMIT_UNAVAILABLE at expectedVersion 0 while the first row still reads back intact. Combined with the event id copied from the grant, a retry cannot double-write.\n\nRECORDED 3 — a decoded activation missing lease/providerSlot cannot reach the row: activation-ledger-codec.ts:91-92 requires both as plain objects (`nested.every(key => isPlainObject(value[key]))`), so a record without them fails to decode and durableActivation answers ATTEMPT_RELEASE_ACTIVATION_UNREADABLE. If a decoded record ever carried lease: {}, leaseRef would be undefined, canonical() throws TypeError, encodeFoundationPayload refuses and the module answers ATTEMPT_RELEASE_RECORD_DRIFT. Fail-closed on every branch, no null-deref.\n\nRECORDED 4 — readAttemptRelease(store, \"\") answers RECORD_ABSENT rather than a malformed-query code, where the sibling readFoundationAttemptRecord answers FOUNDATION_ATTEMPT_REQUEST_MALFORMED. ABSENT is honest and grants nothing; on the write path an empty aggregateId dies earlier at ACTIVATION_UNREADABLE. Noted rather than changed.\n\nEmpty `reasons` array: already covered — parseDrainDisposition returns null on length 0 (drain-disposition.ts:50) and that is exactly the step-3(a) MALFORMED case.\n\nPER-FILE LINE COUNTS: attempt-release-disposition.ts 249, foundation-attempt-service.ts 242, recovery-surface.ts 68. All under the 250 target.\n\nGATE AFTER the review edits, four legs, exit codes captured separately:\nRUNNER_TYPECHECK=0 RUNNER_TEST=0 (\"Test Files 67 passed (67)\" / \"Tests 2230 passed | 1 skipped (2231)\")\nDAEMON_TYPECHECK=0 DAEMON_TEST=0 (\"Test Files 111 passed (111)\" / \"Tests 2248 passed (2248)\" — up from 2246 by the two new adversarial cases).\n\nWORKTREE HAZARD, disclosed not repaired. HEAD moved 29e1b45 -> 9f69bb0 mid-task and a FOREIGN whole-tree commit swallowed every one of my files: `git log --diff-filter=A -1` names 9f69bb0 \"feat(task-5edf037fc3b04efcb41788af690f7822): Durable reviewer calibration record and its installing command\" as the adder of all three new files and the last toucher of all four edited ones. I did not amend, reset, or mint an empty commit. `git dif",
+      "startedAt": "2026-08-17T11:40:01.366Z",
+      "completedAt": "2026-08-17T11:46:45.116Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -151,12 +157,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:03:57.516Z",
-  "updatedAt": "2026-08-17T11:40:01.366Z",
+  "updatedAt": "2026-08-17T11:48:40.199Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:31:53.405Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -172,7 +178,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T11:22:28.791Z",
@@ -198,5 +205,21 @@
     "escalatedAt": "2026-08-17T11:22:46.414Z"
   },
   "planApprovedAt": "2026-08-17T11:22:30.858Z",
-  "workStartedAt": "2026-08-17T11:23:28.642Z"
+  "workStartedAt": "2026-08-17T11:23:28.642Z",
+  "reviewStartedAt": "2026-08-17T11:48:40.199Z",
+  "verification": {
+    "command": "bash -c 'pnpm --filter @moe/runner typecheck; A=$?; pnpm --filter @moe/runner test; B=$?; pnpm --filter @moe/daemon typecheck; C=$?; pnpm --filter @moe/daemon test; D=$?; echo \"LEGS runnerTsc=$A runnerTest=$B daemonTsc=$C daemonTest=$D\"; exit $((A|B|C|D))'",
+    "exitCode": 0,
+    "outputTail": "Test Files  67 passed (67)\n     Tests  2230 passed | 1 skipped (2231)   [@moe/runner]\n Test Files  111 passed (111)\n     Tests  2248 passed (2248)               [@moe/daemon]\nLEGS runnerTsc=0 runnerTest=0 daemonTsc=0 daemonTest=0\n\nFour legs, exit codes captured SEPARATELY into A/B/C/D (no && chain, no pipe), gate exit = A|B|C|D = 0. Both test legs printed a NONZERO count line, so neither is the silent \"No projects matched the filters\" exit-0 no-match case.",
+    "reportedAt": "2026-08-17T11:48:40.199Z"
+  },
+  "filesModified": [
+    "packages/runner/src/surface/recovery-surface.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "apps/daemon/src/work/foundation-attempt-service.ts",
+    "apps/daemon/src/work/attempt-release-disposition.test.ts",
+    "apps/daemon/src/work/attempt-release-disposition.ts",
+    "apps/daemon/src/work/attempt-release-disposition.js",
+    "apps/daemon/src/work/foundation-attempt-service.test.ts"
+  ]
 }
