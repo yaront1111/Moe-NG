@@ -225,6 +225,52 @@ import type {
   RecoveryReconciliationRecorded,
   RecoveryReconciliationWriteResult,
 } from "@moe/daemon";
+// The Foundation ingress closure. Every branch a caller must narrow on is named
+// here, so an entrypoint whose refusal union stopped being published stops
+// compiling rather than merely losing an assertion.
+import type {
+  AcceptanceRecord,
+  ContinuationCommandInput,
+  ContinuationCommandOutcome,
+  CoordinationAdapter,
+  CoordinationAdapterOptions,
+  CoordinationAuthRefused,
+  CoordinationPresentationFields,
+  DeltaRecord,
+  FoundationAttemptCode,
+  FoundationAttemptDeps,
+  FoundationAttemptOutcome,
+  FoundationAttemptRecordAnswer,
+  FoundationAttemptRefused,
+  FoundationRecipeOutcome,
+  FoundationRecipeRegistration,
+  FoundationVerificationAnswer,
+  FoundationVerificationCode,
+  FoundationVerificationDeps,
+  FoundationVerificationLayer,
+  FoundationVerificationOutcome,
+  FoundationVerificationRefusalSource,
+  FoundationVerificationRefused,
+  FoundationVerificationVerdict,
+  GoalClosureQualification,
+  GoalClosureQualified,
+  GoalClosureRefused,
+  GoalPrerequisiteRefusalCode,
+  InFlightAttempt,
+  ReconciliationRecord,
+  RestartReconciliationRequest,
+  RestartReconciliationResult,
+  RestartRecordClassification,
+  RestartTruthClass,
+} from "@moe/daemon";
+// Deliberately NOT re-exported by @moe/daemon: the coordination request/result
+// vocabulary belongs to @moe/coordination and is already reachable from its own
+// public root. Importing it here is what proves the daemon's published closure
+// is expressible without a deep import, the same way the @moe/runner and
+// @moe/scheduler imports above do.
+import type {
+  CoordinationAckResult, CoordinationReadResult, CoordinationSendResult,
+} from "@moe/coordination";
 
 type ExportKind = "function" | "number" | "object" | "string";
 
@@ -236,9 +282,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["BOOTSTRAP_REQUEST_KEYS", "object"],
   ["BOOTSTRAP_SCHEMA_VERSION", "string"],
   ["CLAIM_LEGS", "object"],
+  ["CONTINUATION_COMMAND_KIND", "string"],
+  ["CONTINUATION_PAYLOAD_KEYS", "object"],
   ["CONTROL_ROOM_LISTENER_LAYER", "string"],
   ["DAEMON_ENTRY_LAYER", "string"],
   ["DAEMON_ENTRY_REFUSAL_CODES", "object"],
+  ["DAEMON_FOUNDATION_ATTEMPT", "string"],
+  ["DELTA_CLASSIFICATIONS", "object"],
   ["DOCTOR_COMMAND_KINDS", "object"],
   ["DOCTOR_ERROR_CODES", "object"],
   ["DOCTOR_RECOVERY_SCHEMA_VERSION", "string"],
@@ -247,7 +297,25 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["EVENT_STREAM_OBSERVERS", "object"],
   ["EVENT_STREAM_REFUSAL_CODES", "object"],
   ["EVENT_STREAM_UNKNOWN_CODES", "object"],
+  ["FOUNDATION_ATTEMPT_CODES", "object"],
+  ["FOUNDATION_ATTEMPT_RECORD_VERSION", "string"],
+  ["FOUNDATION_ATTEMPT_REQUEST_KEYS", "object"],
+  ["FOUNDATION_ATTEMPT_SCHEMA_VERSION", "string"],
+  ["FOUNDATION_DISPATCH_COMMAND_KIND", "string"],
+  ["FOUNDATION_RESERVATION_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_CODES", "object"],
+  ["FOUNDATION_VERIFICATION_COMMAND_KIND", "string"],
+  ["FOUNDATION_VERIFICATION_LAYERS", "object"],
+  ["FOUNDATION_VERIFICATION_RECEIPT_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_RECIPE_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_REFUSAL_SOURCES", "object"],
+  ["FOUNDATION_VERIFICATION_REQUEST_KEYS", "object"],
+  ["FOUNDATION_VERIFICATION_SCHEMA_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_VERDICTS", "object"],
+  ["GOAL_CLOSURE_WITNESS_VERSION", "string"],
   ["GOAL_HANDLERS", "object"],
+  ["GOAL_PREREQUISITE_LAYER", "string"],
+  ["GOAL_PREREQUISITE_REFUSAL_CODES", "object"],
   ["HTTP_BOUNDARY_ERROR_CODES", "object"],
   ["HTTP_INPUT_BOUNDS", "object"],
   ["HTTP_REFUSAL_STAGES", "object"],
@@ -273,7 +341,18 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["RECOVERY_SUCCESSION_ERROR_CODES", "object"],
   ["RECOVERY_SUCCESSION_LAYER", "string"],
   ["RECOVERY_SUCCESSION_SCHEMA_VERSION", "string"],
+  ["RESTART_RECONCILIATION_COMMAND_KIND", "string"],
+  ["RESTART_RECONCILIATION_SCHEMA_VERSION", "string"],
+  ["RESTART_RECORD_CLASSIFICATIONS", "object"],
+  ["REVIEW_COMMAND_KINDS", "object"],
   ["REVIEW_HANDLERS", "object"],
+  ["REVIEW_INGRESS_REFUSAL_CODES", "object"],
+  ["REVIEW_PREREQUISITE_REFUSAL_CODES", "object"],
+  ["REVIEW_REFUSED_BY", "object"],
+  ["REVIEW_REQUEST_KEYS", "object"],
+  ["REVIEW_SCHEMA_VERSION", "string"],
+  ["RUNNER_WORKSPACE_LAYER", "string"],
+  ["SCHEDULER_GRAPH_LAYER", "string"],
   ["SERVICE_REFUSED_BY", "object"],
   ["SLOT_CEILING_LEG", "string"],
   ["WIRE_PROTOCOL_VERSION", "string"],
@@ -288,22 +367,34 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
   ["collectDoctorVersionReport", "function"],
+  ["coordinationPresentationDigest", "function"],
+  ["createCoordinationAdapter", "function"],
   ["createDaemonCommandPorts", "function"],
+  ["createFoundationAttemptService", "function"],
+  ["createFoundationVerificationService", "function"],
   ["createNodeRecoveryCryptoPort", "function"],
   ["createRecoveryIncarnationService", "function"],
   ["createRecoverySuccessionService", "function"],
   ["decodeBootstrapRequestBytes", "function"],
+  ["decodeReviewRequestBytes", "function"],
+  ["deriveRecipeAggregateId", "function"],
+  ["deriveVerificationAggregateId", "function"],
   ["evaluateDoctorCommandBytes", "function"],
   ["evaluateGraphPreviewRequestBytes", "function"],
   ["handleCommandRequest", "function"],
   ["isDependencyProvider", "function"],
   ["parseWorkRequest", "function"],
+  ["qualifyGoalClosure", "function"],
   ["readAnchoredIncarnation", "function"],
   ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
+  ["readFoundationAttemptRecord", "function"],
+  ["readReconciliationRecords", "function"],
   ["readRecoveryCompletionEvidence", "function"],
   ["readRecoveryReconciliation", "function"],
+  ["readReviewLedger", "function"],
   ["readSuccessionChain", "function"],
+  ["reconcileOnRestart", "function"],
   ["recordRecoveryReconciliation", "function"],
   ["recoveryCompletionApprovalDigest", "function"],
   ["recoveryCompletionDigest", "function"],
@@ -311,7 +402,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["refuseEntry", "function"],
   ["resumeFromSnapshot", "function"],
   ["runBootstrapCommand", "function"],
+  ["runContinuationCommand", "function"],
   ["runRecoveryCompleteCommand", "function"],
+  ["runReviewCommand", "function"],
   ["selectProjectConfiguration", "function"],
   ["startControlRoomListener", "function"],
   ["startDaemon", "function"],
@@ -325,6 +418,17 @@ const REVIEW_HANDLER_KINDS = [
   "review.submit",
 ] as const;
 
+/**
+ * Names that a single `export *` anywhere in the Foundation curation path would
+ * publish. The first seven predate this list's Foundation half; the rest are
+ * transcribed from the producer modules the curated surface re-exports FROM —
+ * `goals/goal-closure-test-fixtures.ts` (a fixture module sitting inside the
+ * closure family's own directory), the codec helpers `work/foundation-attempt-
+ * contracts.ts` itself re-exports, `evidence/foundation-verification-store.ts`,
+ * and the internal `refuse`/payload readers of `review/review-ledger.ts`.
+ * A star re-export makes the public surface whatever a sibling declares tomorrow;
+ * these are the exact names that would arrive if one were ever added.
+ */
 const FORBIDDEN_FIXTURES = [
   "LEDGER_EVENT_IDS",
   "PROJECTION",
@@ -333,6 +437,33 @@ const FORBIDDEN_FIXTURES = [
   "SUBSCRIBER",
   "ledgerIdsUpTo",
   "streamPort",
+  "accountDurableActivations",
+  "approveNodes",
+  "cleanupGoalClosureFixtures",
+  "commitPhase",
+  "eventsOf",
+  "exactKeys",
+  "foundationAttemptRefusal",
+  "indexDurableReceipts",
+  "isRecord",
+  "loadDurable",
+  "nestedRecord",
+  "nonEmpty",
+  "payloadRef",
+  "readApprovedNodeScope",
+  "readRecipientFold",
+  "reconciliationAggregateId",
+  "refuse",
+  "refuseFromKernel",
+  "refuseLocal",
+  "sameBytes",
+  "seedProvenAttempt",
+  "seedReviewAcceptance",
+  "seedVerifiedNode",
+  "sha256Hex",
+  "storedRecipe",
+  "textOf",
+  "typed",
 ] as const;
 
 const surface: Readonly<Record<string, unknown>> = daemon;
@@ -340,7 +471,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(85);
+    expect(EXPECTED_EXPORTS.length).toBe(132);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {
@@ -384,7 +515,7 @@ process.stdout.write(JSON.stringify({ node: report.observed.node, platform: repo
   });
 
   it("guards the explicit fixture deny-list", () => {
-    expect(FORBIDDEN_FIXTURES.length).toBe(7);
+    expect(FORBIDDEN_FIXTURES.length).toBe(34);
   });
 
   it.each(FORBIDDEN_FIXTURES)("does not publish fixture %s", (name) => {
@@ -848,4 +979,176 @@ try {
       rmSync(directory, { force: true, recursive: true });
     }
   }, 75_000);
+});
+
+describe("daemon package-root Foundation ingress closure", () => {
+  it("names every review command and ledger read branch", () => {
+    expectTypeOf<ReturnType<typeof daemon.runReviewCommand>>().toEqualTypeOf<ReviewOutcome>();
+    expectTypeOf<ReviewOutcome>().toEqualTypeOf<ReviewAccepted | ReviewRefused>();
+    expectTypeOf<ReturnType<typeof daemon.readReviewLedger>>().toEqualTypeOf<ReviewLedger>();
+    // The barrel published ReviewLedger long before it published these two, so a
+    // consumer could hold the ledger and still not narrow either optional member.
+    expectTypeOf<ReviewLedger["accepted"]>().toEqualTypeOf<AcceptanceRecord | undefined>();
+    expectTypeOf<ReviewLedger["delta"]>().toEqualTypeOf<DeltaRecord | undefined>();
+    expectTypeOf<ReviewLedger["rounds"]>().toEqualTypeOf<readonly ReviewRoundRecord[]>();
+    expectTypeOf<ReturnType<typeof daemon.decodeReviewRequestBytes>>()
+      .toEqualTypeOf<ReviewDecodeResult>();
+    expectTypeOf<ReviewDecodeResult>()
+      .toEqualTypeOf<ReviewRequestAccepted | ReviewInputRejected | ReviewRequestRefused>();
+    expectTypeOf<ReviewDecodeRefusal>()
+      .toEqualTypeOf<ReviewInputRejected | ReviewRequestRefused>();
+    expectTypeOf<(typeof daemon.REVIEW_COMMAND_KINDS)[number]>().toEqualTypeOf<ReviewCommandKind>();
+    expectTypeOf<(typeof daemon.REVIEW_INGRESS_REFUSAL_CODES)[number]>()
+      .toEqualTypeOf<ReviewIngressRefusalCode>();
+    expectTypeOf<(typeof daemon.REVIEW_PREREQUISITE_REFUSAL_CODES)[number]>()
+      .toEqualTypeOf<ReviewPrerequisiteRefusalCode>();
+    expectTypeOf<(typeof daemon.REVIEW_REFUSED_BY)[number]>().toEqualTypeOf<ReviewRefusedBy>();
+    expectTypeOf<(typeof daemon.DELTA_CLASSIFICATIONS)[number]>()
+      .toEqualTypeOf<DeltaClassification>();
+    expect(daemon.REVIEW_SCHEMA_VERSION).toBe("moe-review-command/1");
+  });
+
+  it("names every restart reconciliation and continuation branch", () => {
+    expectTypeOf<ReturnType<typeof daemon.reconcileOnRestart>>()
+      .toEqualTypeOf<RestartReconciliationResult>();
+    expectTypeOf<Parameters<typeof daemon.reconcileOnRestart>[1]>()
+      .toEqualTypeOf<RestartReconciliationRequest>();
+    expectTypeOf<RestartReconciliationRequest["attempts"]>()
+      .toEqualTypeOf<readonly InFlightAttempt[]>();
+    expectTypeOf<ReturnType<typeof daemon.readReconciliationRecords>>()
+      .toEqualTypeOf<ReadonlyMap<string, ReconciliationRecord>>();
+    expectTypeOf<ReconciliationRecord["classification"]>()
+      .toEqualTypeOf<RestartRecordClassification>();
+    expectTypeOf<ReconciliationRecord["truthClass"]>().toEqualTypeOf<RestartTruthClass>();
+    expectTypeOf<ReturnType<typeof daemon.runContinuationCommand>>()
+      .toEqualTypeOf<ContinuationCommandOutcome>();
+    expectTypeOf<Parameters<typeof daemon.runContinuationCommand>[1]>()
+      .toEqualTypeOf<ContinuationCommandInput>();
+    expect(daemon.RESTART_RECONCILIATION_SCHEMA_VERSION).toBe("moe-restart-reconciliation/2");
+    expect(daemon.RESTART_RECONCILIATION_COMMAND_KIND).toBe("reconciliation.decide");
+    expect(daemon.CONTINUATION_COMMAND_KIND).toBe("work.resume");
+    expect([...daemon.CONTINUATION_PAYLOAD_KEYS]).toEqual(["attemptRef", "successorRef"]);
+  });
+
+  it("names both Foundation attempt dispatch and read-model branches", () => {
+    expectTypeOf<Parameters<typeof daemon.createFoundationAttemptService>[0]>()
+      .toEqualTypeOf<FoundationAttemptDeps>();
+    expectTypeOf<ReturnType<ReturnType<typeof daemon.createFoundationAttemptService>["dispatch"]>>()
+      .toEqualTypeOf<Promise<FoundationAttemptOutcome>>();
+    expectTypeOf<ReturnType<typeof daemon.readFoundationAttemptRecord>>()
+      .toEqualTypeOf<FoundationAttemptOutcome>();
+    expectTypeOf<FoundationAttemptOutcome>()
+      .toEqualTypeOf<FoundationAttemptRecordAnswer | FoundationAttemptRefused>();
+    expectTypeOf<FoundationAttemptRecordAnswer["authority"]>().toEqualTypeOf<"ADVISORY_RECORD">();
+    expectTypeOf<FoundationAttemptRefused["ok"]>().toEqualTypeOf<false>();
+    expectTypeOf<(typeof daemon.FOUNDATION_ATTEMPT_CODES)[number]>()
+      .toEqualTypeOf<FoundationAttemptCode>();
+    expect(daemon.FOUNDATION_ATTEMPT_SCHEMA_VERSION).toBe("moe-foundation-attempt/1");
+    expect(daemon.FOUNDATION_DISPATCH_COMMAND_KIND).toBe("foundation.dispatch");
+    expect(daemon.DAEMON_FOUNDATION_ATTEMPT).toBe("DAEMON_FOUNDATION_ATTEMPT");
+  });
+
+  it("names all three verification operations and the source-tagged refusal", () => {
+    type VerificationService = ReturnType<typeof daemon.createFoundationVerificationService>;
+    expectTypeOf<Parameters<typeof daemon.createFoundationVerificationService>[0]>()
+      .toEqualTypeOf<FoundationVerificationDeps>();
+    expectTypeOf<ReturnType<VerificationService["verify"]>>()
+      .toEqualTypeOf<Promise<FoundationVerificationOutcome>>();
+    expectTypeOf<ReturnType<VerificationService["readReceipt"]>>()
+      .toEqualTypeOf<FoundationVerificationOutcome>();
+    expectTypeOf<ReturnType<VerificationService["sealRecipe"]>>()
+      .toEqualTypeOf<FoundationRecipeOutcome>();
+    expectTypeOf<Parameters<VerificationService["sealRecipe"]>>()
+      .toEqualTypeOf<[input: FoundationRecipeRegistration]>();
+    expectTypeOf<FoundationVerificationOutcome>()
+      .toEqualTypeOf<FoundationVerificationAnswer | FoundationVerificationRefused>();
+    expectTypeOf<FoundationVerificationAnswer["verdict"]>()
+      .toEqualTypeOf<FoundationVerificationVerdict>();
+    // Five producers can refuse here, so WHICH layer refused is part of the
+    // published closure, not an internal detail.
+    expectTypeOf<FoundationVerificationRefused["source"]>()
+      .toEqualTypeOf<FoundationVerificationRefusalSource>();
+    expectTypeOf<(typeof daemon.FOUNDATION_VERIFICATION_REFUSAL_SOURCES)[number]>()
+      .toEqualTypeOf<FoundationVerificationRefusalSource>();
+    expectTypeOf<(typeof daemon.FOUNDATION_VERIFICATION_CODES)[number]>()
+      .toEqualTypeOf<FoundationVerificationCode>();
+    expectTypeOf<(typeof daemon.FOUNDATION_VERIFICATION_LAYERS)[number]>()
+      .toEqualTypeOf<FoundationVerificationLayer>();
+    expectTypeOf<(typeof daemon.FOUNDATION_VERIFICATION_VERDICTS)[number]>()
+      .toEqualTypeOf<FoundationVerificationVerdict>();
+    expect(daemon.FOUNDATION_VERIFICATION_SCHEMA_VERSION).toBe("moe-foundation-verification/1");
+    expect(daemon.FOUNDATION_VERIFICATION_COMMAND_KIND).toBe("foundation.verification");
+    expect([...daemon.FOUNDATION_VERIFICATION_VERDICTS]).toEqual(["PASSED", "FAILED"]);
+  });
+
+  it("names both review-qualified goal closure branches", () => {
+    expectTypeOf<ReturnType<typeof daemon.qualifyGoalClosure>>()
+      .toEqualTypeOf<GoalClosureQualification>();
+    expectTypeOf<GoalClosureQualification>()
+      .toEqualTypeOf<GoalClosureQualified | GoalClosureRefused>();
+    expectTypeOf<GoalClosureQualified["ok"]>().toEqualTypeOf<true>();
+    expectTypeOf<GoalClosureRefused["code"]>().toEqualTypeOf<GoalPrerequisiteRefusalCode>();
+    expectTypeOf<GoalClosureRefused["layer"]>()
+      .toEqualTypeOf<typeof daemon.GOAL_PREREQUISITE_LAYER>();
+    expectTypeOf<(typeof daemon.GOAL_PREREQUISITE_REFUSAL_CODES)[number]>()
+      .toEqualTypeOf<GoalPrerequisiteRefusalCode>();
+    expect(daemon.GOAL_PREREQUISITE_LAYER).toBe("DAEMON_PREREQUISITE");
+    expect(daemon.GOAL_CLOSURE_WITNESS_VERSION).toBe("moe-goal-closure-witness/1");
+  });
+
+  it("names every coordination adapter operation", () => {
+    expectTypeOf<Parameters<typeof daemon.createCoordinationAdapter>>()
+      .toEqualTypeOf<[options: CoordinationAdapterOptions]>();
+    expectTypeOf<ReturnType<typeof daemon.createCoordinationAdapter>>()
+      .toEqualTypeOf<CoordinationAdapter>();
+    expectTypeOf<ReturnType<CoordinationAdapter["acknowledge"]>>()
+      .toEqualTypeOf<CoordinationAckResult>();
+    expectTypeOf<ReturnType<CoordinationAdapter["read"]>>().toEqualTypeOf<CoordinationReadResult>();
+    expectTypeOf<ReturnType<CoordinationAdapter["replay"]>>()
+      .toEqualTypeOf<CoordinationReadResult>();
+    expectTypeOf<ReturnType<CoordinationAdapter["send"]>>().toEqualTypeOf<CoordinationSendResult>();
+    expectTypeOf<CoordinationAuthRefused["ok"]>().toEqualTypeOf<false>();
+    expectTypeOf<Parameters<typeof daemon.coordinationPresentationDigest>>()
+      .toEqualTypeOf<[fields: CoordinationPresentationFields]>();
+    expectTypeOf<ReturnType<typeof daemon.coordinationPresentationDigest>>().toEqualTypeOf<string>();
+  });
+
+  it("refuses malformed review bytes at DAEMON_INGRESS without touching a store", () => {
+    // Both the decoder and the command refuse BEFORE any durable read, so the
+    // store argument is never dereferenced. Asserting the code AND the refusing
+    // layer, not merely that it refused: a second guard answering first would
+    // leave "it refused" green while testing nothing.
+    const decoded = daemon.decodeReviewRequestBytes(new TextEncoder().encode("{"));
+    expect(decoded.ok).toBe(false);
+    if (decoded.ok) throw new Error("expected a decode refusal");
+    expect(decoded.code).toBe("REVIEW_INPUT_REJECTED");
+    expect(decoded.refusedBy).toBe("DAEMON_INGRESS");
+
+    const outcome = daemon.runReviewCommand(
+      null as unknown as Parameters<typeof daemon.runReviewCommand>[0],
+      new TextEncoder().encode("{"),
+    );
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected a command refusal");
+    expect(outcome.code).toBe("REVIEW_INPUT_REJECTED");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(outcome.authority).toBe("NONE");
+  });
+
+  it("refuses goal closure against an unreadable store with the prerequisite code", () => {
+    // qualifyGoalClosure fails CLOSED on a thrown store rather than propagating.
+    // Pinning the code and the layer keeps that guarantee from silently becoming
+    // "it threw somewhere else".
+    const unreadable = {
+      readEvents(): never {
+        throw new Error("store unavailable");
+      },
+    } as unknown as Parameters<typeof daemon.qualifyGoalClosure>[0];
+
+    const result = daemon.qualifyGoalClosure(unreadable, "project-1", "goal-1");
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a closure refusal");
+    expect(result.code).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED");
+    expect(result.layer).toBe("DAEMON_PREREQUISITE");
+  });
 });

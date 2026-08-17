@@ -90,7 +90,7 @@
     {
       "stepId": "step-6",
       "description": "Implement `packages/runner/src/supervisor/provider-effect-settlement.ts` plus its one-line `.js` bridge (every sibling in `packages/runner/src/supervisor/` has a git-tracked bridge; without it the module is invisible at runtime while tsc and vitest stay green). Exports: the frozen provider-settlement code list and its own layer constant, the frozen observation contract, the exhaustive mapping declared AS DATA rather than as a chain of `if`s, and `settleEffectFromProviderObservation`. RAIL 1 IS THE SHAPE OF THIS MODULE: it derives a closed settle command — target, `SettlementEvidence` {reconciliationVersion, reconciliationDigest, outcomeClass}, `UncertaintyEvidence` when the target is UNKNOWN, and `adoptedAt` — SOLELY from the admitted observation, then calls the public `applyEffectCommand` and returns its output UNCHANGED. It never constructs an `EffectResult` directly and never adds a second reducer. Reuse `ProviderRunRef`, `ProviderTerminalOutcome`, `ProviderInfrastructureOutcome`, `ProviderText`, `EffectIntent` and the lifecycle vocabularies from their owning modules — rail 3 forbids copying their literals. Target <=250 physical lines; if the table and the derivation together cross it, split the table into a sibling contracts module with its own bridge rather than growing past 400.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/provider-effect-settlement.ts",
         "packages/runner/src/supervisor/provider-effect-settlement.js"
@@ -99,25 +99,51 @@
         "packages/runner/src/supervisor/provider-effect-settlement.ts",
         "packages/runner/src/supervisor/provider-effect-settlement.js"
       ],
-      "startedAt": "2026-08-17T19:45:51.219Z"
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.ts",
+        "packages/runner/src/supervisor/provider-effect-settlement.js",
+        "packages/runner/src/supervisor/provider-settlement-contracts.ts",
+        "packages/runner/src/supervisor/provider-settlement-contracts.js",
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "note": "GREEN: 165 tests pass (Test Files 1 passed, Tests 165 passed) on the focused run. Implemented as TWO production sources because one file measured 318 physical lines, over the 250 target: provider-settlement-contracts.ts (210 lines) holds the version/layer constants, the 9-code closed vocabulary with static per-code messages, PROVIDER_RUN_OBSERVATION_KEYS + ProviderRunObservation, the disposition/row types, PROVIDER_SETTLEMENT_ADMITTED_ROWS declared AS DATA (4 rows, deepFreeze + `satisfies`), PROVIDER_SETTLEMENT_OUTCOME_CLASSES (typed Record<TerminalEffectState, ClaudeReconciledOutcome>, so a minted literal fails typecheck), and the total admitProviderRunObservation admission; provider-effect-settlement.ts (137 lines) holds ProviderSettlementOutcome, the two documented digest preimages, dispositionOf over the table, and settleEffectFromProviderObservation. Both got their one-line git-tracked .js bridge (`export * from \"./<name>.ts\";`), which the runtime-entrypoint bridge guard enforces exactly. Rail 1 honoured: no second reducer, no EffectResult constructed here — the function derives target/SettlementEvidence/UncertaintyEvidence/adoptedAt solely from the admitted observation, then returns applyEffectCommand's output unchanged (including MUST_DRAIN via requestCancel for the ACTIVE cancellation row). Rail 3 honoured: ProviderRunRef/ProviderTerminalOutcome/ProviderInfrastructureOutcome/ProviderText/EffectIntent/snapshotRunRef/exactRecord/isDigest/oneOf/parseEffectIntent/isCanonicalUtcTimestamp/canonicalDigest all imported from their owning modules; outcome classes reuse CLAUDE_RECONCILED_OUTCOMES. HAZARD DISCLOSED: while this step ran, foreign whole-tree commit 29f3c5f (task-6600442414134376a113ed28e8994845) captured all five of my in-progress files plus another peer's in-flight edits; per epic rail 3 I did not amend, reset or revert it. It also landed a foreign TS6133 in packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts:547 ('EXIT_DELIVERY' declared but never read) which is ABSENT at d2151d4 — measuring it against the gate in step 8.",
+      "startedAt": "2026-08-17T19:45:51.219Z",
+      "completedAt": "2026-08-17T19:49:49.150Z"
     },
     {
       "stepId": "step-7",
       "description": "Publish from the public root and raise the ratchet, guards FIRST. `applyEffectCommand` is exported DIRECTLY from `packages/runner/src/index.ts` (:121, from `./supervisor/effect-lifecycle.js`) rather than through a `surface/*` module, so follow that pattern and add a sibling block from `./supervisor/provider-effect-settlement.js`. Doing it this way deliberately avoids the `SURFACE_SOURCES.size` guard pinned at 7 (index-surface.test.ts:2214), which fires only on a NEW `*-surface.ts` FILE and would redden nowhere near this code. The guard that DOES fire is `expect(EXPECTED_EXPORTS.length).toBe(232)` at :374 plus its sorted-name equality — two axes, hand-transcribed on purpose; edit them FIRST so they go red before the exports land, and raise them, never loosen them. Because the runner test script has no `--typecheck`, `expectTypeOf` is a NO-OP in this suite: if a type-level fact needs pinning, use a conditional-type assignment, which IS enforced by `pnpm --filter @moe/runner typecheck` since the package tsconfig includes `src/**/*.ts`. Record task-1879166d7f12474fad8038e2a9d2433a as the consumer in the module header, as DoD 5 requires.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/index-surface.test.ts",
         "packages/runner/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/index.ts",
+        "packages/runner/src/index-surface.test.ts"
+      ],
+      "note": "Guards FIRST, then the exports. Edited index-surface.test.ts before touching index.ts: bumped the hand-transcribed ratchet 232 -> 238, added the 6 new [name, kind] entries to EXPECTED_EXPORTS (both axes — the count literal AND the sorted-name equality), added a type-import block naming ProviderRunObservation / ProviderSettlementCode / ProviderSettlementDisposition / ProviderSettlementOutcome / ProviderSettlementRefusal / ProviderSettlementRow through the bare root, and added three root-composed tests: an accepted settlement through `@moe/runner` (ACTIVE + clean COMPLETED -> SUCCEEDED / PROVEN_RESULT, with PROVIDER_SETTLEMENT_ADMITTED_ROWS and PROVIDER_RUN_OBSERVATION_KEYS named in compiled positions and the 4 dispositions pinned), a foreign-run-ref refusal asserting code AND layer AND membership in PROVIDER_SETTLEMENT_CODES, and a withheld-name control (admitProviderRunObservation, PROVIDER_SETTLEMENT_MESSAGES, PROVIDER_SETTLEMENT_OUTCOME_CLASSES absent) with a positive control over the published names so the `in` check cannot pass vacuously. Confirmed RED first: Tests 10 failed | 285 passed, EXIT=1. Then published from index.ts as two sibling blocks (no new surface/*-surface.ts file, so the SURFACE_SOURCES.size guard pinned at 7 stays untouched) from ./supervisor/provider-effect-settlement.js and ./supervisor/provider-settlement-contracts.js, with the withheld-minter rationale in the block comment. GREEN: index-surface + runtime-entrypoint = 298 passed, EXIT=0; `npx tsc --project tsconfig.json` EXIT=0. The consumer task-1879166d7f12474fad8038e2a9d2433a is named in the provider-effect-settlement.ts module header. Note on the earlier foreign TS6133 in claude-telemetry-launch.test.ts: it was a transient half-state the sweep commit captured; the owning peer has since advanced its working tree (EXIT_DELIVERY now used 3x) and the package typecheck is exit 0 — no action of mine.",
+      "startedAt": "2026-08-17T19:50:02.686Z",
+      "completedAt": "2026-08-17T19:52:03.229Z"
     },
     {
       "stepId": "step-8",
       "description": "Verification gate and mutation drills, then stop. Run `pnpm --filter @moe/runner typecheck` and `pnpm --filter @moe/runner test` as SEPARATE FOREGROUND legs with exit codes captured individually — the task's own verification field says so, and a `&&` chain that dies at typecheck hides the count line entirely. `@moe/runner` resolves to packages/runner and declares both scripts (verified at plan time). Record the nonzero `Test Files N passed` AND `Tests N passed` lines, as DoD 5 requires both: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for a package absent from the workspace, so exit 0 alone is not evidence. THREE drills against the PRODUCTION mapping, each restored before the next, each naming the test that reddens: (i) make the derivation trust a caller-supplied target — since the input type has no such field, this drill must add one, and the step-4(a) key-set assertion plus the counterexample must both redden; (ii) map an unproven cell (any non-NONE infrastructure with COMPLETED) to SUCCEEDED — the 120-case table must redden on that exact cell; (iii) map `MAX_TURNS_EXHAUSTED` + `NONE` to FAILED — the named test from step 3 must redden. Drills run in a SHARED worktree: snapshot each file's hash and restore by CONTENT, never `git checkout`, and never trust `git status` to prove a revert. Then run `adversarial-self-review`: an observation whose epoch disagrees with the intent, a completion instant that parses but is not an instant, an intent at the version ceiling (`EFFECT_COUNTER_EXHAUSTED`), and per-file line counts.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/runner/src/supervisor/provider-effect-settlement.ts",
         "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/runtime-provider-invariants.ts",
+        "tests/security/runtime-provider-supervision-cases.ts",
+        "tests/security/runtime-provider-evidence.security.ts"
+      ],
+      "note": "GATE (two SEPARATE foreground legs, exit codes captured individually): `pnpm --filter @moe/runner typecheck` EXIT=0; `pnpm --filter @moe/runner test` EXIT=0 with \"Test Files 68 passed (68)\" and \"Tests 2442 passed | 1 skipped (2443)\" — nonzero executed counts, so the legs really ran.\n\nTHREE DRILLS against the PRODUCTION mapping, each restored by CONTENT and verified by sha256 against both the pre-drill snapshot AND `git show HEAD:<path>` (HEAD unmoved at 29f3c5f, so no sweep captured a drill): (i) trust a caller-supplied target (added `target` to the key list + the interface, used it in the derivation): 148 tests red, including \"admits an exact key set that cannot express a caller-chosen settlement\" AND the counterexample \"can never turn provider-unknown evidence on an ACTIVE intent into SUCCEEDED\", plus typecheck TS2322 on the FORBIDS_TARGET conditional-type pin. (ii) mapped ACTIVE|COMPLETED|CAPTURE_TRUNCATED to SUCCEEDED: exactly 4 red — \"maps ACTIVE|COMPLETED|CAPTURE_TRUNCATED to exactly one settlement outcome\", \"settles an unproven cell as UNKNOWN carrying the uncertainty evidence...\", \"reaches SUCCEEDED and FAILED from exactly one generated cell each\", and the root-composed surface test. (iii) mapped MAX_TURNS_EXHAUSTED+NONE to FAILED: 4 red including the named \"keeps ACTIVE + clean MAX_TURNS_EXHAUSTED honestly UNKNOWN, never SUCCEEDED or FAILED\".\n\nADVERSARIAL REVIEW added two tests: the reducer's EFFECT_COUNTER_EXHAUSTED/LIFECYCLE passes through unrestamped (an intent AT MAX_SUPERVISOR_COUNT still parses, so the arm is live), and the published tables are frozen. Epoch drift and instant-parses-but-is-not-an-instant were already covered in step 4/5. Reviewed and clean: pure function (no clock, IO or shared state, so no concurrency or TOCTOU surface); every string bounded before it reaches a digest, and the digest preimage uses the SNAPSHOTTED run ref, so canonicalJson cannot throw on caller bytes (a crash is not a refusal); no partial adoption — every admission arm answers a code.\n\nOUT-OF-PLAN BUT FORCED, disclosed in full: `tests/security/boundary-roster.security.ts` scans every production module for /^export const [A-Z_]+(LAYERS|LAYER|BOUNDARIES)\\s*(:...)?=/ and demands a hand-written roster entry. My new PROVIDER_EFFECT_SETTLEMENT_LAYER made the security suite RED (scan 93 vs roster 92, \"scan minus roster is empty\" + \"scans exactly the roster's cardinality\", 4 failures) — a red MY diff caused, since 29f3c5f had left that suite green. Deleting the constant or renaming it out of the pattern would hide a real boundary, so I paid the declared-boundary cost: rostered it as `runtime-provider` by SUBJECT, updated all three cardinality sites (EXPECTED_ROSTER_SIZE 92->93, packages/runner 20->21, prose axis totals + changelog), added it to the EVIDENCE partition (23->24 in assertRosterPartition and its title), and wrote the required BEFORE/AFTER/RACE hostile arms in runtime-provider-supervision-cases.ts (foreign run ref + upstream refusal; unknown vs absent completion instant as two distinct codes; proxy vs accessor race), each unwrapping `.failure` so an admitted settlement would read as an ADMISSION and redden the slice invariant. `pnpm test:security` now EXIT=0, \"Test Files 9 passed (9), Tests 486 passed (486)\" — both legs, tsc included.\n\nFOREIGN RED DISCLOSED VERBATIM, not mine: `pnpm --recursive typecheck` EXIT=1 with `apps/daemon typecheck: src/index-surface.test.ts(231,1): error TS6192: All imports in import declaration are unused.` and the same at (271,1). That file is ` M` in the shared worktree from a live peer session (alongside untracked apps/daemon/src/foundation/ and graph-preview-request.*); the failing path is not an owned path of this task and my diff touches no daemon file.\n\nCOMMIT: c708b4e, explicit pathspec, 7 files / 284 insertions — packages/runner/src/index.ts, index-surface.test.ts, supervisor/provider-effect-settlement.test.ts and the four tests/security files. The five NEW production/test files were already captured at HEAD by foreign whole-tree commit 29f3c5f (task-6600442414134376a113ed28e8994845); per epic rail 3 I did not amend, reset or revert it. QA should review by base-ref diff: `git diff d2151d4..HEAD -- packages/runner/src/supervisor/provider-*settlement*` (930 insertions across the 5 files) plus c708b4e.",
+      "startedAt": "2026-08-17T19:52:06.308Z",
+      "completedAt": "2026-08-17T20:04:03.883Z"
     }
   ],
   "status": "WORKING",
@@ -133,12 +159,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:18:14.797Z",
-  "updatedAt": "2026-08-17T19:45:51.219Z",
+  "updatedAt": "2026-08-17T20:04:03.884Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:06.293Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -148,7 +174,10 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T19:34:11.124Z",

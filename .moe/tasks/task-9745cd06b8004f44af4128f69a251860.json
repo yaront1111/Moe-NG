@@ -1,0 +1,116 @@
+{
+  "id": "task-9745cd06b8004f44af4128f69a251860",
+  "epicId": "epic-f02c6977535f4d4fa4c9ebf28d0662b8",
+  "title": "Portability: stamp import event domain schema",
+  "description": "Objective: close the producer-side schema omission blocking the strict daemon shadow reader. Deliverable: every event emitted by public applyImport declares the exact moe-import-event-facts/1 domainSchemaVersion at the StoredEvent envelope as well as inside its canonical payload, with real-SQLite replay evidence. NOT in scope: daemon shadow mapping, importer semantics, event ids/payload bytes, activation, cutover, or new wire kinds. Verification: pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test && pnpm test:migration && pnpm test:store.",
+  "definitionOfDone": [
+    "ImportEventDraft requires domainSchemaVersion typed to typeof IMPORT_EVENT_FACTS_VERSION, and every production applyImport event sets it to moe-import-event-facts/1 without changing the existing event id, event type, canonical payload, or command identity.",
+    "A real SqliteEventStore integration test asserts a positive stored-event count and, for every event, exact equality among StoredEvent.domainSchemaVersion, decoded facts.schemaVersion, and IMPORT_EVENT_FACTS_VERSION; it also pins eventId === decoded claim.claimId and aggregateId === legacy-import:<manifestDigest>.",
+    "Replaying identical source bytes preserves event ids, payload bytes, domain schema, raw event count, and raw command-decision count, with no second commit or partial residue.",
+    "A production-stamp mutation (remove or change the domainSchemaVersion assignment) reddens the named real-store assertion, and all refusal checks assert exact stable import/store code and layer rather than only failure.",
+    "Fresh @moe/import typecheck/test, migration, and store gates execute with nonzero test-count lines where applicable; task-80fce1d1d625453098bd526d61c5ddb8 is recorded as the reader consumer."
+  ],
+  "taskRails": [
+    "Own only packages/import/src/import-apply.ts, packages/import/src/import-apply.test.ts, and tests/migration/import/import-determinism.test.ts; do not edit the daemon reader or package barrels in this task.",
+    "Reuse public IMPORT_EVENT_FACTS_VERSION; do not invent a second schema constant, widen imported claim/link authority, or change canonical payload/event/command identities.",
+    "Use the real SqliteEventStore production surface for acceptance/replay evidence; generated event sweeps assert a nonzero count and mutation drills target the production stamp.",
+    "Keep import-apply.ts at the <=250-line target by focused refactoring/condensing rather than growing a new responsibility; preserve explicit-path staging and commit."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND PIN THE PRE-CHANGE IDENTITY. At HEAD 08e3445d1748223dd60e96f332ba0b5c3eb5e1d5, confirm the three owned paths are clean and record physical lines/CR bytes: import-apply.ts is exactly 250 lines, import-apply.test.ts 674, migration test 226, all LF-only. Re-run the four task legs separately and capture each exit/count line: @moe/import typecheck EXIT 0; @moe/import test 8 files/132 tests; migration 3/25; store has the pre-existing foreign failure packages/store/src/recovery-anchor.test.ts:694 (`RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root`, 1 failed + 43 passed files, 1 failed + 526 passed tests). Record the golden production commit for the fixed two-record MANIFEST fixture BEFORE editing: commandId `dceabb9ccb6efb7049dc02e0f60354fdb20432534f02528a7146c50570f6f08a`, decoded commandBytes `cbf3ab0e8715e75c3dca6a5b0036626fd27b029b862ef021e8ba0b02ae9860ae`, eventIds `[ec4597cf0649a12018122abc8a16199754c3637d5ba0fa0fa2e2dd053e45c204,aaf6423c5562cb8ea6106b8d55c4db9bdc21f2ab8353f601da38cc533f7f4229]`. These literals make “identity unchanged” observable; comparing two post-change runs alone would not.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-apply.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED AT THE PRODUCER PORT in packages/import/src/import-apply.test.ts. Extend the existing one-commit/determinism cases rather than add a parallel fixture. Assert a positive production-draft count, then for every draft read the not-yet-typed property with Reflect.get and require `domainSchemaVersion === IMPORT_EVENT_FACTS_VERSION`; add a Vitest `expectTypeOf<ImportEventDraft[\"domainSchemaVersion\"]>()` assertion proving the member is required and exactly the constant’s literal type. Extend the fixed two-record deterministic case to pin the golden commandId, decoded commandBytes, ordered eventIds, eventTypes and payload bytes, then include domainSchemaVersion in the two-run equality. Before production changes, the runtime assertion must RED on received `undefined` (and typecheck may also expose the absent indexed member); record the named failing assertion. Keep the existing exact IMPORT_COMMIT_FAILED/APPLY and identity-conflict/APPLY refusal assertions unchanged—this task adds no refusal vocabulary.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED THROUGH REAL SQLITE in tests/migration/import/import-determinism.test.ts. Import public `IMPORT_EVENT_FACTS_VERSION` and `decodeImportEventFacts`. Wrap one real SqliteEventStore only to delegate `commit` unchanged while recording its actual dispositions, then run production applyImport twice over the identical root/manifest/records and the SAME store; assert dispositions exactly COMMITTED then REPLAYED. After the first import require a positive full global/aggregate event count and `hasMore:false`; for EVERY StoredEvent decode the production payload and assert outer `domainSchemaVersion === decoded.schemaVersion === IMPORT_EVENT_FACTS_VERSION`, eventId === decoded.claim.claimId, and aggregateId === `legacy-import:${report.manifestDigest}`. Snapshot horizon, aggregate version, receipt, and each event’s aggregate/sequence/id/type/schema/commandId/requestSha/payload bytes; after replay require byte-identical snapshots, unchanged horizon/version/event counts, no duplicate row, and the real command-decision page exactly zero items/hasMore:false before and after (plain applyImport uses commit, not the decision API). Before implementation this must RED specifically on stored `moe-domain-schema/0`, while all identity/count controls prove the case executed and did not merely refuse.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/migration/import/import-determinism.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MINIMUM IMPLEMENTATION in packages/import/src/import-apply.ts only. Reuse the existing public package constant by adding `IMPORT_EVENT_FACTS_VERSION` to the codec import; make `ImportEventDraft.domainSchemaVersion` a REQUIRED `typeof IMPORT_EVENT_FACTS_VERSION`; and stamp every foldRecord event with `domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION`. Do not change claim/link derivation, eventId, eventType, payload, aggregate, commandId, commandBytes, committedAt, counts, or refusal behavior, and do not edit @moe/store/codec/barrels. The store deliberately excludes domainSchemaVersion from request/effect identity, so the golden identities must remain unchanged. Keep import-apply.ts at <=250 physical lines by compacting the existing codec import/removing redundant blank layout—not by dropping the why-comments or adding a new responsibility. This fixes future first commits only: identical replay preserves an already-stamped row; it does NOT restamp pre-fix generic rows.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ONE CONCENTRATED VERIFICATION GATE. Run every leg as its own foreground invocation with its own captured exit code—never pipe or semicolon-mask it—and read test counts: `pnpm --filter @moe/import typecheck`; `pnpm --filter @moe/import test`; `pnpm test:migration`; `pnpm test:store`; because this changes durable event schema, also `pnpm typecheck` and `pnpm test`. The owned import/migration legs and repo typecheck must be green with nonzero test counts where applicable. Apply the merge-base→HEAD path-attributed baseline to store/root test: the known recovery-anchor.test.ts:694 export leak may remain foreign red only if the HEAD-minus-baseline failing-path set intersected with the three owned paths is empty; quote it verbatim and never fabricate green. The exact fresh exit-0 command used as complete_task evidence is `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test && pnpm test:migration`; record its output lines (currently 8/132 and 3/25). Also record task-80fce1d1d625453098bd526d61c5ddb8 as the production reader consumer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-apply.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FINAL ADVERSARIAL REVIEW AND MUTATION DRILL. Snapshot exact hashes and require the owned paths remain uncontested. Replace ONLY the production stamp RHS with the compile-preserving wrong value `\"moe-domain-schema/0\" as typeof IMPORT_EVENT_FACTS_VERSION`—removing the required field would merely fail TypeScript and would not test the runtime subject. The named real-SQLite envelope/payload equality assertion must RED after a positive event count, on the exact received generic default; the unit draft assertion should redden too. Restore by exact inverse patch/content only while the mutant hash still matches, then prove all three file hashes equal the gated hashes (never checkout/restore over peer work). Review: required literal type cannot be omitted; outer and inner schema agree on every event; event/payload/command goldens did not move; replay is COMMITTED→REPLAYED with zero new events and exactly zero command decisions; no claim/link/activation authority widened; pre-fix rows are explicitly not claimed remediated; import-apply.ts <=250; no CR/BOM/debug/probe residue. Inspect staged paths, unstage any foreign entry, commit only the three explicit pathspecs, and verify `git show --stat` contains nothing else.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-apply.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (domainSchemaVersion stamping, gates task-80fce1d1 shadow projection adapter); BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-80fce1d1d625453098bd526d61c5ddb8",
+  "priority": "HIGH",
+  "order": 12.04,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T19:53:43.483Z",
+  "updatedAt": "2026-08-17T20:01:08.992Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T19:54:53.573Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T20:01:06.925Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Accept the store's generic `moe-domain-schema/0` default and trust only the inner JSON schema. Rejected: it makes the future strict reader ignore a first-class event-envelope field and bakes the producer omission into the contract.\n\n2) Add a second import-specific schema constant in daemon or store. Rejected: `IMPORT_EVENT_FACTS_VERSION` already is the exact public single source and both envelope/payload must agree.\n\n3) Change the canonical payload, event id, or command identity to include the stamp. Rejected: the payload already declares the version; @moe/store deliberately excludes domainSchemaVersion from request/effect identity so upcasters can change it without invalidating receipts. This task changes envelope metadata only.\n\n4) Backfill/restamp pre-fix stored rows on replay. Rejected as out of scope and impossible through plain idempotent replay: the store intentionally ignores domainSchemaVersion in identity and returns the original row. No production importer call site has shipped such rows; if historical remediation becomes required, it needs an explicit migration/upcast task, not a hidden rewrite here.\n\n5) Prove only the captured draft in a spy. Rejected: the defect is the real StoredEvent default, so the accepted control must traverse production applyImport and real SqliteEventStore.\n\n6) Compare two post-change runs and call identity preserved. Rejected as tautological; the unit test pins pre-change golden command/event identities measured before editing.",
+    "codebaseInsights": "Fresh measurement at HEAD 08e3445d1748223dd60e96f332ba0b5c3eb5e1d5: all three owned paths are clean. `packages/import/src/import-apply.ts` is exactly 250 LF-only physical lines; `ImportEventDraft` currently has only eventId/eventType/payload at lines 48–52, and foldRecord pushes only those fields at line 166. `IMPORT_EVENT_FACTS_VERSION` is already public from the codec and equals `moe-import-event-facts/1`.\n\nThe structural edge is compatible: @moe/store EventDraft accepts an optional string domainSchemaVersion, so the import package's stricter required literal draft remains assignable without adding a dependency from @moe/import to @moe/store. No external production constructor of ImportEventDraft exists; applyImport is the owner.\n\nReal store behavior matters: store-input-commit stamps `DOMAIN_EVENT_SCHEMA_VERSION` only when a draft omits the property. store-domain-schema-version.test.ts records that domainSchemaVersion is intentionally outside both request and effect digests, and receipt replay supports non-default versions. Consequently an already-stamped first commit replays unchanged, but a pre-fix generic row cannot be rewritten by an identical replay.\n\napplyImport uses SqliteEventStore.commit, not commitExpectedVersionDecision. Therefore a fresh import has a command receipt but exactly zero command-decision records; DoD 3 means preserve that exact zero, not manufacture a positive count.\n\nBaselines: @moe/import typecheck EXIT0; import tests 8 files/132 tests; migration 3/25; repo typecheck EXIT0. test:store and root pnpm test share one foreign failure at packages/store/src/recovery-anchor.test.ts:694 (`RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root`), while the task owns no packages/store path.",
+    "risks": "1) HISTORICAL ROWS: domainSchemaVersion is identity-blind by @moe/store design. This task is prospective; it must never claim replay upgraded an old generic row.\n2) VACUOUS REPLAY COUNTS: command decisions are legitimately zero because applyImport uses plain commit. Assert the real page is empty before and after, while a positive event count proves the sweep ran.\n3) POST-CHANGE EQUALITY IS NOT A GOLDEN. Pin the measured commandId/commandBytes/eventIds so adding metadata cannot silently move another identity.\n4) A NAIVE MUTANT DOES NOT TEST THE SUBJECT. Removing a newly required field or assigning a wrong literal without a cast only reddens TypeScript; use a compile-preserving wrong constant so the persisted-envelope assertion executes.\n5) LINE PRESSURE: import-apply.ts starts at exactly 250. Offset every added line with focused layout compaction and measure physical lines; do not grow past the task rail.\n6) SHARED TREE: HEAD moved during exploration. Hash-check before mutation and before inverse restore; never git checkout/reset/stash. Commit by explicit pathspec only.\n7) WINDOWS TEXT/SQLITE: avoid PowerShell whole-file rewrites that add CRLF/BOM; close the real store before temp-root cleanup to avoid EBUSY.\n8) FOREIGN RED: store/root test failure is disclosed/path-attributed, not repaired and not used as an excuse for any owned-path failure.",
+    "keyFiles": [
+      "packages/import/src/import-apply.ts",
+      "packages/import/src/import-apply.test.ts",
+      "tests/migration/import/import-determinism.test.ts",
+      "packages/store/src/store-input-commit.ts",
+      "packages/store/src/store-domain-schema-version.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-17T20:01:08.992Z"
+}

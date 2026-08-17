@@ -19,7 +19,7 @@
     "Own only the projection matrix test and at most two focused fixture/helper files under tests/integration/portability."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,5 +32,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:35.974Z",
-  "updatedAt": "2026-08-17T11:20:06.454Z"
+  "updatedAt": "2026-08-17T20:03:33.027Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T20:02:30.952Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh Moe status measurement shows the task's explicit hard dependency task-80fce1d1d625453098bd526d61c5ddb8 is BLOCKED and therefore its public daemon shadow adapter does not exist yet. That adapter is itself blocked on task-9745cd06b8004f44af4128f69a251860, now WORKING, which must stamp the exact outer import-event domain schema before the adapter can fail closed. The matrix is an acceptance/proof task and cannot truthfully construct the current ShadowProjection, deep-import a future reader, or substitute BoardProjection/WorkClaimLedger. Reopen only after task-9745 is DONE and task-80fce1 is DONE; then re-measure the public daemon root export and plan the copied-project corpus against that real production adapter.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T20:03:08.638Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured prerequisite statuses, confirmed task-80fce1 is BLOCKED on WORKING task-9745, reported this task BLOCKED, and wrote Serena handoff memory.",
+      "whatRemains": "After task-9745 and task-80fce1 are DONE, re-measure the public daemon adapter and submit the copied-project shadow matrix plan.",
+      "pitfalls": "Do not construct the current ShadowProjection in tests or substitute BoardProjection/WorkClaimLedger. This is an acceptance task and must use the real task-80 public adapter.",
+      "openQuestions": "None until prerequisites land.",
+      "releasedAt": "2026-08-17T20:03:33.026Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after recording the dependency blocker; continuing to plan other queued tasks."
+    }
+  ]
 }

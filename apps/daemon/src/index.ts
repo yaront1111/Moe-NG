@@ -1,8 +1,11 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-import { previewGraphSnapshot } from "@moe/scheduler";
-import type { BoundedJsonDecodeError, JsonObject, JsonValue } from "@moe/contracts";
-import type { GraphPreviewOptions, GraphPreviewResult } from "@moe/scheduler";
-
+/**
+ * The @moe/daemon package root.
+ *
+ * A pure barrel: it decides nothing and defines nothing. Name lists are PACKED
+ * rather than one-per-line — the same convention the recovery blocks below
+ * already carried — because this file has a hard per-file line budget and the
+ * reviewed surface for each area lives in that area's own module.
+ */
 export {
   BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS,
   BOOTSTRAP_SCHEMA_VERSION, decodeBootstrapRequestBytes,
@@ -11,207 +14,91 @@ export {
   type BootstrapRequest, type BootstrapRequestAccepted, type BootstrapRequestRefused,
 } from "./bootstrap/bootstrap-contracts.js";
 export {
-  PREREQUISITE_REFUSAL_CODES,
-  SERVICE_REFUSED_BY,
-  type CommandHandler,
-  type DurableAggregate,
-  type DurableLedger,
-  type HandlerContext,
-  type HandlerTable,
-  type PrerequisiteRefusalCode,
-  type ServiceAccepted,
-  type ServiceOutcome,
-  type ServiceRefused,
-  type ServiceRefusedBy,
+  PREREQUISITE_REFUSAL_CODES, SERVICE_REFUSED_BY,
+  type CommandHandler, type DurableAggregate, type DurableLedger, type HandlerContext,
+  type HandlerTable, type PrerequisiteRefusalCode, type ServiceAccepted, type ServiceOutcome,
+  type ServiceRefused, type ServiceRefusedBy,
 } from "./bootstrap/bootstrap-ledger.js";
-export {
-  BOOTSTRAP_HANDLERS,
-  runBootstrapCommand,
-} from "./bootstrap/bootstrap-services.js";
+export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
 export {
-  CLAIM_LEGS,
-  SLOT_CEILING_LEG,
-  WORK_AUTHORITY_LABELS,
-  WORK_COMMANDS,
-  WORK_ERROR_CODES,
-  WORK_LAYERS,
-  WORK_LEGS,
-  WORK_SCHEMA_VERSION,
-  type ClaimLeg,
-  type ClaimSuccessors,
-  type WorkApplied,
-  type WorkAuthorityLabel,
-  type WorkCommand,
-  type WorkContextView,
-  type WorkErrorCode,
-  type WorkFailure,
-  type WorkGranted,
-  type WorkInputRejected,
-  type WorkLayer,
-  type WorkLeg,
-  type WorkRefused,
-  type WorkResult,
+  CLAIM_LEGS, SLOT_CEILING_LEG, WORK_AUTHORITY_LABELS, WORK_COMMANDS, WORK_ERROR_CODES,
+  WORK_LAYERS, WORK_LEGS, WORK_SCHEMA_VERSION,
+  type ClaimLeg, type ClaimSuccessors, type WorkApplied, type WorkAuthorityLabel,
+  type WorkCommand, type WorkContextView, type WorkErrorCode, type WorkFailure,
+  type WorkGranted, type WorkInputRejected, type WorkLayer, type WorkLeg,
+  type WorkRefused, type WorkResult,
 } from "./work/work-kernel.js";
 export {
-  parseWorkRequest,
-  type WorkRequestEnvelope,
-  type WorkRequestParse,
+  parseWorkRequest, type WorkRequestEnvelope, type WorkRequestParse,
 } from "./work/work-ingress.js";
 export { claimWork } from "./work/work-claim.js";
 export {
-  EVENT_STREAM_CLOCKS,
-  EVENT_STREAM_LAYER,
-  EVENT_STREAM_OBSERVERS,
-  EVENT_STREAM_REFUSAL_CODES,
-  EVENT_STREAM_UNKNOWN_CODES,
-  MAX_EVENT_PAGE_SIZE,
+  EVENT_STREAM_CLOCKS, EVENT_STREAM_LAYER, EVENT_STREAM_OBSERVERS,
+  EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_UNKNOWN_CODES, MAX_EVENT_PAGE_SIZE,
   type EventGapFrame,
   type EventAcknowledgeFrame, type EventAcknowledgeRequest, type EventAcknowledgedFrame,
-  type EventPageFrame,
-  type EventReadFrame,
-  type EventReadRequest,
-  type EventRefusedFrame,
-  type EventReseatedFrame,
-  type EventResumeFrame,
-  type EventResumeRequest,
-  type EventStreamClock,
-  type EventStreamObserver,
-  type EventStreamRefusalCode,
-  type EventStreamUnknownCode,
-  type SeamObserver,
-  type StreamCursor,
+  type EventPageFrame, type EventReadFrame, type EventReadRequest, type EventRefusedFrame,
+  type EventReseatedFrame, type EventResumeFrame, type EventResumeRequest,
+  type EventStreamClock, type EventStreamObserver, type EventStreamRefusalCode,
+  type EventStreamUnknownCode, type SeamObserver, type StreamCursor,
   type StreamAcknowledgeRequest, type StreamAcknowledgeResult, type StreamAcknowledged,
-  type StreamEvent,
-  type StreamGap,
-  type StreamPage,
-  type StreamPageRequest,
-  type StreamReadResult,
-  type StreamRefused,
-  type StreamReseatRequest,
-  type StreamSeatResult,
-  type StreamSeated,
-  type StreamSnapshot,
-  type SubscriptionPort,
-  type WireCursor,
-  type WireEvent,
-  type WireEventIdentity,
-  type WireKnownValue,
-  type WireObservation,
-  type WireSnapshot,
-  type WireUnknownValue,
-  type WireValue,
+  type StreamEvent, type StreamGap, type StreamPage, type StreamPageRequest,
+  type StreamReadResult, type StreamRefused, type StreamReseatRequest,
+  type StreamSeatResult, type StreamSeated, type StreamSnapshot, type SubscriptionPort,
+  type WireCursor, type WireEvent, type WireEventIdentity, type WireKnownValue,
+  type WireObservation, type WireSnapshot, type WireUnknownValue, type WireValue,
 } from "./http/event-stream-contract.js";
 export { acknowledgeEventPage, readEventPage, resumeFromSnapshot } from "./http/event-stream.js";
 export {
-  CONTROL_ROOM_LISTENER_LAYER,
-  DAEMON_ENTRY_LAYER,
-  DAEMON_ENTRY_REFUSAL_CODES,
-  LISTENER_REFUSAL_CODES,
-  isDependencyProvider,
-  refuseEntry,
-  startControlRoomListener,
+  CONTROL_ROOM_LISTENER_LAYER, DAEMON_ENTRY_LAYER, DAEMON_ENTRY_REFUSAL_CODES,
+  LISTENER_REFUSAL_CODES, isDependencyProvider, refuseEntry, startControlRoomListener,
   startDaemon,
-  type BootReconciliationPort,
-  type BootReconciliationRefused,
-  type ControlRoomListener,
-  type DaemonDependencyProvider,
-  type DaemonEntryRefusalCode,
-  type DaemonEntryRefused,
-  type DaemonStartOptions,
-  type DaemonStartResult,
-  type ListenerRefusalCode,
-  type ListenerRefused,
-  type ShutdownResult,
-  type StartedDaemon,
-  type StartListenerOptions,
+  type BootReconciliationPort, type BootReconciliationRefused, type ControlRoomListener,
+  type DaemonDependencyProvider, type DaemonEntryRefusalCode, type DaemonEntryRefused,
+  type DaemonStartOptions, type DaemonStartResult, type ListenerRefusalCode,
+  type ListenerRefused, type ShutdownResult, type StartedDaemon, type StartListenerOptions,
   type StartListenerResult,
 } from "./daemon-entry.js";
 export {
-  HTTP_BOUNDARY_ERROR_CODES,
-  HTTP_INPUT_BOUNDS,
-  HTTP_REFUSAL_STAGES,
-  MAX_COMMAND_PAYLOAD_FIELDS,
-  WIRE_PROTOCOL_VERSION,
-  buildCommandRegistry,
-  type AuthenticatedPrincipal,
-  type AuthenticationResult,
-  type Authenticator,
-  type AuthVerdict,
-  type BoundaryCodesAreRuntimeCodes,
-  type CommandAdapterDeps,
-  type CommandDecisionPort,
-  type CommandHandler as HttpCommandHandler,
-  type CommandHandlerInput,
-  type CommandRegistry,
-  type CommandRegistryEntry,
-  type DecisionKey,
-  type DecisionPortResult,
-  type DurableDecision,
-  type HttpAccepted,
-  type HttpBoundaryErrorCode,
-  type HttpCommandRequest,
-  type HttpCommandResult,
-  type HttpPortRefused,
-  type HttpRefusalStage,
-  type HttpRefused,
-  type PortRefusal,
+  HTTP_BOUNDARY_ERROR_CODES, HTTP_INPUT_BOUNDS, HTTP_REFUSAL_STAGES,
+  MAX_COMMAND_PAYLOAD_FIELDS, WIRE_PROTOCOL_VERSION, buildCommandRegistry,
+  type AuthenticatedPrincipal, type AuthenticationResult, type Authenticator,
+  type AuthVerdict, type BoundaryCodesAreRuntimeCodes, type CommandAdapterDeps,
+  type CommandDecisionPort, type CommandHandler as HttpCommandHandler,
+  type CommandHandlerInput, type CommandRegistry, type CommandRegistryEntry,
+  type DecisionKey, type DecisionPortResult, type DurableDecision, type HttpAccepted,
+  type HttpBoundaryErrorCode, type HttpCommandRequest, type HttpCommandResult,
+  type HttpPortRefused, type HttpRefusalStage, type HttpRefused, type PortRefusal,
   type WireProtocolVersion,
 } from "./http/http-contract.js";
 export { handleCommandRequest } from "./http/http-adapter.js";
 export {
-  OPERATOR_CAPABILITIES,
-  createDaemonCommandPorts,
-  type DaemonCommandPortOptions,
-  type DaemonCommandPorts,
+  OPERATOR_CAPABILITIES, createDaemonCommandPorts,
+  type DaemonCommandPortOptions, type DaemonCommandPorts,
 } from "./daemon-command-registry.js";
 export {
-  DOCTOR_COMMAND_KINDS,
-  DOCTOR_ERROR_CODES,
-  DOCTOR_RECOVERY_SCHEMA_VERSION,
+  DOCTOR_COMMAND_KINDS, DOCTOR_ERROR_CODES, DOCTOR_RECOVERY_SCHEMA_VERSION,
   evaluateDoctorCommandBytes,
-  type DoctorAuthorityStale,
-  type DoctorCommandKind,
-  type DoctorCommandResult,
-  type DoctorErrorCode,
-  type DoctorInputRejected,
-  type DoctorProposed,
-  type DoctorReported,
-  type DoctorRequestInvalid,
-  type DoctorVersionReportAbsent,
+  type DoctorAuthorityStale, type DoctorCommandKind, type DoctorCommandResult,
+  type DoctorErrorCode, type DoctorInputRejected, type DoctorProposed, type DoctorReported,
+  type DoctorRequestInvalid, type DoctorVersionReportAbsent,
 } from "./recovery/doctor-commands.js";
 export { collectDoctorVersionReport } from "./recovery/doctor-version.node.js";
 export type { DoctorVersionReport, DoctorVersionsReported } from "./recovery/doctor-version-contract.js";
 export { REVIEW_HANDLERS } from "./review/review-services.js";
 export type {
-  DeltaClassification,
-  DeltaNodeClassification,
-  ReviewCommandKind,
-  ReviewDecodeRefusal,
-  ReviewDecodeResult,
-  ReviewIngressRefusalCode,
-  ReviewInputRejected,
-  ReviewPrerequisiteRefusalCode,
-  ReviewRefusedBy,
-  ReviewRequest,
-  ReviewRequestAccepted,
+  DeltaClassification, DeltaNodeClassification, ReviewCommandKind, ReviewDecodeRefusal,
+  ReviewDecodeResult, ReviewIngressRefusalCode, ReviewInputRejected,
+  ReviewPrerequisiteRefusalCode, ReviewRefusedBy, ReviewRequest, ReviewRequestAccepted,
   ReviewRequestRefused,
 } from "./review/review-contracts.js";
 export type {
-  CommandHandler as ReviewCommandHandler,
-  HandlerContext as ReviewHandlerContext,
-  HandlerTable as ReviewHandlerTable,
-  ReviewAccepted,
-  ReviewDaemonLayer,
-  ReviewDaemonRefusalCode,
-  ReviewLedger,
-  ReviewOutcome,
-  ReviewRefused,
-  ReviewRoundRecord,
+  CommandHandler as ReviewCommandHandler, HandlerContext as ReviewHandlerContext,
+  HandlerTable as ReviewHandlerTable, ReviewAccepted, ReviewDaemonLayer,
+  ReviewDaemonRefusalCode, ReviewLedger, ReviewOutcome, ReviewRefused, ReviewRoundRecord,
 } from "./review/review-ledger.js";
-// Packed rather than one-name-per-line only to spend fewer physical lines here;
-// see the recovery-incarnation module for the reviewed surface.
 export {
   RECOVERY_INCARNATION_ERROR_CODES, RECOVERY_INCARNATION_SCHEMA_VERSION,
   createNodeRecoveryCryptoPort, createRecoveryIncarnationService,
@@ -280,110 +167,51 @@ export {
   type ProjectConfigurationStore, type ReadCurrentProjectConfigurationResult,
   type SelectedProjectConfiguration, type SelectProjectConfigurationResult,
 } from "./configuration/project-configuration-selection.js";
-
-const SCHEMA_VERSION = "moe-graph-preview-request/1";
-const REQUEST_KEYS = Object.freeze(["options", "schemaVersion", "snapshot"]);
-
-export interface GraphPreviewRequestError {
-  readonly code: "GRAPH_PREVIEW_REQUEST_INVALID";
-  readonly message: "Graph preview request must match moe-graph-preview-request/1 exactly.";
-}
-
-interface AdvisoryEnvelope {
-  readonly advisoryOnly: true;
-  readonly authority: "NONE";
-}
-
-export interface GraphPreviewInputRejected extends AdvisoryEnvelope {
-  readonly ok: false;
-  readonly outcome: "INPUT_REJECTED";
-  readonly error: BoundedJsonDecodeError;
-}
-
-export interface GraphPreviewRequestInvalid extends AdvisoryEnvelope {
-  readonly ok: false;
-  readonly outcome: "REQUEST_INVALID";
-  readonly error: GraphPreviewRequestError;
-}
-
-export interface GraphPreviewRequestEvaluated extends AdvisoryEnvelope {
-  readonly ok: true;
-  readonly outcome: "REQUEST_EVALUATED";
-  readonly preview: GraphPreviewResult;
-}
-
-export type GraphPreviewRequestResult =
-  | GraphPreviewInputRejected
-  | GraphPreviewRequestInvalid
-  | GraphPreviewRequestEvaluated;
-
-const REQUEST_INVALID_ERROR: GraphPreviewRequestError = Object.freeze({
-  code: "GRAPH_PREVIEW_REQUEST_INVALID",
-  message: "Graph preview request must match moe-graph-preview-request/1 exactly.",
-});
-
-const REQUEST_INVALID_RESULT: GraphPreviewRequestInvalid = Object.freeze({
-  advisoryOnly: true,
-  authority: "NONE",
-  error: REQUEST_INVALID_ERROR,
-  ok: false,
-  outcome: "REQUEST_INVALID",
-});
-
-function isExactRequest(
-  value: JsonValue,
-): value is JsonObject & {
-  readonly schemaVersion: typeof SCHEMA_VERSION;
-  readonly snapshot: JsonValue;
-} {
-  if (value === null || Array.isArray(value) || typeof value !== "object") {
-    return false;
-  }
-  if (Object.getPrototypeOf(value) !== null) return false;
-
-  const request = value as JsonObject;
-  const keys = Object.keys(request);
-  if (keys.length < 2 || keys.length > REQUEST_KEYS.length) return false;
-  if (keys.some((key) => !REQUEST_KEYS.includes(key))) return false;
-
-  return (
-    Object.hasOwn(request, "schemaVersion") &&
-    request.schemaVersion === SCHEMA_VERSION &&
-    Object.hasOwn(request, "snapshot")
-  );
-}
-
-/**
- * Composes bounded JSON decoding with a zero-authority graph preview.
- * This advisory operation is not a command or admission boundary.
- */
-export function evaluateGraphPreviewRequestBytes(
-  input: unknown,
-): GraphPreviewRequestResult {
-  const decoded = decodeBoundedJsonBytes(input);
-  if (!decoded.ok) {
-    return Object.freeze({
-      advisoryOnly: true,
-      authority: "NONE",
-      error: decoded,
-      ok: false,
-      outcome: "INPUT_REJECTED",
-    });
-  }
-  if (!isExactRequest(decoded.value)) return REQUEST_INVALID_RESULT;
-
-  const options: unknown = Object.hasOwn(decoded.value, "options")
-    ? decoded.value.options
-    : undefined;
-  const preview = previewGraphSnapshot(
-    decoded.value.snapshot,
-    options as GraphPreviewOptions | undefined,
-  );
-  return Object.freeze({
-    advisoryOnly: true,
-    authority: "NONE",
-    ok: true,
-    outcome: "REQUEST_EVALUATED",
-    preview,
-  });
-}
+// Relocated out of this barrel, re-exported under the original names so no
+// consumer's import path changed. See graph-preview-request.ts for why.
+export {
+  evaluateGraphPreviewRequestBytes,
+  type GraphPreviewInputRejected, type GraphPreviewRequestError,
+  type GraphPreviewRequestEvaluated, type GraphPreviewRequestInvalid,
+  type GraphPreviewRequestResult,
+} from "./graph-preview-request.js";
+// The Foundation ingress surface: six committed families published by explicit
+// name from ONE curated area module, so an external canary or MCP host can drive
+// production authority without a deep import. Never `export *` — see
+// foundation/foundation-surface.ts for why a star here would be unsound.
+export {
+  CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS, DAEMON_FOUNDATION_ATTEMPT,
+  DELTA_CLASSIFICATIONS, FOUNDATION_ATTEMPT_CODES, FOUNDATION_ATTEMPT_RECORD_VERSION,
+  FOUNDATION_ATTEMPT_REQUEST_KEYS, FOUNDATION_ATTEMPT_SCHEMA_VERSION,
+  FOUNDATION_DISPATCH_COMMAND_KIND, FOUNDATION_RESERVATION_VERSION,
+  FOUNDATION_VERIFICATION_CODES, FOUNDATION_VERIFICATION_COMMAND_KIND,
+  FOUNDATION_VERIFICATION_LAYERS, FOUNDATION_VERIFICATION_RECEIPT_VERSION,
+  FOUNDATION_VERIFICATION_RECIPE_VERSION, FOUNDATION_VERIFICATION_REFUSAL_SOURCES,
+  FOUNDATION_VERIFICATION_REQUEST_KEYS, FOUNDATION_VERIFICATION_SCHEMA_VERSION,
+  FOUNDATION_VERIFICATION_VERDICTS, GOAL_CLOSURE_WITNESS_VERSION, GOAL_PREREQUISITE_LAYER,
+  GOAL_PREREQUISITE_REFUSAL_CODES, RESTART_RECONCILIATION_COMMAND_KIND,
+  RESTART_RECONCILIATION_SCHEMA_VERSION, RESTART_RECORD_CLASSIFICATIONS,
+  REVIEW_COMMAND_KINDS, REVIEW_INGRESS_REFUSAL_CODES, REVIEW_PREREQUISITE_REFUSAL_CODES,
+  REVIEW_REFUSED_BY, REVIEW_REQUEST_KEYS, REVIEW_SCHEMA_VERSION, RUNNER_WORKSPACE_LAYER,
+  SCHEDULER_GRAPH_LAYER, coordinationPresentationDigest, createCoordinationAdapter,
+  createFoundationAttemptService, createFoundationVerificationService,
+  decodeReviewRequestBytes, deriveRecipeAggregateId, deriveVerificationAggregateId,
+  qualifyGoalClosure, readFoundationAttemptRecord, readReconciliationRecords,
+  readReviewLedger, reconcileOnRestart, runContinuationCommand, runReviewCommand,
+  type AcceptanceRecord, type ContinuationCommandInput, type ContinuationCommandOutcome,
+  type CoordinationAdapter, type CoordinationAdapterOptions, type CoordinationAuthRefused,
+  type CoordinationPresentationFields, type DeltaRecord, type FoundationAttemptBinding,
+  type FoundationAttemptCode, type FoundationAttemptDeps,
+  type FoundationAttemptDispatchRequest, type FoundationAttemptLaunchTemplate,
+  type FoundationAttemptOutcome, type FoundationAttemptRecordAnswer,
+  type FoundationAttemptRefused, type FoundationRecipeOutcome,
+  type FoundationRecipeRegistration, type FoundationVerificationAnswer,
+  type FoundationVerificationCode, type FoundationVerificationDeps,
+  type FoundationVerificationLayer, type FoundationVerificationOutcome,
+  type FoundationVerificationRefusalSource, type FoundationVerificationRefused,
+  type FoundationVerificationRequest, type FoundationVerificationVerdict,
+  type GoalClosureQualification, type GoalClosureQualified, type GoalClosureRefused,
+  type GoalPrerequisiteRefusalCode, type InFlightAttempt, type ReconciliationRecord,
+  type RestartReconciliationRequest, type RestartReconciliationResult,
+  type RestartRecordClassification, type RestartTruthClass,
+} from "./foundation/foundation-surface.js";

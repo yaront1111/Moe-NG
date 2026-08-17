@@ -18,8 +18,8 @@
     "Keep each production source <=250 physical lines and split before 400; exact one-line LF .js bridges where root-reachable; stage/commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -38,11 +38,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:01:28.873Z",
-  "updatedAt": "2026-08-17T19:41:44.116Z",
+  "updatedAt": "2026-08-17T19:54:47.994Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:41:39.191Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh HEAD measurement found prerequisite task-a677's payload codec is present, but its production ImportEventDraft does not set domainSchemaVersion. A real SqliteEventStore stores every legacy.*.imported row under the generic moe-domain-schema/0 default while only the inner payload declares moe-import-event-facts/1. A strict daemon current-shadow reader would therefore have to ignore the event envelope's schema or bless an accidental generic default, contradicting the stale-dependency/fail-closed rails and the producer task's own DoD. Filed focused prerequisite task-9745cd06b8004f44af4128f69a251860 to require/stamp the exact outer schema and prove it with nonzero real-store replay. Reopen this task only after that task is DONE. The other dependencies are genuinely live: daemon package.json + pnpm-lock link @moe/import and a compiled inside-daemon bare-root probe typechecked exit 0; a677's canonical payload decoder is public. On reopen, this task needs five owned paths (reader.ts, LF bridge, reader.test.ts, daemon index.ts, index-surface.test.ts—the old four-file comment is stale because the daemon root export catalogue is exact). Its semantic scope is the durable v2 imported-state projection, never live work/graph authority: copied source uses projectLegacyImport, durable event bytes use an independent daemon mapper, and public compareShadowProjections compares them. Board counts and WorkClaimLedger remain invalid substitutes.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T19:54:05.354Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured both prior prerequisites; verified the daemon @moe/import manifest+lock+compiled bare-root edge; inspected the landed event codec, durable store envelopes, daemon root export ratchet, and shadow semantics; filed task-9745cd06b8004f44af4128f69a251860; reported this task BLOCKED; wrote Serena handoff memory.",
+      "whatRemains": "After task-9745cd06b8004f44af4128f69a251860 is DONE, remeasure and submit the five-file daemon reader/mapper/comparison plan described in the handoff.",
+      "pitfalls": "Do not use BoardProjection counts or WorkClaimLedger; do not call projectLegacyImport for both sides; preserve upstream IMPORT_EVENT code/layer; include index-surface.test.ts because the runtime export list is exact; keep daemon index below 400.",
+      "openQuestions": "No implementation work should start before the outer event schema is explicit. The intended scope is durable imported-state shadow truth (advisory only), not live work/graph authority; if a human instead requires native operational truth, amend the task and file a separate semantic producer.",
+      "releasedAt": "2026-08-17T19:54:47.993Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing producer-schema prerequisite and blocking this task."
+    }
   ]
 }
