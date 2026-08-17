@@ -16,8 +16,76 @@
     "Keep the roster hand-written/source-compared; the coverage cases must exercise the production goal qualification surface and pin exact code plus layer.",
     "Preserve foreign work and commit only explicit tests/security paths."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND OWNERSHIP. Re-measure before editing: confirm `GOAL_PREREQUISITE_LAYER` is exported from `apps/daemon/src/goals/goal-close-prerequisite.ts`, returned by `qualifyGoalClosure`, and surfaced as `refusedBy` by the real `GOAL_HANDLERS[\"goal.close\"]` path; confirm the completed producer task's four goal sources are committed/worktree-clean and that no live task owns the three security paths. Run `pnpm test:security` standalone and retain the merge-base output/counts. At measured HEAD eb584aed it executed 9 files/466 tests, with 462 passed and four roster assertions red because scan=92 versus roster=90; the exact missing keys are this task's GOAL key plus foreign `GRAPH_CONTENT_LAYERS`. `AGENT_STAFFING_LAYER` is already rostered and covered, so treat the task text's staffing-red premise as stale and never fabricate it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — write the goal-specific security assertions before their cases exist. In the scheduler-activation suite add named expectations that the exact GOAL prerequisite roster key has exactly one BEFORE, one AFTER, and one RACE arm; that the generated GOAL arm/proof counts are positive and equal the cases actually run; that every collected GOAL outcome is the identical object returned by the production command path; that each hostile proof has zero command-decision and `GoalCompleted` residue; and that one accepted GOAL control is required. Use an initially empty exported proof/control collection if needed so `pnpm exec vitest run --root tests/security --config vitest.config.ts scheduler-activation-boundaries.security.ts` fails on the intended missing-GOAL assertion, not on an import/compile error. Do not weaken the existing generic roster-versus-arms checks.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-activation-boundaries.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "HAND-ROSTER THE COMMITTED BOUNDARY. In `boundary-roster.security.ts`, add exactly `{ constant: \"GOAL_PREREQUISITE_LAYER\", file: \"apps/daemon/src/goals/goal-close-prerequisite.ts\", axis: \"scheduler-activation\" }` in the existing apps/daemon ordering. Update only the mechanically attributable ratchets: roster size 90→91 and `apps/daemon` distribution 34→35, with the measurement comment naming this producer. Do not add, classify, suppress, or otherwise absorb foreign `GRAPH_CONTENT_LAYERS`, and do not touch the already-landed AGENT entry.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/boundary-roster.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "ADD REAL BEFORE/AFTER/RACE CASES AND DURABLE PROOFS. In `scheduler-activation-hostile-cases.ts`, import the production GOAL prerequisite/qualification surfaces and reuse the established bootstrap and goal-closure arrangers (`openStore`, `driveThrough`, `send`, `envelope`, `acceptancePayload`, `decisionCount`, `GOAL_ID`, `approveNodes`, `seedReviewAcceptance`, `seedVerifiedNode`) only to create real SQLite facts. Add GOAL cases beside the existing `GOAL_LAYER` entries in `EXPANSION_SUPERSESSION_CASES/RACES`: BEFORE drives a real execution-enabled goal with an approved node but no durable verification receipt and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` at `DAEMON_PREREQUISITE`; AFTER fully qualifies one node and asserts `qualifyGoalClosure(...).ok === true`, then commits a second real PASSED receipt for the same node and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS` at that same layer; RACE submits two distinct real `goal.close` command identities against the approved/no-receipt state, requires both exact ABSENT refusals, and sets `maxAdmitted: 0`. Route all three through one capture helper that returns the exact `send(...)` object unchanged while recording before/after raw decision counts, goal event counts, `GoalCompleted` counts, and durable goal result bytes. Export read-only proof accessors/cleanup, prove four actual hostile command outcomes were captured, and close bootstrap stores before cleaning temporary verification roots. No production file or test helper may synthesize the refusal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN — PIN THE ANSWERING LAYER, ZERO RESIDUE, AND AN ACCEPTED CONTROL. In `scheduler-activation-boundaries.security.ts`, update the measured scheduler-axis cardinality 25→26 and complete the RED assertions. For every GOAL hostile outcome assert the exact code and raw production `refusedBy === GOAL_PREREQUISITE_LAYER` (not merely a projected layer), object identity with the captured service return, unchanged decision/event/result snapshots, and zero `GoalCompleted` admissions. Add one accepted control through the SAME capture/command helper: approve one node, seed its accepted review and one real PASSED verification, submit real `goal.close`, and assert the returned production object is `ok:true`, `disposition:\"DECIDED\"`, `authority:\"DURABLE_DECISION\"`; decision count rises by exactly one; exactly one `GoalCompleted` lands; and production readback is lifecycle `COMPLETED`, version 4, with no active graph revision. Assert the GOAL case/control counts are nonzero so generated coverage cannot silently vanish and a refuse-everything implementation cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS — prove the assertions remain attached to production. Drill 1 is a transient, never-staged mutation of the completed producer: first require `git status --short -- apps/daemon/src/goals/goal-qualification.ts` empty, record its SHA-256, replace exactly the single `receipt === undefined` refusal guard at the measured range, record the mutant hash, and run the focused scheduler suite; the named BEFORE/RACE exact-code tests must redden on the production behavior. Restore only by the exact inverse replacement if the current hash still equals the mutant hash, then require the original hash and clean status; if the path changes concurrently, stop and report rather than overwriting foreign work. Drill 2 makes one exact reversible edit in the owned hostile-case driver so it returns a literal/copy of the expected refusal instead of the actual `send(...)` object; the named production-object-identity/accepted-control assertion must redden. Restore exact bytes and verify hashes/status. Record the applied range, the intended failing test, and the red output for both drills. These are test mutations only: the final diff and commit remain restricted to the three `tests/security` paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "ADVERSARIAL REVIEW. Confirm the roster is hand-written/source-compared at 91 total, 35 apps/daemon, and 26 scheduler-activation; GOAL has exactly BEFORE/AFTER/RACE while GRAPH remains unrostered; every hostile case crosses real `send -> runBootstrapCommand -> GOAL_HANDLERS[\"goal.close\"]`; the AFTER precondition was genuinely accepted before the second receipt; exact code plus raw refusing layer identify the GOAL guard rather than an earlier core/ingress guard; all refusal snapshots prove zero decision, completion-event, and durable-result residue; the accepted control derives admission from the actual returned service object and durable readback; generated counts are positive; cleanup closes SQLite before filesystem removal on Windows; both drills were restored; no production path appears in the final diff; and only the three owned security files are staged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "FINAL GATE AND EXPLICIT-PATH COMMIT. First run the focused scheduler-activation Vitest command in the foreground and require an exit-0 nonzero file/test count. The task's exact verification command is `pnpm test:security`; run it separately, never piped or semicolon-masked, and read its `Test Files`/`Tests` lines. Apply the path-attributed baseline: this task's GOAL scan/coverage delta must be gone and the only remaining roster red may be the pre-existing foreign `GRAPH_CONTENT_LAYERS` key/92-versus-91 cardinality, quoted verbatim; do not claim the suite globally green. Check `git status --porcelain`, unstage any foreign entry without touching its worktree bytes, stage/commit only `tests/security/boundary-roster.security.ts`, `tests/security/scheduler-activation-hostile-cases.ts`, and `tests/security/scheduler-activation-boundaries.security.ts` using explicit pathspecs, and verify `git show --stat` contains only those paths. Completion evidence must include both drills' named red tests, the focused nonzero green counts, the standalone security counts/exit, and the exact disclosed foreign GRAPH failure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +98,35 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-17T11:20:16.516Z"
+  "updatedAt": "2026-08-17T17:58:31.777Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:48:22.504Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T17:58:29.705Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Update only the roster. Rejected: it would close the scanner delta while leaving GOAL with no BEFORE/AFTER/RACE production coverage and could ratify an untested authority boundary. 2) Reuse the existing core `GOAL_LAYER` cases. Rejected: those exercise `reduceGoal` directly and cannot prove the daemon prerequisite/qualification layer answered first or that the daemon left zero close residue. 3) Copy the unit-test refusal literal into the security matrix. Rejected: a helper-shaped refusal detaches the property from production and survives removal of the real guard. 4) Use the task description's stale AGENT/GRAPH set. Rejected on fresh measurement: AGENT is already green; only GOAL and foreign GRAPH are missing. 5) Add production instrumentation. Rejected by scope: the completed GOAL producer already exposes the exact code/layer and durable effects needed; this task owns tests/security only. 6) Skip the production mutation because its source is out of scope. Rejected because DoD explicitly requires the guard-removal drill; the plan permits only a hash-guarded transient mutation, never a final diff or staged path, and stops rather than overwriting concurrent work.",
+    "codebaseInsights": "Measured at HEAD eb584aed30bb0b004eebe88f2d24bbc8bd981172. Producer task task-8f9305b9bb5e4b8db327a55981b2ea0e is DONE/QA-approved; `goal-close-prerequisite.ts`, `goal-qualification.ts`, `goal-qualification-reads.ts`, and `goal-services.ts` are committed and worktree-clean. `qualifyGoalClosure` returns `{ok:false,code,layer:\"DAEMON_PREREQUISITE\"}`; `closeGoal` calls it before `reduceGoal` and surfaces the same code as `refusedBy`. Existing real fixtures already drive `send -> runBootstrapCommand`, real SqliteEventStore, review acceptance, Foundation attempt/verification receipts, and accepted terminal goal readback, so no authority needs to be reimplemented. Fresh `pnpm test:security` executed `Test Files 2 failed | 7 passed (9)` and `Tests 4 failed | 462 passed (466)`; failures name exactly GOAL_PREREQUISITE_LAYER plus foreign GRAPH_CONTENT_LAYERS, scan 92 versus roster 90. AGENT_STAFFING is already rostered/covered. Current roster is 90 total, apps/daemon 34, scheduler axis 25; this slice moves only those values to 91/35/26. The three owned security paths are presently clean and have no active owner.",
+    "risks": "The AFTER arm must first demonstrate a genuinely qualified production value before adding the conflicting second receipt; otherwise it is just another initially-invalid fixture. A returned refusal alone cannot prove zero residue, so raw decisions, goal events, completion events, and durable result bytes are compared. Multiple layers can refuse goal.close; assert the raw service `refusedBy`, not only the matrix projection. A refusal-only matrix can pass if the driver always refuses, hence the accepted control through the same driver. The store replay identity could hide duplicated decisions, hence raw counts and distinct command IDs in the race. Real verification fixtures spawn bounded child processes and temporary roots; close stores before cleanup, especially on Windows. The production mutation drill touches an unowned completed path only transiently; hash/status preconditions and inverse restoration are mandatory, and any concurrent change is a hard stop. The full security gate remains red from foreign GRAPH_CONTENT by design; disclose exact output and use the owned-path delta rather than inventing green.",
+    "keyFiles": [
+      "apps/daemon/src/goals/goal-close-prerequisite.ts",
+      "apps/daemon/src/goals/goal-qualification.ts",
+      "apps/daemon/src/goals/goal-services.ts",
+      "apps/daemon/src/goals/goal-closure-test-fixtures.ts",
+      "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+      "tests/security/boundary-roster.security.ts",
+      "tests/security/scheduler-activation-hostile-cases.ts",
+      "tests/security/scheduler-activation-boundaries.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-17T17:58:31.777Z"
 }

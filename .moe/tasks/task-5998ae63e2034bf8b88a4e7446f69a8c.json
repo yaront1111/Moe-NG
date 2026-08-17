@@ -158,37 +158,48 @@
     {
       "stepId": "step-9",
       "description": "MUTATION DRILLS — prove the failure-path assertions are attached to the production surface, since a green suite cannot show this on its own. Run each drill, record the exact test name that reddened, then restore the file and confirm the restored bytes hash-match the original (git status alone is unreliable in this shared worktree).\n1. In bindAttemptResources, change `grantSuccessorCapacity(rows, null)` to `grantSuccessorCapacity(rows, 'proof-ref')` — the quarantine-laundering drill. If nothing reddens, the no-proof property is unasserted; add the assertion.\n2. Make the duplicate-resourceId check a no-op (return the set unchanged) — the MEMBER_DUPLICATE test must redden, and on that assertion, not merely on a count.\n3. In the reader, drop the `sameBytes` re-encode check — the MALFORMED drift test must redden.\n4. In the reader's fold, make it skip an undecodable member instead of refusing — a NAMED test must redden; a silently omitted member is the exact false-completeness this record exists to prevent.\n5. In activation-ingress.ts, delete the `bindAttemptResources(...)` call — the accepted production-writer control must redden. This is the consumer-edge drill: it proves production IMPORTS the module, not merely that the module loads.\nIf a drill survives, do not rationalise it — either the assertion has detached from its subject or the mutation is equivalent. Say which, in the completion notes, with the evidence.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/attempt-resource-authority.ts",
         "apps/daemon/src/activation/activation-ingress.ts",
         "apps/daemon/src/work/attempt-resource-authority.test.ts"
       ],
-      "startedAt": "2026-08-17T17:45:56.091Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/attempt-resource-authority.test.ts"
+      ],
+      "note": "FIVE MUTATION DRILLS RUN. All five reddened. Every file restored and hash-verified against its pre-drill sha256, because these deliverables are UNTRACKED and `git checkout` cannot restore them — and git status is not evidence in this shared worktree. Final state: all four hashes match, TSC_EXIT=0, `Test Files 4 passed (4) / Tests 53 passed (53)`.\n\nDRILL 1 — quarantine laundering. `grantSuccessorCapacity(rows, null)` -> `(rows, \"proof-ref\")`.\nRED: `attempt resource authority — the bind arm > refuses a quarantined set without laundering it into RELEASED`. Exactly one test, exactly the property. The no-proof argument is load-bearing and asserted.\nRestore: attempt-resource-authority.ts -> ee84f293d635bec496f1ec5fe4b96dc5fa06624955c07cde7c84b758d63b5a17, RESTORE_EXACT.\n\nDRILL 2 — duplicate check made a no-op. RED on the named assertion, but I am NOT reporting this as a clean kill, because the received value shows the evidence is INDIRECT and that matters.\nThe focused run (`-t \"refuses duplicate resource ids...\"`) reddened at test line 165, the code equality itself — not on a count — with:\n  - expected `{ code: \"ATTEMPT_RESOURCE_MEMBER_DUPLICATE\", refusedBy: \"DAEMON_ATTEMPT_RESOURCE\", upstreamCode: null }`\n  - received `{ code: \"ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE\", refusedBy: \"DAEMON_ATTEMPT_RESOURCE\", upstreamCode: \"EXPECTED_VERSION_CONFLICT\" }`\nSo the test observed a COLLISION, not a collapse. Cause, and it is structural rather than a test-design slip: duplicate resource ids are the ONLY production-reachable bind refusal (every other hostile shape is refused earlier by `reserveProviderSlot`, which requires every row ACTIVE, or by `parseRows`). That is why my host fixture activates over duplicates to obtain an empty resource aggregate — so the fixture's precondition depends on the very guard the drill removes, and with the guard gone the ingress binds the duplicate set first. Unfocused, the drill reddens 42 tests for that one reason.\nI did not rationalise this. I ADDED a control to the duplicate test that is independent of the fixture and runs against the production reducer: `grantSuccessorCapacity(duplicateRows(), null)` is asserted to ACCEPT, returning 3 rows carrying only 2 distinct resourceIds. That pins precisely why the daemon's check has to exist — without it those bytes become durable and a consumer folding by resourceId sees a two-member set where three resources were declared. The control is run, not restated as a literal.\nRestore: RESTORE_EXACT (verified twice, once per run of this drill).\n\nDRILL 3 — reader's `sameBytes` re-encode check dropped, leaving only `!again.ok`.\nRED: `attempt resource reader — the four distinct record faults > answers MALFORMED for bytes that decode but no longer canonicalise`. Exactly one test. Confirms the earlier positive control was doing its job: the planted bytes differ from canonical ONLY by a moved key, so nothing but the re-encode comparison can see them.\nRestore: attempt-resource-reader.ts -> c0bda7cbb2d32069cca47f1f5ca1c9791ede06d81f897c244980915f3fd6ce24, RESTORE_EXACT.\n\nDRILL 4 — `decodeAttemptResourceBody` skips an undecodable member (`return null` -> `continue`) instead of refusing.\nRED: `attempt resource reader — membership is complete or the record is UNKNOWN > answers MALFORMED when one member carries an eighth field`. A NAMED test, and it is the false-completeness case: `memberCount` is compared to the RAW array length before the loop, so skipping inside the loop yields a record that decodes with 2 members where 3 were declared and the reader would answer a SHORTER set instead of UNKNOWN.\nRestore: attempt-resource-authority-contracts.ts -> 3b5b368b8cd8e92296e0080f94616a0a510b891b11902e19f7e5152903215a7b, RESTORE_EXACT.\n\nDRILL 5 — the consumer-edge drill. Deleted BOTH the `bindActivationResources(store, request, record)` call and its import from activation-ingress.ts (a real delete, not a disabled branch).\nRED: `attempt resource authority — the production ingress binds > binds the whole declared set through runEffectActivateCommand alone` AND `> replays the bind on a REPLAYED activation without appending a second set`. Those two cases call nothing of this module on the write side, so they prove production IMPORTS the binder — not merely that the module loads.\n\nRESTORE FAILURE ON DRILL 5, CAUGHT BY THE HASH AND FIXED — recording it because it is exactly the hazard the hash check exists for. My revert script asserted on the anchor `} from \"./activation-ledger-contracts.js\";` which occurs TWICE in that file (the multi-line value import and the `import type { ActivationLedgerRecord }` line), so the assertion threw BEFORE writing and left the file in the DRILLED state. Git status would have shown the file merely as ` M`, which it already was; only the hash comparison revealed it. Second attempt restored the import but placed the call immediately after `const committed = ...` instead of BELOW the ordering comment block — still drifted, still caught by the hash. T",
+      "startedAt": "2026-08-17T17:45:56.091Z",
+      "completedAt": "2026-08-17T17:49:21.742Z"
     },
     {
       "stepId": "step-10",
       "description": "REGRESSION AND GATE. Adding a second durable commit inside `runEffectActivateCommand` touches every test that drives an activation, so run the whole daemon package, not just the new file.\nRun exactly:\n`pnpm --filter @moe/daemon typecheck; TC=$?; pnpm --filter @moe/daemon test; TT=$?; echo \"TYPECHECK=$TC TEST=$TT\"`\nBoth exit codes are captured separately — do not pipe (a piped run reports the pipe tail's code) and do not `&&`-chain (a red typecheck then hides the test count line). READ THE OUTPUT: the test leg must print a `Test Files ... passed` count line with a NONZERO count. `pnpm --filter` prints \"No projects matched the filters\" and exits 0 when the package does not resolve, so exit 0 with no count line is UNVERIFIED, not passing. @moe/daemon resolves to apps/daemon (verified in step 1).\nThen attribute any red by the path-attributed baseline: record repo-wide failures at the merge-base, again at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY. Report any foreign red verbatim with its exact failing lines and file paths; never hide it and never fabricate green. A red your own diff caused in a foreign file is NOT excused by that rule — it is exactly what the delta detects.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/attempt-resource-authority.ts",
         "apps/daemon/src/work/attempt-resource-authority.test.ts",
         "apps/daemon/src/activation/activation-ingress.ts"
-      ]
+      ],
+      "note": "OWNED-PACKAGE GATE, run exactly as the step names it, exit codes captured separately (no pipe, no `&&`-chain):\n`pnpm --filter @moe/daemon typecheck; TC=$?; pnpm --filter @moe/daemon test; TT=$?` -> `TYPECHECK=0 TEST=0`.\nTHE TEST LEG PRINTED A NONZERO COUNT LINE, so it is verified rather than vacuous: `Test Files 115 passed (115)` / `Tests 2307 passed (2307)`. @moe/daemon resolves to apps/daemon (step 1), and a non-resolving filter would have printed \"No projects matched the filters\" with no count line.\n\nHEAD MOVED TWICE DURING THIS TASK: 8557296 (where I measured) -> 15918c7 (peer task-4731ba34) -> eb584ae. Merge-base with main is cf272f67c3e34fe1d8c4dd00675512c67f165c05.\n\nPATH-ATTRIBUTED BASELINE.\n\n(2) REPO-WIDE FAILURES AT HEAD, with my diff, run from PowerShell: `pnpm typecheck` EXIT 0 (every package Done, apps/daemon included). `pnpm test` EXIT 1, `Test Files 1 failed | 290 passed (291)` / `Tests 1 failed | 6857 passed | 2 skipped (6860)`:\n  FAIL packages/store/src/recovery-anchor.test.ts > recovery anchor root publication > publishes exactly the anchor surface a restore controller composes\n  packages/store/src/recovery-anchor.test.ts:694:58\n  AssertionError: RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root: expected [ 'PREPARE', 'INACTIVE_INSTALL', 'TRANSACTION', 'FILE_FSYNC', 'DIRECTORY_PERSISTENCE', 'VERIFICATION', 'SWITCH', 'INSTALLED_MARKER' ] to be undefined\n`pnpm test:security` EXIT 1, `Test Files 2 failed | 7 passed (9)` / `Tests 4 failed | 462 passed (466)`, two distinct causes across two files:\n  FAIL boundary-roster.security.ts and durable-store-boundaries.security.ts > roster versus live source scan > names every scanned constant in the roster (scan minus roster is empty) — AssertionError: expected [ …(2) ] to deeply equal [], the two being\n    + \"GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts\"\n    + \"GRAPH_CONTENT_LAYERS@packages/scheduler/src/graph-content.ts\"\n  FAIL both files > scans exactly the roster's cardinality — expected [ … ] to have a length of 90 but got 92\n\n(1) THE SAME FAILURES AT MERGE-BASE. I did NOT check out cf272f67: peers hold uncommitted work in this shared tree and the rails forbid reset/stash/checkout that would disturb it. I established each red's origin by source archaeology instead, which is decisive for all three:\n  - store red: `git show cf272f67:packages/store/src/index.ts | grep RECOVERY_ANCHOR_FAULT_POINTS` -> ABSENT at merge-base, while the WITHHELD guard already existed there (recovery-anchor.test.ts:678). `git log -1 -S'RECOVERY_ANCHOR_FAULT_POINTS' -- packages/store/src/index.ts` -> 4e0201a feat(task-0c89476b78044024b07c86c0c8986bd0): Disaster restore proof. So a peer commit AFTER the merge-base published a constant its own sibling guard withholds.\n  - security reds: `git cat-file -e cf272f67:<path>` -> BOTH offending files ABSENT at merge-base (apps/daemon/src/goals/goal-close-prerequisite.ts and packages/scheduler/src/graph-content.ts). Introduced after it by task-8f9305b9. This is the identical roster 92-vs-90 red the sibling task-740924b7 disclosed.\n\n(3) DELTA INTERSECTED WITH THIS TASK'S OWNED PATHS: EMPTY. Proven two independent ways rather than asserted.\n  - By path: none of the three failing subjects is an owned path. My diff is entirely under apps/daemon (six new attempt-resource-* modules, activation-resource-binding.*, activation-ingress.ts, and two foundation-attempt test files).\n  - STRUCTURALLY, which is stronger: the root vitest `include` is `[\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\"]` — apps/** is not in it. Confirmed against the actual run output: `grep -c 'attempt-resource\\|apps/daemon' <root run log>` returns 0. My entire diff cannot execute in the repo-wide gate, so it cannot have caused any red there. And my two layer constants carry no `_LAYER`/`_LAYERS` suffix (`grep 'export const [A-Z_]*_LAYERS\\?' <owned paths>` -> NONE) and appear nowhere under tests/security, so the boundary roster does not scan them either.\n\nTWO PHANTOM REDS I DID NOT DISCLOSE, because they are the shell and not the code. From Git Bash the repo-wide leg reported `Test Files 2 failed | 289 passed (291)` / `Tests 3 failed`, the two extra being tests/integration/release-archive-cleanup.test.ts (\"preserves the exact success result when cleanup throws\", \"removes the real archive after success\"). That is the MSYS tar drive-letter fault reaching the ROOT script; the PowerShell run of the same tree collapsed them, leaving the single store red. I swapped shells BEFORE writing this disclosure rather than reporting three failures where there is one.\n\nREGRESSION CHECK ON MY OWN BLAST RADIUS: adding a second durable commit inside `runEffectActivateCommand` did break two foreign tests, I found it in step 7, proved causation with a disabled-call probe rather than assuming, and fixed it (the `abortingStore` ordinal). The daemon package is 2307/2307 green at HEAD with that fix in place, so nothing of mine is outstanding.",
+      "startedAt": "2026-08-17T17:49:24.260Z",
+      "completedAt": "2026-08-17T17:52:34.350Z"
     },
     {
       "stepId": "step-11",
       "description": "ADVERSARIAL SELF-REVIEW, then complete. Load the `adversarial-self-review` skill and read the diff as an attacker:\n- Can a caller get its own row list, ref or state into durable bytes on ANY path? Trace every field of the persisted body back to either the durable activation record or the reducer's returned rows.\n- Can two activations for different attempts derive the same resource aggregate id? If the same attempt is activated twice concurrently, does expectedVersion 0 plus the grant-derived event id make the second collide rather than append?\n- Does any refusal path write bytes before refusing? A handler that wrote a row and then refused sails through a return-value assertion — every refusal test must also assert zero events.\n- Is the reader's `state` genuinely the reducer's output, or could a planted event supply an arbitrary token? State the answer honestly in the completion notes rather than claiming a guarantee the code does not make.\n- Confirm every production file is under 250 physical lines (split before 400) and that no probe, scratch or generated file remains in the diff — including the step-1 `_edge-probe.ts`.\nCOMPLETION MUST RECORD, per the epic's consumer-edge rail: task-6d40078159e84d92b3293d7b366cf727 is the named consumer, and its exact reader edge is `readAttemptResources(store, activationAggregateId, projectId)` from apps/daemon/src/work/attempt-resource-authority.js, returning `{ ok, authority, members[] }` with per-member `state` carried verbatim from the accepted scheduler reducer and RECORD_ABSENT/UNREADABLE/MALFORMED/AMBIGUOUS as the four distinct fail-closed codes under layer DAEMON_ATTEMPT_RESOURCE. Also record that `applyAttemptResourceReport` has no production caller at HEAD — no adapter-report ingress exists — so the bind arm carries this task's production edge and the applier's caller belongs to a later task. Stage and commit ONLY the owned paths by explicit pathspec; never `git add -A`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/attempt-resource-authority.ts",
         "apps/daemon/src/work/attempt-resource-authority-contracts.ts",
         "apps/daemon/src/activation/activation-ingress.ts"
-      ]
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW done, diff read as an attacker. Gate re-run fresh after every edit: `pnpm --filter @moe/daemon typecheck` EXIT 0, `... test` EXIT 0 with `Test Files 116 passed (116) / Tests 2408 passed (2408)`.\n\nQ1 — CAN A CALLER GET ITS OWN ROW LIST, REF OR STATE INTO DURABLE BYTES ON ANY PATH? Traced every field of `bodyOf`. attemptRef <- `durable.attempt.attemptId`; effectIntentRef <- `durable.effectIntent.intentId`; memberCount <- derived length; members <- `rows.map(memberOf)` where rows are ALWAYS an accepted reducer's returned rows (rebuilt by `exactRecord` inside `parseRows`, deep-frozen by `settled`); recordVersion and truthClass are constants.\nONE FIELD IS NOT FROM THE DURABLE RECORD, and I am reporting it rather than glossing: `projectId` comes from the caller's binding. `ActivationLedgerRecord` carries NO project — it lives in each event's decision trace — so it cannot be read off `durable`. What fences it is that `durableActivation` already passed that same value to `readFoundationActivationHistory`, whose `tracedProject` requires `event.decisionTrace.projectId === projectId` for EVERY event of the activation (verified at foundation-binding-predicates.ts:38-40). So a caller cannot write a project of its choosing: it names the one the committed activation is traced to, or the activation read refuses first with FOUNDATION_BINDING_PROJECT_MISMATCH (asserted). I added that reasoning as a comment on `bodyOf` so the next reader does not have to re-derive it.\n\nQ2 — CAN TWO ACTIVATIONS FOR DIFFERENT ATTEMPTS DERIVE THE SAME RESOURCE AGGREGATE ID? No. The id is sha256 over `${RECORD_VERSION}\\n${len}\\n${activationAggregateId}` — length-framed, so distinct ids cannot frame identically (asserted: `derive(X) !== derive(X + \"x\")`). The input is itself the activation identity `deriveActivationAggregateId(intent.aggregateId, intent.idempotencyKey)`, and the activation ledger commits at expectedVersion 0, so one activation aggregate holds at most one committed activation and therefore one attempt.\nCONCURRENT DOUBLE ACTIVATION OF THE SAME ATTEMPT: the second bind observes head version 1 and refuses. MEASURED, and it corrected a claim I had written: the refusal is EXPECTED_VERSION_CONFLICT, not DURABLE_ID_CONFLICT — the aggregate head answers BEFORE the reused grant-derived event id, which is the store-wide backstop behind it. Comment and test both say that now.\nAlso checked the command-key construction `${commandId}:RESOURCES:${expectedVersion}` for ambiguity: the version is digits-only and follows the FINAL `:RESOURCES:`, so the split is unique from the right even if a commandId itself contains the delimiter. No two distinct (commandId, version) pairs produce one key.\n\nQ3 — DOES ANY REFUSAL PATH WRITE BYTES BEFORE REFUSING? No. Both arms are read -> decide -> encode -> commit, and the commit is the ONLY write and the LAST step. Every refusal test asserts zero (or unchanged) events as well as the code and layer; the sweep asserts `events(store) === 0` after all 74 hostile cases; the conflict test asserts the count stays 1, the decision row is unchanged, and the reader still returns the ORIGINAL outcome.\n\nQ4 — IS THE READER'S `state` GENUINELY THE REDUCER'S OUTPUT? NO, and I will not claim otherwise. The reader proves the bytes are canonical (decode AND re-encode), complete and self-consistent; it does NOT prove `state` is a scheduler vocabulary member, because `ACQUISITION_STATES` is not on the `@moe/scheduler` root and re-declaring it locally is forbidden. A PLANTED bind event carrying an arbitrary token would be read back verbatim. The property that makes the field trustworthy lives entirely on the WRITE side: the writer only ever persists rows an accepted public reducer returned. I considered a read-side trick (`adapterConfirm` with an absent id discriminates AUTHORITY_MALFORMED_INPUT from AUTHORITY_STALE_LEASE and would in fact run `parseRows`) and REJECTED it: it depends on the internal check order inside `locate`, so a harmless upstream reordering would turn the guard into a no-op while staying green.\n\nQ5 — FILE SIZES AND STRAY FILES. attempt-resource-authority.ts 248, contracts 216, reader 167, activation-resource-binding.ts 61, test-harness 205 — all at or under the 250 target. activation-ingress.ts is 337; it was 321 before I touched it and my split kept the growth to +16. The authority file reached 262 after the Q1 comment landed, so I condensed prose (no finding removed) back to 248. Also wrapped three over-100-column test lines.\nNo probe, scratch or generated file remains: `find . -name '_edge-probe*'` returns nothing (step 1 deleted it in the same command, twice), and `attempt-resource-test-harness.js` is gone — that module is TEST TIER and the runtime-entrypoint bridge guard forbids a bridge on it.\n\nFURTHER FINDINGS FROM THE CHECKLIST, beyond the five questions:\n- CONCURRENCY on the applier: `expectedVersion` is measured by a read then used in a commit — a real check-then-act. A concurrent ",
+      "startedAt": "2026-08-17T17:52:39.910Z",
+      "completedAt": "2026-08-17T17:59:16.531Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a83aecdf",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -200,16 +211,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:45:16.838Z",
-  "updatedAt": "2026-08-17T17:45:56.092Z",
+  "updatedAt": "2026-08-17T18:00:13.644Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:02:33.808Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 11
   },
   "contextFetchedBy": [
     "architect-c9e91335",
-    "worker-a83aecdf"
+    "worker-a83aecdf",
+    "qa-12cda609"
   ],
   "planSizeWarnings": [
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -223,7 +235,10 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:15:48.663Z",
@@ -247,5 +262,31 @@
     "wallClockMs": 9900000
   },
   "planApprovedAt": "2026-08-17T17:15:50.738Z",
-  "workStartedAt": "2026-08-17T17:16:07.687Z"
+  "workStartedAt": "2026-08-17T17:16:07.687Z",
+  "reviewStartedAt": "2026-08-17T18:00:12.327Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck; TC=$?; pnpm --filter @moe/daemon test; TT=$?; echo \"TYPECHECK=$TC TEST=$TT\"",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  116 passed (116)\n      Tests  2408 passed (2408)\n   Start at  20:57:21\n   Duration  6.54s (transform 40.20s, setup 0ms, import 96.56s, tests 63.15s, environment 10ms)\n\nTYPECHECK=0 TEST=0\n\nHEAD at gate time: 3d9d382 feat(task-5998ae63e2034bf8b88a4e7446f69a8c)\nBoth legs captured separately (no pipe, no &&-chain). The test leg printed a NONZERO count line, so it is verified rather than vacuous.",
+    "reportedAt": "2026-08-17T18:00:12.327Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/work/attempt-resource-authority.test.ts",
+    "apps/daemon/src/work/attempt-resource-test-harness.ts",
+    "apps/daemon/src/work/attempt-resource-test-harness.js",
+    "apps/daemon/src/work/attempt-resource-authority-contracts.ts",
+    "apps/daemon/src/work/attempt-resource-authority-contracts.js",
+    "apps/daemon/src/work/attempt-resource-authority.ts",
+    "apps/daemon/src/work/attempt-resource-authority.js",
+    "apps/daemon/src/work/attempt-resource-reader.ts",
+    "apps/daemon/src/work/attempt-resource-reader.js",
+    "apps/daemon/src/work/attempt-resource-reader.test.ts",
+    "apps/daemon/src/work/attempt-resource-transition.test.ts",
+    "apps/daemon/src/activation/activation-ingress.ts",
+    "apps/daemon/src/activation/activation-resource-binding.ts",
+    "apps/daemon/src/activation/activation-resource-binding.js",
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    "apps/daemon/src/work/attempt-resource-sweep.test.ts"
+  ]
 }

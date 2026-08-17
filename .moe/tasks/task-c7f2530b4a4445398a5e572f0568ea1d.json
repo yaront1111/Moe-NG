@@ -15,12 +15,12 @@
     "No deep imports, tsconfig paths, project references, scratch probe residue, or vacuous filter passes; explicit owned-path commit only."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite of the Foundation context-manifest chain; BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
   "priority": "CRITICAL",
@@ -28,5 +28,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:45:52.527Z",
-  "updatedAt": "2026-08-17T17:45:52.527Z"
+  "updatedAt": "2026-08-17T17:48:22.528Z"
 }

@@ -147,7 +147,7 @@
       "completedAt": "2026-08-17T17:44:17.560Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -160,12 +160,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:04:57.717Z",
-  "updatedAt": "2026-08-17T17:47:05.552Z",
+  "updatedAt": "2026-08-17T17:53:52.600Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:07:58.940Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T17:53:52.600Z",
+    "wallClockMs": 2753660
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -202,7 +204,8 @@
   },
   "planApprovedAt": "2026-08-17T17:10:01.671Z",
   "contextFetchedBy": [
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "workStartedAt": "2026-08-17T17:10:27.050Z",
   "reviewStartedAt": "2026-08-17T17:47:05.552Z",
@@ -221,5 +224,8 @@
     "apps/daemon/src/work/attempt-release-disposition.test.ts",
     "apps/daemon/src/work/foundation-attempt-service.ts",
     "apps/daemon/src/work/foundation-attempt-service.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T17:53:52.600Z",
+  "reviewCompletedAt": "2026-08-17T17:53:52.600Z",
+  "reviewSummary": "Verified independently, not from the worker's summary.\n\nGATES re-run by me, 4 legs, separate exits: scheduler typecheck EXIT=0; scheduler test EXIT=0 \"Test Files 45 passed (45) / Tests 1386 passed (1386)\"; daemon typecheck EXIT=0; daemon test EXIT=0 \"Test Files 115 passed (115) / Tests 2307 passed (2307)\". Owned-path failing delta EMPTY.\n\nDoD1: my own compiled bare-specifier probe from apps/daemon (tsc --noEmit, deleted same command) = ZERO diagnostics for releaseWork + DrainDisposition/ReleaseHandoff/ReleaseRequest/ReleaseResult. Negative control same run still TS2305 applyDrainReason, TS2305 parseDisposition, TS2724 LEASE_STATES - withheld per plan step 1 + taskRail 3 (\"widen only by symbols this task consumes\"), reasoned at index.ts:110. Deviation from the DoD's 7-symbol list, grounded in the rail, disclosed.\n\nDoD2/3/5 read from re-decoded durable bytes: leaseState RELEASED (test :364, asserts activation lease was ACTIVE); 3 generated DRAINING variants with expect(rows.length).toBe(3) + field-by-field differing-key list (:508); replay answers NO_OP, durableRowCount 1.\n\nDoD6 - 3 drills run by me, sha256 snapshot, restored BY CONTENT, hash OK each: (i) local resumable -> reds \"records DRAINING with resumable false for each unsettled boundary flag\" + field-by-field case; (ii) activation-time leaseState -> reds \"records leaseState RELEASED from durable bytes, which no path could reach before\"; (iii) hardcoded outcome -> reds both DRAINING cases + the SECOND-transition case. My throw-probe in recordAttemptRelease reddened 7 foundation-attempt-service tests = production call site genuinely wired.\n\ngrep isResumable apps/daemon/src = 0. Per-file 173/186/248 all <250. No probe residue; committed bytes == gated bytes.\n\nDISCLOSED: index.ts 423 lines (408 PRE-EXISTING at base 8557296); barrel split is follow-up. test:security red at BASELINE (BROKER_LAYER, GOAL_PREREQUISITE_LAYER, both at merge-base), zero owned-path intersection."
 }

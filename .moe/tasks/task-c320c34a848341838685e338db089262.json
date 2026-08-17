@@ -18,12 +18,12 @@
     "Preserve upstream source/context refusal code and layer, TDD exact assertions/nonzero cases, and explicit owned-path commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite of the Foundation context-manifest chain; BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
   "priority": "CRITICAL",
@@ -31,5 +31,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:13.563Z",
-  "updatedAt": "2026-08-17T17:46:13.563Z"
+  "updatedAt": "2026-08-17T17:48:20.499Z"
 }

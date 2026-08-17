@@ -105,6 +105,31 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["attemptRef", "successorRef"] },
 ];
 
+/**
+ * The order the registry is BUILT in, transcribed by hand from the `PAYLOAD_KEYS`
+ * literal rather than sorted: `buildCommandRegistry` fills a Map, so `keys()` is
+ * that literal's key order. `ROWS` above is alphabetical, so a move that reordered
+ * the table would agree with it. This one does not.
+ */
+const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
+  "approval.decide", "work.resume", "effect.activate", "recovery.complete",
+  "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
+  "plan.propose", "policy.install", "policy.validate", "project.activate",
+  "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
+  "review.submit", "session.close", "session.open", "session.renew",
+  "work.claim", "work.release", "work.renew",
+];
+
+/**
+ * The kinds the registry gates behind the configured operator principal, transcribed
+ * by hand. The sweep below asserts this set BOTH ways over every wired kind: a kind
+ * added here reddens on the twenty that must reach their own family, and a kind
+ * dropped reddens on the four that must not.
+ */
+const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
+  "approval.decide", "goal.close", "integration.accept_output", "session.open",
+];
+
 const CREDENTIAL = "registry-operator-credential";
 const PROJECT = "proj-command-registry";
 const DECIDED_AT = "2026-08-09T12:00:00.000Z";
@@ -172,11 +197,22 @@ describe("registered command table", () => {
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
+  it("keeps the registration order the payload table declares", () => {
+    // The sorted-set assertion above cannot see a reordered table, and a move that
+    // reshuffles the literal is exactly the silent edit a mechanical split makes.
+    expect(REGISTRATION_ORDER).toHaveLength(23);
+    expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
+  });
+
   it.each(ROWS)("$kind keeps its capability and ordered payload allow-list", (row) => {
     const entry = deps.registry.get(row.kind);
     expect(entry).toBeDefined();
     expect(entry?.requiredCapability).toBe(row.capability);
     expect(entry?.payloadKeys).toEqual(row.payloadKeys);
+    // The entry the seam reads is frozen and self-describing: a table moved through
+    // a spread can lose either property without changing any mapping value.
+    expect(entry?.kind).toBe(row.kind);
+    expect(Object.isFrozen(entry)).toBe(true);
   });
 
   it.each(ROWS)("$kind refuses a smuggled key before it can reach dispatch", (row) => {
@@ -314,6 +350,38 @@ describe("authorization ordering under a real session", () => {
     } finally {
       reader.close();
     }
+  });
+
+  describe("operator-principal gate membership", () => {
+    // One session holding every capability, so AUTHORIZE never answers first and
+    // the operator gate is the only thing that can refuse with 403. Without the
+    // negative half, a kind silently ADDED to the gate set would pass unnoticed:
+    // nothing else in this file asserts that a kind reaches its own family.
+    let sessionCredential = "";
+
+    beforeAll(() => {
+      sessionCredential = openSession(
+        "cmd-open-gate-sweep", "sess-gate-sweep", "secret-gate-sweep",
+        [ADMIN, GOAL, PLANNING, REVIEW, WORK],
+      );
+    });
+
+    it("gates exactly the four transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(4);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(4);
+    });
+
+    it.each(ROWS)("$kind answers the non-operator session from its own layer", (row) => {
+      const gated = OPERATOR_ONLY.includes(row.kind);
+      expect(send(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential)).toMatchObject({
+        httpStatus: gated ? 403 : 422,
+        outcome: "PORT_REFUSED",
+        refusal: gated
+          ? { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" }
+          : { code: row.code, layer: row.layer },
+        stage: "DISPATCH",
+      });
+    });
   });
 });
 

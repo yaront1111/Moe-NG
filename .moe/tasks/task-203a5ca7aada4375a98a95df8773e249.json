@@ -18,8 +18,8 @@
     "TDD exact codes/layers, real SqliteEventStore, target <=250 lines per production source, explicit owned-path commits."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,11 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:53:18.945Z",
-  "updatedAt": "2026-08-17T17:37:15.369Z",
+  "updatedAt": "2026-08-17T17:48:09.265Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:37:10.880Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh measurement at committed HEAD 15918c7 shows the described hard dependency is both BLOCKED and insufficient. task-a3e8 promises final launchTemplate/inputManifest but no AdmittedContextSelection, graph/config/context provenance, trusted context budget, or typed rendered-bytes delivery slot. Repo-wide production search finds zero selectContext/renderContext caller; daemon has no @moe/context manifest/lock edge (plain Node from apps/daemon => ERR_MODULE_NOT_FOUND); Foundation forwards flat argv unchanged and Claude physical boundary has no context/stdin field; no context record/codec/reader exists. Therefore task-203 cannot prove exact delivered bytes without inventing context items or guessing/mutating argv. SPIDR prerequisites filed: task-c7f2530b4a4445398a5e572f0568ea1d (dependency edge), task-c320c34a848341838685e338db089262 (server-derived selection authority; must get human/facts decision), task-3e891741bef14097bbed6d820b392f98 (strict record codec), task-22fa35a59f204777b4db56f7516ef57b (separate prelaunch ledger), task-225d25f7e58a401b8b414dd69ef3ab60 (strict reader), task-933605a5f6ef436cb68f0ec0a2fdc755 (exact prelaunch delivery composition). Re-plan this parent only after those and a3e8 are DONE; then keep it as the <=3-file real Foundation service/physical-boundary/replay hardening slice. Do not add context events to the existing Foundation dispatch aggregate or grow the 248-line service materially.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:47:41.593Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured @moe/context public API, daemon manifest/lock/runtime edge, Foundation launch path, service line pressure, and durable persistence. Proved a3e8 alone cannot supply selection or exact provider-byte delivery. Filed six bounded prerequisites: c7f2530b, c320c34a, 3e891741, 22fa35a5, 225d25f7, 933605a5. Reported parent BLOCKED and wrote Serena handoff.",
+      "whatRemains": "After a3e8 and all six children are DONE, re-plan as final <=3-file Foundation service/physical-boundary/replay integration. Invoke prelaunch composition after winning reservation, launch once with exact bytes, and expose strict reader to AF.",
+      "pitfalls": "Never guess argv prompt position, deep-import test-only runner renderer, treat @moe/context inner digest as outer authority, reconstruct after launch, insert context event into Foundation dispatch aggregate, or grow the 248-line service past its cap.",
+      "openQuestions": "Context-selection task c320 must obtain/freeze the complete design 14.2 item mapping, durable readers and provider byte budget; optional=[] is not an implicit choice. a3e8 must expose an explicit context insertion recipe, not opaque final argv.",
+      "releasedAt": "2026-08-17T17:48:09.263Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after blocking on measured authority/delivery gaps and filing prerequisites."
+    }
   ]
 }

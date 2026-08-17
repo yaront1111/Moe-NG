@@ -1,0 +1,35 @@
+{
+  "id": "task-933605a5f6ef436cb68f0ec0a2fdc755",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Prepare exact Foundation provider context before launch",
+  "description": "Prerequisite for task-203a5ca7aada4375a98a95df8773e249; hard-depend on task-a3e8a02ddb864c689ac66de7b66bfceb, task-c320c34a848341838685e338db089262, task-22fa35a59f204777b4db56f7516ef57b, and task-225d25f7e58a401b8b414dd69ef3ab60. Compose the server-derived selection, public renderContext, durable prelaunch decision/readback, and a typed daemon-owned Claude provider-input recipe. Current flat caller-shaped argv is not a lawful insertion seam; planning must verify the a3e authority source supplies an explicit recipe or file that missing prerequisite rather than guessing an argv slot.",
+  "definitionOfDone": [
+    "A server-only prelaunch composition accepts project/session/node/attempt identity and the durable Foundation authority services—not context text/items/bytes/digest, graph/config/input facts, byte budget, argv, prompt slot, or provider observation from a request—and obtains one same-snapshot selection/provenance from task-c320.",
+    "It calls public `renderContext` exactly once, verifies `manifest.digest===digestContextManifest(binding)`, builds the task-3e891 record, commits through task-22fa, and re-reads through task-225d before returning any launchable value; every conflict/refusal occurs before provider/grant/lock/process effects.",
+    "The rendered exactBytes must be nonempty, NUL-free, canonical UTF-8 that round-trips byte-identically, and are inserted exactly once through an explicit server-owned Claude argv/provider-input recipe supplied by the approved a3e launch authority; no positional guess, append/spread into opaque argv, shell normalization, reference hash, file ref, base64 substitution, or local CLI flag spelling is permitted.",
+    "Success returns a deeply frozen final Foundation launch template plus the original rendered bytes/context record; its argv/provider-input element byte-encodes exactly to manifest.binding.exactBytes and every graph/config/input/session binding matches.",
+    "Exact replay returns the original durable context bytes and final launch value without a second render/append; conflicting selection/template identity refuses before provider effects with raw store counts unchanged and the first record intact.",
+    "Real SQLite tests cover accepted byte-for-byte composition, Windows argv/NUL/Unicode boundaries, malformed/unrepresentable bytes, stale/cross-binding/replay/conflict cases with exact code/layer/nonzero counts, and mutations hashing a reference or choosing a different argv element that redden named assertions."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/work/foundation-context-prelaunch.ts, its exact one-line LF .js bridge, and its focused test; production source <=250 lines.",
+    "If task-a3e8 lands only final opaque argv and no typed context insertion recipe, report blocked/file a prerequisite—never mutate or reinterpret that argv.",
+    "Use public @moe/context and the named production children only; no provider launch in this task, caller context authority, deep imports, local context/CLI renderer, or second digest opinion.",
+    "Preserve exact upstream codes/layers, TDD mutation/nonzero evidence, and explicit owned-path commit; task-203 is the consumer."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite of the Foundation context-manifest chain; BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
+  "priority": "CRITICAL",
+  "order": 80.06,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:47:26.251Z",
+  "updatedAt": "2026-08-17T17:48:13.961Z"
+}

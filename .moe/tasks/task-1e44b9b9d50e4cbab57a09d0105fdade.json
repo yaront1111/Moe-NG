@@ -16,8 +16,58 @@
     "The verification output must prove the @moe/daemon filter matched and executed; exit 0 with no compiler/test output is not evidence.",
     "Do not implement the reader or edit @moe/import production sources in this task."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the BEFORE state, so every later claim has a baseline to be measured against. Run and capture verbatim: (a) `node -e \"const d=require('./apps/daemon/package.json').dependencies; console.log('@moe/import' in d)\"` — expect `false`; (b) `grep -n \"@moe/import\" pnpm-lock.yaml` and note that `packages/import: {}` appears at :153 with NO dependents anywhere, so this task lands the FIRST edge into that package; (c) a compiled bare-specifier probe that must FAIL right now — write `apps/daemon/src/__import-edge-probe.ts` importing `compareShadowProjections` and `projectLegacyImport` plus the types `LegacyImportFacts`, `ShadowComparison` and `ShadowProjection` from the bare specifier `@moe/import`, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, capture the error, and DELETE the probe in the same command. Expect TS2307 \"Cannot find module '@moe/import'\" or the TS6059 rooted-directory error the undeclared-workspace-dep family produces. A probe that unexpectedly PASSES here means the edge already exists by some route and the whole task premise is wrong — stop and report rather than proceeding. Those five symbols are all confirmed present on the root barrel (index.ts:104-115) at plan time.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Declare the dependency. Add `\"@moe/import\": \"workspace:*\"` to `apps/daemon/package.json` dependencies, placed alphabetically between `@moe/core` and `@moe/mcp` to match the existing block (`@moe/contracts`, `@moe/coordination`, `@moe/core`, `@moe/mcp`, `@moe/review`, `@moe/runner`, `@moe/scheduler`, `@moe/store`). Edit the JSON by hand rather than through `pnpm add`, which reorders keys, may rewrite the version specifier style, and can touch fields this task does not own. This is the whole production change: rail 4 forbids implementing the reader or editing any `@moe/import` source, so no call site is added anywhere in this task.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Refresh the lock importer, then AUDIT the diff before believing it. Run `pnpm install --lockfile-only` (or a `--filter @moe/daemon` install if the lockfile-only form does not update the importer) from the repo root, then inspect `git diff -- pnpm-lock.yaml`. The ONLY expected change is a new `'@moe/import': {specifier: workspace:*, version: link:../../packages/import}` entry inside the `apps/daemon:` importer block at :97, slotted alphabetically — every sibling there uses exactly that two-line shape. Rail 2 requires unrelated lockfile and worktree changes to be PRESERVED: if the install rewrites peer entries, bumps unrelated resolutions, or reformats regions this task does not own, do NOT commit that churn and do NOT hand-revert it selectively — report what it touched and stop. Two Windows hazards to check first, both from prior incidents on this repo: a `node_modules` tree stamped by a WSL run makes Windows pnpm fail in ways that look like a manifest error, and an interrupted install can leave the lock half-written. Verify `git diff --stat -- pnpm-lock.yaml` shows a small, localized change before going further.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "pnpm-lock.yaml"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Prove the edge with a compiled probe AND its negative control, which is the half that stops a vacuous pass. Recreate the same probe from step 1 at `apps/daemon/src/__import-edge-probe.ts`, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, and require exit 0 with NO diagnostic naming the probe file. Then, in the same run, the NEGATIVE CONTROL that DoD 3 demands: a second probe importing from a bare specifier that certainly does not exist (for example `@moe/does-not-exist`) MUST fail typecheck, and the failure must be a module-resolution error — read the actual code, because a probe that fails on a syntax error or an unused-variable rule would satisfy \"it failed\" while proving nothing about resolution. DELETE BOTH probes in the same command that creates them, and confirm afterwards with `git status --porcelain -- apps/daemon/src` that neither survives; rail 5 and the epic rail both forbid a probe or scratch file remaining. Finally re-run the plain `pnpm --filter @moe/daemon typecheck` and require it still exits 0.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Prove RUNTIME resolution, not just types — DoD 4 is a separate claim from DoD 2 and a passing typecheck does not establish it. `@moe/import`'s manifest maps `exports: {\".\": \"./src/index.ts\"}` — a `.ts` file — and this repo runs TypeScript directly under Node (apps/daemon's own `start` script is `node ./src/daemon-main.ts`), on Node v24.16.0 where type stripping is native and needs no flag. So the correct probe is a plain `node --input-type=module -e \"import('@moe/import').then(m => console.log(typeof m.compareShadowProjections))\"` executed with the working directory inside `apps/daemon`, printing `function`. NO tsconfig paths, NO deep relative import, NO loader or `--experimental-*` flag — if any of those is needed, the edge is not really landed and the task must report rather than paper over it. Run this from PowerShell, not the Bash tool: a prior plain-Node smoke on this repo failed only because Git Bash rewrote paths. Do NOT copy the precedent in `tools/import/import-shadow.ts`, which imports `../../packages/import/src/index.js` by deep relative path — that works only because `tools/` has no manifest of its own, and rail 1 forbids it here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Gate, commit and record the consumer. Verification is `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, exit codes captured SEPARATELY. Rail 3 is explicit that exit 0 with no output is NOT evidence: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0 when the package is absent, so record the compiler's own output for the typecheck leg and the nonzero `Test Files N passed` count line for the test leg. `@moe/daemon` resolves to apps/daemon and declares both scripts (verified at plan time). Then commit BY EXPLICIT PATHSPEC and nothing else: `git commit -- apps/daemon/package.json pnpm-lock.yaml`. Before committing run `git status --porcelain` and confirm no foreign path is staged; after committing run `git show --stat` and confirm the commit contains exactly those two paths — the shared worktree means the index carries other agents' files, and a bare `git commit` would capture them. Record task-80fce1d1d625453098bd526d61c5ddb8 (\"Portability: expose the daemon shadow projection adapter\", currently PLANNING) as the immediate consumer, in the commit message and in the completion evidence, as DoD 5 requires — this task deliberately lands an edge with no call site, so the consumer must be named rather than implied.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +80,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.565Z",
-  "updatedAt": "2026-08-17T11:20:08.262Z"
+  "updatedAt": "2026-08-17T17:49:28.977Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:47:20.968Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T17:49:26.903Z",
+  "planningNotes": {
+    "approachesConsidered": "HAND-EDIT THE MANIFEST RATHER THAN `pnpm add @moe/import --filter @moe/daemon`. The CLI reorders dependency keys, can rewrite the specifier style, and may touch manifest fields outside this task's ownership; the diff then stops being reviewable as \"one line added\". A hand edit plus a lockfile-only install keeps both owned files minimal.\n\nCONSIDERED AND REJECTED: adding a real call site to satisfy the consumer-edge rail. Rail 4 forbids implementing the reader and rail 5 requires the consumer to be NAMED instead — task-80fce1d1. This is the explicit \"(a) name the consumer task and record its id\" arm of the pure-package rail, not an oversight, and the plan says so in the commit evidence.\n\nCONSIDERED AND REJECTED: copying the import style already in the repo. `tools/import/import-shadow.ts:16` and `tools/import/shadow-input.ts:3` both import `../../packages/import/src/index.js` by DEEP RELATIVE PATH. That is legal only because `tools/` is not a workspace package and has no manifest to declare a dependency in. Reproducing it inside apps/daemon would violate rail 1 and would make the whole task a no-op, since a deep relative import needs no edge at all.\n\nCONSIDERED AND REJECTED: proving runtime resolution with a loader flag or a tsx-style runner. DoD 4 forbids source-loader flags, and none is needed — see the Node version finding below.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The premise is confirmed in both directions.\n\nTHE EDGE IS GENUINELY ABSENT. `apps/daemon/package.json` declares exactly eight workspace dependencies — @moe/contracts, @moe/coordination, @moe/core, @moe/mcp, @moe/review, @moe/runner, @moe/scheduler, @moe/store — and `@moe/import` is not among them. In `pnpm-lock.yaml` the `apps/daemon:` importer block begins at :97 and lists those same eight in the two-line `specifier: workspace:* / version: link:../../packages/<name>` shape; `@moe/import` slots alphabetically between @moe/core and @moe/mcp.\n\nNOBODY DEPENDS ON @moe/import AT ALL. A sweep over every packages/*, apps/* and adapters/* manifest found zero dependents, and the lock carries `packages/import: {}` at :153. This task lands the FIRST edge into that package, so there is no existing importer entry to pattern-match against for the import side — only the eight daemon-side siblings.\n\nTHE SYMBOLS THE PROBE NEEDS ALL EXIST ON THE ROOT BARREL TODAY. `packages/import/src/index.ts:115` exports `compareShadowProjections` and `projectLegacyImport`; :103-113 exports the types `LegacyImportFacts`, `ShadowComparison`, `ShadowDisposition`, `ShadowEntity`, `ShadowEntityKind`, `ShadowMismatch`, `ShadowMismatchKind` and `ShadowProjection`; :94-102 exports the SHADOW_* constants. The probe should name symbols that exist NOW — it is proving the EDGE, not any particular payload — and must not reach for the codec decoder being added by task-a6775ac5, which has not landed.\n\nRUNTIME RESOLUTION WORKS WITHOUT FLAGS, AND HERE IS WHY. `packages/import/package.json` sets `\"type\": \"module\"` and `exports: {\".\": \"./src/index.ts\"}` — the export target is a `.ts` file. Node here is v24.16.0, where TypeScript type stripping is native and on by default, and this repo already relies on it: apps/daemon's own `start` script is `node ./src/daemon-main.ts` with no loader. So DoD 4's \"plain-Node compiled import ... without tsconfig paths, deep relative imports, or source-loader flags\" is achievable exactly as written. If a worker finds themselves reaching for a flag, the edge is not landed.\n\nGATES RESOLVE BY NAME: `@moe/daemon` is apps/daemon and declares both `typecheck` and `test`.\n\nTHE UNDECLARED-DEP FAILURE MODE THIS TASK EXISTS TO REMOVE: this repo has no tsconfig `paths` and no TypeScript project references, so an undeclared workspace dependency has no escape hatch — a deep relative import across package boundaries fails with TS6059 rather than degrading gracefully. That is why the edge must be a real manifest + lock change and why the negative control matters.",
+    "risks": "1. THE LOCKFILE IS THE ONLY RISKY FILE HERE. `pnpm install` can rewrite far more than the one importer entry — peer resolutions, formatting, unrelated blocks — and rail 2 requires unrelated changes to be PRESERVED. Audit `git diff -- pnpm-lock.yaml` before committing. If the install touched regions this task does not own, report it; do not hand-revert selectively and do not commit the churn. There is no partial-file commit available here, so a polluted lock is a stop-and-report, not a judgement call.\n2. A WSL-stamped `node_modules` makes Windows pnpm fail in ways that read like a manifest error rather than an environment one. Check before concluding the manifest edit was wrong.\n3. THE NEGATIVE CONTROL MUST FAIL FOR THE RIGHT REASON. A probe that errors on a syntax mistake, an unused import, or a lint rule satisfies \"it failed\" while proving nothing about module resolution. Read the actual diagnostic code and require it to be the module-not-found family.\n4. THE STEP-1 BASELINE PROBE MUST FAIL. If it passes before the manifest edit, the edge already exists by some route and the task premise is wrong — stop and report rather than landing a no-op edit and claiming the probe as evidence.\n5. Run the plain-Node smoke from PowerShell, not the Bash tool. A prior plain-Node smoke on this repo failed purely because Git Bash rewrote paths.\n6. BOTH PROBES MUST BE DELETED IN THE SAME COMMAND THAT CREATES THEM, and confirmed gone with `git status --porcelain -- apps/daemon/src`. A surviving probe is a rail violation and, worse, an untracked file that later gate runs will trip over.\n7. Commit by explicit pathspec only. The worktree is shared, so the index routinely holds other agents' staged files and a bare `git commit` would capture them; verify with `git show --stat` afterwards that exactly two paths landed.\n8. This task deliberately ships an edge with NO call site. Do not let a reviewer's \"nothing imports it\" reading turn into scope creep — rail 4 forbids the reader, and rail 5's named-consumer arm is the sanctioned answer.",
+    "keyFiles": [
+      "apps/daemon/package.json",
+      "pnpm-lock.yaml",
+      "packages/import/package.json",
+      "packages/import/src/index.ts",
+      "tools/import/import-shadow.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-17T17:49:28.977Z"
 }

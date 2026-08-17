@@ -21,24 +21,35 @@
     {
       "stepId": "step-1",
       "description": "TDD the codec's vocabulary and its refusal arms, in `packages/import/src/import-apply.test.ts` (169 lines today). Rail 3 caps ownership at five paths and a separate codec test file is NOT one of them, so the codec's cases live here — say so in a comment at the top of the new describe block, so the next reader does not read the placement as an accident. WHERE THE NEW CODES LIVE, and this is the one judgement call in the plan: `refuseImport` is typed to the frozen `ImportRefusalCode` union in `import-contract.ts`, which rail 3 does NOT let this task own. So the codec declares its OWN frozen code list (`IMPORT_EVENT_*`) and its own refused shape, while REUSING `ImportRefusalLayer`'s existing `\"DECODE\"` member imported from import-contract.js rather than retyping the string. Do not reuse the four existing DECODE codes (IMPORT_SOURCE_MALFORMED / UNSUPPORTED / AMBIGUOUS / UNREADABLE): those name facts about SOURCE bytes, and pointing them at EVENT bytes is exactly the one-code-two-subjects defect the contract's own comment at :103-109 warns against. Follow that comment's rule instead — every code has a planned emitter, and the arms stay distinct: bytes that are not the declared shape, a schemaVersion this decoder knowingly declines, a schemaVersion that conflicts with the payload it accompanies, non-canonical bytes that decode but do not re-encode identically, and missing required facts. One RED case per arm, each pinning the exact code AND the `DECODE` layer.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.test.ts"
       ],
-      "startedAt": "2026-08-17T17:46:39.629Z"
+      "modifiedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ],
+      "note": "RED for the codec's refusal arms in packages/import/src/import-apply.test.ts (placement comment states the ownership-rail reason). Seven-code vocabulary declared by the codec itself, reusing ImportRefusalLayer's DECODE member: BYTES_MALFORMED (not the declared shape, closed-vocabulary break, accessor descriptor), SCHEMA_UNSUPPORTED, SCHEMA_CONFLICT, BYTES_NONCANONICAL, FACTS_INCOMPLETE, FACTS_UNKNOWN_FIELD. Every arm pins exact code AND DECODE layer via expectRefusal(); each sweep asserts a positive generated case count. Verified RED: pnpm --filter @moe/import test -> \"Cannot find module './import-event-codec.js'\", Test Files 1 failed | 7 passed, Tests 100 passed, EXIT=1.",
+      "startedAt": "2026-08-17T17:46:39.629Z",
+      "completedAt": "2026-08-17T17:51:26.160Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD the codec's accepted control and its determinism, same test file. Rail 4 and the epic rail both require a positive case alongside the hostile ones, because a refusal-only suite is blind to a wrong ACCEPTED value. (a) ONE ACCEPTED CLAIM-AND-LINK CONTROL, as DoD 5 names: encode a record that yields one `ImportedClaim` and at least one `LegacyLink`, decode it back, and assert field by field — claimId, principal, status, and the whole `ImportProvenance` {manifestDigest, sourceDigest, sourcePath, sourceTime, timeBasis}; then evidenceOnly, from, kind, to and provenance on each link. Assert the decoded links are non-empty and assert the generated hostile-case count is positive, so neither sweep can pass while producing nothing. (b) DEEP FREEZE: assert the decoded facts and every nested provenance object are frozen, and that a mutation attempt does not take. (c) DETERMINISTIC ORDER: links decode in a total order that does not depend on input order — feed the same links shuffled and assert byte-identical encodings. (d) DESCRIPTOR SAFETY, which DoD 3 names explicitly: feed the decoder an object with an accessor property, a `__proto__` key and an extra key, and assert it refuses rather than letting any of them survive into the facts — `isPlainRecord` from canonical-bytes.js is the existing helper for this and must be reused, not reimplemented.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ],
+      "note": "RED for the accepted control and determinism, same file. (a) Round-trip pins claimId (computed through production deriveImportedId, not restated), principal, status, the whole ImportProvenance, and every link's evidenceOnly/from/kind/to/provenance; links asserted non-empty, plus a zero-link control. (b) Deep freeze asserted on facts, claim, provenance, links array, each link, each link provenance, payload and its nested array, with two mutation attempts that must throw TypeError and leave the value unchanged. (c) Determinism driven through the real encoder: same links reversed produce byte-identical output, and the decoded order (task-1, task-10, task-9) is asserted to DIFFER from the caller's order (task-1, task-9, task-10), so a pass-through cannot fake it. (d) Descriptor safety: accessor arm through admitImportEventFacts asserting the accessor is never read, plus __proto__ and extra-key arms through the byte decoder with an Object.prototype pollution check. Still RED (module absent).",
+      "startedAt": "2026-08-17T17:51:28.328Z",
+      "completedAt": "2026-08-17T17:52:31.390Z"
     },
     {
       "stepId": "step-3",
       "description": "Implement `packages/import/src/import-event-codec.ts` plus its one-line `.js` bridge. THE BRIDGE MUST BE LF, as rail 3 states in as many words: every sibling bridge in this package is `export * from \"./<name>.ts\";` with a bare LF, and a CRLF written by a Windows editor is a byte difference in a tracked file that no typecheck or vitest run will ever surface. Verify it after writing — `git show :packages/import/src/import-event-codec.js | od -c | tail` or equivalent — do not assume the editor did the right thing. The codec exports its frozen code list, its `domainSchemaVersion` constant, `encodeImportEventFacts(...)` and `decodeImportEventFacts(...)`. Encoding uses `canonicalJson` from `./canonical-bytes.js` — the package already owns canonical encoding and a second one would drift. The encoded object carries the derived `ImportedClaim`, the full `LegacyLink` list, the `ImportProvenance`, the declared `domainSchemaVersion`, and the existing canonical record payload; it carries NO executable or activation affordance, which is a property of the field set, not a comment — there is nowhere in the shape to put a status other than the `ImportedClaimStatus` union or an `evidenceOnly` other than literal `true`. Target <=250 physical lines; split before 400.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/import/src/import-event-codec.ts",
         "packages/import/src/import-event-codec.js"
@@ -46,7 +57,8 @@
       "newFiles": [
         "packages/import/src/import-event-codec.ts",
         "packages/import/src/import-event-codec.js"
-      ]
+      ],
+      "startedAt": "2026-08-17T17:52:34.415Z"
     },
     {
       "stepId": "step-4",
@@ -112,16 +124,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.357Z",
-  "updatedAt": "2026-08-17T17:46:39.629Z",
+  "updatedAt": "2026-08-17T17:52:34.415Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:42:38.898Z",
     "plannedStepCount": 9,
-    "plannedDistinctFileCount": 5
+    "plannedDistinctFileCount": 5,
+    "executedStepCount": 2
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:46:03.030Z",
   "planningNotes": {

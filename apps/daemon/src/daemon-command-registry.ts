@@ -1,185 +1,58 @@
 import { DurableStoreError, IdempotencyConflictError, type SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
-import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
-  EFFECT_ACTIVATE_PAYLOAD_KEYS, type ActivationIngressOutcome }
+import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
   from "./activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
 import { BOOTSTRAP_SCHEMA_VERSION, type BootstrapCommandKind }
   from "./bootstrap/bootstrap-contracts.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
-import type { HandlerTable, ServiceOutcome } from "./bootstrap/bootstrap-ledger.js";
+import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
-import type { SessionOutcome } from "./identity/session-ledger.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
-import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS, runContinuationCommand }
+import { CONTINUATION_COMMAND_KIND, runContinuationCommand }
   from "./recovery/continuation-command.js";
-import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND,
-  RECOVERY_COMPLETION_SCHEMA_VERSION } from "./recovery/recovery-completion-digest.js";
-import { runRecoveryCompleteCommand, type RecoveryCompletionOutcome }
-  from "./recovery/recovery-completion.js";
+import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
+  from "./recovery/recovery-completion-digest.js";
+import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
 import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
-import type { ReviewOutcome } from "./review/review-ledger.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
 import { WORK_CLAIM_SCHEMA_VERSION, type WorkClaimCommandKind }
   from "./work/work-claim-contracts.js";
-import { runWorkClaimCommand, type WorkClaimOutcome } from "./work/work-claim-services.js";
+import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
-  type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult,
-  type DurableDecision } from "./http/http-contract.js";
+  type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult }
+  from "./http/http-contract.js";
+import { DomainRefusal, decisionOf, encoder, refusal } from "./daemon-command-dispatch.js";
+import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
+  REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, type WiredCommandKind }
+  from "./daemon-command-vocabulary.js";
 
 /**
- * The daemon's command registry and durable decision port. Everything command-specific
- * lives here: the capability a kind demands, the exact payload keys it admits, the
- * service family that answers it, and how a family refusal becomes a port refusal. The
- * HTTP seam reads only the registry, so a command is added by registering an entry here
- * rather than by editing the boundary or the composition root.
+ * The daemon's command registry and durable decision port. The command-specific TABLES
+ * -- the capability a kind demands, the exact payload keys it admits, the family that
+ * answers it and the operator-only set -- live in `./daemon-command-vocabulary.js`;
+ * this module composes them into registry entries and turns a family refusal into a
+ * port refusal. The HTTP seam reads only the registry, so a command is still added by
+ * registering an entry in the vocabulary rather than by editing the boundary or the
+ * composition root.
  */
 
-const CAPABILITIES = {
-  ADMIN: "project.admin", GOAL: "goal.write", PLANNING: "planning.write",
-  REVIEW: "review.write", WORK: "work.write",
-} as const;
+/**
+ * Re-exported on their original path: `./daemon-store-dependencies.js` imports
+ * `OPERATOR_CAPABILITIES` from here and re-exports `agentCapabilitiesFor` from here,
+ * and the orchestrator's agent wrapper has always read the latter through that module.
+ * Moving the definitions must not move any consumer's import.
+ */
+export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vocabulary.js";
 
-const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
-  "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
-  "goal.create": CAPABILITIES.GOAL, "plan.propose": CAPABILITIES.PLANNING,
-  "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
-  "project.activate": CAPABILITIES.ADMIN, "project.bind_repository": CAPABILITIES.ADMIN,
-  "project.register": CAPABILITIES.ADMIN, "provider.probe": CAPABILITIES.ADMIN,
-});
 
-const REVIEW_FAMILY: Readonly<Record<ReviewCommandKind, string>> = Object.freeze({
-  "escalation.decide": CAPABILITIES.REVIEW, "integration.accept_output": CAPABILITIES.REVIEW,
-  "qualification.replan": CAPABILITIES.REVIEW, "review.submit": CAPABILITIES.REVIEW,
-});
-
-const SESSION_FAMILY: Readonly<Record<SessionCommandKind, string>> = Object.freeze({
-  "session.close": CAPABILITIES.ADMIN, "session.open": CAPABILITIES.ADMIN,
-  "session.renew": CAPABILITIES.ADMIN,
-});
-
-const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Object.freeze({
-  "work.claim": CAPABILITIES.WORK, "work.release": CAPABILITIES.WORK,
-  "work.renew": CAPABILITIES.WORK,
-});
-
-type WiredCommandKind =
-  | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
-  | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
-  | typeof RECOVERY_COMPLETION_COMMAND_KIND;
-
-export function agentCapabilitiesFor(kind: string): readonly string[] | null {
-  if (kind === "node.deliver") {
-    return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
-  }
-  if (kind === EFFECT_ACTIVATE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
-  // Resuming an interrupted attempt is work authority, not admin: the human-only
-  // gate on this path is the runner's boundary admission, not a wider capability.
-  if (kind === CONTINUATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
-  if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
-    return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
-  }
-  const family = kind in BOOTSTRAP_FAMILY
-    ? BOOTSTRAP_FAMILY[kind as BootstrapCommandKind]
-    : kind in REVIEW_FAMILY
-      ? REVIEW_FAMILY[kind as ReviewCommandKind]
-      : kind in SESSION_FAMILY
-        ? SESSION_FAMILY[kind as SessionCommandKind]
-        : kind in WORK_FAMILY ? WORK_FAMILY[kind as WorkClaimCommandKind] : null;
-  if (family === null) return null;
-  return family === CAPABILITIES.WORK
-    ? Object.freeze([CAPABILITIES.WORK])
-    : Object.freeze([family, CAPABILITIES.WORK]);
-}
-
-const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
-  Object.freeze({
-    "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
-    [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
-    [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
-    [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
-    "escalation.decide": ["escalationRef", "subjectRef"],
-    "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
-    "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
-    "integration.accept_output": ["receiptId", "subjectRef"],
-    "plan.propose": ["commands", "runId"],
-    "policy.install": ["slice"], "policy.validate": ["input"],
-    "project.activate": ["witness"], "project.bind_repository": ["observation"],
-    "project.register": ["owner"], "provider.probe": ["observation"],
-    "qualification.replan": [
-      "nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions",
-    ],
-    "review.submit": ["findings", "packageItems", "round", "subjectRef"],
-    "session.close": ["sessionId"],
-    "session.open": ["capabilities", "credentialSha256", "expiresAt", "sessionId"],
-    "session.renew": ["expiresAt", "sessionId"],
-    "work.claim": ["expiresAt", "workItemId"], "work.release": ["workItemId"],
-    "work.renew": ["expiresAt", "workItemId"],
-  });
-
-export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
-  CAPABILITIES.ADMIN, CAPABILITIES.GOAL, CAPABILITIES.PLANNING,
-  CAPABILITIES.REVIEW, CAPABILITIES.WORK,
-]);
-
-const encoder = new TextEncoder();
-
-class DomainRefusal extends Error {
-  public readonly code: string;
-  public readonly detail: string;
-  public readonly httpStatus: number;
-  public readonly layer: string;
-
-  public constructor(code: string, layer: string, detail: string, httpStatus = 422) {
-    super(`${code}: ${detail}`);
-    this.code = code;
-    this.detail = detail;
-    this.httpStatus = httpStatus;
-    this.layer = layer;
-  }
-}
-
-const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
-  "approval.decide",
-  "goal.close",
-  "integration.accept_output",
-  "session.open",
-]);
-
-function decisionOf(
-  outcome: ActivationIngressOutcome | RecoveryCompletionOutcome | ReviewOutcome | ServiceOutcome
-    | SessionOutcome | WorkClaimOutcome,
-): DurableDecision {
-  if (!outcome.ok) {
-    throw new DomainRefusal(
-      outcome.code,
-      outcome.refusedBy,
-      outcome.error === null ? outcome.code : outcome.error.code,
-    );
-  }
-  return Object.freeze({
-    commandId: outcome.decision.key.commandId,
-    disposition: outcome.disposition,
-    effectId: outcome.decision.decisionId,
-    resultCode: outcome.decision.resultCode,
-  });
-}
-
-function refusal(
-  code: string, httpStatus: number, detail: string, layer: string,
-): DecisionPortResult {
-  return Object.freeze({
-    outcome: "REFUSED",
-    refusal: Object.freeze({ code, detail, httpStatus, layer }),
-  } as const);
-}
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
