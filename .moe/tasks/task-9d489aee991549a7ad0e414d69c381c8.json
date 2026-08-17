@@ -1,0 +1,32 @@
+{
+  "id": "task-9d489aee991549a7ad0e414d69c381c8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Freeze provider-run decision identity",
+  "description": "Prerequisite for the strict reader in task-00e4827dd9374ec79625351d560c82c8. The provider-run writer's command kind is currently a private literal in provider-run-ledger.ts, so a reader must either duplicate it or omit a binding check. Promote that exact existing kind to the provider-run contract and keep the production writer and its receipt tests pinned to the single source.",
+  "definitionOfDone": [
+    "The existing `provider-run.telemetry.commit` value is exported once as a frozen literal from provider-run-contracts.ts and provider-run-ledger.ts imports it; no second production or test literal owns the command identity.",
+    "The production ledger's real SqliteEventStore decision trace and command decision both carry the exported kind, with target aggregate, expected version, request digest, singleton event id, and result bytes unchanged.",
+    "Focused ledger tests assert the exact command kind on the stored event, decision and receipt-backed trace, plus a positive accepted commit and replay control; mutating the writer to a different kind reddens the named binding assertion.",
+    "Daemon typecheck/test execute with nonzero count lines, and completion names the provider-run reader child of task-00e4827dd9374ec79625351d560c82c8 as consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/telemetry/provider-run-contracts.ts, provider-run-ledger.ts, and provider-run-ledger.test.ts; do not change the record/event schema or command bytes.",
+    "This is a constant-promotion and production-binding slice, not a new wire kind; do not register it in RuntimeCommandKind or HTTP.",
+    "Preserve all existing ledger/store refusal mappings and exact layers; use TDD and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "HIGH",
+  "order": 79.03,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:35:03.360Z",
+  "updatedAt": "2026-08-17T17:43:07.419Z"
+}

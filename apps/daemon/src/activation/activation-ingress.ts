@@ -12,6 +12,7 @@ import {
   ACTIVATION_LEDGER_LAYER,
   ACTIVATION_LEDGER_RECORD_VERSION,
 } from "./activation-ledger-contracts.js";
+import { bindActivationResources } from "./activation-resource-binding.js";
 import type { ActivationLedgerRecord } from "./activation-ledger-contracts.js";
 import {
   ACTIVATION_BUDGET_LAYER,
@@ -311,11 +312,26 @@ export function runEffectActivateCommand(
   if (isRefusal(slot)) return slot;
   const budget = budgetStage(claim.value, attemptRef);
   if (isRefusal(budget)) return budget;
-  return commitStage(store, request, bytes, assemble({
+  const record = assemble({
     activation: activation.value,
     armed: arm.value,
     budgetReservation: budget.value,
     providerSlot: slot.value,
     successors: claim.value,
-  }));
+  });
+  const committed = commitStage(store, request, bytes, record);
+  // (J) THE ORDER IS FORCED. The binder re-reads the COMMITTED activation for
+  // attemptRef, the effect intent and the project fence, so it cannot run before
+  // this commit exists — and it may not share the activation aggregate, whose
+  // strict reader treats a foreign event type as a malformed activation.
+  //
+  // A BIND REFUSAL IS NOT AN ACTIVATION REFUSAL. The activation is already
+  // durable here, so reporting it as refused would be a false claim about a
+  // committed decision; nor is a failed bind reported as an accepted binding. The
+  // observable is the resource reader answering ATTEMPT_RESOURCE_RECORD_ABSENT,
+  // which grants no terminal authority and therefore BLOCKS a consumer's release
+  // instead of permitting one. That is why the bind outcome is discarded, and the
+  // full reasoning lives with the call in `activation-resource-binding.ts`.
+  if (committed.ok) bindActivationResources(store, request, record);
+  return committed;
 }

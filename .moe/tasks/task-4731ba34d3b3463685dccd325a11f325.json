@@ -117,8 +117,8 @@
       "completedAt": "2026-08-17T17:18:59.306Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,12 +130,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:04:19.777Z",
-  "updatedAt": "2026-08-17T17:19:52.035Z",
+  "updatedAt": "2026-08-17T17:23:48.610Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:05:51.956Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-17T17:23:48.610Z",
+    "wallClockMs": 1076654
   },
   "stepsCompleted": [
     "step-1",
@@ -182,5 +184,8 @@
     "packages/scheduler/src/authority/provider-slot-release.js",
     "packages/scheduler/src/authority/lease-resource.ts",
     "packages/scheduler/src/authority/authority-kernel-invariants.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T17:23:48.610Z",
+  "reviewCompletedAt": "2026-08-17T17:23:48.610Z",
+  "reviewSummary": "VERIFIED at HEAD 15918c7 by base-ref diff 8557296..15918c7 over owned paths only (that commit is a whole-tree hook sweep that also swallowed foreign apps/daemon + index.ts bytes - hook hazard per globalRail, not this task's defect).\n\nGATE, legs separate: typecheck EXIT=0 (tsc invoked); test EXIT=0 with count line `Test Files 45 passed (45) / Tests 1386 passed (1386)` - real execution, not a filter no-match. Focused run of the new file: 14 passed. Re-run after drills: 45/1386 green.\n\nDRILLS run by ME (sha256 snapshot, restore by content, hashes verified identical after each):\n(i) collapse disposition block to unconditional accept(successor(slot,\"RELEASED\")) -> RED: \"refuses releasing a RESERVED slot even when its attempt binding matches\" + \"drives one release per frozen member and pins each member's disposition\".\n(ii) delete the attemptRef equality guard -> RED: \"refuses a release naming a different attempt than the slot binding\" + \"refuses a release against an unbound slot rather than treating null as a wildcard\".\n(iii) widen SLOT_STATES to a 4th member in its OWNING module resource-model.ts -> RED: the sweep. Proves it reads the frozen vocabulary, not a copy.\n\nDoD 1-6 evidenced. Every refusal arm pins code AND exact message (only 2 codes reachable; a test asserts all 5 messages distinct, so no two guards are interchangeable). Outsider sweep generated from LEASE_STATES+ACQUISITION_STATES, length>0. Purity: fresh frozen successor, caller record not mutated/frozen/returned by reference.\n\nRAILS: pure kernel, no store/clock/fs/daemon import; provider-slot-release.ts 119 lines, lease-resource.ts 241 (<250); .js bridge tracked; AuthorityErrorCode NOT widened; index.ts untouched here (its +19 is peer task-8b2bb97b). Sole out-of-plan edit - 1 line adding the module to LEASE_MODULES in authority-kernel-invariants.test.ts - is FORCED: that suite readdirs the authority dir and asserts the roster equals it. Consumer edge named: task-8b2bb97b."
 }

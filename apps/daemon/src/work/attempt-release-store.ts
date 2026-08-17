@@ -18,6 +18,7 @@
  * committed activation, never taken from a caller's copy.
  */
 
+import type { AuthorityErrorCode, AuthorityRejection } from "@moe/scheduler";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
@@ -34,37 +35,76 @@ export const ATTEMPT_RELEASE_COMMAND_KIND = "work.attempt_release" as const;
 /** This module's own layer. A refusal raised by the activation reader keeps ITS
  *  code; only decisions made here are reported under this name. */
 export const DAEMON_ATTEMPT_RELEASE = "DAEMON_ATTEMPT_RELEASE" as const;
+/** The OTHER layer that can refuse this path. `releaseWork` fences the lease and
+ *  parses the whole release request itself, so its rejection is carried under
+ *  ITS name: a daemon code standing in for a kernel refusal would hide the fact
+ *  that the daemon no longer judges dispositions at all. */
+export const SCHEDULER_LEASE_DRAIN = "SCHEDULER_LEASE_DRAIN" as const;
+export type AttemptReleaseLayer =
+  typeof DAEMON_ATTEMPT_RELEASE | typeof SCHEDULER_LEASE_DRAIN;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
  *  bytes that no longer re-encode stay three codes for the reason the sibling
- *  dispatch reader keeps them apart. DOWNGRADED and TARGET_MISMATCH are likewise
- *  two and not one: a retargeted boundary and a downgraded set fail oppositely. */
+ *  dispatch reader keeps them apart. NO disposition or drain-reason code lives
+ *  here any more: `releaseWork` owns that judgement, and a member only this
+ *  daemon could raise would be a dead entry that still read as coverage. */
 export const ATTEMPT_RELEASE_CODES = Object.freeze([
-  "ATTEMPT_RELEASE_REASON_UNKNOWN", "ATTEMPT_RELEASE_REASON_NOT_UNIONED",
-  "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED",
-  "ATTEMPT_RELEASE_TARGET_MISMATCH", "ATTEMPT_RELEASE_BINDING_MISMATCH",
-  "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE", "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE",
-  "ATTEMPT_RELEASE_RECORD_ABSENT", "ATTEMPT_RELEASE_RECORD_AMBIGUOUS",
-  "ATTEMPT_RELEASE_RECORD_DRIFT", "ATTEMPT_RELEASE_RECORD_UNREADABLE",
+  "ATTEMPT_RELEASE_BINDING_MISMATCH", "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE",
+  "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", "ATTEMPT_RELEASE_RECORD_ABSENT",
+  "ATTEMPT_RELEASE_RECORD_AMBIGUOUS", "ATTEMPT_RELEASE_RECORD_DRIFT",
+  "ATTEMPT_RELEASE_RECORD_UNREADABLE",
 ] as const);
 export type AttemptReleaseCode = (typeof ATTEMPT_RELEASE_CODES)[number];
 
+/** The kernel's three answers, recorded verbatim. `NO_OP` never composes a row:
+ *  it names a release that had already happened, and the row that recorded it
+ *  stands untouched. */
+export const ATTEMPT_RELEASE_OUTCOMES = Object.freeze([
+  "DRAINING", "NO_OP", "RELEASED",
+] as const);
+export type AttemptReleaseOutcomeName = (typeof ATTEMPT_RELEASE_OUTCOMES)[number];
+
 export interface AttemptReleaseRefused {
-  readonly advisoryOnly: true; readonly authority: "NONE"; readonly code: AttemptReleaseCode;
-  readonly ok: false; readonly refusedBy: typeof DAEMON_ATTEMPT_RELEASE;
+  readonly advisoryOnly: true; readonly authority: "NONE";
+  readonly code: AttemptReleaseCode | AuthorityErrorCode;
+  /** The refusing layer's own words when it had any; never rewritten here. */
+  readonly message: string | null;
+  readonly ok: false; readonly refusedBy: AttemptReleaseLayer;
 }
 export interface AttemptReleaseAnswer {
   readonly advisoryOnly: true; readonly authority: "ADVISORY_RECORD"; readonly digest: string;
-  readonly ok: true; readonly record: Record<string, unknown>;
+  readonly ok: true;
+  /** What the kernel answered for THIS call. A replay answers `NO_OP` while the
+   *  row it hands back still records the `RELEASED` that actually happened. */
+  readonly outcome: AttemptReleaseOutcomeName;
+  readonly record: Record<string, unknown>;
 }
 export type AttemptReleaseOutcome = AttemptReleaseAnswer | AttemptReleaseRefused;
 
 const encoder = new TextEncoder();
 
 export const refuse = (code: AttemptReleaseCode): AttemptReleaseRefused => Object.freeze({
-  advisoryOnly: true as const, authority: "NONE" as const, code, ok: false as const,
+  advisoryOnly: true as const, authority: "NONE" as const, code, message: null, ok: false as const,
   refusedBy: DAEMON_ATTEMPT_RELEASE,
 });
+
+/** The kernel's own rejection, surfaced UNCHANGED under the kernel's own layer.
+ *  Flattening it into a daemon code would leave a reviewer unable to tell a
+ *  fencing refusal from a malformed row; they demand opposite repairs. */
+export function carryAuthorityRejection(rejection: AuthorityRejection): AttemptReleaseRefused {
+  const issue = rejection.issues[0];
+  return Object.freeze({
+    advisoryOnly: true as const, authority: "NONE" as const,
+    code: issue?.code ?? "AUTHORITY_MALFORMED_INPUT",
+    message: issue?.message ?? null, ok: false as const, refusedBy: SCHEDULER_LEASE_DRAIN,
+  });
+}
+
+/** Re-states a durable answer under the outcome THIS call earned. The row is
+ *  passed through byte-identically; only the caller-facing outcome changes. */
+export const withOutcome = (
+  answer: AttemptReleaseAnswer, outcome: AttemptReleaseOutcomeName,
+): AttemptReleaseAnswer => Object.freeze({ ...answer, outcome });
 
 /** Framed by this record version, as the dispatch aggregate is framed by its
  *  own. The row may NOT share the activation aggregate: that stream is read by
@@ -115,7 +155,9 @@ export function commitRelease(
   } catch { return false; }
 }
 
-/** The durable answer, always from re-decoded bytes that still re-encode. */
+/** The durable answer, always from re-decoded bytes that still re-encode. The
+ *  reported outcome is the ROW's own recorded one: a reader states what the
+ *  stored release was, never what a later call would decide. */
 export function readAttemptRelease(
   store: SqliteEventStore, attemptAggregateId: string,
 ): AttemptReleaseOutcome {
@@ -132,8 +174,13 @@ export function readAttemptRelease(
   if (!again.ok || !sameBytes(again.bytes, event.payload)) {
     return refuse("ATTEMPT_RELEASE_RECORD_DRIFT");
   }
+  // Re-read through the frozen vocabulary: a row carrying an outcome no kernel
+  // ever answered would otherwise be handed on as if a kernel had.
+  const stored = decoded.value["outcome"];
+  const outcome = ATTEMPT_RELEASE_OUTCOMES.find((name) => name === stored);
+  if (outcome === undefined) return refuse("ATTEMPT_RELEASE_RECORD_DRIFT");
   return Object.freeze({
     advisoryOnly: true as const, authority: "ADVISORY_RECORD" as const, digest: again.digest,
-    ok: true as const, record: Object.freeze(decoded.value),
+    ok: true as const, outcome, record: Object.freeze(decoded.value),
   });
 }

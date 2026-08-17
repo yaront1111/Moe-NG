@@ -1,0 +1,32 @@
+{
+  "id": "task-c7f2530b4a4445398a5e572f0568ea1d",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Declare the daemon context dependency",
+  "description": "Prerequisite for task-203a5ca7aada4375a98a95df8773e249. Fresh measurement at HEAD 15918c7: @moe/context is a real workspace package and its root exports selectContext/renderContext/digestContextManifest, but apps/daemon declares no dependency, its pnpm-lock importer has no link, and a plain-Node bare import from apps/daemon fails ERR_MODULE_NOT_FOUND. Land only the dependency edge and prove it resolves.",
+  "definitionOfDone": [
+    "apps/daemon/package.json declares `@moe/context: workspace:*` in dependencies and pnpm-lock.yaml records the apps/daemon importer link to `../../packages/context`; no unrelated importer changes are introduced.",
+    "A compiled temporary probe inside apps/daemon imports `selectContext`, `renderContext`, `digestContextManifest`, and their public types from the bare `@moe/context` specifier and typechecks exit 0; the probe is deleted in the same command.",
+    "A plain-Node bare-root import from apps/daemon resolves the three production functions at runtime, while a negative deep-import probe remains refused by package exports.",
+    "Daemon and context typecheck/test commands execute separately with nonzero test-count output, and completion names the remaining context-manifest children of task-203a5ca7aada4375a98a95df8773e249 as consumers."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/package.json and pnpm-lock.yaml; do not edit @moe/context sources or add a production call site in this plumbing task.",
+    "Use pnpm workspace install/update semantics and inspect the importer diff; do not hand-edit unrelated lockfile sections.",
+    "No deep imports, tsconfig paths, project references, scratch probe residue, or vacuous filter passes; explicit owned-path commit only."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
+  "priority": "CRITICAL",
+  "order": 80.01,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:45:52.527Z",
+  "updatedAt": "2026-08-17T17:45:52.527Z"
+}

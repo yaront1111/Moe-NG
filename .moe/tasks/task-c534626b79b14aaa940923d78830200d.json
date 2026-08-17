@@ -1,0 +1,34 @@
+{
+  "id": "task-c534626b79b14aaa940923d78830200d",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Bind Claude telemetry to the durable launcher",
+  "description": "Prerequisite for task-00e4827dd9374ec79625351d560c82c8. Fresh measurement at HEAD 8557296: launchClaudeWithTelemetry hardwires raw launchClaude and returns only the telemetry handoff, while Foundation dispatch must use createClaudeLauncher(authority) and still needs the exact ClaudeLaunchResult. Add the public runner factory/result surface that executes one authority-bound physical launch and derives the handoff from that same result—never a second launch or a rebuilt observation.",
+  "definitionOfDone": [
+    "A public @moe/runner factory accepts only ClaudeLauncherAuthority, binds createClaudeLauncher(authority), and on invocation calls that launcher exactly once; no caller-supplied deps, launcher function, exit, observation, or telemetry handoff is accepted.",
+    "The success arm returns one deeply frozen object containing the exact ClaudeLaunchResult and the ClaudeTelemetryHandoff derived from that same result; REFUSED, EXIT_BEFORE_LAUNCH, ADOPTED and OBSERVED preserve the runner's existing truth, code and layer without restamping.",
+    "A malformed/hostile ProviderRunRef refuses at TELEMETRY_INPUT with TELEMETRY_RUN_REF_MALFORMED before authority, store, filesystem, or process effects; generated hostile cases assert a positive case count.",
+    "Focused production-surface tests prove one-launch ordering, raw-result identity/binding, blind UNKNOWN behavior, and one accepted same-result control; mutation of the production binding to invoke twice or pair a different result reddens a named assertion.",
+    "The new symbol is exported through the public @moe/runner root, the existing daemon manifest and pnpm-lock edge remain valid, and a compiled bare-specifier probe from apps/daemon typechecks and is deleted in the same command."
+  ],
+  "taskRails": [
+    "Modify only packages/runner/src/providers/telemetry/claude-telemetry-launch.ts, its focused test, and packages/runner/src/surface/claude-surface.ts; refactor/trim the existing 250-line production source rather than growing it over 250.",
+    "Do not expose private launcher defaults, snapshotRunRef, intakeProcessObservation, raw dependencies, or a generic supplied-launcher hook; authority is the existing public ClaudeLauncherAuthority.",
+    "Preserve existing ProviderTelemetryCode/layer and Claude launcher refusals exactly; no new wire kind or daemon behavior in this task.",
+    "Use TDD, assert exact code/layer and nonzero cases, run runner typecheck/test with nonzero count lines, and name task-00e4827dd9374ec79625351d560c82c8 as the consuming production task."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "CRITICAL",
+  "order": 79.01,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:34:16.790Z",
+  "updatedAt": "2026-08-17T17:43:09.194Z"
+}

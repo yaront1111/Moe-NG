@@ -36,8 +36,8 @@ export type {
 /** Only post-launch workspace observation is supplied by composition. The runtime
  * filesystem, host observer and clock are NOT dependencies: @moe/runner mints them
  * from the request's three plain data fields, so no caller — test or transport —
- * can hand pinning a runtime nobody observed. The shipped launcher and its
- * physical boundary are not replaceable through this service either. */
+ * can hand pinning a runtime nobody observed. The shipped launcher and its physical
+ * boundary are not replaceable through this service either. */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
@@ -95,19 +95,13 @@ function narrowLaunchOptions(
   });
 }
 
-/**
- * PROPOSED, never asserted. Design 765 makes only an unchanged strongest
- * `WORK_RELEASE_OR_PAUSE` resumable, so a settle that did not prove its result
- * is a cancellation and may not present as one. `recordAttemptRelease` decides
- * whether either shape is recordable — through @moe/runner's own monotonicity
- * predicate — and refuses rather than repairs.
- */
-const SETTLE_DISPOSITIONS = Object.freeze({
-  PROVEN: { reasons: ["WORK_RELEASE_OR_PAUSE"], strongestReason: "WORK_RELEASE_OR_PAUSE",
-    terminalTarget: "RELEASED" },
-  UNPROVEN: { reasons: ["WORK_CANCEL"], strongestReason: "WORK_CANCEL",
-    terminalTarget: "CANCELLED" },
-} as const);
+/** The drain REASON this settle earned, and nothing else. Design 765 makes only an
+ * unchanged strongest `WORK_RELEASE_OR_PAUSE` resumable, so a settle that did not
+ * prove its result is a cancellation and may not present as one. `releaseWork`
+ * composes the disposition from this reason alone: a disposition literal owned here
+ * would be a second copy of the drain table, and the two would drift. */
+const SETTLE_REASONS =
+  Object.freeze({ PROVEN: "WORK_RELEASE_OR_PAUSE", UNPROVEN: "WORK_CANCEL" } as const);
 
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   dispatch(input: unknown): Promise<FoundationAttemptOutcome>;
@@ -115,16 +109,28 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   const { store } = deps;
 
   /** The attempt's release disposition, durable beside the dispatch record and
-   *  derived from what the settle ACTUALLY answered. Facts only: a release row
-   *  that cannot be written changes no dispatch answer and grants no authority,
-   *  so its own refusal is deliberately not folded into the outcome. */
+   *  derived from what the settle ACTUALLY answered. Facts only: a release row that
+   *  cannot be written changes no dispatch answer and grants no authority, so its
+   *  own refusal is deliberately not folded into the outcome.
+   *
+   *  THE THREE BOUNDARY FLAGS AND THE HANDOFF ARE PASS-THROUGH INPUTS WITH NO
+   *  PRODUCER YET — never read them as proven facts. `safeBoundaryObserved` is
+   *  task-ded026d6; `effectsTerminal`/`resourcesTerminal` are task-6d400781; the
+   *  handoff is task-af9454f4. None has landed, so this reports what it actually
+   *  observed — nothing — and `releaseWork` refuses instead of releasing. A flag
+   *  defaulted to true, or five minted handoff digests, would manufacture the safe
+   *  boundary the epic exists to prove. `intentRefs` is the one honest value: the
+   *  durable effect intent's own id. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     settled: FoundationAttemptOutcome,
   ): FoundationAttemptOutcome {
-    const disposition = settled.ok ? SETTLE_DISPOSITIONS.PROVEN : SETTLE_DISPOSITIONS.UNPROVEN;
-    recordAttemptRelease(store, bound, record,
-      { disposition, reason: disposition.strongestReason });
+    recordAttemptRelease(store, bound, record, {
+      disposition: null, effectsTerminal: false, handoff: null,
+      intentRefs: [record.effectIntent.intentId],
+      reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
+      resourcesTerminal: false, safeBoundaryObserved: false,
+    });
     return settled;
   }
 

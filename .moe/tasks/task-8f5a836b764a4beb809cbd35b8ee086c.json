@@ -1,0 +1,39 @@
+{
+  "id": "task-8f5a836b764a4beb809cbd35b8ee086c",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Decompose daemon-command-registry before the graph kinds cross the line cap",
+  "description": "Filed 2026-08-17 by architect-2cc07e26 on the human's instruction, split out of task-931f99e8a84348689f97820acf0482bb's DoD 5 so it can land NOW instead of waiting behind that task's blocked services.\n\nWHY NOW. apps/daemon/src/daemon-command-registry.ts is 346 physical lines at HEAD a42ae2f (`git show HEAD:apps/daemon/src/daemon-command-registry.ts | wc -l`). Epic rail 5 targets <=250 per production source and hard-splits before 400. task-931f99e8 must add FIVE graph mutation kinds (graph.approve, graph.prepare_supersession, graph.release_preparation, graph.request_expansion, graph.supersede), each needing a family entry, a capability entry and a payload allow-list entry. That crosses 400. Doing the split inside 931f99e8 would force one worker to refactor and wire in the same task, mixing a pure refactor with a behavior change in one diff -- the hardest possible thing for QA to grade. This task depends on NOTHING in the Graph Beta chain and de-risks it by landing first.\n\nMEASURED STRUCTURE at HEAD a42ae2f:\n- :1-43   imports (33 lines, ~10 subsystems)\n- :45-48  CAPABILITIES\n- :50-71  four frozen family maps: BOOTSTRAP_FAMILY (:50), REVIEW_FAMILY (:58), SESSION_FAMILY (:63), WORK_FAMILY (:68)\n- :78-100 `agentCapabilitiesFor` -- EXPORTED and imported elsewhere\n- :102-126 PAYLOAD_KEYS\n- :127-131 OPERATOR_CAPABILITIES -- EXPORTED and imported elsewhere\n- :149-155 OPERATOR_PRINCIPAL_KINDS\n- :156-173 decisionOf, :175-182 refusal\n- :184-202 DaemonCommandPortOptions / DaemonCommandPorts types\n- :203-346 `createDaemonCommandPorts` -- 143 lines, the composition root\n\nTHE NATURAL SEAM is the vocabulary/mapping half: CAPABILITIES, the four family maps, PAYLOAD_KEYS, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS and agentCapabilitiesFor are all static tables about WHICH kind maps to what. Extracting them into a sibling module is exactly the surface task-931f99e8 will extend, so the split pays off immediately. The dispatch plumbing (decisionOf, refusal) and the composition root can stay, or move together if the arithmetic demands -- resolve at planning time against real line counts, not against this description.\n\nTWO IMPORT EDGES TO PRESERVE (measure them yourself before moving anything):\n- `agentCapabilitiesFor` is imported by apps/daemon/src/orchestrator/agent-wrapper.ts:6 and re-exported through apps/daemon/src/daemon-store-dependencies.ts (whose comment at :30 says the agent wrapper has ALWAYS imported it from that module).\n- `OPERATOR_CAPABILITIES` is imported by apps/daemon/src/daemon-store-dependencies.ts:12.\nEither keep both symbols re-exported from daemon-command-registry.ts so no consumer path changes, or update every importer. Do not leave one importer on a stale path.\n\nTHIS IS A PURE REFACTOR. No command kind is added, removed or re-mapped; no capability, family or payload allow-list value changes; no refusal code or layer changes. The entire value is that the diff is behavior-free and therefore cheap to verify -- and that is also the whole risk, because a silent mapping change inside a mechanical move is invisible to a green suite.\n\nNOT in scope: registering graph kinds (that is task-931f99e8), new runtime kinds, changing capabilities or payload allow-lists, touching the HTTP adapter or Authenticator, or any behavior change whatsoever.",
+  "definitionOfDone": [
+    "Every production file touched is at or under 250 physical lines after the split, verified by an explicit line count in the completion note, and daemon-command-registry.ts specifically has room for five more kinds plus their family/capability/payload entries without approaching 400.",
+    "The complete mapping content is provably unchanged: a test enumerates every wired command kind with its capability, family and payload allow-list and asserts the full set against values captured BEFORE the split, so a silently altered or dropped entry fails rather than passing as a move.",
+    "Both exported consumer edges still resolve: `agentCapabilitiesFor` and `OPERATOR_CAPABILITIES` are reachable on the same import paths their existing consumers use (apps/daemon/src/orchestrator/agent-wrapper.ts and apps/daemon/src/daemon-store-dependencies.ts), proven by grep plus a compiled probe, not by reading the code.",
+    "Any new .ts module has its one-line .js bridge and loads under plain Node from apps/daemon, so the split does not create a module invisible to the .js import graph.",
+    "The diff is behavior-free: no command kind added/removed/re-mapped, no capability/family/payload value changed, no refusal code or layer changed; the completion note states this explicitly and names the check that would have caught a violation.",
+    "A mutation drill that alters ONE payload allow-list entry in the extracted module makes the step-2 enumeration test go red for that entry, proving the test pins mapping content rather than merely counting kinds.",
+    "pnpm typecheck && pnpm --filter @moe/daemon test && pnpm test are exit 0, each printing a nonzero Test Files count line, with no test file deleted or skipped to accommodate the move."
+  ],
+  "taskRails": [
+    "PURE REFACTOR. No behavior change of any kind: no command kind added, removed or re-mapped, no capability/family/payload value edited, no refusal code or layer touched. If the split appears to require a behavior change, stop and report blocked rather than bundling one.",
+    "Preserve every existing import path for agentCapabilitiesFor and OPERATOR_CAPABILITIES, or update every importer; never leave a consumer on a stale path. Verify a moved symbol at its ORIGIN, not only at its destination.",
+    "A new .ts module needs its one-line .js bridge in the same commit, or it is invisible to the .js import graph and to plain-Node loadability.",
+    "Land BEFORE task-931f99e8 wires the graph kinds; this task exists so that refactor and wiring are never in one diff. Use TDD for the enumeration guard, target <=250 lines per production source, and commit only explicit owned paths by pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-2cc07e26",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 113.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:43:34.086Z",
+  "updatedAt": "2026-08-17T17:46:16.940Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:46:16.940Z"
+  }
+}

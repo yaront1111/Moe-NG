@@ -2,7 +2,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { DRAIN_REASONS, DRAIN_TERMINAL_TARGETS } from "@moe/runner";
+import { DRAIN_REASONS } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -18,15 +18,17 @@ import {
 } from "../recovery/restore-test-harness.js";
 import {
   ATTEMPT_RELEASE_CODES, ATTEMPT_RELEASE_COMMAND_KIND, ATTEMPT_RELEASE_EVENT_TYPE,
-  ATTEMPT_RELEASE_RECORD_VERSION, DAEMON_ATTEMPT_RELEASE, deriveAttemptReleaseAggregateId,
-  readAttemptRelease, recordAttemptRelease,
+  ATTEMPT_RELEASE_RECORD_VERSION, DAEMON_ATTEMPT_RELEASE, SCHEDULER_LEASE_DRAIN,
+  deriveAttemptReleaseAggregateId, readAttemptRelease, recordAttemptRelease,
 } from "./attempt-release-disposition.js";
 import type { AttemptReleaseOutcome, AttemptReleaseRequest } from "./attempt-release-disposition.js";
+import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 
 /**
- * The attempt-level release disposition, over a REAL SqliteEventStore and a REAL
- * activation committed by the production ingress.
+ * The attempt-level release disposition, over a REAL SqliteEventStore, a REAL
+ * activation committed by the production ingress, and the REAL `releaseWork`
+ * kernel reached through the bare `@moe/scheduler` root.
  *
  * NOTHING HERE HAND-FORGES AN ACTIVATION. `parseActivationGrant` demands a hex64
  * grantId derived from the whole successor intent, so the only coherent
@@ -34,9 +36,11 @@ import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
  * makes the durable lease and provider-slot facts below genuinely durable rather
  * than a fixture this suite wrote and then read back.
  *
- * Every refusal case asserts THREE things, not one: the exact code, the exact
- * layer, and that NO durable row exists afterwards. A handler that wrote a row
- * and then refused sails through a return-value assertion.
+ * TWO LAYERS CAN REFUSE THIS PATH, so every refusal case asserts WHICH one said
+ * no as well as the exact code, and that NO durable row exists afterwards. A
+ * handler that wrote a row and then refused sails through a return-value
+ * assertion, and a daemon code standing in for a kernel refusal hides the fact
+ * that the daemon no longer judges dispositions at all.
  */
 
 const encoder = new TextEncoder();
@@ -144,19 +148,30 @@ function activated(label: string): Fixture {
   return { bound, record: history.history.record, store };
 }
 
-/** Design 348's own shape: WORK_RELEASE_OR_PAUSE is rank 20, target RELEASED. */
-const RELEASE_DISPOSITION = Object.freeze({
-  reasons: Object.freeze(["WORK_RELEASE_OR_PAUSE"]),
-  strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
+/** The handoff the kernel demands before it will compose ANY transition: five
+ *  digest families, a next safe action and a truth class. Its durable producer
+ *  is task-af9454f4, so this suite supplies it as an INPUT. */
+const HANDOFF = Object.freeze({
+  activeProcessResourceFacts: Object.freeze([]),
+  artifactDigest: DIGEST, completedSteps: Object.freeze(["step:1"]), contextDigest: DIGEST,
+  inputDigest: DIGEST, journalDigest: DIGEST, nextSafeAction: "action:resume",
+  truthClass: "DAEMON_VERIFIED", worktreeDigest: DIGEST,
 });
 
-const releaseRequest = (
+/** A settled boundary. The three flags have NO durable producer yet
+ *  (task-ded026d6, task-6d400781), so the suite drives them as inputs; the
+ *  daemon must never synthesize or upgrade one of its own accord. */
+const settledRequest = (
   overrides: Partial<AttemptReleaseRequest> = {},
 ): AttemptReleaseRequest => ({
-  disposition: RELEASE_DISPOSITION, reason: "WORK_RELEASE_OR_PAUSE", ...overrides,
+  disposition: null, effectsTerminal: true, handoff: HANDOFF, intentRefs: ["intent:release"],
+  reason: "WORK_RELEASE_OR_PAUSE", resourcesTerminal: true, safeBoundaryObserved: true,
+  ...overrides,
 });
 
-function refusalOf(outcome: AttemptReleaseOutcome): { code: string; refusedBy: string } {
+function refusalOf(
+  outcome: AttemptReleaseOutcome,
+): { code: string; refusedBy: string } {
   if (outcome.ok) throw new Error("expected a refusal, received a recorded row");
   return { code: outcome.code, refusedBy: outcome.refusedBy };
 }
@@ -175,22 +190,37 @@ function expectNoDurableRow(fixture: Fixture): void {
   });
 }
 
+/** Counts the rows OUT OF THE STORE rather than trusting a return value: "it did
+ *  not throw the second time" is also exactly what a double write looks like. */
+function durableRowCount(fixture: Fixture): number {
+  return fixture.store.readEvents(deriveAttemptReleaseAggregateId(fixture.bound.aggregateId))
+    .filter((event) => event.eventType === ATTEMPT_RELEASE_EVENT_TYPE).length;
+}
+
 describe("attempt release disposition — frozen vocabulary", () => {
   it("publishes a closed code list with no duplicate member", () => {
     expect(ATTEMPT_RELEASE_CODES.length).toBeGreaterThan(0);
     expect(new Set(ATTEMPT_RELEASE_CODES).size).toBe(ATTEMPT_RELEASE_CODES.length);
+    // Seven, not twelve. The five disposition and drain-reason codes were retired
+    // with the daemon-side validator that raised them: `releaseWork` owns that
+    // judgement now and refuses in its own words, under its own layer.
     expect([...ATTEMPT_RELEASE_CODES].sort()).toEqual([
       "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE", "ATTEMPT_RELEASE_BINDING_MISMATCH",
-      "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED",
-      "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", "ATTEMPT_RELEASE_REASON_NOT_UNIONED",
-      "ATTEMPT_RELEASE_REASON_UNKNOWN", "ATTEMPT_RELEASE_RECORD_AMBIGUOUS",
-      "ATTEMPT_RELEASE_RECORD_ABSENT", "ATTEMPT_RELEASE_RECORD_DRIFT",
-      "ATTEMPT_RELEASE_RECORD_UNREADABLE", "ATTEMPT_RELEASE_TARGET_MISMATCH",
+      "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", "ATTEMPT_RELEASE_RECORD_ABSENT",
+      "ATTEMPT_RELEASE_RECORD_AMBIGUOUS", "ATTEMPT_RELEASE_RECORD_DRIFT",
+      "ATTEMPT_RELEASE_RECORD_UNREADABLE",
     ].sort());
+    for (const retired of ["ATTEMPT_RELEASE_REASON_UNKNOWN", "ATTEMPT_RELEASE_REASON_NOT_UNIONED",
+      "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED",
+      "ATTEMPT_RELEASE_TARGET_MISMATCH"]) {
+      expect([...ATTEMPT_RELEASE_CODES]).not.toContain(retired);
+    }
   });
 
-  it("names its own layer, disjoint from the sibling dispatch layer", () => {
+  it("names both refusing layers, disjoint from the sibling dispatch layer", () => {
     expect(DAEMON_ATTEMPT_RELEASE).toBe("DAEMON_ATTEMPT_RELEASE");
+    expect(SCHEDULER_LEASE_DRAIN).toBe("SCHEDULER_LEASE_DRAIN");
+    expect(DAEMON_ATTEMPT_RELEASE).not.toBe(SCHEDULER_LEASE_DRAIN);
     expect(DAEMON_ATTEMPT_RELEASE).not.toBe("DAEMON_FOUNDATION_ATTEMPT");
     expect([ATTEMPT_RELEASE_RECORD_VERSION, ATTEMPT_RELEASE_EVENT_TYPE,
       ATTEMPT_RELEASE_COMMAND_KIND]).toEqual(
@@ -205,46 +235,30 @@ describe("attempt release disposition — frozen vocabulary", () => {
   });
 });
 
-describe("attempt release disposition — refusals write nothing", () => {
-  it("refuses a disposition whose SHAPE the runner's parser rejects", () => {
+describe("attempt release disposition — the kernel refuses, the daemon carries", () => {
+  it("carries the KERNEL's refusal for a disposition it will not compose", () => {
     const fixture = activated("malformed");
     const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      releaseRequest({ disposition: { reasons: [], strongestReason: "WORK_RELEASE_OR_PAUSE" } }));
+      settledRequest({ disposition: { reasons: [], strongestReason: "WORK_RELEASE_OR_PAUSE" } }));
+    // The layer is the discriminator: a DAEMON_ATTEMPT_RELEASE code here would
+    // mean the daemon kept a second disposition validator of its own.
     expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
     });
     expectNoDurableRow(fixture);
   });
 
-  it("refuses a DOWNGRADED disposition whose strongest reason is not its highest", () => {
+  it("carries the KERNEL's refusal for a DOWNGRADED strongest reason", () => {
     const fixture = activated("downgraded");
     // URGENT_REVOKE is rank 70 and sits in the set, so WORK_RELEASE_OR_PAUSE
-    // (rank 20) cannot honestly be the strongest. The target below is the one
-    // the CLAIMED strongest reason maps to, so only the rank half is wrong.
+    // (rank 20) cannot honestly be the strongest one.
     const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      releaseRequest({ disposition: {
-        reasons: ["URGENT_REVOKE", "WORK_RELEASE_OR_PAUSE"],
+      settledRequest({ disposition: {
+        reasons: ["URGENT_REVOKE", "WORK_RELEASE_OR_PAUSE"], resumable: true,
         strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
       } }));
     expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED", refusedBy: DAEMON_ATTEMPT_RELEASE,
-    });
-    expectNoDurableRow(fixture);
-  });
-
-  it("refuses a RETARGETED disposition under its own distinct code", () => {
-    const fixture = activated("retargeted");
-    // The reason set is coherent — WORK_RELEASE_OR_PAUSE really is its own
-    // strongest — and ONLY the terminal target is wrong. A single code shared
-    // with the case above would leave a reviewer unable to tell a retargeted
-    // safe boundary from a downgraded reason set; they demand opposite repairs.
-    const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      releaseRequest({ disposition: {
-        reasons: ["WORK_RELEASE_OR_PAUSE"], strongestReason: "WORK_RELEASE_OR_PAUSE",
-        terminalTarget: "SUCCEEDED",
-      } }));
-    expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RELEASE_TARGET_MISMATCH", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
     });
     expectNoDurableRow(fixture);
   });
@@ -256,35 +270,43 @@ describe("attempt release disposition — refusals write nothing", () => {
     // ever became a real reason, THIS assertion fails before the refusal does.
     expect([...DRAIN_REASONS]).not.toContain(unknown);
     const outcome = recordAttemptRelease(
-      fixture.store, fixture.bound, fixture.record, releaseRequest({ reason: unknown }));
+      fixture.store, fixture.bound, fixture.record, settledRequest({ reason: unknown }));
     expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RELEASE_REASON_UNKNOWN", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
     });
     expectNoDurableRow(fixture);
   });
 
-  it("refuses a declared reason the disposition never unioned", () => {
-    const fixture = activated("not-unioned");
-    // A recognised reason that is absent from the disposition's own set: the
-    // union step of design 348 was skipped, so the recorded `reason` and the
-    // recorded `strongestReason` would describe two different releases.
-    expect([...DRAIN_REASONS]).toContain("SUBMISSION_FINALIZE");
-    expect([...RELEASE_DISPOSITION.reasons]).not.toContain("SUBMISSION_FINALIZE");
-    const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      releaseRequest({ reason: "SUBMISSION_FINALIZE" }));
-    expect(refusalOf(outcome)).toEqual({
-      code: "ATTEMPT_RELEASE_REASON_NOT_UNIONED", refusedBy: DAEMON_ATTEMPT_RELEASE,
-    });
+  it("refuses an uncommittable handoff BEFORE any transition is composed", () => {
+    const fixture = activated("handoff");
+    for (const handoff of [null, { ...HANDOFF, inputDigest: "not-a-digest" }]) {
+      const outcome = recordAttemptRelease(
+        fixture.store, fixture.bound, fixture.record, settledRequest({ handoff }));
+      expect(refusalOf(outcome)).toEqual({
+        code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
+      });
+    }
     expectNoDurableRow(fixture);
   });
 
-  it("keeps the two coherence codes reachable through the runner's own predicate", () => {
-    // A positive control for the discriminator itself: the retargeted case above
-    // is only distinguishable because SOME declared target makes the disposition
-    // monotonic. If the terminal-target vocabulary ever shrank to one member the
-    // discriminator would silently collapse into one code.
-    expect(DRAIN_TERMINAL_TARGETS.length).toBeGreaterThan(1);
-    expect([...DRAIN_TERMINAL_TARGETS]).toContain("RELEASED");
+  it("refuses an OMITTED boundary flag rather than defaulting it either way", () => {
+    // The three flags have no durable producer. A daemon that defaulted a missing
+    // one to false would silently record DRAINING; one that defaulted it to true
+    // would manufacture the safe boundary this whole epic exists to prove.
+    const flags = ["effectsTerminal", "resourcesTerminal", "safeBoundaryObserved"] as const;
+    let driven = 0;
+    for (const flag of flags) {
+      const fixture = activated(`omitted-${flag}`);
+      const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+        settledRequest({ [flag]: undefined }));
+      expect(refusalOf(outcome), flag).toEqual({
+        code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
+      });
+      expectNoDurableRow(fixture);
+      driven += 1;
+    }
+    // A sweep that generated nothing would pass every assertion above vacuously.
+    expect(driven).toBe(3);
   });
 
   it("refuses when the durable activation it must read is not there", () => {
@@ -294,7 +316,7 @@ describe("attempt release disposition — refusals write nothing", () => {
       target: deriveAttemptReleaseAggregateId(`${ACTIVATION_AGGREGATE}-absent`),
     });
     const outcome =
-      recordAttemptRelease(fixture.store, orphan, fixture.record, releaseRequest());
+      recordAttemptRelease(fixture.store, orphan, fixture.record, settledRequest());
     expect(refusalOf(outcome)).toEqual({
       code: "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE", refusedBy: DAEMON_ATTEMPT_RELEASE,
     });
@@ -309,7 +331,7 @@ describe("attempt release disposition — refusals write nothing", () => {
     };
     expect(forged.activationDigest).not.toBe(fixture.record.activationDigest);
     const outcome =
-      recordAttemptRelease(fixture.store, fixture.bound, forged, releaseRequest());
+      recordAttemptRelease(fixture.store, fixture.bound, forged, settledRequest());
     expect(refusalOf(outcome)).toEqual({
       code: "ATTEMPT_RELEASE_BINDING_MISMATCH", refusedBy: DAEMON_ATTEMPT_RELEASE,
     });
@@ -330,30 +352,53 @@ function dispositionOf(row: Record<string, unknown>): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-describe("attempt release disposition — durable release facts", () => {
-  it("records an unchanged strongest WORK_RELEASE_OR_PAUSE and reads every field back", () => {
-    const fixture = activated("happy");
+function leaseOf(row: Record<string, unknown>): Record<string, unknown> {
+  const value = row["lease"];
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new TypeError("the recorded row carries no lease record");
+  }
+  return value as Record<string, unknown>;
+}
+
+describe("attempt release disposition — a lease durably reaches RELEASED", () => {
+  it("records leaseState RELEASED from durable bytes, which no path could reach before", () => {
+    const fixture = activated("released");
+    // THE PLAIN FACT THIS CASE EXISTS FOR: before this task the daemon recorded
+    // the ACTIVATION-TIME lease state, so the row said "ACTIVE" forever and
+    // `leaseState === "RELEASED"` was unreachable in the whole repository.
+    expect(fixture.record.lease.state).toBe("ACTIVE");
     const written = recordAttemptRelease(
-      fixture.store, fixture.bound, fixture.record, releaseRequest());
-    expect(written.ok).toBe(true);
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(written.ok && written.outcome).toBe("RELEASED");
     // EVERY assertion below is against the READER's answer, never `written`.
-    const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+    const answer = readAttemptRelease(fixture.store, fixture.bound.aggregateId);
+    const row = rowOf(answer);
+    expect(row["leaseState"]).toBe("RELEASED");
     expect(RELEASE_FIELDS.filter((field) => !(field in row))).toEqual([]);
     expect({
       attemptState: row["attemptState"], leaseRef: row["leaseRef"],
-      leaseState: row["leaseState"], providerSlotRef: row["providerSlotRef"],
-      providerSlotState: row["providerSlotState"], reason: row["reason"],
+      providerSlotRef: row["providerSlotRef"], providerSlotState: row["providerSlotState"],
+      reason: row["reason"],
     }).toEqual({
       attemptState: fixture.record.attempt.state, leaseRef: fixture.record.lease.leaseId,
-      leaseState: fixture.record.lease.state,
       providerSlotRef: fixture.record.providerSlot.slotRef,
+      // The provider-slot transition is task-4731ba34's; `releaseWork` does not
+      // touch slots, so this stays the durable activation-time fact.
       providerSlotState: fixture.record.providerSlot.state, reason: "WORK_RELEASE_OR_PAUSE",
     });
+    // The kernel's whole lease answer, not just the projection: the version was
+    // bumped by the kernel and the daemon supplied neither field.
+    expect([leaseOf(row)["state"], leaseOf(row)["version"], fixture.record.lease.version])
+      .toEqual(["RELEASED", 8, 7]);
+    expect(row["leaseState"]).toBe(leaseOf(row)["state"]);
+    expect([row["outcome"], row["releasePending"], row["resumable"]])
+      .toEqual(["RELEASED", false, true]);
     expect(dispositionOf(row)).toEqual({
       resumable: true, strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
     });
     expect([row["recordVersion"], row["truthClass"], row["attemptAggregateId"]]).toEqual(
       [ATTEMPT_RELEASE_RECORD_VERSION, "DAEMON_VERIFIED", ACTIVATION_AGGREGATE]);
+    expect(row["handoff"]).toEqual(HANDOFF);
   });
 
   it("records a NON-RESUMABLE release under a different drain reason", () => {
@@ -363,17 +408,14 @@ describe("attempt release disposition — durable release facts", () => {
     // this case cannot pass by accidentally re-driving the resumable one.
     expect(other).not.toBe("WORK_RELEASE_OR_PAUSE");
     expect([...DRAIN_REASONS]).toContain(other);
-    const written = recordAttemptRelease(fixture.store, fixture.bound, fixture.record, {
-      disposition: {
-        reasons: [other], strongestReason: other, terminalTarget: "CANCELLED",
-      },
-      reason: other,
-    });
-    expect(written.ok).toBe(true);
+    const written = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+      settledRequest({ reason: other }));
+    expect(written.ok && written.outcome).toBe("RELEASED");
     const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
-    expect(row["reason"]).toBe(other);
+    expect([row["reason"], row["leaseState"], row["resumable"]])
+      .toEqual([other, "RELEASED", false]);
     expect(dispositionOf(row)).toEqual({
-      resumable: false, strongestReason: other, terminalTarget: "CANCELLED",
+      resumable: false, strongestReason: other, terminalTarget: "RELEASED",
     });
     // Stated as a difference, not just as a value: the resumable path must be
     // unreachable by default rather than merely unselected here.
@@ -386,22 +428,112 @@ describe("attempt release disposition — durable release facts", () => {
     const fixture = activated("contradiction");
     const claimed: ActivationLedgerRecord = {
       ...fixture.record,
-      lease: { ...fixture.record.lease, state: "RELEASED" },
+      lease: { ...fixture.record.lease, state: "REVOKED", version: 99 },
       providerSlot: { ...fixture.record.providerSlot, state: "RELEASED" },
     };
-    // The premise: the caller really is claiming something the store denies.
+    // The premise: the caller really is claiming something the store denies. A
+    // REVOKED lease would make the kernel answer NO_OP and write nothing at all.
     expect([fixture.record.lease.state, fixture.record.providerSlot.state]).toEqual(
       ["ACTIVE", "ACTIVE"]);
-    expect([claimed.lease.state, claimed.providerSlot.state]).toEqual(["RELEASED", "RELEASED"]);
+    expect([claimed.lease.state, claimed.providerSlot.state]).toEqual(["REVOKED", "RELEASED"]);
     const written =
-      recordAttemptRelease(fixture.store, fixture.bound, claimed, releaseRequest());
+      recordAttemptRelease(fixture.store, fixture.bound, claimed, settledRequest());
     // No layer refuses: the claim is not rejected, it is never consulted. The
     // identity is unchanged, so the binding guard has nothing to answer.
-    expect(written.ok).toBe(true);
+    expect(written.ok && written.outcome).toBe("RELEASED");
     const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
-    expect([row["leaseState"], row["providerSlotState"]]).toEqual(["ACTIVE", "ACTIVE"]);
-    expect([row["leaseRef"], row["providerSlotRef"]]).toEqual(
-      [fixture.record.lease.leaseId, fixture.record.providerSlot.slotRef]);
+    expect([row["leaseState"], row["providerSlotState"]]).toEqual(["RELEASED", "ACTIVE"]);
+    expect([leaseOf(row)["version"], row["providerSlotRef"]]).toEqual(
+      [8, fixture.record.providerSlot.slotRef]);
+  });
+
+  it("reads the reason set through validated bytes, not the caller's own array", () => {
+    const fixture = activated("hostile-reasons");
+    // A plain array carrying an own `includes` that lies and an own iterator that
+    // would smuggle an unvalidated member into the durable row. The kernel's
+    // `stringList` reads own INDEX properties and then composes a fresh frozen
+    // array, so neither override is ever consulted.
+    const reasons: string[] = ["WORK_RELEASE_OR_PAUSE"];
+    Object.defineProperty(reasons, "includes", { value: () => true });
+    Object.defineProperty(reasons, Symbol.iterator, {
+      value: function* smuggle(): Generator<string> { yield "NOT_A_DRAIN_REASON"; },
+    });
+    const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+      settledRequest({ disposition: {
+        reasons, resumable: true, strongestReason: "WORK_RELEASE_OR_PAUSE",
+        terminalTarget: "RELEASED",
+      } }));
+    expect(rowOf(outcome)["reasons"]).toEqual(["WORK_RELEASE_OR_PAUSE"]);
+  });
+});
+
+describe("attempt release disposition — DRAINING is its own outcome", () => {
+  /** Drives one unsettled variant and returns the row it wrote. */
+  function drained(flag: string): Record<string, unknown> {
+    const fixture = activated(`draining-${flag}`);
+    const written = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+      settledRequest({ [flag]: false }));
+    expect(written.ok && written.outcome, flag).toBe("DRAINING");
+    expect(durableRowCount(fixture), flag).toBe(1);
+    return rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+  }
+
+  it("records DRAINING with resumable false for each unsettled boundary flag", () => {
+    const flags = ["effectsTerminal", "resourcesTerminal", "safeBoundaryObserved"];
+    const rows = flags.map((flag) => drained(flag));
+    // A sweep that generated nothing passes every assertion below vacuously.
+    expect(rows.length).toBe(3);
+    for (const row of rows) {
+      expect([row["outcome"], row["leaseState"], row["resumable"], row["releasePending"]])
+        .toEqual(["DRAINING", "DRAINING", false, true]);
+      expect(leaseOf(row)["state"]).toBe("DRAINING");
+      expect(row["intentRefs"]).toEqual(["intent:release"]);
+      expect(row["handoff"]).toBeNull();
+      // THE NON-EQUIVALENT HALF. The reason set still composes a RESUMABLE
+      // disposition — design 765 says WORK_RELEASE_OR_PAUSE is resumable — yet
+      // THIS release is not, because the boundary was never observed. A daemon
+      // that re-derived `resumable` from the disposition would print true here.
+      expect(dispositionOf(row)["resumable"]).toBe(true);
+      expect(row["resumable"]).toBe(false);
+    }
+  });
+
+  it("differs from the released row FIELD BY FIELD, never merely 'not released'", () => {
+    const fixture = activated("released-for-diff");
+    recordAttemptRelease(fixture.store, fixture.bound, fixture.record, settledRequest());
+    const released = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+    const draining = drained("safeBoundaryObserved");
+    const differing = Object.keys(released)
+      .filter((key) => JSON.stringify(released[key]) !== JSON.stringify(draining[key]));
+    expect(differing.sort()).toEqual([
+      "handoff", "intentRefs", "lease", "leaseState", "outcome", "releasePending", "resumable",
+    ]);
+    // And every OTHER field is genuinely identical, so the two rows describe the
+    // same attempt rather than two unrelated releases that happen to disagree.
+    expect([draining["attemptAggregateId"], draining["reason"], draining["attemptState"]])
+      .toEqual([released["attemptAggregateId"], released["reason"], released["attemptState"]]);
+  });
+});
+
+describe("attempt release disposition — replay and cardinality", () => {
+  it("answers the kernel's NO_OP on replay and leaves EXACTLY ONE durable row", () => {
+    const fixture = activated("replay");
+    const first = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(first.ok && first.outcome).toBe("RELEASED");
+    expect(durableRowCount(fixture)).toBe(1);
+    // A DIFFERENT disposition, so a second row would be observable rather than an
+    // idempotent repeat. The recorded lease is already RELEASED, so `releaseWork`
+    // answers NO_OP and the daemon writes nothing.
+    const replay = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+      settledRequest({ reason: "WORK_CANCEL" }));
+    expect(replay.ok && replay.outcome).toBe("NO_OP");
+    expect(durableRowCount(fixture)).toBe(1);
+    // The FIRST release still stands, unchanged, and is still the durable answer.
+    const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+    expect([row["reason"], row["outcome"], row["leaseState"]])
+      .toEqual(["WORK_RELEASE_OR_PAUSE", "RELEASED", "RELEASED"]);
+    expect(rowOf(replay)).toEqual(row);
   });
 
   it("keeps ABSENT and AMBIGUOUS distinct, because they demand opposite repairs", () => {
@@ -409,62 +541,11 @@ describe("attempt release disposition — durable release facts", () => {
     expect(refusalOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId)).code)
       .toBe("ATTEMPT_RELEASE_RECORD_ABSENT");
     expect(recordAttemptRelease(
-      fixture.store, fixture.bound, fixture.record, releaseRequest()).ok).toBe(true);
+      fixture.store, fixture.bound, fixture.record, settledRequest()).ok).toBe(true);
     plantReleaseEvent(fixture, encoder.encode(JSON.stringify({ duplicate: true })), 1);
     expect(refusalOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId))).toEqual({
       code: "ATTEMPT_RELEASE_RECORD_AMBIGUOUS", refusedBy: DAEMON_ATTEMPT_RELEASE,
     });
-  });
-
-  it("cannot append a SECOND release to an attempt that already released", () => {
-    const fixture = activated("second-release");
-    expect(recordAttemptRelease(
-      fixture.store, fixture.bound, fixture.record, releaseRequest()).ok).toBe(true);
-    // A different disposition, so a second row would be observable rather than
-    // an idempotent repeat of the first. The aggregate is written at
-    // expectedVersion 0, so there is nowhere for it to land.
-    const second = recordAttemptRelease(fixture.store, fixture.bound, fixture.record, {
-      disposition: {
-        reasons: ["WORK_CANCEL"], strongestReason: "WORK_CANCEL", terminalTarget: "CANCELLED",
-      },
-      reason: "WORK_CANCEL",
-    });
-    expect(refusalOf(second)).toEqual({
-      code: "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", refusedBy: DAEMON_ATTEMPT_RELEASE,
-    });
-    // The FIRST release still stands and is still readable — the second attempt
-    // neither overwrote it nor made the aggregate ambiguous.
-    const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
-    expect(row["reason"]).toBe("WORK_RELEASE_OR_PAUSE");
-  });
-
-  it("reads the reason set through the frozen vocabulary, not the caller's array", () => {
-    const fixture = activated("hostile-reasons");
-    // A plain array carrying an own `includes` that lies and an own iterator
-    // that would smuggle an unvalidated member into the durable row. Neither is
-    // a key `parseDrainDisposition` inspects, so only re-reading the set through
-    // DRAIN_REASONS and a borrowed builtin keeps the forgery out.
-    const reasons: string[] = ["WORK_RELEASE_OR_PAUSE"];
-    Object.defineProperty(reasons, "includes", { value: () => true });
-    Object.defineProperty(reasons, Symbol.iterator, {
-      value: function* smuggle(): Generator<string> { yield "NOT_A_DRAIN_REASON"; },
-    });
-    const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      releaseRequest({ disposition: {
-        reasons, strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
-      } }));
-    const row = rowOf(outcome);
-    expect(row["reasons"]).toEqual(["WORK_RELEASE_OR_PAUSE"]);
-    // The lying `includes` must not be what admitted the union check either: a
-    // reason genuinely absent from the array is still refused.
-    const other = activated("hostile-reasons-union");
-    const refused = recordAttemptRelease(other.store, other.bound, other.record, {
-      disposition: {
-        reasons, strongestReason: "WORK_RELEASE_OR_PAUSE", terminalTarget: "RELEASED",
-      },
-      reason: "SUBMISSION_FINALIZE",
-    });
-    expect(refusalOf(refused).code).toBe("ATTEMPT_RELEASE_REASON_NOT_UNIONED");
   });
 
   it("refuses stored bytes that no longer re-encode, under a third distinct code", () => {
@@ -473,6 +554,103 @@ describe("attempt release disposition — durable release facts", () => {
     // decodes cleanly and then fails the re-encode byte compare — unreadable in
     // the only sense that matters, and not the same repair as absent or two.
     plantReleaseEvent(fixture, encoder.encode('{"b":1,"a":2}'), 0);
+    expect(refusalOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId))).toEqual({
+      code: "ATTEMPT_RELEASE_RECORD_DRIFT", refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+  });
+
+  it("refuses a SECOND transition over a DRAINING row rather than appending one", () => {
+    const fixture = activated("draining-then-settled");
+    // First release: the boundary was never observed, so the row records DRAINING
+    // and the durable lease reaches DRAINING rather than a terminal state.
+    const first = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+      settledRequest({ safeBoundaryObserved: false }));
+    expect(first.ok && first.outcome).toBe("DRAINING");
+    // DRAINING is NOT terminal, so `releaseWork` composes a real RELEASED
+    // transition on the replay — and the aggregate, written at expectedVersion 0,
+    // has nowhere to put it. Refused, not silently dropped and not a second row.
+    const second = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(refusalOf(second)).toEqual({
+      code: "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+    expect(durableRowCount(fixture)).toBe(1);
+    expect(rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId))["outcome"])
+      .toBe("DRAINING");
+  });
+
+  it("refuses to fence against a stored lease the scheduler's parser will not accept", () => {
+    const fixture = activated("lease-drift");
+    // Canonically encoded and carrying a declared outcome, so the byte compare
+    // and the outcome guard both pass and ONLY the lease parse can refuse. A
+    // daemon that fell back to the activation lease here would fence against a
+    // state the release had already left, and write a second truth.
+    plantReleaseEvent(
+      fixture, encoder.encode('{"lease":{"leaseId":"lease-1"},"outcome":"RELEASED"}'), 0);
+    expect(readAttemptRelease(fixture.store, fixture.bound.aggregateId).ok).toBe(true);
+    const outcome = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(refusalOf(outcome)).toEqual({
+      code: "ATTEMPT_RELEASE_RECORD_DRIFT", refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+    expect(durableRowCount(fixture)).toBe(1);
+  });
+
+  it("refuses an UNREADABLE store separately from an absent row", () => {
+    const fixture = activated("unreadable");
+    fixture.store.close();
+    // Absent and unreadable demand opposite repairs: one says write the release,
+    // the other says the durable history cannot be consulted at all.
+    expect(refusalOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId))).toEqual({
+      code: "ATTEMPT_RELEASE_RECORD_UNREADABLE", refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+    expect(refusalOf(recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest())).code)
+      .toBe("ATTEMPT_RELEASE_ACTIVATION_UNREADABLE");
+  });
+
+  it("carries the kernel's EXHAUSTED-COUNTER refusal instead of releasing over it", () => {
+    // `fenceAuthority` refuses a lease at MAX_AUTHORITY_COUNT as MALFORMED: a
+    // successor above the ceiling would never parse again, leaving the lease
+    // unrevocable. Planted through the PRODUCTION codec, so the bytes are the
+    // canonical ones the reader demands rather than a hand-sorted guess.
+    const CEILING = Number.MAX_SAFE_INTEGER - 1_000_000;
+    const plant = (fixture: Fixture, version: number): void => {
+      const encoded = encodeFoundationPayload({
+        lease: {
+          authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT",
+          leaseId: "lease-1", leaseToken: "token-1", monotonicObservation: 500,
+          ownerSessionRef: SESSION_ID, serverWallDeadline: 1_000, state: "RELEASED", version,
+        },
+        outcome: "RELEASED",
+      });
+      if (!encoded.ok) throw new Error("the production codec refused the planted row");
+      plantReleaseEvent(fixture, encoded.bytes, 0);
+    };
+    // CONTROL first, the SAME planted shape one counter below the ceiling: it
+    // fences cleanly and answers NO_OP, so the refusal below is the counter and
+    // not merely "a planted row is rejected".
+    const control = activated("counter-control");
+    plant(control, CEILING - 1);
+    const fenced =
+      recordAttemptRelease(control.store, control.bound, control.record, settledRequest());
+    expect(fenced.ok && fenced.outcome).toBe("NO_OP");
+
+    const fixture = activated("counter-exhausted");
+    plant(fixture, CEILING);
+    expect(refusalOf(recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest()))).toEqual({
+      code: "AUTHORITY_MALFORMED_INPUT", refusedBy: SCHEDULER_LEASE_DRAIN,
+    });
+    expect(durableRowCount(fixture)).toBe(1);
+  });
+
+  it("refuses a row whose recorded outcome is outside the frozen vocabulary", () => {
+    const fixture = activated("outcome-drift");
+    // Canonically encoded, so the byte compare passes and ONLY the outcome guard
+    // can refuse it. A reader that trusted the stored string would hand a caller
+    // an outcome no kernel ever answered.
+    plantReleaseEvent(fixture, encoder.encode('{"outcome":"SUCCEEDED"}'), 0);
     expect(refusalOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId))).toEqual({
       code: "ATTEMPT_RELEASE_RECORD_DRIFT", refusedBy: DAEMON_ATTEMPT_RELEASE,
     });

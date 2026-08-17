@@ -1,0 +1,33 @@
+{
+  "id": "task-232793a07bfd4552b47ef0de7a15e096",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Route activation telemetry through durable launch authority",
+  "description": "Prerequisite for task-00e4827dd9374ec79625351d560c82c8; hard-depend on task-c534626b79b14aaa940923d78830200d. Replace activation-telemetry-launch's raw launchClaudeWithTelemetry call with the new authority-bound runner factory so one invocation returns both the original durable ClaudeLaunchResult and its telemetry handoff without exposing launcher dependencies.",
+  "definitionOfDone": [
+    "`launchActivationProviderRun` requires the existing ClaudeLauncherAuthority and invokes the task-c534626 production factory exactly once; it returns the runner result unchanged, including both exact raw launch result and same-capture handoff.",
+    "The adapter still forwards ProviderRunRef and request unread so the runner's hostile-object guard answers first; no caller option can name deps, a launcher function, exit, observation, registration, reconciliation, or telemetry handoff.",
+    "Malformed run identity preserves TELEMETRY_RUN_REF_MALFORMED@TELEMETRY_INPUT with zero authority/store/process calls; blind/refused launch preserves the original launcher and telemetry codes/layers and UNKNOWN facts.",
+    "Focused tests call the production adapter, assert exact one-call ordering/result binding and positive hostile counts, and mutation to raw launch or a second invocation reddens a named assertion; daemon typecheck/test and the compiled bare @moe/runner edge execute nonvacuously.",
+    "Completion names task-00e4827dd9374ec79625351d560c82c8 as the production consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/activation/activation-telemetry-launch.ts and activation-telemetry-launch.test.ts.",
+    "Do not modify activation-run-commit.ts, expose runner private ports, accept caller deps, or create a wire/HTTP kind.",
+    "Preserve runner codes/layers/result identity, use TDD and explicit owned-path commit, and keep the production file <=250 lines."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "CRITICAL",
+  "order": 79.06,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:35:53.316Z",
+  "updatedAt": "2026-08-17T17:42:51.670Z"
+}

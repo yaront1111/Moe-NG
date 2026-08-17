@@ -17,9 +17,90 @@
     "Use TDD exact code/layer assertions, positive generated counts, and mutation drills against the production encoder/decoder; stage/commit only explicit paths.",
     "Name task-80fce1d1d625453098bd526d61c5ddb8 as the production reader consumer."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the codec's vocabulary and its refusal arms, in `packages/import/src/import-apply.test.ts` (169 lines today). Rail 3 caps ownership at five paths and a separate codec test file is NOT one of them, so the codec's cases live here — say so in a comment at the top of the new describe block, so the next reader does not read the placement as an accident. WHERE THE NEW CODES LIVE, and this is the one judgement call in the plan: `refuseImport` is typed to the frozen `ImportRefusalCode` union in `import-contract.ts`, which rail 3 does NOT let this task own. So the codec declares its OWN frozen code list (`IMPORT_EVENT_*`) and its own refused shape, while REUSING `ImportRefusalLayer`'s existing `\"DECODE\"` member imported from import-contract.js rather than retyping the string. Do not reuse the four existing DECODE codes (IMPORT_SOURCE_MALFORMED / UNSUPPORTED / AMBIGUOUS / UNREADABLE): those name facts about SOURCE bytes, and pointing them at EVENT bytes is exactly the one-code-two-subjects defect the contract's own comment at :103-109 warns against. Follow that comment's rule instead — every code has a planned emitter, and the arms stay distinct: bytes that are not the declared shape, a schemaVersion this decoder knowingly declines, a schemaVersion that conflicts with the payload it accompanies, non-canonical bytes that decode but do not re-encode identically, and missing required facts. One RED case per arm, each pinning the exact code AND the `DECODE` layer.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ],
+      "startedAt": "2026-08-17T17:46:39.629Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD the codec's accepted control and its determinism, same test file. Rail 4 and the epic rail both require a positive case alongside the hostile ones, because a refusal-only suite is blind to a wrong ACCEPTED value. (a) ONE ACCEPTED CLAIM-AND-LINK CONTROL, as DoD 5 names: encode a record that yields one `ImportedClaim` and at least one `LegacyLink`, decode it back, and assert field by field — claimId, principal, status, and the whole `ImportProvenance` {manifestDigest, sourceDigest, sourcePath, sourceTime, timeBasis}; then evidenceOnly, from, kind, to and provenance on each link. Assert the decoded links are non-empty and assert the generated hostile-case count is positive, so neither sweep can pass while producing nothing. (b) DEEP FREEZE: assert the decoded facts and every nested provenance object are frozen, and that a mutation attempt does not take. (c) DETERMINISTIC ORDER: links decode in a total order that does not depend on input order — feed the same links shuffled and assert byte-identical encodings. (d) DESCRIPTOR SAFETY, which DoD 3 names explicitly: feed the decoder an object with an accessor property, a `__proto__` key and an extra key, and assert it refuses rather than letting any of them survive into the facts — `isPlainRecord` from canonical-bytes.js is the existing helper for this and must be reused, not reimplemented.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement `packages/import/src/import-event-codec.ts` plus its one-line `.js` bridge. THE BRIDGE MUST BE LF, as rail 3 states in as many words: every sibling bridge in this package is `export * from \"./<name>.ts\";` with a bare LF, and a CRLF written by a Windows editor is a byte difference in a tracked file that no typecheck or vitest run will ever surface. Verify it after writing — `git show :packages/import/src/import-event-codec.js | od -c | tail` or equivalent — do not assume the editor did the right thing. The codec exports its frozen code list, its `domainSchemaVersion` constant, `encodeImportEventFacts(...)` and `decodeImportEventFacts(...)`. Encoding uses `canonicalJson` from `./canonical-bytes.js` — the package already owns canonical encoding and a second one would drift. The encoded object carries the derived `ImportedClaim`, the full `LegacyLink` list, the `ImportProvenance`, the declared `domainSchemaVersion`, and the existing canonical record payload; it carries NO executable or activation affordance, which is a property of the field set, not a comment — there is nowhere in the shape to put a status other than the `ImportedClaimStatus` union or an `evidenceOnly` other than literal `true`. Target <=250 physical lines; split before 400.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-event-codec.ts",
+        "packages/import/src/import-event-codec.js"
+      ],
+      "newFiles": [
+        "packages/import/src/import-event-codec.ts",
+        "packages/import/src/import-event-codec.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Derive once, persist once, and return what was stored. In `packages/import/src/import-apply.ts` (213 lines, so budget carefully) the facts already exist: `claimFrom` (:76) and `linksFrom` (:87) derive the exact `ImportedClaim` and `LegacyLink` values, and `resolve` (:134) already walks records in canonical order with provenance in hand. Today `eventFor` (:116) writes `payload: ENCODER.encode(canonical)` — ONLY `canonicalPayload(record)` — which is the whole information loss. Restructure so each record's claim and links are derived ONCE inside `resolve`, handed to `encodeImportEventFacts`, and the resulting bytes become the event payload in the SAME `store.commit` call at :183. DoD 2's anti-echo clause is the load-bearing half: `applyImport` must return facts that are byte-equivalent to what was stored, so build the returned `claims` and `links` from the encoded representation — decode the bytes back, or assert byte-equality against a re-encode — rather than returning the separately-built objects at :175-176 and calling them equivalent. A test that only compares the report to a hand-built expectation cannot tell those two apart.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Pin the exact fact set the consumer needs, against the production projector rather than a restatement. `projectLegacyImport` (shadow-projection.ts:60) reads precisely: `claim.claimId`, `claim.principal`, `claim.provenance.sourcePath`, `claim.status`, and per link `link.evidenceOnly`, `link.from`, `link.kind`, `link.to` plus `linkId(link)`; a SUSPENDED claim additionally yields a BLOCKER derived from `claim.status` and `claim.principal`, so BLOCKER needs no stored fact of its own. Add a test in import-apply.test.ts that runs `applyImport`, takes the DECODED facts off the committed event bytes, feeds them to the real `projectLegacyImport`, and asserts the projection is byte-identical to the one built from `applyImport`'s returned report. That is the DoD 1 claim — \"everything moe-shadow-projection/1 needs\" — stated as a property against the production surface, which the epic rail requires, instead of as a field checklist that can silently fall behind the projector. Assert `SHADOW_PROJECTION_VERSION` is the version the codec declares it serves, so a future bump surfaces here rather than at a consumer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Replay identity and the conflict refusal, DoD 4. (a) Run `applyImport` twice over identical source bytes through a recording store port and assert the two commits are byte-identical across event ids, event payloads and `commandBytes`, and that `counts` is unchanged — nothing in this task may perturb the raw counts, and `committedAt` is already manifest-bound rather than a clock read (:206-213), so determinism is preserved by construction and the test proves it rather than assuming it. (b) THE CONFLICT ARM: the same decision identity presented with DIFFERENT encoded facts must refuse BEFORE any partial import. Assert the exact code and layer AND that the store port recorded ZERO commits — a refusal that already wrote is what this clause exists to prevent, and a return-value-only assertion cannot see it. Drive this through the production path, not by calling the codec directly.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Publish the codec from the package root. `packages/import/src/index.ts` (118 lines) exports in grouped per-module blocks; add one for `./import-event-codec.js` exporting the encoder, the decoder, the frozen code list, the schema-version constant and the fact types. There is NO export-roster guard in this package — `grep -rn \"EXPECTED_EXPORTS\" packages/import/src` returns nothing — so unlike @moe/runner and @moe/scheduler this addition trips no hand-transcribed counter. CONSUMER EDGE, named as rail 5 requires: the production reader is task-80fce1d1d625453098bd526d61c5ddb8 (\"Portability: expose the daemon shadow projection adapter\"), currently PLANNING. Record that id in the module header. Note also that a real consumer already exists in-repo — `tools/import/import-shadow.ts` and `tools/import/shadow-input.ts` are typechecked by the root `pnpm typecheck:import` script — so an index change here can break a surface that neither the package gate nor the repo-wide recursive typecheck covers on its own.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification gate, six legs, exit codes captured SEPARATELY — a `&&` chain that dies early hides every later count line, and a `;`-chained run reports only the last leg. DoD 5 requires the wire-bytes blast radius to be run and ATTRIBUTED: `pnpm --filter @moe/import typecheck`, `pnpm --filter @moe/import test`, `pnpm test:migration`, `pnpm test:store`, `pnpm typecheck:import`, `pnpm typecheck`. All six resolve (verified at plan time: `@moe/import` is packages/import with both scripts; `test:migration`, `test:store`, `typecheck:import` and `typecheck` are root scripts). READ THE OUTPUT, not the exit code — `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for a package absent from the workspace, and the only discriminator is the `Test Files N passed` count line; record the nonzero count for every test leg. `pnpm typecheck` is repo-wide: attribute any red by the merge-base-versus-HEAD failing-path delta intersected with the owned paths, and disclose foreign red verbatim with its exact failing lines rather than hiding it or fabricating green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-event-codec.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "Mutation drills against the PRODUCTION encoder and decoder, as rail 4 names, then adversarial review. FOUR drills, each restored before the next, each naming the test that reddens: (i) drop the `provenance` field from the encoded claim — the step-5 projector-equivalence test must redden, which is what proves `sourcePath` really is carried rather than reconstructed downstream; (ii) make the decoder skip its re-encode byte-comparison so non-canonical bytes decode — the non-canonical arm from step 1 must redden; (iii) make `applyImport` return the separately-built `claims`/`links` instead of the stored representation — the DoD 2 anti-echo assertion must redden, and if it does not, that assertion never tested the clause; (iv) make the conflict check run AFTER the commit — the zero-commits assertion from step 6 must redden while the code/layer assertion alone would still pass, which is precisely why that arm counts commits. A drill that reddens the WRONG test, or that hangs, is not a pass. Drills run in a SHARED worktree: snapshot each file's hash and restore by CONTENT, never `git checkout`, and never trust `git status` to prove a revert — also re-check the `.js` bridge is still LF after any restore. Then run the `adversarial-self-review` skill: a record with zero links, a link whose `to` is the empty string, a claim whose principal fell back to `\"UNKNOWN\"`, an import at exactly `maxEventsPerCommit`, and per-file line counts (codec under 250, import-apply.ts under 250).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/import/src/import-event-codec.ts",
+        "packages/import/src/import-apply.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-f144c751",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,5 +112,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.357Z",
-  "updatedAt": "2026-08-17T11:20:22.066Z"
+  "updatedAt": "2026-08-17T17:46:39.629Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:42:38.898Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 5
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T17:46:03.030Z",
+  "planningNotes": {
+    "approachesConsidered": "WHERE THE NEW REFUSAL CODES LIVE was the only real judgement call, and it is a genuine tension between two rails. `refuseImport(code, layer, detail)` is typed to the frozen `ImportRefusalCode` union in `import-contract.ts`, and the package's own comment at :103-109 establishes that every code has a planned emitter and that the four DECODE codes are deliberately distinct. Consistency argues for appending the codec's codes there. Rail 3 forbids it: the task may own at most import-event-codec.ts, its bridge, import-apply.ts, import-apply.test.ts and index.ts, and import-contract.ts is not on that list.\n\nRESOLUTION: the codec declares its OWN frozen `IMPORT_EVENT_*` code list and its own refused shape, while importing and reusing the existing `\"DECODE\"` member of `ImportRefusalLayer` rather than retyping the literal. This keeps the package's layer vocabulary single-sourced, respects the ownership cap, and avoids the worse alternative below. If a worker concludes import-contract.ts must be touched after all, that is a rail-3 deviation that needs an amend on the record, never a silent edit.\n\nREJECTED: reusing the four existing DECODE codes (IMPORT_SOURCE_MALFORMED / UNSUPPORTED / AMBIGUOUS / UNREADABLE) for event-payload failures. They name facts about SOURCE bytes. Pointing them at EVENT bytes gives one code two subjects, which is the exact defect the contract comment warns about, and it would leave an operator unable to tell a corrupt legacy file from a corrupt committed event.\n\nCODEC TESTS LIVE IN import-apply.test.ts rather than a new codec test file, for the same ownership reason. Slightly unusual placement, so the plan requires a comment saying why.\n\nREJECTED: encoding a second canonical form. `canonical-bytes.ts` already exports `canonicalJson`, `canonicalDigest`, `sha256Hex`, `isPlainRecord`, `byCodeUnit` and `normalizedText`; the codec composes those.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The task's premise is CONFIRMED, not assumed.\n\nTHE INFORMATION LOSS IS EXACTLY WHERE THE DESCRIPTION SAYS. `eventFor` (import-apply.ts:116-126) builds `payload: ENCODER.encode(canonical)` where `canonical = canonicalPayload(record)` — the raw record payload and nothing else. `eventId = deriveImportedId(provenance.manifestDigest, record)` is a digest and non-invertible. `commandBytes = canonicalDigest({counts, manifest})` (:186) carries counts and a manifest digest only. So claimId, sourcePath, status and link endpoints are unrecoverable from any committed byte today.\n\nTHE FACTS ARE ALREADY DERIVED AND THEN THROWN AWAY. `claimFrom` (:76-84) yields `{claimId, principal, provenance, status}` with status HISTORICAL or SUSPENDED. `linksFrom` (:87-114) yields CONTAINS and RELATED links, each `{evidenceOnly: true, from, kind, provenance, to}`. Both are computed at :175-176 and returned in the report but NEVER persisted. This task moves them into the event, it does not invent them — rail 1's \"encode the authoritative derived facts at the producer\" is a short move, not a new derivation.\n\nTHE CONSUMER'S EXACT NEEDS, read off the production projector rather than the design. `projectLegacyImport` (shadow-projection.ts:60-82) reads `claim.claimId`, `claim.principal`, `claim.provenance.sourcePath`, `claim.status`, and per link `link.evidenceOnly`, `link.from`, `link.kind`, `link.to` plus `linkId(link)`. A SUSPENDED claim also emits a BLOCKER with `basis: \"SUSPENDED_CLAIM\"` and `holder: claim.principal`, DERIVED from the claim — so BLOCKER needs no stored fact. `SHADOW_ENTITY_FIELDS` (shadow-contract.ts:39-43) confirms: CLAIM {principal, sourcePath, status}, LINK {evidenceOnly, from, kind, to}, BLOCKER {basis, holder}.\n\nSHAPES. `ImportProvenance {manifestDigest, sourceDigest, sourcePath, sourceTime, timeBasis}` (import-contract.ts:154-160) — note `sourcePath` lives here, which is why the whole provenance must be carried and not just a digest. `ImportedClaim {claimId, principal, provenance, status}` (:173). `LegacyLink` carries `evidenceOnly` as the LITERAL `true`, not `boolean`, deliberately, so no call site can construct a non-evidence link.\n\nVOCABULARY. `IMPORT_REFUSAL_CODES` is a frozen 11-member list (:113-125); `IMPORT_REFUSAL_LAYERS` is INPUT, MANIFEST, DECODE, CANONICAL, APPLY, SHADOW (:92-99). `refuseImport` (:136) is typed to both.\n\nDETERMINISM IS ALREADY A PROPERTY. `committedAt` comes from `importCommittedAt` (:206-213), the latest source-declared time or the 1970 sentinel — explicitly never a clock read. `orderRecords` gives canonical order. So replay identity is preserved by construction and step 6 proves it rather than establishing it.\n\nNO ROSTER GUARD HERE. `grep -rn \"EXPECTED_EXPORTS\" packages/import/src` returns nothing, unlike @moe/runner and @moe/scheduler which both pin an export count and a sorted name list. An index.ts addition in this package trips no hand-transcribed counter.\n\nGATES ALL RESOLVE, checked by name and not by directory. `@moe/import` is packages/import with `typecheck` and `test`. Root scripts: `test:migration` = `tsc -p tests/migration/tsconfig.json && vitest run --config tests/migration/vitest.config.ts`; `test:store` = `vitest run packages/store/src`; `typecheck:import` typechecks `tools/import/import-shadow.ts` and `tools/import/shadow-input.ts`; `typecheck` = `pnpm --recursive typecheck`.\n\nAN EXISTING CONSUMER ALREADY EXISTS: tools/import/import-shadow.ts and tools/import/shadow-input.ts, covered ONLY by `pnpm typecheck:import`. Neither the package gate nor the recursive typecheck necessarily reaches them, which is why that leg is in the gate.\n\nFILE SIZES: import-apply.ts 213, shadow-projection.ts 246, import-contract.ts 223, index.ts 118, canonical-bytes.ts 85, import-apply.test.ts 169.",
+    "risks": "1. THE `.js` BRIDGE MUST BE LF, and rail 3 says so explicitly. Every sibling bridge is a single `export * from \"./<name>.ts\";` line terminated with a bare LF. A CRLF written by a Windows editor is a byte difference in a tracked file that no typecheck and no vitest run will ever surface, and a drill restore can silently reintroduce it. Verify the committed bytes, and re-verify after every drill restore.\n2. THE ANTI-ECHO CLAUSE IS THE EASIEST THING TO FAKE. DoD 2 requires the returned facts to be byte-equivalent to the STORED representation. A worker who keeps returning the objects built at import-apply.ts:175-176 and adds a test comparing the report to a hand-built expectation satisfies neither clause while looking green. Decode the committed bytes back, or byte-compare against a re-encode.\n3. import-apply.ts is at 213 of a 250 target. The restructuring in step 4 threads claim and link derivation through `resolve`; done carelessly it crosses the cap and forces an unplanned split. If it does cross, split rather than exceed — but prefer moving the derivation helpers into the codec module, which has room.\n4. WIRE BYTES CHANGE, so the blast radius is real and is why six gate legs are named. The migration suite replays durable bytes; the store suite exercises the commit seam; `typecheck:import` covers two tools/ consumers that neither package gate reaches on its own. Do not trim this gate because the package leg is green.\n5. `evidenceOnly` is the literal `true`, not `boolean`. A codec that decodes it as a boolean widens the type and makes a non-evidence link representable — which rail 2 forbids outright. Parse it as the literal and refuse anything else.\n6. A refusal that has already written is what DoD 4's conflict clause exists to prevent. Assert the store port recorded ZERO commits, not merely that the call returned refused.\n7. Descriptor safety is a named DoD requirement, not a nicety: accessors, `__proto__` and extra keys must all be refused. Reuse `isPlainRecord` from canonical-bytes.js rather than writing a second check that will drift from it.\n8. Mutation drills run in a shared worktree; snapshot hashes and restore by content, never `git checkout`, and never trust `git status` to prove a revert.",
+    "keyFiles": [
+      "packages/import/src/import-apply.ts",
+      "packages/import/src/import-contract.ts",
+      "packages/import/src/shadow-contract.ts",
+      "packages/import/src/shadow-projection.ts",
+      "packages/import/src/canonical-bytes.ts",
+      "packages/import/src/import-canonical.ts",
+      "packages/import/src/index.ts",
+      "packages/import/src/import-apply.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 8100000
+  },
+  "planApprovedAt": "2026-08-17T17:46:05.124Z",
+  "contextFetchedBy": [
+    "worker-f144c751"
+  ],
+  "workStartedAt": "2026-08-17T17:46:39.629Z"
 }

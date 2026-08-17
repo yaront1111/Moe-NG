@@ -17,12 +17,12 @@
     "TDD exact stable code and refusing layer, positive generated-case counts, production-surface mutation drill, public-root surface ratchet, target <=250 physical lines per new production source, and explicit owned-path commit."
   ],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
   "createdBy": "WORKER",
   "parentTaskId": "task-1879166d7f12474fad8038e2a9d2433a",
   "priority": "CRITICAL",
@@ -30,5 +30,5 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:18:14.797Z",
-  "updatedAt": "2026-08-17T17:18:14.797Z"
+  "updatedAt": "2026-08-17T17:42:53.388Z"
 }

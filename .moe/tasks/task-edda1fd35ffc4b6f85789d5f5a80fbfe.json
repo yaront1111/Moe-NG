@@ -1,0 +1,35 @@
+{
+  "id": "task-edda1fd35ffc4b6f85789d5f5a80fbfe",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Read the current decision-verified provider run",
+  "description": "Prerequisite for task-00e4827dd9374ec79625351d560c82c8; hard-depend on task-7e3ede6c76324017a1d53601940391f0, task-9d489aee991549a7ad0e414d69c381c8, and task-7f7fee6687944c7ab2116e05aab0bad8. Land the strict read-only project+attempt projection over canonical ProviderRunTelemetryCommitted events, binding each candidate to its command receipt/decision and the durable activation session/effect/epoch before any record gains authority.",
+  "definitionOfDone": [
+    "A `readCurrentProviderRun(store,{projectId,attemptRef})`-style surface captures one event horizon and pages only `PROVIDER_RUN_EVENT_TYPE` through `readEventsByTypeAfter` with explicit page/candidate ceilings; it verifies every reserved provider event before filtering and never returns early on the first match or chooses a maximum epoch.",
+    "Each candidate is decoded/re-encoded by the production codec and must match its derived aggregate/event ids, sequence/version/schema, exported provider-run command kind, project/request trace, EFFECTS_COMMITTED 0->1 decision, singleton command receipt/effect digest, result bytes, and zero outbox; any readable disagreement is exact BINDING_MISMATCH.",
+    "The reader joins the unique task-7e3ede6c activation binding and requires exact attemptRef, effectIntentId, epoch, project and verified decision principal==ownerSessionRef; success is deeply frozen and returns the original durable ProviderRunRecord plus verified sessionId, recordDigest, stdoutReceiptDigest and captured horizon.",
+    "Zero matches is EVIDENCE_ABSENT, more than one is EVIDENCE_AMBIGUOUS, corrupt canonical bytes is RECORD_UNREADABLE, malformed page/envelope is EVIDENCE_MALFORMED, and store/decision/receipt absence or throw is EVIDENCE_UNREADABLE with exact layer/upstream storeCode; all answers grant zero authority.",
+    "Real SqliteEventStore tests cover an accepted record, more than one page of foreign records before the match, a duplicate after a page boundary, absent, corrupt, foreign project/session, cursor drift, horizon racing, and a positive mutation table for aggregate/event/trace/decision/result/receipt bindings; raw event/decision counts prove the reader writes nothing.",
+    "Mutation drills skipping receipt validation or selecting the first duplicate redden named assertions; daemon typecheck/test count lines are nonzero and completion names task-00e4827dd9374ec79625351d560c82c8 and task-ded026d6587442eabc28ff2609d231aa as consumers."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/telemetry/provider-run-reader.ts, its exact one-line LF .js bridge, and its focused test; keep the production module <=250 physical lines.",
+    "Use a new narrow read-only port over public SqliteEventStore getHealth/readEventHorizon/readEventsByTypeAfter/getCommandDecision/getCommandReceipt; do not widen ProviderRunStore, use raw DatabaseSync, add schema, or scan all event types.",
+    "Hard-depend on the three named tasks; preserve provider/activation/store code and layer rather than restamping, and never infer session, exit, currentness, or terminality from attempt order/FoundationAttemptRecorded.",
+    "Use TDD exact codes/layers/storeCode, positive generated counts, production-surface mutation drills, nonvacuous daemon gates, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "CRITICAL",
+  "order": 79.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:35:39.046Z",
+  "updatedAt": "2026-08-17T17:43:17.459Z"
+}

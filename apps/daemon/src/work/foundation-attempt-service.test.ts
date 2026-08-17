@@ -673,7 +673,14 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
 
   it("aborts the reservation commit after a committed activation and still launches nothing", async () => {
     const real = readyStore("abort-reservation");
-    const injected = abortingStore(real, 2);
+    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch now commits, in
+    // order: (1) the activation ledger record, (2) the durable attempt-resource
+    // set bound by `activation-resource-binding.ts`, (3) THIS reservation. Abort
+    // on 2 and the resource bind absorbs it while the reservation succeeds, so
+    // the refusal arrives from a later layer and this case silently stops testing
+    // the reservation. If you add a commit to `runEffectActivateCommand`, count
+    // again here and in the sibling Windows conformance case.
+    const injected = abortingStore(real, 3);
     const run = harness(injected.store, { platform: "win32" });
 
     const outcome = await run.service.dispatch(dispatchRequest());
@@ -759,16 +766,18 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     });
     // The grant was never consumed: the activation aggregate carries no tail.
     expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(["EffectActivationCommitted"]);
-    // COMPOSITION, not export: the same production dispatch also wrote the
-    // attempt's release disposition. An unproven launch is a cancellation, so it
-    // must NOT present as resumable — the resumable path is unreachable here.
+    // COMPOSITION, not export: the same production dispatch reached the attempt
+    // release path, which now composes through `releaseWork`. NO ROW IS WRITTEN,
+    // and that is the fail-closed answer rather than a regression: the safe
+    // boundary (task-ded026d6), the terminal effect/resource facts
+    // (task-6d400781) and the handoff (task-af9454f4) have no producer, so the
+    // service reports what it has observed — nothing — and the kernel refuses.
+    // A row here would mean the daemon had defaulted or minted one of them.
     const released = readAttemptRelease(store, ACTIVATION_AGGREGATE);
-    expect(released.ok && released.record["reason"]).toBe("WORK_CANCEL");
-    expect(released.ok && released.record["disposition"]).toEqual({
-      resumable: false, strongestReason: "WORK_CANCEL", terminalTarget: "CANCELLED",
-    });
-    // Read from the DURABLE activation, never from a caller claim.
-    expect(released.ok && released.record["leaseState"]).toBe("ACTIVE");
+    expect(released.ok).toBe(false);
+    expect(!released.ok && released.code).toBe("ATTEMPT_RELEASE_RECORD_ABSENT");
+    // The dispatch answer is untouched by that refusal — the assertions above
+    // already passed, and the durable dispatch record is still the real one.
   });
 
   it("refuses a read for an aggregate that has no dispatch record", () => {

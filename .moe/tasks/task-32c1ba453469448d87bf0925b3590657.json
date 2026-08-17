@@ -29,7 +29,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:34:31.585Z",
-  "updatedAt": "2026-08-17T17:05:19.376Z",
+  "updatedAt": "2026-08-17T17:42:19.751Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T11:23:46.862Z"
   },
@@ -38,6 +38,14 @@
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-17T17:04:51.181Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Nothing — claimed 11:23Z, no plan submitted before the session went silent.",
+      "whatRemains": "Full planning. Context: filed by architect-f956ffe1 during the 22:35Z Graph Beta SPIDR split of task-efc2ef63; siblings are 931f99e8 (mutation ingress), c4b80778 (current-graph query), eacea969 (atomic transition service).",
+      "pitfalls": "Do not equate structural graphIdentity with the GraphRevisionContent hash — the retracted task-77e8cb44 plan died on exactly that; see its blockedReason and comments.",
+      "releasedAt": "2026-08-17T17:42:19.750Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Human-approved release (TUI, 17:03Z): holder architect-2cc07e26 silent 5.6h since 11:23Z, no response to liveness pings, surrounding fleet cycled — dead-session evidence class. Task stays PLANNING, 0 steps, no work lost."
+    },
     {
       "whatIsDone": "Decision dec-64b2391c resolved by the human as OPTION A (full GraphRevisionContent authority); recorded in msg-6a6d3590. Measured the lane at HEAD a42ae2f: GraphRevisionContent does not exist in code at all; @moe/core treats graphContentHash as an opaque hex64 and never computes it; @moe/scheduler DOES export a landed graph-content codec but it hashes graphIdentity only (structure), so its symbol name overclaims under option A. Filed the missing chain head as task-e3d5fd05 (GraphRevisionContent contract, codec and content-hash producer in @moe/core).",
       "whatRemains": "Do not replan this task until task-e3d5fd05 has landed a real contract and task-dd4ffa0c (current-active projection, still BLOCKED with 0 plan steps) is planned and landed. Then write the preparation/release steps against the real content shape. Also re-measure task-c4171c1c (approved expansion binding), which this task names as a hard dependency and which I did not verify.",

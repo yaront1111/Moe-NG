@@ -1,0 +1,32 @@
+{
+  "id": "task-7f7fee6687944c7ab2116e05aab0bad8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Close provider-run reader refusal vocabulary",
+  "description": "Prerequisite for task-00e4827dd9374ec79625351d560c82c8. The landed family already has EVIDENCE_ABSENT, EVIDENCE_AMBIGUOUS and RECORD_UNREADABLE, but no exact reader answers for malformed indexed evidence, an unreadable store/page, or a record whose receipt/decision/activation binding disagrees. Add only those missing stable categories before the reader ships.",
+  "definitionOfDone": [
+    "The closed provider-run code roster adds distinct `PROVIDER_RUN_EVIDENCE_UNREADABLE`, `PROVIDER_RUN_EVIDENCE_MALFORMED`, and `PROVIDER_RUN_BINDING_MISMATCH` members while retaining the existing ABSENT, AMBIGUOUS, RECORD_UNREADABLE, ledger, codec and composition members in reviewed order.",
+    "Reader UNKNOWN refusals preserve an upstream DurableStoreErrorCode when the store is the unreadable authority; malformed and binding-mismatch answers carry null storeCode and the exact PROVIDER_RUN_READER layer.",
+    "The runtime roster test hand-lists every production member, asserts exact order/count/freeze/disjointness, and pins each new constructor result by code, layer, outcome and storeCode; no expectation is derived from the production array.",
+    "Mutation drills deleting one code or flattening a store code redden named assertions; daemon typecheck/test run with nonzero count lines and task-00e4827dd9374ec79625351d560c82c8 is the consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/telemetry/provider-run-refusals.ts and provider-run-refusals.test.ts.",
+    "Do not alias store codes into the provider vocabulary, restamp runner refusals, or collapse ABSENT/AMBIGUOUS/MALFORMED/UNREADABLE/BINDING_MISMATCH.",
+    "Use TDD exact code/layer/outcome/storeCode, positive production roster counts, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "HIGH",
+  "order": 79.04,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:35:19.328Z",
+  "updatedAt": "2026-08-17T17:43:01.089Z"
+}

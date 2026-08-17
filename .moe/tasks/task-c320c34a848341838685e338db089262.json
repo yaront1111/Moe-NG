@@ -1,0 +1,35 @@
+{
+  "id": "task-c320c34a848341838685e338db089262",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Assemble server-derived Foundation context selection",
+  "description": "Prerequisite for task-203a5ca7aada4375a98a95df8773e249; hard-depend on task-c7f2530b4a4445398a5e572f0568ea1d, task-a3e8a02ddb864c689ac66de7b66bfceb, and the durable journal task-04dd5a0a9631484f9b7fe68897c3efac. Current disk has zero production selectContext/renderContext caller and no durable source for the design's mandatory Foundation context. Land the server-only ContextSelectionInput authority; do not treat a test fixture or a caller item list as the missing source.",
+  "definitionOfDone": [
+    "Planning freezes a complete, versioned authority matrix for every mandatory Foundation context item named by design section 14.2—goal/node objective, criteria, policy revision, graph/manifest, approved plan, node authority/dependency/artifact closure, input tree/lease/epoch/workspace/scope, budgets/coverage, and legal next commands—plus optional journal/findings, exclusions, stable item ids/sections, and the provider-backed byte budget; any item lacking a durable reader blocks rather than defaults.",
+    "A server-only `assembleFoundationContextSelection`-style surface accepts only project/session/node/attempt identity, reads every item from the same durable graph/config/input/lease/journal snapshot, and calls public `@moe/context.selectContext`; caller text, items, exclusions, priority, ordering, graph/config bytes, and byteBudget are unrepresentable.",
+    "Success returns one deeply frozen AdmittedContextSelection plus provenance that binds project/session/node/attempt, graph revision/hash/epoch, configuration digest, sealed input-manifest digest, journal horizon/digest, and the exact provider context limit used; repeated unchanged reads serialize identically.",
+    "Missing/stale/foreign/ambiguous/unreadable durable facts refuse with exact stable source code/layer; invalid/overflow budget preserves `INVALID_CONTEXT_BUDGET` or `CONTEXT_TOO_LARGE` at `CONTEXT_SELECTION`, and no partial selection gains authority.",
+    "Real SqliteEventStore tests seed facts only through their production writers, cover one complete accepted Foundation control and a positive matrix of missing/stale/cross-binding/oversize cases, assert exact code/layer and zero writes, and prove a caller-proposed item or budget cannot affect output.",
+    "Mutation drills omitting one mandatory production item or substituting caller content redden named assertions; daemon tests/typecheck execute nonvacuously and completion names task-203a5ca7aada4375a98a95df8773e249 as consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/work/foundation-context-selection.ts, its exact one-line LF .js bridge, and its focused test; production source <=250 lines.",
+    "Do not invent item mappings/budget during implementation: if planning cannot verify every reader, report blocked and file measured prerequisites. Optional=[] is not an implicit default; it requires an explicit Foundation policy decision.",
+    "Use public @moe/context root and production durable readers; no deep imports, local selection/ranking, caller context/graph/config/journal, or mock-backed accepted journey.",
+    "Preserve upstream source/context refusal code and layer, TDD exact assertions/nonzero cases, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
+  "priority": "CRITICAL",
+  "order": 80.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:46:13.563Z",
+  "updatedAt": "2026-08-17T17:46:13.563Z"
+}

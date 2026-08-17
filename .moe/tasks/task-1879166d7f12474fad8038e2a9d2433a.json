@@ -30,7 +30,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:45:16.648Z",
-  "updatedAt": "2026-08-17T17:18:53.165Z",
+  "updatedAt": "2026-08-17T17:42:25.498Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:02:03.568Z"
   },
@@ -42,6 +42,14 @@
   "blockedFromStatus": "PLANNING",
   "blockedAt": "2026-08-17T17:18:41.397Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Nothing on this task — assignment orphaned when the architect session vanished.",
+      "whatRemains": "Full planning. Context: filed by architect-f956ffe1 at 22:45Z last night as a prerequisite of task-6d40078159 (terminal effect and resource refs for released attempts); sibling prerequisite is task-5998ae63 (per-attempt resource authority). Their measured basis is in #governors 22:45Z: ActivationLedgerRecord is only ACTIVE/RUNNING and its tails never settle.",
+      "pitfalls": "task-740924b7 (release disposition producer) went DONE today — re-measure what it landed before planning against last night's absence claims; block premises go stale.",
+      "releasedAt": "2026-08-17T17:42:25.497Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Human-approved release (TUI, 17:03Z): holder architect-f956ffe1 is absent from the worker registry entirely (session vanished without deregistration); assignment is orphaned. Task stays PLANNING, claimable."
+    },
     {
       "whatIsDone": "Re-measured runner, daemon, activation, Foundation release, and store surfaces; executed the public-root discriminator proving applyEffectCommand can accept SUCCEEDED/HONEST_UNKNOWN; identified the durable provider observation and replay gaps; filed task-7c16fcbcb72c4dc6b21efd90e69793c8 and attached existing task-00e4827dd9374ec79625351d560c82c8; blocked this task on both.",
       "whatRemains": "After both prerequisites are DONE, re-plan a focused terminal-effect ledger/current reader plus a production Foundation finalization edge that re-drives from durable provider evidence on replay before returning the stored attempt.",

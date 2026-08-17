@@ -1,0 +1,34 @@
+{
+  "id": "task-225d25f7e58a401b8b414dd69ef3ab60",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Read the strict Foundation context manifest",
+  "description": "Prerequisite for task-203a5ca7aada4375a98a95df8773e249; hard-depend on task-22fa35a59f204777b4db56f7516ef57b and task-3e891741bef14097bbed6d820b392f98. Expose read-only decision/receipt/canonical verification of the one prelaunch context record and compare it to the server-derived current authority binding before any digest is reused by release evidence.",
+  "definitionOfDone": [
+    "A strict reader derives the separate context aggregate from server project/session/attempt identity, requires exactly one context event, decodes/re-encodes it through task-3e891741, and returns the original deeply frozen durable record/bytes only after all checks pass.",
+    "The event must match derived aggregate/event id, sequence/version/type/schema, exported context command kind, project/session decision trace and request digest; `getCommandDecision` and `getCommandReceipt` must prove EFFECTS_COMMITTED 0->1, exact target, singleton event, result bytes/effect digest and zero outbox.",
+    "The decoded record must exactly match expected node, attempt, graph revision/hash/epoch, configuration digest and input-manifest digest from the server-derived current selection authority; a readable disagreement is STALE or FOREIGN/BINDING_MISMATCH, never silently selected.",
+    "Zero, multiple, malformed, noncanonical, wrong-type, missing decision/receipt, store throw and binding mismatch have distinct exact ABSENT/AMBIGUOUS/MALFORMED/NONCANONICAL/UNREADABLE/STALE/FOREIGN codes at the correct CODEC or FOUNDATION_CONTEXT_READER layer with upstream store code retained.",
+    "Real SqliteEventStore tests cover accepted read, every refusal arm, a positive decision/receipt mutation matrix, raw count/no-write invariance and reopen; mutations trusting the stored digest without recomputation or skipping one outer binding redden named assertions.",
+    "Daemon tests/typecheck run with nonzero counts and completion names task-203a5ca7aada4375a98a95df8773e249 plus task-af9454f4438242e5854208284e0086e2 as consumers."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/work/foundation-context-manifest-reader.ts, its exact one-line LF .js bridge, and its focused test; production source <=250 lines.",
+    "Use a narrow public-store read port; no raw DatabaseSync, new schema, scan-all-events, caller graph/config/digest authority, or fallback to FoundationAttemptRecorded.",
+    "Preserve codec/ledger/store code and layer, TDD exact refusal/mutation/count evidence, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
+  "priority": "CRITICAL",
+  "order": 80.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:47:04.539Z",
+  "updatedAt": "2026-08-17T17:47:04.539Z"
+}

@@ -1,0 +1,34 @@
+{
+  "id": "task-7e3ede6c76324017a1d53601940391f0",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Read durable activation binding by attempt",
+  "description": "Prerequisite for task-00e4827dd9374ec79625351d560c82c8. ProviderRunRecord carries attempt/effect/epoch but no session, so a provider reader cannot prove authenticated session binding from opaque request bytes. Land a read-only, horizon-bounded production lookup that selects the unique decision-verified Foundation activation by projectId+attemptId and returns its aggregate, effect, epoch, and owner session without changing the 371-line activation-ledger reader.",
+  "definitionOfDone": [
+    "A read-only `readFoundationActivationByAttempt`-style surface accepts only projectId and attemptId, captures one store horizon, and uses the existing activation event-type index plus `readFoundationActivationHistory` to return a deeply frozen unique binding containing activationAggregateId, attemptId, effectIntentId, epoch, ownerSessionRef, projectId, and activationDigest.",
+    "Every candidate is receipt/decision/project/canonical-history verified before selection; zero candidates is the existing exact NOT_FOUND/ABSENT answer, more than one is EVIDENCE_AMBIGUOUS, and unreadable, malformed, foreign-project, or identity-disagreeing evidence preserves the existing FOUNDATION_ACTIVATION_BINDING code/layer rather than being selected by order.",
+    "The scan is bounded by its captured horizon and explicit page/case ceilings, never scans all event types, never picks the highest epoch, and returns UNKNOWN rather than partial authority on cursor drift, malformed pages, store throws, or a writer racing beyond the horizon.",
+    "Real SqliteEventStore tests seed only through the production activation writer and cover accepted, absent, duplicate, foreign, malformed/unreadable, and cross-page/racing cases with exact code/layer, raw counts, a positive generated-case count, and no writes by the reader.",
+    "Mutation drills that choose the first duplicate or skip production history validation redden named assertions; completion names task-00e4827dd9374ec79625351d560c82c8 as consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/activation/activation-attempt-reader.ts, its exact one-line LF .js bridge, and its focused test; do not grow activation-ledger-reader.ts or add store schema.",
+    "Use public SqliteEventStore read APIs and the existing indexed activation event type; no raw DatabaseSync, scan-all-events, caller graph/session/effect/epoch, or inference from FoundationAttemptRecorded.",
+    "Preserve existing activation binding codes/layer and upstream store code; do not mint a second lifecycle/history reducer.",
+    "Use TDD exact codes/layers, nonzero generated cases, daemon typecheck/test count evidence, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
+  "priority": "CRITICAL",
+  "order": 79.02,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:34:50.008Z",
+  "updatedAt": "2026-08-17T17:42:59.190Z"
+}

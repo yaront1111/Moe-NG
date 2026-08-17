@@ -315,7 +315,12 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const fixture = windowsFixture("reservation-abort", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
-      store: abortingStore(fixture.store, 2),
+      // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch commits, in
+      // order: (1) the activation ledger record, (2) the durable attempt-resource
+      // set bound by `activation-resource-binding.ts`, (3) THIS reservation.
+      // Aborting 2 lets the reservation succeed and the refusal then arrives from
+      // a later layer, so this case would stop testing reservation failure.
+      store: abortingStore(fixture.store, 3),
     });
 
     const outcome = await service.dispatch(fixture.request);

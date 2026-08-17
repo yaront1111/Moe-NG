@@ -1,0 +1,33 @@
+{
+  "id": "task-3e891741bef14097bbed6d820b392f98",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Seal the Foundation context manifest record",
+  "description": "Prerequisite for task-203a5ca7aada4375a98a95df8773e249; hard-depend on task-c7f2530b4a4445398a5e572f0568ea1d. @moe/context's manifest digest binds its seven render fields and exactBytes, but not project/session/node/attempt/graph/config/input provenance and it has no durable decoder. Define the daemon-owned canonical authority envelope and strict codec without changing the context package.",
+  "definitionOfDone": [
+    "One exact versioned FoundationContextManifestRecord binds projectId, sessionId, nodeKey, attemptRef, graphRevisionRef, graphContentHash, graphEpoch, configurationDigest, inputManifestDigest, the complete public ContextRenderManifest, and an outer recordDigest over every field; all ids/digests/integers/keys are bounded and deeply frozen.",
+    "The encoder accepts only descriptor-safe exact-key plain data, requires manifest.version `context-manifest.v1`, byte values 0..255 and nonempty exactBytes, recomputes `digestContextManifest(manifest.binding)`, and derives rather than trusts recordDigest.",
+    "The decoder uses bounded canonical bytes, distinguishes exact MALFORMED, VERSION_UNSUPPORTED, MANIFEST_DIGEST_MISMATCH, RECORD_DIGEST_MISMATCH and NONCANONICAL codes at a frozen FOUNDATION_CONTEXT_CODEC layer, re-encodes and byte-compares before returning authority.",
+    "Focused tests pin the complete code/key/version roster, hostile accessors/proxies/unknown keys/oversize/truncation/negative-zero cases with a positive generated count, one accepted real renderContext control, and mutations hashing a reference or omitting an outer binding field that redden named assertions.",
+    "Context and daemon package tests/typecheck execute separately with nonzero counts; completion records the ledger child of task-203a5ca7aada4375a98a95df8773e249 as consumer."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/work/foundation-context-manifest-codec.ts, its exact one-line LF .js bridge, and its focused test; production source <=250 lines.",
+    "Use public @moe/context `digestContextManifest`; never copy its canonical digest, accept a caller digest/reference, or claim its inner digest binds outer authority fields.",
+    "No store, launch, registry, graph reader, or provider behavior in this codec task; exact stable code/layer assertions and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
+  "priority": "CRITICAL",
+  "order": 80.03,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:46:29.449Z",
+  "updatedAt": "2026-08-17T17:46:29.449Z"
+}

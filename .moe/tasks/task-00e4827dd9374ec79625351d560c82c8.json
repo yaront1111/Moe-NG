@@ -18,8 +18,8 @@
     "Use real SqliteEventStore, TDD exact codes/layers, bounded index reads, target <=250 lines per production source, and explicit owned-path commits."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -31,11 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:48:12.501Z",
-  "updatedAt": "2026-08-17T17:19:04.312Z",
+  "updatedAt": "2026-08-17T17:36:53.156Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:18:59.824Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh measurement at HEAD 8557296 disproves the task's one-slice premise. Foundation dispatch's only real physical seam uses createFoundationClaudeLauncher/createClaudeLauncher(authority) and needs the exact ClaudeLaunchResult for durable observation. launchActivationProviderRun instead calls raw launchClaudeWithTelemetry, which hardwires plain launchClaude and discards that raw result. Calling it after Foundation launch double-launches; replacing Foundation launch drops grant/registration authority and settlement evidence. The strict reader is separately substantial and ProviderRunRecord has no project/session, so it must join a decision-verified durable activation-by-attempt binding; request bytes alone cannot prove the authenticated owner. Filed bounded prerequisites task-c534626b79b14aaa940923d78830200d (same-launch runner authority), task-7e3ede6c76324017a1d53601940391f0 (activation binding reader), task-9d489aee991549a7ad0e414d69c381c8 (decision-kind single source), task-7f7fee6687944c7ab2116e05aab0bad8 (reader codes), task-edda1fd35ffc4b6f85789d5f5a80fbfe (strict current reader), and task-232793a07bfd4552b47ef0de7a15e096 (daemon authority adapter). Re-plan this task only after all six are DONE; then it owns the Foundation service callsite/final physical replay proof in <=3 files. task-a9fd is downstream, not a dependency. Fresh public-root probe also retracted the stale Windows-test premise: discoverInstalledClaudeRuntime exists and returned PROVEN, so no runtime-quote prerequisite is needed.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:36:07.087Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the real Foundation launch, runner telemetry, provider ledger, event index, session binding, and public runtime-discovery surfaces. Proved the raw telemetry wrapper cannot preserve durable Foundation authority or return the required raw result. Filed six bounded prerequisite tasks: c534626b, 7e3ede6c, 9d489aee, 7f7fee66, edda1fd3, 232793a0. Reported this task BLOCKED and recorded a Serena handoff.",
+      "whatRemains": "After all six prerequisites are DONE, re-plan this task as the <=3-file Foundation service integration/final physical replay proof. Invoke the authority-bound telemetry adapter once after the winning reservation, commit once, reuse the same raw result for existing settlement, and verify via the strict reader. Preserve consumer task-ded026.",
+      "pitfalls": "Never call telemetry after the existing launch (double-launch), replace durable Foundation authority with raw launchClaude, infer session from opaque request bytes, choose max epoch, infer exit from FoundationAttemptRecorded/PROCESS_OBSERVED, or trust the stale Windows-test comment about runtime discovery.",
+      "openQuestions": "No human authority choice remains for this slice. task-a9fd is downstream rather than a dependency. Revalidate exact HEAD/file sizes when reopened.",
+      "releasedAt": "2026-08-17T17:36:53.154Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing measured prerequisites and blocking."
+    }
   ]
 }
