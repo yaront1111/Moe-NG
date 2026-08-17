@@ -151,7 +151,13 @@ export {
  * The provider-run telemetry seam. `launchClaudeWithTelemetry` is the entry
  * point: it runs the SAME `launchClaude` published above and returns the raw
  * provider-run handoff that launch supports, so a consumer never has to choose
- * between launching and observing. `parseClaudeResultTelemetry` travels with it
+ * between launching and observing. `createTelemetryBoundClaudeLauncher` is the
+ * DURABLE second entry point: it takes the same `ClaudeLauncherAuthority` that
+ * `createClaudeLauncher` does instead of running on the shipped defaults, and it
+ * returns the raw `ClaudeLaunchResult` ALONGSIDE the handoff derived from it —
+ * both out of ONE launch, so a dispatcher needing the launcher's own exit facts
+ * on an arm where the handoff is blind never has to launch a second time to get
+ * them. `parseClaudeResultTelemetry` travels with it
  * because a consumer holding a stored `ClaudeStreamEvidence` capture must be
  * able to re-derive the same facts from the bytes alone, without relaunching.
  *
@@ -190,7 +196,10 @@ export {
 } from "../providers/telemetry/claude-result-telemetry.js";
 export {
   CLAUDE_TELEMETRY_HANDOFF_VERSION,
+  createTelemetryBoundClaudeLauncher,
   launchClaudeWithTelemetry,
+  type ClaudeBoundLaunch,
+  type ClaudeBoundLaunchResult,
   type ClaudeDeclaredSelection,
   type ClaudeTelemetryConcurrency,
   type ClaudeTelemetryHandoff,

@@ -544,9 +544,6 @@ describe("declared is not observed", () => {
  * process — which is the arm every counting case below drives.
  */
 const ABSENT_GRANT_ROW = { grantId: "grant:no-such-durable-row" };
-const EXIT_DELIVERY = {
-  claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE",
-};
 const WIN32 = { platform: "win32" } as const;
 
 const boundInput = (
@@ -557,8 +554,10 @@ const boundInput = (
 /** Refused-arm helper: throws rather than returning, so no case reads a refusal as a launch. */
 async function bound(
   authority: ClaudeLauncherAuthority, overrides: Partial<ClaudeLaunchRequest> = {},
+  providerRunRef: unknown = RUN_REF,
 ): Promise<ClaudeBoundLaunch> {
-  const settled = await createTelemetryBoundClaudeLauncher(authority)(boundInput(overrides));
+  const settled = await createTelemetryBoundClaudeLauncher(authority)(
+    boundInput(overrides, providerRunRef));
   if (!settled.ok) throw new Error(`bound launch refused: ${settled.code}/${settled.layer}`);
   return settled;
 }
@@ -631,4 +630,299 @@ describe("createTelemetryBoundClaudeLauncher", () => {
       expect(Object.isFrozen(frozen)).toBe(true);
     }
   });
+});
+
+/**
+ * The arms the AUTHORITY-BOUND factory can reach, each pinning its exact truth
+ * class, code and layer.
+ *
+ * OBSERVED is deliberately absent from this describe and is NOT an untested arm.
+ * The published factory refuses caller dependencies outright, so the only way to
+ * reach OBSERVED through it would be to spawn a real provider process from the
+ * shipped Windows boundary. It is covered where it IS reachable — on the SAME
+ * `handoffOf` derivation both entry points share — by "binds the launcher's own
+ * observation rather than recomputing any of it" and by the infrastructure sweep,
+ * which is why the last case below pins that the two entry points really do agree
+ * byte for byte on an arm they can both produce. If that derivation ever forked,
+ * the OBSERVED coverage would stop transferring and this case is what notices.
+ */
+const EXIT_DELIVERY = {
+  claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE",
+};
+
+/** Each arm with the TELEMETRY code its blind facts must carry, and nothing else. */
+const BOUND_BLIND_ARMS: readonly (readonly [string, Partial<ClaudeLaunchRequest>, string])[] = [
+  ["a launcher refusal", {}, "TELEMETRY_LAUNCH_REFUSED"],
+  ["a delivery that exited before launching", { duplicateDelivery: EXIT_DELIVERY },
+    "TELEMETRY_LAUNCH_NOT_ATTEMPTED"],
+  ["an adopted delivery", { duplicateDelivery: DUPLICATE_DELIVERY },
+    "TELEMETRY_LAUNCH_NOT_ATTEMPTED"],
+];
+
+describe("the bound launcher's arms", () => {
+  it("forwards the launcher's own REFUSED code and layer without restamping either way",
+    async () => {
+      const settled = await bound(grantRefusingAuthority());
+      expect(settled.result.kind).toBe("REFUSED");
+      expect(settled.handoff.launch.kind).toBe("REFUSED");
+      // The launcher's own pair, verbatim — not a TELEMETRY_* pair standing in.
+      expect(settled.handoff.launch.reasonCode).toBe("ACTIVATION_COMMIT_INCOHERENT");
+      expect(settled.handoff.launch.reasonLayer).toBe("ACTIVATION");
+      expect(settled.handoff.launch.truthClass).toBe("UNKNOWN");
+      expect(settled.handoff.launch.observationDigest).toBeNull();
+      expect(settled.handoff.launch.exit).toBeNull();
+      expect(settled.handoff.terminal).toBe("REFUSED");
+      expect(settled.handoff.infrastructure).toBe("LAUNCH_REFUSED");
+      // And the telemetry refusal keeps ITS own vocabulary, at the layer that
+      // raised it: the two refusals never borrow one another's codes.
+      expect(settled.handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_REFUSED");
+      expect(settled.handoff.telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      expect(CLAUDE_LAUNCH_ERROR_CODES).not.toContain(settled.handoff.telemetryRefusal?.code);
+      expect(PROVIDER_TELEMETRY_CODES).not.toContain(settled.handoff.launch.reasonCode);
+    });
+
+  it("marks a delivery that EXITED before launching as never having launched", async () => {
+    const settled = await bound(grantRefusingAuthority(), { duplicateDelivery: EXIT_DELIVERY });
+    expect(settled.result.kind).toBe("EXIT_BEFORE_LAUNCH");
+    expect(settled.handoff.launch.kind).toBe("EXIT_BEFORE_LAUNCH");
+    expect(settled.handoff.launch.truthClass).toBe("PROVEN");
+    // The duplicate arms carry no code or layer of their own; the absence is
+    // forwarded rather than filled in.
+    expect(settled.handoff.launch.reasonCode).toBeNull();
+    expect(settled.handoff.launch.reasonLayer).toBeNull();
+    expect(settled.handoff.terminal).toBe("UNKNOWN");
+    expect(settled.handoff.infrastructure).toBe("LAUNCH_NOT_ATTEMPTED");
+    expect(settled.handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_NOT_ATTEMPTED");
+  });
+
+  it("marks an ADOPTED delivery as never having launched, as its own case", async () => {
+    // Separate from EXIT_BEFORE_LAUNCH on purpose: one case covering both kinds
+    // would stay green the day only one of them still reached this arm.
+    const settled = await bound(grantRefusingAuthority(), {
+      duplicateDelivery: DUPLICATE_DELIVERY });
+    expect(settled.result.kind).toBe("ADOPTED");
+    expect(settled.handoff.launch.kind).toBe("ADOPTED");
+    expect(settled.handoff.launch.truthClass).toBe("PROVEN");
+    expect(settled.handoff.launch.reasonCode).toBeNull();
+    expect(settled.handoff.launch.reasonLayer).toBeNull();
+    expect(settled.handoff.terminal).toBe("UNKNOWN");
+    expect(settled.handoff.infrastructure).toBe("LAUNCH_NOT_ATTEMPTED");
+    expect(settled.handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_NOT_ATTEMPTED");
+  });
+
+  it("covers every arm the bound factory can reach that carries no observation", () => {
+    expect(BOUND_BLIND_ARMS.length).toBe(3);
+  });
+
+  it.each(BOUND_BLIND_ARMS)("leaves every fact UNMEASURED under the forwarded code for %s",
+    async (_label, overrides, code) => {
+      const { handoff } = await bound(grantRefusingAuthority(), overrides);
+      const blind = { known: false, code, layer: "TELEMETRY_LAUNCH" };
+      expect(handoff.tokens).toEqual({ inputTokens: blind, outputTokens: blind,
+        cacheCreationInputTokens: blind, cacheReadInputTokens: blind, coverage: "UNKNOWN" });
+      expect(handoff.steps).toEqual({ turns: blind, coverage: "UNKNOWN" });
+      expect(handoff.observedModel).toEqual({ modelId: blind, snapshotKind: "UNKNOWN",
+        snapshotEvidence: blind });
+      expect(handoff.sequence).toEqual(blind);
+      expect(handoff.stdoutReceiptDigest).toEqual(blind);
+      expect(handoff.stderrReceiptDigest).toEqual(blind);
+      // The UNKNOWN's CODE is the assertion, not merely that no number arrived:
+      // a zero-fill and a partial sum both fail here rather than downstream.
+      expect(JSON.stringify({ tokens: handoff.tokens, steps: handoff.steps,
+        sequence: handoff.sequence })).not.toContain("\"value\"");
+      // The declared side is untouched by the launch failing — it was read from
+      // the caller's request, never from a run that never happened.
+      expect(handoff.declared).toEqual({ known: true, selection: SELECTION });
+      expect(handoff.concurrency.achieved).toEqual({ known: false,
+        code: "TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED", layer: "TELEMETRY_SCHEMA" });
+    });
+
+  it("derives the same handoff as launchClaudeWithTelemetry for the same launch result",
+    async () => {
+      // THE ACCEPTED SAME-RESULT CONTROL. Two entry points, two independent
+      // launchers, one arm both can produce — and one shared derivation, so the
+      // handoffs must be identical. This is what carries the OBSERVED-arm
+      // guarantees, provable only through `launchClaudeWithTelemetry`, across to
+      // the bound factory; a forked derivation reddens here.
+      const settled = await bound(grantRefusingAuthority(), {
+        duplicateDelivery: DUPLICATE_DELIVERY });
+      const direct = await launchClaudeWithTelemetry({
+        providerRunRef: RUN_REF,
+        request: request({ limits: LIMITS, duplicateDelivery: DUPLICATE_DELIVERY }),
+        options: { platform: "win32", deps: dependencies(boundaryHarness(), []) },
+      });
+      if (!direct.ok) throw new Error(`direct telemetry launch refused: ${direct.code}`);
+      expect(settled.handoff).toEqual(direct.handoff);
+      // Not a vacuous equality: both really did produce the adopted arm.
+      expect(direct.handoff.launch.kind).toBe("ADOPTED");
+    });
+});
+
+/**
+ * HOSTILE RUN REFERENCES, refused BEFORE any effect exists.
+ *
+ * A return-value assertion sees only half of that claim. The other half — that
+ * nothing happened — is asserted by driving every case through a BOOBY-TRAPPED
+ * authority whose two ports throw the moment they are called: a hostile ref that
+ * reached the launcher would surface as that throw and as a non-empty trap log.
+ * The positive control below is what stops that zero-effect assertion from being
+ * satisfied by ports this fixture could never reach in the first place.
+ *
+ * Two of the shapes are NOT malformed on their own and are recorded as such
+ * rather than asserted into the table: an accessor-backed field is refused only
+ * when its getter answers something inadmissible, and an own `__proto__` key is
+ * ACCEPTED — `snapshotRunRef` is total by construction and rebuilds a fresh
+ * record from five read fields, so nothing can be partially adopted. The last
+ * case pins that acceptance and proves the key was not carried across.
+ */
+interface HostileRef { readonly label: string; make(): unknown }
+
+const revokedRef = (): unknown => {
+  const revocable = Proxy.revocable({ ...RUN_REF }, {});
+  revocable.revoke();
+  return revocable.proxy;
+};
+const accessorRef = (): unknown => {
+  const ref: Record<string, unknown> = { ...RUN_REF };
+  Object.defineProperty(ref, "runRef", { get: () => 7, enumerable: true, configurable: true });
+  return ref;
+};
+const protoBearing = (runRef: string, attemptRef: string | null): unknown => JSON.parse(
+  JSON.stringify({ __proto__: { polluted: true }, provider: "claude", runRef,
+    effectIntentId: RUN_REF.effectIntentId, attemptRef, epoch: RUN_REF.epoch }));
+
+const HOSTILE_RUN_REFS: readonly HostileRef[] = [
+  { label: "null", make: () => null },
+  { label: "undefined", make: () => undefined },
+  { label: "a string primitive", make: () => RUN_REF.runRef },
+  { label: "a number primitive", make: () => RUN_REF.epoch },
+  { label: "an array", make: () => [RUN_REF] },
+  { label: "a Proxy with a throwing get trap", make: () => new Proxy({ ...RUN_REF },
+    { get: (): never => { throw new Error("hostile run-ref get trap"); } }) },
+  { label: "a revoked Proxy", make: revokedRef },
+  { label: "an accessor-backed runRef answering a non-string", make: accessorRef },
+  { label: "a __proto__-bearing record whose attemptRef is absent",
+    make: () => protoBearing(RUN_REF.runRef, null) },
+  { label: "a record missing effectIntentId", make: () => ({ provider: RUN_REF.provider,
+    runRef: RUN_REF.runRef, attemptRef: RUN_REF.attemptRef, epoch: RUN_REF.epoch }) },
+  { label: "an empty runRef", make: () => ({ ...RUN_REF, runRef: "" }) },
+  { label: "a non-ASCII effectIntentId", make: () => ({ ...RUN_REF, effectIntentId: "intent:é" }) },
+  { label: "a numeric attemptRef", make: () => ({ ...RUN_REF, attemptRef: 1 }) },
+  { label: "a run reference naming another provider", make: () => ({ ...RUN_REF, provider: "codex" }) },
+  { label: "a negative epoch", make: () => ({ ...RUN_REF, epoch: -1 }) },
+  { label: "a fractional epoch", make: () => ({ ...RUN_REF, epoch: 1.5 }) },
+  { label: "an over-long runRef", make: () => ({ ...RUN_REF, runRef: "r".repeat(201) }) },
+];
+
+interface BoobyTrap { readonly fired: string[]; readonly authority: ClaudeLauncherAuthority }
+const boobyTrapped = (): BoobyTrap => {
+  const fired: string[] = [];
+  return { fired, authority: {
+    consumeGrantDurably: (): never => {
+      fired.push("consumeGrantDurably"); throw new Error("booby trap: durable grant reached");
+    },
+    commitProcessRegistration: (): never => {
+      fired.push("commitProcessRegistration"); throw new Error("booby trap: registration reached");
+    },
+  } };
+};
+
+describe("a hostile provider run reference", () => {
+  it("generates a non-empty sweep of distinctly labelled cases", () => {
+    // Asserted BEFORE any outcome: a sweep that silently produced zero cases
+    // would otherwise pass while testing nothing at all.
+    expect(HOSTILE_RUN_REFS.length).toBeGreaterThan(0);
+    expect(HOSTILE_RUN_REFS.length).toBe(17);
+    expect(new Set(HOSTILE_RUN_REFS.map(({ label }) => label)).size).toBe(17);
+  });
+
+  it.each(HOSTILE_RUN_REFS.map((hostile) => [hostile.label, hostile] as const))(
+    "refuses %s at TELEMETRY_INPUT before any authority, store or process effect",
+    async (_label, hostile) => {
+      const trap = boobyTrapped();
+      const settled = await createTelemetryBoundClaudeLauncher(trap.authority)(
+        { providerRunRef: hostile.make(), request: request({ limits: LIMITS }), options: WIN32 });
+      expect(settled.ok).toBe(false);
+      // BOTH halves of the refusal identity, never merely `ok === false`: more
+      // than one layer can refuse a launch, so the layer is what pins which did.
+      expect(settled.ok === false ? settled.code : "launched").toBe("TELEMETRY_RUN_REF_MALFORMED");
+      expect(settled.ok === false ? settled.layer : "launched").toBe("TELEMETRY_INPUT");
+      // And nothing happened: neither durable port was reached.
+      expect(trap.fired).toEqual([]);
+    });
+
+  it("reaches the durable grant port for a WELL-FORMED reference on the same authority",
+    async () => {
+      // The positive control the zero-effect assertion needs. Without it, an
+      // empty trap log would be equally consistent with ports this fixture can
+      // never reach — and every case above would pass while proving nothing.
+      const trap = boobyTrapped();
+      const settled = await createTelemetryBoundClaudeLauncher(trap.authority)(boundInput());
+      expect(trap.fired).toEqual(["consumeGrantDurably"]);
+      if (!settled.ok) throw new Error(`well-formed reference refused: ${settled.code}`);
+      expect(settled.result.kind).toBe("REFUSED");
+      expect(settled.result.code).toBe("CLAUDE_LAUNCH_DEPENDENCY_THROWN");
+      expect(settled.result.layer).toBe("GRANT");
+    });
+
+  it("accepts a __proto__-bearing reference without carrying the key across", async () => {
+    const { handoff } = await bound(grantRefusingAuthority(), {},
+      protoBearing(RUN_REF.runRef, RUN_REF.attemptRef));
+    expect(handoff.providerRunRef).toEqual(RUN_REF);
+    // Rebuilt from five READ fields rather than adopted, so the hostile key is
+    // absent and the prototype is the ordinary one.
+    expect(Object.hasOwn(handoff.providerRunRef, "__proto__")).toBe(false);
+    expect(Object.getPrototypeOf(handoff.providerRunRef)).toBe(Object.prototype);
+    expect(Object.keys(handoff.providerRunRef).sort())
+      .toEqual(["attemptRef", "effectIntentId", "epoch", "provider", "runRef"]);
+  });
+});
+
+/**
+ * What the SIGNATURE still lets a caller reach. `ClaudeTelemetryLaunchInput`
+ * carries `options?: ClaudeLaunchOptions`, and that type has a `deps` slot — so
+ * a caller CAN spell a dependency set even though this seam accepts none. These
+ * two cases pin what happens then, and pin that the authority really is read
+ * once at construction rather than on every launch.
+ */
+describe("what the bound signature refuses to honour", () => {
+  it("refuses a caller-supplied dependency set instead of launching on it", async () => {
+    const trace: string[] = [];
+    const harness = boundaryHarness();
+    const grants = durableGrants(ABSENT_GRANT_ROW);
+    const regs = durableRegistrations();
+    const settled = await createTelemetryBoundClaudeLauncher(authorityOf(grants, regs))({
+      providerRunRef: RUN_REF, request: request({ limits: LIMITS }),
+      options: { platform: "win32", deps: dependencies(harness, trace) },
+    });
+    if (!settled.ok) throw new Error(`bound launch refused: ${settled.code}`);
+    // The launcher's own refusal for an inadmissible options record, forwarded
+    // verbatim — the seam composes its shipped ports or it refuses, never both.
+    expect(settled.result.kind).toBe("REFUSED");
+    expect(settled.result.code).toBe("CLAUDE_LAUNCH_REQUEST_MALFORMED");
+    expect(settled.result.layer).toBe("LAUNCHER");
+    expect(settled.handoff.launch.reasonCode).toBe("CLAUDE_LAUNCH_REQUEST_MALFORMED");
+    expect(settled.handoff.infrastructure).toBe("LAUNCH_REFUSED");
+    // Not one supplied port ran, and no authority call was made either.
+    expect({ trace, opened: harness.requests.length, grants: grants.calls.length })
+      .toEqual({ trace: [], opened: 0, grants: 0 });
+  });
+
+  it("reads the authority ONCE at construction, so a later swap cannot redirect a launch",
+    async () => {
+      const grants = durableGrants(ABSENT_GRANT_ROW);
+      const authority: { consumeGrantDurably: unknown; commitProcessRegistration: unknown } = {
+        ...authorityOf(grants, durableRegistrations()) };
+      const run = createTelemetryBoundClaudeLauncher(authority as ClaudeLauncherAuthority);
+      // The caller mutates its own authority object AFTER the factory bound it.
+      let swapped = 0;
+      authority.consumeGrantDurably = (): never => {
+        swapped += 1; throw new Error("the swapped port was reached");
+      };
+      const settled = await run(boundInput());
+      expect(swapped).toBe(0);
+      expect(grants.calls.length).toBe(1);
+      if (!settled.ok) throw new Error(`bound launch refused: ${settled.code}`);
+      expect(settled.result.code).toBe("ACTIVATION_COMMIT_INCOHERENT");
+    });
 });

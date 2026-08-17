@@ -82,9 +82,8 @@ const blindModel = (fact: ProviderFactUnknown): ClaudeObservedModel =>
 /** Bound rather than re-hashed, but through the same bounded-text reader every
  *  other observed string uses: an empty or unprintable digest becomes an
  *  explicit UNKNOWN receipt, never a known one nobody can verify. */
-const receipt = (evidence: ClaudeStreamEvidence): ProviderText => readText(
-  { sha256: evidence.sha256 }, "sha256",
-  unknownFact("TELEMETRY_CAPTURE_UNDECODABLE", "TELEMETRY_CAPTURE"));
+const receipt = (evidence: ClaudeStreamEvidence): ProviderText => readText({ sha256: evidence.sha256 },
+  "sha256", unknownFact("TELEMETRY_CAPTURE_UNDECODABLE", "TELEMETRY_CAPTURE"));
 
 /**
  * Own DATA descriptors only, behind the launcher's own proxy guard. An accessor
@@ -109,9 +108,8 @@ function declaredOf(request: unknown): ClaudeDeclaredSelection {
  */
 function concurrencyOf(declared: ClaudeDeclaredSelection): ClaudeTelemetryConcurrency {
   const achieved = unknownFact("TELEMETRY_ACHIEVED_CONCURRENCY_UNSUPPORTED", "TELEMETRY_SCHEMA");
-  if (!declared.known) {
-    return Object.freeze({ fact: "NO_CONCURRENCY_FACTS", declaredCeiling: declared, achieved });
-  }
+  if (!declared.known) return Object.freeze(
+    { fact: "NO_CONCURRENCY_FACTS", declaredCeiling: declared, achieved });
   const declaredCeiling = knownCount(declared.selection.concurrencyCeiling) ??
     unknownFact("TELEMETRY_DECLARED_SELECTION_UNREADABLE", "TELEMETRY_INPUT");
   return Object.freeze({ fact: "DECLARED_CEILING_ONLY", declaredCeiling, achieved });

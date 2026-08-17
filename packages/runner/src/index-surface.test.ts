@@ -346,9 +346,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["codexRuntimePinningIsAuthoritative", "function"], ["probeCodexRuntime", "function"],
   ["reconcileCodexRun", "function"], ["recordCodexStream", "function"],
   ["renderCodexAdvisorySkills", "function"], ["renderCodexContext", "function"],
-  // The 17 values the provider-telemetry seam publishes: 5 supported-fact
+  // The 18 values the provider-telemetry seam publishes: 5 supported-fact
   // tables, 1 anomaly-refusal table, 6 closed vocabularies, 3 pinned versions
-  // and the 2 entry points. Counted by hand from claude-surface.ts, never from
+  // and the 3 entry points. Counted by hand from claude-surface.ts, never from
   // the namespace under test.
   ["CLAUDE_MODEL_EVIDENCE_PATTERNS", "object"], ["CLAUDE_RESULT_SUBTYPES", "object"],
   ["CLAUDE_RESULT_TELEMETRY_VERSION", "string"], ["CLAUDE_STEP_FIELD", "string"],
@@ -357,8 +357,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROVIDER_CONCURRENCY_FACTS", "array"], ["PROVIDER_COUNT_COVERAGE_CLASSES", "array"],
   ["PROVIDER_INFRASTRUCTURE_OUTCOMES", "array"], ["PROVIDER_TELEMETRY_CODES", "array"],
   ["PROVIDER_TELEMETRY_CONTRACT_VERSION", "string"], ["PROVIDER_TELEMETRY_LAYERS", "array"],
-  ["PROVIDER_TERMINAL_OUTCOMES", "array"], ["launchClaudeWithTelemetry", "function"],
-  ["parseClaudeResultTelemetry", "function"],
+  ["PROVIDER_TERMINAL_OUTCOMES", "array"], ["createTelemetryBoundClaudeLauncher", "function"],
+  ["launchClaudeWithTelemetry", "function"], ["parseClaudeResultTelemetry", "function"],
   // The 10 values the provider-RUN RECORD seam publishes: 4 closed vocabularies,
   // 1 meter table, 2 pinned versions, 1 pinned parser revision and the 2 entry
   // points. Counted by hand from claude-surface.ts, never from the namespace.
@@ -371,7 +371,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(232);
+  expect(EXPECTED_EXPORTS.length).toBe(233);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
