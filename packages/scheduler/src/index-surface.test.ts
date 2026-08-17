@@ -110,6 +110,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["FAIRNESS_SERVICE_COST", "number"], ["FORBIDDEN_VERDICT_KEYS", "array"],
   ["GRAPH_CONTENT_ISSUE_CODES", "array"], ["GRAPH_CONTENT_LAYERS", "array"],
   ["GRAPH_CONTENT_SCHEMA_VERSION", "number"],
+  ["GRAPH_REVISION_CONTENT_KEYS", "array"],
   ["GraphAnalysisError", "function"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
   ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
@@ -150,7 +151,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(93);
+  expect(EXPECTED_EXPORTS.length).toBe(94);
 });
 
 /**
@@ -224,7 +225,15 @@ it("reaches the real graph content codec through the bare package root", () => {
     }],
     completionNodeKey: "dev-b",
   };
-  const encoded = scheduler.encodeGraphContent(snapshot);
+  const encoded = scheduler.encodeGraphContent({
+    author: "human:architect-2cc07e26",
+    completionNode: "dev-b",
+    decompositionBudget: 24,
+    parentRevision: null,
+    policyRevision: "pol-000000000001",
+    repositoryBaseTree: "4".repeat(40),
+    snapshot,
+  });
   expect(encoded.ok).toBe(true);
   if (!encoded.ok) return;
 
@@ -232,9 +241,15 @@ it("reaches the real graph content codec through the bare package root", () => {
   // revision gate accepts, and the canonical order is the validator's, not the
   // caller's (the snapshot above deliberately supplies dev-b first).
   expect(encoded.value.graphContentHash).toMatch(/^[0-9a-f]{64}$/u);
-  expect(encoded.value.snapshot.nodes.map((node) => node.nodeKey))
+  expect(encoded.value.content.snapshot.nodes.map((node) => node.nodeKey))
     .toEqual(["dev-a", "dev-b"]);
   expect(encoded.value.schemaVersion).toBe(scheduler.GRAPH_CONTENT_SCHEMA_VERSION);
+  // Content authority is not the structural identity — dec-64b2391c, reached
+  // through the bare package root rather than the internal module.
+  expect(encoded.value.snapshotIdentity).toMatch(/^[0-9a-f]{64}$/u);
+  expect(encoded.value.graphContentHash).not.toBe(encoded.value.snapshotIdentity);
+  expect(Object.keys(encoded.value.content))
+    .toEqual([...scheduler.GRAPH_REVISION_CONTENT_KEYS]);
 
   const decoded = scheduler.decodeGraphContent(encoded.value.bytes);
   expect(decoded.ok).toBe(true);

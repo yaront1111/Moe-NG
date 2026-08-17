@@ -198,8 +198,8 @@
       "completedAt": "2026-08-17T17:59:16.531Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -211,12 +211,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:45:16.838Z",
-  "updatedAt": "2026-08-17T18:00:13.644Z",
+  "updatedAt": "2026-08-17T18:05:49.752Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:02:33.808Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-17T18:05:49.752Z",
+    "wallClockMs": 3795944
   },
   "contextFetchedBy": [
     "architect-c9e91335",
@@ -288,5 +290,8 @@
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/src/work/foundation-attempt-windows.test.ts",
     "apps/daemon/src/work/attempt-resource-sweep.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:05:49.752Z",
+  "reviewCompletedAt": "2026-08-17T18:05:49.752Z",
+  "reviewSummary": "APPROVED. Re-ran the gate at HEAD d2c86b7: TYPECHECK=0 TEST=0 with a NONZERO count line `Test Files 116 passed (116) / Tests 2408 passed (2408)`.\n\nFIVE MUTATION DRILLS RUN BY QA, not taken on report. Each reddened the NAMED assertion; every file restored and sha256-verified:\n1. grantSuccessorCapacity(rows,null)->\"proof-ref\" -> FAIL \"refuses a quarantined set without laundering it into RELEASED\".\n2. duplicate check -> `return value` -> FAIL \"refuses duplicate resource ids rather than collapsing them\".\n3. reader drops the sameBytes re-encode -> FAIL \"MALFORMED for bytes that decode but no longer canonicalise\".\n4. QA's own: decodeAttemptResourceBody skips an undecodable member -> FAIL \"MALFORMED when one member carries an eighth field\".\n5. CONSUMER EDGE: deleted the bindActivationResources call in activation-ingress.ts -> FAIL \"binds the whole declared set through runEffectActivateCommand alone\". Production IMPORTS the module.\n\nDoD 1-5 evidenced. Reader pins 4 distinct codes with layer and authority \"NONE\". Transitions compare against the reducer's OWN returned rows (no tautology); ordering non-vacuous. Sweep asserts cases.length>60 BEFORE any outcome plus REQUIRED_LABELS families, zero residue, crash!=refusal, positive control.\n\nPer-FILE lines 248/216/167/61/205; activation-ingress.ts 337 was 321 pre-task (+16), under the 400 split point. Dep edge: manifest workspace:*, lock importer, real bare-specifier value imports typechecking.\n\nForeign red attributed, NOT this task's: RECOVERY_ANCHOR_FAULT_POINTS on packages/store/src/index.ts and GOAL_PREREQUISITE_LAYER/GRAPH_CONTENT_LAYERS are absent at merge-base cf272f67; delta ∩ owned paths EMPTY. Tree == HEAD over owned paths; no probe/scratch files; harness correctly carries no .js bridge.\n\nDoD 6: consumer edge recorded in full in the handoff memory and parentTaskId IS the consumer, but the step-11 note hit the 5000-char cap mid-sentence. Platform truncation, not omission."
 }

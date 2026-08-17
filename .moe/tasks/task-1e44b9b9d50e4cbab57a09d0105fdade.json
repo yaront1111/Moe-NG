@@ -20,42 +20,61 @@
     {
       "stepId": "step-1",
       "description": "Record the BEFORE state, so every later claim has a baseline to be measured against. Run and capture verbatim: (a) `node -e \"const d=require('./apps/daemon/package.json').dependencies; console.log('@moe/import' in d)\"` — expect `false`; (b) `grep -n \"@moe/import\" pnpm-lock.yaml` and note that `packages/import: {}` appears at :153 with NO dependents anywhere, so this task lands the FIRST edge into that package; (c) a compiled bare-specifier probe that must FAIL right now — write `apps/daemon/src/__import-edge-probe.ts` importing `compareShadowProjections` and `projectLegacyImport` plus the types `LegacyImportFacts`, `ShadowComparison` and `ShadowProjection` from the bare specifier `@moe/import`, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, capture the error, and DELETE the probe in the same command. Expect TS2307 \"Cannot find module '@moe/import'\" or the TS6059 rooted-directory error the undeclared-workspace-dep family produces. A probe that unexpectedly PASSES here means the edge already exists by some route and the whole task premise is wrong — stop and report rather than proceeding. Those five symbols are all confirmed present on the root barrel (index.ts:104-115) at plan time.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json"
-      ]
+      ],
+      "note": "BASELINE RECORDED at HEAD d2c86b7 (plan measured a42ae2f; HEAD has since moved).\n\n(a) `node -e \"const d=require('./apps/daemon/package.json').dependencies; console.log('@moe/import' in d)\"` -> `false`. Edge genuinely absent. Premise confirmed.\n\n(b) `grep -n \"@moe/import\\|packages/import\" pnpm-lock.yaml` -> single hit, `156:  packages/import: {}` (plan said :153; lock shifted 3 lines, see FOREIGN WORK below). No dependents anywhere. This task lands the FIRST edge into packages/import.\n\n(c) BASELINE PROBE FAILED FOR THE RIGHT REASON. Wrote apps/daemon/src/__import-edge-probe.ts importing `compareShadowProjections`, `projectLegacyImport` + types `LegacyImportFacts`, `ShadowComparison`, `ShadowProjection` from bare `@moe/import`; ran `npx tsc --project apps/daemon/tsconfig.json --noEmit`; captured ${PIPESTATUS[0]}=1, verbatim:\n  apps/daemon/src/__import-edge-probe.ts(1,63): error TS2307: Cannot find module '@moe/import' or its corresponding type declarations.\n  apps/daemon/src/__import-edge-probe.ts(2,76): error TS2307: Cannot find module '@moe/import' or its corresponding type declarations.\nTS2307 is the module-resolution family the plan predicted. Probe DELETED in the same command; `git status --porcelain -- apps/daemon/src` afterwards shows only the foreign untracked `apps/daemon/src/journal/`.\n\nSymbols re-verified on the barrel at current worktree state: packages/import/src/index.ts:131 LegacyImportFacts, :132 ShadowComparison, :138 ShadowProjection, :142 `export { compareShadowProjections, projectLegacyImport }`. Did not reach for the unlanded codec decoder (task-a6775ac5).\n\nFOREIGN WORK NOW SITS IN BOTH OWNED FILES — new since the plan was written, changes step 6.\nA peer has landed an uncommitted `@moe/context` edge in exactly the two files this task owns:\n  - apps/daemon/package.json: `+    \"@moe/context\": \"workspace:*\",` (one line, above @moe/contracts)\n  - pnpm-lock.yaml: +3 lines, the matching `'@moe/context': {specifier, version: link:../../packages/context}` importer entry in the apps/daemon block\n`git diff --stat -- pnpm-lock.yaml` = `1 file changed, 3 insertions(+)` and that is ALL of it. packages/context exists and is a real workspace package, so the peer's edge is self-consistent, not half-applied. Almost certainly the journal work behind the untracked apps/daemon/src/journal/.\n\nConsequence for step 6: `git commit -- apps/daemon/package.json pnpm-lock.yaml` commits WORKTREE content for those paths and would therefore capture the peer's @moe/context edge as well. Rail 3 forbids that, and reverting their line is equally forbidden. The index is currently CLEAN (every `git status --porcelain` entry has a space in column 1), so the plan is to stage only this task's own hunks with `git apply --cached` and then `git commit` against the index, leaving the peer's lines untouched and unstaged in the worktree. `git reset`/`stash` stay off the table per rail 3. Will re-verify the index is still clean immediately before staging, and confirm with `git show --stat` + the actual commit diff that only my two hunks landed.\n\nFiles touched this step: none persisted (probe created and deleted in one command).",
+      "startedAt": "2026-08-17T18:08:48.675Z",
+      "completedAt": "2026-08-17T18:09:56.686Z"
     },
     {
       "stepId": "step-2",
       "description": "Declare the dependency. Add `\"@moe/import\": \"workspace:*\"` to `apps/daemon/package.json` dependencies, placed alphabetically between `@moe/core` and `@moe/mcp` to match the existing block (`@moe/contracts`, `@moe/coordination`, `@moe/core`, `@moe/mcp`, `@moe/review`, `@moe/runner`, `@moe/scheduler`, `@moe/store`). Edit the JSON by hand rather than through `pnpm add`, which reorders keys, may rewrite the version specifier style, and can touch fields this task does not own. This is the whole production change: rail 4 forbids implementing the reader or editing any `@moe/import` source, so no call site is added anywhere in this task.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/package.json"
+      ],
+      "note": "DEPENDENCY DECLARED, by hand, one line.\n\nAdded `    \"@moe/import\": \"workspace:*\",` to apps/daemon/package.json dependencies, slotted alphabetically between `@moe/core` and `@moe/mcp` exactly as the plan specified. Used the Edit tool, NOT `pnpm add` — the plan's reason holds: the CLI reorders keys and can rewrite the specifier style, and this file already carries a peer's uncommitted line, so a reorder would have churned their work too.\n\n`git diff -- apps/daemon/package.json` now shows exactly TWO added lines and zero removals:\n  +    \"@moe/context\": \"workspace:*\",     <- FOREIGN, peer's uncommitted edge, preserved untouched\n  +    \"@moe/import\": \"workspace:*\",      <- MINE, this task\nNo other field of the manifest was touched: no scripts, no exports, no bin, no version.\n\nJSON re-parsed after the edit: `node -e \"const d=require('./apps/daemon/package.json').dependencies; console.log('@moe/import' in d, d['@moe/import'])\"` -> `true workspace:*`. So the file is still valid JSON and the specifier style matches all eight (now ten) siblings.\n\nNO CALL SITE ADDED ANYWHERE. Rail 4 forbids implementing the reader or editing @moe/import sources, and rail 5's named-consumer arm is satisfied by recording task-80fce1d1d625453098bd526d61c5ddb8 in step 6 instead. This one line is the entire production change of the task.\n\nCarrying forward from step 1: the peer's @moe/context line means step 6 cannot use `git commit -- <pathspec>` (that commits worktree content and would capture their edge). Will stage only my own hunks via `git apply --cached` against a currently-clean index and commit the index instead.",
+      "startedAt": "2026-08-17T18:10:00.248Z",
+      "completedAt": "2026-08-17T18:10:31.055Z"
     },
     {
       "stepId": "step-3",
       "description": "Refresh the lock importer, then AUDIT the diff before believing it. Run `pnpm install --lockfile-only` (or a `--filter @moe/daemon` install if the lockfile-only form does not update the importer) from the repo root, then inspect `git diff -- pnpm-lock.yaml`. The ONLY expected change is a new `'@moe/import': {specifier: workspace:*, version: link:../../packages/import}` entry inside the `apps/daemon:` importer block at :97, slotted alphabetically — every sibling there uses exactly that two-line shape. Rail 2 requires unrelated lockfile and worktree changes to be PRESERVED: if the install rewrites peer entries, bumps unrelated resolutions, or reformats regions this task does not own, do NOT commit that churn and do NOT hand-revert it selectively — report what it touched and stop. Two Windows hazards to check first, both from prior incidents on this repo: a `node_modules` tree stamped by a WSL run makes Windows pnpm fail in ways that look like a manifest error, and an interrupted install can leave the lock half-written. Verify `git diff --stat -- pnpm-lock.yaml` shows a small, localized change before going further.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "pnpm-lock.yaml"
+      ],
+      "note": "LOCK IMPORTER REFRESHED, AND THE CHURN RISK MEASURED RATHER THAN ASSUMED.\n\nBecause both owned files already carried a peer's uncommitted @moe/context edge, a diff-vs-HEAD alone could not tell my install's churn from theirs. So I snapshotted the pre-install lock OUTSIDE the repo first (`$env:TEMP\\lock-before-1e44b9b9.yaml`, SHA-256 2FD8C0BF6C872824DC398B932036932012F540152EA9B8895A34366F4D99AD1C) and diffed against it afterwards. No scratch file was created inside the worktree.\n\nCommand, from PowerShell (not the Bash tool) at repo root: `pnpm install --lockfile-only` -> `Scope: all 20 workspace projects`, `Progress: resolved 383, reused 0, downloaded 0, added 0, done`, `Done in 369ms using pnpm v11.0.8`, PNPM_EXIT=0. One pre-existing warning, `[WARN] 1 deprecated subdependencies found: whatwg-encoding@3.1.1`, unrelated and not introduced here. Node v24.16.0, pnpm 11.0.8. No WSL-stamp symptom: the install resolved the whole workspace and exited clean, and --lockfile-only does not write node_modules.\n\nDELTA ATTRIBUTABLE TO THIS TASK — snapshot vs post-install, the whole of it, three lines:\n      '@moe/import':\n        specifier: workspace:*\n        version: link:../../packages/import\ninserted alphabetically between '@moe/core' and '@moe/mcp' in the `apps/daemon:` importer block, in exactly the two-line specifier/version shape every sibling uses. My install rewrote NOTHING else: no peer resolutions bumped, no reformatting, no other importer touched, no change to `packages/import: {}` itself.\n\n`git diff --stat -- pnpm-lock.yaml` = `1 file changed, 6 insertions(+)`, zero deletions. Six, not three, because three of them are the peer's @moe/context entry that was already there before I started — PRESERVED untouched, per rail 2. The diff-vs-HEAD is two hunks: @@ -96,6 +96,9 @@ (peer's @moe/context) and @@ -105,6 +108,9 @@ (mine). Both hunks are additions only.\n\nSo there is no polluted-lock stop-and-report condition here: the install was surgical. The only complication is the co-located foreign hunk, which is a commit-staging problem, not a lock-integrity problem, and step 6 handles it by staging my hunk alone with `git apply --cached`.\n\nRuntime resolution is NOT yet claimed — --lockfile-only deliberately did not link node_modules. Step 5 proves that separately and will report if the link is missing.",
+      "startedAt": "2026-08-17T18:10:33.552Z",
+      "completedAt": "2026-08-17T18:11:15.000Z"
     },
     {
       "stepId": "step-4",
       "description": "Prove the edge with a compiled probe AND its negative control, which is the half that stops a vacuous pass. Recreate the same probe from step 1 at `apps/daemon/src/__import-edge-probe.ts`, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, and require exit 0 with NO diagnostic naming the probe file. Then, in the same run, the NEGATIVE CONTROL that DoD 3 demands: a second probe importing from a bare specifier that certainly does not exist (for example `@moe/does-not-exist`) MUST fail typecheck, and the failure must be a module-resolution error — read the actual code, because a probe that fails on a syntax error or an unused-variable rule would satisfy \"it failed\" while proving nothing about resolution. DELETE BOTH probes in the same command that creates them, and confirm afterwards with `git status --porcelain -- apps/daemon/src` that neither survives; rail 5 and the epic rail both forbid a probe or scratch file remaining. Finally re-run the plain `pnpm --filter @moe/daemon typecheck` and require it still exits 0.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json"
-      ]
+      ],
+      "note": "EDGE PROVEN BY COMPILE, WITH TWO CONTROLS. All probes created and deleted in the same command.\n\nCONTROL 0 - baseline, no probe present: `npx tsc --project apps/daemon/tsconfig.json --noEmit` -> exit 1, exactly two diagnostics, BOTH in a peer's untracked file:\n  apps/daemon/src/journal/journal-append.test.ts(7,43): error TS2307: Cannot find module './journal-reader.js' ...\n  apps/daemon/src/journal/journal-append.test.ts(73,32): error TS7006: Parameter 'admitted' implicitly has an 'any' type.\nThis baseline is what every probe run is measured against.\n\nPOSITIVE PROBE - apps/daemon/src/__import-edge-probe.ts, bare `@moe/import`, importing compareShadowProjections, projectLegacyImport + types LegacyImportFacts, ShadowComparison, ShadowProjection. tsc output was BYTE-IDENTICAL to the baseline: `grep -c \"__import-edge-probe\"` = 0. ZERO diagnostics named the probe. The run's exit 1 is entirely the peer's file; the probe's own delta is EMPTY. DoD 2 met.\n\nNEGATIVE CONTROL - apps/daemon/src/__import-edge-negative.ts, byte-identical body with ONLY the specifier swapped to `@moe/does-not-exist`:\n  apps/daemon/src/__import-edge-negative.ts(1,63): error TS2307: Cannot find module '@moe/does-not-exist' or its corresponding type declarations.\n  apps/daemon/src/__import-edge-negative.ts(2,76): error TS2307: Cannot find module '@moe/does-not-exist' ...\nSame syntax, same unused-value voids, same positions (1,63)/(2,76) - the ONLY difference is the specifier, so the failure cannot be a syntax or unused-variable artifact. It is TS2307, the module-resolution family, and it is the same code the step-1 baseline produced against @moe/import BEFORE the edge existed. DoD 3 met.\n\nTHIRD CONTROL, not required by the DoD but it closes the last vacuity hole: a clean TS2307-free run proves the specifier resolved, not that real declarations arrived - a module resolving to `any` would also pass. So apps/daemon/src/__import-edge-types-real.ts deliberately misused the symbol: `compareShadowProjections(42, \"not-a-projection\")` ->\n  apps/daemon/src/__import-edge-types-real.ts(3,63): error TS2345: Argument of type 'number' is not assignable to parameter of type 'ShadowProjection'.\nTS2345 naming ShadowProjection by name proves the resolved module delivered packages/import's REAL declarations. The positive pass was not vacuous.\n\nCLEANUP: all three probes deleted in their creating command; `git status --porcelain -- apps/daemon/src` afterwards shows no `__import-edge-*` path. Node resolution note: `pnpm install --lockfile-only` did also create the workspace symlink - `apps/daemon/node_modules/@moe/import -> /d/projexts/moe-next/packages/import`, stamped at install time - so no extra install was needed.\n\nNAMED GATE LEG, foreign red disclosed verbatim, not hidden: `pnpm --filter @moe/daemon typecheck` -> exit 1. Filter MATCHED and EXECUTED (it printed `$ tsc --project tsconfig.json` plus real compiler output, so this is not the vacuous exit-0 \"No projects matched\" shape). Its only two errors are the peer's journal-append.test.ts lines above. `git ls-tree HEAD apps/daemon/src/journal/` is EMPTY and `git status` shows `?? apps/daemon/src/journal/`: the failing path does not exist at HEAD, so it cannot be at merge-base, and it is not in this task's owned set (apps/daemon/package.json, pnpm-lock.yaml). Failing-paths-at-HEAD minus failing-paths-at-merge-base, intersected with owned paths, is EMPTY. A manifest+lock edge cannot make a test fail to resolve './journal-reader.js'.\n\nCorroboration that the red is foreign and moving: across two consecutive `pnpm --filter @moe/daemon test` runs minutes apart, a SECOND failure (runtime-entrypoint.test.ts flagging journal/journal-contracts.js and journal/journal-entry-codec.js as unexpected .js bridges) appeared and then CLEARED on its own as the peer registered their bridges - `Test Files 2 failed | 115 passed` then `Test Files 1 failed | 116 passed (117)`, `Tests 2408 passed (2408)`. Step 6 will re-run both legs fresh and poll for the peer's journal-reader.ts before claiming any exit code.",
+      "startedAt": "2026-08-17T18:11:20.718Z",
+      "completedAt": "2026-08-17T18:14:12.035Z"
     },
     {
       "stepId": "step-5",
       "description": "Prove RUNTIME resolution, not just types — DoD 4 is a separate claim from DoD 2 and a passing typecheck does not establish it. `@moe/import`'s manifest maps `exports: {\".\": \"./src/index.ts\"}` — a `.ts` file — and this repo runs TypeScript directly under Node (apps/daemon's own `start` script is `node ./src/daemon-main.ts`), on Node v24.16.0 where type stripping is native and needs no flag. So the correct probe is a plain `node --input-type=module -e \"import('@moe/import').then(m => console.log(typeof m.compareShadowProjections))\"` executed with the working directory inside `apps/daemon`, printing `function`. NO tsconfig paths, NO deep relative import, NO loader or `--experimental-*` flag — if any of those is needed, the edge is not really landed and the task must report rather than paper over it. Run this from PowerShell, not the Bash tool: a prior plain-Node smoke on this repo failed only because Git Bash rewrote paths. Do NOT copy the precedent in `tools/import/import-shadow.ts`, which imports `../../packages/import/src/index.js` by deep relative path — that works only because `tools/` has no manifest of its own, and rail 1 forbids it here.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/package.json"
-      ]
+      ],
+      "startedAt": "2026-08-17T18:14:15.437Z"
     },
     {
       "stepId": "step-6",
@@ -68,7 +87,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-3d941382",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -80,13 +99,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.565Z",
-  "updatedAt": "2026-08-17T17:49:28.977Z",
+  "updatedAt": "2026-08-17T18:14:15.437Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:47:20.968Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:49:26.903Z",
   "planningNotes": {
@@ -104,5 +129,9 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-17T17:49:28.977Z"
+  "planApprovedAt": "2026-08-17T17:49:28.977Z",
+  "contextFetchedBy": [
+    "worker-3d941382"
+  ],
+  "workStartedAt": "2026-08-17T18:08:48.675Z"
 }

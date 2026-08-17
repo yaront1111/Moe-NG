@@ -172,19 +172,27 @@ function frozenData(value: unknown): unknown {
  * spelling — so a caller holding bytes must use `decodeImportEventFacts`.
  */
 export function admitImportEventFacts(value: unknown): ImportEventFacts | ImportEventRefused {
-  const broken = checkFacts(value);
-  if (broken !== null) return broken;
-  const facts = value as Record<string, unknown>;
-  return Object.freeze({
-    claim: frozenClaim(facts["claim"] as Record<string, unknown>),
-    links: Object.freeze((facts["links"] as readonly Record<string, unknown>[])
-      .map((link) => frozenLink(link))
-      .sort(compareLinks)),
-    payload: frozenData(facts["payload"]) as Record<string, unknown>,
-    recordVersion: IMPORT_RECORD_VERSION,
-    schemaVersion: IMPORT_EVENT_FACTS_VERSION,
-    shadowVersion: SHADOW_PROJECTION_VERSION,
-  });
+  // The walks below recurse, and `JSON.parse` is iterative in V8 — so bytes it accepts can
+  // still overflow the stack here. A crash is not a refusal, so the whole admission fails
+  // closed onto a code rather than escaping as a throw.
+  try {
+    const broken = checkFacts(value);
+    if (broken !== null) return broken;
+    const facts = value as Record<string, unknown>;
+    return Object.freeze({
+      claim: frozenClaim(facts["claim"] as Record<string, unknown>),
+      links: Object.freeze((facts["links"] as readonly Record<string, unknown>[])
+        .map((link) => frozenLink(link))
+        .sort(compareLinks)),
+      payload: frozenData(facts["payload"]) as Record<string, unknown>,
+      recordVersion: IMPORT_RECORD_VERSION,
+      schemaVersion: IMPORT_EVENT_FACTS_VERSION,
+      shadowVersion: SHADOW_PROJECTION_VERSION,
+    });
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return refuse("IMPORT_EVENT_BYTES_MALFORMED", `facts could not be admitted: ${detail}`);
+  }
 }
 
 /**
@@ -217,7 +225,12 @@ export function decodeImportEventFacts(bytes: unknown): ImportEventFacts | Impor
   }
   const facts = admitImportEventFacts(parsed);
   if ("outcome" in facts) return facts;
-  return canonicalJson(factsBody(facts)) === text
-    ? facts
-    : refuse("IMPORT_EVENT_BYTES_NONCANONICAL", "event payload is not its own canonical form");
+  try {
+    return canonicalJson(factsBody(facts)) === text
+      ? facts
+      : refuse("IMPORT_EVENT_BYTES_NONCANONICAL", "event payload is not its own canonical form");
+  } catch (cause) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    return refuse("IMPORT_EVENT_BYTES_MALFORMED", `facts do not re-encode: ${detail}`);
+  }
 }

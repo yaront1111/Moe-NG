@@ -69,17 +69,23 @@ export {
 } from "./graph-policy.js";
 export { createTraversalCounter } from "./graph-model.js";
 /**
- * Canonical graph content identity. The codec boundary is published; the wire
- * mechanics in `./graph-content-format.js` are deliberately withheld, because
- * `canonicalGraphJson`/`graphContentHash` take an already-validated graph and a
- * consumer holding them could mint canonical bytes for a snapshot the kernel
- * never accepted. Going through `encodeGraphContent` is the only route to a
+ * Canonical `GraphRevisionContent` identity — design 197's seven fields and the
+ * domain-separated `graphContentHash` over ALL of them. NAMES ARE LOAD-BEARING
+ * (dec-64b2391c): the STRUCTURE-ONLY value is `GraphContent.snapshotIdentity`,
+ * never a symbol reachable by asking for content, so no caller binds a durable
+ * revision to an identity omitting six fields while believing it asked for
+ * content. The codec boundary is published; the wire mechanics in
+ * `./graph-content-format.js` and the per-field canonicalisation and digest in
+ * `./graph-content-fields.js` stay withheld, because they take an
+ * already-validated graph and a consumer holding any of them could mint bytes or
+ * a hash the kernel never accepted. `encodeGraphContent` is the only route to a
  * `graphContentHash`.
  */
 export {
   GRAPH_CONTENT_ISSUE_CODES,
   GRAPH_CONTENT_LAYERS,
   GRAPH_CONTENT_SCHEMA_VERSION,
+  GRAPH_REVISION_CONTENT_KEYS,
   MAX_GRAPH_CONTENT_BYTES,
   decodeGraphContent,
   encodeGraphContent,
@@ -90,6 +96,7 @@ export type {
   GraphContentIssueCode,
   GraphContentLayer,
   GraphContentResult,
+  GraphRevisionContent,
 } from "./graph-content.js";
 
 export {

@@ -41,6 +41,16 @@ it("loads and executes the scheduler entrypoint in Node's strip-types runtime", 
 
   expect(result).toEqual({
     admissionReadyWidth: 1,
+    // The graph-content codec loaded and RAN under Node's own resolution, so its
+    // three sibling `.js` bridges resolve; `SEPARATE` pins dec-64b2391c through
+    // the bare specifier, and the refusal pin proves the fail-closed path is the
+    // production one and not a vitest-only artefact.
+    contentAuthority: "SEPARATE",
+    contentHashLength: 64,
+    contentIssueCodeCount: 9,
+    contentKeyCount: 7,
+    contentRefusal: "GRAPH_CONTENT_COMPLETION_DRIFT:GRAPH_CONTENT_IDENTITY",
+    contentRoundTrip: "MATCHED",
     counterfactualEdgeCount: 0,
     counterfactualType: "function",
     dispatchableWidth: 1,

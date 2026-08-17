@@ -15,6 +15,12 @@ import type {
   ImportedClaim,
   LegacyLink,
 } from "./import-contract.js";
+import {
+  decodeImportEventFacts,
+  encodeImportEventFacts,
+  refuseImportEvent,
+} from "./import-event-codec.js";
+import type { ImportEventRefused } from "./import-event-codec.js";
 import { reconcileImport } from "./import-reconcile.js";
 import type { ReconcileEntry } from "./import-reconcile.js";
 import type { SourceManifest } from "./source-manifest.js";
@@ -28,6 +34,10 @@ import type { SourceManifest } from "./source-manifest.js";
  * import does not fit in one commit it is REFUSED rather than split: splitting would
  * silently trade atomicity for capacity, and a half-imported project that reports success
  * is the exact failure §21.7 forbids.
+ *
+ * WHAT EACH EVENT CARRIES. The payload is the versioned `import-event-codec` encoding of
+ * the DERIVED facts — claim, evidence-only links, provenance — never the bare record
+ * payload it used to be, which no reader could turn back into any of them.
  *
  * The port is declared structurally rather than imported from @moe/store. Keeping this
  * package dependency-free means the loadability gate has nothing to resolve, and the
@@ -68,8 +78,9 @@ export interface ApplyImportInput {
   readonly store: ImportStorePort;
 }
 
-export type ApplyImportResult = ImportRefused | ImportReport;
+export type ApplyImportResult = ImportEventRefused | ImportRefused | ImportReport;
 
+const DECODER = new TextDecoder();
 const ENCODER = new TextEncoder();
 
 /** §21.4: a claim imports HISTORICAL, or SUSPENDED when the source said it was held. */
@@ -113,39 +124,67 @@ function linksFrom(
   ]);
 }
 
-function eventFor(
+interface Resolved {
+  readonly claims: ImportedClaim[];
+  readonly entries: ReconcileEntry[];
+  readonly events: ImportEventDraft[];
+  readonly links: LegacyLink[];
+  /** Facts text already derived per id, so a conflict is seen BEFORE anything writes. */
+  readonly seen: Map<string, string>;
+}
+
+/**
+ * Encodes one record's derived facts and folds them in, or refuses. The claim and links are
+ * derived ONCE here and then read back OUT of the encoded bytes, so what `applyImport`
+ * reports is the stored representation itself rather than a separately built lookalike.
+ */
+function foldRecord(
+  into: Resolved,
   record: LegacySourceRecord,
   provenance: ImportProvenance,
-  canonical: string,
-): ImportEventDraft {
-  return {
-    eventId: deriveImportedId(provenance.manifestDigest, record),
-    eventType: `legacy.${record.kind}.imported`,
-    payload: ENCODER.encode(canonical),
-  };
+): ImportEventRefused | null {
+  const claim = claimFrom(record, provenance);
+  const links = linksFrom(record, provenance);
+  const payload = encodeImportEventFacts({ claim, links, payload: record.payload });
+  if (!(payload instanceof Uint8Array)) return payload;
+  const eventId = deriveImportedId(provenance.manifestDigest, record);
+  const text = DECODER.decode(payload);
+  const first = into.seen.get(eventId);
+  if (first !== undefined && first !== text) {
+    return refuseImportEvent(
+      "IMPORT_EVENT_IDENTITY_CONFLICT",
+      "APPLY",
+      `${record.legacyId} in ${record.sourcePath} derives id ${eventId}, which another `
+        + "record already carries with different facts; importing either would lose one",
+    );
+  }
+  const stored = decodeImportEventFacts(payload);
+  if ("outcome" in stored) return stored;
+  into.seen.set(eventId, text);
+  into.claims.push(stored.claim);
+  into.links.push(...stored.links);
+  into.events.push({ eventId, eventType: `legacy.${record.kind}.imported`, payload });
+  return null;
 }
 
-interface Resolved {
-  readonly entries: readonly ReconcileEntry[];
-  readonly events: readonly ImportEventDraft[];
-}
-
-/** Resolves provenance and canonical payload for every record, in canonical order. */
-function resolve(input: ApplyImportInput): Resolved | ImportRefused {
-  const entries: ReconcileEntry[] = [];
-  const events: ImportEventDraft[] = [];
+/** Resolves provenance, derived facts and canonical payload for every record, in order. */
+function resolve(input: ApplyImportInput): Resolved | ImportEventRefused | ImportRefused {
+  const walk: Resolved = { claims: [], entries: [], events: [], links: [], seen: new Map() };
   for (const record of orderRecords(input.records)) {
     const provenance = deriveProvenance(input.manifest, record);
     if ("outcome" in provenance) return provenance;
-    entries.push({ provenance, record });
-    const canonical = canonicalPayload(record);
-    // A record whose payload cannot be canonicalised is REPORTED by the reconciler as
-    // CORRUPT_BYTES and carries no event; it is never guessed at and never dropped.
-    if (typeof canonical === "string") {
-      events.push(eventFor(record, provenance, canonical));
+    walk.entries.push({ provenance, record });
+    // A payload that cannot be canonicalised is REPORTED as CORRUPT_BYTES and carries no
+    // event, but keeps its derived claim and links so the raw counts do not move.
+    if (typeof canonicalPayload(record) !== "string") {
+      walk.claims.push(claimFrom(record, provenance));
+      walk.links.push(...linksFrom(record, provenance));
+      continue;
     }
+    const refused = foldRecord(walk, record, provenance);
+    if (refused !== null) return refused;
   }
-  return { entries, events };
+  return walk;
 }
 
 /**
@@ -157,7 +196,7 @@ function resolve(input: ApplyImportInput): Resolved | ImportRefused {
 export function applyImport(input: ApplyImportInput): ApplyImportResult {
   const resolved = resolve(input);
   if ("outcome" in resolved) return resolved;
-  const { entries, events } = resolved;
+  const { claims, entries, events, links } = resolved;
   if (events.length > input.maxEventsPerCommit) {
     return refuseImport(
       "IMPORT_TOO_LARGE_FOR_ONE_COMMIT",
@@ -172,8 +211,6 @@ export function applyImport(input: ApplyImportInput): ApplyImportResult {
     knownFields: input.knownFields,
     sourcePaths: input.manifest.entries.map((entry) => entry.path),
   });
-  const claims = entries.map((entry) => claimFrom(entry.record, entry.provenance));
-  const links = entries.flatMap((entry) => linksFrom(entry.record, entry.provenance));
   const counts: ImportCounts = Object.freeze({
     claims: claims.length,
     links: links.length,

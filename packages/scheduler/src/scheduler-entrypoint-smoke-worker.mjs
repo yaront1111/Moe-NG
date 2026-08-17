@@ -3,8 +3,12 @@ import { parentPort } from "node:worker_threads";
 import {
   FAIRNESS_CONTRACT_ISSUE_CODES,
   FAIRNESS_CONTRACT_LAYERS,
+  GRAPH_CONTENT_ISSUE_CODES,
+  GRAPH_REVISION_CONTENT_KEYS,
   analyzeHardEdgeCounterfactuals,
   analyzeGraphStructure,
+  decodeGraphContent,
+  encodeGraphContent,
   partitionFrontier,
   previewGraphSnapshot,
   validateBypassClaim,
@@ -76,6 +80,39 @@ const fairnessRingRefusal = ring.ok
   ? "UNEXPECTEDLY_ADMITTED"
   : `${ring.disposition}:${ring.issues[0].code}:${ring.issues[0].layer}`;
 
+// The graph-content codec, exercised under Node's real resolution for the same
+// reason: `graph-content.js` imports `./graph-content-fields.js`,
+// `./graph-content-format.js` and `./graph-content-issues.js` literally, and a
+// missing or CRLF sibling bridge is invisible to both vitest and tsc.
+const revisionContent = {
+  author: "human:runtime",
+  completionNode: "runtime-done",
+  decompositionBudget: 1,
+  parentRevision: null,
+  policyRevision: "pol-runtime",
+  repositoryBaseTree: "4".repeat(40),
+  snapshot,
+};
+const encodedContent = encodeGraphContent(revisionContent);
+if (!encodedContent.ok) {
+  throw new Error("runtime graph content did not encode");
+}
+const decodedContent = decodeGraphContent(encodedContent.value.bytes);
+const contentRoundTrip = decodedContent.ok
+  && decodedContent.value.graphContentHash === encodedContent.value.graphContentHash
+  ? "MATCHED"
+  : "DRIFTED";
+// Content authority is never the structural identity, proven through the bare
+// specifier rather than the internal module (dec-64b2391c).
+const contentAuthority =
+  encodedContent.value.graphContentHash === encodedContent.value.snapshotIdentity
+    ? "COLLAPSED_ONTO_STRUCTURE"
+    : "SEPARATE";
+const drifted = encodeGraphContent({ ...revisionContent, completionNode: "runtime-other" });
+const contentRefusal = drifted.ok
+  ? "UNEXPECTEDLY_ADMITTED"
+  : `${drifted.issues[0].code}:${drifted.issues[0].layer}`;
+
 let internalSubpath;
 try {
   await import("@moe/scheduler/src/graph-provenance.js");
@@ -88,6 +125,12 @@ try {
 
 parentPort.postMessage({
   admissionReadyWidth: analysis.admissionReadyWidth,
+  contentAuthority,
+  contentHashLength: encodedContent.value.graphContentHash.length,
+  contentIssueCodeCount: GRAPH_CONTENT_ISSUE_CODES.length,
+  contentKeyCount: GRAPH_REVISION_CONTENT_KEYS.length,
+  contentRefusal,
+  contentRoundTrip,
   counterfactualEdgeCount: counterfactuals.edges.length,
   counterfactualType: typeof analyzeHardEdgeCounterfactuals,
   dispatchableWidth: analysis.dispatchableWidth,

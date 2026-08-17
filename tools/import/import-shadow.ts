@@ -15,8 +15,9 @@ import {
   reconcileImport,
 } from "../../packages/import/src/index.js";
 import type {
+  ApplyImportResult,
+  ImportEventRefused,
   ImportRefused,
-  ImportReport,
   ImportStorePort,
   LegacySourceRecord,
   ReconcileEntry,
@@ -136,7 +137,7 @@ function entriesFor(
 function applyShadowImport(
   manifest: SourceManifest,
   records: readonly LegacySourceRecord[],
-): ImportReport | ImportRefused {
+): ApplyImportResult {
   return applyImport({
     declaredRecordCount: null,
     knownFields: KNOWN_FIELDS,
@@ -147,7 +148,8 @@ function applyShadowImport(
   });
 }
 
-function refusedReport(refused: ImportRefused): string {
+/** Either refusal shape: both carry a code, a detail and the layer that answered. */
+function refusedReport(refused: ImportEventRefused | ImportRefused): string {
   return `${JSON.stringify({
     code: refused.code,
     detail: refused.detail,

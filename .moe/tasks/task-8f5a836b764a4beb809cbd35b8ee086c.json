@@ -99,26 +99,43 @@
     {
       "stepId": "step-6",
       "description": "Mutation drill, then prove the diff is behavior-free. THE DRILL (DoD 6): change ONE payload allow-list entry in the extracted vocabulary module -- drop a key from one kind's array. The step-2 enumeration guard must go RED naming that specific kind and key. If it only fails a count, or stays green, the guard is checking shape rather than content and must be strengthened before this task can claim anything. Run a second drill on a capability value for a different kind. Record for each the command, the failing test NAME and the exact assertion; a drill that reddens by crashing has not proven the guard. Restore exact bytes by re-editing, never `git checkout` (destructive in this shared worktree), and confirm with `git diff --numstat` showing 0 added and 0 deleted per drilled file. THEN prove behavior-freedom: `git diff <merge-base>..HEAD -- apps/daemon/src/` should contain only moves and re-exports -- no changed literal, no altered refusal code or layer, no added or removed kind. State that check by name in the completion note as DoD 5 requires.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-vocabulary.ts"
       ],
-      "startedAt": "2026-08-17T17:59:52.450Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "note": "Two mutation drills run and restored; behavior-freedom proved by byte comparison against the pre-split origin.\n\nPRE-DRILL HASH SNAPSHOT (needed because the two new modules were untracked at drill time, so `git checkout` could not have restored them even if the rails allowed it):\n  vocabulary 5a2269137a39a8932ea0d4ccea4d9475b0cdd04039ba96ced44bf2e6a81128e3\n  registry   8dc435b414f5e5e1225cfe7443103b102a45b2c5d3b7a5e2c1a8f3848a66117a\n  dispatch   3cf74da5f7f7e64df6e958c3008af92eba58cb8c6542dc52a1259dc3dbd1ad3f\n\nDRILL 1 -- payload allow-list content (DoD 6). Dropped \"packageItems\" from PAYLOAD_KEYS[\"review.submit\"] in daemon-command-vocabulary.ts.\n  Command: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts\n  Result: EXIT=1, \"Tests 2 failed | 208 passed (210)\". Exactly two, both naming the kind AND the key -- no crash, no count-only failure:\n   - FAIL src/daemon-command-registry.test.ts > registered command table > 'review.submit' keeps its capability and ordered payload allow-list\n     AssertionError: expected [ 'findings', 'round', 'subjectRef' ] to deeply equal [ 'findings', 'packageItems', ...(2) ]   -  \"packageItems\",\n   - FAIL src/daemon-command-vocabulary.test.ts > command vocabulary > 'review.submit' keeps its exact payload allow-list\n     AssertionError: expected [ 'findings', 'round', 'subjectRef' ] to deeply equal [ 'findings', 'packageItems', ...(2) ]   -  \"packageItems\",\n  The other 22 swept payload cases stayed green, so the failure is attributable to the mutated entry rather than to a collapsed suite.\n  Restored by re-editing the single line; sha256 back to 5a2269... exactly.\n\nDRILL 2 -- capability value, different kind and different table. Changed SESSION_FAMILY[\"session.renew\"] from CAPABILITIES.ADMIN to CAPABILITIES.WORK.\n  Same command. Result: EXIT=1, \"Tests 4 failed | 206 passed (210)\", all four naming session.renew:\n   - FAIL registry > 'session.renew' keeps its capability and ordered payload allow-list -- AssertionError: expected 'work.write' to be 'project.admin'\n   - FAIL registry > 'session.renew' exposes its agent capability list through the old module -- expected [ 'work.write' ] to deeply equal [ 'project.admin', 'work.write' ]\n   - FAIL vocabulary > 'session.renew' belongs to its family alone, at its capability -- expected 'work.write' to be 'project.admin'\n   - FAIL vocabulary > 'session.renew' hands an agent its ordered, frozen capability list -- expected [ 'work.write' ] to deeply equal [ 'project.admin', 'work.write' ]\n  Note the second failure reaches through daemon-store-dependencies.js, so the drill also proves the far consumer path is live rather than shadowed.\n  Restored by re-editing; sha256 back to 5a2269... exactly.\n\nRESTORE VERIFIED: all three sha256 values match the pre-drill snapshot character for character, and `git status --porcelain -- apps/daemon/src/` is empty.\n\nBEHAVIOR-FREEDOM, the named check (DoD 5): byte-diff of each MOVED BLOCK against its origin bytes at eb584ae -- `git show eb584ae:apps/daemon/src/daemon-command-registry.ts`, sliced at the recorded line ranges, diffed against the corresponding region of each new module.\n - Vocabulary block: the ONLY differing lines are the eight `export ` prefixes on CAPABILITIES, BOOTSTRAP_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, WiredCommandKind, PAYLOAD_KEYS and OPERATOR_PRINCIPAL_KINDS. Every mapping literal, every payload key string, every capability reference is byte-identical.\n - Dispatch block: the ONLY differing lines are the four `export ` prefixes on encoder, DomainRefusal, decisionOf and refusal, plus the OPERATOR_PRINCIPAL_KINDS declaration, which went to the vocabulary instead and is accounted for in the block above. Every refusal code, layer and httpStatus is byte-identical -- including the 422 default, the 403/409/503 branches and the `refusedBy` layer passthrough.\n - Registry diff (`git diff eb584ae..HEAD -- apps/daemon/src/daemon-command-registry.ts`, 27 added / 154 deleted): every ADDED line is an import narrowing, one of the two new imports, the rewritten header comment, or the re-export. Not one added line contains a command kind, a capability value, a payload key or a refusal code. No kind added, removed or re-mapped; no capability/family/payload value edited; no refusal code or layer touched.\n A silent mapping change inside the move would have been caught by the two enumeration guards, which the drills above prove pin CONTENT and not shape.\n\nSHARED-WORKTREE HAZARD, disclosed (global rail 5 clause 1). While this step ran, a FOREIGN whole-tree completion committed my in-progress files: d2c86b7 \"feat(task-5998ae63e2034bf8b88a4e7446f69a8c): Persist durable per-attempt resource authority\" carries all seven of my files (`git log --diff-filter=A` names d2c86b7 for both new modules). I did NOT amend, reset, stash or create an empty commit. The bytes are safe and correct: `git show HEAD:<path> | sha2",
+      "startedAt": "2026-08-17T17:59:52.450Z",
+      "completedAt": "2026-08-17T18:02:02.228Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review, commit, and gate. ATTACKER PASS on a refactor asks a narrow question -- did anything change that should not have? Diff the step-1 mapping dump against the post-split values one kind at a time. Is any kind now registered twice, or absent? Is any frozen table no longer frozen (the existing test asserts `Object.isFrozen(OPERATOR_CAPABILITIES)`; check the others too -- a move through a spread silently unfreezes)? Did any import become a type-only import that erases a runtime value? Does the new `.js` bridge exist and load under plain Node from apps/daemon? Are both consumer paths still resolving? Confirm no test file was deleted, skipped, or narrowed to accommodate the move. COMMIT: `git status --porcelain`, unstage any foreign entry with `git restore --staged -- <path>`, commit ONLY the owned paths by explicit pathspec, and verify with `git show --stat` that no foreign path appears; if a foreign whole-tree completion already captured these bytes, do NOT amend or reset -- record the merge-base diff for QA. GATE, foreground and `&&`-chained so no red leg is masked: `pnpm typecheck && pnpm --filter @moe/daemon test && pnpm test`. Read the OUTPUT, not the exit code: `pnpm --filter` on an unresolved name prints \"No projects matched the filters\" and exits 0, so each leg counts only if it prints a `Test Files N passed` line with N nonzero; `@moe/daemon` resolves to apps/daemon and root `pnpm test` does not cover apps/**, so both legs are needed. Confirm daemon-command-registry.test.ts and daemon-command-registry-continuation.test.ts both appear by name.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-vocabulary.ts",
         "apps/daemon/src/daemon-command-vocabulary.js",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-vocabulary.js",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-dispatch.ts",
+        "apps/daemon/src/daemon-command-dispatch.js",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "ATTACKER PASS, each question answered by a command rather than by reading.\n- Any kind registered twice or absent? No. `buildCommandRegistry` throws on a duplicate kind; registry.size is 23; the sorted kind SET and the unsorted REGISTRATION ORDER are both pinned against literals. The plain-Node probe independently reports the same 23-kind set.\n- Any frozen table silently unfrozen by the move? No. daemon-command-vocabulary.test.ts asserts Object.isFrozen on all four family maps, PAYLOAD_KEYS and OPERATOR_CAPABILITIES -- the pre-existing suite only covered OPERATOR_CAPABILITIES. NOTED, deliberately NOT changed: CAPABILITIES is `as const` and OPERATOR_PRINCIPAL_KINDS is a `ReadonlySet` over a mutable Set; neither was frozen at HEAD, and adding Object.freeze would be an observable behavior change this task's rail 1 forbids. Both are now module-external, which widens who could mutate them; worth a follow-up, out of scope here.\n- Any import turned type-only and erased a runtime value? No. `git grep \"import type.*daemon-command-(vocabulary|dispatch)\"` returns nothing -- both new edges are value imports. The dispatch module's own seven imports ARE type-only and correctly so; they name only outcome/decision types.\n- Do the new .js bridges exist and load under plain Node from apps/daemon? Yes -- step 4's `node --experimental-strip-types` run imported all three bridges (NODE_EXIT=0), and runtime-entrypoint.test.ts's bridge-parity guard passes, which it would not if either bridge were `missing` or `unexpected`.\n- Both consumer paths resolving? Yes -- `sameFunction: true` / `sameOperatorArray: true` across registry, store-dependencies and vocabulary: one object per symbol, no duplicate definition.\n- Any test deleted, skipped or narrowed? No. `git diff eb584ae..HEAD -- daemon-command-registry.test.ts` has ZERO deleted lines (68 added / 0 deleted). No `.skip`/`.only`/`.todo` in any of the three suites. No test file deleted anywhere under apps/daemon/src (`--diff-filter=D` empty).\n\nCOMMIT: nothing to commit, and no empty commit was created. A foreign whole-tree completion, d2c86b7 \"feat(task-5998ae63e2034bf8b88a4e7446f69a8c)\", already captured all seven of my files. Per global rail 5 clause 1 I did not amend, reset or stash. Verified instead: for every one of the seven owned paths `git show HEAD:<path> | sha256sum` equals the worktree sha256, and `git status --porcelain -- apps/daemon/src/daemon-command-*` is empty. QA should review by base-ref diff: `git diff eb584ae..HEAD -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/daemon-command-registry.test.ts apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/daemon-command-vocabulary.js apps/daemon/src/daemon-command-vocabulary.test.ts apps/daemon/src/daemon-command-dispatch.ts apps/daemon/src/daemon-command-dispatch.js`.\n\nGATE. Named legs run foreground and &&-chained. OUTPUT read, not just exit codes.\n1. `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test` -> EXIT 0, \"Test Files 116 passed (116) / Tests 2408 passed (2408)\". Nonzero count line, so the filter resolved and tests actually ran.\n2. Suites confirmed BY NAME in a focused run: daemon-command-registry.test.ts, daemon-command-registry-continuation.test.ts, daemon-command-vocabulary.test.ts, daemon-store-dependencies.test.ts, runtime-entrypoint.test.ts, index-surface.test.ts -> EXIT 0, \"Test Files 6 passed (6) / Tests 341 passed (341)\".\n3. `pnpm typecheck` (repo-wide) -> EXIT 1. ONE error, FOREIGN: `packages/scheduler typecheck: src/index-surface.test.ts(251,28): error TS2339: Property 'GRAPH_REVISION_CONTENT_KEYS' does not exist on type 'typeof import(\".../packages/scheduler/src/index\")'`. Every other project prints Done, including apps/daemon.\n4. `pnpm test` (root) -> EXIT 1, \"Test Files 3 failed | 288 passed (291) / Tests 4 failed | 6896 passed | 2 skipped\". Failing files, all foreign: packages/scheduler/src/index-surface.test.ts (\"publishes exactly the reviewed root namespace, with no loss and no addition\"), packages/store/src/recovery-anchor.test.ts (\"publishes exactly the anchor surface a restore controller composes\"), tests/integration/release-archive-cleanup.test.ts (2 tests).\n\nPATH ATTRIBUTION (global rail 3). Owned paths: apps/daemon/src/daemon-command-*.{ts,js} only. The HEAD failing-path set is {packages/scheduler/src/index-surface.test.ts, packages/store/src/recovery-anchor.test.ts, tests/integration/release-archive-cleanup.test.ts}; its intersection with the owned paths is EMPTY. Three independent measurements say the red is not mine:\n (a) STRUCTURAL: root vitest.config.ts:6 is `include: [\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\"]` -- apps/** is not covered, so root `pnpm test` cannot execute one line this task wrote.\n (b) DIRTY-TREE: `git status --porcelain -- packages/scheduler` shows a peer mid-refactor -- M graph-content.ts, M graph-content-format.ts, M index-surface.test.ts, ?? graph-content-fields.{ts,js}, ?? graph-content-issues.{t",
+      "startedAt": "2026-08-17T18:02:04.616Z",
+      "completedAt": "2026-08-17T18:06:53.589Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -130,19 +147,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:43:34.086Z",
-  "updatedAt": "2026-08-17T17:59:52.450Z",
+  "updatedAt": "2026-08-17T18:08:20.653Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:46:16.940Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:47:40.145Z",
@@ -163,7 +182,24 @@
   },
   "planApprovedAt": "2026-08-17T17:47:42.212Z",
   "contextFetchedBy": [
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
-  "workStartedAt": "2026-08-17T17:47:59.006Z"
+  "workStartedAt": "2026-08-17T17:47:59.006Z",
+  "reviewStartedAt": "2026-08-17T18:07:53.184Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  116 passed (116)\n      Tests  2408 passed (2408)\n   Start at  21:06:10\n   Duration  6.99s (transform 41.70s, setup 0ms, import 95.87s, tests 68.56s, environment 10ms)\nOWNED_GATE_EXIT=0",
+    "reportedAt": "2026-08-17T18:07:53.184Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-vocabulary.js",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-dispatch.ts",
+    "apps/daemon/src/daemon-command-dispatch.js"
+  ]
 }

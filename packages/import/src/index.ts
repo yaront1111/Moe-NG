@@ -66,6 +66,33 @@ export type {
   TimeBasis,
 } from "./import-contract.js";
 
+/**
+ * The versioned wire form of a committed import event, and its strict decoder.
+ *
+ * Published from `import-event-codec.js` alone even though the vocabulary lives beside it
+ * in `import-event-facts.ts`: that file split is a line-rail concern, not a consumer one,
+ * so the codec stays ONE seam here.
+ *
+ * CONSUMER EDGE: the production reader is task-80fce1d1d625453098bd526d61c5ddb8
+ * ("Portability: expose the daemon shadow projection adapter"). `tools/import/import-shadow.ts`
+ * already composes `applyImport` today and is typechecked only by `pnpm typecheck:import`.
+ */
+export {
+  IMPORT_EVENT_FACTS_VERSION,
+  IMPORT_EVENT_MAX_BYTES,
+  IMPORT_EVENT_REFUSAL_CODES,
+  admitImportEventFacts,
+  decodeImportEventFacts,
+  encodeImportEventFacts,
+  refuseImportEvent,
+} from "./import-event-codec.js";
+export type {
+  ImportEventFacts,
+  ImportEventFactsInput,
+  ImportEventRefusalCode,
+  ImportEventRefused,
+} from "./import-event-codec.js";
+
 export { reconcileImport } from "./import-reconcile.js";
 export type { ReconcileEntry, ReconcileInput, ReconcileReport } from "./import-reconcile.js";
 

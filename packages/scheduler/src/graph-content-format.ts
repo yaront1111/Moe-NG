@@ -24,16 +24,27 @@ import {
 } from "./runtime-shape.js";
 import type { GraphSnapshot, ValidatedGraph } from "./graph-model.js";
 
-/** The exact tag serialized into the envelope. Never reworded silently. */
-export const SCHEMA_TAG = "MOE-GRAPH-CONTENT/1";
 /**
- * Separate from {@link SCHEMA_TAG} on purpose: a digest domain and a wire tag
- * that share one string cannot be rotated independently.
+ * The exact tag serialized into the envelope. Never reworded silently.
+ *
+ * `/2` because the version-1 envelope carried a snapshot and a structure-only
+ * hash under the name `graphContentHash`. Reinterpreting those bytes under
+ * version-2 rules is precisely how that structural identity would survive
+ * disguised as content authority, so the bump is load-bearing: version-1 bytes
+ * decode to `GRAPH_CONTENT_UNSUPPORTED_SCHEMA` and nothing else.
  */
-const HASH_DOMAIN = "MOE-GRAPH-CONTENT-HASH/1";
+export const SCHEMA_TAG = "MOE-GRAPH-CONTENT/2";
+/**
+ * Separate from {@link SCHEMA_TAG} and from the content-hash domain on purpose: a
+ * digest domain and a wire tag that share one string cannot be rotated
+ * independently, and a STRUCTURAL domain that shared a string with the CONTENT
+ * domain could produce the one value decision dec-64b2391c forbids — a structural
+ * identity indistinguishable from content authority.
+ */
+export const SNAPSHOT_IDENTITY_DOMAIN = "MOE-GRAPH-SNAPSHOT-IDENTITY/1";
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
-const ENVELOPE_KEYS = Object.freeze(["schema", "hash", "snapshot"] as const);
+const ENVELOPE_KEYS = Object.freeze(["schema", "hash", "content"] as const);
 
 /**
  * Derived from the kernel's own absolute ceilings rather than guessed, so
@@ -44,8 +55,18 @@ const ENVELOPE_KEYS = Object.freeze(["schema", "hash", "snapshot"] as const);
 const NODE_RECORD_ALLOWANCE = 48;
 const EDGE_RECORD_ALLOWANCE = 96;
 const ENVELOPE_ALLOWANCE = 1024;
+/**
+ * The six non-snapshot content fields. Each is bounded by `isGraphKey`'s own
+ * ceiling (or is shorter still), so this is derived from the same kernel constant
+ * as the node allowance rather than guessed, with slack for the field name and
+ * JSON punctuation around each value.
+ */
+const CONTENT_FIELD_COUNT = 6;
+const CONTENT_FIELD_ALLOWANCE =
+  CONTENT_FIELD_COUNT * (MAX_GRAPH_KEY_CODE_UNITS + 64);
 export const MAX_GRAPH_CONTENT_BYTES =
   ENVELOPE_ALLOWANCE
+  + CONTENT_FIELD_ALLOWANCE
   + ABSOLUTE_MAX_GRAPH_NODES * (MAX_GRAPH_KEY_CODE_UNITS + NODE_RECORD_ALLOWANCE)
   + ABSOLUTE_MAX_GRAPH_TOTAL_EDGES
     * (3 * MAX_GRAPH_KEY_CODE_UNITS + EDGE_RECORD_ALLOWANCE);
@@ -74,7 +95,7 @@ export const DECODE_POLICY = Object.freeze({
 export interface GraphContentEnvelope {
   readonly schema: string;
   readonly hash: string;
-  readonly snapshot: unknown;
+  readonly content: unknown;
 }
 
 /**
@@ -87,7 +108,12 @@ function quote(value: string): string {
   return JSON.stringify(value);
 }
 
-export function canonicalGraphJson(hash: string, graph: ValidatedGraph): string {
+/**
+ * The canonical node/edge set alone — the one design-197 field this module owns.
+ * Split out of the envelope so the content digest can frame it as ONE field
+ * without any second definition of structural canonicalisation existing.
+ */
+export function canonicalSnapshotJson(graph: ValidatedGraph): string {
   const nodes = graph.nodes.map((node) =>
     `{"nodeKey":${quote(node.nodeKey)},"executionBearing":`
     + `${node.executionBearing ? "true" : "false"}}`);
@@ -95,19 +121,29 @@ export function canonicalGraphJson(hash: string, graph: ValidatedGraph): string 
     `{"edgeKey":${quote(edge.edgeKey)},"producerNodeKey":`
     + `${quote(edge.producerNodeKey)},"consumerNodeKey":`
     + `${quote(edge.consumerNodeKey)},"kind":${quote(edge.kind)}}`);
-  return `{"schema":${quote(SCHEMA_TAG)},"hash":${quote(hash)},"snapshot":`
-    + `{"nodes":[${nodes.join(",")}],"edges":[${edges.join(",")}],`
-    + `"completionNodeKey":${quote(graph.completionNodeKey)}}}`;
+  return `{"nodes":[${nodes.join(",")}],"edges":[${edges.join(",")}],`
+    + `"completionNodeKey":${quote(graph.completionNodeKey)}}`;
+}
+
+/** The wire envelope around an already-canonical content record. */
+export function canonicalGraphJson(hash: string, contentJson: string): string {
+  return `{"schema":${quote(SCHEMA_TAG)},"hash":${quote(hash)},`
+    + `"content":${contentJson}}`;
 }
 
 /**
- * Domain-separated and length-framed: the framing stops one `graphIdentity`
- * from colliding with a differently-domained payload sharing a suffix.
+ * The graph's STRUCTURE only — nodes, edges and completion node, as
+ * `graphIdentity` defines them. Named for what it is: it is NOT content identity
+ * and must never be handed to a consumer asking for `graphContentHash`, which
+ * covers six further fields this value knows nothing about (dec-64b2391c).
+ *
+ * Domain-separated and length-framed: the framing stops one `graphIdentity` from
+ * colliding with a differently-domained payload sharing a suffix.
  */
-export function graphContentHash(graph: ValidatedGraph): string {
+export function snapshotIdentityHash(graph: ValidatedGraph): string {
   const identity = graph.graphIdentity;
   return createHash("sha256")
-    .update(`${HASH_DOMAIN}\n${identity.length}:`, "utf8")
+    .update(`${SNAPSHOT_IDENTITY_DOMAIN}\n${identity.length}:`, "utf8")
     .update(identity, "utf8")
     .digest("hex");
 }
@@ -158,7 +194,7 @@ export function readContentEnvelope(value: unknown): GraphContentEnvelope | null
   }
   const schema = readOwnDataProperty(value, "schema");
   const hash = readOwnDataProperty(value, "hash");
-  const snapshot = readOwnDataProperty(value, "snapshot");
+  const content = readOwnDataProperty(value, "content");
   if (!schema.ok || !schema.present || typeof schema.value !== "string") {
     return null;
   }
@@ -166,10 +202,10 @@ export function readContentEnvelope(value: unknown): GraphContentEnvelope | null
     || !HEX_64.test(hash.value)) {
     return null;
   }
-  if (!snapshot.ok || !snapshot.present) {
+  if (!content.ok || !content.present) {
     return null;
   }
-  return { schema: schema.value, hash: hash.value, snapshot: snapshot.value };
+  return { schema: schema.value, hash: hash.value, content: content.value };
 }
 
 export function sameBytes(left: Uint8Array, right: Uint8Array): boolean {

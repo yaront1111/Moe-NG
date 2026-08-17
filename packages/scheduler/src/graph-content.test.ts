@@ -699,6 +699,7 @@ describe("runtime bridges", () => {
     ["graph-content", "graph-content.ts"],
     ["graph-content-fields", "graph-content-fields.ts"],
     ["graph-content-format", "graph-content-format.ts"],
+    ["graph-content-issues", "graph-content-issues.ts"],
   ])("publishes the exact one-line LF bridge for %s", (name, target) => {
     const bridge = readFileSync(
       new URL(`./${name}.js`, import.meta.url),

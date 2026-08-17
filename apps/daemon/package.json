@@ -12,9 +12,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
+    "@moe/context": "workspace:*",
     "@moe/contracts": "workspace:*",
     "@moe/coordination": "workspace:*",
     "@moe/core": "workspace:*",
+    "@moe/import": "workspace:*",
     "@moe/mcp": "workspace:*",
     "@moe/review": "workspace:*",
     "@moe/runner": "workspace:*",

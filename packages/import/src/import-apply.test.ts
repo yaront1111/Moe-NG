@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { canonicalJson } from "./canonical-bytes.js";
 import { applyImport } from "./import-apply.js";
 import type { ImportCommitInput, ImportStorePort } from "./import-apply.js";
 import { deriveImportedId } from "./import-canonical.js";
@@ -8,6 +9,7 @@ import { IMPORTED_CLAIM_STATUSES, LEGACY_LINK_KINDS } from "./import-contract.js
 import type { ImportReport, ImportRefusalLayer } from "./import-contract.js";
 import {
   IMPORT_EVENT_FACTS_VERSION,
+  IMPORT_EVENT_MAX_BYTES,
   IMPORT_EVENT_REFUSAL_CODES,
   admitImportEventFacts,
   decodeImportEventFacts,
@@ -18,6 +20,9 @@ import type {
   ImportEventRefusalCode,
   ImportEventRefused,
 } from "./import-event-codec.js";
+import { SHADOW_ENTITY_FIELDS, SHADOW_PROJECTION_VERSION } from "./shadow-contract.js";
+import type { ShadowEntityKind } from "./shadow-contract.js";
+import { projectLegacyImport } from "./shadow-projection.js";
 import type { SourceManifest } from "./source-manifest.js";
 
 /**
@@ -499,15 +504,171 @@ describe("the accepted control: what a decoded event actually carries", () => {
       payload: { ...RICH_PAYLOAD },
     });
     expect([...shuffled]).toEqual([...forward]);
-    // And the ordering is the codec's own, not the caller's: the source order is CONTAINS,
-    // RELATED task-9, RELATED task-10, which is NOT what comes back out.
-    expect(decoded(forward).links.map((link) => link.to)).toEqual(["task-1", "task-10", "task-9"]);
-    expect(report.links.map((link) => link.to)).toEqual(["task-1", "task-9", "task-10"]);
+    // And the ordering is the codec's OWN, not a pass-through of whatever it was handed:
+    // the reversed input does not come back out reversed.
+    const order = decoded(forward).links.map((link) => link.to);
+    expect(order).toEqual(["task-1", "task-10", "task-9"]);
+    expect([...report.links].reverse().map((link) => link.to)).not.toEqual(order);
+  });
+
+  it("returns the STORED representation, not a separately built lookalike", () => {
+    // DoD 2's anti-echo clause. Comparing the report against a hand-built expectation
+    // cannot tell "read back out of the committed bytes" from "rebuilt alongside them", so
+    // both halves are pinned: the report equals the DECODED facts in order, and re-encoding
+    // the report reproduces the committed bytes exactly.
+    const spy = spyStore();
+    const report = reported(run([
+      record({ legacyId: "a", payload: { ...RICH_PAYLOAD } }),
+      record({ legacyId: "b", payload: { owner: "bob", parent: "epic-2" }, sourcePath: "tasks/two.json" }),
+    ], spy));
+    const events = spy.commits[0]?.events ?? [];
+    expect(events.length).toBe(2);
+    const facts = events.map((event) => decoded(event.payload));
+    expect(report.claims).toEqual(facts.map((fact) => fact.claim));
+    expect(report.links).toEqual(facts.flatMap((fact) => fact.links));
+    const first = events[0];
+    if (first === undefined) throw new Error("production committed no event");
+    expect([...encoded({
+      claim: facts[0]!.claim,
+      links: report.links.filter((link) => link.provenance.sourcePath === "tasks/one.json"),
+      payload: facts[0]!.payload,
+    })]).toEqual([...first.payload]);
+  });
+
+  it("carries everything moe-shadow-projection/1 reads, checked against the projector", () => {
+    // Stated as a PROPERTY against the production projector and its frozen field
+    // vocabulary, not as a field checklist that can fall behind them: every field
+    // SHADOW_ENTITY_FIELDS declares must be populated from the STORED bytes alone.
+    const spy = spyStore();
+    const report = reported(run([
+      record({ legacyId: "a", payload: { ...RICH_PAYLOAD } }),
+      record({ legacyId: "b", payload: { owner: "bob", parent: "epic-2" }, sourcePath: "tasks/two.json" }),
+    ], spy));
+    const facts = (spy.commits[0]?.events ?? []).map((event) => decoded(event.payload));
+    expect(facts.length).toBe(2);
+    for (const fact of facts) expect(fact.shadowVersion).toBe(SHADOW_PROJECTION_VERSION);
+    const fromStore = projectLegacyImport({
+      claims: facts.map((fact) => fact.claim),
+      links: facts.flatMap((fact) => fact.links),
+    });
+    expect(fromStore.version).toBe(SHADOW_PROJECTION_VERSION);
+    expect(fromStore.entities.length).toBeGreaterThan(0);
+    const kinds = new Set(fromStore.entities.map((entity) => entity.kind));
+    expect([...kinds].sort()).toEqual(["BLOCKER", "CLAIM", "LINK"]);
+    for (const entity of fromStore.entities) {
+      for (const field of SHADOW_ENTITY_FIELDS[entity.kind as ShadowEntityKind]) {
+        expect(Object.hasOwn(entity.fields, field)).toBe(true);
+        expect(entity.fields[field]).not.toBe("");
+      }
+    }
+    // The values themselves, so a populated-but-wrong field cannot pass the sweep above.
+    const claimId = facts[0]?.claim.claimId;
+    expect(fromStore.entities.find((entity) => entity.kind === "CLAIM" && entity.id === claimId)?.fields)
+      .toEqual({ principal: "alice", sourcePath: "tasks/one.json", status: "SUSPENDED" });
+    expect(fromStore.entities.find((entity) => entity.kind === "BLOCKER")?.fields)
+      .toEqual({ basis: "SUSPENDED_CLAIM", holder: "alice" });
+    // And the projection off the stored bytes is byte-identical to the reported one.
+    expect(canonicalJson(fromStore))
+      .toBe(canonicalJson(projectLegacyImport({ claims: report.claims, links: report.links })));
   });
 
   it("declares a frozen, sorted refusal vocabulary", () => {
     expect(Object.isFrozen(IMPORT_EVENT_REFUSAL_CODES)).toBe(true);
     expect([...IMPORT_EVENT_REFUSAL_CODES]).toEqual([...IMPORT_EVENT_REFUSAL_CODES].sort());
     expect(new Set(IMPORT_EVENT_REFUSAL_CODES).size).toBe(IMPORT_EVENT_REFUSAL_CODES.length);
+  });
+});
+
+const CONFLICT_PAIR: readonly LegacySourceRecord[] = Object.freeze([
+  record({ payload: { owner: "alice" } }),
+  // Same kind, legacyId and sourcePath, so the SAME id derives — with different facts.
+  record({ payload: { owner: "mallory" } }),
+]);
+
+describe("committed facts replay identically, and a conflicting identity refuses first", () => {
+  it("commits byte-identical ids, payloads and command bytes on a replay", () => {
+    const first = spyStore();
+    const second = spyStore();
+    const records = [
+      record({ legacyId: "a", payload: { ...RICH_PAYLOAD } }),
+      record({ legacyId: "b", payload: { owner: "bob", parent: "epic-2" }, sourcePath: "tasks/two.json" }),
+    ];
+    const left = reported(run(records, first));
+    const right = reported(run([...records].reverse(), second));
+    const commits = [first.commits[0], second.commits[0]];
+    expect(commits[0]?.events.length).toBe(2);
+    expect(commits[1]?.events.map((event) => event.eventId))
+      .toEqual(commits[0]?.events.map((event) => event.eventId));
+    expect(commits[1]?.events.map((event) => [...event.payload]))
+      .toEqual(commits[0]?.events.map((event) => [...event.payload]));
+    expect([...(commits[1]?.commandBytes ?? [])]).toEqual([...(commits[0]?.commandBytes ?? [])]);
+    expect(commits[1]?.commandId).toBe(commits[0]?.commandId);
+    // The raw counts are exactly what they were before facts were persisted: nothing in
+    // this change may move them.
+    expect({ ...right.counts }).toEqual({ ...left.counts });
+    expect({ ...left.counts })
+      .toEqual({ claims: 2, links: 4, reconciliations: 2, sourceFiles: 2 });
+  });
+
+  it("refuses a conflicting derived identity BEFORE anything is written", () => {
+    const spy = spyStore();
+    const result = run(CONFLICT_PAIR, spy);
+    expectRefusal(result, "IMPORT_EVENT_IDENTITY_CONFLICT", "APPLY");
+    // A refusal that already wrote is exactly what this clause exists to prevent, so the
+    // return value alone is not enough: the port must have recorded nothing.
+    expect(spy.commits.length).toBe(0);
+  });
+
+  it("still collapses a byte-identical duplicate rather than refusing it", () => {
+    // The negative control for the arm above: same identity, same facts, no conflict.
+    const spy = spyStore();
+    const report = reported(run([record(), record()], spy));
+    expect(spy.commits.length).toBe(1);
+    expect(report.counts.claims).toBe(2);
+  });
+
+  it("carries the awkward legacy values a real corpus produces", () => {
+    // Adversarial: an empty link endpoint and the "UNKNOWN" principal fallback are values
+    // the importer DERIVES, so the codec has to round-trip them rather than normalise them
+    // into something the source never said.
+    const facts = decoded(factsBytes({
+      payload: { dependsOn: [""], owner: 7, parent: "" },
+    }));
+    expect(facts.claim.principal).toBe("UNKNOWN");
+    expect(facts.claim.status).toBe("HISTORICAL");
+    expect(facts.links.map((link) => [link.kind, link.from, link.to]))
+      .toEqual([["CONTAINS", "", "task-1"], ["RELATED", "task-1", ""]]);
+  });
+
+  it("imports an import sitting exactly on the per-commit bound", () => {
+    // The boundary, not one either side of it: `>` and `>=` differ here, and persisting
+    // facts must not have moved the edge.
+    const spy = spyStore();
+    const records = [record({ legacyId: "a" }), record({ legacyId: "b" })];
+    expect(reported(run(records, spy, 2)).counts.claims).toBe(2);
+    expect(spy.commits[0]?.events.length).toBe(2);
+    // Asserted directly rather than through `expectRefusal`: this is the IMPORT vocabulary,
+    // not the event codec's, and the emitter-coverage set must stay the codec's alone.
+    const over = refusalOf(run(records, spyStore(), 1));
+    expect(over.code).toBe("IMPORT_TOO_LARGE_FOR_ONE_COMMIT");
+    expect(over.layer).toBe("APPLY");
+  });
+
+  it("refuses oversized and pathologically nested bytes instead of crashing", () => {
+    // "A crash is not a refusal": JSON.parse is iterative in V8, so bytes it accepts can
+    // still overflow a recursive walk. Both must come back as a code, not a throw.
+    const oversized = bytesOf(`{"claim":"${"x".repeat(IMPORT_EVENT_MAX_BYTES)}"}`);
+    expect(oversized.byteLength).toBeGreaterThan(IMPORT_EVENT_MAX_BYTES);
+    expectRefusal(decodeImportEventFacts(oversized), "IMPORT_EVENT_BYTES_MALFORMED", "DECODE");
+    const depth = 100_000;
+    const nested = bytesOf(`${"[".repeat(depth)}1${"]".repeat(depth)}`);
+    expectRefusal(decodeImportEventFacts(nested), "IMPORT_EVENT_BYTES_MALFORMED", "DECODE");
+  });
+
+  it("has a live emitter for every code it declares", () => {
+    // Runs last on purpose: an unreachable code is a claim no test can pin, and a frozen
+    // list is the easiest place for one to hide. It is a WHOLE-FILE invariant, so a run
+    // narrowed by --test-name-pattern will fail it; that is the assertion working.
+    expect([...EMITTED_CODES].sort()).toEqual([...IMPORT_EVENT_REFUSAL_CODES]);
   });
 });
