@@ -88,8 +88,8 @@
       "completedAt": "2026-08-17T20:12:43.828Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a83aecdf",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -101,7 +101,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T18:45:35.428Z",
-  "updatedAt": "2026-08-17T20:12:43.828Z",
+  "updatedAt": "2026-08-17T20:13:56.403Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:38.866Z",
     "plannedStepCount": 6,
@@ -158,12 +158,12 @@
     "worker-a83aecdf"
   ],
   "workStartedAt": "2026-08-17T19:34:57.203Z",
-  "reviewStartedAt": "2026-08-17T19:47:18.268Z",
+  "reviewStartedAt": "2026-08-17T20:13:56.403Z",
   "verification": {
     "command": "pnpm test:security",
     "exitCode": 0,
-    "outputTail": "$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n\n Test Files  9 passed (9)\n      Tests  483 passed (483)\n   Start at  22:45:50\n   Duration  10.30s (transform 2.36s, setup 0ms, import 3.87s, tests 5.59s, environment 0ms)\n\nSECURITY_EXIT=0",
-    "reportedAt": "2026-08-17T19:47:18.268Z"
+    "outputTail": "$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n Test Files  9 passed (9)\n      Tests  487 passed (487)\n   Start at  23:11:52\n   Duration  9.50s (transform 2.12s, setup 0ms, import 3.52s, tests 5.19s, environment 0ms)",
+    "reportedAt": "2026-08-17T20:13:56.403Z"
   },
   "filesModified": [
     "tests/security/integrity-hostile-cases.ts",

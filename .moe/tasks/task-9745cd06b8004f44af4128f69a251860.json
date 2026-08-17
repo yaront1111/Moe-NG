@@ -61,11 +61,16 @@
     {
       "stepId": "step-4",
       "description": "MINIMUM IMPLEMENTATION in packages/import/src/import-apply.ts only. Reuse the existing public package constant by adding `IMPORT_EVENT_FACTS_VERSION` to the codec import; make `ImportEventDraft.domainSchemaVersion` a REQUIRED `typeof IMPORT_EVENT_FACTS_VERSION`; and stamp every foldRecord event with `domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION`. Do not change claim/link derivation, eventId, eventType, payload, aggregate, commandId, commandBytes, committedAt, counts, or refusal behavior, and do not edit @moe/store/codec/barrels. The store deliberately excludes domainSchemaVersion from request/effect identity, so the golden identities must remain unchanged. Keep import-apply.ts at <=250 physical lines by compacting the existing codec import/removing redundant blank layout—not by dropping the why-comments or adding a new responsibility. This fixes future first commits only: identical replay preserves an already-stamped row; it does NOT restamp pre-fix generic rows.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.ts"
       ],
-      "startedAt": "2026-08-17T20:12:12.967Z"
+      "modifiedFiles": [
+        "packages/import/src/import-apply.ts"
+      ],
+      "note": "MINIMUM IMPLEMENTATION — packages/import/src/import-apply.ts only, three substantive changes:\n1. `IMPORT_EVENT_FACTS_VERSION` added to the EXISTING ./import-event-codec.js import (no second constant, no new module, no new dependency).\n2. `ImportEventDraft.domainSchemaVersion` declared REQUIRED and typed `typeof IMPORT_EVENT_FACTS_VERSION`, with a why-comment naming the store's generic default as the defect.\n3. `foldRecord` pushes `domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION` on every event.\n\nNothing else moved: claim/link derivation, eventId, eventType, payload bytes, aggregateId, commandId, commandBytes, committedAt, counts and every refusal path are byte-unchanged; no @moe/store, codec or barrel file was touched. The remaining diff is pure layout compaction of three existing import blocks (import-canonical value block 6->3 lines, import-contract type block 8->3, codec block 5->3) to hold the line target; no why-comment was dropped except one prose line inside the new member's own doc block.\n\nLINE TARGET HELD: import-apply.ts is exactly 250 physical lines, 0 CR bytes. Longest line is 102 chars at line 224 (`commandId: canonicalDigest(...)`), which is byte-identical to HEAD — `git show HEAD:...| awk length>99` reports the same single line at the same length, so this change introduced no over-width line.\n\nGREEN, both owned legs, each its own foreground run:\n- pnpm --filter @moe/import typecheck EXIT 0 (both step-2 type errors cleared).\n- pnpm --filter @moe/import test EXIT 0, \"Test Files 8 passed (8) / Tests 134 passed (134)\" — up exactly the two cases added in step 2, and the goldens (commandId dceabb9c, commandBytes cbf3ab0e, eventIds ec4597cf/aaf6423c) still hold, so the envelope metadata did not disturb command or event identity.\n- pnpm test:migration EXIT 0, \"Test Files 3 passed (3) / Tests 26 passed (26)\"; the real-SQLite case now reads moe-import-event-facts/1 at both envelope and payload, with COMMITTED->REPLAYED and zero new rows.\n\nSCOPE HONESTY: this fixes FUTURE first commits. An identical replay preserves an already-stamped row because @moe/store keeps domainSchemaVersion out of request and effect identity and returns the original receipt; a pre-fix row carrying moe-domain-schema/0 is NOT restamped by this change and would need an explicit upcast/migration task.",
+      "startedAt": "2026-08-17T20:12:12.967Z",
+      "completedAt": "2026-08-17T20:14:01.279Z"
     },
     {
       "stepId": "step-5",
@@ -101,12 +106,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T19:53:43.483Z",
-  "updatedAt": "2026-08-17T20:12:12.967Z",
+  "updatedAt": "2026-08-17T20:14:01.279Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:54:53.573Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -115,7 +120,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T20:01:06.925Z",
