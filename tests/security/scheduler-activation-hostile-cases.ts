@@ -102,6 +102,29 @@ import {
 import {
   AGENT_STAFFING_LAYER, createAgentSessionFence,
 } from "../../apps/daemon/src/orchestrator/agent-session-fence.js";
+import { readDurableLedger } from "../../apps/daemon/src/bootstrap/bootstrap-ledger.js";
+import {
+  GOAL_ID,
+  PROJECT_ID as GOAL_PROJECT_ID,
+  acceptancePayload,
+  closeStores,
+  decisionCount,
+  envelope,
+  openStore,
+  send,
+} from "../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
+import {
+  GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
+  GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS,
+  GOAL_PREREQUISITE_LAYER,
+} from "../../apps/daemon/src/goals/goal-close-prerequisite.js";
+import {
+  approveNodes,
+  cleanupGoalClosureFixtures,
+  seedReviewAcceptance,
+  seedVerifiedNode,
+} from "../../apps/daemon/src/goals/goal-closure-test-fixtures.js";
+import { qualifyGoalClosure } from "../../apps/daemon/src/goals/goal-qualification.js";
 import { hostileRoot } from "./hostile-harness.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
 
@@ -987,6 +1010,165 @@ const holdCommand = (commandId: string, expectedVersion: number): Record<string,
   workerHandoff: { ...HANDOFF },
 });
 
+// ---------------------------------------------------------------------------
+// GROUP 4 — the goal-closure prerequisite (apps/daemon, GOAL_PREREQUISITE_LAYER)
+//
+// `goal.close` passes THREE layers that can all refuse it: the daemon's ingress payload
+// check, this prerequisite composer, and the core reducer behind it. A case asserting only
+// "refused" is therefore one arranged-fixture slip away from testing nothing, so every arm
+// below drives the real `send -> runBootstrapCommand -> GOAL_HANDLERS["goal.close"]` chain
+// against real durable SQLite facts and the suite pins production's OWN `refusedBy`.
+//
+// A REFUSED CLOSE IS NOT PROVED BY ITS RETURN VALUE. The worst defect available here is a
+// handler that mutates and then refuses, so the driver snapshots the raw decision count, the
+// goal aggregate's event count, its `GoalCompleted` count and its durable result bytes on
+// both sides of every command and the suite requires all four to be unchanged.
+// ---------------------------------------------------------------------------
+
+/** The durable facts a refused `goal.close` must leave EXACTLY as it found them. */
+export interface GoalResidue {
+  readonly completedEvents: number;
+  readonly decisions: number;
+  readonly goalEvents: number;
+  /** The committed goal result, serialized, so a silent field edit is visible too. */
+  readonly resultBytes: string;
+}
+
+export interface GoalPrerequisiteProof {
+  readonly after: GoalResidue;
+  readonly arm: "AFTER" | "BEFORE" | "CONTROL" | "RACE";
+  readonly before: GoalResidue;
+  /** PRODUCTION's own return value, recorded unprojected. */
+  readonly outcome: unknown;
+  /**
+   * The exact object the case table hands the suite: `asLayered`'s copy of `outcome` carrying
+   * production's own `refusedBy` under the key the shared harness reads. For an ACCEPTED
+   * outcome there is no `refusedBy`, so `asLayered` answers the identical reference.
+   */
+  readonly projected: unknown;
+}
+
+const goalProofs: GoalPrerequisiteProof[] = [];
+const goalControls: GoalPrerequisiteProof[] = [];
+
+/** Every hostile goal-close outcome this group actually captured. */
+export function goalPrerequisiteProofs(): readonly GoalPrerequisiteProof[] {
+  return goalProofs;
+}
+
+/** The ACCEPTED control(s): the negative control for a refuse-everything implementation. */
+export function goalAcceptedControls(): readonly GoalPrerequisiteProof[] {
+  return goalControls;
+}
+
+/** Handles first, then the verification scratch roots: win32 holds the store file open. */
+export function closeGoalPrerequisiteFixtures(): void {
+  closeStores();
+  cleanupGoalClosureFixtures();
+}
+
+type GoalStore = ReturnType<typeof openStore>;
+
+/** Read straight off the durable store — never off the answer the command returned. */
+function goalResidue(store: GoalStore): GoalResidue {
+  const events = store.readEvents(GOAL_ID);
+  const aggregate = readDurableLedger(store, GOAL_PROJECT_ID).aggregates.get(GOAL_ID);
+  return {
+    completedEvents: events.filter((event) => event.eventType === "GoalCompleted").length,
+    decisions: decisionCount(store),
+    goalEvents: events.length,
+    resultBytes: JSON.stringify(aggregate?.result ?? null),
+  };
+}
+
+/**
+ * THE ONE DRIVER every goal case and the accepted control go through.
+ *
+ * It sends a REAL `goal.close` — `send` is `runBootstrapCommand` with the shipped handler
+ * table, so the command crosses ingress, the prerequisite composer and, when qualified, the
+ * core reducer — and returns the EXACT object production answered with, unchanged.
+ *
+ * The durable snapshot on both sides is the half a returned refusal cannot carry: a handler
+ * that mutated and then refused satisfies every code and layer assertion in the suite.
+ *
+ * The goal sits at domain version 2 for all of them: `goal.create` left it at 1 and the
+ * approval's activation half advanced it to 2 in the same decision.
+ */
+function captureGoalClose(
+  store: GoalStore, arm: GoalPrerequisiteProof["arm"], commandId: string,
+): unknown {
+  const before = goalResidue(store);
+  const outcome = send(store, envelope("goal.close", 2, acceptancePayload(), commandId));
+  const after = goalResidue(store);
+  (arm === "CONTROL" ? goalControls : goalProofs).push({
+    after, arm, before, outcome, projected: asLayered(outcome, "refusedBy"),
+  });
+  return outcome;
+}
+
+/**
+ * The projection the shared harness reads, TAKEN FROM the proof this outcome was captured
+ * into rather than rebuilt here. `assertRefusedWith` reads `layer`/`reasonLayer` and the
+ * daemon's service refusal spells it `refusedBy`, so the raw value alone reports harness
+ * misuse instead of a verdict; `asLayered` copies production's own two fields and invents
+ * nothing. Returning the RECORDED object is what lets the suite prove, by reference, that
+ * what it collected descends from the captured service return.
+ */
+function goalProjectionOf(outcome: unknown): unknown {
+  const proof = [...goalProofs, ...goalControls].find((entry) => entry.outcome === outcome);
+  if (proof === undefined) {
+    throw new Error("goal projection asked for an outcome no capture recorded");
+  }
+  return proof.projected;
+}
+
+/** An execution-enabled goal with one approved node and NO durable verification receipt. */
+function approvedGoalWithoutReceipt(label: string): GoalStore {
+  const store = openStore();
+  approveNodes(store, [label === "" ? "node-1" : "node-1"]);
+  return store;
+}
+
+let afterPrecondition: unknown = null;
+
+/**
+ * What `qualifyGoalClosure` answered for the AFTER arm BEFORE its second receipt landed.
+ *
+ * Without it the AFTER arm is just a second initially-invalid fixture: the property is that
+ * a closure which genuinely QUALIFIED stops qualifying once the evidence becomes ambiguous.
+ */
+export function goalAfterPrecondition(): unknown {
+  return afterPrecondition;
+}
+
+/**
+ * One node carried all the way to a qualifying closure, then made AMBIGUOUS by a second real
+ * PASSED receipt naming the same node. Both receipts are minted by the production chain.
+ */
+async function ambiguouslyReceiptedGoal(): Promise<GoalStore> {
+  const store = openStore();
+  approveNodes(store, ["node-1"]);
+  seedReviewAcceptance(store, "node-1");
+  await seedVerifiedNode(store, "node-1");
+  afterPrecondition = qualifyGoalClosure(store, GOAL_PROJECT_ID, GOAL_ID);
+  await seedVerifiedNode(store, "node-1");
+  return store;
+}
+
+/**
+ * The ACCEPTED control, run by the suite through the same driver as the hostile arms.
+ *
+ * Without it every refusal above is equally explained by a boundary that refuses
+ * everything — and a boundary that refuses everything holds no rule at all.
+ */
+export async function runAcceptedGoalCloseControl(): Promise<unknown> {
+  const store = openStore();
+  approveNodes(store, ["node-1"]);
+  seedReviewAcceptance(store, "node-1");
+  await seedVerifiedNode(store, "node-1");
+  return captureGoalClose(store, "CONTROL", "cmd-goal.close-control");
+}
+
 export const EXPANSION_SUPERSESSION_CASES: readonly HostileCase[] = Object.freeze([
   {
     constant: "EXPANSION_APPROVAL_LAYERS", arm: "BEFORE",
@@ -1789,6 +1971,7 @@ export {
   EXPANSION_HOLD_LAYERS,
   EXPANSION_PREPARATION_LAYERS,
   GOAL_LAYER,
+  GOAL_PREREQUISITE_LAYER,
   GRAPH_REVISION_LAYER,
   PLANNING_EXPANSION_LAYERS,
   SUPERSESSION_DISPOSITION_LAYERS,

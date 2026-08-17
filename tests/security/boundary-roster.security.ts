@@ -96,12 +96,13 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 14,
- * runtime-provider 23, scheduler-activation 25 — sums to 91. These tags, NOT the subset
+ * runtime-provider 23, scheduler-activation 26 — sums to 92. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
  * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
- * GRAPH_CONTENT_LAYERS integrity, task-e3d5fd05.)
+ * GRAPH_CONTENT_LAYERS integrity, task-e3d5fd05. 91→92 on 2026-08-17:
+ * GOAL_PREREQUISITE_LAYER scheduler-activation, task-a46d4f99.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -121,6 +122,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // Verification activation authority: FOUNDATION_* dispatch/verification family per the
   // subject-wins rule (governor entry 2026-08-16, producer task-44d4873e).
   { constant: "FOUNDATION_VERIFICATION_LAYERS", file: "apps/daemon/src/evidence/foundation-verification-contracts.ts", axis: "scheduler-activation" },
+  // The layer the daemon refuses `goal.close` at, ahead of the core reducer. Its subject is
+  // goal admission, so scheduler-activation by the subject-wins rule (producer task-8f9305b9).
+  { constant: "GOAL_PREREQUISITE_LAYER", file: "apps/daemon/src/goals/goal-close-prerequisite.ts", axis: "scheduler-activation" },
   { constant: "AFFORDANCE_SURFACE_LAYER", file: "apps/daemon/src/http/affordance-contract.ts", axis: "transport" },
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
@@ -213,8 +217,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * `GraphRevisionContent` codec's refusal vocabulary). `integrity` by SUBJECT, not
  * by directory: it is the reason vocabulary of a codec and its content digest, not
  * an admission or scheduling boundary.
+ *
+ * 91 -> 92 for GOAL_PREREQUISITE_LAYER (producer task-8f9305b9, the daemon's
+ * `goal.close` prerequisite composer). `scheduler-activation` by SUBJECT: it is the
+ * layer that admits or refuses the final goal-acceptance command, ahead of the core
+ * reducer. Measured at HEAD 78a0aa2 — scan 92, roster 91 before this entry.
  */
-const EXPECTED_ROSTER_SIZE = 91;
+const EXPECTED_ROSTER_SIZE = 92;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -222,7 +231,7 @@ const EXPECTED_ROSTER_SIZE = 91;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 34,
+  "apps/daemon": 35,
   "packages/benchmark": 1,
   "packages/runner": 20,
   "packages/core": 10,

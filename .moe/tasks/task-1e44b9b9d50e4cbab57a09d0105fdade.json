@@ -95,7 +95,7 @@
       "completedAt": "2026-08-17T18:18:56.821Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -108,12 +108,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.565Z",
-  "updatedAt": "2026-08-17T18:20:35.448Z",
+  "updatedAt": "2026-08-17T18:27:19.097Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:47:20.968Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-17T18:27:19.097Z",
+    "wallClockMs": 2398129
   },
   "stepsCompleted": [
     "step-1",
@@ -142,7 +144,8 @@
   },
   "planApprovedAt": "2026-08-17T17:49:28.977Z",
   "contextFetchedBy": [
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "workStartedAt": "2026-08-17T18:08:48.675Z",
   "reviewStartedAt": "2026-08-17T18:20:35.447Z",
@@ -155,5 +158,8 @@
   "filesModified": [
     "apps/daemon/package.json",
     "pnpm-lock.yaml"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:27:19.097Z",
+  "reviewCompletedAt": "2026-08-17T18:27:19.097Z",
+  "reviewSummary": "Re-ran every proof myself. DoD1: HEAD manifest declares \"@moe/import\":\"workspace:*\"; lock apps/daemon importer has version link:../../packages/import. DoD2: MY OWN probe apps/daemon/src/__qa-import-edge-probe.ts imported from bare @moe/import the ShadowProjection types + the decoders DoD2 names (decodeLegacySources, decodeImportEventFacts; worker's probe used projectLegacyImport instead) + compareShadowProjections -> tsc --project apps/daemon/tsconfig.json --noEmit exit 0, zero diagnostics; deleted same command, git status shows no ?? under apps/daemon/src. DoD3: byte-identical body, ONLY specifier swapped -> TS2307 \"Cannot find module '@moe/qa-does-not-exist'\" at (1,108)/(2,76) = resolution family, not syntax. Extra control: compareShadowProjections(42,\"not-a-projection\") -> TS2345 not assignable to 'ShadowProjection', so real declarations arrived, not implicit any. DoD4: plain node, cwd apps/daemon, no flag/loader/paths/deep import -> \"compareShadowProjections: function | decodeLegacySources: function\", exit 0. Attributable: same specifier from packages/store -> ERR_MODULE_NOT_FOUND; root node_modules/@moe/import absent. DoD5: numstat d2c86b7..HEAD = 2/0 manifest, 6/0 lock, ZERO deletions (peer's @moe/context preserved; 5 daemon journal sources import it). Worktree-vs-HEAD empty, so committed bytes == gated bytes. Consumer task-80fce1d1 recorded. No task-id commit is not a reject (global rail 5); 38e94e3 swept the paths. GATES: typecheck exit 0, executed ($ tsc --project tsconfig.json). test exit 1, executed ($ vitest run --root . --config package.json src; Test Files 3 failed | 116 passed (119), Tests 3 failed | 2452 passed). All 3 reds foreign: journal-refusals.test.ts is in no commit; vocabulary \"expected [...24] to equal [...23]\" and store-dependencies \"+ journal.append\" both trace to a peer's UNCOMMITTED daemon-command-registry.ts journal wiring. Owned diff greps EMPTY for journal|command. Delta-failing paths INTERSECT owned paths = EMPTY."
 }

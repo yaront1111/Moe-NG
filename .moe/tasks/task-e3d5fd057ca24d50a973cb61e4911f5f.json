@@ -135,7 +135,7 @@
     {
       "stepId": "step-8",
       "description": "Adversarial review, then commit and gate. ATTACKER PASS: can any consumer obtain a graphContentHash without going through the encoder, reopening the withheld-mechanics seam? Can two different logical contents collide -- are all seven fields length-framed so a value cannot bleed across a boundary? Can a hostile descriptor, getter or revoked proxy on the input object be read twice with different answers (snapshot hostile input before inspecting it)? Is the encoding stable across Windows, macOS and Linux, free of filesystem path normalisation and locale-sensitive ordering? Does an absent parentRevision encode distinctly from an empty string? Does any refusal reuse a code that means something else? Confirm every production file is <=250 physical lines and that no second structural validator was introduced. Name `task-dd4ffa0c40834c59892f957fbf61fb23` as the real consumer in the completion note, and state that task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8 and task-c4b80778 are all blocked on this surface. COMMIT: `git status --porcelain`, unstage foreign entries with `git restore --staged -- <path>`, commit ONLY the owned paths by explicit pathspec, verify with `git show --stat`. GATE, foreground and `&&`-chained so no red leg is masked: `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test`, plus a plain-Node import of the new bridge. Read the OUTPUT: a filtered leg is evidence only if it prints a `Test Files N passed` line with N nonzero, since `pnpm --filter` on an unresolved name prints \"No projects matched the filters\" and exits 0.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/graph-content.ts",
         "packages/scheduler/src/graph-content-format.ts",
@@ -144,11 +144,27 @@
         "packages/scheduler/src/graph-content.test.ts",
         "packages/scheduler/src/index.ts"
       ],
-      "startedAt": "2026-08-17T18:12:02.352Z"
+      "modifiedFiles": [
+        "packages/scheduler/src/graph-content.ts",
+        "packages/scheduler/src/graph-content-fields.ts",
+        "packages/scheduler/src/graph-content-fields.js",
+        "packages/scheduler/src/graph-content-issues.ts",
+        "packages/scheduler/src/graph-content-issues.js",
+        "packages/scheduler/src/graph-content-format.ts",
+        "packages/scheduler/src/graph-content.test.ts",
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/index-surface.test.ts",
+        "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+        "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "ATTACKER PASS, every question answered by measurement.\n1. HASH WITHOUT THE ENCODER? No. `grep -c` over index.ts: canonicalGraphJson/readContentFields/projectContent/projectGraphSnapshot/readContentBytes/readContentEnvelope/sameBytes/GRAPH_CONTENT_HASH_DOMAIN/SNAPSHOT_IDENTITY_DOMAIN/SCHEMA_TAG/DECODE_POLICY all 0; the four that return 1 are in the withheld-mechanics prose (index.ts:86-87), not an export clause. Deep subpath import is refused by the package exports map, which the plain-Node worker already asserts as `internalSubpath: \"ERR_PACKAGE_PATH_NOT_EXPORTED\"`.\n2. COLLISION? All seven digest entries are `frame(name)+frame(tag)+frame(payload)`, frame = `length + \":\" + token`, mirroring computeGraphIdentity. Every payload is ASCII (isGraphKey is ASCII-only, tree is hex, budget is digits, snapshot keys are SAFE_GRAPH_KEY), so code units equal UTF-8 bytes and the framing is unambiguous. Pinned by a test whose two fixtures have BYTE-IDENTICAL concatenated preimages and must still differ.\n3. DOUBLE READ? Each field is read once via `readOwnDataProperty` (accessor -> `{ok:false}`) into a Map; every later use reads the Map. Proxy and revoked proxy are refused by `isPlainRecord`, whose `types.isProxy` call is try/caught to return true on throw. 10 hostile shapes tested.\n4. CROSS-PLATFORM? No path normalisation, no localeCompare/Intl, no Date, no `JSON.stringify` of an object — the wire is fixed-order string concatenation. `JSON.stringify` is used only to quote single ASCII strings that cannot contain `\"` or `\\`. Verified green on Windows under both Git Bash and PowerShell.\n5. ABSENT parentRevision? Tag \"z\" vs \"s\" in the digest, `null` vs a quoted string on the wire, and `\"\"` is not a representable ref so the two forms are unreachable from each other.\n6. CODE REUSE? Two brand-new codes only; no existing code repurposed; the vocabulary test proves every declared code has a real producing path.\n7. CAPS AND AUTHORITY: at HEAD graph-content.ts 229, graph-content-fields.ts 234, graph-content-format.ts 220, graph-content-issues.ts 77 — all <=250. `validateGraphSnapshot` remains the single structural authority (two call sites, both to it). No debug/scratch files.\nALSO CHECKED: pure functions, no shared mutable state, no handles, so no concurrency or cleanup path exists to leak. No external package imports the codec (`grep` outside packages/scheduler finds only @moe/core's own `graphContentHash` FIELD name, which is the spelling this producer emits).\nONE CHANGE MADE DURING REVIEW: a comment recording why the completion reconciliation runs BEFORE the digest — an attacker controlling bytes can also compute a correct digest over drifted content, so ordering only decides which code a tampered-and-drifted input reports, and internal incoherence is the more specific answer.\n\nCOMMIT — THE FOREIGN-SWEEP HAZARD FIRED, TWICE. `git status --porcelain -- packages/scheduler/` is EMPTY: two foreign whole-tree commits swallowed my bytes. `38e94e3 feat(task-a6775ac56d714da388e6b28343eb806e): Portability: persist canonical import shadow facts` took all 11 scheduler files (its `--stat` also carries another task's apps/daemon/src/journal/** and packages/import/**, proving it is not mine), and `78a0aa2 feat(task-1e44b9b9d50e4cbab57a09d0105fdade)` then took my tests/security roster edit. Per the global rail I did NOT amend, reset, or create an empty commit to claim the work.\nTHE DIFF QA SHOULD REVIEW: `git diff 15918c7..HEAD -- packages/scheduler/src/graph-content.ts packages/scheduler/src/graph-content-fields.ts packages/scheduler/src/graph-content-fields.js packages/scheduler/src/graph-content-issues.ts packages/scheduler/src/graph-content-issues.js packages/scheduler/src/graph-content-format.ts packages/scheduler/src/graph-content.test.ts packages/scheduler/src/index.ts packages/scheduler/src/index-surface.test.ts packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs packages/scheduler/src/scheduler-runtime-entrypoint.test.ts` = 11 files, +1156/-201. 15918c7 was HEAD when step 1 measured. All 11 paths verified present at HEAD by `git cat-file -e`, and the committed bytes ARE the gated bytes because the working tree is clean for those paths and the gate ran against it.\nFOREIGN INDEX.TS EDIT PRESERVED: index.ts arrived carrying an uncommitted foreign comment reflow of the lease-drain block; I edited only the graph-content export block and never reverted it.\n\nGATE, foreground, chained, at HEAD 78a0aa2.\n- `pnpm typecheck` -> EXIT 0, repo-wide GREEN, all 19 projects \"Done\". (The apps/daemon TS2307 `Cannot find module './journal-reader.js'` I measured earlier was a peer's UNTRACKED in-flight file; that peer has since landed journal-reader.ts and the red cleared.)\n- `pnpm --filter @moe/scheduler typecheck` -> EXIT 0. `pnpm --filter @moe/scheduler test` -> EXIT 0, `Test Files 45 passed (45) / Tests 1411 passed (1411)`. The count line is present and nonzero, so the filtered leg genuinely executed rather than printing \"No projects matched t",
+      "startedAt": "2026-08-17T18:12:02.352Z",
+      "completedAt": "2026-08-17T18:26:04.079Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b8af1a87",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,12 +176,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:03:06.265Z",
-  "updatedAt": "2026-08-17T18:12:02.352Z",
+  "updatedAt": "2026-08-17T18:28:06.153Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:43:57.144Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -177,7 +193,8 @@
     "step-4",
     "step-5",
     "step-6",
-    "step-7"
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:46:12.572Z",
@@ -203,5 +220,26 @@
   "contextFetchedBy": [
     "worker-b8af1a87"
   ],
-  "workStartedAt": "2026-08-17T17:46:36.937Z"
+  "workStartedAt": "2026-08-17T17:46:36.937Z",
+  "reviewStartedAt": "2026-08-17T18:28:06.153Z",
+  "verification": {
+    "command": "pnpm typecheck && pnpm --filter @moe/scheduler test",
+    "exitCode": 0,
+    "outputTail": "apps/daemon typecheck: Done\n\n Test Files  45 passed (45)\n      Tests  1411 passed (1411)\n   Start at  21:26:15\n   Duration  1.24s (transform 9.77s, setup 0ms, import 13.41s, tests 1.81s, environment 3ms)\n\nGATE_EXIT=0",
+    "reportedAt": "2026-08-17T18:28:06.153Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/graph-content.ts",
+    "packages/scheduler/src/graph-content-format.ts",
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/graph-content.test.ts",
+    "packages/scheduler/src/graph-content-fields.ts",
+    "packages/scheduler/src/graph-content-fields.js",
+    "packages/scheduler/src/graph-content-issues.ts",
+    "packages/scheduler/src/graph-content-issues.js",
+    "packages/scheduler/src/index-surface.test.ts",
+    "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
+    "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts",
+    "tests/security/boundary-roster.security.ts"
+  ]
 }

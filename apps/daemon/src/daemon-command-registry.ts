@@ -123,12 +123,12 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       : journal
         ? JOURNAL_APPEND_SCHEMA_VERSION
         : recovery
-        ? RECOVERY_COMPLETION_SCHEMA_VERSION
-        : review
-          ? REVIEW_SCHEMA_VERSION
-          : session
-            ? SESSION_SCHEMA_VERSION
-            : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
+          ? RECOVERY_COMPLETION_SCHEMA_VERSION
+          : review
+            ? REVIEW_SCHEMA_VERSION
+            : session
+              ? SESSION_SCHEMA_VERSION
+              : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId) {
@@ -159,6 +159,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
+      if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
       if (recovery) {
         return decisionOf(runRecoveryCompleteCommand(store, bytes, recoveryAuthority));
       }
@@ -179,7 +180,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation
+    const requiredCapability = activation || continuation || journal
       ? CAPABILITIES.WORK
       : recovery
         ? CAPABILITIES.ADMIN

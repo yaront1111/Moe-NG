@@ -29,28 +29,41 @@
     {
       "stepId": "step-2",
       "description": "TDD RED — write the goal-specific security assertions before their cases exist. In the scheduler-activation suite add named expectations that the exact GOAL prerequisite roster key has exactly one BEFORE, one AFTER, and one RACE arm; that the generated GOAL arm/proof counts are positive and equal the cases actually run; that every collected GOAL outcome is the identical object returned by the production command path; that each hostile proof has zero command-decision and `GoalCompleted` residue; and that one accepted GOAL control is required. Use an initially empty exported proof/control collection if needed so `pnpm exec vitest run --root tests/security --config vitest.config.ts scheduler-activation-boundaries.security.ts` fails on the intended missing-GOAL assertion, not on an import/compile error. Do not weaken the existing generic roster-versus-arms checks.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/scheduler-activation-boundaries.security.ts",
         "tests/security/scheduler-activation-hostile-cases.ts"
       ],
-      "startedAt": "2026-08-17T18:19:01.683Z"
+      "modifiedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "TDD RED landed. `npx tsc -p tests/security/tsconfig.json` EXIT 0 first, so the red is on assertions, not on an import/compile error.\n\nFocused run `pnpm exec vitest run --root tests/security --config vitest.config.ts scheduler-activation-boundaries.security.ts` -> EXIT=1, `Test Files 1 failed (1)`, `Tests 8 failed | 116 passed (124)` (nonzero executed count, not a vacuous lane).\n\nThe 8 named RED tests, all newly added and all failing for the intended missing-GOAL reason:\n1. the accepted goal-closure control > closes a fully qualified goal through the driver the hostile arms use\n2. the goal-closure prerequisite boundary > is rostered on this axis with exactly one BEFORE, one AFTER and one RACE arm\n3. ... > captured one outcome per goal command it actually sent, and the count is positive\n4. ... > was answered by this layer itself, read off production's own refusal field\n5. ... > carries the exact prerequisite code arranged for each arm\n6. ... > left zero decision, event, completion and result residue behind every refusal\n7. ... > surfaced the captured service return itself, never a refusal minted in the fixture\n8. the whole slice > collected an outcome from every case, so nothing escaped by not running\n\nStub surface added to the case module (empty on purpose so the assertions fail rather than crash): `GoalResidue`, `GoalPrerequisiteProof` (after/arm/before/outcome/projected), `goalPrerequisiteProofs()`, `goalAcceptedControls()`, `closeGoalPrerequisiteFixtures()`, `runAcceptedGoalCloseControl()` returning null, plus a `GOAL_PREREQUISITE_LAYER` re-export.\n\nDESIGN DECISION, recorded because it deviates in letter from step-4's \"returns the exact send(...) object unchanged\": `hostile-harness.readRefusal` reads only `layer`/`reasonLayer`, and the daemon's ServiceRefused spells it `refusedBy` — so a raw return makes `assertRefusedWith` throw HostileHarnessMisuseError instead of asserting. The proof therefore records BOTH: `outcome` = the exact unprojected `send(...)` return (what the layer/code/residue assertions read), and `projected` = `asLayered(outcome, \"refusedBy\")`, the same copy-production's-own-two-fields projection `ingressOf` already uses on this axis. For an ACCEPTED outcome there is no `refusedBy`, so `asLayered` returns the IDENTICAL reference and the control's `projected === outcome`. The identity assertion is `expect(collected).toContain(proof.projected)` — by reference, so a driver returning a literal OR a copy reddens (that is drill 2's target).\n\nExisting generic checks left untouched: roster-axis count, cover-every/cover-none, and the three-armed per-constant generator still run as before. Whole-slice invariant now derives its admission allowance from `goalAcceptedControls().filter(isAdmitted)` (production's returned value) instead of a hard-coded +1, and the collected-length check adds `goalAcceptedControls().length` with a separate `>0` guard.\n\nBound: added `GOAL_CONTROL_BOUND_MS = min(120_000, MAX_BOUND_MS)` for the control only; `CASE_BOUND_MS` (15s) untouched so far.",
+      "startedAt": "2026-08-17T18:19:01.683Z",
+      "completedAt": "2026-08-17T18:25:07.933Z"
     },
     {
       "stepId": "step-3",
       "description": "HAND-ROSTER THE COMMITTED BOUNDARY. In `boundary-roster.security.ts`, add exactly `{ constant: \"GOAL_PREREQUISITE_LAYER\", file: \"apps/daemon/src/goals/goal-close-prerequisite.ts\", axis: \"scheduler-activation\" }` in the existing apps/daemon ordering. Update only the mechanically attributable ratchets: roster size 90→91 and `apps/daemon` distribution 34→35, with the measurement comment naming this producer. Do not add, classify, suppress, or otherwise absorb foreign `GRAPH_CONTENT_LAYERS`, and do not touch the already-landed AGENT entry.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "Roster entry landed, hand-written, in the existing apps/daemon path ordering (after evidence/, before http/):\n  { constant: \"GOAL_PREREQUISITE_LAYER\", file: \"apps/daemon/src/goals/goal-close-prerequisite.ts\", axis: \"scheduler-activation\" }\n\nRE-MEASUREMENT REQUIRED MID-STEP — HEAD MOVED under me: 38e94e3 -> 78a0aa2 (`feat(task-1e44b9b9...)`), and a peer task (task-e3d5fd05) had already rostered the FOREIGN `GRAPH_CONTENT_LAYERS@packages/scheduler/src/graph-content-issues.ts` as axis `integrity`, moving EXPECTED_ROSTER_SIZE 90->91 and packages/scheduler 7->8. The Edit tool flagged the file as changed on disk; `git diff --numstat` confirmed only MY 3 lines are uncommitted there, so no foreign work was overwritten and none was absorbed by me.\n\nCONSEQUENCE: the step's stated ratchets are stale. Applied the mechanically correct ones instead, and said so:\n- EXPECTED_ROSTER_SIZE 91 -> 92 (not 90 -> 91), with a comment naming producer task-8f9305b9 and the measured HEAD 78a0aa2.\n- EXPECTED_DISTRIBUTION[\"apps/daemon\"] 34 -> 35 (unchanged from plan).\n- Axis-total doc comment scheduler-activation 25 -> 26, sums 91 -> 92, appended \"91→92 on 2026-08-17: GOAL_PREREQUISITE_LAYER scheduler-activation, task-a46d4f99\". Verified by counting the committed bytes: durable-store 14, integrity 14, runtime-provider 23, scheduler-activation 26, transport 15 = 92.\n\nFOREIGN RED IS NOW GONE, not repaired by me: the GRAPH key is rostered by its own task, so the only remaining scan-minus-roster delta was mine. I did NOT touch that entry, its integrity classification, packages/scheduler: 8, or the AGENT entry.\n\nFocused verification `pnpm exec vitest run --root tests/security --config vitest.config.ts boundary-roster.security.ts` -> EXIT=0, `Test Files 1 passed (1)`, `Tests 31 passed (31)` — nonzero executed count; scan 92 == roster 92 bidirectionally, distribution equal.",
+      "startedAt": "2026-08-17T18:25:19.450Z",
+      "completedAt": "2026-08-17T18:26:46.190Z"
     },
     {
       "stepId": "step-4",
       "description": "ADD REAL BEFORE/AFTER/RACE CASES AND DURABLE PROOFS. In `scheduler-activation-hostile-cases.ts`, import the production GOAL prerequisite/qualification surfaces and reuse the established bootstrap and goal-closure arrangers (`openStore`, `driveThrough`, `send`, `envelope`, `acceptancePayload`, `decisionCount`, `GOAL_ID`, `approveNodes`, `seedReviewAcceptance`, `seedVerifiedNode`) only to create real SQLite facts. Add GOAL cases beside the existing `GOAL_LAYER` entries in `EXPANSION_SUPERSESSION_CASES/RACES`: BEFORE drives a real execution-enabled goal with an approved node but no durable verification receipt and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` at `DAEMON_PREREQUISITE`; AFTER fully qualifies one node and asserts `qualifyGoalClosure(...).ok === true`, then commits a second real PASSED receipt for the same node and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS` at that same layer; RACE submits two distinct real `goal.close` command identities against the approved/no-receipt state, requires both exact ABSENT refusals, and sets `maxAdmitted: 0`. Route all three through one capture helper that returns the exact `send(...)` object unchanged while recording before/after raw decision counts, goal event counts, `GoalCompleted` counts, and durable goal result bytes. Export read-only proof accessors/cleanup, prove four actual hostile command outcomes were captured, and close bootstrap stores before cleaning temporary verification roots. No production file or test helper may synthesize the refusal.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/scheduler-activation-hostile-cases.ts"
-      ]
+      ],
+      "startedAt": "2026-08-17T18:27:37.030Z"
     },
     {
       "stepId": "step-5",
@@ -102,19 +115,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-17T18:19:01.683Z",
+  "updatedAt": "2026-08-17T18:27:37.031Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:48:22.504Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
     "worker-f144c751"
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:58:29.705Z",

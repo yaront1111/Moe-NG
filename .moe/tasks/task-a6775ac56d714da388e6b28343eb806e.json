@@ -163,8 +163,8 @@
       "completedAt": "2026-08-17T18:13:12.728Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -176,12 +176,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.357Z",
-  "updatedAt": "2026-08-17T18:16:57.378Z",
+  "updatedAt": "2026-08-17T18:21:02.658Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:42:38.898Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-08-17T18:21:02.658Z",
+    "wallClockMs": 2303760
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
@@ -239,5 +241,8 @@
     "packages/import/src/import-apply.ts",
     "packages/import/src/index.ts",
     "tools/import/import-shadow.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:21:02.658Z",
+  "reviewCompletedAt": "2026-08-17T18:21:02.658Z",
+  "reviewSummary": "APPROVED. Reviewed by `git diff 15918c7 HEAD -- packages/import/src tools/import/import-shadow.ts` (38e94e3 is a whole-tree hook commit; per global rail not a reject).\n\nGATES RE-RUN BY ME, exit codes separate, output read:\n1. --filter @moe/import typecheck -> 0 (executed: `$ tsc --project tsconfig.json`)\n2. --filter @moe/import test -> 0, \"Test Files 8 passed (8) / Tests 132 passed (132)\"\n3. test:migration -> 0, \"3 passed / 25 passed\"\n4. test:store -> 1, \"1 failed | 526 passed\", store/src/recovery-anchor.test.ts:694 RECOVERY_ANCHOR_FAULT_POINTS leaked onto root. FOREIGN: packages/store byte-identical to base (empty --numstat), clean worktree, no @moe/import dep edge. Delta n owned paths = EMPTY.\n5. typecheck:import -> 0 (executed)\n6. pnpm typecheck -> 0, 19/19 Done\n\nMY OWN DRILLS (restored by content, hashes re-matched, LF intact, base re-green 132/132):\n(A) foldRecord pushes separately-built claim/links not stored.* -> reddened EXACTLY \"returns the STORED representation, not a separately built lookalike\". DoD 2 anti-echo live, not vacuous.\n(C) decoder re-encode compare made self-comparing -> reddened the NONCANONICAL arm AND emitter-coverage.\n\nDoD: 1 versioned codec, schemaVersion/recordVersion/shadowVersion in the bytes, no activation field, equivalence pinned against real projectLegacyImport + SHADOW_ENTITY_FIELDS. 2 derive-once, same store.commit, report read back out of the bytes. 3 descriptor-safe checkData, MAX_BYTES bound, 7 frozen distinct codes each pinned with layer, deep freeze, total link order. 4 replay pins eventIds/payloads/commandBytes/commandId and counts {2,4,2,2}; conflict asserts code+layer AND commits.length===0 with a duplicate-collapse control. 5 every sweep guarded by toBeGreaterThan(0).\n\nSizes 253/236/250/145, under 400. Rail-3 7-path deviation forced by the 400 split bar, disclosed; import-shadow.ts edit forced by the widened union gate 5 covers."
 }

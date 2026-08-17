@@ -60,6 +60,11 @@ const ROWS: readonly Row[] = [
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "integration.accept_output", layer: INGRESS,
     payloadKeys: ["receiptId", "subjectRef"] },
+  // An empty payload carries none of the three keys, so the journal writer's own
+  // envelope decode answers before any binding, node or entry judgement runs.
+  { agent: [WORK], capability: WORK, code: "JOURNAL_REQUEST_MALFORMED", kind: "journal.append",
+    layer: "DAEMON_JOURNAL_APPEND",
+    payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
@@ -112,7 +117,7 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
-  "approval.decide", "work.resume", "effect.activate", "recovery.complete",
+  "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
   "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
@@ -189,18 +194,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-three characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-four characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(23);
-    expect(deps.registry.size).toBe(23);
+    expect(ROWS).toHaveLength(24);
+    expect(deps.registry.size).toBe(24);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(23);
+    expect(REGISTRATION_ORDER).toHaveLength(24);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -484,7 +489,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(23);
+    expect(ports.registry.size).toBe(24);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
