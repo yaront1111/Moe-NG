@@ -1220,8 +1220,15 @@ const GRAPH_CONTENT = GRAPH_CONTENT_LAYERS;
  *
  * THE THREE DECLARED MEMBERS ARE SPREAD ACROSS THE ARMS rather than one exercised three
  * times: GRAPH_CONTENT_CODEC and GRAPH_VALIDATION on the two BEFORE arms, GRAPH_CONTENT_IDENTITY
- * on the forgery. GRAPH_VALIDATION is the one that matters most here — it is the passthrough
- * branch, where a structural failure keeps the kernel's OWN code instead of being restamped.
+ * on the forgery and on the non-canonical re-spelling. GRAPH_VALIDATION is the one that matters
+ * most here — it is the passthrough branch, where a structural failure keeps the kernel's OWN
+ * code instead of being restamped.
+ *
+ * IDENTITY IS PINNED TWICE BECAUSE IT ANSWERS TWICE, at two guards neither of which subsumes
+ * the other (`graph-content.ts:216` vs `:224`): a swapped VALUE whose bytes are canonical is
+ * caught only by the digest recompute, an alternate SPELLING of correct content recomputes the
+ * right digest and is caught only by the re-encode. One arm each, so dropping either guard
+ * reddens a NAMED case on its own code comparison.
  */
 
 /**
@@ -1232,11 +1239,21 @@ const GRAPH_CONTENT = GRAPH_CONTENT_LAYERS;
  * It refuses to choose when production answered with more than one issue: picking `issues[0]`
  * would silently pin whichever the validator's `sortIssues` happened to order first, and the
  * case would then be asserting a branch it never arranged. Every arm below is built to produce
- * exactly one, so this throws only if that stops being true.
+ * exactly one REFUSED issue, so this throws only if that stops being true — and it throws only
+ * for a refusal, never for the admission it exists to catch.
  */
 const soleIssue = (value: unknown): unknown => {
   if (typeof value !== "object" || value === null) return value;
   const record = value as Record<string, unknown>;
+  // AN ADMITTED RESULT PASSES THROUGH UNTOUCHED, and that is load-bearing rather than tidy.
+  // `{ ok: true, value }` carries no `issues`, so throwing below would fire on exactly the
+  // outcome these arms exist to catch. On a RACE arm the throw INVERTS the verdict:
+  // `probeRacing` catches every leg, `legValue` hands the caught Error to `admitted()`, an
+  // Error carries no `ok`/`authority`/`truth`/`outcome`, and `expect(admitted(left))
+  // .toBe(false)` then PASSES on an admission. Handing the record back unread lets
+  // `admitted()` see its own `ok: true` and redden; on a BEFORE/AFTER arm it reddens twice —
+  // the whole-slice invariant collects it, then `assertRefusedWith` reports the absent code.
+  if (record["ok"] !== false) return value;
   const issues = record["issues"];
   if (!Array.isArray(issues) || issues.length !== 1) {
     throw new Error(
@@ -1382,6 +1399,23 @@ const graphContentCases: readonly HostileCase[] = [
     // the digest recompute runs BEFORE the canonical re-encode (`graph-content.ts:216` vs
     // `:224`), so IDENTITY answers with a mismatch rather than the misleading NONCANONICAL.
     async () => soleIssue(decodeGraphContent(forgedGraphBytes())),
+  ),
+  after(
+    "GRAPH_CONTENT_LAYERS", "sealed bytes re-spelled with the envelope keys reversed",
+    {
+      code: "GRAPH_CONTENT_NONCANONICAL",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_CONTENT_IDENTITY"),
+    },
+    // NO EARLIER GUARD CAN ANSWER, and each is named rather than assumed. The input is a real
+    // Uint8Array far under the ceiling; it is fatal-decodable UTF-8 carrying one JSON document;
+    // `readContentEnvelope` compares the key SET, which a reversal leaves exact; the schema tag
+    // is the sealed one; the seven content fields are the sealed record's own, so the field
+    // read admits them and the snapshot is the same accepted chain; the declared completion
+    // node still agrees; and the digest is recomputed over the graph and the fields, NEITHER of
+    // which moved, so it matches. The canonical re-encode comparison is the only branch left.
+    // That is what makes the pin mean something: a codec that stopped re-encoding would answer
+    // `ok: true` on these bytes, and this arm reddens on its own code rather than on a crash.
+    async () => soleIssue(decodeGraphContent(reSpelledGraphBytes())),
   ),
   racing(
     "GRAPH_CONTENT_LAYERS", "a re-spelled envelope races a duplicated hash key",
