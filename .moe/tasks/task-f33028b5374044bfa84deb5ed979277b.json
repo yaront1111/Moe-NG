@@ -17,7 +17,7 @@
     "Own only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml; commit by explicit pathspec and preserve foreign lockfile changes."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +30,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:03.062Z",
-  "updatedAt": "2026-08-17T11:20:32.395Z"
+  "updatedAt": "2026-08-17T19:41:28.246Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T19:31:58.478Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh HEAD d2151d49 proves the task's DoD and ownership rail are mutually incompatible. `apps/daemon/src/daemon-startup.test.ts:98-117` parses apps/daemon/package.json and deliberately asserts manifest.bin as the exact closed two-key set {moe-daemon, moe-mcp-http}, with a comment that stdio has no bin. Adding the required enumerable `moe-mcp-stdio: ./src/mcp-main.ts` entry therefore makes the required full daemon package test fail; current baseline is nonvacuously green at 120 files/2476 tests. The task simultaneously requires daemon tests pass and says only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml may be owned/committed, so the worker cannot update the exact closed-set test. Commit 9aa4711 confirms the prior moe-mcp-http publication had to change this same test atomically. A manifest-only plan would knowingly introduce a regression caused by its own diff and cannot use path attribution to excuse it. JetBrains also has only a source-relative host runtime test, not a durable public-subpath assertion. Recommended correction: split into (A) daemon stdio publication owning apps/daemon/package.json + apps/daemon/src/daemon-startup.test.ts; and (B) JetBrains ./host + root @moe/import/@moe/store/@moe/jetbrains-adapter edges owning package.json, adapters/jetbrains/package.json, pnpm-lock.yaml, and adapters/jetbrains/src/jetbrains-runtime-entrypoint.test.ts. Both slices can gate independently and stay <=4 files. Prerequisite task-1e44 is DONE and its daemon @moe/import manifest/lock edge is present.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T19:40:25.471Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Remeasured every claimed entrypoint/manifest/lock/package gate, proved prerequisite 1e44 DONE, identified the exact daemon closed-bin regression, reported BLOCKED to governors, and wrote mem:task-task-f33028b5374044bfa84deb5ed979277b-handoff with two-slice correction.",
+      "whatRemains": "Human/governor must amend/split scope to allow daemon-startup.test.ts (and preferably JetBrains public-subpath runtime test) before a truthful plan can be submitted.",
+      "pitfalls": "Do not land manifest-only stdio bin: full daemon suite will fail by own diff. Do not re-export JetBrains host from root; publish ./host to the existing LF bridge.",
+      "openQuestions": "Approve two slices versus one six-file amended task.",
+      "releasedAt": "2026-08-17T19:41:28.245Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing a measured rail/DoD conflict; continuing the user's plan-more sweep."
+    }
+  ]
 }

@@ -3,13 +3,23 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { JsonObject, RuntimeCommandEnvelope } from "@moe/contracts";
 import { afterAll, describe, expect, it } from "vitest";
 
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
+import type { AuthenticatedPrincipal, DecisionPortResult } from "../http/http-contract.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { runReviewCommand } from "../review/review-services.js";
+import { REVIEWER_CALIBRATION_SLICE_REF } from "../review/reviewer-calibration-record.js";
+import {
+  VERIFIER_POLICY_SLICE_REF,
+  createVerifierAuthorityProvider,
+} from "../review/verifier-authority-provider.js";
+import { verifierReceiptId } from "../review/verifier-receipt-contracts.js";
 import {
   NODE_VERIFIER_PRINCIPAL_ID,
   readVerifierReceipt,

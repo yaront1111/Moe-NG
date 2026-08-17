@@ -7,16 +7,20 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  authorityOf, durableGrants, durableRegistrations,
+} from "../claude/claude-launcher-authority-test-fixtures.js";
+import {
   CLAIM, DIGEST, SELECTED_EFFORT, SELECTED_MODEL, SELECTION, boundaryHarness, dependencies,
   request, selectionWith,
 } from "../claude/claude-launcher-test-fixtures.js";
 import { intakeProcessObservation } from "../../supervisor/process-observation.js";
 import {
-  launchClaude, type ClaudeLaunchRequest, type ClaudeLauncherDependencies,
+  CLAUDE_LAUNCH_ERROR_CODES, CLAUDE_LAUNCH_LAYERS, launchClaude,
+  type ClaudeLaunchRequest, type ClaudeLauncherAuthority, type ClaudeLauncherDependencies,
 } from "../claude/claude-launcher.js";
 import {
-  CLAUDE_TELEMETRY_HANDOFF_VERSION, launchClaudeWithTelemetry,
-  type ClaudeTelemetryHandoff,
+  CLAUDE_TELEMETRY_HANDOFF_VERSION, createTelemetryBoundClaudeLauncher, launchClaudeWithTelemetry,
+  type ClaudeBoundLaunch, type ClaudeTelemetryHandoff,
 } from "./claude-telemetry-launch.js";
 import {
   PROVIDER_COUNT_COVERAGE_CLASSES, PROVIDER_INFRASTRUCTURE_OUTCOMES, PROVIDER_TELEMETRY_CODES,
@@ -521,6 +525,110 @@ describe("declared is not observed", () => {
       SELECTION.modelSnapshotEvidence, SELECTION.configurationDigest]) {
       expect(observedSide, `declared ${declaredValue} reached the observed side`)
         .not.toContain(declaredValue);
+    }
+  });
+});
+
+/**
+ * The AUTHORITY-BOUND entry point. Every case drives the real
+ * `createClaudeLauncher(authority)` with its SHIPPED ports — no dependency set is
+ * accepted here and none is offered, so the launch these cases observe is the one
+ * the daemon will run.
+ *
+ * HOW A PHYSICAL LAUNCH IS COUNTED. Rail 2 forbids a supplied-launcher hook, so
+ * there is no seam to spy on. The authority's own `consumeGrantDurably` is the
+ * honest counter instead: the shipped launcher invokes it once per launch, after
+ * the runtime pin and the activation commit and BEFORE the lock or the boundary.
+ * A durable store holding no row for the presented grant therefore lets a launch
+ * reach grant consumption and stop there — one counted launch, no OS lock and no
+ * process — which is the arm every counting case below drives.
+ */
+const ABSENT_GRANT_ROW = { grantId: "grant:no-such-durable-row" };
+const EXIT_DELIVERY = {
+  claim: CLAIM, registration: null, lockState: "RELEASED", effectState: "ACTIVE",
+};
+const WIN32 = { platform: "win32" } as const;
+
+const boundInput = (
+  overrides: Partial<ClaudeLaunchRequest> = {}, providerRunRef: unknown = RUN_REF,
+): Parameters<ReturnType<typeof createTelemetryBoundClaudeLauncher>>[0] =>
+  ({ providerRunRef, request: request({ limits: LIMITS, ...overrides }), options: WIN32 });
+
+/** Refused-arm helper: throws rather than returning, so no case reads a refusal as a launch. */
+async function bound(
+  authority: ClaudeLauncherAuthority, overrides: Partial<ClaudeLaunchRequest> = {},
+): Promise<ClaudeBoundLaunch> {
+  const settled = await createTelemetryBoundClaudeLauncher(authority)(boundInput(overrides));
+  if (!settled.ok) throw new Error(`bound launch refused: ${settled.code}/${settled.layer}`);
+  return settled;
+}
+
+const grantRefusingAuthority = (): ClaudeLauncherAuthority =>
+  authorityOf(durableGrants(ABSENT_GRANT_ROW), durableRegistrations());
+
+describe("createTelemetryBoundClaudeLauncher", () => {
+  it("takes the authority alone and returns a runner taking the launch input alone", () => {
+    // Pinned as ARITY so a `deps`, launcher-function or telemetry-handoff
+    // parameter cannot be added to either signature without reddening here.
+    expect(createTelemetryBoundClaudeLauncher.length).toBe(1);
+    const run = createTelemetryBoundClaudeLauncher(grantRefusingAuthority());
+    expect(typeof run).toBe("function");
+    expect(run.length).toBe(1);
+  });
+
+  it("performs exactly one physical launch per invocation", async () => {
+    const grants = durableGrants(ABSENT_GRANT_ROW);
+    const regs = durableRegistrations();
+    const run = createTelemetryBoundClaudeLauncher(authorityOf(grants, regs));
+    const first = await run(boundInput());
+    // The arm is asserted BEFORE the count: a launch that refused earlier than
+    // grant consumption would count zero and make the count vacuous.
+    expect(first.ok && first.result.kind).toBe("REFUSED");
+    expect(first.ok && first.result.code).toBe("ACTIVATION_COMMIT_INCOHERENT");
+    expect({ grants: grants.calls.length, regs: regs.commits.length })
+      .toEqual({ grants: 1, regs: 0 });
+    // A SECOND invocation launches again — once — rather than replaying the first.
+    await run(boundInput());
+    expect(grants.calls.length).toBe(2);
+  });
+
+  it("derives the handoff from the launch result it returns", async () => {
+    const settled = await bound(grantRefusingAuthority());
+    expect(settled.handoff.launch.kind).toBe(settled.result.kind);
+    expect(settled.handoff.launch.truthClass).toBe(settled.result.truthClass);
+    expect(settled.handoff.launch.reasonCode).toBe(settled.result.code);
+    expect(settled.handoff.launch.reasonLayer).toBe(settled.result.layer);
+    // Forwarded VERBATIM: the launcher's own vocabulary, never restamped into a
+    // TELEMETRY_* code that would attribute the refusal to the wrong layer.
+    expect(CLAUDE_LAUNCH_ERROR_CODES).toContain(settled.handoff.launch.reasonCode);
+    expect(CLAUDE_LAUNCH_LAYERS).toContain(settled.handoff.launch.reasonLayer);
+    expect(PROVIDER_TELEMETRY_CODES).not.toContain(settled.handoff.launch.reasonCode);
+    expect(settled.handoff.providerRunRef).toEqual(RUN_REF);
+  });
+
+  it("pairs each invocation's handoff with that invocation's own result", async () => {
+    // ONE bound launcher, TWO launches landing on DIFFERENT arms. A handoff built
+    // from a captured or freshly minted result rather than the one just returned
+    // agrees with at most one of them.
+    const run = createTelemetryBoundClaudeLauncher(grantRefusingAuthority());
+    const refused = await run(boundInput());
+    const adopted = await run(boundInput({ duplicateDelivery: DUPLICATE_DELIVERY }));
+    if (!refused.ok || !adopted.ok) throw new Error("a bound launch refused before launching");
+    expect([refused.result.kind, adopted.result.kind]).toEqual(["REFUSED", "ADOPTED"]);
+    for (const settled of [refused, adopted]) {
+      expect(settled.handoff.launch.kind).toBe(settled.result.kind);
+      expect(settled.handoff.launch.reasonCode).toBe(settled.result.code);
+      expect(settled.handoff.launch.reasonLayer).toBe(settled.result.layer);
+      expect(settled.handoff.launch.truthClass).toBe(settled.result.truthClass);
+    }
+  });
+
+  it("returns one deeply frozen object carrying both the result and the handoff", async () => {
+    const settled = await bound(grantRefusingAuthority());
+    expect(Object.keys(settled).sort()).toEqual(["handoff", "ok", "result"]);
+    for (const frozen of [settled, settled.result, settled.handoff, settled.handoff.launch,
+      settled.handoff.tokens, settled.handoff.steps, settled.handoff.concurrency]) {
+      expect(Object.isFrozen(frozen)).toBe(true);
     }
   });
 });

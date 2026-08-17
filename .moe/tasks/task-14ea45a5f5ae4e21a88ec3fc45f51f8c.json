@@ -65,12 +65,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-2cc07e26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Human-approved via TUI (19:35Z): rail-2 cross-repo authorization extended to this task — edits in D:/projexts/moes limited to scripts/moe-agent.sh, scripts/moe-agent.ps1, and the existing scripts/tests post-flight harness files, this task only. Fix target per the banked step-1 measurement: extraction (sh:2043-2086) must verify routed bodies against .moe/messages/<chan>.jsonl by message id and fail closed; both silent-drop paths (:2045, :2086) in scope. Test the invariant delivered-body == stored-body per DELIVERY (not per id, not by payload-shape matching); delivery floor on record is 11+.",
   "createdBy": "HUMAN",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -78,7 +78,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T16:20:57.866Z",
-  "updatedAt": "2026-08-16T22:30:29.514Z",
+  "updatedAt": "2026-08-17T19:42:04.546Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:23:28.762Z",
     "plannedStepCount": 8,
@@ -100,17 +100,19 @@
     ]
   },
   "budget": {
-    "wallClockMs": 7200000
+    "wallClockMs": 7200000,
+    "warnedAt": "2026-08-17T19:42:04.546Z",
+    "escalatedAt": "2026-08-17T19:42:04.546Z"
   },
   "planApprovedAt": "2026-08-16T22:25:34.076Z",
   "contextFetchedBy": [
     "worker-a83aecdf"
   ],
   "workStartedAt": "2026-08-16T22:27:10.356Z",
-  "blockedReason": "Step-1 STOP-AND-AUTHORIZE gate. Read-only LOCATE done; blocking on the same rail-2 exception as task-495ad5e8 — ONE human grant covers both. Existing request: msg-d9710c17c7d44e89924970e244733904. Nothing edited in either repo.\n\nCONFIRMED on current bytes (D:/projexts/moes):\n1. Extraction sh:2043-2086 reads the chat_read RESPONSES via env vars PREFLIGHT_GENERAL_UNREAD/PREFLIGHT_TASK_UNREAD and emits {id,channel,sender,content} from msg.get(\"content\"). It NEVER opens .moe/messages/chan-*.jsonl, so nothing downstream can detect a body altered in transit.\n2. Both silent-drop paths real: `2>/dev/null || true` (:2045) and `|| echo 0` (:2086).\n3. Interpolation sh:2294-2296 expands $PREFLIGHT_ROUTED_MENTIONS_JSON inside a double-quoted assignment — no word splitting there.\n4. Payload SOURCE confirmed: ~/.claude/settings.json has enabledPlugins {\"caveman@caveman\":true}, and plugins/cache/caveman/caveman/0d95a81d35a9/.claude-plugin/plugin.json declares hooks SessionStart,UserPromptSubmit — origin of the impersonated banner.\n\nTWO FINDINGS THAT CHANGE THE PLAN — settle before step 3:\n5. FORMAT MISMATCH. The wrapper emits print(json.dumps(...)) — quoted JSON. The block delivered to MY session start was NOT quoted JSON; it read {id:msg-5134ad00...,channel:chan-ced9935...,sender:qa-c7cedba3,content:...}. Matches NEITHER twin (ps1 uses ConvertTo-Json). So either the running assembler is not scripts/moe-agent.{sh,ps1}, or the block is re-rendered downstream, or a third path exists. Step 3 adds a digest to those two scripts; if they are not the executing assembler it lands green and changes nothing — the failure mode already found on task-495ad5e8.\n6. FOUR COPIES, DRIFTED. routed_mentions appears in scripts/, moe-vscode/bundled/scripts/, and the moe-jetbrains sandbox. The three .sh copies have DIFFERENT md5s (06238ee2/5a05fc50/3a33cfd7). Forks, not regenerated artifacts.\n\nMechanism NOT confirmed. Step 1 forbids fixing on a guess.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-16T22:29:36.425Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Step 1 (STOP-AND-AUTHORIZE + LOCATE) read-only measurement COMPLETE; no bytes edited in either repository. CONFIRMED on current bytes in D:/projexts/moes: (1) the mention extraction at scripts/moe-agent.sh:2043-2086 is an inline Python heredoc reading the chat_read RESPONSES from env vars PREFLIGHT_GENERAL_UNREAD and PREFLIGHT_TASK_UNREAD, emitting {id,channel,sender,content} from msg.get(\"content\"), and it NEVER opens .moe/messages/chan-*.jsonl — so the wrapper trusts the response end to end and nothing downstream can detect a body altered in transit; (2) both silent-drop paths are real — `2>/dev/null || true` at :2045 turns a Python failure into an empty mentions block, and `|| echo 0` at :2086 turns an unparseable count into 'no mentions'; (3) interpolation at sh:2294-2296 expands $PREFLIGHT_ROUTED_MENTIONS_JSON inside a double-quoted assignment, so no word splitting happens there and that is NOT the corruption site; (4) the PAYLOAD SOURCE is confirmed — ~/.claude/settings.json carries enabledPlugins {\"caveman@caveman\":true} and plugins/cache/caveman/caveman/0d95a81d35a9/.claude-plugin/plugin.json declares hooks SessionStart,UserPromptSubmit, which is where the impersonated 'SessionStart:startup hook success' banner text originates. The substitution MECHANISM itself is NOT confirmed, and step 1 explicitly forbids proceeding to a fix on a guessed mechanism. Full detail is in the task's blockedReason and Serena memory `task-14ea45a5-handoff`.",

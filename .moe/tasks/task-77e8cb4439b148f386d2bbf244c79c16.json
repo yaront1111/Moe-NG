@@ -106,12 +106,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Architect retraction after authoritative-design remeasurement: the approved plan incorrectly equates structural scheduler ValidatedGraph.graphIdentity with the broader GraphRevisionContent.graphContentHash (design line 197). Worker was told to stop twice and continued through steps 3-4, likely due the live routed-mention delivery fault. Preserve current files; no commit. Whole-plan rework/human Graph Beta authority decision dec-64b2391cb80f4c0cbb6e88353017cc65 required.",
+  "reopenReason": "Transit hop for archival — ABSORBED by task-e3d5fd05 per architect-2cc07e26's measured finding; full record preserved in comment-946753dc.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -122,11 +122,17 @@
       "author": "governor-7610ed5a",
       "content": "Governor correction to the 11:19Z handoff note recorded on this task: its \"whatIsDone: steps 1-2, no production code\" describes the state at the 22:27Z stop order and is superseded by the task's own blockedReason — the worker actually reached steps 1-4 and produced graph-content surface bytes that the blockedReason instructs the next owner to PRESERVE. Trust the blockedReason over the handoff note where they disagree. The handoff note's pitfalls section (do not equate graphContentHash with ValidatedGraph.graphIdentity; authoritative GraphRevisionContent covers repo base/parent/policy/budget/author) remains correct.",
       "timestamp": "2026-08-17T11:21:21.436Z"
+    },
+    {
+      "id": "comment-946753dc7a2b4deab16dd13a80321c8f",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR ARCHIVAL RECORD (19:43Z) — preserving the ABSORBED finding before the BACKLOG hop wipes the blockedReason. architect-2cc07e26's measured verdict (msg-26f099fe, 19:41Z): this task is NOT blocked on a dependency — it is ABSORBED. Its deliverable (canonical graph snapshot content identity) landed as part of task-e3d5fd05 (Canonical GraphRevisionContent contract, codec and content-hash producer — DONE, QA-approved 18:57Z), which supersedes the structural-only slice this shell described. Planning it now would re-implement a landed public surface — the silent-duplicate failure the stale-by-default rail forbids. History for provenance: original 6-step plan retracted mid-flight (wrong premise: structural graphIdentity equated with content hash); worker's steps 1-4 bytes were later superseded by the e3d5fd05 implementation. Archived under the human's active unstall directive on the architect's ARCHIVE recommendation. Un-archive path if ever needed: set_task_status ARCHIVED→BACKLOG.",
+      "timestamp": "2026-08-17T19:43:10.312Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:16:46.823Z",
-  "updatedAt": "2026-08-17T11:21:21.436Z",
+  "updatedAt": "2026-08-17T19:43:20.765Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:17:07.456Z",
     "plannedStepCount": 6,
@@ -158,15 +164,26 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-17T19:39:17.867Z",
+    "escalatedAt": "2026-08-17T19:39:17.867Z"
   },
   "planApprovedAt": "2026-08-16T22:18:47.535Z",
   "workStartedAt": "2026-08-16T22:19:14.269Z",
-  "blockedReason": "Authoritative-design remeasurement invalidated the plan after steps 1-4: GraphRevisionContent hash includes repository base, parent, policy, decomposition budget and author in addition to graph structure. The produced graph-content surface and tests currently claim structural graphIdentity is graphContentHash, which would redefine the authority contract. Preserve current bytes for the next owner; do not commit/reset. Resume only after dec-64b2391 is resolved and rewrite the task/plan accordingly.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T22:34:01.596Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
+    {
+      "whatIsDone": "Verified DoD item by item at HEAD d2151d4 that task-e3d5fd05 already delivered this task's entire objective, including the snapshotIdentity rename this task was reopened for. encodeGraphContent/decodeGraphContent are root-exported; GraphContent carries graphContentHash over all seven design-197 fields PLUS a separate snapshotIdentity documented as never equal to it; graph-content-issues.ts declares 9 frozen codes over 3 frozen layers; graph-content.test.ts is green at 57 tests; all four modules have .js bridges.",
+      "whatRemains": "Nothing to implement. This task should be ARCHIVED (BLOCKED -> BACKLOG -> ARCHIVED) with credit to task-e3d5fd05. If a governor disagrees, the burden is to name one DoD item NOT satisfied on disk -- I could not find one.",
+      "pitfalls": "DO NOT PLAN THIS AS WRITTEN. Its description was authored before dec-64b2391c was resolved and before e3d5fd05 landed, so it reads as unbuilt work. Implementing it now would re-create a landed public surface in packages/scheduler/src/graph-content*.ts and collide with committed bytes in the shared worktree -- the exact silent-duplicate the stale-by-default rail forbids in its 'gap claimed present, actually closed' direction. Re-measure before believing any task description that predates a landed dependency.",
+      "openQuestions": "None on the code. The only open item is administrative: whether the board prefers to archive this or to re-title it as the already-done record of the e3d5fd05 sub-deliverable. Either is fine; leaving it in PLANNING is not, because the next architect will re-measure the same ground.",
+      "releasedAt": "2026-08-17T19:41:59.849Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Releasing the assignment only; the BLOCKED state and its ABSORBED finding stand. Released so I can keep sweeping the PLANNING queue -- holding a blocked task stops claim_next_task."
+    },
     {
       "whatIsDone": "Steps 1-2 of the retracted 6-step plan: baseline audit (validateGraphSnapshot surface, no graph-content codec exists, @moe/scheduler baseline 43 files / 1326 tests) and RED tests in graph-content.test.ts specifying encode/decode/permutation-identity behavior.",
       "whatRemains": "Full re-plan by architect-f956ffe1 on the corrected premise: canonical GraphSnapshot with a SEPARATE snapshotIdentity, core graphContentHash retained as distinct provenance — or a full GraphRevisionContent producer/codec prerequisite. The existing RED tests encode the WRONG hash-equivalence and must be rewritten or discarded by the new plan, not inherited as-is.",

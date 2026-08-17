@@ -17,50 +17,36 @@
  */
 import { deepFreeze } from "../../canonical.js";
 import { isHostileObject, snapshotLaunchSelection } from "../claude/claude-launch-selection.js";
-import {
-  launchClaude,
-  type ClaudeLaunchErrorCode, type ClaudeLaunchExit, type ClaudeLaunchLayer,
-  type ClaudeLaunchOptions, type ClaudeLaunchResult, type ClaudeLaunchSelection,
-  type ClaudeLaunchTruthClass, type ClaudeStreamEvidence,
-} from "../claude/claude-launcher.js";
-import {
-  CLAUDE_RESULT_TELEMETRY_VERSION, parseClaudeResultTelemetry,
+import { createClaudeLauncher } from "../claude/claude-launcher-authority.js";
+import { launchClaude, type ClaudeLaunchErrorCode, type ClaudeLaunchExit,
+  type ClaudeLaunchLayer, type ClaudeLaunchOptions, type ClaudeLaunchResult,
+  type ClaudeLaunchSelection, type ClaudeLaunchTruthClass, type ClaudeLauncherAuthority,
+  type ClaudeStreamEvidence } from "../claude/claude-launcher.js";
+import { CLAUDE_RESULT_TELEMETRY_VERSION, parseClaudeResultTelemetry,
   type ClaudeObservedModel, type ClaudeResultTelemetryVerdict, type ClaudeStepObservations,
-  type ClaudeTokenObservations,
-} from "./claude-result-telemetry.js";
-import {
-  countCoverage, knownCount, readText, snapshotRunRef, telemetryRefusal, unknownFact,
+  type ClaudeTokenObservations } from "./claude-result-telemetry.js";
+import { countCoverage, knownCount, readText, snapshotRunRef, telemetryRefusal, unknownFact,
   type ProviderConcurrencyFact, type ProviderFactUnknown, type ProviderInfrastructureOutcome,
   type ProviderQuantity, type ProviderRunRef, type ProviderTelemetryCode,
-  type ProviderTelemetryRefusal, type ProviderTerminalOutcome, type ProviderText,
-} from "./provider-telemetry-contracts.js";
+  type ProviderTelemetryRefusal, type ProviderTerminalOutcome,
+  type ProviderText } from "./provider-telemetry-contracts.js";
 
 export const CLAUDE_TELEMETRY_HANDOFF_VERSION = "moe-claude-telemetry-handoff/1" as const;
 
 export type ClaudeDeclaredSelection =
   | { readonly known: true; readonly selection: ClaudeLaunchSelection } | ProviderFactUnknown;
-export interface ClaudeTelemetryConcurrency {
-  readonly fact: ProviderConcurrencyFact;
-  readonly declaredCeiling: ProviderQuantity;
-  readonly achieved: ProviderQuantity;
-}
+export interface ClaudeTelemetryConcurrency { readonly fact: ProviderConcurrencyFact;
+  readonly declaredCeiling: ProviderQuantity; readonly achieved: ProviderQuantity }
 
 /** Bound from `ClaudeLaunchObservation` verbatim; null on the arms that have none. */
 export interface ClaudeTelemetryLaunchFacts {
-  readonly kind: ClaudeLaunchResult["kind"];
-  readonly truthClass: ClaudeLaunchTruthClass;
-  readonly reasonCode: ClaudeLaunchErrorCode | null;
-  readonly reasonLayer: ClaudeLaunchLayer | null;
-  readonly exit: ClaudeLaunchExit | null;
-  readonly effectDigest: string | null;
-  readonly activationDigest: string | null;
-  readonly runtimeBindingDigest: string | null;
-  readonly quotedRuntimeDigest: string | null;
-  readonly freshRuntimeDigest: string | null;
-  readonly pinnedClosureDigest: string | null;
-  readonly observationDigest: string | null;
-  readonly startedAt: string | null;
-  readonly completedAt: string | null;
+  readonly kind: ClaudeLaunchResult["kind"]; readonly truthClass: ClaudeLaunchTruthClass;
+  readonly reasonCode: ClaudeLaunchErrorCode | null; readonly reasonLayer: ClaudeLaunchLayer | null;
+  readonly exit: ClaudeLaunchExit | null; readonly effectDigest: string | null;
+  readonly activationDigest: string | null; readonly runtimeBindingDigest: string | null;
+  readonly quotedRuntimeDigest: string | null; readonly freshRuntimeDigest: string | null;
+  readonly pinnedClosureDigest: string | null; readonly observationDigest: string | null;
+  readonly startedAt: string | null; readonly completedAt: string | null;
 }
 export interface ClaudeTelemetryLaunchInput { readonly providerRunRef: unknown;
   readonly request: unknown; readonly options?: ClaudeLaunchOptions }
@@ -70,27 +56,21 @@ export type ClaudeTelemetryLaunchResult =
 export interface ClaudeTelemetryHandoff {
   readonly handoffVersion: typeof CLAUDE_TELEMETRY_HANDOFF_VERSION;
   readonly parserVersion: typeof CLAUDE_RESULT_TELEMETRY_VERSION;
-  readonly providerRunRef: ProviderRunRef;
-  readonly launch: ClaudeTelemetryLaunchFacts;
-  readonly declared: ClaudeDeclaredSelection;
-  readonly observedModel: ClaudeObservedModel;
+  readonly providerRunRef: ProviderRunRef; readonly launch: ClaudeTelemetryLaunchFacts;
+  readonly declared: ClaudeDeclaredSelection; readonly observedModel: ClaudeObservedModel;
   readonly terminal: ProviderTerminalOutcome;
   readonly infrastructure: ProviderInfrastructureOutcome;
-  readonly tokens: ClaudeTokenObservations;
-  readonly steps: ClaudeStepObservations;
-  readonly sequence: ProviderQuantity;
-  readonly concurrency: ClaudeTelemetryConcurrency;
-  readonly stdoutReceiptDigest: ProviderText;
-  readonly stderrReceiptDigest: ProviderText;
+  readonly tokens: ClaudeTokenObservations; readonly steps: ClaudeStepObservations;
+  readonly sequence: ProviderQuantity; readonly concurrency: ClaudeTelemetryConcurrency;
+  readonly stdoutReceiptDigest: ProviderText; readonly stderrReceiptDigest: ProviderText;
   readonly telemetryRefusal: ProviderTelemetryRefusal | null;
 }
 
 const INFRASTRUCTURE_BY_CODE:
   Readonly<Partial<Record<ProviderTelemetryCode, ProviderInfrastructureOutcome>>> = Object.freeze({
-    TELEMETRY_CAPTURE_INCOMPLETE: "CAPTURE_INCOMPLETE",
-    TELEMETRY_CAPTURE_TRUNCATED: "CAPTURE_TRUNCATED", TELEMETRY_CAPTURE_UNDECODABLE: "UNKNOWN",
-    TELEMETRY_SCHEMA_UNSUPPORTED: "SCHEMA_UNSUPPORTED",
-    TELEMETRY_STREAM_ANOMALOUS: "STREAM_ANOMALOUS" });
+    TELEMETRY_CAPTURE_INCOMPLETE: "CAPTURE_INCOMPLETE", TELEMETRY_CAPTURE_UNDECODABLE: "UNKNOWN",
+    TELEMETRY_CAPTURE_TRUNCATED: "CAPTURE_TRUNCATED", TELEMETRY_STREAM_ANOMALOUS: "STREAM_ANOMALOUS",
+    TELEMETRY_SCHEMA_UNSUPPORTED: "SCHEMA_UNSUPPORTED" });
 
 const blindTokens = (fact: ProviderFactUnknown): ClaudeTokenObservations => Object.freeze({
   inputTokens: fact, outputTokens: fact, cacheCreationInputTokens: fact,
@@ -137,10 +117,9 @@ function concurrencyOf(declared: ClaudeDeclaredSelection): ClaudeTelemetryConcur
   return Object.freeze({ fact: "DECLARED_CEILING_ONLY", declaredCeiling, achieved });
 }
 
-const NO_LAUNCH_DIGESTS = Object.freeze({
-  effectDigest: null, activationDigest: null, runtimeBindingDigest: null, exit: null,
-  quotedRuntimeDigest: null, freshRuntimeDigest: null, pinnedClosureDigest: null,
-  observationDigest: null, startedAt: null, completedAt: null });
+const NO_LAUNCH_DIGESTS = Object.freeze({ effectDigest: null, activationDigest: null,
+  runtimeBindingDigest: null, exit: null, quotedRuntimeDigest: null, freshRuntimeDigest: null,
+  pinnedClosureDigest: null, observationDigest: null, startedAt: null, completedAt: null });
 
 function blindHandoff(
   providerRunRef: ProviderRunRef, declared: ClaudeDeclaredSelection, result: ClaudeLaunchResult,
@@ -150,32 +129,25 @@ function blindHandoff(
   const fact = unknownFact(code, "TELEMETRY_LAUNCH");
   return deepFreeze({
     handoffVersion: CLAUDE_TELEMETRY_HANDOFF_VERSION,
-    parserVersion: CLAUDE_RESULT_TELEMETRY_VERSION,
-    providerRunRef,
-    launch: {
-      kind: result.kind, truthClass: result.truthClass, reasonCode: result.code,
-      reasonLayer: result.layer, ...NO_LAUNCH_DIGESTS,
-    },
+    parserVersion: CLAUDE_RESULT_TELEMETRY_VERSION, providerRunRef,
+    launch: { kind: result.kind, truthClass: result.truthClass, reasonCode: result.code,
+      reasonLayer: result.layer, ...NO_LAUNCH_DIGESTS },
     declared, observedModel: blindModel(fact), terminal, infrastructure,
     tokens: blindTokens(fact), steps: blindSteps(fact), sequence: fact,
-    concurrency: concurrencyOf(declared),
-    stdoutReceiptDigest: fact, stderrReceiptDigest: fact,
+    concurrency: concurrencyOf(declared), stdoutReceiptDigest: fact, stderrReceiptDigest: fact,
     telemetryRefusal: telemetryRefusal(code, "TELEMETRY_LAUNCH"),
   });
 }
 
 /**
  * The single branch on the parse verdict. A refusal turns into UNKNOWN facts
- * carrying the parser's exact code and layer — never a partial sum and never a
- * zero — and the refusal record travels with them.
+ * carrying the parser's exact code and layer — never a partial sum, never a zero —
+ * and the refusal record travels with them.
  */
 interface ParsedFacts {
-  readonly observedModel: ClaudeObservedModel;
-  readonly terminal: ProviderTerminalOutcome;
-  readonly tokens: ClaudeTokenObservations;
-  readonly steps: ClaudeStepObservations;
-  readonly sequence: ProviderQuantity;
-  readonly telemetryRefusal: ProviderTelemetryRefusal | null;
+  readonly observedModel: ClaudeObservedModel; readonly terminal: ProviderTerminalOutcome;
+  readonly tokens: ClaudeTokenObservations; readonly steps: ClaudeStepObservations;
+  readonly sequence: ProviderQuantity; readonly telemetryRefusal: ProviderTelemetryRefusal | null;
 }
 function factsOf(parsed: ClaudeResultTelemetryVerdict): ParsedFacts {
   if (parsed.ok) {
@@ -188,11 +160,10 @@ function factsOf(parsed: ClaudeResultTelemetryVerdict): ParsedFacts {
 }
 
 /**
- * `NONE` asserts an ABSENCE of infrastructure fault, so it is the one member
- * that must be EARNED: the exit observed, the capture parsed, and the launcher
- * itself having PROVEN the run. A launch it could not prove — a failed stderr
- * capture, an unproven boundary identity — reports UNKNOWN even when stdout
- * reads perfectly.
+ * `NONE` asserts an ABSENCE of infrastructure fault, so it is the one member that
+ * must be EARNED: the exit observed, the capture parsed, and the launcher itself
+ * having PROVEN the run. A launch it could not prove — a failed stderr capture, an
+ * unproven boundary identity — reports UNKNOWN even when stdout reads perfectly.
  */
 function infrastructureOf(
   exit: ClaudeLaunchExit, parsed: ClaudeResultTelemetryVerdict, truthClass: ClaudeLaunchTruthClass,
@@ -201,6 +172,39 @@ function infrastructureOf(
   if (exit.kind === "UNOBSERVED") return "EXIT_UNOBSERVED";
   if (!parsed.ok) return INFRASTRUCTURE_BY_CODE[parsed.code] ?? "UNKNOWN";
   return truthClass === "PROVEN" ? "NONE" : "UNKNOWN";
+}
+
+/**
+ * The ONE arm selection, over an ALREADY-OBTAINED result. Both entry points derive
+ * their handoff here, so neither can grow a second derivation that disagrees with
+ * the other about the same launch. It launches nothing, and binds every observed
+ * field by NAME rather than by spread, so nothing else can leak in.
+ */
+function handoffOf(
+  providerRunRef: ProviderRunRef, declared: ClaudeDeclaredSelection, result: ClaudeLaunchResult,
+): ClaudeTelemetryHandoff {
+  if (result.kind === "REFUSED") {
+    return blindHandoff(providerRunRef, declared, result, "TELEMETRY_LAUNCH_REFUSED", "REFUSED",
+      "LAUNCH_REFUSED");
+  }
+  if (result.kind !== "OBSERVED") {
+    return blindHandoff(providerRunRef, declared, result, "TELEMETRY_LAUNCH_NOT_ATTEMPTED",
+      "UNKNOWN", "LAUNCH_NOT_ATTEMPTED");
+  }
+  const { exit, stdout, stderr, truthClass, reasonCode, reasonLayer, effectDigest, activationDigest,
+    runtimeBindingDigest, quotedRuntimeDigest, freshRuntimeDigest, pinnedClosureDigest,
+    observationDigest, startedAt, completedAt } = result.observation;
+  const parsed = parseClaudeResultTelemetry({ providerRunRef, stdout });
+  return deepFreeze({
+    handoffVersion: CLAUDE_TELEMETRY_HANDOFF_VERSION,
+    parserVersion: CLAUDE_RESULT_TELEMETRY_VERSION, providerRunRef,
+    launch: { kind: result.kind, truthClass, reasonCode, reasonLayer, effectDigest,
+      activationDigest, runtimeBindingDigest, quotedRuntimeDigest, freshRuntimeDigest,
+      pinnedClosureDigest, observationDigest, startedAt, completedAt, exit },
+    declared, ...factsOf(parsed), infrastructure: infrastructureOf(exit, parsed, truthClass),
+    concurrency: concurrencyOf(declared), stdoutReceiptDigest: receipt(stdout),
+    stderrReceiptDigest: receipt(stderr),
+  });
 }
 
 export async function launchClaudeWithTelemetry(
@@ -214,37 +218,35 @@ export async function launchClaudeWithTelemetry(
   }
   const declared = declaredOf(input.request);
   const result = await launchClaude(input.request, input.options ?? {});
-  if (result.kind === "REFUSED") {
-    return Object.freeze({ ok: true as const, handoff: blindHandoff(
-      providerRunRef, declared, result, "TELEMETRY_LAUNCH_REFUSED", "REFUSED", "LAUNCH_REFUSED") });
-  }
-  if (result.kind !== "OBSERVED") {
-    return Object.freeze({ ok: true as const, handoff: blindHandoff(
-      providerRunRef, declared, result, "TELEMETRY_LAUNCH_NOT_ATTEMPTED", "UNKNOWN",
-      "LAUNCH_NOT_ATTEMPTED") });
-  }
-  const observation = result.observation;
-  const parsed = parseClaudeResultTelemetry({ providerRunRef, stdout: observation.stdout });
-  return Object.freeze({ ok: true as const, handoff: deepFreeze({
-    handoffVersion: CLAUDE_TELEMETRY_HANDOFF_VERSION,
-    parserVersion: CLAUDE_RESULT_TELEMETRY_VERSION,
-    providerRunRef,
-    launch: {
-      kind: result.kind, truthClass: observation.truthClass, reasonCode: observation.reasonCode,
-      reasonLayer: observation.reasonLayer, effectDigest: observation.effectDigest,
-      activationDigest: observation.activationDigest,
-      runtimeBindingDigest: observation.runtimeBindingDigest,
-      quotedRuntimeDigest: observation.quotedRuntimeDigest,
-      freshRuntimeDigest: observation.freshRuntimeDigest,
-      pinnedClosureDigest: observation.pinnedClosureDigest,
-      observationDigest: observation.observationDigest, startedAt: observation.startedAt,
-      completedAt: observation.completedAt, exit: observation.exit,
-    },
-    declared,
-    ...factsOf(parsed),
-    infrastructure: infrastructureOf(observation.exit, parsed, observation.truthClass),
-    concurrency: concurrencyOf(declared),
-    stdoutReceiptDigest: receipt(observation.stdout),
-    stderrReceiptDigest: receipt(observation.stderr),
-  }) });
+  return Object.freeze({ ok: true as const, handoff: handoffOf(providerRunRef, declared, result) });
+}
+
+export interface ClaudeBoundLaunch { readonly ok: true; readonly result: ClaudeLaunchResult;
+  readonly handoff: ClaudeTelemetryHandoff }
+export type ClaudeBoundLaunchResult = ClaudeBoundLaunch | ProviderTelemetryRefusal;
+
+/**
+ * The AUTHORITY-BOUND entry point. `createClaudeLauncher` is bound ONCE, here, so
+ * a later mutation of the caller's authority cannot redirect a launch already in
+ * flight; the caller supplies that authority and nothing else — no dependency set,
+ * no launcher function, no exit, no observation, no handoff. Each invocation runs
+ * exactly ONE physical launch and derives its handoff from THAT result, which is
+ * why the raw `ClaudeLaunchResult` travels back beside it: the handoff is blind on
+ * every arm that carried no observation, so a consumer needing the launcher's own
+ * truth there reads the result rather than launching again to obtain it.
+ */
+export function createTelemetryBoundClaudeLauncher(
+  authority: ClaudeLauncherAuthority,
+): (input: ClaudeTelemetryLaunchInput) => Promise<ClaudeBoundLaunchResult> {
+  const launch = createClaudeLauncher(authority);
+  return async (input: ClaudeTelemetryLaunchInput): Promise<ClaudeBoundLaunchResult> => {
+    const providerRunRef = snapshotRunRef(input.providerRunRef);
+    if (providerRunRef === null) {
+      return telemetryRefusal("TELEMETRY_RUN_REF_MALFORMED", "TELEMETRY_INPUT");
+    }
+    const declared = declaredOf(input.request);
+    const result = await launch(input.request, input.options ?? {});
+    return deepFreeze({ ok: true as const, result,
+      handoff: handoffOf(providerRunRef, declared, result) });
+  };
 }

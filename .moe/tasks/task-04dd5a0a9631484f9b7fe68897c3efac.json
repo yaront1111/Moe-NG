@@ -206,8 +206,8 @@
       "completedAt": "2026-08-17T18:41:33.346Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -219,12 +219,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:53:19.142Z",
-  "updatedAt": "2026-08-17T18:46:49.477Z",
+  "updatedAt": "2026-08-17T18:53:39.851Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:42:08.815Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-17T18:53:39.851Z",
+    "wallClockMs": 4291036
   },
   "contextFetchedBy": [
     "architect-c9e91335",
@@ -302,5 +304,8 @@
     "apps/daemon/src/journal/journal-idempotence.test.ts",
     "apps/daemon/src/daemon-command-vocabulary.test.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:53:39.851Z",
+  "reviewCompletedAt": "2026-08-17T18:53:39.851Z",
+  "reviewSummary": "GATE RE-RUN BY ME (legs separate): daemon typecheck -> 0; daemon test -> 0 with count line \"Test Files 120 passed (120) / Tests 2476 passed (2476)\"; repo-wide typecheck -> 0. pnpm test:security -> 1 but FOREIGN: all 3 failures are the GRAPH_CONTENT_LAYERS ratchet in tests/security/integrity-boundaries.security.ts (roster 14 vs 13, arms 0); that constant is packages/scheduler and the suite has ZERO journal refs, so delta n owned paths = EMPTY.\n\nDIFF d2c86b7..HEAD over owned paths: 21 files +1941/-21; worktree == HEAD everywhere; production files 250/183/164/94 lines (per-FILE cap respected); no _edge-probe or scratch; 4 exact .js bridges; all four closed rosters bumped 23->24, none weakened.\n\nFOUR DRILLS I RAN INDEPENDENTLY, each reddening NAMED assertions, each restored with sha256 equality: (1) DoD-5 drill, digest over entries.slice(0,-1) -> 7 red incl \"records two entries and answers the attempt-bound digest from durable bytes\"; (2) drop binding.layer -> 3 red incl \"carries the BINDING READER's expired-lease refusal, not a daemon code\"; (3) delete strict predicate decode -> 6 red with \"CRASHED instead of refusing: TypeError: Unsupported canonical value type\", so crash-vs-refusal is pinned; (4) widen payload keys with journalDigest -> \"refuses a payload carrying 'journalDigest' at PAYLOAD_SHAPE\" reddens, proving the caller-digest fence is the seam allow-list.\n\nDoD 1-6 evidenced: structural sweep has a positive control per case and asserts no DISPATCH-stage refusal; exact code+layer for stale lease, absent attempt, binding mismatch, malformed entry, limit, UNREADABLE, AMBIGUOUS, PROJECT_MISMATCH, DIGEST_MISMATCH; replay keeps one row and an identical digest, conflict pins IDEMPOTENCY_CONFLICT/DURABLE_STORE before mutating; both sweeps assert nonzero generated counts; consumer task-af9454f4438242e5854208284e0086e2 named with edge readCurrentAttemptJournal from journal-reader.js."
 }

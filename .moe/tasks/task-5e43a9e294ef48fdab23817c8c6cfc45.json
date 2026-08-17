@@ -16,13 +16,94 @@
     "Keep production files focused, target <=250 physical lines and split before 400; stage and commit only explicit owned paths.",
     "Curate explicit named exports in the area module; package-root runtime set equality must prevent fixtures or incidental helpers from leaking."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure, and read the two corrections this plan carries. Read-only. TWO PRIOR ARCHITECTS BLOCKED THIS TASK and their handoff notes are still binding advice: do not narrow the DoD to a review-only surface (DoD 2 demands exact root namespace SET EQUALITY, unwritable while any family is missing, so a partial surface satisfies NONE of the DoD), and do not file prerequisite tasks (they all exist and are now DONE). CORRECTION 1 -- THE SIZE PREMISE IS STALE THREE TIMES OVER. The description says apps/daemon/src/index.ts is 249 lines; the first architect measured 317, the second 346, and at HEAD d2151d4 it is **389** -- eleven lines from the 400 hard split. Confirm with `wc -l < apps/daemon/src/index.ts`. CORRECTION 2 -- AND THE REASON IT IS OVERSIZED IS NOT EXPORTS. Lines ~280-389 are a ~110-line BEHAVIOR block living inside the barrel: the `GraphPreviewRequestError` / `GraphPreviewInputRejected` / `GraphPreviewRequestInvalid` / `GraphPreviewRequestEvaluated` / `GraphPreviewRequestResult` types and the `evaluateGraphPreviewRequestBytes` function. index.ts is not a pure barrel today. Then confirm the deliverable is genuinely unbuilt: `apps/daemon/src/foundation/` does NOT exist, and NONE of `runReviewCommand`, `readReviewLedger`, `reconcileOnRestart`, `runContinuationCommand`, `createFoundationAttemptService`, `createFoundationVerificationService` or `createCoordinationAdapter` appears in index.ts (only `REVIEW_HANDLERS` does). All seven exist as modules under apps/daemon/src. Finally, per the governor's comment-55e0505e, probe each family's committed public runtime AND type closure before curating a name -- a symbol whose types are not exportable produces a surface that typechecks in-package and fails at the consumer.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Make room first, because DoD 4 (index.ts <=250) is unreachable while a 110-line behavior block sits in the barrel and six families of exports are still to be added. Move the graph-preview block out of apps/daemon/src/index.ts into a new focused module -- suggested apps/daemon/src/http/graph-preview-request.ts -- plus its one-line `.js` bridge (`export * from \"./graph-preview-request.ts\";`, without which the module is invisible to the .js import graph). Move the five types and `evaluateGraphPreviewRequestBytes` together; they are one unit. Re-export them from index.ts so no consumer's import path changes -- the task description forbids behavior changes and a moved export that changes a consumer's path is a behavior change to that consumer. THIS EXPANDS THE DESCRIPTION'S FIVE OWNED PATHS TO SEVEN. Say so explicitly in the step note: the description named five paths on the false premise that index.ts was 249 lines and needed no surgery of its own; the second architect's handoff already flagged that \"splitting index.ts itself is part of the real job\". Verify the move at its ORIGIN as well as its destination -- a symbol left defined in both files typechecks, passes, and drifts later.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/http/graph-preview-request.ts",
+        "apps/daemon/src/http/graph-preview-request.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/graph-preview-request.ts",
+        "apps/daemon/src/http/graph-preview-request.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Create the curated area surface: apps/daemon/src/foundation/foundation-surface.ts plus its one-line `.js` bridge. EXPLICIT NAMED EXPORTS ONLY -- no `export *` anywhere, because rail 4 and DoD 1 both require that no fixture or incidental helper can leak in, and a star re-export makes the surface whatever a sibling module happens to declare tomorrow. Curate all six families with their runtime entrypoints, their schema/kind/refusal vocabularies, and complete type-only closure: (1) REVIEW -- runReviewCommand, readReviewLedger, the REVIEW schema version, command kinds and refusal code lists; (2) RECOVERY -- reconcileOnRestart and runContinuationCommand with their command kinds and payload keys; (3) ATTEMPT -- createFoundationAttemptService and its read model; (4) VERIFICATION -- createFoundationVerificationService and its read model; (5) CLOSURE -- the review-qualified goal closure entrypoint landed by task-8f9305b9; (6) COORDINATION -- createCoordinationAdapter and its operations. For each, export the RESULT types too, and every branch of every discriminated union a caller must narrow on -- DoD 1 says complete type closure and DoD 2 says type assertions must distinguish every public result branch, so an exported function whose refusal type is unexported fails both. Keep the file <=250 physical lines; if six families do not fit, split by family into sibling modules that the surface re-exports by name rather than trimming the closure.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Publish the surface from the package root: re-export the curated names from apps/daemon/src/index.ts, again by explicit name, never `export *`. Then check the arithmetic that DoD 4 pins: `wc -l` on index.ts must be <=250 AND on foundation-surface.ts must be <=250. Step 2 removed ~110 lines and this step adds re-export lines, so the budget is real but not generous -- if index.ts lands over 250, do NOT trim the surface; move a second cohesive block out of the barrel the way step 2 moved graph-preview, and record which block and why. Do not touch apps/daemon/package.json: DoD 4 forbids manifest changes, and the root already resolves through index.ts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD the set-equality guard in the existing apps/daemon/src/index-surface.test.ts (851 lines -- extend it, do not add a parallel suite). Import the package by its BARE specifier `@moe/daemon`, not by relative path: DoD 2 says package-root tests use @moe/daemon, and a relative import proves the file rather than the published surface. Assert EXACT SET EQUALITY over the runtime namespace -- both directions, so the test catches a missing export AND an unreviewed one that leaked in. Write the expected set as a frozen literal list, never derived from the namespace at runtime, or the assertion agrees with whatever the module happens to export and can never fail. Add the type-level half DoD 2 requires: assertions that distinguish every public result branch (a success branch, each refusal branch), so an exported function whose refusal union is unexported or collapsed fails to compile. Include a negative guard that no name matching a fixture or test-helper pattern appears in the namespace, and assert the expected set's SIZE so a wholesale replacement cannot pass.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "TDD the plain-Node probe in apps/daemon/src/runtime-entrypoint.test.ts (213 lines). DoD 3 requires a real Node import that resolves every entrypoint WITHOUT Vitest's .js-to-.ts remapping -- so this must spawn a real `node` process against the built/bridged `.js` graph from apps/daemon, not import inside the vitest worker where the remapping hides a missing bridge. That remapping is exactly why a new .ts module without its one-line .js bridge passes every in-suite test and fails for a real consumer, which is the failure mode this probe exists to catch. In the spawned process, import the package root and (a) assert every curated entrypoint resolves to a function or object as expected, and (b) invoke the SAFE decode/read probes only -- a decode of malformed bytes, a read against an empty store -- asserting each returns its stable refusal rather than throwing. Never invoke anything that writes, spawns, or launches. Assert the probe actually ran by checking a nonzero count of resolved entrypoints; a probe that silently resolved nothing exits 0.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Mutation drills, three, one per claim the suite must actually pin. Drill 1 (set equality is real in the missing direction): delete one curated export from foundation-surface.ts; the step-5 set-equality test must go RED naming that symbol -- if it only fails a size assertion, the test is counting rather than comparing. Drill 2 (set equality is real in the leaking direction): add a throwaway export named like a fixture to the surface; the test must go RED. These are separate failures and a single-direction assertion catches only one. Drill 3 (the plain-Node probe is real): delete one `.js` bridge; the step-6 probe must go RED on module resolution while the in-suite vitest tests stay GREEN -- that divergence is the proof the probe tests something vitest cannot. Record for each drill the command, the failing test NAME and the exact assertion; a drill that reddens by crashing has not proven the guard. Restore by re-editing, never `git checkout` (destructive in this shared worktree), and confirm with `git diff --numstat` showing 0 added and 0 deleted per drilled file. One drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Adversarial review, commit, and gate. ATTACKER PASS: does any `export *` survive anywhere in the curated path? Can a test fixture, a `*-test-fixtures.ts` helper or an incidental util be reached from `@moe/daemon`? Is every exported function's full result union also exported, including each refusal branch -- pick two functions and try to narrow their results in a consumer-shaped type assertion. Did any behavior change (this task forbids all of it): is the graph-preview move byte-equivalent, are all prior consumer import paths intact, and did any refusal code, layer or schema version get touched? Do both new `.js` bridges exist? Are index.ts and foundation-surface.ts each <=250 lines? CONCURRENCY CHECK before committing -- a prior handoff recorded another task in flight against index.ts and index-surface.test.ts: run `git log --oneline -5 -- apps/daemon/src/index.ts` and re-read the file; if a peer has moved underneath you, rebase your edit onto their bytes rather than overwriting. COMMIT: `git status --porcelain`, unstage any foreign entry with `git restore --staged -- <path>`, commit ONLY the seven owned paths by explicit pathspec, verify with `git show --stat`. GATE, foreground and `&&`-chained so no red leg is masked: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`, plus the plain-Node root probe run directly from apps/daemon. Read the OUTPUT: `pnpm --filter` on an unresolved name prints \"No projects matched the filters\" and exits 0, so each leg counts only if it prints a `Test Files N passed` line with N nonzero, and DoD 5 requires the test count to be at least baseline -- capture the baseline count BEFORE your first edit or you cannot prove it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/src/runtime-entrypoint.test.ts",
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js",
+        "apps/daemon/src/http/graph-preview-request.ts",
+        "apps/daemon/src/http/graph-preview-request.js"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion under the human's active unstall directive (19:31Z \"unblock more tasks\"): the stored block's re-promote condition is now fully met — all three producers DONE (6cbff010, 44d4873eb, and 8f9305b9 which landed today), foundation families present under apps/daemon/src since a42ae2f. Planning architect: re-probe the committed public runtime/type closures first per comment-55e0505e, and re-measure the index.ts sizing note.",
   "createdBy": "WORKER",
   "parentTaskId": "task-97554aa4293e40eab56c0b642e18513a",
   "priority": "CRITICAL",
@@ -67,7 +148,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-16T21:45:41.796Z",
+  "updatedAt": "2026-08-17T19:39:15.976Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-cb476f76",
@@ -76,12 +157,14 @@
     "governor-a627169a"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-09T14:24:55.279Z"
+    "firstClaimAt": "2026-08-09T14:24:55.279Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 7
   },
-  "blockedReason": "Fresh audit confirms this publication task is still not plannable. Its required producers task-6cbff010 (attempt dispatch), task-44d4873 (verification dispatch), and task-8f9305b9 (review-qualified closure) are all BLOCKED, and committed HEAD 54af35270ca90a9f4d07c82e1896d9fb99c6b365 has zero `foundation-attempt`, `foundation-verification`, or `goal-qualification` hits under apps/daemon/src; apps/daemon/src/foundation does not exist. Review, recovery, and coordination families are landed, but DoD requires exact set equality over all six families, so publishing only three would be a forbidden narrowed surface. The description's sizing premise is also stale: apps/daemon/src/index.ts is 346 physical lines, not 249, so eventual planning must split/curate the existing root within owned paths rather than merely avoid adding past 250. Re-promote only after 6cb, 44d, and 8f are QA-approved DONE and their committed public runtime/type closures are re-probed. Do not create duplicate prerequisites or export foreign uncommitted surfaces.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-15T18:31:04.184Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-read prior handoff/governor updates, remeasured HEAD, confirmed three of six required families remain absent because 6cb/44d/8f are blocked, foundation/ is absent, and index.ts is 346 lines; reported BLOCKED.",
@@ -101,5 +184,30 @@
       "releasedBy": "architect-cb476f76",
       "reason": "Planning complete in the only sense available: the task is not plannable yet and is now BLOCKED with a full symbol-by-symbol measurement. Releasing so the architect pool is not held by a task that cannot move."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T19:39:13.901Z",
+  "planningNotes": {
+    "approachesConsidered": "TWO PRIOR ARCHITECTS BLOCKED THIS RATHER THAN PLANNING IT, correctly -- four to six of the required families were absent. All producers are now DONE, so this is the first plannable pass, and both handoff notes remain binding: no review-only narrowing (DoD 2's exact SET EQUALITY is unwritable while any family is missing, so a partial surface satisfies none of the DoD, and Clause 2 forbids the narrowing independently), and no new prerequisite tasks (they all exist and landed). THE SCOPE ADJUSTMENT THIS PLAN MAKES: the description names five owned paths on the premise that index.ts is 249 lines and needs no surgery. It is 389. Worse, ~110 of those lines are a BEHAVIOR block -- the GraphPreview types plus evaluateGraphPreviewRequestBytes -- living inside the barrel, so index.ts is not a pure re-export file at all. DoD 4 requires index.ts <=250 while this task ADDS six families of exports; that is arithmetically impossible without moving the behavior block out. So step 2 extracts it into apps/daemon/src/http/graph-preview-request.ts plus a .js bridge, taking owned paths from five to seven. The second architect's handoff already anticipated this: \"splitting index.ts itself is part of the real job\". REJECTED: (a) putting graph-preview into foundation-surface.ts -- unrelated to Foundation and it would blow that file's budget too; (b) growing index.ts past 250 and disclosing it -- DoD 4 is explicit and the file is 11 lines from the 400 hard split; (c) `export *` from the area module -- forbidden by rail 4 and DoD 1, and it makes the published surface whatever a sibling declares tomorrow; (d) importing by relative path in the root test -- DoD 2 says @moe/daemon, and a relative import proves the file rather than the published package.",
+    "codebaseInsights": "Measured at HEAD d2151d4; earlier measurements in this task's own history are stale in a consistent direction, so re-measure rather than trusting any of them. SIZE: apps/daemon/src/index.ts is 389 lines (description says 249; architect-94dd1835 measured 317; architect-cb476f76 measured 346). Lines ~280-389 hold GraphPreviewRequestError (:287), GraphPreviewInputRejected (:297), GraphPreviewRequestInvalid (:303), GraphPreviewRequestEvaluated (:309), GraphPreviewRequestResult (:315) and evaluateGraphPreviewRequestBytes (:360) -- roughly 110 lines of behavior inside the barrel. DELIVERABLE IS UNBUILT: apps/daemon/src/foundation/ does not exist, and index.ts exports NONE of runReviewCommand, readReviewLedger, reconcileOnRestart, runContinuationCommand, createFoundationAttemptService, createFoundationVerificationService or createCoordinationAdapter -- only REVIEW_HANDLERS (:186), the handler table rather than the entrypoint. SOURCES, all present: review-services.ts (runReviewCommand), review-ledger.ts (readReviewLedger), recovery/restart-reconciliation.ts (reconcileOnRestart), recovery/continuation-command.ts (runContinuationCommand), work/foundation-attempt-service.ts, evidence/foundation-verification-service.ts, coordination/coordination-adapter.ts. TESTS: index-surface.test.ts is 851 lines and is where the set-equality guard belongs; runtime-entrypoint.test.ts is 213 lines and is where the plain-Node probe belongs. A new .ts module needs its one-line .js bridge or it is invisible to the .js import graph -- and Vitest's .js-to-.ts remapping HIDES a missing bridge inside the suite, which is precisely why DoD 3 demands a real Node process. NOTE: createCoordinationAdapter still has no production caller; publishing it is this task's job and does not conflict with the canary's separate descope of the coordination gap.",
+    "risks": "The load-bearing risk is a set-equality test that cannot fail: derive the expected namespace from the module at runtime and it agrees with any export list forever. It must be a frozen hand-written literal, asserted in BOTH directions (missing and leaked) with a size assertion, and drills 1 and 2 exist because a single-direction assertion catches only one of the two failures. Second risk is the plain-Node probe collapsing into an ordinary vitest import: inside the worker, .js-to-.ts remapping resolves a module whose bridge does not exist, so the probe must spawn a real node process -- drill 3 proves it by deleting a bridge and requiring the probe to redden while the in-suite tests stay green. Third, incomplete type closure: an exported function whose refusal union is unexported typechecks in-package and fails at the consumer, so export every branch a caller must narrow on. Fourth, the graph-preview extraction must keep every existing consumer import path working -- re-export from index.ts; a moved export that changes a consumer's path IS a behavior change, which this task forbids. Verify the move at its ORIGIN too, or a symbol defined in both files drifts later. Fifth, CONCURRENCY: a prior handoff recorded another task in flight against index.ts and index-surface.test.ts, two owned paths, in one shared working directory -- check `git log` on those files and re-read before committing. Sixth, DoD 5 requires the test count to be at least baseline, so capture the baseline BEFORE the first edit; afterwards it is unrecoverable. Finally, this is a publishing task: no behavior module changes, no manifest changes, no new authority -- if the surface appears to need one, that is a finding to report, not a line to add.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts",
+      "apps/daemon/src/runtime-entrypoint.test.ts",
+      "apps/daemon/src/review/review-services.ts",
+      "apps/daemon/src/recovery/restart-reconciliation.ts",
+      "apps/daemon/src/work/foundation-attempt-service.ts",
+      "apps/daemon/src/evidence/foundation-verification-service.ts",
+      "apps/daemon/src/coordination/coordination-adapter.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-17T19:39:15.976Z"
 }

@@ -16,9 +16,112 @@
     "Use the existing public ProviderRunRef, ProviderTerminalOutcome, ProviderInfrastructureOutcome, ProviderText, EffectIntent and lifecycle vocabularies; do not copy their literals into a daemon-local contract.",
     "TDD exact stable code and refusing layer, positive generated-case counts, production-surface mutation drill, public-root surface ratchet, target <=250 physical lines per new production source, and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Reproduce the counterexample before building anything, so the deliverable has a measured defect to close rather than a described one. The premise re-measures TRUE at HEAD a42ae2f: `settleIntent` (effect-lifecycle.ts:145-190) validates the ADMITTED ARC and the SHAPE of the settlement evidence, but `SettlementEvidence.outcomeClass` is a bare `string` (effect-kernel.ts:237-241) and nothing compares it to `command.target`. Write a throwaway probe against the PUBLIC ROOT that calls `applyEffectCommand` with an ACTIVE intent, `target: \"SUCCEEDED\"` and `settlement.outcomeClass: \"HONEST_UNKNOWN\"`, run it, and record that it transitions to SUCCEEDED. Delete the probe in the same command. That recorded output is the exact behaviour DoD 4's counterexample test must forbid once the new function exists — and note carefully that this task does NOT change `applyEffectCommand`: rail 1 forbids a second reducer, so the reducer keeps accepting a caller-chosen target and the new function is what stops choosing one.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/effect-lifecycle.ts"
+      ],
+      "note": "Counterexample REPRODUCED at HEAD d2151d4 (task cites 8557296, plan cites a42ae2f; premise re-measures TRUE at current HEAD). Throwaway public-root probe packages/runner/qa-probe-tmp.mjs imported applyEffectCommand from bare \"@moe/runner\" and called it with an ACTIVE intent, target \"SUCCEEDED\", settlement.outcomeClass \"HONEST_UNKNOWN\", uncertainty null. Recorded output: KIND=TRANSITIONED / STATE=SUCCEEDED OUTCOME_CLASS=HONEST_UNKNOWN, PROBE_EXIT=0. Probe deleted in the same command; `git status --porcelain -- packages/runner/` from repo root is EMPTY. Cause confirmed by reading source: settleIntent (effect-lifecycle.ts:145-188) validates the admitted arc, the settlement-evidence SHAPE and UNKNOWN-needs-uncertainty, but never compares settlement.outcomeClass to command.target; SettlementEvidence.outcomeClass is a bare string (effect-kernel.ts:237-241) further constrained only by isRef. This task does NOT change applyEffectCommand (rail 1: no second reducer); the new function is what stops a caller choosing a target.",
+      "startedAt": "2026-08-17T19:34:37.533Z",
+      "completedAt": "2026-08-17T19:36:11.459Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD the exhaustive mapping table, which is the heart of the task. Create `packages/runner/src/supervisor/provider-effect-settlement.test.ts` RED. THE CASE COUNT IS KNOWN AND MUST BE ASSERTED: `PROVIDER_TERMINAL_OUTCOMES` has SIX members (COMPLETED, CANCELLED, MAX_TURNS_EXHAUSTED, ERROR_DURING_EXECUTION, REFUSED, UNKNOWN) and `PROVIDER_INFRASTRUCTURE_OUTCOMES` has TEN (NONE, PROCESS_SIGNALLED, EXIT_UNOBSERVED, CAPTURE_TRUNCATED, CAPTURE_INCOMPLETE, SCHEMA_UNSUPPORTED, STREAM_ANOMALOUS, LAUNCH_REFUSED, LAUNCH_NOT_ATTEMPTED, UNKNOWN), so the cross product is 60 cells, and DoD 2 requires both ACTIVE and CANCEL_REQUESTED — **120 generated cases**. Assert `PROVIDER_TERMINAL_OUTCOMES.length === 6`, `PROVIDER_INFRASTRUCTURE_OUTCOMES.length === 10`, and that the generated list length is exactly 120 and greater than zero; generate it FROM the frozen vocabularies imported from the public root, never from a transcribed literal, so a member added upstream fails loudly instead of being skipped. Each case pins the exact outcome: the terminal state, or the exact refusal code AND refusing layer, or MUST_DRAIN.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "note": "RED sweep landed. packages/runner/src/supervisor/provider-effect-settlement.test.ts generates the cross product FROM the frozen vocabularies imported through the public root `@moe/runner` (PROVIDER_TERMINAL_OUTCOMES, PROVIDER_INFRASTRUCTURE_OUTCOMES) x the two settleable states, and asserts PROVIDER_TERMINAL_OUTCOMES.length===6, PROVIDER_INFRASTRUCTURE_OUTCOMES.length===10, CASES.length>0, CASES.length===120 and 120 DISTINCT cell keys (a duplicate-key generator would otherwise satisfy the count). Each of the 120 it.each cases pins one exact label: `TERMINAL:<state>` / `MUST_DRAIN` / `REFUSED:<code>:<layer>` / `PROVIDER_SETTLEMENT_REFUSED:<code>:<layer>` — code AND refusing layer, so a cell answered by a different layer cannot pass. The 4 admitted cells are hand-written from DoD 2 (ACTIVE|COMPLETED|NONE=SUCCEEDED, ACTIVE|ERROR_DURING_EXECUTION|NONE=FAILED, ACTIVE|CANCELLED|NONE=MUST_DRAIN, CANCEL_REQUESTED|CANCELLED|NONE=CANCELLED), never derived from the production table; the other 116 default to TERMINAL:UNKNOWN. RED confirmed: `npx vitest run --root ../.. packages/runner/src/supervisor/provider-effect-settlement.test.ts` EXIT=1, \"Cannot find module './provider-effect-settlement.js'\", Test Files 1 failed.",
+      "startedAt": "2026-08-17T19:40:31.695Z",
+      "completedAt": "2026-08-17T19:41:15.429Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD the four admitted cells and the fail-closed default, same test file. DoD 2 names exactly four rules and everything else is UNKNOWN-or-refuse: (a) infrastructure `NONE` + terminal `COMPLETED` may reach SUCCEEDED; (b) infrastructure `NONE` + terminal `ERROR_DURING_EXECUTION` may reach FAILED; (c) infrastructure `NONE` + terminal `CANCELLED` reaches CANCELLED ONLY from a CANCEL_REQUESTED intent; (d) an ACTIVE intent with a cancellation observation returns the production MUST_DRAIN path, which means issuing `requestCancel` and returning the reducer's `{kind: \"MUST_DRAIN\", drainRequired: true, versionDelta: 0}` UNCHANGED — `applyEffectCommand` already answers that for ACTIVE+requestCancel (effect-lifecycle.ts:211-218) and it is a third outcome kind, NOT a refusal, so a test matching on refusal codes here would be wrong. EXPLICIT AND DELIBERATE: `MAX_TURNS_EXHAUSTED` and `REFUSED` are terminal provider facts but are NOT \"completion/error\", so they may NEVER become SUCCEEDED or FAILED — they stay UNKNOWN. Pin that as its own named test, because it is the cell a future reader is most likely to \"fix\" toward FAILED. Every one of the remaining cells stays UNKNOWN or refuses without authority; assert an UNKNOWN settlement also carries the uncertainty evidence the reducer demands (`EFFECT_UNCERTAINTY_EVIDENCE_REQUIRED`, effect-lifecycle.ts:171-176).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "note": "RED. Added named tests for the four admitted cells plus the fail-closed default: (a) ACTIVE+COMPLETED+NONE -> SUCCEEDED, outcomeClass PROVEN_RESULT; (b) ACTIVE+ERROR_DURING_EXECUTION+NONE -> FAILED, outcomeClass CRASHED; (c) CANCEL_REQUESTED+CANCELLED+NONE -> CANCELLED, outcomeClass CANCELLED_CLEAN; (d) ACTIVE+CANCELLED+NONE -> MUST_DRAIN asserted as a KIND, not a refusal: drainRequired true, versionDelta 0, intent.state still ACTIVE, intent.version unmoved, and toEqual against applyEffectCommand(intent,{kind:\"requestCancel\"}) so the returned value is the reducer's own MUST_DRAIN unchanged. MAX_TURNS_EXHAUSTED and REFUSED get their own named it.each over both states pinning terminalState UNKNOWN / outcomeClass HONEST_UNKNOWN — the cell most likely to be \"fixed\" toward FAILED. UNKNOWN-carries-uncertainty is asserted by settlementDigest equality against a HAND-TRANSCRIBED preimage (canonicalDigest({settlement, uncertainty})) plus a not-toBe against the uncertainty:null digest, backed by a positive control asserting the reducer really refuses EFFECT_UNCERTAINTY_EVIDENCE_REQUIRED / LIFECYCLE without it — without that control, \"TRANSITIONED to UNKNOWN\" would prove nothing. A reuse test pins every derived outcomeClass to a member of CLAUDE_RECONCILED_OUTCOMES so a locally minted literal reddens. Verified RED: EXIT=1, \"Cannot find module './provider-effect-settlement.js'\".",
+      "startedAt": "2026-08-17T19:41:39.020Z",
+      "completedAt": "2026-08-17T19:42:45.247Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD the input contract, the binding, and the hostile arms. (a) THE INPUT SHAPE IS THE PROOF, per DoD 1: assert by exact key set that the admitted input contains NO `target`, `outcomeClass`, `uncertainty`, `adoptedAt`, result bytes or terminal EffectIntent — a substitute for derived authority must be UNREPRESENTABLE rather than validated away, the same discipline `FoundationVerificationRequest` uses. (b) BINDING: `ProviderRunRef.effectIntentId` must equal the snapshotted intent's `intentId`; a mismatch refuses with its own stable provider-settlement code and layer before anything is derived. Drive a case where the run ref is well-formed but names a foreign intent. (c) The completion instant: missing, and present-but-unknown (the `ProviderText` `{known: false}` arm), are two DISTINCT refusals — do not fold them, since one means nothing was recorded and the other means the provider recorded that it does not know. (d) HOSTILE INPUTS: accessor properties, `__proto__`, extra keys and a frozen input object; assert each refuses rather than letting a value survive into the derivation. (e) TERMINAL ABSORPTION: a snapshotted intent already terminal must surface the reducer's own `EFFECT_TERMINAL_ABSORBED` / `LIFECYCLE` pair unchanged — DoD 3 requires reducer refusals to retain their original SupervisorFailure code and layer, so assert both fields, not just that it refused.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "note": "RED (EXIT=1, module still absent). Added: (a) exact-key-set proof — PROVIDER_RUN_OBSERVATION_KEYS sorted equals exactly [completedAt, infrastructure, runRef, sourceDigest, sourceVersion, terminal, upstreamRefusal] PLUS seven TYPE-LEVEL pins `type Forbids<K> = K extends keyof ProviderRunObservation ? never : true` for target/outcomeClass/uncertainty/adoptedAt/result/terminalState/intent (enforced by `pnpm --filter @moe/runner typecheck`, since this package's test script has no --typecheck so expectTypeOf would be a no-op), PLUS a runtime sweep asserting each of those seven keys added to an otherwise-valid observation refuses PROVIDER_SETTLEMENT_OBSERVATION_MALFORMED. (b) binding: a well-formed runRef naming intent-999 refuses PROVIDER_SETTLEMENT_EFFECT_BINDING_MISMATCH. (c) three DISTINCT completion-instant arms: null -> ..._ABSENT, {known:false} -> ..._UNKNOWN, {known:true,value:\"yesterday\"} -> ..._MALFORMED. (d) hostile: accessor-supplied terminal, accessor-supplied runRef, own __proto__ key, Proxy, non-record, null. Plus source-evidence arms: sourceVersion drift -> ..._SOURCE_VERSION_UNSUPPORTED, bad digest/terminal/infrastructure -> ..._OBSERVATION_MALFORMED, foreign provider runRef -> ..._RUN_REF_MALFORMED, non-null upstreamRefusal -> ..._UPSTREAM_REFUSED, malformed intent -> ..._INTENT_MALFORMED. Every one asserts code AND the PROVIDER_EFFECT_SETTLEMENT layer. (e) terminal absorption asserts kind REFUSED with the reducer's own EFFECT_TERMINAL_ABSORBED + LIFECYCLE (both fields), and a pre-activation ARMED intent surfaces the reducer's EFFECT_TRANSITION_NOT_ADMITTED + LIFECYCLE. Closed-vocabulary test pins the 9 codes and a nonzero length. DELIBERATE DEVIATION on plan 4(d)'s \"frozen input object ... refuses\": a frozen WELL-FORMED observation must be ADMITTED — refusing it would pin wrong behaviour and make the seam unusable for a careful caller. The test instead asserts a frozen observation yields an outcome equal to the mutable one, which is what actually proves no fact survived into a mutating derivation (a write-back would throw on the frozen record).",
+      "startedAt": "2026-08-17T19:43:03.615Z",
+      "completedAt": "2026-08-17T19:44:10.341Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "TDD the accepted control with exact fields, and the counterexample. (a) ONE ACCEPTED COMPLETION CONTROL, as DoD 4 names: an infrastructure-clean proven completion on an ACTIVE intent returns the reducer's exact frozen `EffectIntent` and `EffectResult` — assert every `EffectResult` field by name (`resultVersion`, `intentId`, `terminalState`, `outcomeClass`, `settlementDigest`, `adoptedAt`) and assert the digest is the value the production derivation computed, not a hand-written constant. A refusal-only suite is blind to a wrong ACCEPTED value, which is why this control is not optional. Do not compute the expected digest by calling the production helper — that makes the assertion a tautology; derive it independently from the observation the test seeded. (b) THE COUNTEREXAMPLE FROM STEP 1, now as a permanent test: an ACTIVE intent plus provider-unknown evidence can NEVER produce SUCCEEDED. Assert the returned terminal is not SUCCEEDED AND that the outcome is the specific UNKNOWN-or-refusal the table declares, so the test cannot pass merely because some unrelated guard answered first.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "modifiedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ],
+      "note": "RED (EXIT=1, module still absent; test file now 579 lines — a test file, not a production source, so the per-FILE 250/400 production cap does not apply). Added (a) the ACCEPTED control: ACTIVE + COMPLETED + NONE asserts the whole EffectResult by name via toEqual — resultVersion \"moe-effect-result/1\", intentId, terminalState SUCCEEDED, outcomeClass PROVEN_RESULT, settlementDigest, adoptedAt — with the digest derived INDEPENDENTLY (canonicalDigest over a hand-transcribed {settlement, uncertainty:null} preimage), never by calling the derivation under test; plus the successor intent asserted as {...intent, state:\"SUCCEEDED\", version+1}, versionDelta 1, and Object.isFrozen on both. (b) the counterexample as a permanent test: ACTIVE + terminal UNKNOWN + infrastructure UNKNOWN asserts label === TERMINAL:UNKNOWN (the specific declared outcome, so an unrelated guard answering cannot make it pass), plus not SUCCEEDED, terminalState UNKNOWN, outcomeClass HONEST_UNKNOWN and the exact uncertainty-bearing digest. Also added a whole-sweep invariant: SUCCEEDED / FAILED / CANCELLED / MUST_DRAIN are each reached from EXACTLY ONE generated cell and 116 cells are UNPROVEN, which reddens on any table widening anywhere in the 120. Also pinned that the observed run epoch reaches the settlement digest (an epoch-drifted observation settles to a different digest) rather than being compared to EffectIntent.expectedGraphEpoch — those are counters from different domains and equating them would invent an authority this module has no basis for; the reasoning is in the test's own comment for QA.",
+      "startedAt": "2026-08-17T19:44:20.917Z",
+      "completedAt": "2026-08-17T19:45:48.748Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "Implement `packages/runner/src/supervisor/provider-effect-settlement.ts` plus its one-line `.js` bridge (every sibling in `packages/runner/src/supervisor/` has a git-tracked bridge; without it the module is invisible at runtime while tsc and vitest stay green). Exports: the frozen provider-settlement code list and its own layer constant, the frozen observation contract, the exhaustive mapping declared AS DATA rather than as a chain of `if`s, and `settleEffectFromProviderObservation`. RAIL 1 IS THE SHAPE OF THIS MODULE: it derives a closed settle command — target, `SettlementEvidence` {reconciliationVersion, reconciliationDigest, outcomeClass}, `UncertaintyEvidence` when the target is UNKNOWN, and `adoptedAt` — SOLELY from the admitted observation, then calls the public `applyEffectCommand` and returns its output UNCHANGED. It never constructs an `EffectResult` directly and never adds a second reducer. Reuse `ProviderRunRef`, `ProviderTerminalOutcome`, `ProviderInfrastructureOutcome`, `ProviderText`, `EffectIntent` and the lifecycle vocabularies from their owning modules — rail 3 forbids copying their literals. Target <=250 physical lines; if the table and the derivation together cross it, split the table into a sibling contracts module with its own bridge rather than growing past 400.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.ts",
+        "packages/runner/src/supervisor/provider-effect-settlement.js"
+      ],
+      "newFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.ts",
+        "packages/runner/src/supervisor/provider-effect-settlement.js"
+      ],
+      "startedAt": "2026-08-17T19:45:51.219Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "Publish from the public root and raise the ratchet, guards FIRST. `applyEffectCommand` is exported DIRECTLY from `packages/runner/src/index.ts` (:121, from `./supervisor/effect-lifecycle.js`) rather than through a `surface/*` module, so follow that pattern and add a sibling block from `./supervisor/provider-effect-settlement.js`. Doing it this way deliberately avoids the `SURFACE_SOURCES.size` guard pinned at 7 (index-surface.test.ts:2214), which fires only on a NEW `*-surface.ts` FILE and would redden nowhere near this code. The guard that DOES fire is `expect(EXPECTED_EXPORTS.length).toBe(232)` at :374 plus its sorted-name equality — two axes, hand-transcribed on purpose; edit them FIRST so they go red before the exports land, and raise them, never loosen them. Because the runner test script has no `--typecheck`, `expectTypeOf` is a NO-OP in this suite: if a type-level fact needs pinning, use a conditional-type assignment, which IS enforced by `pnpm --filter @moe/runner typecheck` since the package tsconfig includes `src/**/*.ts`. Record task-1879166d7f12474fad8038e2a9d2433a as the consumer in the module header, as DoD 5 requires.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/index-surface.test.ts",
+        "packages/runner/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "Verification gate and mutation drills, then stop. Run `pnpm --filter @moe/runner typecheck` and `pnpm --filter @moe/runner test` as SEPARATE FOREGROUND legs with exit codes captured individually — the task's own verification field says so, and a `&&` chain that dies at typecheck hides the count line entirely. `@moe/runner` resolves to packages/runner and declares both scripts (verified at plan time). Record the nonzero `Test Files N passed` AND `Tests N passed` lines, as DoD 5 requires both: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for a package absent from the workspace, so exit 0 alone is not evidence. THREE drills against the PRODUCTION mapping, each restored before the next, each naming the test that reddens: (i) make the derivation trust a caller-supplied target — since the input type has no such field, this drill must add one, and the step-4(a) key-set assertion plus the counterexample must both redden; (ii) map an unproven cell (any non-NONE infrastructure with COMPLETED) to SUCCEEDED — the 120-case table must redden on that exact cell; (iii) map `MAX_TURNS_EXHAUSTED` + `NONE` to FAILED — the named test from step 3 must redden. Drills run in a SHARED worktree: snapshot each file's hash and restore by CONTENT, never `git checkout`, and never trust `git status` to prove a revert. Then run `adversarial-self-review`: an observation whose epoch disagrees with the intent, a completion instant that parses but is not an instant, an intent at the version ceiling (`EFFECT_COUNTER_EXHAUSTED`), and per-file line counts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/runner/src/supervisor/provider-effect-settlement.ts",
+        "packages/runner/src/supervisor/provider-effect-settlement.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-3d941382",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,5 +133,44 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:18:14.797Z",
-  "updatedAt": "2026-08-17T17:42:53.388Z"
+  "updatedAt": "2026-08-17T19:45:51.219Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T19:31:06.293Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 5
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-17T19:34:11.124Z",
+  "planningNotes": {
+    "approachesConsidered": "EXPORT FROM index.ts DIRECTLY, NOT THROUGH A NEW `surface/*` MODULE. `applyEffectCommand` and the whole effect-lifecycle family are already exported straight from `packages/runner/src/index.ts` (:118-125), so a sibling block is the consistent placement. It also sidesteps a guard that would otherwise fire nowhere near this code: `index-surface.test.ts:2214` pins `SURFACE_SOURCES.size` to 7 by reading the `surface/` directory, so a NEW `*-surface.ts` file reddens with a bare \"expected 8 to be 7\". Adding to an existing surface module was the alternative; rejected because none of the six is about effect settlement and the curated seams say plainly they must not grow on autopilot.\n\nMAX_TURNS_EXHAUSTED AND REFUSED STAY UNKNOWN. Both are genuine terminal provider facts, and a reasonable reader will want to map them to FAILED. DoD 2 says only an infrastructure-clean proven COMPLETION or ERROR may become SUCCEEDED or FAILED, and rail 2 says unverifiable facts grant no terminal authority. So the fail-closed reading is that they are neither, and the plan makes that its own NAMED test precisely because it is the cell most likely to be \"fixed\" later.\n\nTHE MAPPING IS DECLARED AS DATA, not as branching. A 60-cell table written as conditionals cannot be swept exhaustively by the test without the test re-deriving the same conditions, which is the property-asserted-against-a-test-helper defect. As data, the test drives the real table.\n\nNOT CHANGING applyEffectCommand. Rail 1 forbids a second reducer, and the reducer's willingness to accept a caller-chosen target is not itself the bug being fixed — the bug is that nobody derives the target from evidence. The reducer keeps its behaviour; this function stops anyone needing to choose.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The task cites HEAD 8557296; the premise re-measures TRUE, so it is not stale.\n\nTHE COUNTEREXAMPLE IS REAL AND I FOUND ITS EXACT CAUSE. `settleIntent` (effect-lifecycle.ts:145-190) checks the admitted arc (:156), the settlement-evidence SHAPE (:162), and that an UNKNOWN target carries uncertainty evidence (:171). It NEVER compares `settlement.outcomeClass` to `command.target`, and `SettlementEvidence.outcomeClass` is typed as a bare `string` (effect-kernel.ts:237-241). So ACTIVE + target SUCCEEDED + outcomeClass HONEST_UNKNOWN is admitted. Nothing in packages/runner maps a provider observation to a justified target: `grep` finds HONEST_UNKNOWN only in the two provider cancel-reconcilers and a test fixture.\n\nTHE CASE COUNT IS DETERMINED, NOT ESTIMATED. `PROVIDER_TERMINAL_OUTCOMES` (provider-telemetry-contracts.ts:37-39) has SIX members; `PROVIDER_INFRASTRUCTURE_OUTCOMES` (:48-51) has TEN. 6 x 10 = 60 cells, x 2 intent states = 120 generated cases. The sibling suite already asserts these counts by name (claude-telemetry-launch.test.ts:296 pins 10), so the convention exists.\n\nSHAPES THE FUNCTION MUST COMPOSE. `EffectIntent` (effect-kernel.ts:185-199) carries state and version. `SettlementEvidence {reconciliationVersion, reconciliationDigest, outcomeClass}` (:237). `UncertaintyEvidence {uncertaintyReason, uncertaintyDigest}` (:243). `EffectResult {resultVersion, intentId, terminalState, outcomeClass, settlementDigest, adoptedAt}` (:255-262). `ProviderRunRef {provider: \"claude\", runRef, effectIntentId, attemptRef, epoch}` (provider-telemetry-contracts.ts:141-147) — `effectIntentId` is the binding field DoD 1 names. `ProviderText = {known: true, value} | ProviderFactUnknown` (:138), which is why a missing completion instant and a known-unknown one are two different facts.\n\nMUST_DRAIN IS NOT A REFUSAL. `applyEffectCommand` answers `{kind: \"MUST_DRAIN\", drainRequired: true, intent, versionDelta: 0}` for ACTIVE + requestCancel (effect-lifecycle.ts:211-218), and the module header (:34-36) is explicit that it is a third outcome kind because \"a caller matching on refusal codes would retry a rejected command\". Note also (:48-55) that ACTIVE -> CANCEL_REQUESTED IS an admitted row but is deliberately unreachable from a bare requestCancel; only the drain transaction authorises it.\n\nTHERE IS NO completion-instant FIELD in provider-telemetry-contracts today — grep for completedAt/completionInstant/observedAt returns nothing — so the new frozen observation contract owns it. That is a new field on a NEW contract, not a widening of a frozen upstream vocabulary, so rail 3 is satisfied.\n\nPUBLICATION AND RATCHET. `applyEffectCommand` is exported directly from index.ts:121. The ratchet is `expect(EXPECTED_EXPORTS.length).toBe(232)` (index-surface.test.ts:374) plus a sorted-name equality; the separate `SURFACE_SOURCES.size` guard at :2214 is pinned to 7 and fires only on a new `surface/*-surface.ts` FILE.\n\n`expectTypeOf` IS A NO-OP HERE: packages/runner's test script is `vitest run --root ../.. packages/runner/src` with no `--typecheck`. Use a conditional-type assignment to pin a type-level fact; that IS enforced by the package typecheck because its tsconfig includes src/**/*.ts.\n\nFILE SIZES: effect-lifecycle.ts 262, effect-kernel.ts 266 — both already over the 250 target, which is why the deliverable is a NEW module and neither is edited.\n\nGATE RESOLVES: `@moe/runner` is packages/runner with typecheck and test scripts.",
+    "risks": "1. MUST_DRAIN READ AS A REFUSAL is the likeliest wrong turn. It returns a third outcome KIND with no `ok` field and carries `drainRequired: true` and `versionDelta: 0`. A test asserting \"refused with code X\" for the ACTIVE-cancellation cell will fail against correct behaviour and may push a worker to change production instead of the test.\n2. THE FOUR ADMITTED CELLS ARE A CEILING, NOT A FLOOR. MAX_TURNS_EXHAUSTED and REFUSED are terminal facts that must NOT become FAILED. Give that its own named test; it is the cell a future reader will most plausibly \"correct\".\n3. REDUCER REFUSALS MUST BE CARRIED, NOT RESTAMPED. DoD 3 requires the reducer's original SupervisorFailure code and layer to survive — assert BOTH fields on the terminal-absorption case, because a code-only assertion stays green if this module starts restamping the layer.\n4. THE ACCEPTED CONTROL CAN GO TAUTOLOGICAL. If the expected `settlementDigest` is computed by calling the production helper, the assertion tests nothing. Derive it independently from the seeded observation.\n5. THE 120-CASE SWEEP CAN GO VACUOUS. Generate it from the frozen vocabularies imported through the public root and assert the count is exactly 120 and nonzero — a sweep that silently produces zero cases passes every arm.\n6. `expectTypeOf` does not execute in this suite. A type-level claim pinned that way is decoration.\n7. Two ratchet axes at index-surface.test.ts:374 — the count literal AND the sorted list. Bumping only the count produces an array-diff failure that reads like an unrelated regression.\n8. effect-lifecycle.ts (262) and effect-kernel.ts (266) are both ALREADY over the 250 target. Do not add to either; the new module must carry everything, and split to a sibling contracts module if it crosses 250 itself.\n9. Mutation drill (i) has to ADD a field to the input type before it can trust a caller target — that is expected, and it is precisely what proves the unrepresentable-by-construction claim rather than a validated-away one.\n10. Drills run in a shared worktree; snapshot hashes and restore by content, never `git checkout`.",
+    "keyFiles": [
+      "packages/runner/src/supervisor/effect-lifecycle.ts",
+      "packages/runner/src/supervisor/effect-kernel.ts",
+      "packages/runner/src/providers/telemetry/provider-telemetry-contracts.ts",
+      "packages/runner/src/index.ts",
+      "packages/runner/src/index-surface.test.ts",
+      "packages/runner/src/providers/telemetry/claude-telemetry-launch.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 7200000
+  },
+  "planApprovedAt": "2026-08-17T19:34:13.189Z",
+  "contextFetchedBy": [
+    "worker-3d941382"
+  ],
+  "workStartedAt": "2026-08-17T19:34:37.533Z"
 }

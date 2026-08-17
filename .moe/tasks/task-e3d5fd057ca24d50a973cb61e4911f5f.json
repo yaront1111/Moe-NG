@@ -125,7 +125,7 @@
       "completedAt": "2026-08-17T18:46:15.237Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -145,14 +145,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:03:06.265Z",
-  "updatedAt": "2026-08-17T18:47:06.984Z",
+  "updatedAt": "2026-08-17T18:57:59.696Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:43:57.144Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-17T18:57:59.696Z",
+    "wallClockMs": 4442552
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -214,7 +216,7 @@
     "packages/scheduler/src/graph-content-fields.ts",
     "packages/scheduler/src/graph-content-fields.js"
   ],
-  "reviewCompletedAt": "2026-08-17T18:36:35.007Z",
+  "reviewCompletedAt": "2026-08-17T18:57:59.696Z",
   "rejectionDetails": {
     "failedDodItems": [
       "The @moe/core root exports the symbols with LF .js bridge and plain-Node loadability coverage; completion names task-dd4ffa0c40834c59892f957fbf61fb23 as the real consumer, and pnpm typecheck && pnpm test report nonzero Test Files counts with each production file <=250 physical lines."
@@ -265,5 +267,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-17T18:57:59.696Z",
+  "reviewSummary": "APPROVED at HEAD d2151d4. Reopen #1 was RECORD-only; all three gaps closed and each re-verified by me.\n\nCODE UNCHANGED from the bytes I already verified green: `git diff --numstat b3149fc..HEAD -- packages/scheduler/ tests/security/` EMPTY; `git status --porcelain` same paths EMPTY. d2151d4 touches .moe/ only.\n\nGATE RE-RUN, foreground: `pnpm typecheck && pnpm --filter @moe/scheduler test` -> EXIT 0, `Test Files 45 passed (45)` / `Tests 1411 passed (1411)`. Nonzero count line proves execution.\n\nGAP 1 CLOSED: `dd4ffa0c` now in comments[0] (comment-68b13f7e) AND all 8 step notes; longest note 3978 chars, under the 5000 cap that ate it last pass. Blocked dependents 77e8cb44/32c1ba45/eacea969/931f99e8/c4b80778 named.\n\nGAP 2 CLOSED: I ran root `pnpm test` -> EXIT 1, `Test Files 2 failed | 289 passed (291)` / `Tests 3 failed | 6902 passed | 2 skipped (6907)`, exactly as disclosed. `git diff --numstat 15918c7 HEAD --` on both failing paths prints NOTHING; both have 0 scheduler references; packages/store declares no dependencies. HEAD-minus-base failing paths INTERSECT owned = EMPTY.\n\nGAP 3 CLOSED: `npx vitest run --config tests/security/vitest.config.ts` -> EXIT 1, `Tests 3 failed | 476 passed (479)`, assertions verbatim as disclosed. At base 15918c7 GRAPH_CONTENT_LAYERS was ALREADY `export const` (graph-content.ts:43) and named 0x in the roster, so the suite was red BEFORE this diff. Entry kept; follow-up task-66004424 filed HIGH with a rail forbidding closure-by-deletion.\n\nLIVE PLAIN-NODE PROBE, bare specifier from inside packages/scheduler, scratch deleted: keys=7, schemaVersion=2, hashLen=64 hexLower, snapshotIdentity separate, roundtrip true, identity NOT on the wire; changing `author` and `decompositionBudget` each move graphContentHash while snapshotIdentity holds — dec-64b2391c pinned in production, not only in tests.\n\nFiles 229/234/220/77 lines, all <=250. LF one-line .js bridges, tracked at HEAD."
 }
