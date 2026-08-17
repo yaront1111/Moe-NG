@@ -66,7 +66,7 @@
     {
       "stepId": "step-5",
       "description": "GREEN. Create the new sibling module packages/scheduler/src/graph-content-fields.ts plus its one-line `.js` bridge (`export * from \"./graph-content-fields.ts\";` -- without it the module is invisible to the .js import graph) holding the per-field bounded validation and canonical encoding for the six non-snapshot fields. Then extend graph-content-format.ts to fold ALL seven fields into the digest -- today :110-111 hashes only `identity` -- keeping the existing length-framed, domain-separated construction so no field can be smuggled across a boundary into another. Extend graph-content.ts's `GraphContent` to carry the full content, keeping `graphContentHash` spelled as the lowercase 64-char hex @moe/core's gate requires. BUMP THE SCHEMA: `GRAPH_CONTENT_SCHEMA_VERSION` 1 -> 2, `SCHEMA_TAG` and `HASH_DOMAIN` to their /2 spellings. The wire shape is changing and the existing frozen issue code `GRAPH_CONTENT_UNSUPPORTED_SCHEMA` already exists, so version-1 bytes must decode to that clean refusal rather than being silently reinterpreted -- add a test for it. Keep every file at or under 250 physical lines; if format.ts cannot absorb the fold, move the digest construction into the new module rather than trimming a guard.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/graph-content-fields.ts",
         "packages/scheduler/src/graph-content-fields.js",
@@ -76,25 +76,32 @@
       "newFiles": [
         "packages/scheduler/src/graph-content-fields.ts",
         "packages/scheduler/src/graph-content-fields.js"
-      ]
+      ],
+      "note": "CONSUMER EDGE, FIRST: real consumer = task-dd4ffa0c40834c59892f957fbf61fb23. Unblocked dependents: task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8, task-c4b80778.\n\nSTEP-5 (GREEN) RE-VERIFIED ON DISK at HEAD afe9940. All four production modules exist, are committed, carry LF one-line `.js` bridges, and are under the 250 cap: graph-content.ts 229, graph-content-fields.ts 234, graph-content-format.ts 220, graph-content-issues.ts 77.\n\nTHE DIGEST FOLDS ALL SEVEN FIELDS (packages/scheduler/src/graph-content-fields.ts:157-198), read verbatim this session:\n  preimageParts() returns one (name, typeTag, payload) triple per declared field, in GRAPH_REVISION_CONTENT_KEYS order: author \"s\", completionNode \"s\", decompositionBudget \"i\" (String()), parentRevision \"z\"+\"\" when null ELSE \"s\"+ref, policyRevision \"s\", repositoryBaseTree \"s\", snapshot \"g\" + canonicalSnapshotJson(graph).\n  graphContentDigest() seeds sha256 with `${GRAPH_CONTENT_HASH_DOMAIN}\\n` then, for every part, `frame(name)+frame(tag)+frame(payload)` where frame(t) = `${t.length}:${t}`. Domain first, every field length-framed, so nothing can shift across a boundary — the property the :1029 framing test pins.\n  The TYPE TAG is what keeps an absent parentRevision distinct from any present ref (\"z\" vs \"s\"), not a magic empty string — which the codec does not admit as a ref anyway.\n  The snapshot field is COMPOSED, not re-derived: `canonicalSnapshotJson(graph)` over the already-validated graph, so canonical ordering is inherited from validateGraphSnapshot. No second structural validator exists.\n\nSCHEMA BUMP LANDED, all three constants at their new spellings: GRAPH_CONTENT_SCHEMA_VERSION = 2 (graph-content.ts:66), SCHEMA_TAG = \"MOE-GRAPH-CONTENT/2\" (graph-content-format.ts:36), GRAPH_CONTENT_HASH_DOMAIN = \"MOE-GRAPH-CONTENT-HASH/2\" (graph-content-fields.ts:38). SNAPSHOT_IDENTITY_DOMAIN stayed at /1 deliberately — the structural identity's preimage did not change. Version-1 bytes refuse cleanly rather than being reinterpreted: test \"refuses an unsupported schema tag, version-1 bytes included\" (graph-content.test.ts:468) asserts GRAPH_CONTENT_UNSUPPORTED_SCHEMA, the pre-existing frozen code.\n\ncanonicalContentJson (:205-218) emits the same seven keys in the same declared order with no whitespace and `null` — not `\"\"` — for an absent parent, and projectContent (:221-233) assembles the frozen answer in that order so Object.keys is stable.\n\nformat.ts could NOT absorb the fold, so the digest construction moved into the new sibling module exactly as the step directed; no guard was trimmed to make room.\n\nFRESH GATE EVIDENCE for this step's claim (full log kept out of the repo, at /d/tmp/gate-e3d5fd05.log):\n  LEG1 `pnpm typecheck` -> TYPECHECK_EXIT=0 (repo-wide).\n  LEG2 `pnpm --filter @moe/scheduler test` -> SCHEDULER_EXIT=0, `Test Files 45 passed (45)` / `Tests 1411 passed (1411)`. NONZERO count line present, so the filter resolved and the suite really executed — not the \"No projects matched the filters\" exit-0 vacuum.",
+      "startedAt": "2026-08-17T18:40:47.036Z",
+      "completedAt": "2026-08-17T18:41:11.517Z"
     },
     {
       "stepId": "step-6",
       "description": "Publish the surface and separate the two identities by NAME, which is the rename half of this lane's problem. Update packages/scheduler/src/index.ts to export the GraphRevisionContent type and the extended codec. THE STRUCTURAL IDENTITY MUST STOP WEARING THE CONTENT NAME: whatever the root currently publishes that resolves to a structure-only value must be named for what it is (snapshotIdentity / graphStructureHash), so a consumer cannot reach a structural value by asking for content. Preserve the withheld-mechanics property from index.ts:71-77 -- `encodeGraphContent` stays the only route to a hash, and the raw canonicalisation helpers stay unexported. Extend the existing root-export/bridge guard tests so the new symbols are covered, and verify plain-Node loadability of the new `.js` bridge from a consumer package. COORDINATE, do not collide: task-77e8cb44 is BLOCKED with 4 of 6 steps landed and committed and owns overlapping files. Before editing, `git log -1 -- packages/scheduler/src/graph-content*.ts` and re-read those files; if its rename has already landed, adopt the name it chose instead of inventing a second one, and say so in the step note.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/index.ts",
         "packages/scheduler/src/graph-content.ts"
-      ]
+      ],
+      "note": "CONSUMER EDGE, FIRST: real consumer = task-dd4ffa0c40834c59892f957fbf61fb23. Unblocked dependents: task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8, task-c4b80778.\n\nSTEP-6 (publish + rename) RE-VERIFIED at HEAD afe9940.\n\nROOT PUBLICATION (packages/scheduler/src/index.ts:84-100): value exports GRAPH_CONTENT_ISSUE_CODES, GRAPH_CONTENT_LAYERS, GRAPH_CONTENT_SCHEMA_VERSION, GRAPH_REVISION_CONTENT_KEYS, MAX_GRAPH_CONTENT_BYTES, decodeGraphContent, encodeGraphContent; type exports GraphContent, GraphContentIssue, GraphContentIssueCode, GraphContentLayer, GraphContentResult, GraphRevisionContent.\n\nTHE RENAME LANDED, and the two identities are separated BY NAME: the structure-only value is published only as `GraphContent.snapshotIdentity` (graph-content.ts:87). Nothing named for content resolves to a structural value, so the mistake dec-64b2391c exists to prevent is not reachable by autocomplete. index.ts:71-83 states this in the surface doc: \"NAMES ARE LOAD-BEARING (dec-64b2391c): the STRUCTURE-ONLY value is `GraphContent.snapshotIdentity`, never a symbol reachable by asking for content\".\n\nWITHHELD MECHANICS PRESERVED AND WIDENED: graph-content-format.js AND the new graph-content-fields.js both stay unexported from the root, \"because they take an already-validated graph and a consumer holding any of them could mint bytes or a hash the kernel never accepted. `encodeGraphContent` is the only route to a `graphContentHash`.\" The new module strictly increased the withheld set; it did not open a seam.\n\nCOORDINATION WITH task-77e8cb44: re-checked `git log -1 -- packages/scheduler/src/graph-content*.ts` this session — no competing rename has landed; the names above are the ones that exist, so task-77e8cb44 must ADOPT snapshotIdentity rather than invent a second. Its landed work was preserved, never reset.\n\nPLAIN-NODE LOADABILITY, run FRESH this session from inside packages/scheduler (bare specifier resolves upward from the file, so a probe outside the package cannot test the edge). Probe encoded a two-node HARD chain and decoded it back:\n  BRIDGE_LOADED keys=7 schemaVersion=2 hashLen=64 hexLower=true separate=true contentKeys=[\"author\",\"completionNode\",\"decompositionBudget\",\"parentRevision\",\"policyRevision\",\"repositoryBaseTree\",\"snapshot\"] roundTrip=true\n  PROBE_EXIT=0\nThat is the bare `@moe/scheduler` specifier through the .js bridge graph under plain Node with no bundler and no vitest: seven keys in declared order, lowercase hex64 (the exact spelling core's validHex64 gate requires), content hash != snapshotIdentity, byte round trip stable.\nNEGATIVE CONTROL, obtained by accident and worth recording: my first probe used a wrong node shape and production refused `GRAPH_MALFORMED_NODE` / `GRAPH_VALIDATION` with an issues array — the probe cannot pass by loading a stub, and the validator (not the codec) is what judges structure.\nSCRATCH REMOVED IN THE SAME COMMAND: `rm -f probe-e3d5.mjs`, then `git status --porcelain -- packages/scheduler/` printed NOTHING. No probe file is in the tree or any commit (epic rail 5).\n\nDurable coverage, not just this probe: scheduler-entrypoint-smoke-worker.mjs + scheduler-runtime-entrypoint.test.ts and index-surface.test.ts are committed and ran inside LEG2's 1411 green tests.",
+      "startedAt": "2026-08-17T18:41:22.980Z",
+      "completedAt": "2026-08-17T18:42:14.943Z"
     },
     {
       "stepId": "step-7",
       "description": "Mutation drills, three, one per claim a green suite cannot otherwise distinguish. Drill 1 (every field is really hashed) -- the DoD-6 drill: remove ONE field from the hashed input in the digest construction; the step-4 per-field case for that field must go RED on its hash-difference assertion, not on a crash. Repeat for a second, different field so the drill proves the sweep rather than one lucky case. Drill 2 (the two hashes stay separate): make the content hash fall back to the structural identity; the step-4 decision guard must go RED. This is the drill that protects dec-64b2391c. Drill 3 (the schema bump is load-bearing): make the decoder accept version-1 bytes; the unsupported-schema test must go RED. Record for each drill the command, the failing test NAME and the exact assertion -- a drill that reddens by crashing, or on a different assertion, has not proven the binding. Restore exact bytes by re-editing, never `git checkout` (destructive in this shared worktree), and confirm with `git diff --numstat` showing 0 added and 0 deleted per drilled file. One drill at a time: a peer commit landing mid-drill can swallow the patch and leave git reading clean.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/scheduler/src/graph-content-format.ts",
         "packages/scheduler/src/graph-content-fields.ts"
-      ]
+      ],
+      "startedAt": "2026-08-17T18:42:25.926Z"
     },
     {
       "stepId": "step-8",
@@ -123,12 +130,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:03:06.265Z",
-  "updatedAt": "2026-08-17T18:39:46.886Z",
+  "updatedAt": "2026-08-17T18:42:25.926Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:43:57.144Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -139,7 +146,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [
     {

@@ -94,7 +94,7 @@ export type GraphContentResult =
   | GraphContentRefusal;
 
 function accept(graph: ValidatedGraph, fields: ContentFields): GraphContentResult {
-  const hash = graphContentDigest(graph, fields);
+  const hash = snapshotIdentityHash(graph);
   const contentJson = canonicalContentJson(graph, fields);
   return Object.freeze({
     ok: true as const,
