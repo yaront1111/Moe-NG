@@ -211,3 +211,123 @@ it("has an exact .js bridge for every runtime module and none for test-tier ones
     wrongContent: wrongContent.map((file) => relative(SRC_ROOT, file)),
   }).toEqual({ missing: [], unexpected: [], wrongContent: [] });
 }, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
+
+/**
+ * The Foundation ingress surface, resolved and EXERCISED in a real child Node
+ * process. Every name is listed with its expected typeof so a curated symbol
+ * that stopped being published is reported BY NAME rather than as a count, and
+ * the count itself is pinned so a probe that silently resolved nothing — which
+ * would exit 0 — cannot pass.
+ *
+ * Only decode and read paths are invoked. Nothing here writes, spawns, launches
+ * or opens a store: `runReviewCommand` and `decodeReviewRequestBytes` both refuse
+ * at ingress before any durable read, so a null store is never dereferenced, and
+ * `qualifyGoalClosure` is handed a store whose only method throws so it takes its
+ * fail-closed branch. `deriveRecipeAggregateId` is a pure string derivation.
+ */
+const REPORT_FOUNDATION_SURFACE = `
+const report = (value) => process.stdout.write(JSON.stringify(value));
+const ENTRYPOINTS = [
+  ["CONTINUATION_COMMAND_KIND", "string"], ["CONTINUATION_PAYLOAD_KEYS", "object"],
+  ["DAEMON_FOUNDATION_ATTEMPT", "string"], ["DELTA_CLASSIFICATIONS", "object"],
+  ["FOUNDATION_ATTEMPT_CODES", "object"], ["FOUNDATION_ATTEMPT_RECORD_VERSION", "string"],
+  ["FOUNDATION_ATTEMPT_REQUEST_KEYS", "object"], ["FOUNDATION_ATTEMPT_SCHEMA_VERSION", "string"],
+  ["FOUNDATION_DISPATCH_COMMAND_KIND", "string"], ["FOUNDATION_RESERVATION_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_CODES", "object"], ["FOUNDATION_VERIFICATION_COMMAND_KIND", "string"],
+  ["FOUNDATION_VERIFICATION_LAYERS", "object"],
+  ["FOUNDATION_VERIFICATION_RECEIPT_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_RECIPE_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_REFUSAL_SOURCES", "object"],
+  ["FOUNDATION_VERIFICATION_REQUEST_KEYS", "object"],
+  ["FOUNDATION_VERIFICATION_SCHEMA_VERSION", "string"],
+  ["FOUNDATION_VERIFICATION_VERDICTS", "object"], ["GOAL_CLOSURE_WITNESS_VERSION", "string"],
+  ["GOAL_PREREQUISITE_LAYER", "string"], ["GOAL_PREREQUISITE_REFUSAL_CODES", "object"],
+  ["RESTART_RECONCILIATION_COMMAND_KIND", "string"],
+  ["RESTART_RECONCILIATION_SCHEMA_VERSION", "string"],
+  ["RESTART_RECORD_CLASSIFICATIONS", "object"], ["REVIEW_COMMAND_KINDS", "object"],
+  ["REVIEW_INGRESS_REFUSAL_CODES", "object"], ["REVIEW_PREREQUISITE_REFUSAL_CODES", "object"],
+  ["REVIEW_REFUSED_BY", "object"], ["REVIEW_REQUEST_KEYS", "object"],
+  ["REVIEW_SCHEMA_VERSION", "string"], ["RUNNER_WORKSPACE_LAYER", "string"],
+  ["SCHEDULER_GRAPH_LAYER", "string"], ["coordinationPresentationDigest", "function"],
+  ["createCoordinationAdapter", "function"], ["createFoundationAttemptService", "function"],
+  ["createFoundationVerificationService", "function"], ["decodeReviewRequestBytes", "function"],
+  ["deriveRecipeAggregateId", "function"], ["deriveVerificationAggregateId", "function"],
+  ["qualifyGoalClosure", "function"], ["readFoundationAttemptRecord", "function"],
+  ["readReconciliationRecords", "function"], ["readReviewLedger", "function"],
+  ["reconcileOnRestart", "function"], ["runContinuationCommand", "function"],
+  ["runReviewCommand", "function"],
+];
+try {
+  const ns = await import("@moe/daemon");
+  const unresolved = ENTRYPOINTS
+    .filter(([name, kind]) => typeof ns[name] !== kind)
+    .map(([name]) => name);
+  const malformed = new TextEncoder().encode("{");
+  const decoded = ns.decodeReviewRequestBytes(malformed);
+  const command = ns.runReviewCommand(null, malformed);
+  const closure = ns.qualifyGoalClosure(
+    { readEvents() { throw new Error("store unavailable"); } },
+    "project-1",
+    "goal-1",
+  );
+  report({
+    outcome: "IMPORTED",
+    resolved: ENTRYPOINTS.length - unresolved.length,
+    unresolved,
+    reviewDecode: { code: decoded.code, refusedBy: decoded.refusedBy },
+    reviewCommand: {
+      authority: command.authority, code: command.code, refusedBy: command.refusedBy,
+    },
+    goalClosure: { code: closure.code, layer: closure.layer },
+    frozen: [
+      Object.isFrozen(ns.FOUNDATION_ATTEMPT_CODES),
+      Object.isFrozen(ns.FOUNDATION_VERIFICATION_VERDICTS),
+      Object.isFrozen(ns.REVIEW_COMMAND_KINDS),
+    ],
+    recipeAggregateId: ns.deriveRecipeAggregateId("verify-1"),
+    schemaVersions: [
+      ns.REVIEW_SCHEMA_VERSION, ns.RESTART_RECONCILIATION_SCHEMA_VERSION,
+      ns.FOUNDATION_ATTEMPT_SCHEMA_VERSION, ns.FOUNDATION_VERIFICATION_SCHEMA_VERSION,
+      ns.GOAL_CLOSURE_WITNESS_VERSION,
+    ],
+  });
+} catch (error) {
+  report({ outcome: "FAILED", code: error.code ?? "NO_CODE", message: error.message });
+}
+`;
+
+it("resolves and exercises the Foundation ingress surface under plain Node", async () => {
+  // DoD 3. Vitest rewrites a `./foo.js` specifier back to `foo.ts`, so the two
+  // NEW modules this task ships (foundation/foundation-surface.ts and
+  // graph-preview-request.ts) would load in-suite even with no `.js` bridge and
+  // fail for a real consumer. Only a child Node process resolving the bare
+  // `@moe/daemon` root through the real `.js` graph can see that.
+  //
+  // `resolved: 47` is the anti-vacuity pin: a probe that resolved nothing exits
+  // 0 and would otherwise read as a pass. `unresolved: []` names the casualty
+  // instead of merely lowering the count.
+  expect(await probe(REPORT_FOUNDATION_SURFACE)).toEqual({
+    outcome: "IMPORTED",
+    resolved: 47,
+    unresolved: [],
+    // Reason codes AND refusing layers, from production, through the published
+    // root — not "it refused".
+    reviewDecode: { code: "REVIEW_INPUT_REJECTED", refusedBy: "DAEMON_INGRESS" },
+    reviewCommand: {
+      authority: "NONE", code: "REVIEW_INPUT_REJECTED", refusedBy: "DAEMON_INGRESS",
+    },
+    goalClosure: {
+      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED", layer: "DAEMON_PREREQUISITE",
+    },
+    frozen: [true, true, true],
+    recipeAggregateId: "foundation-verify-recipe:verify-1",
+    // Values, not typeofs: a binding that resolved to the wrong module cannot pass.
+    schemaVersions: [
+      "moe-review-command/1",
+      "moe-restart-reconciliation/2",
+      "moe-foundation-attempt/1",
+      "moe-foundation-verification/1",
+      "moe-goal-closure-witness/1",
+    ],
+  });
+}, RUNTIME_FILESYSTEM_PROBE_TIMEOUT_MS);
