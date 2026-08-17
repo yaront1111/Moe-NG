@@ -99,11 +99,16 @@
     {
       "stepId": "step-6",
       "description": "TDD the plain-Node probe in apps/daemon/src/runtime-entrypoint.test.ts (213 lines). DoD 3 requires a real Node import that resolves every entrypoint WITHOUT Vitest's .js-to-.ts remapping -- so this must spawn a real `node` process against the built/bridged `.js` graph from apps/daemon, not import inside the vitest worker where the remapping hides a missing bridge. That remapping is exactly why a new .ts module without its one-line .js bridge passes every in-suite test and fails for a real consumer, which is the failure mode this probe exists to catch. In the spawned process, import the package root and (a) assert every curated entrypoint resolves to a function or object as expected, and (b) invoke the SAFE decode/read probes only -- a decode of malformed bytes, a read against an empty store -- asserting each returns its stable refusal rather than throwing. Never invoke anything that writes, spawns, or launches. Assert the probe actually ran by checking a nonzero count of resolved entrypoints; a probe that silently resolved nothing exits 0.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/runtime-entrypoint.test.ts"
       ],
-      "startedAt": "2026-08-17T20:04:05.188Z"
+      "modifiedFiles": [
+        "apps/daemon/src/runtime-entrypoint.test.ts"
+      ],
+      "note": "Plain-Node probe added to the EXISTING apps/daemon/src/runtime-entrypoint.test.ts (213 -> 333 lines). New case: \"resolves and exercises the Foundation ingress surface under plain Node\".\n\nREAL CHILD PROCESS, not an in-suite import. It reuses the file's existing `probe()` helper, which runs `process.execPath --experimental-strip-types --input-type=module -e <source>` with `cwd: PACKAGE_ROOT` (apps/daemon). The bare specifier `@moe/daemon` therefore resolves through this package's own `exports` map by Node's self-reference rule — the exact resolution an external dependent gets, and the only way to see a missing `.js` bridge, because vitest rewrites `./foo.js` back to `foo.ts` in-process. That remapping is why the two NEW modules this task ships (foundation/foundation-surface.ts, graph-preview-request.ts) would pass every in-suite test with no bridge at all. Step 7 drill 3 is what proves the probe can actually see it.\n\n(a) EVERY CURATED ENTRYPOINT RESOLVES: the probe carries a hand-written [name, typeof] table of all 47 curated runtime names — 17 strings, 16 frozen objects, 14 functions — and reports `resolved` plus an `unresolved` array. Asserted as `resolved: 47, unresolved: []`. The count is the anti-vacuity pin the step demanded: a probe that resolved NOTHING exits 0, and `resolved: 0` fails against `47`. `unresolved` names the casualty rather than merely lowering a number.\n\n(b) SAFE DECODE/READ ONLY, each pinned to its stable refusal — code AND refusing layer, per epic rail 6:\n- decodeReviewRequestBytes(bytes of \"{\") -> { code: \"REVIEW_INPUT_REJECTED\", refusedBy: \"DAEMON_INGRESS\" }\n- runReviewCommand(null, bytes of \"{\") -> { authority: \"NONE\", code: \"REVIEW_INPUT_REJECTED\", refusedBy: \"DAEMON_INGRESS\" }\n- qualifyGoalClosure({ readEvents() { throw } }, \"project-1\", \"goal-1\") -> { code: \"GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED\", layer: \"DAEMON_PREREQUISITE\" }\n- deriveRecipeAggregateId(\"verify-1\") -> \"foundation-verify-recipe:verify-1\"\nNOTHING THAT WRITES, SPAWNS OR LAUNCHES IS INVOKED. The null store is safe by construction, not by luck: both review paths refuse at ingress before any durable read, so passing null also PROVES the store is never dereferenced on that path. qualifyGoalClosure gets a store whose only method throws, taking its documented fail-closed branch.\n\nVALUES, NOT TYPEOFS, for the identity checks: five schema versions are asserted by literal (moe-review-command/1, moe-restart-reconciliation/2, moe-foundation-attempt/1, moe-foundation-verification/1, moe-goal-closure-witness/1) plus three Object.isFrozen results. A binding that resolved to the WRONG module would satisfy a typeof check and fail these.\n\nRESULTS. Focused: `npx vitest run --root . --config package.json src/runtime-entrypoint.test.ts` -> Test Files 1 passed (1), Tests 5 passed (5) — was 4, exit 0. Full package: `pnpm --filter @moe/daemon test` -> Test Files 121 passed (121), Tests 2571 passed (2571), exit 0. Baseline captured before the first edit was 121 / 2488, so the count is ABOVE baseline by 83 with no file lost. `pnpm --filter @moe/daemon typecheck` EXIT 0.",
+      "startedAt": "2026-08-17T20:04:05.188Z",
+      "completedAt": "2026-08-17T20:05:22.779Z"
     },
     {
       "stepId": "step-7",
@@ -179,7 +184,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-17T20:04:05.188Z",
+  "updatedAt": "2026-08-17T20:05:22.779Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-cb476f76",
@@ -192,7 +197,7 @@
     "firstClaimAt": "2026-08-09T14:24:55.279Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -226,7 +231,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T19:39:13.901Z",

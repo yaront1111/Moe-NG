@@ -146,8 +146,8 @@
       "completedAt": "2026-08-17T20:04:03.883Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -159,7 +159,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:18:14.797Z",
-  "updatedAt": "2026-08-17T20:04:03.884Z",
+  "updatedAt": "2026-08-17T20:05:20.561Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:06.293Z",
     "plannedStepCount": 8,
@@ -201,5 +201,26 @@
   "contextFetchedBy": [
     "worker-3d941382"
   ],
-  "workStartedAt": "2026-08-17T19:34:37.533Z"
+  "workStartedAt": "2026-08-17T19:34:37.533Z",
+  "reviewStartedAt": "2026-08-17T20:05:20.561Z",
+  "verification": {
+    "command": "pnpm --filter @moe/runner typecheck (EXIT=0, separate leg) ; pnpm --filter @moe/runner test (EXIT=0, output below)",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root ../.. packages/runner/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  68 passed (68)\n      Tests  2442 passed | 1 skipped (2443)\n   Start at  23:03:28\n   Duration  7.67s\nTEST_EXIT=0",
+    "reportedAt": "2026-08-17T20:05:20.561Z"
+  },
+  "filesModified": [
+    "packages/runner/src/supervisor/effect-lifecycle.ts",
+    "packages/runner/src/supervisor/provider-effect-settlement.test.ts",
+    "packages/runner/src/supervisor/provider-effect-settlement.ts",
+    "packages/runner/src/supervisor/provider-effect-settlement.js",
+    "packages/runner/src/supervisor/provider-settlement-contracts.ts",
+    "packages/runner/src/supervisor/provider-settlement-contracts.js",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/index-surface.test.ts",
+    "tests/security/boundary-roster.security.ts",
+    "tests/security/runtime-provider-invariants.ts",
+    "tests/security/runtime-provider-supervision-cases.ts",
+    "tests/security/runtime-provider-evidence.security.ts"
+  ]
 }
