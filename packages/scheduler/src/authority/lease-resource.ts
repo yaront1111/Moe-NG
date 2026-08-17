@@ -41,6 +41,9 @@ export type {
   ProviderSlotActivateCommand, ProviderSlotReservation, ReserveAllRequest, ReserveAllResult,
   ResourceRow, ResourceWaitRequest, SlotState,
 } from "./resource-model.js";
+/** The ACTIVE -> RELEASED transition, so the whole slot family imports from here. */
+export { releaseProviderSlot } from "./provider-slot-release.js";
+export type { ProviderSlotReleaseCommand } from "./provider-slot-release.js";
 
 /**
  * One transaction either reserves capacity for every declared non-provider

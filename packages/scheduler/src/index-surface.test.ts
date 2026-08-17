@@ -63,6 +63,9 @@ import type {
   ExpansionRestoredMeter,
 } from "@moe/scheduler";
 import type {
+  DrainDisposition, ReleaseHandoff, ReleaseRequest, ReleaseResult,
+} from "@moe/scheduler";
+import type {
   ExpansionAdmissionBinding, ExpansionBindingIssue, ExpansionBindingIssueCode,
   ExpansionBindingLayer, ExpansionBindingOrigin, ExpansionBindingRefusal,
   ExpansionBindingRequest, ExpansionBindingResult, ExpansionCurrentAuthority,
@@ -81,7 +84,10 @@ type ExportKind = "array" | "function" | "number" | "record";
  * telemetry composer needs so it never has to copy the source/coverage matrix) + the
  * 6 graph content identity values (the encode/decode codec boundary, its schema
  * version, byte ceiling, and the two closed refusal vocabularies a durable graph
- * revision needs to tell a framing refusal from an identity refusal).
+ * revision needs to tell a framing refusal from an identity refusal) + the design-765
+ * release authority `releaseWork`, the sole composer of a lease's RELEASED/DRAINING/NO_OP
+ * transition. Its four types travel with it but are invisible here — a type publishes no
+ * runtime key — so they are proven by annotation in the release block further down.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
@@ -129,6 +135,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
+  ["releaseWork", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
   ["resourceRotationOrder", "function"], ["rotateOnce", "function"],
@@ -143,7 +150,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(92);
+  expect(EXPECTED_EXPORTS.length).toBe(93);
 });
 
 /**
@@ -1732,6 +1739,78 @@ it("treats a same-identity same-bytes redelivery as a deterministic no-op at the
     .measurement.sequence).toBe(8);
   refusedAtRoot(normalizeAtRoot(usageObservation({ sequence: 10 }), prior),
     "MEASUREMENT", "BUDGET_OBSERVATION_SEQUENCE_GAP");
+});
+
+/**
+ * The design-765 release authority, reached through the bare package root. Same
+ * rule as the fairness and expansion blocks: `releaseWork` is the only runtime
+ * value, so its four types are proven by ANNOTATION on values that came through
+ * `@moe/scheduler` — a type published nowhere becomes a tsc error rather than a
+ * silently green test.
+ */
+const RELEASE_HANDOFF: ReleaseHandoff = {
+  completedSteps: ["step:1"], activeProcessResourceFacts: [],
+  inputDigest: DIGEST, worktreeDigest: DIGEST, contextDigest: DIGEST, journalDigest: DIGEST,
+  artifactDigest: DIGEST, nextSafeAction: "action:resume", truthClass: "DAEMON_VERIFIED",
+};
+const RELEASE_REQUEST: ReleaseRequest = {
+  reason: "WORK_RELEASE_OR_PAUSE", safeBoundaryObserved: true, effectsTerminal: true,
+  resourcesTerminal: true, handoff: RELEASE_HANDOFF, intentRefs: ["intent:1"], disposition: null,
+};
+
+function releasedAtRoot(outcome: AuthorityOutcome<ReleaseResult>): ReleaseResult {
+  if (!outcome.ok) throw new Error(authorityCodes(outcome).join(","));
+  return outcome.value;
+}
+
+it("composes a RELEASED lease through the root release authority", () => {
+  const result: ReleaseResult = releasedAtRoot(scheduler.releaseWork(LEASE, PROOF, RELEASE_REQUEST));
+  if (result.outcome !== "RELEASED") throw new Error(`expected RELEASED, got ${result.outcome}`);
+  const lease: LeaseRecord = result.lease;
+  const disposition: DrainDisposition = result.disposition;
+  const handoff: ReleaseHandoff = result.handoff;
+  // The kernel decides the state and bumps the version; the caller supplied neither.
+  expect([lease.state, lease.version, LEASE.version]).toEqual(["RELEASED", 8, 7]);
+  expect([disposition.strongestReason, disposition.terminalTarget, disposition.resumable])
+    .toEqual(["WORK_RELEASE_OR_PAUSE", "RELEASED", true]);
+  expect([result.resumable, result.releasePending]).toEqual([true, false]);
+  expect(handoff.nextSafeAction).toBe("action:resume");
+});
+
+it("keeps DRAINING a separate root outcome for every unsettled boundary flag", () => {
+  const flags = ["safeBoundaryObserved", "effectsTerminal", "resourcesTerminal"] as const;
+  let driven = 0;
+  for (const flag of flags) {
+    const result = releasedAtRoot(
+      scheduler.releaseWork(LEASE, PROOF, { ...RELEASE_REQUEST, [flag]: false }));
+    if (result.outcome !== "DRAINING") throw new Error(`${flag} did not drain`);
+    expect([result.lease.state, result.resumable, result.releasePending])
+      .toEqual(["DRAINING", false, true]);
+    expect(result.intentRefs).toEqual(["intent:1"]);
+    driven += 1;
+  }
+  // A sweep that generated nothing would pass every assertion above vacuously.
+  expect(driven).toBe(3);
+});
+
+it("answers NO_OP for a lease the root release authority already terminated", () => {
+  for (const state of ["RELEASED", "REVOKED"] as const) {
+    const result = releasedAtRoot(
+      scheduler.releaseWork({ ...LEASE, state }, PROOF, RELEASE_REQUEST));
+    expect(result.outcome).toBe("NO_OP");
+    // Idempotent, not a second transition: the version is untouched.
+    expect([result.lease.state, result.lease.version]).toEqual([state, 7]);
+  }
+});
+
+it("refuses a malformed release request and an uncommittable handoff from the root", () => {
+  expect(authorityCodes(scheduler.releaseWork(LEASE, PROOF, { ...RELEASE_REQUEST, intentRefs: null })))
+    .toEqual(["AUTHORITY_MALFORMED_INPUT"]);
+  expect(authorityCodes(scheduler.releaseWork(LEASE, PROOF, { ...RELEASE_REQUEST, handoff: null })))
+    .toEqual(["AUTHORITY_MALFORMED_INPUT"]);
+  // A stale proof is fenced BEFORE any transition is composed, under its own code.
+  expect(authorityCodes(scheduler.releaseWork(LEASE, { ...PROOF, epoch: 2 }, RELEASE_REQUEST)))
+    .toEqual(["AUTHORITY_STALE_EPOCH"]);
 });
 
 it("publishes the measurement vocabularies as frozen non-empty closed sets", () => {

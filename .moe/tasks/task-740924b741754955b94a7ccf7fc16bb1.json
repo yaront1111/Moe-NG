@@ -144,7 +144,7 @@
       "completedAt": "2026-08-17T11:46:45.116Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -157,16 +157,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T15:03:57.516Z",
-  "updatedAt": "2026-08-17T11:48:40.199Z",
+  "updatedAt": "2026-08-17T17:03:13.720Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:31:53.405Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T12:04:37.647Z",
+    "wallClockMs": 48764242
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-12cda609",
+    "architect-77071474"
   ],
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -221,5 +225,8 @@
     "apps/daemon/src/work/attempt-release-disposition.ts",
     "apps/daemon/src/work/attempt-release-disposition.js",
     "apps/daemon/src/work/foundation-attempt-service.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T12:04:37.647Z",
+  "reviewCompletedAt": "2026-08-17T12:04:37.647Z",
+  "reviewSummary": "APPROVED. All 7 DoD items verified independently, not from summaries.\n\nGATES re-run by QA, exit codes separate (no && chain, no pipe): RUNNER_TYPECHECK=0, RUNNER_TEST=0 \"Test Files 67 passed (67)\"/\"Tests 2230 passed | 1 skipped (2231)\"; DAEMON_TYPECHECK=0, DAEMON_TEST=0 \"Test Files 111 passed (111)\"/\"Tests 2248 passed (2248)\". Both count lines nonzero, so neither leg is the silent exit-0 no-match case. Matches task.verification. All four HEAD failing-path sets EMPTY, so the HEAD-minus-merge-base delta over owned paths is EMPTY (DoD 7).\n\nDoD 1 grep returns producers where it returned zero. DoD 2 all 9 fields read back via readAttemptRelease from durable bytes, never from `written`. DoD 3 vocabulary + both validators come from the @moe/runner root; unknown reason refused ATTEMPT_RELEASE_REASON_UNKNOWN @ DAEMON_ATTEMPT_RELEASE with a non-vacuity assert.\n\nSIX drills run by QA, each restored by content, sha256 re-verified (module back to 3d000525641f0df8):\n- hardcode terminalTarget \"RELEASED\" -> EXIT=1, \"records a NON-RESUMABLE release under a different drain reason\" (DoD 6)\n- hardcode resumable: true -> EXIT=1, same named test (DoD 6)\n- drop isMonotonicDisposition -> EXIT=1, DOWNGRADED and TARGET_MISMATCH red on DIFFERENT assertions\n- caller-wins on lease/slot, typecheck EXIT=0 -> exactly one named test red, ['RELEASED','RELEASED'] != ['ACTIVE','ACTIVE'] (DoD 5)\n- delete the noteRelease call -> EXIT=1, service composition case red: consumer edge is real\n- corrupt SETTLE_DISPOSITIONS.PROVEN -> SURVIVED. Throw-probe: capture() is unreachable by all 2248 daemon tests, so that arm is PRE-EXISTING undrivable, not introduced here, and no DoD item covers it. Filed as mem:gotcha-consumer-edge-proven-on-one-arm-only.\n\nPer-file 249/242/68, all under 250. .js bridge tracked. pnpm test:security EXIT=1 is FOREIGN and correctly disclosed: excess is GOAL_PREREQUISITE_LAYER + GRAPH_CONTENT_LAYERS, both ABSENT at merge-base cf272f67; this diff adds no *_LAYER constant."
 }

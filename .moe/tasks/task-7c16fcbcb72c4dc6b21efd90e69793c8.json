@@ -1,0 +1,34 @@
+{
+  "id": "task-7c16fcbcb72c4dc6b21efd90e69793c8",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Provider reconciliation effect settlement",
+  "description": "Objective: land the missing @moe/runner authority that converts one canonical provider-run observation into the only effect terminal transition its evidence proves. Current measurement at HEAD 8557296330648bca2977e27d77fb0f26c319b758: public applyEffectCommand accepts a caller-selected settle target/outcomeClass; an executed public-root probe transitions ACTIVE to SUCCEEDED even when outcomeClass is HONEST_UNKNOWN, while no production reconciliation-to-effect mapper exists. Deliverable: a public-root settleEffectFromProviderObservation-style function and exact frozen evidence/failure contracts. It accepts an EffectIntent plus a closed provider observation (ProviderRunRef, source version/digest, provider terminal and infrastructure classifications, upstream refusal, observed completion instant), derives target/outcome/uncertainty/adoptedAt itself, invokes the production lifecycle reducer, and returns its exact terminal EffectIntent+EffectResult or typed refusal/MUST_DRAIN. NOT in scope: daemon persistence, provider-run storage/readers (task-00e4827dd9374ec79625351d560c82c8), release disposition, resource authority, new runtime command kinds, or physical launch. Consumer: task-1879166d7f12474fad8038e2a9d2433a. Verification: run `pnpm --filter @moe/runner typecheck` and `pnpm --filter @moe/runner test` as separate foreground legs and record the nonzero test-count lines.",
+  "definitionOfDone": [
+    "The @moe/runner public root exports one production settlement function whose exact input contains no effect target, outcomeClass, uncertainty, adoptedAt, result bytes, or terminal EffectIntent; it snapshots an EffectIntent plus a versioned provider observation and binds ProviderRunRef.effectIntentId to the intent before deriving anything.",
+    "A frozen exhaustive mapping covers every generated ProviderTerminalOutcome x ProviderInfrastructureOutcome case for ACTIVE and CANCEL_REQUESTED intents: only an infrastructure-clean proven completion/error may become SUCCEEDED/FAILED, clean cancellation reaches CANCELLED only from CANCEL_REQUESTED, ACTIVE cancellation returns the production MUST_DRAIN path, and every unproven combination stays UNKNOWN or refuses without authority. Tests assert the generated case count is nonzero and pin each exact terminal/refusal code and layer.",
+    "The implementation derives SettlementEvidence, UncertaintyEvidence, outcomeClass and adoptedAt solely from the admitted provider observation, then calls production applyEffectCommand; its returned EffectIntent and EffectResult are the reducer's exact frozen output. Malformed/foreign/unverifiable source evidence fails closed with distinct stable provider-settlement codes/layer, while reducer refusals retain their original SupervisorFailure code/layer.",
+    "Focused tests include the current counterexample (ACTIVE plus provider-unknown evidence can never produce SUCCEEDED), hostile/accessor inputs, effect/run binding mismatch, missing or unknown completion instant, terminal absorption, and one accepted completion control with exact result fields and digest. Mutating the production mapping to trust a caller target or map an unproven cell to success turns a named test red.",
+    "The curated runner surface and surface-ratchet test include the new values/types without deep imports; completion names task-1879166d7f12474fad8038e2a9d2433a as the consumer, and runner typecheck/test execute separately with nonzero Test Files and Tests counts."
+  ],
+  "taskRails": [
+    "Never add a second effect reducer or construct EffectResult directly; derive a closed settle command and delegate to public applyEffectCommand, returning its output unchanged.",
+    "No caller-selected target, terminal state, outcomeClass, uncertainty, adoptedAt, result, or reconciliation verdict becomes authority. Provider facts are observations; unknown/unverifiable facts grant no terminal success authority.",
+    "Use the existing public ProviderRunRef, ProviderTerminalOutcome, ProviderInfrastructureOutcome, ProviderText, EffectIntent and lifecycle vocabularies; do not copy their literals into a daemon-local contract.",
+    "TDD exact stable code and refusing layer, positive generated-case counts, production-surface mutation drill, public-root surface ratchet, target <=250 physical lines per new production source, and explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-1879166d7f12474fad8038e2a9d2433a",
+  "priority": "CRITICAL",
+  "order": 78.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:18:14.797Z",
+  "updatedAt": "2026-08-17T17:18:14.797Z"
+}

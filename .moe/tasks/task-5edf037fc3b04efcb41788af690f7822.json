@@ -118,8 +118,8 @@
       "completedAt": "2026-08-17T11:42:20.613Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -131,12 +131,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:29:38.779Z",
-  "updatedAt": "2026-08-17T11:44:03.983Z",
+  "updatedAt": "2026-08-17T11:49:45.343Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T11:22:04.268Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-17T11:49:45.343Z",
+    "wallClockMs": 1661075
   },
   "stepsCompleted": [
     "step-1",
@@ -182,5 +184,8 @@
     "apps/daemon/src/review/reviewer-calibration-record.test.ts",
     "apps/daemon/src/review/reviewer-calibration-record.ts",
     "apps/daemon/src/review/reviewer-calibration-record.js"
-  ]
+  ],
+  "completedAt": "2026-08-17T11:49:45.343Z",
+  "reviewCompletedAt": "2026-08-17T11:49:45.343Z",
+  "reviewSummary": "RE-RAN GATE at HEAD: `pnpm typecheck` EXIT=0 && `pnpm --filter @moe/daemon test` EXIT=0, \"Test Files 111 passed (111) / Tests 2248 passed (2248)\". Proved EXECUTION not just exit-0: `vitest list --root . --config package.json src | grep reviewer-calibration-record` = 22 collected cases.\n\nDIFF c2b8269: 3 new files, +575, nothing else touched. Production .ts 152 lines, .js 1 (both <=250).\n\nDoD1 no new command kind (commit touches no registry/vocabulary file). DoD2 test drives the REAL registry (createDaemonCommandPorts -> registry.get(\"policy.install\") -> decisions.decide, ADMIN) and asserts all three fields individually + exact key set. DoD3 absent -> code REVIEWER_CALIBRATION_NOT_INSTALLED, layer DAEMON_PREREQUISITE, `\"calibration\" in read === false`, raw event count unchanged. DoD4 9 hostile cases (count asserted nonzero) -> UNREADABLE at DAEMON_PREREQUISITE, plus 3 genuine ingress cases -> BOOTSTRAP_PAYLOAD_INVALID at DAEMON_INGRESS with rawEventCount 0, plus a positive control proving ingress ACCEPTS malformed contents so the sweep cannot go vacuous behind an earlier guard. DoD6 names consumer task-4dd4424c as BLOCKED, no live edge claimed.\n\nTWO DRILLS I RAN MYSELF. (A) wrong refusal code -> RED on `expected 'REVIEWER_CALIBRATION_UNREADABLE' to be 'REVIEWER_CALIBRATION_NOT_INSTALLED'` (code assertion; ok stayed false). (B) hard-coded literal -> RED on `expected 'corpus-2026-08' to be 'corpus-abc'` (value assertion, not a crash).\n\nINCIDENT I CAUSED AND REPAIRED: sibling whole-tree commit 6fbe1dc (task-92031b0a) swept drill B into HEAD. Restored to c2b8269's exact blob 9a5bba33 in commit 042a996, single owned pathspec; gate green after.\n\nDISCLOSED FOREIGN RED: `pnpm test:security` EXIT=1 on GOAL_PREREQUISITE_LAYER + GRAPH_CONTENT_LAYERS, both from task-8f9305b9, both present at c2b8269^. Failing paths inters owned paths = EMPTY. Positive control: the roster regex matches goal-close-prerequisite.ts:46 and yields zero matches in this task's file."
 }

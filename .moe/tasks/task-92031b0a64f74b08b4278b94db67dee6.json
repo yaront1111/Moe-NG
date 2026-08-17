@@ -157,7 +157,7 @@
       "completedAt": "2026-08-17T11:44:07.194Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -170,12 +170,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:29:07.687Z",
-  "updatedAt": "2026-08-17T11:46:21.371Z",
+  "updatedAt": "2026-08-17T11:57:05.635Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T11:18:47.827Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T11:57:05.635Z",
+    "wallClockMs": 2297808
   },
   "stepsCompleted": [
     "step-1",
@@ -208,7 +210,8 @@
   },
   "planApprovedAt": "2026-08-17T11:22:03.130Z",
   "contextFetchedBy": [
-    "worker-a83aecdf"
+    "worker-a83aecdf",
+    "qa-12cda609"
   ],
   "workStartedAt": "2026-08-17T11:22:27.190Z",
   "reviewStartedAt": "2026-08-17T11:46:21.371Z",
@@ -228,5 +231,8 @@
     "apps/daemon/src/review/review-package-restore.ts",
     "apps/daemon/src/review/review-package-restore.js",
     "apps/daemon/src/review/review-package-restore.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T11:57:05.635Z",
+  "reviewCompletedAt": "2026-08-17T11:57:05.635Z",
+  "reviewSummary": "APPROVED. HEAD 8557296, base 29e1b45; work in 7565c36 (9 files, all apps/daemon/src/review/). 6fbe1dc reuses this message but is a foreign sweep with zero owned paths.\n\nGATES RE-RUN: `pnpm typecheck && pnpm --filter @moe/daemon test` exit 0, Test Files 111 passed (111) / Tests 2248 passed (2248). `pnpm test` exit 1 on ONE red, packages/store recovery-anchor.test.ts \"publishes exactly the anchor surface\" — inherited (`git diff --numstat 29e1b45..HEAD -- packages`: packages/store ZERO changed files; reproduces in isolation; outside owned paths). Git Bash added 2 phantom release-archive reds; PowerShell same tree: 289 passed | 1 failed.\n\nDoD: (1) items persisted on the accepted commit's result via boundPackageItems; test asserts seven items element-by-element plus a key-set match to the submitted fixture, no count. (2) verify/restore recompute with public buildReviewPackage against the STORED digest; substituted digest and substituted locator both pin REVIEW_PACKAGE_DIGEST_MISMATCH + DAEMON_PREREQUISITE + null kernelLayer. (3) pre-change round refuses REVIEW_PACKAGE_ITEMS_ABSENT/DAEMON_PREREQUISITE; ABSENT marker asserted not-equal to all three empty disguises. (4) unbindable set still refuses PACKAGE_BINDING_INCOMPLETE at kernel layer PACKAGE, three witnesses of zero writes. (6) per-file 247/207/120/104 lines; eventPayload byte-unchanged, pinned by a key-set test.\n\nDoD 5 — THREE DRILLS RE-RUN BY QA, each red on the right assertion: removing persistence reddens \"persists the item set the kernel bound...\" with `expected { status: 'ABSENT' } to deeply equal { items: [...] }`; PRESENT-empty instead of ABSENT reddens \"marks a round stored before this change ABSENT...\"; recomputed-vs-recomputed tautology reddens both substitution tests. sha256 of all four production files restored byte-identical, tree clean, src/review re-run 97 passed.\n\nFlagged not rejected: bigger result runs nearer MAX_JSON_BODY_BYTES (1 MiB) — fail-closed, pre-existing."
 }

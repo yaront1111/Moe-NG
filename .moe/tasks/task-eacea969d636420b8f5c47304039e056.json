@@ -16,7 +16,7 @@
     "One durable decision must cover the complete authority move; no compensating second commit, mock-backed accepted path or caller-supplied current state. TDD and per-file line caps apply."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:34:57.261Z",
-  "updatedAt": "2026-08-17T11:18:02.703Z"
+  "updatedAt": "2026-08-17T17:07:41.671Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:05:23.695Z"
+  },
+  "blockedReason": "Blocked at planning, not planned speculatively. Rail says \"Wait for dec-64b2391c and consume a recomputed full GraphRevisionContent hash; never equate scheduler graphIdentity with graphContentHash.\"\n\nDECISION RESOLVED: the human chose OPTION A (full GraphRevisionContent authority) in the architect REPL 2026-08-17; B rejected. Recorded as msg-6a6d3590. The record still reads status:proposed -- chat_decision only proposes; a governor should stamp it.\n\nTHE RAIL'S PRECONDITION IS UNMET. Measured at HEAD a42ae2f:\n- `git grep \"GraphRevisionContent\" HEAD -- packages/ apps/` (minus tests) returns ZERO. No full content hash exists to recompute or consume.\n- @moe/core treats graphContentHash as an OPAQUE hex64 (graph-revision-contract.ts:125; validHex64 at reducer:85; compared :131, :162) and never computes it.\n- @moe/scheduler DOES export graph-content.ts / graph-content-format.ts at HEAD (index.ts:86, :93), but its header says \"its graphIdentity is the only thing hashed\" -- structure only, one of seven fields design line 197 names. Consuming it here is the exact equation the rail forbids, and its NAME makes that mistake easy by accident.\n\nDoD 1-3 need reducers driven over durable content bindings that do not exist, and forbid content bytes outside a sealed proposal with no surface to read.\n\nBLOCKING DEPENDENCIES, all unlanded:\n- task-e3d5fd05 (filed by me this session): GraphRevisionContent contract/codec/hash producer in @moe/core, new head of the lane.\n- task-dd4ffa0c: current-active projection, BLOCKED, 0 plan steps.\n- task-32c1ba45: preparation generation, BLOCKED by me for the same missing contract; this task needs its exact generation.\n- task-c4171c1c: approved expansion binding. NOT verified -- re-measure.\n\nCHAIN: e3d5fd05 + 77e8cb44 -> dd4ffa0c -> 32c1ba45 -> eacea969 -> 931f99e8 -> efc2ef63 -> a9fd91c3 -> canary.\n\nUnblock test is a grep: `git grep \"GraphRevisionContent\" HEAD -- packages/core/` must return a contract, and dd4ffa0c + 32c1ba45 must be DONE.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:07:27.750Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Decision dec-64b2391c resolved by the human as OPTION A (full GraphRevisionContent authority), recorded in msg-6a6d3590. Measured the lane at HEAD a42ae2f and found this task's own rail precondition unmet: GraphRevisionContent does not exist in code, @moe/core never computes graphContentHash, and the landed @moe/scheduler graph-content codec hashes graphIdentity only. Filed the missing chain head as task-e3d5fd05.",
+      "whatRemains": "Replan only after task-e3d5fd05 lands a real GraphRevisionContent contract AND task-dd4ffa0c (current-active projection) and task-32c1ba45 (preparation generation) are DONE -- this task needs 32c1ba45's exact preparation generation to consume. Re-measure task-c4171c1c (approved expansion binding) too; I did not verify it.",
+      "pitfalls": "The trap here is specific and easy: @moe/scheduler already EXPORTS a symbol named graphContentHash (index.ts:86, :93) that computes a structural identity. Consuming it to satisfy DoD 1 or 2 would look correct, typecheck, and pass a name-based grep, while binding activations to an identity that omits repository base tree, parent revision, completion node, policy revision, decomposition budget and author. That is precisely what this task's rail forbids. Do not design the content contract inside this transition service either -- that is authority reimplemented in the consumer.",
+      "openQuestions": "Has task-77e8cb44's export been renamed off content authority? It is BLOCKED with 4/6 steps landed and committed; PRESERVE that work and rename (snapshotIdentity / graphStructureHash) rather than reset. If both it and e3d5fd05 land without the rename, two symbols will claim content authority at once. Also: the decision record still reads status:proposed because moe.chat_decision only proposes -- a governor should stamp it.",
+      "releasedAt": "2026-08-17T17:07:41.669Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Architect releasing the assignment only; the BLOCKED state and its reason stand. Released so I can continue planning the rest of the Graph Beta lane this session -- holding a blocked task stops claim_next_task."
+    }
+  ]
 }

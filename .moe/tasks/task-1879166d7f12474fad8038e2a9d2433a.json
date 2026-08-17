@@ -17,7 +17,7 @@
     "Use real SqliteEventStore, TDD exact codes/layers, target <=250 lines per production source, and commit only explicit owned paths."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +30,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:45:16.648Z",
-  "updatedAt": "2026-08-17T11:18:08.705Z"
+  "updatedAt": "2026-08-17T17:18:53.165Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:02:03.568Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh measurement at HEAD 8557296330648bca2977e27d77fb0f26c319b758 disproves the task's authority premise. The public @moe/runner `applyEffectCommand` accepts caller-selected settle target/outcomeClass; an executed root probe with an ACTIVE intent, target SUCCEEDED, and outcomeClass HONEST_UNKNOWN returned TRANSITIONED with a SUCCEEDED EffectResult. There is no production reconciliation-to-effect mapper and zero production `kind:\"settle\"` callers. The real provider observation chain is also uncomposed/unreadable: task-00e4827dd9374ec79625351d560c82c8 owns the physical launch/commit plus strict current-by-attempt provider record reader. Filed task-7c16fcbcb72c4dc6b21efd90e69793c8 for the runner-owned exhaustive provider-observation→effect settlement surface that accepts no caller target/outcome/adoptedAt. Re-plan only after both are DONE; then derive from the canonical provider record, preserve runner refusal code/layer, write the terminal pair decision-backed, and re-drive from durable provider evidence on Foundation replay. Do not infer terminality from FoundationAttemptRecorded/process exit or append another unrecoverable side effect beside task-740's `noteRelease`.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:18:41.397Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured runner, daemon, activation, Foundation release, and store surfaces; executed the public-root discriminator proving applyEffectCommand can accept SUCCEEDED/HONEST_UNKNOWN; identified the durable provider observation and replay gaps; filed task-7c16fcbcb72c4dc6b21efd90e69793c8 and attached existing task-00e4827dd9374ec79625351d560c82c8; blocked this task on both.",
+      "whatRemains": "After both prerequisites are DONE, re-plan a focused terminal-effect ledger/current reader plus a production Foundation finalization edge that re-drives from durable provider evidence on replay before returning the stored attempt.",
+      "pitfalls": "Do not infer from FoundationAttemptRecorded, raw process exit, advisory release disposition, or caller target/outcome. Activation aggregate admits only its existing four-event shape. Store replay identity excludes event bytes, so read/re-encode/byte-compare the durable terminal record and include the same-request/different-candidate echo-trap test.",
+      "openQuestions": "The prerequisite runner task must freeze the exhaustive provider terminal/infrastructure mapping. Cancellation over ACTIVE must stay MUST_DRAIN; never force CANCELLED through an unadmitted arc.",
+      "releasedAt": "2026-08-17T17:18:53.164Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing measured prerequisites; continuing the user-requested plan-all sweep."
+    }
+  ]
 }

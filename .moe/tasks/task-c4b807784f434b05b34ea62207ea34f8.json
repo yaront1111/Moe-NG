@@ -16,7 +16,7 @@
     "Wait for dec-64b2391cb80f4c0cbb6e88353017cc65; never label scheduler graphIdentity as graphContentHash. TDD and explicit-path discipline apply."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:35:32.638Z",
-  "updatedAt": "2026-08-17T11:18:06.656Z"
+  "updatedAt": "2026-08-17T17:10:28.558Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:08:58.633Z"
+  },
+  "blockedReason": "Blocked at planning. DoD 2 requires the handler to \"call task-dd4ffa0c's public reader and return the exact deeply frozen current snapshot\". THAT READER DOES NOT EXIST: task-dd4ffa0c is BLOCKED with 0 plan steps.\n\nMeasured at HEAD a42ae2f:\n- graph.get IS in the frozen query vocabulary (packages/contracts/src/runtime/runtime-vocabulary.ts:76), so the kind half is ready.\n- The dispatch half is not. apps/daemon/src/mcp-dispatch-port.ts serves exactly two query kinds -- work.get_context (:85) and events.read (:89); anything else hits queryRefusal(). Its header calls itself \"the read surface that exists\".\n- No durable current-active reader exists, and `git grep \"GraphRevisionContent\" HEAD -- packages/ apps/` returns zero; @moe/core never computes graphContentHash (graph-revision-contract.ts:125 is an opaque hex64).\n\nThe rail says \"Consume the durable projection; do not copy its fold or trust scanned event payloads.\" With no projection, the only way to write steps now is folding events inside the query handler -- what the rail forbids and Clause 2 calls authority reimplemented in the consumer.\n\nDECISION: the rail says \"Wait for dec-64b2391c; never label scheduler graphIdentity as graphContentHash.\" It IS resolved -- the human chose OPTION A (full GraphRevisionContent authority) 2026-08-17, msg-6a6d3590. Decision precondition met; READER precondition not.\n\nThat sharpens DoD 2: it wants full graphContentHash provenance AND a separately named structural identity, unequated. @moe/scheduler already exports a symbol NAMED graphContentHash that is structural only (index.ts:86, :93); returning it as content provenance would violate the DoD while typechecking cleanly. task-e3d5fd05 supplies the real one.\n\nBRANCH: e3d5fd05 + 77e8cb44 -> dd4ffa0c -> c4b80778. Does NOT wait on 32c1ba45 or eacea969, so it lands as soon as dd4ffa0c does.\n\nUnblock test is a grep: dd4ffa0c must export a current-active reader and packages/core a real GraphRevisionContent contract.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:10:13.471Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the query surface at HEAD a42ae2f. graph.get is already in the frozen query vocabulary, but mcp-dispatch-port.ts serves only work.get_context and events.read, and task-dd4ffa0c's current-active reader does not exist. Decision dec-64b2391c resolved by the human as OPTION A (msg-6a6d3590), which satisfies this task's decision rail but sharpens DoD 2. Filed the missing chain head as task-e3d5fd05.",
+      "whatRemains": "Replan once task-dd4ffa0c exports a public current-active reader and packages/core carries a real GraphRevisionContent contract. This task is the SHORTEST branch of the lane -- it needs neither 32c1ba45 nor eacea969 -- so it is the first Graph Beta transport that can land after dd4ffa0c.",
+      "pitfalls": "DoD 2 wants the full graphContentHash provenance AND a separately named structural snapshot identity, never equated. @moe/scheduler ALREADY exports a symbol named graphContentHash (index.ts:86, :93) that is structural only -- wiring it in as content provenance typechecks cleanly, passes a name-based grep, and silently violates both the DoD and decision dec-64b2391c. That is the single most likely way this task lands green and wrong.",
+      "openQuestions": "Should graph.preview also be served? It sits beside graph.get in the same frozen vocabulary line and is equally unserved, but it is outside this task's stated scope. Worth a governor decision rather than silent scope creep.",
+      "releasedAt": "2026-08-17T17:10:28.556Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Architect releasing the assignment only; the BLOCKED state and reason stand. Graph Beta lane sweep complete for this session."
+    }
+  ]
 }

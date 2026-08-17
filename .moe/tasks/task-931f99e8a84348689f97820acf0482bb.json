@@ -16,7 +16,7 @@
     "TDD, exact codes/layers, <=250-line target and split before 400, explicit owned paths and path-attributed gates."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +29,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:35:18.331Z",
-  "updatedAt": "2026-08-17T11:18:04.650Z"
+  "updatedAt": "2026-08-17T17:08:55.563Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T17:07:45.628Z"
+  },
+  "blockedReason": "Blocked at planning. This is pure TRANSPORT: DoD 2 requires each registered kind to \"delegate to its named durable production service and return that service's exact stable refusal code/layer\", with no reducer, projection fold, current-state synthesis, reservation or activation logic in the registry. THOSE SERVICES DO NOT EXIST.\n\nMeasured at HEAD a42ae2f:\n- daemon-command-registry.ts is 346 lines and contains ZERO `graph.` references -- none of the five kinds is wired.\n- RUNTIME_COMMAND_KINDS DOES already carry graph.approve, graph.prepare_supersession, graph.release_preparation, graph.request_expansion, graph.supersede (plus graph.get, graph.preview), so the vocabulary half is ready.\n- The delegation targets are not: task-32c1ba45 (preparation/release) and task-eacea969 (approve/supersede) are BOTH BLOCKED by me this session, because the canonical GraphRevisionContent contract does not exist in code (`git grep \"GraphRevisionContent\" HEAD -- packages/ apps/` returns zero).\n\nRegistering five kinds now would force the registry to call nothing or synthesise authority itself -- what DoD 2 forbids and Clause 2 calls authority reimplemented in the consumer.\n\nDECISION CONTEXT: this rail says \"obtain the Graph Beta authority decision first\". dec-64b2391c IS resolved -- the human chose OPTION A (full GraphRevisionContent authority) 2026-08-17, recorded as msg-6a6d3590. Decision precondition met; SERVICE precondition not.\n\nSEPARABLE AND ACTIONABLE NOW: DoD 5's registry decomposition. daemon-command-registry.ts sits at 346 of a 400 hard cap, and adding five kinds plus payload allow-lists will cross it. That work depends on nothing in this chain and could be its own task landed early to de-risk the wiring. Not filed -- governor's call.\n\nCHAIN: e3d5fd05 + 77e8cb44 -> dd4ffa0c -> 32c1ba45 -> eacea969 -> 931f99e8 -> efc2ef63 -> a9fd91c3 -> canary.\n\nAlso re-measure task-738a12a8 and task-c4171c1c, named hard dependencies here, neither verified by me.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T17:08:42.287Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured the transport surface at HEAD a42ae2f. The vocabulary half is ready: RUNTIME_COMMAND_KINDS already carries all five graph mutation kinds. The delegation half is not: daemon-command-registry.ts (346 lines) has zero graph references, and both delegation targets (task-32c1ba45, task-eacea969) are BLOCKED on the missing GraphRevisionContent contract, now filed as task-e3d5fd05. Decision dec-64b2391c was resolved by the human as OPTION A (msg-6a6d3590), so this task's decision rail is satisfied even though its service rail is not.",
+      "whatRemains": "Replan once task-32c1ba45 and task-eacea969 export real services. Then register the five kinds with the human-approved capability/family/payload mapping, delegating only. Re-measure task-738a12a8 and task-c4171c1c first; both are named hard dependencies and I verified neither.",
+      "pitfalls": "The capability/family/payload mapping must NOT be chosen by analogy with an existing family; the task rail says obtain the authority decision and pin the approved mapping in tests. Resolving dec-64b2391c settled the HASH question, not the capability mapping -- do not treat one as the other. Also: the registry must contain no reducer, fold, current-state synthesis, reservation or activation logic; if a service is missing when you plan, that absence is a block, never a licence to inline the logic.",
+      "openQuestions": "Should DoD 5's registry decomposition be split into its own task and landed NOW? daemon-command-registry.ts is at 346 lines against a 400 hard cap, and adding five kinds plus payload allow-lists will cross it. The decomposition depends on nothing in this chain, so landing it early de-risks the wiring and avoids a worker hitting the cap mid-task. I did not file it -- governor's call.",
+      "releasedAt": "2026-08-17T17:08:55.561Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Architect releasing the assignment only; the BLOCKED state and reason stand. Released so I can reach the last Graph Beta task this session -- holding a blocked task stops claim_next_task."
+    }
+  ]
 }

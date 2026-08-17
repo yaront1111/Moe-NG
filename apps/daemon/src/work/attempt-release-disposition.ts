@@ -1,8 +1,8 @@
 /**
- * The attempt-level release disposition, recorded durably and nowhere else.
+ * The attempt-level release disposition: the COMPOSITION half.
  *
  * THIS MODULE PRODUCES FACTS AND GRANTS NO AUTHORITY. It creates no hold, no
- * PlanningRun and no terminal decision; it writes one advisory row saying what
+ * PlanningRun and no terminal decision; it composes one advisory row saying what
  * happened to ONE attempt at release: the drain disposition, the attempt's own
  * state, and the lease and provider-slot refs with the states the COMMITTED
  * ACTIVATION gives them.
@@ -22,73 +22,40 @@
  *
  * FAIL CLOSED. An unreadable activation, an incoherent disposition or a row that
  * no longer re-encodes stays UNKNOWN under an exact code and this layer.
+ *
+ * The durable half — the frozen vocabulary, the aggregate derivation, the store
+ * reads and the single append — lives in `./attempt-release-store.js` and is
+ * re-exported below, so consumers keep one import site.
  */
 
 import {
   DRAIN_REASONS, DRAIN_TERMINAL_TARGETS, isMonotonicDisposition, parseDrainDisposition,
 } from "@moe/runner";
 import type { DrainDisposition } from "@moe/runner";
-import type { SqliteEventStore, StoredEvent } from "@moe/store";
+import type { SqliteEventStore } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
-import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
-  decodeFoundationPayload, encodeFoundationPayload, sameBytes, sha256Hex,
-} from "./foundation-attempt-codec.js";
+  ATTEMPT_RELEASE_RECORD_VERSION, commitRelease, durableActivation, refuse, sameActivation,
+  readAttemptRelease,
+} from "./attempt-release-store.js";
+import type { AttemptReleaseOutcome, AttemptReleaseRefused } from "./attempt-release-store.js";
+import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 
-export const ATTEMPT_RELEASE_RECORD_VERSION = "moe-attempt-release-record/1" as const;
-export const ATTEMPT_RELEASE_EVENT_TYPE = "AttemptReleaseRecorded" as const;
-export const ATTEMPT_RELEASE_COMMAND_KIND = "work.attempt_release" as const;
-
-/** This module's own layer. A refusal raised by the activation reader keeps ITS
- *  code; only decisions made here are reported under this name. */
-export const DAEMON_ATTEMPT_RELEASE = "DAEMON_ATTEMPT_RELEASE" as const;
-
-/** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
- *  bytes that no longer re-encode stay three codes for the reason the sibling
- *  dispatch reader keeps them apart. DOWNGRADED and TARGET_MISMATCH are likewise
- *  two and not one: a retargeted boundary and a downgraded set fail oppositely. */
-export const ATTEMPT_RELEASE_CODES = Object.freeze([
-  "ATTEMPT_RELEASE_REASON_UNKNOWN", "ATTEMPT_RELEASE_REASON_NOT_UNIONED",
-  "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED",
-  "ATTEMPT_RELEASE_TARGET_MISMATCH", "ATTEMPT_RELEASE_BINDING_MISMATCH",
-  "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE", "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE",
-  "ATTEMPT_RELEASE_RECORD_ABSENT", "ATTEMPT_RELEASE_RECORD_AMBIGUOUS",
-  "ATTEMPT_RELEASE_RECORD_DRIFT", "ATTEMPT_RELEASE_RECORD_UNREADABLE",
-] as const);
-export type AttemptReleaseCode = (typeof ATTEMPT_RELEASE_CODES)[number];
-
-export interface AttemptReleaseRefused {
-  readonly advisoryOnly: true; readonly authority: "NONE"; readonly code: AttemptReleaseCode;
-  readonly ok: false; readonly refusedBy: typeof DAEMON_ATTEMPT_RELEASE;
-}
-export interface AttemptReleaseAnswer {
-  readonly advisoryOnly: true; readonly authority: "ADVISORY_RECORD"; readonly digest: string;
-  readonly ok: true; readonly record: Record<string, unknown>;
-}
-export type AttemptReleaseOutcome = AttemptReleaseAnswer | AttemptReleaseRefused;
+export {
+  ATTEMPT_RELEASE_CODES, ATTEMPT_RELEASE_COMMAND_KIND, ATTEMPT_RELEASE_EVENT_TYPE,
+  ATTEMPT_RELEASE_RECORD_VERSION, DAEMON_ATTEMPT_RELEASE, deriveAttemptReleaseAggregateId,
+  readAttemptRelease,
+} from "./attempt-release-store.js";
+export type {
+  AttemptReleaseAnswer, AttemptReleaseCode, AttemptReleaseOutcome, AttemptReleaseRefused,
+} from "./attempt-release-store.js";
 
 /** What THIS release carried. `reason` is this request's own drain reason;
  *  `disposition` is the accumulated one it was unioned into. */
 export interface AttemptReleaseRequest {
   readonly disposition: unknown; readonly reason: string;
-}
-
-const encoder = new TextEncoder();
-const refuse = (code: AttemptReleaseCode): AttemptReleaseRefused => Object.freeze({
-  advisoryOnly: true as const, authority: "NONE" as const, code, ok: false as const,
-  refusedBy: DAEMON_ATTEMPT_RELEASE,
-});
-
-/** Framed by this record version, as the dispatch aggregate is framed by its
- *  own. The row may NOT share the activation aggregate: that stream is read by
- *  a strict exactly-one-plus-ordered-tail reader, and an event of an unexpected
- *  type there would make the activation itself unreadable. */
-export function deriveAttemptReleaseAggregateId(attemptAggregateId: string): string {
-  const framed =
-    `${ATTEMPT_RELEASE_RECORD_VERSION}\n${attemptAggregateId.length}\n${attemptAggregateId}`;
-  return `attempt-release-${sha256Hex(encoder.encode(framed))}`;
 }
 
 /**
@@ -129,27 +96,6 @@ function admitRequest(request: AttemptReleaseRequest): DrainDisposition | Attemp
     ? disposition : refuse("ATTEMPT_RELEASE_REASON_NOT_UNIONED");
 }
 
-/** The activation as the STORE holds it, never as the caller describes it. */
-function durableActivation(
-  store: SqliteEventStore, bound: FoundationAttemptBound,
-): ActivationLedgerRecord | AttemptReleaseRefused {
-  let events: readonly StoredEvent[];
-  try { events = store.readEvents(bound.aggregateId); }
-  catch { return refuse("ATTEMPT_RELEASE_ACTIVATION_UNREADABLE"); }
-  const history = readFoundationActivationHistory(bound.aggregateId, events, bound.projectId);
-  return history.ok ? history.history.record : refuse("ATTEMPT_RELEASE_ACTIVATION_UNREADABLE");
-}
-
-/** Identity only. States are deliberately absent: a caller that could make its
- *  claimed lease state part of the agreement test could refuse the durable one. */
-function sameActivation(left: ActivationLedgerRecord, right: ActivationLedgerRecord): boolean {
-  return left.activationDigest === right.activationDigest
-    && left.grant.grantId === right.grant.grantId
-    && left.grant.wrapperIdentity === right.grant.wrapperIdentity
-    && left.effectIntent.intentId === right.effectIntent.intentId
-    && left.attempt.attemptId === right.attempt.attemptId;
-}
-
 /**
  * Design 765, applied as a derivation and never as an input: "only an unchanged
  * strongest WORK_RELEASE_OR_PAUSE result makes the run resumable". Both halves
@@ -182,22 +128,6 @@ function releaseRecordBody(
   };
 }
 
-function commitRelease(
-  store: SqliteEventStore, bound: FoundationAttemptBound, bytes: Uint8Array, eventId: string,
-): boolean {
-  const { commandId, principalId, projectId } = bound;
-  try { // expectedVersion 0: a second release on this aggregate cannot append.
-    const written = store.commitExpectedVersionDecision({
-      commandKind: ATTEMPT_RELEASE_COMMAND_KIND, committedResultBytes: bytes,
-      correlationId: `${bound.correlationId}:RELEASED`, decidedAt: new Date().toISOString(),
-      events: [{ eventId, eventType: ATTEMPT_RELEASE_EVENT_TYPE, payload: bytes }],
-      expectedVersion: 0, key: { commandId: `${commandId}:RELEASED`, principalId, projectId },
-      requestBytes: bytes, targetAggregateId: deriveAttemptReleaseAggregateId(bound.aggregateId),
-    });
-    return written.decision.effectDisposition === "EFFECTS_COMMITTED";
-  } catch { return false; }
-}
-
 /**
  * The one writer. Validate the disposition through the runner -> re-read the
  * activation from the store -> agree on identity -> compose from DURABLE fields
@@ -223,27 +153,4 @@ export function recordAttemptRelease(
     return refuse("ATTEMPT_RELEASE_COMMIT_UNAVAILABLE");
   }
   return readAttemptRelease(store, bound.aggregateId);
-}
-
-/** The durable answer, always from re-decoded bytes that still re-encode. */
-export function readAttemptRelease(
-  store: SqliteEventStore, attemptAggregateId: string,
-): AttemptReleaseOutcome {
-  let events: readonly StoredEvent[];
-  try { events = store.readEvents(deriveAttemptReleaseAggregateId(attemptAggregateId)); }
-  catch { return refuse("ATTEMPT_RELEASE_RECORD_UNREADABLE"); }
-  const found = events.filter((event) => event.eventType === ATTEMPT_RELEASE_EVENT_TYPE);
-  if (found.length > 1) return refuse("ATTEMPT_RELEASE_RECORD_AMBIGUOUS");
-  const event = found[0];
-  if (event === undefined) return refuse("ATTEMPT_RELEASE_RECORD_ABSENT");
-  const decoded = decodeFoundationPayload(event.payload);
-  if (!decoded.ok) return refuse("ATTEMPT_RELEASE_RECORD_DRIFT");
-  const again = encodeFoundationPayload(decoded.value);
-  if (!again.ok || !sameBytes(again.bytes, event.payload)) {
-    return refuse("ATTEMPT_RELEASE_RECORD_DRIFT");
-  }
-  return Object.freeze({
-    advisoryOnly: true as const, authority: "ADVISORY_RECORD" as const, digest: again.digest,
-    ok: true as const, record: Object.freeze(decoded.value),
-  });
 }

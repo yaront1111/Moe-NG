@@ -15,7 +15,7 @@ import { lease, proof } from "./test-fixtures.js";
 const authorityDir = fileURLToPath(new URL(".", import.meta.url));
 const LEASE_MODULES = [
   "authority-kernel.ts", "lease-drain.ts", "lease-fencing.ts", "lease-resource.ts",
-  "lease-state.ts", "resource-model.ts",
+  "lease-state.ts", "provider-slot-release.ts", "resource-model.ts",
 ];
 const AUTHORITY_REACHING = /lease|authority-kernel|resource-model/u;
 

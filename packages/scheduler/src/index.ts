@@ -107,6 +107,19 @@ export {
   parseProof,
 } from "./authority/lease-fencing.js";
 export { SLOT_STATES } from "./authority/resource-model.js";
+/**
+ * The design-765 release authority. `releaseWork` is the SOLE composer of a
+ * lease's RELEASED / DRAINING / NO_OP transition, so a durable consumer that
+ * needs `leaseState` has one place to get it and no reason to derive
+ * `resumable`, a terminal target or a drain rank a second time.
+ *
+ * CURATED. `applyDrainReason` and `parseDisposition` stay withheld: `releaseWork`
+ * runs both internally over an already-fenced record, and a consumer holding
+ * either could compose a disposition — and therefore a `resumable` — for a lease
+ * the fence never admitted. Publishing them would recreate exactly the second
+ * definition of design 765 this seam exists to remove.
+ */
+export { releaseWork } from "./authority/lease-drain.js";
 export {
   ADMISSION_PURPOSES,
   ADMISSION_PURPOSE_RESERVE_CONTRACT,
@@ -277,6 +290,12 @@ export type {
   RejectionSecurityRecord,
 } from "./authority/authority-kernel.js";
 export type { Fenced } from "./authority/lease-fencing.js";
+/** The four shapes `releaseWork` reads and answers in, so a consumer completes
+ *  the type closure from the bare specifier alone. `DrainTerminalTarget` and
+ *  `DrainReason` are reachable as the field types of `DrainDisposition`. */
+export type {
+  DrainDisposition, ReleaseHandoff, ReleaseRequest, ReleaseResult,
+} from "./authority/lease-drain.js";
 export type {
   AcquisitionFailure,
   AcquisitionSet,

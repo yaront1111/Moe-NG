@@ -1,0 +1,36 @@
+{
+  "id": "task-e3d5fd057ca24d50a973cb61e4911f5f",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Canonical GraphRevisionContent contract, codec and content-hash producer",
+  "description": "NEW HEAD OF THE GRAPH BETA CHAIN. Filed 2026-08-17 by architect-2cc07e26 after the human resolved decision dec-64b2391cb80f4c0cbb6e88353017cc65 in favour of OPTION A (full GraphRevisionContent authority). Option B, the non-authoritative structural projection, was REJECTED because it cannot drive Foundation execution and would leave the canary's GAP A open while appearing to progress.\n\nTHE AUTHORITY, from the pinned design line 197, verbatim:\n  `GraphRevisionContent`: immutable canonical node/edge set, repository base tree,\n  parent revision, completion node, policy revision, decomposition budget,\n  graph hash, and author.\n\nMEASURED STATE at committed HEAD a42ae2f (git grep against HEAD, not the working tree):\n- `git grep -n \"GraphRevisionContent\" HEAD -- packages/ apps/ | grep -v '\\.test\\.'` returns ZERO. The type does not exist in code at all.\n- @moe/core owns the field that consumes it: `GraphRevisionState.graphContentHash` (packages/core/src/planning/graph-revision-contract.ts:125), validated as hex64 by `validHex64(command.graphContentHash)` (graph-revision-reducer.ts:85) and compared against approval/activation witnesses at :131 and :162. Core treats it as an OPAQUE hex64 string and never computes it.\n- @moe/scheduler HAS landed a canonical codec -- packages/scheduler/src/graph-content.ts and graph-content-format.ts, both committed with .js bridges and exported from the root (index.ts:86, :93) -- BUT its own header states \"its `graphIdentity` is the only thing hashed\", and `graphIdentity` is structural (nodes and edges) only.\n\nTHE DEFECT THIS CREATES. The scheduler currently exports a symbol named `graphContentHash` that computes a STRUCTURAL identity covering one of the seven fields design 197 names. Under decision A that name is load-bearing and wrong: a downstream consumer binding a durable revision to it, or any check that greps for the name, passes while carrying an identity that omits the repository base tree, parent revision, completion node, policy revision, decomposition budget and author. This is precisely the \"never equate the two hashes\" failure the decision was raised to prevent, and it currently sits in a public package root.\n\nObjective: land the canonical GraphRevisionContent contract, its strict codec, and the domain-separated content-hash producer, so a durable graph revision can prove the stored content is the one its approved hash names.\n\nDeliverable: a focused @moe/core production module (core already owns graphContentHash's consumer, so the producer belongs beside it) plus its one-line .js bridge, root export, and focused tests. It COMPOSES the scheduler's canonical snapshot bytes as ONE field -- do not reimplement structural canonicalisation, and do not re-validate the graph; `validateGraphSnapshot` remains the single structural authority.\n\nRELATED RE-SCOPE, not owned by this task but must be coordinated: task-77e8cb4439b148f386d2bbf244c79c16 is BLOCKED with 4 of 6 steps landed. Its work is sound and must be PRESERVED, but its exported name must stop claiming content authority -- rename to a structural name (snapshotIdentity / graphStructureHash) keeping the domain separation. Its retraction message is msg-75057af0. Whoever plans this task should confirm on disk whether that rename has happened, because if it has not, two symbols named for content authority will coexist.\n\nNOT in scope: persistence of the content (that is task-dd4ffa0c), graph lifecycle, daemon transport or ingress, Foundation attempt dispatch, new runtime command or query kinds, or edits to the authoritative design.",
+  "definitionOfDone": [
+    "A public @moe/core GraphRevisionContent contract declares all seven design-197 fields (canonical node/edge set, repository base tree, parent revision, completion node, policy revision, decomposition budget, author) with a bounded shape per field; a test asserts the field set exactly, so a later addition or omission cannot pass silently.",
+    "A public producer returns a domain-separated lowercase SHA-256 graphContentHash over ALL seven fields; a test proves changing EACH field individually changes the hash -- assert one case per field and assert the case count equals the field count, so a field silently excluded from the hash is caught.",
+    "The producer composes the scheduler's canonical snapshot bytes for the node/edge field and does not reimplement structural canonicalisation or re-validate the graph; a test proves two structurally equivalent node/edge orderings yield the same content hash when all other fields are equal.",
+    "The content hash is NEVER equal to the scheduler's structural identity for the same graph: a test asserts the two values differ for a snapshot with non-empty other fields, and asserts the domain separation tag is present, pinning decision dec-64b2391c.",
+    "A strict decoder rejects malformed, non-canonical, oversized, extra-keyed, hostile-descriptor/proxy and digest-mismatched bytes under stable core code/layer pairs and never returns content authority; every refusal asserts the exact code and layer and the generated hostile-case count is asserted nonzero.",
+    "A mutation drill on the production hash path (drop one field from the hashed input) makes a NAMED per-field test go red for its hash-difference assertion, not for a crash, and production bytes are restored exactly.",
+    "The @moe/core root exports the symbols with LF .js bridge and plain-Node loadability coverage; completion names task-dd4ffa0c40834c59892f957fbf61fb23 as the real consumer, and pnpm typecheck && pnpm test report nonzero Test Files counts with each production file <=250 physical lines."
+  ],
+  "taskRails": [
+    "Decision dec-64b2391c is RESOLVED as option A: full content authority. Never equate graphContentHash with the scheduler's structural graphIdentity, and never widen the structural identity to stand in for content.",
+    "Compose @moe/scheduler's canonical snapshot bytes through its public root as ONE field; do not introduce a second structural graph validator and do not include policy overrides in content identity except via the design-named policy revision field.",
+    "Keep the codec deterministic and identical across Windows, macOS and Linux; never depend on filesystem path normalisation, locale ordering, or object key insertion order.",
+    "Fail closed with stable reason codes and layers, assert nonzero generated case counts, use TDD, target <=250 lines per production file and split before 400, and commit only explicit owned paths by pathspec."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 113.05,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T17:03:06.265Z",
+  "updatedAt": "2026-08-17T17:03:06.265Z"
+}
