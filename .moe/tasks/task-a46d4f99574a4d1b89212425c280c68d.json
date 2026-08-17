@@ -136,8 +136,8 @@
       "completedAt": "2026-08-17T18:38:12.820Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -149,12 +149,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-17T18:40:05.361Z",
+  "updatedAt": "2026-08-17T18:45:32.369Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:48:22.504Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T18:45:32.369Z",
+    "wallClockMs": 3429865
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -205,5 +207,8 @@
     "tests/security/scheduler-activation-hostile-cases.ts",
     "tests/security/scheduler-activation-boundaries.security.ts",
     "tests/security/boundary-roster.security.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:45:32.369Z",
+  "reviewCompletedAt": "2026-08-17T18:45:32.369Z",
+  "reviewSummary": "VERIFIED INDEPENDENTLY. All 6 DoD items met.\n\nGATES I RAN. `pnpm test:security` standalone, unpiped: EXIT=1, `Test Files 1 failed | 8 passed (9)`, `Tests 3 failed | 476 passed (479)` — nonzero executed counts. All 3 reds sit in tests/security/integrity-boundaries.security.ts on GRAPH_CONTENT_LAYERS, byte-identical to the worker's disclosure. Foreign by attribution: the GRAPH roster line entered at 78a0aa2 (peer sweep, credited task-e3d5fd05); integrity-boundaries.security.ts last changed at 0237cfc; afe9940 touches only two scheduler files, so it cannot make an integrity-axis red. Owned-scope leg re-run: `Test Files 2 passed (2)`, `Tests 160 passed (160)`, exit 0.\n\nMY OWN DRILLS (not the worker's; production restored byte-identical, sha256 match + clean status both times):\n1. goal-qualification-reads.ts:141 duplicate-receipt AMBIGUOUS refusal -> `continue`. RED: \"GOAL_PREREQUISITE_LAYER AFTER: a closure that qualified stops qualifying...\" + \"carries the exact prerequisite code arranged for each arm\" (2 failed/127 passed).\n2. goal-services.ts:94 layer -> `\"DAEMON_INGRESS\"`. RED: BEFORE, AFTER, RACE arms + \"was answered by this layer itself, read off production's own refusal field\" (4 failed/125 passed). All three arms provably cross real send -> runBootstrapCommand -> goal.close.\n\nDoD: roster holds exactly the GOAL entry on scheduler-activation (92/35/26 ratchets, roster suite green); one BEFORE + one AFTER + one RACE, counts asserted positive; outcome identity checked with `===` against the captured service return; the residue reader is proven non-vacuous by the accepted control (decisions +1, completedEvents 0->1, lifecycle COMPLETED version 4); the slice invariant derives admission from isAdmitted(proof.projected), never a hard-coded +1.\n\nRails: no production path in the task's diff; tests/security worktree clean. Roster bytes were swept by foreign whole-tree commit 991dd14 — not a rejection reason per global rail."
 }

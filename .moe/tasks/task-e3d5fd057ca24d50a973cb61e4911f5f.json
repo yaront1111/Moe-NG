@@ -96,17 +96,19 @@
     {
       "stepId": "step-7",
       "description": "Mutation drills, three, one per claim a green suite cannot otherwise distinguish. Drill 1 (every field is really hashed) -- the DoD-6 drill: remove ONE field from the hashed input in the digest construction; the step-4 per-field case for that field must go RED on its hash-difference assertion, not on a crash. Repeat for a second, different field so the drill proves the sweep rather than one lucky case. Drill 2 (the two hashes stay separate): make the content hash fall back to the structural identity; the step-4 decision guard must go RED. This is the drill that protects dec-64b2391c. Drill 3 (the schema bump is load-bearing): make the decoder accept version-1 bytes; the unsupported-schema test must go RED. Record for each drill the command, the failing test NAME and the exact assertion -- a drill that reddens by crashing, or on a different assertion, has not proven the binding. Restore exact bytes by re-editing, never `git checkout` (destructive in this shared worktree), and confirm with `git diff --numstat` showing 0 added and 0 deleted per drilled file. One drill at a time: a peer commit landing mid-drill can swallow the patch and leave git reading clean.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/graph-content-format.ts",
         "packages/scheduler/src/graph-content-fields.ts"
       ],
-      "startedAt": "2026-08-17T18:42:25.926Z"
+      "note": "CONSUMER EDGE, FIRST: real consumer = task-dd4ffa0c40834c59892f957fbf61fb23. Unblocked dependents: task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8, task-c4b80778.\n\nFOUR DRILLS RUN FRESH THIS SESSION, one at a time, each restored by RE-EDITING (never `git checkout`). Command for every drill, from packages/scheduler: `npx vitest run --root ../.. packages/scheduler/src/graph-content.test.ts`. Baseline sha256: graph-content-fields.ts b1c8ac86c1aba8e621b48c795c98053147ca33dcf2bc2017549fcba5a25c7cf5, graph-content.ts 192a5e507a74c97030f4c8e537deba19ab0d3ee669a0a23ffd7051c42efdf4d4.\n\nDRILL 1 (DoD 6) — deleted `[\"author\", \"s\", fields.author],` from preimageParts (graph-content-fields.ts:162). RED on the NAMED per-field test, on its hash-difference assertion, not a crash:\n  FAIL ... > graphContentHash — every design-197 field is inside the digest > changes when any one field changes, once per declared field\n  AssertionError: author: expected '42e85fb5cc4603cd1d7803f0819d8a302e534…' not to be '42e85fb5cc4603cd1d7803f0819d8a302e534…'\n  Test Files 1 failed (1) / Tests 2 failed | 55 passed (57). Restored -> sha256 b1c8ac86… , `git diff --numstat` empty.\n\nDRILL 1b (proves the SWEEP, not one lucky case) — deleted `[\"policyRevision\", \"s\", fields.policyRevision],` (:168). Same named test, same assertion shape, different label:\n  AssertionError: policyRevision: expected '0d74baf83503c9143b01a63d15b741fd3f12c…' not to be '0d74baf83503c9143b01a63d15b741fd3f12c…'\n  Restored -> sha256 b1c8ac86… , status clean.\n\nDRILL 2 (protects dec-64b2391c) — in accept() (graph-content.ts:97) replaced `graphContentDigest(graph, fields)` with `snapshotIdentityHash(graph)`. 15 tests red; the decision guard reddened on its own inequality assertion:\n  FAIL ... > content authority is never the structural identity > answers with both hashes and they differ\n  AssertionError: expected '8d64eb88e871948c83cf33aea626515073627…' not to be '8d64eb88e871948c83cf33aea626515073627…'  at graph-content.test.ts:1090:40\n\nDRILL 3 (the schema bump is load-bearing) — widened the decode guard at graph-content.ts:197 to also admit \"MOE-GRAPH-CONTENT/1\". RED on the named test, on its code/layer pair assertion, labelled by the sweep case:\n  FAIL ... > decodeGraphContent — fails closed on exact code and layer > refuses an unsupported schema tag, version-1 bytes included\n  AssertionError: the retired version-1 tag: expected [ [ …(2) ] ] to deeply equal [ [ …(2) ] ]\n\nHAZARD HIT AND HANDLED — READ THIS. Mid-DRILL-2 a FOREIGN whole-tree commit landed: ffe3b00 `feat(task-04dd5a0a…): Persist the Foundation attempt journal authority` captured my drill patch into HEAD, so HEAD briefly shipped `const hash = snapshotIdentityHash(graph)` — literally the dec-64b2391c defect. Detected by the memory-documented signature: after restoring, sha256 matched my pre-drill snapshot EXACTLY while `git status` still read ` M` — restore correct, HEAD poisoned. I did NOT amend, reset or revert the foreign commit (epic rail 3). I committed the correct production bytes forward by explicit owned pathspec: b3149fc, `git show --stat` = `packages/scheduler/src/graph-content.ts | 2 +-`, one file, one line, nothing foreign. Post-restore state verified: graph-content.ts sha256 192a5e50… , graph-content-fields.ts sha256 b1c8ac86… , `git status --porcelain -- packages/scheduler/` EMPTY, HEAD = b3149fc.",
+      "startedAt": "2026-08-17T18:42:25.926Z",
+      "completedAt": "2026-08-17T18:44:42.779Z"
     },
     {
       "stepId": "step-8",
       "description": "Adversarial review, then commit and gate. ATTACKER PASS: can any consumer obtain a graphContentHash without going through the encoder, reopening the withheld-mechanics seam? Can two different logical contents collide -- are all seven fields length-framed so a value cannot bleed across a boundary? Can a hostile descriptor, getter or revoked proxy on the input object be read twice with different answers (snapshot hostile input before inspecting it)? Is the encoding stable across Windows, macOS and Linux, free of filesystem path normalisation and locale-sensitive ordering? Does an absent parentRevision encode distinctly from an empty string? Does any refusal reuse a code that means something else? Confirm every production file is <=250 physical lines and that no second structural validator was introduced. Name `task-dd4ffa0c40834c59892f957fbf61fb23` as the real consumer in the completion note, and state that task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8 and task-c4b80778 are all blocked on this surface. COMMIT: `git status --porcelain`, unstage foreign entries with `git restore --staged -- <path>`, commit ONLY the owned paths by explicit pathspec, verify with `git show --stat`. GATE, foreground and `&&`-chained so no red leg is masked: `pnpm typecheck && pnpm test && pnpm --filter @moe/scheduler test`, plus a plain-Node import of the new bridge. Read the OUTPUT: a filtered leg is evidence only if it prints a `Test Files N passed` line with N nonzero, since `pnpm --filter` on an unresolved name prints \"No projects matched the filters\" and exits 0.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/scheduler/src/graph-content.ts",
         "packages/scheduler/src/graph-content-format.ts",
@@ -114,11 +116,17 @@
         "packages/scheduler/src/graph-content-fields.js",
         "packages/scheduler/src/graph-content.test.ts",
         "packages/scheduler/src/index.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/scheduler/src/graph-content.ts"
+      ],
+      "note": "CONSUMER EDGE: task-dd4ffa0c40834c59892f957fbf61fb23 is the real consumer. Blocked on this surface: task-77e8cb44, task-32c1ba45, task-eacea969, task-931f99e8, task-c4b80778. Also filed durably as comment-68b13f7ef1e84064890cc0999abf6900 (the 5000-char note cap ate this last pass).\n\nFOLLOW-UP FILED for the security ratchet: task-6600442414134376a113ed28e8994845 \"Cover GRAPH_CONTENT_LAYERS on the integrity security axis (BEFORE/AFTER/RACE arms)\", HIGH, with the verbatim red, the cause, and a rail forbidding closure by deleting the roster entry.\n\nATTACKER PASS.\n- Hash without the encoder? No. graph-content-fields.js and graph-content-format.js are both withheld from the root (index.ts:71-83); encodeGraphContent is the only route. The new module strictly widened the withheld set.\n- Collision across fields? Every field is length-framed AND type-tagged: frame(name)+frame(tag)+frame(payload), frame(t)=`${t.length}:${t}`, domain first. Pinned by \"is length-framed, so a value cannot bleed across a field boundary\" with a fixture whose concatenated text is asserted identical first.\n- Hostile descriptor / getter / revoked proxy? graph-content-fields.ts:77 \"The six caller-stated fields, read once\" and :102 \"Every field is read EXACTLY ONCE, through a data-property descriptor read\" — a getter cannot answer differently between validation and hashing. The hostile sweep asserts `expect(HOSTILE.length).toBeGreaterThan(0)` before looping, so a sweep that generated nothing cannot pass.\n- Cross-platform? Digest input is field text + canonicalSnapshotJson only; no path normalisation, no locale collation, no Intl, no Date. Key order comes from the frozen GRAPH_REVISION_CONTENT_KEYS, not insertion order (\"is deterministic and blind to key insertion order\").\n- Absent parentRevision vs empty string? Distinct by TYPE TAG (\"z\" vs \"s\") in the digest and by `null` vs `\"\"` in the JSON; two named tests.\n- Reused refusal code? No. GRAPH_CONTENT_FIELD_INVALID (codec) and GRAPH_CONTENT_COMPLETION_DRIFT (identity) are new; validator failures pass through unrestamped with their own GraphIssueCode under GRAPH_VALIDATION.\n- Second structural validator? None; validateGraphSnapshot is the only one, called from graph-content.ts alone.\n- Sizes: 229 / 234 / 220 / 77, all <=250.\n\nCOMMIT. One commit this session: b3149fc, `git show --stat` = `packages/scheduler/src/graph-content.ts | 2 +-`, one owned file. It repairs HEAD after foreign whole-tree commit ffe3b00 captured drill 2 (see step-7). Committed bytes == gated bytes: `git show HEAD:<f> | sha256sum` equals the on-disk sha256 for all five owned sources; `git status --porcelain -- packages/scheduler/ tests/security/` is EMPTY. No probe or scratch file remains.\n\nGATE, run FRESH at HEAD b3149fc, foreground, log at /d/tmp/gate2-e3d5fd05.log (outside the repo):\n- `pnpm typecheck && pnpm --filter @moe/scheduler test` -> OWNED_GATE_EXIT=0, `Test Files 45 passed (45)` / `Tests 1411 passed (1411)`. The NONZERO count line proves the filter resolved and tests really executed.\n- Root `pnpm test` -> ROOTTEST_EXIT=1, `Test Files 2 failed | 289 passed (291)` / `Tests 3 failed | 6902 passed | 2 skipped (6907)`. FOREIGN: tests/integration/release-archive-cleanup.test.ts (2) and packages/store/src/recovery-anchor.test.ts:694 (1). Path-attributed: both byte-identical to merge-base 15918c7 (`git diff --numstat` empty), packages/store has no @moe/scheduler dependency, release-archive-cleanup.test.ts has zero scheduler references. HEAD-minus-base failing paths INTERSECT owned paths = EMPTY.\n- `npx vitest run --config tests/security/vitest.config.ts` -> SECURITY_EXIT=1, `Test Files 1 failed | 8 passed (9)` / `Tests 3 failed | 476 passed (479)`, all three naming GRAPH_CONTENT_LAYERS. Caused by this task's roster entry; disclosed, entry kept, follow-up filed above.\n- Plain-Node bare-specifier probe: BRIDGE_LOADED keys=7 schemaVersion=2 hashLen=64 hexLower=true separate=true roundTrip=true, PROBE_EXIT=0, scratch deleted.",
+      "startedAt": "2026-08-17T18:44:46.945Z",
+      "completedAt": "2026-08-17T18:46:15.237Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b8af1a87",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -127,15 +135,22 @@
   "parentTaskId": null,
   "priority": "CRITICAL",
   "order": 113.05,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-68b13f7ef1e84064890cc0999abf6900",
+      "author": "worker-b8af1a87",
+      "content": "CONSUMER EDGE RECORD (global rail clause 1; QA reject gap 1). Filed as a comment, not a step note, because moe.complete_step's note hard-caps at 5000 chars and ate this on the previous pass.\n\nREAL CONSUMER: task-dd4ffa0c40834c59892f957fbf61fb23 — persistence of GraphRevisionContent. It is the task that will compose this package's surface (encodeGraphContent / decodeGraphContent / GRAPH_REVISION_CONTENT_KEYS / GraphRevisionContent, published at packages/scheduler/src/index.ts:84-100) into a durable store, giving the pure codec its real call site.\n\nALSO BLOCKED ON THIS SURFACE, unblocked by it: task-77e8cb4439b148f386d2bbf244c79c16 (must ADOPT the landed name `GraphContent.snapshotIdentity` for the structural identity rather than invent a second — its own rename never landed), task-32c1ba45, task-eacea969, task-931f99e8, task-c4b80778.\n\nCROSS-CONSUMER ALREADY REAL: @moe/core's GraphRevisionState.graphContentHash (packages/core/src/planning/graph-revision-contract.ts:125) is the field this producer feeds. Core gates it with validHex64 (graph-revision-reducer.ts:85) and compares it against approval/activation witnesses at :131/:162; the producer emits exactly that lowercase-hex64 spelling, verified this session by a plain-Node bare-specifier probe (`hexLower=true hashLen=64`). The dependency runs scheduler -> core, so this could not live in core.\n\nTWO DISCLOSURES CARRIED WITH THE COMPLETION, neither hidden:\n1. Root `pnpm test` is EXIT 1 at HEAD — `Test Files 2 failed | 289 passed (291)` / `Tests 3 failed | 6902 passed | 2 skipped (6907)`. Failing: tests/integration/release-archive-cleanup.test.ts (2) and packages/store/src/recovery-anchor.test.ts:694 (1). Both are byte-identical to the merge-base (`git diff --numstat 15918c7 HEAD -- <both paths>` prints nothing), packages/store declares no @moe/scheduler dependency, and release-archive-cleanup.test.ts contains zero scheduler references — so the HEAD-minus-base failing-path delta intersected with this task's owned paths is EMPTY.\n2. `pnpm test:security` is EXIT 1 with 3 failures, all caused by the roster entry THIS task added (GRAPH_CONTENT_LAYERS, tests/security/boundary-roster.security.ts:199). The entry is true and stays; deleting it to quiet the gate would hide a real boundary. A follow-up task carries the three BEFORE/AFTER/RACE hostile arms the integrity axis now demands.",
+      "timestamp": "2026-08-17T18:45:08.952Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:03:06.265Z",
-  "updatedAt": "2026-08-17T18:42:25.926Z",
+  "updatedAt": "2026-08-17T18:47:06.984Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:43:57.144Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 14,
+    "executedStepCount": 16,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -148,7 +163,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [
     {
@@ -182,12 +199,12 @@
     "qa-12cda609"
   ],
   "workStartedAt": "2026-08-17T17:46:36.937Z",
-  "reviewStartedAt": "2026-08-17T18:28:06.153Z",
+  "reviewStartedAt": "2026-08-17T18:47:06.984Z",
   "verification": {
     "command": "pnpm typecheck && pnpm --filter @moe/scheduler test",
     "exitCode": 0,
-    "outputTail": "apps/daemon typecheck: Done\n\n Test Files  45 passed (45)\n      Tests  1411 passed (1411)\n   Start at  21:26:15\n   Duration  1.24s (transform 9.77s, setup 0ms, import 13.41s, tests 1.81s, environment 3ms)\n\nGATE_EXIT=0",
-    "reportedAt": "2026-08-17T18:28:06.153Z"
+    "outputTail": "=== FINAL GATE at b3149fc ===\n(typecheck: repo-wide, exit 0)\n Test Files  45 passed (45)\n      Tests  1411 passed (1411)\n   Duration  1.24s\nOWNED_GATE_EXIT=0\n\nDISCLOSED, NOT GREEN, same run: root `pnpm test` -> EXIT 1, Test Files 2 failed | 289 passed (291) / Tests 3 failed | 6902 passed | 2 skipped (6907); failing = tests/integration/release-archive-cleanup.test.ts (2) + packages/store/src/recovery-anchor.test.ts:694 (1), both byte-identical to merge-base 15918c7, no @moe/scheduler dep edge -> delta INTERSECT owned paths = EMPTY. `npx vitest run --config tests/security/vitest.config.ts` -> EXIT 1, Test Files 1 failed | 8 passed (9) / Tests 3 failed | 476 passed (479), all three naming GRAPH_CONTENT_LAYERS (this task's roster entry); entry kept, follow-up task-66004424 filed.",
+    "reportedAt": "2026-08-17T18:47:06.984Z"
   },
   "filesModified": [
     "packages/scheduler/src/graph-content.ts",
@@ -195,13 +212,7 @@
     "packages/scheduler/src/index.ts",
     "packages/scheduler/src/graph-content.test.ts",
     "packages/scheduler/src/graph-content-fields.ts",
-    "packages/scheduler/src/graph-content-fields.js",
-    "packages/scheduler/src/graph-content-issues.ts",
-    "packages/scheduler/src/graph-content-issues.js",
-    "packages/scheduler/src/index-surface.test.ts",
-    "packages/scheduler/src/scheduler-entrypoint-smoke-worker.mjs",
-    "packages/scheduler/src/scheduler-runtime-entrypoint.test.ts",
-    "tests/security/boundary-roster.security.ts"
+    "packages/scheduler/src/graph-content-fields.js"
   ],
   "reviewCompletedAt": "2026-08-17T18:36:35.007Z",
   "rejectionDetails": {

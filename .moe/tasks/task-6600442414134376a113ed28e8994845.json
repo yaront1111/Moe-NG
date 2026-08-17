@@ -1,0 +1,32 @@
+{
+  "id": "task-6600442414134376a113ed28e8994845",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Cover GRAPH_CONTENT_LAYERS on the integrity security axis (BEFORE/AFTER/RACE arms)",
+  "description": "FILED BY worker-b8af1a87 from task-e3d5fd057ca24d50a973cb61e4911f5f, which DECLARED the boundary and disclosed this red rather than hiding it. QA's reject on that task said explicitly: \"Do NOT delete the roster entry to quiet (3); that hides a real boundary\" and \"file the follow-up for the 3 arms. Keep the entry.\"\n\nMEASURED RED, verbatim, reproduced at HEAD by `npx vitest run --config tests/security/vitest.config.ts` (run it directly: `pnpm test:security` dies earlier on a FOREIGN TS6133 before vitest starts):\n\n  FAIL  integrity-boundaries.security.ts > integrity axis versus the declared-boundary roster > reads a positive number of integrity entries off the roster\n  AssertionError: expected [ ...(14) ] to have a length of 13 but got 14\n   at integrity-boundaries.security.ts:106:30\n\n  FAIL  ... > covers every integrity boundary the roster declares (roster minus covered is empty)\n  AssertionError: expected [ 'GRAPH_CONTENT_LAYERS' ] to deeply equal []\n   at integrity-boundaries.security.ts:111:75\n\n  FAIL  ... > generates a positive, three-armed case count for GRAPH_CONTENT_LAYERS\n  AssertionError: expected 0 to be greater than 0\n   at integrity-boundaries.security.ts:124:27\n\n  Test Files  1 failed | 8 passed (9) / Tests  3 failed | 476 passed (479)\n\nCAUSE, stated plainly: task-e3d5fd05 added the roster entry `{ constant: \"GRAPH_CONTENT_LAYERS\", file: \"packages/scheduler/src/graph-content-issues.ts\", axis: \"integrity\" }` at tests/security/boundary-roster.security.ts:199. Rostering a boundary ACTIVATES a closed coverage ratchet in the axis slice: integrity-boundaries.security.ts parses the roster's committed bytes for its own axis tag and demands BEFORE, AFTER and RACE hostile arms per constant. There is no quiet tag — retagging to `scheduler-activation` was measured and moves the same three failures to that slice.\n\nWORK: add BEFORE/AFTER/RACE hostile arms for GRAPH_CONTENT_LAYERS in the integrity axis's hostile-cases module, following the shape the sibling arms already use (each forgery arm RE-SEALS through production and carries an `integrity` thunk asserted ok:true first), and bump the pinned integrity cardinality 13 -> 14 at integrity-boundaries.security.ts:106 plus EXPECTED_ROSTER_SIZE / EXPECTED_DISTRIBUTION in the roster if they also moved.\n\nSUBJECT UNDER TEST, already landed and green: packages/scheduler/src/graph-content-issues.ts (GRAPH_CONTENT_LAYERS = GRAPH_CONTENT_CODEC | GRAPH_CONTENT_IDENTITY | GRAPH_VALIDATION), the codec in graph-content.ts / graph-content-fields.ts / graph-content-format.ts, and `pnpm --filter @moe/scheduler test` = Test Files 45 passed / Tests 1411 passed.\n\nDO NOT close this by deleting the roster entry.",
+  "definitionOfDone": [
+    "tests/security/integrity-boundaries.security.ts reports GRAPH_CONTENT_LAYERS as covered: roster-minus-covered is empty and armsFor(\"GRAPH_CONTENT_LAYERS\") contains BEFORE, AFTER and RACE with a nonzero asserted case count.",
+    "The pinned integrity roster cardinality is corrected to the true count (13 -> 14) and any sibling cardinality assertion that moved with it, with no roster entry deleted or retagged to a quieter axis.",
+    "Each new hostile arm re-seals through the production codec (encodeGraphContent / decodeGraphContent) rather than a test-local reimplementation, and asserts the exact GRAPH_CONTENT_* code and layer it expects, never merely that the operation failed.",
+    "`npx vitest run --config tests/security/vitest.config.ts` exits 0 with a nonzero Test Files count line, and a mutation drill on one new arm makes a NAMED test go red on its own assertion."
+  ],
+  "taskRails": [
+    "Never delete or retag the GRAPH_CONTENT_LAYERS roster entry to quiet the gate - the boundary is real and removing it hides it.",
+    "Owned paths are the tests/security integrity-axis files only; do not edit packages/scheduler production sources, which are green and owned elsewhere.",
+    "`pnpm test:security` currently dies on a FOREIGN TS6133 before vitest starts - run `npx vitest run --config tests/security/vitest.config.ts` directly and disclose the foreign typecheck red rather than fixing it from this task."
+  ],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 117,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-17T18:45:35.428Z",
+  "updatedAt": "2026-08-17T18:45:35.428Z"
+}
