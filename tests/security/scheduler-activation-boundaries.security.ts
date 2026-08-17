@@ -44,6 +44,7 @@ import {
   SCHEDULER_DECISION_RACES,
   closeGoalPrerequisiteFixtures,
   goalAcceptedControls,
+  goalAfterPrecondition,
   goalPrerequisiteProofs,
   honestUnknownFact,
   honestUnknownMeasurement,
@@ -127,7 +128,9 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
   it("reads a positive number of scheduler-activation entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_AXIS.length).toBeGreaterThan(0);
-    expect(ROSTER_AXIS).toHaveLength(25);
+    // 25 -> 26 on 2026-08-17: GOAL_PREREQUISITE_LAYER (task-a46d4f99). Measured off the
+    // roster's committed bytes, not off this file's own case tables.
+    expect(ROSTER_AXIS).toHaveLength(26);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
@@ -296,6 +299,19 @@ describe("the goal-closure prerequisite boundary", () => {
     }
   });
 
+  it("qualified the AFTER arm's closure before its evidence was made ambiguous", () => {
+    // THE FIXTURE FIRST. Without this the AFTER arm is only a second initially-invalid
+    // fixture, and the property it claims — that a closure which genuinely DID qualify stops
+    // qualifying once a second receipt names its node — is never tested at all.
+    const precondition = goalAfterPrecondition() as Record<string, unknown> | null;
+    // Null means the AFTER case never ran, which is an absent probe rather than a pass.
+    expect(precondition).not.toBeNull();
+    expect(precondition?.["ok"], "the AFTER arm must start from a qualified closure").toBe(true);
+    // Both witnesses derived by production, not declared by the payload.
+    expect(precondition?.["closureWitness"]).toBeDefined();
+    expect(precondition?.["zeroAuthorityWitness"]).toBeDefined();
+  });
+
   it("carries the exact prerequisite code arranged for each arm", () => {
     const codesFor = (arm: string): readonly unknown[] =>
       goalPrerequisiteProofs()
@@ -324,10 +340,13 @@ describe("the goal-closure prerequisite boundary", () => {
     const proofs = [...goalPrerequisiteProofs(), ...goalAcceptedControls()];
     expect(proofs).toHaveLength(5);
     for (const proof of proofs) {
-      // BY REFERENCE. A driver answering with a literal — or with a COPY — of the expected
-      // refusal satisfies every code, layer and residue assertion above, and fails here.
-      expect(collected, `${proof.arm}: the suite must see production's own object`)
-        .toContain(proof.projected);
+      // BY REFERENCE, spelled with `===` rather than left to a matcher's equality mode: a
+      // driver answering with a literal — or with a COPY — of the expected refusal satisfies
+      // every code, layer and residue assertion above, and fails exactly here.
+      expect(
+        collected.some((value) => value === proof.projected),
+        `${proof.arm}: the suite must see the captured service return itself`,
+      ).toBe(true);
     }
   });
 });

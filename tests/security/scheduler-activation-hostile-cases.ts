@@ -1122,10 +1122,16 @@ function goalProjectionOf(outcome: unknown): unknown {
   return proof.projected;
 }
 
-/** An execution-enabled goal with one approved node and NO durable verification receipt. */
-function approvedGoalWithoutReceipt(label: string): GoalStore {
+/**
+ * An execution-enabled goal with one approved node and NO durable verification receipt.
+ *
+ * `approveNodes` drives the whole real bootstrap sequence up to and including the approval,
+ * so the goal is EXECUTION_ENABLED at version 2 and the close is valid at every layer AHEAD
+ * of the prerequisite composer — which is the only reason the composer gets to answer.
+ */
+function approvedGoalWithoutReceipt(): GoalStore {
   const store = openStore();
-  approveNodes(store, [label === "" ? "node-1" : "node-1"]);
+  approveNodes(store, ["node-1"]);
   return store;
 }
 
@@ -1347,6 +1353,33 @@ export const EXPANSION_SUPERSESSION_CASES: readonly HostileCase[] = Object.freez
       return fromError(reduceGoal(undefined, { goalId: "goal-other", kind: "goal.close" } as never));
     },
   },
+  {
+    constant: "GOAL_PREREQUISITE_LAYER", arm: "BEFORE",
+    // ARRANGED: the payload is complete and the goal is EXECUTION_ENABLED at the version it
+    // presents, so neither the ingress payload check nor the core reducer can answer. What is
+    // missing is DURABLE: no verification receipt names the one approved node.
+    name: "a close against an approved node with no durable verification receipt is refused",
+    arranged: GOAL_PREREQUISITE_LAYER,
+    expected: {
+      code: GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT, layer: GOAL_PREREQUISITE_LAYER,
+    },
+    run: async () => goalProjectionOf(
+      captureGoalClose(approvedGoalWithoutReceipt(), "BEFORE", "cmd-goal.close-hostile-before")),
+  },
+  {
+    constant: "GOAL_PREREQUISITE_LAYER", arm: "AFTER",
+    // THE SUBJECT MOVES, and it starts VALID: the node is fully qualified first — asserted
+    // through `qualifyGoalClosure` in the suite — and only then does a second real PASSED
+    // receipt for the same node make the evidence ambiguous. Zero receipts and two receipts
+    // are opposite durable states, so this arm must not collapse into the BEFORE code.
+    name: "a closure that qualified stops qualifying once a second receipt names its node",
+    arranged: GOAL_PREREQUISITE_LAYER,
+    expected: {
+      code: GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS, layer: GOAL_PREREQUISITE_LAYER,
+    },
+    run: async () => goalProjectionOf(captureGoalClose(
+      await ambiguouslyReceiptedGoal(), "AFTER", "cmd-goal.close-hostile-after")),
+  },
 ]);
 
 export const EXPANSION_SUPERSESSION_RACES: readonly HostileRaceCase[] = Object.freeze([
@@ -1450,6 +1483,25 @@ export const EXPANSION_SUPERSESSION_RACES: readonly HostileRaceCase[] = Object.f
       fromError(reduceGoal(undefined, { kind: "nope" } as never)),
       fromError(reduceGoal(undefined, { kind: "goal.close" } as never)),
     ] as const,
+  },
+  {
+    constant: "GOAL_PREREQUISITE_LAYER",
+    // TWO DISTINCT COMMAND IDENTITIES against ONE unqualified goal, so the daemon's replay
+    // path cannot answer the second side by echoing the first: each must be refused on its
+    // own durable evidence. `maxAdmitted: 0` — an unqualified goal has no legitimate winner.
+    name: "two distinct closes racing one unqualified goal are both refused and neither closes",
+    arranged: GOAL_PREREQUISITE_LAYER,
+    expected: {
+      code: GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT, layer: GOAL_PREREQUISITE_LAYER,
+    },
+    maxAdmitted: 0,
+    run: async () => {
+      const store = approvedGoalWithoutReceipt();
+      return [
+        goalProjectionOf(captureGoalClose(store, "RACE", "cmd-goal.close-race-left")),
+        goalProjectionOf(captureGoalClose(store, "RACE", "cmd-goal.close-race-right")),
+      ] as const;
+    },
   },
 ]);
 
