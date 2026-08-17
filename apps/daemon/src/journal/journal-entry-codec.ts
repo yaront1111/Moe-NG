@@ -46,11 +46,19 @@ const PREDICATE_OPERATORS = Object.freeze({
 } as const);
 
 /** Own DATA properties only, and nothing inherited, non-enumerable or symbol
- *  keyed. An accessor or a revoked proxy answers `null` rather than throwing. */
+ *  keyed. An accessor or a revoked proxy answers `null` rather than throwing.
+ *
+ *  BOTH PROTOTYPES ARE ADMITTED, and only these two. A caller's entry arrives as
+ *  an ordinary object literal, while an entry read back out of durable bytes
+ *  arrives NULL-PROTOTYPED — `parseBoundedJsonText` builds every object with
+ *  `Object.create(null)` (packages/contracts/src/bounded-json-parser.ts:87), so
+ *  demanding `Object.prototype` would make this decoder unable to read its own
+ *  output and the reader would refuse every row it had just written. */
 function ownData(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
   try {
     if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-    if (Object.getPrototypeOf(value) !== Object.prototype) return null;
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return null;
     if (Object.getOwnPropertySymbols(value).length > 0) return null;
     const names = Object.getOwnPropertyNames(value);
     if (names.length !== allowed.length) return null;

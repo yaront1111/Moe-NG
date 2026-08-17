@@ -2,6 +2,8 @@ import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
+import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
+  from "./journal/journal-contracts.js";
 import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS }
   from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
@@ -53,7 +55,7 @@ export const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Objec
 export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
-  | typeof RECOVERY_COMPLETION_COMMAND_KIND;
+  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -63,6 +65,9 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // Resuming an interrupted attempt is work authority, not admin: the human-only
   // gate on this path is the runner's boundary admission, not a wider capability.
   if (kind === CONTINUATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Appending a dead-end journal is WORK authority, not admin: the agent holding
+  // the attempt's lease is exactly who records why an approach failed.
+  if (kind === JOURNAL_APPEND_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
@@ -85,6 +90,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
+    [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],

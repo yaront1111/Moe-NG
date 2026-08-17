@@ -134,8 +134,8 @@
       "completedAt": "2026-08-17T18:06:53.589Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -147,12 +147,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:43:34.086Z",
-  "updatedAt": "2026-08-17T18:08:20.653Z",
+  "updatedAt": "2026-08-17T18:16:23.170Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:46:16.940Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-17T18:16:23.170Z",
+    "wallClockMs": 1806230
   },
   "stepsCompleted": [
     "step-1",
@@ -201,5 +203,8 @@
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/daemon-command-dispatch.ts",
     "apps/daemon/src/daemon-command-dispatch.js"
-  ]
+  ],
+  "completedAt": "2026-08-17T18:16:23.170Z",
+  "reviewCompletedAt": "2026-08-17T18:16:23.170Z",
+  "reviewSummary": "APPROVED. Reviewed by base-ref diff eb584ae..HEAD (bytes sit in foreign sweep d2c86b7 - rail 5, not a reject). DoD1: registry 219 (was 346), vocabulary 117, dispatch 63, bridges 1 each. DoD5 proved structurally: the RETAINED half (createDaemonCommandPorts 144 lines + port types) diffs ZERO vs origin; moved blocks differ ONLY in `export ` prefixes (vocabulary 84 lines identical, dispatch 40 identical) after slicing the origin at its recorded ranges. No import turned type-only over a runtime value. DoD2: hand-transcribed literals; ROWS length 23 pinned (sweep cannot go vacuous), PAYLOAD_KEYS key ORDER pinned, family exclusivity, isFrozen on 4 family maps + PAYLOAD_KEYS, operator gate swept both ways asserting OPERATOR_PRINCIPAL_REQUIRED / layer DAEMON_AUTHORIZATION against each kind's own 422. DoD6: I re-ran both drills - dropping \"round\" from review.submit gave exactly 2 named failures quoting the key; session.renew ADMIN->WORK gave 4, one reaching through daemon-store-dependencies.js. Restored by re-edit; sha256 -c matched, and vocabulary 5a2269... equals the worker's pre-drill hash, so reviewed bytes are gated bytes. DoD3: 7 consumer sites unchanged, zero importers rewritten; plain-Node probe shows sameFn registry==store-deps==vocabulary, sameOps true (one object, nothing duplicated at origin), registry exporting exactly the 3 pinned names. DoD4: both bridges load under plain Node; runtime-entrypoint guard reports missing:[] wrongContent:[]. No test deleted or skipped (68 added / 0 deleted). GATES: focused run of registry, registry-continuation, vocabulary, store-dependencies, index-surface = 5 files / 337 passed. Owned leg was exit 0, \"Test Files 116 passed\", at the 21:06 gate; red now ONLY on a peer's untracked src/journal/ (mtimes 21:07-21:15) missing journal-reader.js, and the bridge guard names only journal bridges. Root test red on release-archive-cleanup + recovery-anchor; root vitest omits apps/**. Failing paths intersect owned = EMPTY."
 }

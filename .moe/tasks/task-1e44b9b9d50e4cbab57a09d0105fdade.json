@@ -70,24 +70,33 @@
     {
       "stepId": "step-5",
       "description": "Prove RUNTIME resolution, not just types — DoD 4 is a separate claim from DoD 2 and a passing typecheck does not establish it. `@moe/import`'s manifest maps `exports: {\".\": \"./src/index.ts\"}` — a `.ts` file — and this repo runs TypeScript directly under Node (apps/daemon's own `start` script is `node ./src/daemon-main.ts`), on Node v24.16.0 where type stripping is native and needs no flag. So the correct probe is a plain `node --input-type=module -e \"import('@moe/import').then(m => console.log(typeof m.compareShadowProjections))\"` executed with the working directory inside `apps/daemon`, printing `function`. NO tsconfig paths, NO deep relative import, NO loader or `--experimental-*` flag — if any of those is needed, the edge is not really landed and the task must report rather than paper over it. Run this from PowerShell, not the Bash tool: a prior plain-Node smoke on this repo failed only because Git Bash rewrote paths. Do NOT copy the precedent in `tools/import/import-shadow.ts`, which imports `../../packages/import/src/index.js` by deep relative path — that works only because `tools/` has no manifest of its own, and rail 1 forbids it here.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json"
       ],
-      "startedAt": "2026-08-17T18:14:15.437Z"
+      "note": "RUNTIME RESOLUTION PROVEN SEPARATELY FROM TYPES, WITH TWO CONTROLS. All from PowerShell, never the Bash tool, per the known Git-Bash path-rewriting hazard.\n\nPOSITIVE, cwd inside apps/daemon:\n  node --input-type=module -e \"import('@moe/import').then(m => console.log(typeof m.compareShadowProjections, typeof m.projectLegacyImport))\"\n  -> `RESOLVED typeof compareShadowProjections = function | typeof projectLegacyImport = function`, NODE_EXIT=0.\nBoth live function values came back, so Node did not merely locate the package - it EVALUATED packages/import/src/index.ts and produced the real bindings. That is a `.ts` export target (`exports: {\".\": \"./src/index.ts\"}`) executed on Node v24.16.0 under native type stripping.\n\nNO FLAG, NO PATHS, NO DEEP IMPORT. The command carries no --experimental-*, no --loader, no --import, no tsconfig paths, no relative path. I did not copy the tools/import/import-shadow.ts precedent (`../../packages/import/src/index.js`), which rail 1 forbids here and which would have proven nothing since a deep relative import needs no edge at all. DoD 4 met exactly as written.\n\nCONTROL A - not root hoisting. `Test-Path node_modules/@moe/import` at the repo root -> `False`. There is no hoisted copy for the daemon to walk up to, so the success above had to come through apps/daemon's own resolution.\n\nCONTROL B - nonexistent specifier, same shape, same cwd: `import('@moe/does-not-exist')` from apps/daemon -> `FAILED code= ERR_MODULE_NOT_FOUND`, exit 1. So the positive is not a harness that swallows errors.\n\nCONTROL C, the decisive one - the SAME REAL SPECIFIER from a package WITHOUT the edge: `import('@moe/import')` with cwd `packages/store` (which does not declare @moe/import) -> `FAILED code= ERR_MODULE_NOT_FOUND`, exit 1. Identical specifier, identical Node, identical command; only the declaring manifest differs. This is what makes the positive attributable to THIS TASK'S manifest+lock edge rather than to anything ambient in the workspace.\n\nMechanism, for the record: `pnpm install --lockfile-only` in step 3 also materialised the workspace symlink `apps/daemon/node_modules/@moe/import -> /d/projexts/moe-next/packages/import`. That link is the edge at runtime; it exists for apps/daemon and does not exist for packages/store, which is precisely the difference controls B and C isolate.\n\nNo file was created or left behind by this step - every probe was an inline `-e` expression, so there is nothing in `git status` to clean up.",
+      "startedAt": "2026-08-17T18:14:15.437Z",
+      "completedAt": "2026-08-17T18:14:51.369Z"
     },
     {
       "stepId": "step-6",
       "description": "Gate, commit and record the consumer. Verification is `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, exit codes captured SEPARATELY. Rail 3 is explicit that exit 0 with no output is NOT evidence: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0 when the package is absent, so record the compiler's own output for the typecheck leg and the nonzero `Test Files N passed` count line for the test leg. `@moe/daemon` resolves to apps/daemon and declares both scripts (verified at plan time). Then commit BY EXPLICIT PATHSPEC and nothing else: `git commit -- apps/daemon/package.json pnpm-lock.yaml`. Before committing run `git status --porcelain` and confirm no foreign path is staged; after committing run `git show --stat` and confirm the commit contains exactly those two paths — the shared worktree means the index carries other agents' files, and a bare `git commit` would capture them. Record task-80fce1d1d625453098bd526d61c5ddb8 (\"Portability: expose the daemon shadow projection adapter\", currently PLANNING) as the immediate consumer, in the commit message and in the completion evidence, as DoD 5 requires — this task deliberately lands an edge with no call site, so the consumer must be named rather than implied.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/package.json",
         "pnpm-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/package.json",
+        "pnpm-lock.yaml"
+      ],
+      "note": "GATED. NOT COMMITTED BY ME - a foreign whole-tree commit got there first. Consumer recorded.\n\nTHE COMMIT I WAS TOLD TO MAKE IS IMPOSSIBLE, AND THE RAIL SAYS SO. While I was gating, commit 38e94e3 `feat(task-a6775ac56d714da388e6b28343eb806e): Portability: persist canonical import shadow facts` landed as a WHOLE-TREE commit and swallowed 29 paths including BOTH of my owned files (`apps/daemon/package.json | 2 +`, and pnpm-lock.yaml), plus another agent's entire untracked apps/daemon/src/journal/ tree and the scheduler work. This is the exact hazard the global rail names. Per that rail I did NOT amend it, did NOT reset, did NOT create an empty claiming commit, and did NOT re-commit. I had already built an own-hunks-only patch (to avoid capturing a peer's uncommitted @moe/context line that sits in both my files) and was about to `git apply --cached`; that became a no-op the moment HEAD absorbed the bytes, so it was discarded and nothing was staged. The index is clean.\n\nBASE-REF DIFF FOR QA, which replaces the commit as the review artifact:\n  git diff d2c86b7..HEAD -- apps/daemon/package.json pnpm-lock.yaml\n  numstat: `2 0 apps/daemon/package.json`, `6 0 pnpm-lock.yaml`. ZERO deletions.\nOf those 8 added lines, MINE are exactly 4: `+    \"@moe/import\": \"workspace:*\",` between @moe/core and @moe/mcp, and the 3-line `'@moe/import': {specifier: workspace:*, version: link:../../packages/import}` importer entry in the `apps/daemon:` block. The other 4 (@moe/context, manifest + lock) are a peer's edge, preserved untouched. d2c86b7 was HEAD when this task started.\n\nCOMMITTED BYTES == GATED BYTES: `git diff --stat -- apps/daemon/package.json pnpm-lock.yaml` against HEAD is EMPTY, so what is committed is byte-for-byte what I verified.\n\nGATE LEG 1, `pnpm --filter @moe/daemon typecheck` -> EXIT 0, run fresh with the exit code captured directly (not through a pipe). It EXECUTED: pnpm echoed `$ tsc --project tsconfig.json`. A non-matching filter prints \"No projects matched the filters\" and never echoes a script line; an earlier failing run of the same command also printed the `D:\\projexts\\moe-next\\apps\\daemon:` header, so `@moe/daemon` demonstrably resolves to apps/daemon.\n\nGATE LEG 2, `pnpm --filter @moe/daemon test` -> EXIT 1. DISCLOSED VERBATIM, NOT HIDDEN. Also executed (count line printed). Failing paths, both foreign:\n  src/journal/journal-append.test.ts (2 tests | 2 failed)\n  src/journal/journal-reader.test.ts (13 tests | 9 failed)\ne.g. `AssertionError: expected false to be true`, and refusals like `refuses 'a foreign project' with 'JOURNAL_PROJECT_MISMATCH'`.\nPATH ATTRIBUTION: `git ls-tree d2c86b7 apps/daemon/src/journal/` is EMPTY - neither file existed at my merge-base. Failing-set(HEAD) minus failing-set(merge-base) = {journal-append.test.ts, journal-reader.test.ts}; intersected with my owned paths {apps/daemon/package.json, pnpm-lock.yaml} = EMPTY. A manifest+lock edge cannot make a journal test assert false, and journal-reader.test.ts is still UNTRACKED and being written right now (its owner is mid-TDD; the earlier run had fewer failures, and a separate bridge-inventory failure appeared then self-cleared). This red belongs to task-04dd5a0a, not here. Waiting it out is not viable - the peer keeps adding failing tests.\n\nCONSUMER RECORDED, per DoD 5 and the pure-package rail's \"(a) name the consumer task\" arm: task-80fce1d1d625453098bd526d61c5ddb8, \"Portability: expose the daemon shadow projection adapter\" (PLANNING). This task deliberately lands an edge with NO call site; rail 4 forbids implementing the reader. The commit message could not carry that name because the commit was not mine to write, so it is recorded here and in the completion evidence.\n\nADVERSARIAL PASS: packages/import declares zero dependencies -> no cycle. No depcheck/knip/unused-dep gate exists in the root scripts, and nothing under tools/packaging or scripts/ enumerates the daemon's dependency list, so an as-yet-unused dep reddens no pinned inventory. No probe or scratch file remains in the repo; both temp snapshots lived outside the worktree and are deleted.",
+      "startedAt": "2026-08-17T18:15:13.782Z",
+      "completedAt": "2026-08-17T18:18:56.821Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -99,18 +108,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:03:29.565Z",
-  "updatedAt": "2026-08-17T18:14:15.437Z",
+  "updatedAt": "2026-08-17T18:20:35.448Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:47:20.968Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:49:26.903Z",
@@ -133,5 +144,16 @@
   "contextFetchedBy": [
     "worker-3d941382"
   ],
-  "workStartedAt": "2026-08-17T18:08:48.675Z"
+  "workStartedAt": "2026-08-17T18:08:48.675Z",
+  "reviewStartedAt": "2026-08-17T18:20:35.447Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nTYPECHECK_EXIT=0\n\n(Filter matched and EXECUTED: pnpm echoed the script line `$ tsc --project tsconfig.json`. A non-matching filter prints \"No projects matched the filters\" and never echoes a script; a failing run of this same command earlier also printed the `D:\\projexts\\moe-next\\apps\\daemon:` header, confirming @moe/daemon resolves to apps/daemon. Exit code captured directly, not through a pipe.)",
+    "reportedAt": "2026-08-17T18:20:35.447Z"
+  },
+  "filesModified": [
+    "apps/daemon/package.json",
+    "pnpm-lock.yaml"
+  ]
 }

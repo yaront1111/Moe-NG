@@ -95,11 +95,13 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 13, durable-store 14,
- * runtime-provider 23, scheduler-activation 24 — sums to 89. These tags, NOT the subset
+ * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 14,
+ * runtime-provider 23, scheduler-activation 25 — sums to 91. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
- * scheduler-activation — producer-registers rule, governor entries.)
+ * scheduler-activation — producer-registers rule, governor entries. 89→90:
+ * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
+ * GRAPH_CONTENT_LAYERS integrity, task-e3d5fd05.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -190,6 +192,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EXPANSION_BINDING_LAYERS", file: "packages/scheduler/src/expansion/expansion-current-hold.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_EVIDENCE_LAYERS", file: "packages/scheduler/src/expansion/expansion-receipt.ts", axis: "scheduler-activation" },
   { constant: "FAIRNESS_CONTRACT_LAYERS", file: "packages/scheduler/src/fairness/fairness-contract.ts", axis: "scheduler-activation" },
+  { constant: "GRAPH_CONTENT_LAYERS", file: "packages/scheduler/src/graph-content-issues.ts", axis: "integrity" },
   { constant: "READINESS_LAYERS", file: "packages/scheduler/src/readiness/readiness-model.ts", axis: "scheduler-activation" },
   { constant: "SUPERSESSION_DISPOSITION_LAYERS", file: "packages/scheduler/src/supersession/supersession-disposition-contract.ts", axis: "scheduler-activation" },
   { constant: "RECOVERY_ANCHOR_LAYER", file: "packages/store/src/recovery-anchor-contracts.ts", axis: "durable-store" },
@@ -205,8 +208,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * staffing fence). Declaring an exported layer constant is what this scan
  * counts, so a boundary must be rostered in the task that declares it — no
  * package test or repo-wide typecheck can see this gate.
+ *
+ * 90 -> 91 for GRAPH_CONTENT_LAYERS (task-e3d5fd05, the canonical
+ * `GraphRevisionContent` codec's refusal vocabulary). `integrity` by SUBJECT, not
+ * by directory: it is the reason vocabulary of a codec and its content digest, not
+ * an admission or scheduling boundary.
  */
-const EXPECTED_ROSTER_SIZE = 90;
+const EXPECTED_ROSTER_SIZE = 91;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -218,7 +226,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "packages/benchmark": 1,
   "packages/runner": 20,
   "packages/core": 10,
-  "packages/scheduler": 7,
+  "packages/scheduler": 8,
   "packages/store": 4,
   "apps/control-room": 4,
   "packages/contracts": 3,

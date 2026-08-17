@@ -10,6 +10,9 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
+import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
+  from "./journal/journal-contracts.js";
+import { runJournalAppendCommand } from "./journal/journal-append.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -110,13 +113,16 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
+    const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
     const work = kind in WORK_FAMILY;
     const schemaVersion = activation
       ? ACTIVATION_INGRESS_SCHEMA_VERSION
-      : recovery
+      : journal
+        ? JOURNAL_APPEND_SCHEMA_VERSION
+        : recovery
         ? RECOVERY_COMPLETION_SCHEMA_VERSION
         : review
           ? REVIEW_SCHEMA_VERSION

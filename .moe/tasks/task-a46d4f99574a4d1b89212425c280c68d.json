@@ -20,17 +20,21 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND OWNERSHIP. Re-measure before editing: confirm `GOAL_PREREQUISITE_LAYER` is exported from `apps/daemon/src/goals/goal-close-prerequisite.ts`, returned by `qualifyGoalClosure`, and surfaced as `refusedBy` by the real `GOAL_HANDLERS[\"goal.close\"]` path; confirm the completed producer task's four goal sources are committed/worktree-clean and that no live task owns the three security paths. Run `pnpm test:security` standalone and retain the merge-base output/counts. At measured HEAD eb584aed it executed 9 files/466 tests, with 462 passed and four roster assertions red because scan=92 versus roster=90; the exact missing keys are this task's GOAL key plus foreign `GRAPH_CONTENT_LAYERS`. `AGENT_STAFFING_LAYER` is already rostered and covered, so treat the task text's staffing-red premise as stale and never fabricate it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE at HEAD 38e94e314a4c92781443a46cf1b89c8d68b8b70e (moved from planning's eb584aed; re-measured).\n\nVERIFIED ON DISK (not from description):\n- apps/daemon/src/goals/goal-close-prerequisite.ts:46 exports `GOAL_PREREQUISITE_LAYER = \"DAEMON_PREREQUISITE\"`.\n- goal-qualification.ts:239 `qualifyGoalClosure` returns `{ok:false, code, layer: GOAL_PREREQUISITE_LAYER}`; refusal codes ABSENT (line 214) and AMBIGUOUS (goal-qualification-reads.ts:141-144 \"two durable receipts name one node\").\n- goal-services.ts:92-95 `closeGoal` calls qualifyGoalClosure BEFORE reduceGoal and surfaces `refuse(kind, qualified.code, GOAL_PREREQUISITE_LAYER)`; bootstrap-ledger.refuse sets `refusedBy`.\n- GOAL_HANDLERS keys exactly [\"goal.create\",\"goal.close\"].\n- git status --short over apps/daemon/src/goals and tests/security: EMPTY (clean). Only .moe/tasks/task-a46d4f99... names tests/security among live tasks; no foreign owner.\n- sha256 goal-qualification.ts = 476a9c0602c1f91bbdc908fdf5c00bd418c6aa735858a2b56f10b9c392db23a0 (drill anchor).\n\nFRESH `pnpm test:security` (standalone, not piped): EXIT=1, `Test Files 2 failed | 7 passed (9)`, `Tests 4 failed | 462 passed (466)`. Exact scan-minus-roster:\n  \"GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts\"  (mine)\n  \"GRAPH_CONTENT_LAYERS@packages/scheduler/src/graph-content-issues.ts\"      (FOREIGN)\nscan 92 vs roster 90.\n\nCORRECTION to planningNotes: the foreign GRAPH key is at `packages/scheduler/src/graph-content-issues.ts`, NOT `graph-content.ts`; both files exist, only the -issues one declares the constant. It was committed by foreign commit 38e94e3 (task-a6775ac5).\n\nAGENT_STAFFING_LAYER is already rostered (boundary-roster.security.ts:126) and covered (hostile-cases 1750-1764) — task text's staffing premise is stale, not fabricated red.\n\nSTRUCTURAL FINDING: `durable-store-boundaries.security.ts:19` imports from `./boundary-roster.security.js`, which re-registers the roster's top-level describes into that file too — that is why the 4 failures are 2 identical assertions x 2 files. Adding the roster entry clears the GOAL half in BOTH without touching durable-store. BOUNDARY_ROSTER IS exported (line 594) despite the scheduler suite's comment saying it is not; the scheduler suite still re-parses the file bytes by regex, so my roster entry must keep the exact single-line shape.",
+      "startedAt": "2026-08-17T18:15:34.084Z",
+      "completedAt": "2026-08-17T18:18:21.657Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED — write the goal-specific security assertions before their cases exist. In the scheduler-activation suite add named expectations that the exact GOAL prerequisite roster key has exactly one BEFORE, one AFTER, and one RACE arm; that the generated GOAL arm/proof counts are positive and equal the cases actually run; that every collected GOAL outcome is the identical object returned by the production command path; that each hostile proof has zero command-decision and `GoalCompleted` residue; and that one accepted GOAL control is required. Use an initially empty exported proof/control collection if needed so `pnpm exec vitest run --root tests/security --config vitest.config.ts scheduler-activation-boundaries.security.ts` fails on the intended missing-GOAL assertion, not on an import/compile error. Do not weaken the existing generic roster-versus-arms checks.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/security/scheduler-activation-boundaries.security.ts",
         "tests/security/scheduler-activation-hostile-cases.ts"
-      ]
+      ],
+      "startedAt": "2026-08-17T18:19:01.683Z"
     },
     {
       "stepId": "step-3",
@@ -86,7 +90,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-f144c751",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -98,16 +102,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-17T17:58:31.777Z",
+  "updatedAt": "2026-08-17T18:19:01.683Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:48:22.504Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-f144c751"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:58:29.705Z",
   "planningNotes": {
@@ -128,5 +136,6 @@
   "budget": {
     "wallClockMs": 3600000
   },
-  "planApprovedAt": "2026-08-17T17:58:31.777Z"
+  "planApprovedAt": "2026-08-17T17:58:31.777Z",
+  "workStartedAt": "2026-08-17T18:15:34.084Z"
 }

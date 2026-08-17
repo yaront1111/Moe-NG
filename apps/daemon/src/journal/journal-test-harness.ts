@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { RuntimeCommandKind } from "@moe/contracts";
+import { createDeadEndJournal } from "@moe/context";
 import type { DeadEndJournalEntry } from "@moe/context";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -31,7 +32,10 @@ import {
   FOUNDATION_RESERVATION_VERSION,
 } from "../work/foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "../work/foundation-attempt-contracts.js";
-import { deriveAttemptJournalAggregateId } from "./journal-contracts.js";
+import {
+  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_EVENT_TYPE, JOURNAL_RECORD_VERSION,
+  deriveAttemptJournalAggregateId,
+} from "./journal-contracts.js";
 
 /**
  * The fixture the journal suites share: a REAL SqliteEventStore, a REAL activation
@@ -223,10 +227,12 @@ export interface HarnessOptions extends ActivationOptions {
 export function openJournalHarness(label: string, options: HarnessOptions = {}): JournalHarness {
   const root = mkdtempSync(join(tmpdir(), `moe-journal-${label}-`));
   const store = openHarnessStore(join(root, "project.db"));
-  seedReadyProject(store);
+  // Genesis FIRST: the initial installer proves the store pristine before it
+  // inserts, so a seeded project would make it refuse GENESIS_INSTALL_REFUSED.
   const genesis = ensureGenesisRecoveryBinding(
     store, { clock: () => DECIDED_AT, projectId: PROJECT_ID });
   if (!genesis.ok) throw new Error(`genesis binding refused: ${genesis.code}`);
+  seedReadyProject(store);
   const attempt = activate(store, label, options);
   const { decisions, registry } = createDaemonCommandPorts({
     clock: () => DECIDED_AT, operatorPrincipalId: OPERATOR_ID, projectId: PROJECT_ID, store,
@@ -271,6 +277,62 @@ export function openJournalHarness(label: string, options: HarnessOptions = {}):
  *  throw the second time" is also exactly what a double write looks like. */
 export function journalEventCount(store: SqliteEventStore, activationDigest: string): number {
   return store.readEvents(deriveAttemptJournalAggregateId(activationDigest)).length;
+}
+
+/**
+ * A well-formed durable body, composed here so the READER can be driven without
+ * a writer. Every planted case below drifts exactly ONE field of this value, and
+ * a positive control asserts the undrifted body reads OK — without that control a
+ * "refused" assertion could be caused by the fixture being invalid at an earlier
+ * layer rather than by the field under test.
+ */
+export function journalBody(
+  attempt: ActivationFixture, entries: readonly DeadEndJournalEntry[],
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  const admitted = createDeadEndJournal(entries);
+  if (admitted.kind !== "ADMITTED") throw new Error(`body fixture refused: ${admitted.limit}`);
+  return {
+    activationDigest: attempt.record.activationDigest,
+    attemptRef: attempt.record.attempt.attemptId,
+    effectId: attempt.record.effectIntent.intentId,
+    entries: admitted.journal.entries,
+    journalDigest: admitted.journal.digest,
+    leaseRef: attempt.record.lease.leaseId,
+    nodeKey: NODE_KEY,
+    projectId: PROJECT_ID,
+    recordVersion: JOURNAL_RECORD_VERSION,
+    sessionId: attempt.sessionId,
+    truthClass: "DAEMON_VERIFIED",
+    ...overrides,
+  };
+}
+
+/** Writes a row this suite did not compose through the writer, so the reader's
+ *  guards are reached by evidence rather than by a stub. */
+export function plantJournalEvent(
+  store: SqliteEventStore, activationDigest: string, body: unknown, expectedVersion: number,
+): void {
+  const encoded = encodeFoundationPayload(body);
+  if (!encoded.ok) throw new Error(`planted body refused by the codec: ${encoded.code}`);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: JOURNAL_APPEND_COMMAND_KIND, committedResultBytes: encoded.bytes,
+    correlationId: `corr-plant-${expectedVersion}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `planted-${activationDigest.slice(0, 8)}-${expectedVersion}`,
+      eventType: JOURNAL_APPEND_EVENT_TYPE, payload: encoded.bytes,
+    }],
+    expectedVersion,
+    key: {
+      commandId: `cmd-plant-${activationDigest.slice(0, 8)}-${expectedVersion}`,
+      principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    },
+    requestBytes: encoded.bytes,
+    targetAggregateId: deriveAttemptJournalAggregateId(activationDigest),
+  });
+  if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
+  }
 }
 
 let nextEntry = 0;

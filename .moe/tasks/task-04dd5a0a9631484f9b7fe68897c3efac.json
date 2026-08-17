@@ -91,21 +91,31 @@
     {
       "stepId": "step-5",
       "description": "Land the STRICT CURRENT READER `readCurrentAttemptJournal(store, activationDigest, expectedProjectId)` in the same module. If journal-append.ts would cross 250 physical lines, split the reader into apps/daemon/src/journal/journal-reader.ts plus its .js bridge — that split is AUTHORIZED by this plan; record the measured line count as the forcing evidence in the completion notes, since the per-FILE cap is hard and the per-task file count is not a reason to breach it.\nAlgorithm, fail-closed at every branch:\n- `store.readEvents(deriveAttemptJournalAggregateId(activationDigest))` in try/catch -> JOURNAL_RECORD_UNREADABLE on throw; zero events -> JOURNAL_RECORD_ABSENT (distinct from UNREADABLE: no rows and an unreadable store demand opposite repairs).\n- Every event must be `AttemptJournalAppended` with `aggregateSequence === index + 1`; a foreign type or a sequence hole -> JOURNAL_RECORD_MALFORMED; two events claiming the same sequence -> JOURNAL_RECORD_AMBIGUOUS.\n- The CURRENT journal is the LAST event. Decode -> re-encode -> `sameBytes(again.bytes, event.payload)`; drift -> JOURNAL_RECORD_MALFORMED. Canonical bytes need both the digest and the re-encode.\n- Body exact-keyed; recordVersion mismatch -> JOURNAL_RECORD_MALFORMED; body projectId !== expectedProjectId -> JOURNAL_PROJECT_MISMATCH.\n- RE-DERIVE the digest through the production surface: run `createDeadEndJournal(body.entries)` and compare `journal.digest` with the stored `journalDigest`; unequal -> JOURNAL_DIGEST_MISMATCH; REFUSED -> JOURNAL_RECORD_MALFORMED. This is what makes a stored digest that has quietly stopped covering its entries unusable rather than merely wrong, and it is where the DoD's digest mutation drill lands.\n- Answer frozen: `{ ok: true, authority: \"DURABLE_JOURNAL\", journalDigest, entries, attemptRef, leaseRef, nodeKey, sessionId, effectId, activationDigest }`. Every refused branch returns authority \"NONE\" and no digest — an unverifiable journal never becomes a handoff input.\nTests: ABSENT before any append; UNREADABLE on a throwing store; MALFORMED on a planted drifted payload; AMBIGUOUS on a duplicated sequence; PROJECT_MISMATCH on a foreign expected project; DIGEST_MISMATCH on a planted body whose entries and digest disagree — each pinning the exact code AND the exact layer.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/journal/journal-append.ts",
         "apps/daemon/src/journal/journal-append.test.ts"
       ],
-      "startedAt": "2026-08-17T18:14:04.181Z"
+      "modifiedFiles": [
+        "apps/daemon/src/journal/journal-reader.ts",
+        "apps/daemon/src/journal/journal-reader.js",
+        "apps/daemon/src/journal/journal-reader.test.ts",
+        "apps/daemon/src/journal/journal-entry-codec.ts",
+        "apps/daemon/src/journal/journal-test-harness.ts"
+      ],
+      "note": "Landed apps/daemon/src/journal/journal-reader.ts (164 lines) + its exact one-line .js bridge, and apps/daemon/src/journal/journal-reader.test.ts. 13/13 GREEN.\n\nTHE SPLIT IS FORCED, WITH THE MEASUREMENT: journal-append.ts is 235 physical lines with the writer alone. Adding the reader (164 lines) would put the module at ~399 — past the 250 target and at the 400 hard limit. The plan authorises this split explicitly; the per-FILE cap is hard and the per-task file count is not a reason to breach it.\n\nREADER ALGORITHM, fail-closed at every branch, all under DAEMON_JOURNAL_APPEND:\n- readEvents(deriveAttemptJournalAggregateId(activationDigest)) in try/catch -> JOURNAL_RECORD_UNREADABLE on throw; zero events -> JOURNAL_RECORD_ABSENT. Kept apart because they demand opposite repairs.\n- duplicate aggregateSequence -> JOURNAL_RECORD_AMBIGUOUS, checked BEFORE the ordering sweep so a collision is never reported as a hole; then every event must be AttemptJournalAppended with aggregateSequence === index + 1 -> JOURNAL_RECORD_MALFORMED otherwise.\n- CURRENT = the LAST event (each append persists the whole admitted journal, so the head row IS the journal). decode -> re-encode -> sameBytes; drift -> JOURNAL_RECORD_MALFORMED. Canonical bytes need both the decode and the re-encode.\n- body exact-keyed to 11 keys; recordVersion, truthClass \"DAEMON_VERIFIED\" and activationDigest must agree, and attemptRef/effectId/leaseRef/nodeKey/sessionId/journalDigest must be non-empty -> JOURNAL_RECORD_MALFORMED.\n- body.projectId !== expectedProjectId -> JOURNAL_PROJECT_MISMATCH.\n- verifiedEntries: the stored entries go through the STRICT DECODER FIRST (createDeadEndJournal throws rather than refuses on a malformed predicate, and a crash is not a refusal), then are re-admitted through createDeadEndJournal. TWO equalities, both load-bearing: (a) canonical bytes of the stored order must equal canonical bytes of the DERIVED order — because createDeadEndJournal SORTS its input, a reordered body would otherwise still match its digest; (b) derived digest === stored journalDigest -> JOURNAL_DIGEST_MISMATCH otherwise.\n- Every refusal returns authority \"NONE\" and no digest. Answer frozen with authority \"DURABLE_JOURNAL\".\n- The store parameter is the narrow port `JournalEventSource { readEvents }` — every commit method absent BY CONSTRUCTION, so a reader that cannot name a write cannot perform one. SqliteEventStore satisfies it structurally.\n\nTESTS (apps/daemon/src/journal/journal-reader.test.ts, 13 cases, each pinning exact CODE and exact LAYER):\n- POSITIVE CONTROL first, and every drifted case re-plants the UNDRIFTED body on a sibling harness and asserts it reads OK before asserting the drifted one refuses — without that control a \"refused\" assertion could be caused by a fixture already invalid at an earlier layer.\n- ABSENT before any row; UNREADABLE by closing the REAL store; AMBIGUOUS and the foreign-event-type case by taking REAL store rows and drifting exactly ONE field of one row (the store assigns sequences itself and will not mint a duplicate, so a narrow JournalEventSource over the real rows is the only honest way to reach that guard); RECORD_MALFORMED on non-canonical bytes; PROJECT_MISMATCH; stale recordVersion; downgraded truthClass; foreign activationDigest; an entry whose retryPredicate.kind is unknown (a REFUSAL, not the TypeError createDeadEndJournal would throw); entries stored out of canonical order.\n- DIGEST_MISMATCH is planted as a body storing BOTH entries under a digest computed over only the FIRST, with the test asserting up front that the two digests really differ. Canonical bytes, every other field agreeing — only the re-derivation can catch it. This is where the DoD's digest mutation drill lands.\n- The sweep asserts `cases.length === 6` and that every declared code is a member of JOURNAL_CODES, so a table that generated nothing cannot pass vacuously.\n\nONE PRODUCTION BUG FOUND AND FIXED BY THIS SUITE — the control body was refused JOURNAL_ENTRY_MALFORMED although the entry was visibly perfect. `parseBoundedJsonText` builds EVERY object with `Object.create(null)` (packages/contracts/src/bounded-json-parser.ts:87), so a value read back out of durable bytes is NULL-PROTOTYPED. The entry decoder's `Object.getPrototypeOf(value) !== Object.prototype` guard therefore made the codec unable to read its own output: the writer would commit and the reader would refuse the row it had just written. Fixed to admit exactly `Object.prototype` OR `null` and nothing else (a null prototype is strictly safer, so no hostility guard is lost). Recorded as Serena memory `gotcha-bounded-json-yields-null-prototype-objects`.\n\nRUN: `cd apps/daemon && npx vitest run --root . --config package.json src/journal/journal-reader.test.ts` -> \"Test Files 1 passed (1) / Tests 13 passed (13)\". The accepted-append suite is still RED at the seam with httpStatus 400 / outcome REFUSED — the kind is unregistered until step 6, which is exactly the RED step 2 recorded.",
+      "startedAt": "2026-08-17T18:14:04.181Z",
+      "completedAt": "2026-08-17T18:19:21.226Z"
     },
     {
       "stepId": "step-6",
       "description": "Wire the command into the seam, and update the closed roster it breaks.\nIn apps/daemon/src/daemon-command-registry.ts, keep the delta to roughly ten lines by importing the registration data from the journal fragment rather than inlining new literals — the file is 346 lines and the task rail requires extracting a focused fragment rather than growing the monolith. Add: JOURNAL_APPEND_COMMAND_KIND to `WiredCommandKind`; a PAYLOAD_KEYS entry sourced from JOURNAL_APPEND_PAYLOAD_KEYS; a `journal` branch in `entryOf` supplying JOURNAL_APPEND_SCHEMA_VERSION, `requiredCapability` = `work.write`, and `decisionOf(runJournalAppendCommand(store, bytes))`; and a `journal` case in `agentCapabilitiesFor` returning `[work.write]`. Do NOT add it to OPERATOR_PRINCIPAL_KINDS: an agent holding work authority is exactly who appends a dead-end journal. If the file crosses 380 lines, move the journal branch out into the fragment as a handler factory instead of inlining it.\nTHE ROSTER WILL GO RED AND THAT IS EXPECTED: apps/daemon/src/daemon-command-registry.test.ts asserts \"exactly the twenty-three characterized kinds\", with `ROWS` at length 23 and `registry.size` 23 at two separate places (lines ~167-171 and ~419). Add the `journal.append` ROW with its capability and payload keys and bump BOTH counts to 24. Do not weaken the roster into a `>=` check — its whole value is that a new kind cannot be registered unnoticed.\nAfter wiring, the step-2 accepted-append control must go green through the real seam, which is also the proof that authentication and the capability check run BEFORE any payload authority: the seam's order is authenticate -> AUTHORIZE/CAPABILITY_DENIED -> `checkPayload` -> dispatch.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/daemon-command-registry.ts",
         "apps/daemon/src/daemon-command-registry.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-17T18:19:38.242Z"
     },
     {
       "stepId": "step-7",
@@ -167,12 +177,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:53:19.142Z",
-  "updatedAt": "2026-08-17T18:14:04.181Z",
+  "updatedAt": "2026-08-17T18:19:38.242Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:42:08.815Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-c9e91335",
@@ -187,7 +197,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:49:14.084Z",

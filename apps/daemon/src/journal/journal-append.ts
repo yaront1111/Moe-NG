@@ -75,9 +75,8 @@ const nonEmpty = (value: unknown): value is string =>
  * SERVER facts the registry's `requestOf` stamped; they are read from the
  * envelope and never from the payload, which cannot carry them.
  */
-function decodeRequest(input: unknown): JournalAppendRequest | JournalAppendRefused {
+function decodeRequest(input: Uint8Array): JournalAppendRequest | JournalAppendRefused {
   const malformed = journalRefusal("JOURNAL_REQUEST_MALFORMED");
-  if (!(input instanceof Uint8Array)) return malformed;
   const decoded = decodeBoundedJsonBytes(input);
   if (!decoded.ok) return malformed;
   const record = exactKeys(decoded.value, REQUEST_KEYS);
@@ -162,6 +161,7 @@ const isRefusal = (value: unknown): value is JournalAppendRefused =>
 export function runJournalAppendCommand(
   store: SqliteEventStore, input: unknown,
 ): JournalAppendOutcome {
+  if (!(input instanceof Uint8Array)) return journalRefusal("JOURNAL_REQUEST_MALFORMED");
   const request = decodeRequest(input);
   if (isRefusal(request)) return request;
   const binding = readCurrentEffectSessionBinding(
