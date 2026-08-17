@@ -44,11 +44,10 @@ import { readCurrentAttemptJournal } from "./journal-reader.js";
  *   - the entries are admitted by `createDeadEndJournal`, whose own
  *     `JOURNAL_LIMIT_REACHED` / `DEAD_END_JOURNAL` refusal is carried verbatim.
  *
- * APPEND-ONLY. Each append commits ONE new event at `expectedVersion` = the
- * current event count, and no branch rewrites a prior one. A byte-identical
- * replay returns the store's REPLAYED without a second row; the same command
- * identity with different bytes raises the store's own idempotency conflict,
- * which is deliberately rethrown so the seam reports it under DURABLE_STORE.
+ * APPEND-ONLY. Each append commits ONE new event at the current tail and no branch
+ * rewrites a prior one. A byte-identical replay returns the store's REPLAYED
+ * without a second row; the same identity with different bytes raises the store's
+ * own idempotency conflict, rethrown so the seam reports it under DURABLE_STORE.
  */
 
 const REQUEST_KEYS = Object.freeze([
@@ -123,8 +122,7 @@ function durableNodeKey(
 }
 
 interface AttemptFacts {
-  readonly attemptRef: string;
-  readonly leaseRef: string;
+  readonly attemptRef: string; readonly leaseRef: string;
 }
 
 /** The caller's aggregate id LOCATES; these three equalities AUTHORISE. A record
