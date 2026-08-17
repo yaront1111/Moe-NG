@@ -10,6 +10,7 @@ import {
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
+import { createVerifierAuthorityProvider } from "../review/verifier-authority-provider.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
@@ -275,9 +276,12 @@ async function main(): Promise<void> {
       projectId: config.projectId,
       runTest: verifierRunner,
       store: verifierStore,
-      // No production authority provider is shipped yet. Refuse a green test
-      // rather than manufacture calibration, package or policy facts in-process.
-      verificationAuthority: () => null,
+      // Reads calibration, policy and package facts from the durable store; a
+      // fact that is not installed still yields VERIFICATION_AUTHORITY_UNAVAILABLE.
+      verificationAuthority: createVerifierAuthorityProvider({
+        projectId: config.projectId,
+        store: verifierStore,
+      }),
     });
 
     // Agents connect to this trusted parent over loopback. The host retains store/operator

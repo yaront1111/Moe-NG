@@ -92,7 +92,11 @@ function readVerifierPolicy(
   if (slices === null || !Object.hasOwn(slices, VERIFIER_POLICY_SLICE_REF)) return null;
   const slice = asObject(slices[VERIFIER_POLICY_SLICE_REF]);
   if (slice === null) return null;
-  const candidate: Record<string, JsonValue> = {};
+  // A NULL-prototype accumulator, not `{}`. A stored slice carrying an own `__proto__` key would
+  // hit the setter on a plain object and silently reshape the accumulator instead of adding a key;
+  // with no prototype there is no setter to hit, so an exotic key stays an ordinary key and
+  // `validateEvaluationInput`'s exact-key check is what refuses it.
+  const candidate = Object.create(null) as Record<string, JsonValue>;
   for (const [key, value] of Object.entries(slice)) {
     if (key !== "sliceRef") candidate[key] = value;
   }
