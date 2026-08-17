@@ -148,11 +148,5 @@ export function readReviewerCalibration(
   const slice = asObject(slices[REVIEWER_CALIBRATION_SLICE_REF]);
   const calibration = slice === null ? null : parseSlice(slice);
   if (calibration === null) return refuse("REVIEWER_CALIBRATION_UNREADABLE");
-  void calibration;
-  return Object.freeze({
-    calibration: Object.freeze({
-      corpusRevision: "corpus-2026-08", sentinelPassed: true, staleness: "CURRENT" as const,
-    }),
-    ok: true as const,
-  });
+  return Object.freeze({ calibration, ok: true as const });
 }
