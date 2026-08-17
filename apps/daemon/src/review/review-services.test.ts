@@ -1,9 +1,11 @@
 import { RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import { REVIEW_REASON_CODES, findingFingerprint } from "@moe/review";
+import type { ReviewPackageBoundItem, ReviewPackageItemInput } from "@moe/review";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { REVIEW_COMMAND_KINDS, REVIEW_SCHEMA_VERSION } from "./review-contracts.js";
 import { readReviewLedger } from "./review-ledger.js";
+import type { StoredPackageItems } from "./review-round-items.js";
 import { runReviewCommand } from "./review-services.js";
 import {
   PROJECT_ID,
@@ -48,6 +50,30 @@ const OWNED_KINDS = [
 ] as const;
 
 const encoder = new TextEncoder();
+
+/**
+ * The seven fixture items in the order `buildReviewPackage` BINDS them — criteria, the two
+ * hashes, receipts, rubric, submitted bytes, tree — which is not the order they are submitted in.
+ * Hand-written, so an eighth fixture item cannot appear on both sides and stay green.
+ */
+const BOUND_ITEMS = [
+  { digest: hex64("c1"), kind: "CRITERION", locator: "criterion-1" },
+  { digest: hex64("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
+  { digest: hex64("b1"), kind: "PLAN_HASH", locator: "plan-1" },
+  { digest: hex64("d1"), kind: "DAEMON_RECEIPT", locator: "receipt-1" },
+  { digest: hex64("2b"), kind: "RUBRIC", locator: "rubric-1" },
+  { digest: hex64("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
+  { digest: hex64("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
+] as const;
+
+const itemKey = (item: ReviewPackageItemInput): string =>
+  `${item.kind}|${item.locator}|${item.digest}`;
+
+/** Throws rather than returning `[]` on an absent marker: a silent empty set proves nothing. */
+function itemsOf(stored: StoredPackageItems | undefined): readonly ReviewPackageBoundItem[] {
+  if (stored?.status !== "PRESENT") throw new Error(`expected PRESENT items, got ${stored?.status}`);
+  return stored.items;
+}
 
 describe("review command vocabulary", () => {
   it("covers exactly the four command kinds this task owns", () => {
@@ -101,6 +127,50 @@ describe("a review round is recorded durably through @moe/review (DoD 1)", () =>
 
     const ledger = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
     expect(ledger.rounds[0]?.reviewInputDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it("persists the item set the kernel bound, recoverable through the read model", () => {
+    const store = openStore();
+
+    expect(submit(store, 1).ok).toBe(true);
+
+    const round = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds[0];
+    expect(round?.packageItems).toEqual({ items: BOUND_ITEMS, status: "PRESENT" });
+    // The same seven values that went in, compared as a set: no item dropped, added or edited.
+    // A count would pass for a substituted item, which is the failure this exists to see.
+    expect(itemsOf(round?.packageItems).map(itemKey).sort())
+      .toEqual(packageItems().map(itemKey).sort());
+  });
+
+  it("persists the bound set rather than the caller's array, order included", () => {
+    const store = openStore();
+    // Reversed input. `buildReviewPackage` binds by kind into six slots, so the stored order can
+    // only match the caller's if the RAW parsed array was persisted instead of the bound set —
+    // which would durably record content the stored digest does not attest.
+    const reversed = [...packageItems()].reverse();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], {
+      packageItems: reversed,
+    })));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    const round = readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds[0];
+    expect(round?.packageItems).toEqual({ items: BOUND_ITEMS, status: "PRESENT" });
+    expect(round?.packageItems).not.toEqual({ items: reversed, status: "PRESENT" });
+  });
+
+  it("leaves the durable event payload untouched while the result gains the items", () => {
+    const store = openStore();
+
+    expect(submit(store, 1).ok).toBe(true);
+
+    // The event is the public durable shape other readers consume; recoverability is a RESULT
+    // concern. A fifth key here would drag every event consumer into a review-only fix.
+    const events = store.readEvents(SUBJECT_REF);
+    expect(events).toHaveLength(1);
+    const payload: unknown = JSON.parse(new TextDecoder().decode(events[0]?.payload));
+    expect(Object.keys(payload as Record<string, unknown>).sort())
+      .toEqual(["reviewInputDigest", "round", "route", "subjectRef"]);
   });
 
   it("survives a store restart rather than living in process memory", () => {
@@ -180,6 +250,25 @@ describe("a refusal names the code AND the layer that produced it", () => {
     expect(outcome.refusedBy).toBe("REVIEW_KERNEL");
     expect(outcome.kernelLayer).toBe("PACKAGE");
     expect(decisionCount(store)).toBe(0);
+  });
+
+  it("writes no round at all when the items fail to bind, so validation precedes storage", () => {
+    const store = openStore();
+
+    const outcome = send(store, envelope("review.submit", 0, submitPayload(1, [finding()], {
+      packageItems: packageItems().filter((item) => item["kind"] !== "DAEMON_RECEIPT"),
+    })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    // The ORIGINAL code and layer, unchanged by persistence being added downstream of them.
+    expect(outcome.code).toBe("PACKAGE_BINDING_INCOMPLETE");
+    expect(outcome.kernelLayer).toBe("PACKAGE");
+    // Three independent witnesses that nothing was written. A refusal that stored the items
+    // anyway would still return this code, so the return value cannot be the evidence.
+    expect(decisionCount(store)).toBe(0);
+    expect(store.readEvents(SUBJECT_REF)).toHaveLength(0);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds).toEqual([]);
   });
 
   it("refuses a forbidden package item with its own code rather than the unknown-kind one", () => {

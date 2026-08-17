@@ -6,6 +6,8 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { DELTA_CLASSIFICATIONS, isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
+import { parseStoredPackageItems } from "./review-round-items.js";
+import type { StoredPackageItems } from "./review-round-items.js";
 
 /**
  * The read half of the review composition: every committed decision for one reviewed subject,
@@ -22,6 +24,8 @@ export interface ReviewRoundRecord {
   readonly aggregateVersion: number;
   readonly decisionId: string;
   readonly lineage: ReviewLineage;
+  /** PRESENT with the items the round was raised against, or ABSENT — never an empty list. */
+  readonly packageItems: StoredPackageItems;
   readonly principalId: string;
   readonly reviewInputDigest: string;
   readonly resultSha256: string;
@@ -159,12 +163,17 @@ function parseRound(
   if (!isPlainJsonObject(result)) return undefined;
   const lineage = parseLineage(result["lineage"]);
   const routing = parseRouting(result["routing"]);
+  // A malformed items key makes the whole round unreadable rather than partly trusted: binding
+  // an item set nobody validated would put bytes the stored digest never covered in front of a
+  // caller that has no way left to tell.
+  const packageItems = parseStoredPackageItems(result["packageItems"]);
   const round = result["round"];
-  if (lineage === undefined || routing === undefined) return undefined;
+  if (lineage === undefined || routing === undefined || packageItems === undefined) return undefined;
   if (typeof round !== "number" || !isRef(result["reviewInputDigest"])) return undefined;
   return {
     ...storeFacts,
     lineage,
+    packageItems,
     reviewInputDigest: result["reviewInputDigest"],
     round,
     routing,

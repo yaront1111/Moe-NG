@@ -23,6 +23,7 @@ import {
   replayOf,
 } from "./review-ledger.js";
 import type { CommandHandler, HandlerContext, HandlerTable, ReviewOutcome } from "./review-ledger.js";
+import { boundPackageItems } from "./review-round-items.js";
 
 /**
  * The review-flow services and the pipeline every review command runs through (journey J4).
@@ -149,6 +150,10 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     expectedVersion: ledger.version,
     result: {
       lineage,
+      // The set the kernel BOUND, never `items` — the caller's raw parsed array would durably
+      // record content the digest stored beside it does not attest. Retained on the RESULT and
+      // not on the event: recoverability is this surface's concern, the event shape is shared.
+      packageItems: boundPackageItems(built.value),
       reviewInputDigest: built.value.reviewInputDigest,
       round,
       routing,
