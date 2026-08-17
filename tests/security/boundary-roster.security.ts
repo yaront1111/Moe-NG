@@ -96,13 +96,14 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 14,
- * runtime-provider 23, scheduler-activation 26 — sums to 92. These tags, NOT the subset
+ * runtime-provider 24, scheduler-activation 26 — sums to 93. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
  * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
  * GRAPH_CONTENT_LAYERS integrity, task-e3d5fd05. 91→92 on 2026-08-17:
- * GOAL_PREREQUISITE_LAYER scheduler-activation, task-a46d4f99.)
+ * GOAL_PREREQUISITE_LAYER scheduler-activation, task-a46d4f99. 92→93 on 2026-08-17:
+ * PROVIDER_EFFECT_SETTLEMENT_LAYER runtime-provider, task-7c16fcbc.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -191,6 +192,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "RECOVERY_LAYERS", file: "packages/runner/src/recovery/recovery-contract.ts", axis: "runtime-provider" },
   { constant: "SCOPE_OBSERVER_LAYERS", file: "packages/runner/src/scope/scope-contract.ts", axis: "runtime-provider" },
   { constant: "SUPERVISOR_LAYERS", file: "packages/runner/src/supervisor/effect-kernel.ts", axis: "runtime-provider" },
+  { constant: "PROVIDER_EFFECT_SETTLEMENT_LAYER", file: "packages/runner/src/supervisor/provider-settlement-contracts.ts", axis: "runtime-provider" },
   { constant: "MEASUREMENT_ISSUE_LAYERS", file: "packages/scheduler/src/budget/budget-measurement.ts", axis: "scheduler-activation" },
   { constant: "CONVERGENCE_BREAKER_LAYER", file: "packages/scheduler/src/convergence/breaker-contract.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_BINDING_LAYERS", file: "packages/scheduler/src/expansion/expansion-current-hold.ts", axis: "scheduler-activation" },
@@ -222,8 +224,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * `goal.close` prerequisite composer). `scheduler-activation` by SUBJECT: it is the
  * layer that admits or refuses the final goal-acceptance command, ahead of the core
  * reducer. Measured at HEAD 78a0aa2 — scan 92, roster 91 before this entry.
+ *
+ * 92 -> 93 for PROVIDER_EFFECT_SETTLEMENT_LAYER (producer task-7c16fcbc, the layer
+ * that refuses a provider-run observation before any effect settlement is derived
+ * from it). `runtime-provider` by SUBJECT: it answers for a provider RUN's evidence,
+ * not for a codec or an admission decision. Measured at HEAD 29f3c5f — scan 93,
+ * roster 92 before this entry.
  */
-const EXPECTED_ROSTER_SIZE = 92;
+const EXPECTED_ROSTER_SIZE = 93;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -233,7 +241,7 @@ const EXPECTED_ROSTER_SIZE = 92;
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 35,
   "packages/benchmark": 1,
-  "packages/runner": 20,
+  "packages/runner": 21,
   "packages/core": 10,
   "packages/scheduler": 8,
   "packages/store": 4,

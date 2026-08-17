@@ -150,6 +150,35 @@ export {
   type MirroredLeaseState,
 } from "./supervisor/effect-shape.js";
 export { fenceMirroredLease, type MirrorVerdict } from "./supervisor/lease-mirror.js";
+/**
+ * The provider-run settlement seam, published beside the reducer it delegates to
+ * because it is the same subtree, not a new provider surface. The entry point is
+ * the only thing here that decides anything; the three tables beside it are what
+ * let a consumer branch on the decision it made — the exact input key set, the
+ * closed refusal vocabulary, and the settlement mapping as data.
+ *
+ * WITHHELD: `admitProviderRunObservation`, `PROVIDER_SETTLEMENT_MESSAGES` and
+ * `PROVIDER_SETTLEMENT_OUTCOME_CLASSES`. The first MINTS an admitted observation
+ * and the other two are what a fabricated refusal or a hand-picked outcome class
+ * would need to look real — the same asymmetry the telemetry seam publishes
+ * under: consumers READ settlements, only this package mints them.
+ */
+export {
+  settleEffectFromProviderObservation,
+  type ProviderSettlementOutcome,
+} from "./supervisor/provider-effect-settlement.js";
+export {
+  PROVIDER_EFFECT_SETTLEMENT_LAYER,
+  PROVIDER_EFFECT_SETTLEMENT_VERSION,
+  PROVIDER_RUN_OBSERVATION_KEYS,
+  PROVIDER_SETTLEMENT_ADMITTED_ROWS,
+  PROVIDER_SETTLEMENT_CODES,
+  type ProviderRunObservation,
+  type ProviderSettlementCode,
+  type ProviderSettlementDisposition,
+  type ProviderSettlementRefusal,
+  type ProviderSettlementRow,
+} from "./supervisor/provider-settlement-contracts.js";
 
 /**
  * The recovery, recovery-inventory, evidence, Claude observation and Codex

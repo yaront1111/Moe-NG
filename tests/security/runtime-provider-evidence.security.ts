@@ -42,6 +42,9 @@ import { SCOPE_OBSERVER_LAYERS, ScopeObserverError } from "../../packages/runner
 import { classifyRefFailure } from "../../packages/runner/src/scope/scope-git-classify.js";
 import { observeScope } from "../../packages/runner/src/scope/scope-observation.js";
 import { SUPERVISOR_LAYERS } from "../../packages/runner/src/supervisor/effect-kernel.js";
+import {
+  PROVIDER_EFFECT_SETTLEMENT_LAYER,
+} from "../../packages/runner/src/supervisor/provider-settlement-contracts.js";
 import { isContainedBy } from "../../packages/runner/src/workspace/workspace-contract.js";
 import { buildResultManifest } from "../../packages/runner/src/workspace/workspace-manifest.js";
 import { probeAfter, probeBefore, probeRacing, withHostileRoot } from "./hostile-harness.js";
@@ -340,6 +343,7 @@ describe("SCOPE_OBSERVER_LAYERS", () => {
 // boundary's layer reddens.
 describeSupervisionBoundaries(ledger, {
   kernel: KERNEL, safeBoundary: SAFE_BOUNDARY, classification: CLASSIFICATION, inventory: INVENTORY,
+  settlement: PROVIDER_EFFECT_SETTLEMENT_LAYER,
 });
 
 

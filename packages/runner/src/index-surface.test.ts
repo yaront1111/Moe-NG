@@ -174,6 +174,17 @@ import type {
   ArtifactObjectObservation, ArtifactStagingObservation, GitRefListing, GitRefObservation,
   ScopeObserverLayer,
 } from "@moe/runner";
+/**
+ * The provider-run settlement seam's type closure, through the same root. A
+ * consumer that can call `settleEffectFromProviderObservation` but cannot name
+ * the observation it must build, or the refusal it must branch on, cannot
+ * compose the seam at all — so an under-published closure fails here rather than
+ * in the consuming repository.
+ */
+import type {
+  ProviderRunObservation, ProviderSettlementCode, ProviderSettlementDisposition,
+  ProviderSettlementOutcome, ProviderSettlementRefusal, ProviderSettlementRow,
+} from "@moe/runner";
 
 it("resolves the self-referencing package root specifier @moe/runner", () => {
   expect(typeof runner.observeScope).toBe("function");
@@ -367,11 +378,19 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROVIDER_USAGE_CONTRACT_VERSION", "string"], ["PROVIDER_USAGE_LAYERS", "array"],
   ["PROVIDER_USAGE_METERS", "object"], ["PROVIDER_USAGE_SOURCE_PARSER_VERSION", "number"],
   ["buildProviderRunRecord", "function"], ["normalizeProviderUsage", "function"],
+  // The 6 values the provider-run SETTLEMENT seam publishes: 2 pinned strings
+  // (its own version and its own refusal layer), 3 frozen tables (the closed
+  // refusal vocabulary, the exact admitted input key set, and the settlement
+  // mapping declared as data) and the single entry point. Its message table and
+  // its admission reader stay internal — see the withheld-name control below.
+  ["PROVIDER_EFFECT_SETTLEMENT_LAYER", "string"], ["PROVIDER_EFFECT_SETTLEMENT_VERSION", "string"],
+  ["PROVIDER_RUN_OBSERVATION_KEYS", "array"], ["PROVIDER_SETTLEMENT_ADMITTED_ROWS", "array"],
+  ["PROVIDER_SETTLEMENT_CODES", "array"], ["settleEffectFromProviderObservation", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(233);
+  expect(EXPECTED_EXPORTS.length).toBe(239);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -2449,4 +2468,89 @@ it("normalizes provider usage through the root and refuses an unobserved interva
   const basisClasses: readonly ProviderCostBasis[] = [...runner.PROVIDER_COST_BASES];
   const reasons: readonly ProviderUnpricedReason[] = [...runner.PROVIDER_UNPRICED_REASONS];
   expect([basisClasses.length, reasons.length]).toEqual([2, 3]);
+});
+
+/* ---- provider-run settlement, composed THROUGH THE PACKAGE ROOT ---- */
+
+/**
+ * The exact admitted observation, hand-written from the contract rather than
+ * read off the published key list, so a key that silently changed name would
+ * fail here instead of quietly redefining the seam.
+ */
+function runObservation(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  return {
+    sourceVersion: runner.PROVIDER_TELEMETRY_CONTRACT_VERSION,
+    sourceDigest: DIGEST,
+    runRef: {
+      provider: "claude", runRef: "run:1", effectIntentId: "intent:1",
+      attemptRef: "attempt:1", epoch: 3,
+    },
+    terminal: "COMPLETED", infrastructure: "NONE", upstreamRefusal: null,
+    completedAt: { known: true, value: AT },
+    ...overrides,
+  };
+}
+
+it("settles an effect from a provider observation through the root, deriving the target", () => {
+  const observation: ProviderRunObservation =
+    runObservation() as unknown as ProviderRunObservation;
+  const outcome: ProviderSettlementOutcome = runner.settleEffectFromProviderObservation(
+    intentIn("ACTIVE"), observation,
+  );
+  if (outcome.kind !== "TRANSITIONED") throw new Error(`expected TRANSITIONED, got ${outcome.kind}`);
+  const result: EffectResult | null = outcome.result;
+  expect([outcome.intent.state, result?.terminalState, result?.outcomeClass]).toEqual(
+    ["SUCCEEDED", "SUCCEEDED", "PROVEN_RESULT"],
+  );
+  // The published table and key set, named in compiled positions.
+  const rows: readonly ProviderSettlementRow[] = runner.PROVIDER_SETTLEMENT_ADMITTED_ROWS;
+  const dispositions: readonly ProviderSettlementDisposition[] =
+    rows.map((row) => row.disposition);
+  expect([rows.length, runner.PROVIDER_RUN_OBSERVATION_KEYS.length]).toEqual([4, 7]);
+  expect(dispositions).toEqual(["SUCCEEDED", "FAILED", "DRAIN", "CANCELLED"]);
+  expect(runner.PROVIDER_EFFECT_SETTLEMENT_VERSION).toBe("moe-provider-effect-settlement/1");
+});
+
+it("refuses a foreign run reference through the root with its own code and layer", () => {
+  const outcome: ProviderSettlementOutcome = runner.settleEffectFromProviderObservation(
+    intentIn("ACTIVE"),
+    runObservation({
+      runRef: {
+        provider: "claude", runRef: "run:1", effectIntentId: "intent:999",
+        attemptRef: "attempt:1", epoch: 3,
+      },
+    }),
+  );
+  if (outcome.kind !== "PROVIDER_SETTLEMENT_REFUSED") {
+    throw new Error(`expected a settlement refusal, got ${outcome.kind}`);
+  }
+  const failure: ProviderSettlementRefusal = outcome.failure;
+  const code: ProviderSettlementCode = failure.code;
+  expect([code, failure.layer, failure.ok]).toEqual(
+    ["PROVIDER_SETTLEMENT_EFFECT_BINDING_MISMATCH", runner.PROVIDER_EFFECT_SETTLEMENT_LAYER, false],
+  );
+  expect(runner.PROVIDER_SETTLEMENT_CODES).toContain(code);
+});
+
+/**
+ * Negative control for the settlement seam's WIDTH, on the same rule as the
+ * telemetry one above: a consumer able to call the ADMISSION could hand this
+ * package a hand-built "admitted observation", and the message table is what a
+ * fabricated refusal would need to look real. Both stay internal.
+ */
+it("withholds the settlement seam's admission reader and message table from the root", () => {
+  const withheld = [
+    "admitProviderRunObservation", "PROVIDER_SETTLEMENT_MESSAGES",
+    "PROVIDER_SETTLEMENT_OUTCOME_CLASSES",
+  ];
+  expect(withheld.length).toBe(3);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the identical membership check over names it does publish.
+  const published = [
+    "settleEffectFromProviderObservation", "PROVIDER_SETTLEMENT_CODES",
+    "PROVIDER_SETTLEMENT_ADMITTED_ROWS", "PROVIDER_RUN_OBSERVATION_KEYS",
+  ];
+  expect(published.filter((name) => name in surface)).toEqual(published);
 });

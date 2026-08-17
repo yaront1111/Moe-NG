@@ -21,6 +21,9 @@ import {
 import {
   consumeActivationGrant, validateActivationCommit,
 } from "../../packages/runner/src/supervisor/effect-grant.js";
+import {
+  settleEffectFromProviderObservation,
+} from "../../packages/runner/src/supervisor/provider-effect-settlement.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import { POISON_PATH } from "./runtime-provider-evidence-fixtures.js";
 import { RUNTIME_BOUND as BOUND, hostile } from "./runtime-provider-ledger.js";
@@ -31,6 +34,40 @@ export interface SupervisionLayers {
   readonly safeBoundary: string;
   readonly classification: string;
   readonly inventory: string;
+  readonly settlement: string;
+}
+
+/** A well-formed intent and observation, so every arm below is refused for the ONE hostile
+ *  fact it introduces rather than by an earlier shape guard answering first. */
+const SETTLEMENT_DIGEST = "b".repeat(64);
+const SETTLEMENT_INTENT = {
+  protocolVersion: "moe-effect-intent/1", intentId: "intent:settle", aggregateId: "aggregate:1",
+  expectedGraphEpoch: 3,
+  leaseBinding: {
+    leaseId: "lease:1", kind: "ASSIGNMENT", ownerSessionRef: "session:1", leaseToken: "token:1",
+    epoch: 3, state: "ACTIVE", serverWallDeadline: 90, bootId: "boot:1",
+    monotonicObservation: 12, authorityHashRef: SETTLEMENT_DIGEST, version: 7,
+  },
+  inputBinding: SETTLEMENT_DIGEST, predecessorCursor: "cursor:1", desiredState: "RUNNING",
+  idempotencyKey: "idem:1", runtimeObservationDigest: SETTLEMENT_DIGEST, state: "ACTIVE",
+  version: 7,
+};
+
+function settlementRunRef(effectIntentId: string): Record<string, unknown> {
+  return {
+    provider: "claude", runRef: "run:1", effectIntentId, attemptRef: "attempt:1", epoch: 3,
+  };
+}
+
+function settlementObservation(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> {
+  return {
+    sourceVersion: "moe-provider-telemetry/1", sourceDigest: SETTLEMENT_DIGEST,
+    runRef: settlementRunRef("intent:settle"), terminal: "COMPLETED", infrastructure: "NONE",
+    upstreamRefusal: null, completedAt: { known: true, value: "2026-08-08T00:00:00.000Z" },
+    ...overrides,
+  };
 }
 
 export function describeSupervisionBoundaries(ledger: Ledger, layers: SupervisionLayers): void {
@@ -38,6 +75,7 @@ export function describeSupervisionBoundaries(ledger: Ledger, layers: Supervisio
   const SAFE_BOUNDARY = layers.safeBoundary;
   const CLASSIFICATION = layers.classification;
   const INVENTORY = layers.inventory;
+  const SETTLEMENT = layers.settlement;
 
   // ── SUPERVISOR_LAYERS ─────────────────────────────────────────────────────────────────────
   describe("SUPERVISOR_LAYERS", () => {
@@ -158,6 +196,76 @@ export function describeSupervisionBoundaries(ledger: Ledger, layers: Supervisio
       );
       ledger.refusedSide(boundary, outcome.left, invalid);
       ledger.refusedSide(boundary, outcome.right, invalid);
+    });
+  });
+
+  // ── PROVIDER_EFFECT_SETTLEMENT_LAYER ──────────────────────────────────────────────────────
+  // The layer that refuses a provider-run observation BEFORE any effect settlement is derived
+  // from it. Its refusals are its own: a refusal the reducer made keeps the reducer's
+  // `LIFECYCLE` layer, so a case here answering with `LIFECYCLE` would be pinning the wrong
+  // boundary. The outcome's `.failure` is what carries the code and the layer; handing the
+  // wrapper straight to the ledger would read as an ADMISSION, which is why every arm unwraps.
+  describe("PROVIDER_EFFECT_SETTLEMENT_LAYER", () => {
+    const boundary = "PROVIDER_EFFECT_SETTLEMENT_LAYER";
+    const settle = (observation: unknown): unknown => {
+      const outcome = settleEffectFromProviderObservation(SETTLEMENT_INTENT, observation);
+      return (outcome as { failure?: unknown }).failure ?? outcome;
+    };
+    const binding = { code: "PROVIDER_SETTLEMENT_EFFECT_BINDING_MISMATCH", layer: SETTLEMENT };
+    const upstream = { code: "PROVIDER_SETTLEMENT_UPSTREAM_REFUSED", layer: SETTLEMENT };
+    const malformed = { code: "PROVIDER_SETTLEMENT_OBSERVATION_MALFORMED", layer: SETTLEMENT };
+
+    it("BEFORE — a foreign or upstream-refused run never reaches the settlement", async () => {
+      const outcome = await probeBefore(
+        BOUND,
+        async () => settle(settlementObservation({ runRef: settlementRunRef("intent:foreign") })),
+        async () =>
+          settle(
+            settlementObservation({
+              upstreamRefusal: {
+                ok: false, code: "TELEMETRY_RESULT_ABSENT", layer: "TELEMETRY_RESULT",
+                message: "the capture holds no terminal result record",
+              },
+            }),
+          ),
+      );
+      ledger.refused(boundary, "BEFORE", outcome.probe, binding);
+      ledger.refused(boundary, "BEFORE", outcome.effect, upstream);
+    });
+
+    it("AFTER — an unrecorded and an unknown completion instant refuse apart", async () => {
+      const outcome = await probeAfter(
+        BOUND,
+        async () =>
+          settle(
+            settlementObservation({
+              completedAt: { known: false, code: "TELEMETRY_RESULT_ABSENT", layer: "TELEMETRY_RESULT" },
+            }),
+          ),
+        async () => settle(settlementObservation({ completedAt: null })),
+      );
+      // Two DISTINCT codes at one layer: folding them would lose the difference between the
+      // provider recording that it does not know and nothing being recorded at all.
+      ledger.refused(boundary, "AFTER", outcome.effect, {
+        code: "PROVIDER_SETTLEMENT_COMPLETION_INSTANT_UNKNOWN", layer: SETTLEMENT,
+      });
+      ledger.refused(boundary, "AFTER", outcome.probe, {
+        code: "PROVIDER_SETTLEMENT_COMPLETION_INSTANT_ABSENT", layer: SETTLEMENT,
+      });
+    });
+
+    it("RACE — a proxied and an accessor-supplied observation both refuse as malformed", async () => {
+      const accessor = settlementObservation();
+      Object.defineProperty(accessor, "terminal", { get: () => "COMPLETED", enumerable: true });
+      const outcome = await probeRacing(
+        BOUND,
+        async () => settle(new Proxy(settlementObservation(), {})),
+        async () => settle(accessor),
+      );
+      for (const side of [outcome.left, outcome.right]) {
+        expect(side.status).toBe("fulfilled");
+        ledger.refused(boundary, "RACE", (side as { value: unknown }).value, malformed);
+      }
     });
   });
 }

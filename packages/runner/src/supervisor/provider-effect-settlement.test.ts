@@ -38,6 +38,7 @@ import {
   PROVIDER_EFFECT_SETTLEMENT_LAYER,
   PROVIDER_EFFECT_SETTLEMENT_VERSION,
   PROVIDER_RUN_OBSERVATION_KEYS,
+  PROVIDER_SETTLEMENT_ADMITTED_ROWS,
   PROVIDER_SETTLEMENT_CODES,
   type ProviderRunObservation,
 } from "./provider-settlement-contracts.js";
@@ -548,6 +549,28 @@ it("binds the observed run epoch into the settlement digest rather than ignoring
   expect(base.kind).toBe("TRANSITIONED");
   if (drifted.kind !== "TRANSITIONED" || base.kind !== "TRANSITIONED") return;
   expect(drifted.result?.settlementDigest).not.toBe(base.result?.settlementDigest);
+});
+
+/**
+ * The reducer's counter ceiling reaches the caller with the reducer's own code
+ * and layer. An intent AT the ceiling still parses, so this is a live arm rather
+ * than an unreachable one, and it is a second witness that this module carries
+ * reducer refusals rather than restamping them.
+ */
+it("surfaces the reducer's exhausted counter unchanged, code and layer", () => {
+  const outcome = settleEffectFromProviderObservation(
+    makeIntent({ state: "ACTIVE", version: Number.MAX_SAFE_INTEGER - 1_000_000 }),
+    observation(),
+  );
+  expect(refusal(outcome)).toBe("REFUSED:EFFECT_COUNTER_EXHAUSTED:LIFECYCLE");
+});
+
+it("publishes the settlement tables frozen, so no consumer can widen the mapping", () => {
+  expect(Object.isFrozen(PROVIDER_SETTLEMENT_ADMITTED_ROWS)).toBe(true);
+  expect(PROVIDER_SETTLEMENT_ADMITTED_ROWS.every((row) => Object.isFrozen(row))).toBe(true);
+  expect(Object.isFrozen(PROVIDER_RUN_OBSERVATION_KEYS)).toBe(true);
+  expect(Object.isFrozen(PROVIDER_SETTLEMENT_CODES)).toBe(true);
+  expect(PROVIDER_SETTLEMENT_ADMITTED_ROWS.length).toBe(4);
 });
 
 it("publishes a closed refusal vocabulary every arm above draws from", () => {
