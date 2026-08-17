@@ -155,7 +155,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -204,14 +204,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-17T20:12:07.512Z",
+  "updatedAt": "2026-08-17T20:19:16.088Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-cb476f76",
     "governor-7c5e6be6",
     "architect-94dd1835",
     "governor-a627169a",
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-12cda609"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-09T14:24:55.279Z",

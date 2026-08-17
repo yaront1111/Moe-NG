@@ -75,26 +75,42 @@
     {
       "stepId": "step-5",
       "description": "ONE CONCENTRATED VERIFICATION GATE. Run every leg as its own foreground invocation with its own captured exit code—never pipe or semicolon-mask it—and read test counts: `pnpm --filter @moe/import typecheck`; `pnpm --filter @moe/import test`; `pnpm test:migration`; `pnpm test:store`; because this changes durable event schema, also `pnpm typecheck` and `pnpm test`. The owned import/migration legs and repo typecheck must be green with nonzero test counts where applicable. Apply the merge-base→HEAD path-attributed baseline to store/root test: the known recovery-anchor.test.ts:694 export leak may remain foreign red only if the HEAD-minus-baseline failing-path set intersected with the three owned paths is empty; quote it verbatim and never fabricate green. The exact fresh exit-0 command used as complete_task evidence is `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test && pnpm test:migration`; record its output lines (currently 8/132 and 3/25). Also record task-80fce1d1d625453098bd526d61c5ddb8 as the production reader consumer.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.ts",
         "packages/import/src/import-apply.test.ts",
         "tests/migration/import/import-determinism.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-apply.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ],
+      "note": "CONCENTRATED GATE. Every leg its own foreground invocation, exit read from PIPESTATUS[0]/$? — never `;`-chained, never piped-and-read-tail's-code.\n\nOWNED, GREEN, with executed counts:\n- pnpm --filter @moe/import typecheck EXIT 0\n- pnpm --filter @moe/import test EXIT 0 \"Test Files 8 passed (8) / Tests 134 passed (134)\" (was 8/132)\n- pnpm test:migration EXIT 0 \"Test Files 3 passed (3) / Tests 26 passed (26)\" (was 3/25)\n- pnpm typecheck (repo-wide, recursive) EXIT 0 — every package including apps/daemon Done.\n\nFRESH COMPLETION EVIDENCE, run as one command: `pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test && pnpm test:migration` EXIT 0, printing 8/134 and 3/26 count lines.\n\nFOREIGN RED, quoted verbatim, path-attributed, never fabricated green:\n- pnpm test:store EXIT 1 \"Test Files 1 failed | 43 passed (44) / Tests 1 failed | 526 passed (527)\" — identical to the pre-change baseline captured in step 1; sole failure packages/store/src/recovery-anchor.test.ts:694 \"RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root\".\n- pnpm test (root) EXIT 1. From Git Bash: \"Test Files 3 failed | 289 passed (292) / Tests 4 failed | 7116 passed | 2 skipped (7122)\" — recovery-anchor.test.ts, packages/testkit/src/foundation/foundation-spec.test.ts:224 (\"expected [ 'apps\\\\daemon\\\\src\\\\index.ts' ] to deeply equal []\"), tests/integration/release-archive-cleanup.test.ts (2, reason SOURCE_ARCHIVE_FAILED). Re-run under PowerShell: \"Test Files 3 failed | 289 passed (292) / Tests 3 failed | 7117 passed | 2 skipped (7122)\" — release-archive-cleanup PASSES 4/4 there (known MSYS-tar/Git-Bash artifact), and a timing flake appears instead at packages/runner/src/providers/claude/claude-launcher.windows.test.ts \"stays alive beyond the control poll slice\".\n- ATTRIBUTION: the HEAD failing-path set is {packages/store/src/recovery-anchor.test.ts, packages/testkit/src/foundation/foundation-spec.test.ts, packages/runner/.../claude-launcher.windows.test.ts, tests/integration/release-archive-cleanup.test.ts}. Intersected with this task's three owned paths it is EMPTY. Each is independently shown to pre-date or be independent of this diff: recovery-anchor reproduced at the pre-change baseline; the foundation violation names apps/daemon/src/index.ts whose ./foundation/foundation-surface.js import is already present at baseline HEAD 926f6db (`git show 926f6db:apps/daemon/src/index.ts` line 217); release-archive-cleanup imports nothing from @moe/import and is green in PowerShell; the launcher case is a wall-clock timing arm in packages/runner.\n\nKNOWN HAZARD — FOREIGN WHOLE-TREE COMMIT CAPTURED THIS TASK'S BYTES. Commit 7a596d5 \"feat(task-5e43a9e294ef48fdab23817c8c6cfc45): Foundation daemon ingress surface\" committed all three owned files along with its own work; `git status` therefore reads clean for them. Per the global rail I did NOT amend, reset, stash or add an empty claiming commit. Worktree blobs equal HEAD blobs exactly (import-apply.ts 0b3dacb632c5ca598f0b2898b88c6e868ba71e00, import-apply.test.ts 86e022f24d5eac72b9d95269e893de7254b36a05, import-determinism.test.ts 4795c17aa94653ef9204226994cf2d8dae8ae9ba), so the committed bytes ARE the gated bytes. QA should review `git diff 926f6db..HEAD -- packages/import/src/import-apply.ts packages/import/src/import-apply.test.ts tests/migration/import/import-determinism.test.ts` (numstat 14/14, 64/2, 113/0); outside .moe the only other paths in that range are a peer serena memory and tests/security/integrity-hostile-cases.ts from commit 3997b07.\n\nCONSUMER RECORDED: task-80fce1d1d625453098bd526d61c5ddb8 (daemon imported-state shadow projection adapter) is the production reader that consumes this stamp; its handoff memory names the missing envelope schema as its blocking gap.",
+      "startedAt": "2026-08-17T20:14:03.493Z",
+      "completedAt": "2026-08-17T20:16:58.808Z"
     },
     {
       "stepId": "step-6",
       "description": "FINAL ADVERSARIAL REVIEW AND MUTATION DRILL. Snapshot exact hashes and require the owned paths remain uncontested. Replace ONLY the production stamp RHS with the compile-preserving wrong value `\"moe-domain-schema/0\" as typeof IMPORT_EVENT_FACTS_VERSION`—removing the required field would merely fail TypeScript and would not test the runtime subject. The named real-SQLite envelope/payload equality assertion must RED after a positive event count, on the exact received generic default; the unit draft assertion should redden too. Restore by exact inverse patch/content only while the mutant hash still matches, then prove all three file hashes equal the gated hashes (never checkout/restore over peer work). Review: required literal type cannot be omitted; outer and inner schema agree on every event; event/payload/command goldens did not move; replay is COMMITTED→REPLAYED with zero new events and exactly zero command decisions; no claim/link/activation authority widened; pre-fix rows are explicitly not claimed remediated; import-apply.ts <=250; no CR/BOM/debug/probe residue. Inspect staged paths, unstage any foreign entry, commit only the three explicit pathspecs, and verify `git show --stat` contains nothing else.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.ts",
         "packages/import/src/import-apply.test.ts",
         "tests/migration/import/import-determinism.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-apply.ts",
+        "packages/import/src/import-apply.test.ts",
+        "tests/migration/import/import-determinism.test.ts"
+      ],
+      "note": "FINAL ADVERSARIAL REVIEW AND MUTATION DRILL.\n\nMUTATION DRILL (compile-preserving, so the RUNTIME subject is the thing tested): production stamp RHS replaced with `\"moe-domain-schema/0\" as typeof IMPORT_EVENT_FACTS_VERSION`. Mutant blob db896d7bb3a0fbc336547bad81d1868693f4e65a, re-verified as still in place immediately before EACH drill run.\n- pnpm test:migration EXIT 1, \"Tests 1 failed | 25 passed (26)\", named assertion import/import-determinism.test.ts:294 \"expected 'moe-domain-schema/0' to be 'moe-import-event-facts/1'\". It reddens AFTER the positive-event-count, hasMore:false and zero-decision controls pass, so the real-store sweep executed rather than refused.\n- pnpm --filter @moe/import test EXIT 1, \"Tests 2 failed | 132 passed (134)\": import-apply.test.ts:126 and :246, both on the exact received generic default.\nRESTORED by exact inverse edit while the mutant hash still matched. Post-restore blobs equal the gated blobs AND HEAD: import-apply.ts 0b3dacb632c5ca598f0b2898b88c6e868ba71e00, import-apply.test.ts 86e022f24d5eac72b9d95269e893de7254b36a05, import-determinism.test.ts 4795c17aa94653ef9204226994cf2d8dae8ae9ba. No checkout/reset/stash was used; no peer commit captured the mutant (HEAD 3997b07 before and after). Post-restore gate re-run green: typecheck EXIT 0, 8/134, 3/26, chained GATE_EXIT=0.\n\nADVERSARIAL REVIEW.\n- Required literal cannot be omitted: `Omit<ImportEventDraft,\"domainSchemaVersion\"> extends ImportEventDraft ? never : true` fails to compile if the member is optional; expectTypeOf pins the exact literal so a widened `string` also fails. Both checked by tsc, and both were RED before the change.\n- Outer/inner agreement asserted per event over a positive, hasMore:false page — no vacuous sweep.\n- Goldens did not move: commandId dceabb9c, commandBytes cbf3ab0e, eventIds ec4597cf/aaf6423c, eventTypes, payload bytes all still pass, consistent with @moe/store excluding domainSchemaVersion from request and effect identity.\n- Replay is COMMITTED then REPLAYED with byte-identical envelopes, unchanged horizon/version/receipt, no duplicate row, and exactly zero command decisions before and after.\n- No authority widened: claim status vocabulary, evidenceOnly links, counts and every refusal code/layer are untouched; the diff adds no refusal arm and no new export.\n- Concurrency/inputs: the stamp is a module constant on a pure derivation, not caller data, so there is no new check-then-act, no new mutable shared state, no injection surface; requireIdentifier accepts it (non-empty, <=512 UTF-8 bytes, no NUL). foldRecord pushes only after every refusal return, so no partial write is introduced.\n- The ONLY other ImportEventDraft references are the test file and the barrel re-export (grep over packages/apps/adapters/tests), and repo-wide `pnpm typecheck` is EXIT 0, so no other constructor was left unstamped or silently cast.\n- SCOPE HONESTY: pre-fix rows carrying moe-domain-schema/0 are NOT remediated by this change; identical replay returns the original receipt. Historical remediation needs an explicit upcast/migration task.\n- Hygiene: import-apply.ts exactly 250 lines, 0 CR bytes, no BOM; no debug/probe/scratch file was created (the pre-change goldens were measured with an in-memory `node --input-type=module -e` run, nothing written to disk).\n\nCOMMIT: nothing to stage. Foreign whole-tree commit 7a596d5 (task-5e43a9e294ef48fdab23817c8c6cfc45) already captured all three owned files; `git diff --cached` is empty and the owned-path worktree delta versus HEAD is empty, so the committed bytes are exactly the gated bytes. Per the global rail I did not amend that commit, reset, or manufacture an empty claiming commit. QA reviews `git diff 926f6db..HEAD -- packages/import/src/import-apply.ts packages/import/src/import-apply.test.ts tests/migration/import/import-determinism.test.ts` (numstat 14/14, 64/2, 113/0). Untracked residue: none in owned paths; the only dirty tree entries are .moe board/message files written by the daemon.",
+      "startedAt": "2026-08-17T20:17:04.493Z",
+      "completedAt": "2026-08-17T20:18:48.511Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b8af1a87",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -106,12 +122,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T19:53:43.483Z",
-  "updatedAt": "2026-08-17T20:14:01.279Z",
+  "updatedAt": "2026-08-17T20:20:02.507Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:54:53.573Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -121,7 +137,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T20:01:06.925Z",
@@ -141,5 +159,17 @@
     "wallClockMs": 5400000
   },
   "planApprovedAt": "2026-08-17T20:01:08.992Z",
-  "workStartedAt": "2026-08-17T20:05:53.494Z"
+  "workStartedAt": "2026-08-17T20:05:53.494Z",
+  "reviewStartedAt": "2026-08-17T20:20:02.507Z",
+  "verification": {
+    "command": "pnpm --filter @moe/import typecheck && pnpm --filter @moe/import test && pnpm test:migration",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root ../.. packages/import/src\n RUN  v4.1.10 D:/projexts/moe-next\n Test Files  8 passed (8)\n      Tests  134 passed (134)\n   Start at  23:18:05\n   Duration  598ms\n$ tsc -p tests/migration/tsconfig.json && vitest run --config tests/migration/vitest.config.ts\n RUN  v4.1.10 D:/projexts/moe-next/tests/migration\n Test Files  3 passed (3)\n      Tests  26 passed (26)\n   Start at  23:18:07\n   Duration  10.98s\nGATE_EXIT=0",
+    "reportedAt": "2026-08-17T20:20:02.507Z"
+  },
+  "filesModified": [
+    "packages/import/src/import-apply.ts",
+    "packages/import/src/import-apply.test.ts",
+    "tests/migration/import/import-determinism.test.ts"
+  ]
 }

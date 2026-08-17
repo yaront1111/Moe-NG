@@ -167,8 +167,8 @@
       "completedAt": "2026-08-17T20:03:33.664Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -187,12 +187,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:34:16.790Z",
-  "updatedAt": "2026-08-17T20:13:51.913Z",
+  "updatedAt": "2026-08-17T20:18:08.828Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:32:12.904Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-17T20:18:08.828Z",
+    "wallClockMs": 2755924
   },
   "contextFetchedBy": [
     "architect-c9e91335",
@@ -250,5 +252,8 @@
     "packages/runner/src/surface/claude-surface.ts",
     "packagesges/runner/src/index-surface.test.ts",
     "packages/runner/src/index-surface.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T20:18:08.828Z",
+  "reviewCompletedAt": "2026-08-17T20:18:08.828Z",
+  "reviewSummary": "APPROVED. Gates re-run by me: `pnpm --filter @moe/runner typecheck; pnpm --filter @moe/runner test` -> TYPECHECK=0 TEST=0, count line `Test Files 68 passed (68)` / `Tests 2442 passed | 1 skipped (2443)` (nonzero = executed). Owned paths clean vs HEAD, so committed bytes == gated bytes. bee2e51 = exactly the 4 owned paths; 04c6532 reuses this task's MESSAGE but carries only apps/daemon/runtime-entrypoint.test.ts (foreign sweep, not a reject).\nDoD1: arity pinned (factory and runner .length 1); launcher bound ONCE - a post-construction authority swap never runs (swapped=0).\nDoD2: success arm deep-frozen (7 nested objects); raw ClaudeLaunchResult returned beside a handoff derived from THAT result; REFUSED/ADOPTED/EXIT_BEFORE_LAUNCH each own case, codes forwarded verbatim, no restamping either way.\nDoD3: 17 hostile refs, count asserted BEFORE outcomes (>0, ==17, distinct labels), each asserting BOTH TELEMETRY_RUN_REF_MALFORMED and TELEMETRY_INPUT; zero-effect via booby-trapped authority + positive control reaching consumeGrantDurably.\nDoD4 - my own drills, red on NAMED assertions: (1) second `await launch` -> \"performs exactly one physical launch per invocation\" failed; (2) module-level STALE result paired with handoff -> \"pairs each invocation's handoff with that invocation's own result\", `expected 'REFUSED' to be 'ADOPTED'`; (3) ref guard removed -> 17 failed. Restored, sha256-verified, not trusted to git status.\nDoD5: root export live (`node -e import('@moe/runner')` -> typeof function), apps/daemon/package.json:22 + pnpm-lock.yaml:120 importer, compiled bare-specifier probe baseline 0 / probe 0 / deleted same command - plus a negative control the worker did not record: bogus symbol fails TS2724, so the exit-0 probe really resolved.\nFile exactly 250 lines, no scratch, apps/daemon untouched. OBSERVED unreachable here (caller deps refused), covered on the ONE shared handoffOf via the ADOPTED byte-equality control - disclosed, not narrowed."
 }
