@@ -103,7 +103,10 @@ describe("integrity axis versus the declared-boundary roster", () => {
   it("reads a positive number of integrity entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_INTEGRITY.length).toBeGreaterThan(0);
-    expect(ROSTER_INTEGRITY).toHaveLength(13);
+    // 13 -> 14 for GRAPH_CONTENT_LAYERS (task-66004424), whose BEFORE/AFTER/RACE arms land
+    // with this bump. The pin is the true roster count, never the covered count: raising it
+    // without the arms would redden the three-armed assertion instead of hiding anything.
+    expect(ROSTER_INTEGRITY).toHaveLength(14);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -139,6 +142,10 @@ describe("integrity axis versus the declared-boundary roster", () => {
       "APPROVAL_AUTHORITY_LAYERS",
       "DISTRIBUTION_REFUSAL_LAYERS",
       "DOCUMENT_WORK_PROPOSAL_LAYERS",
+      // Added by task-66004424 with the GRAPH_CONTENT_LAYERS arms. This literal is TIGHTENED,
+      // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
+      // and omitting it would let the new `forged` arm redden a passing assertion.
+      "GRAPH_CONTENT_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
       "REVIEW_DECISION_LAYERS",

@@ -111,6 +111,9 @@ import {
 import {
   EMPTY_REVIEW_LINEAGE, REVIEW_DECISION_LAYERS, buildReviewPackage, recordReviewRound,
 } from "../../packages/review/src/index.js";
+import {
+  GRAPH_CONTENT_LAYERS, decodeGraphContent, encodeGraphContent,
+} from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore, verifyBackupGeneration } from "../../packages/store/src/index.js";
 
 import { hostileRoot, probeRacing } from "./hostile-harness.js";
@@ -1201,8 +1204,195 @@ const reducerCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// GRAPH_CONTENT_LAYERS — @moe/scheduler's canonical `GraphRevisionContent` codec.
+// ---------------------------------------------------------------------------
+
+const GRAPH_CONTENT = GRAPH_CONTENT_LAYERS;
+
+/**
+ * ONLY THE PUBLISHED CODEC IS CALLED. `packages/scheduler/src/index.ts` exports
+ * `encodeGraphContent`/`decodeGraphContent` and deliberately WITHHOLDS `canonicalGraphJson`
+ * and `graphContentDigest`, because a caller holding either could mint bytes or a hash the
+ * graph kernel never accepted. A probe reaching past the barrel would prove nothing about
+ * what a consumer can actually do, so every arm below goes through the two exported entries
+ * and every byte string it forges is derived from bytes production itself sealed.
+ *
+ * THE THREE DECLARED MEMBERS ARE SPREAD ACROSS THE ARMS rather than one exercised three
+ * times: GRAPH_CONTENT_CODEC and GRAPH_VALIDATION on the two BEFORE arms, GRAPH_CONTENT_IDENTITY
+ * on the forgery. GRAPH_VALIDATION is the one that matters most here — it is the passthrough
+ * branch, where a structural failure keeps the kernel's OWN code instead of being restamped.
+ */
+
+/**
+ * This codec refuses with `{ ok: false, issues: [...] }`, not with a flat record, so
+ * `assertRefusedWith` cannot read it and `asLayered` — which only re-keys top-level fields —
+ * does not apply. This lifts production's own `code` and `layer` up UNREAD.
+ *
+ * It refuses to choose when production answered with more than one issue: picking `issues[0]`
+ * would silently pin whichever the validator's `sortIssues` happened to order first, and the
+ * case would then be asserting a branch it never arranged. Every arm below is built to produce
+ * exactly one, so this throws only if that stops being true.
+ */
+const soleIssue = (value: unknown): unknown => {
+  if (typeof value !== "object" || value === null) return value;
+  const record = value as Record<string, unknown>;
+  const issues = record["issues"];
+  if (!Array.isArray(issues) || issues.length !== 1) {
+    throw new Error(
+      "graph-content refusal must carry exactly one issue for a layer assertion to mean "
+      + `anything, got ${Array.isArray(issues) ? issues.length : 0}`,
+    );
+  }
+  const issue = issues[0] as Record<string, unknown>;
+  return { ...record, code: issue["code"], layer: issue["layer"] };
+};
+
+/** A HARD chain dev-node-1 -> dev-node-2 -> dev-node-3, completion = the terminal node. */
+const graphChain = (): Record<string, unknown> => ({
+  nodes: [1, 2, 3].map((index) => ({ nodeKey: `dev-node-${index}`, executionBearing: true })),
+  edges: [1, 2].map((index) => ({
+    edgeKey: `dev-edge-${index}`, producerNodeKey: `dev-node-${index}`,
+    consumerNodeKey: `dev-node-${index + 1}`, kind: "HARD",
+  })),
+  completionNodeKey: "dev-node-3",
+});
+
+/**
+ * The same chain plus a HARD SELF EDGE. Integrity defects are collected first and cycle and
+ * completion-closure are evaluated only once integrity holds (`validate-graph.ts:18-24`), so
+ * this snapshot yields exactly ONE issue and there is no ambiguity about which layer answered.
+ */
+const selfEdgeGraph = (): Record<string, unknown> => {
+  const chain = graphChain();
+  const edges = chain["edges"] as readonly unknown[];
+  return {
+    ...chain,
+    edges: [...edges, {
+      edgeKey: "dev-edge-self", producerNodeKey: "dev-node-1",
+      consumerNodeKey: "dev-node-1", kind: "HARD",
+    }],
+  };
+};
+
+/** The seven design-197 content fields. `completionNode` agrees with the snapshot's own
+ *  completion node, and `repositoryBaseTree` is a legal 40-hex tree id, so the field reader
+ *  and the reconciliation both admit every record built here. */
+const graphContentRecord = (
+  author: string, snapshot: Record<string, unknown> = graphChain(),
+): Record<string, unknown> => ({
+  author,
+  completionNode: snapshot["completionNodeKey"],
+  decompositionBudget: 3,
+  parentRevision: null,
+  policyRevision: "dev-policy-1",
+  repositoryBaseTree: "a".repeat(40),
+  snapshot,
+});
+
+/** Seals through the PRODUCTION encoder, the only route to a `graphContentHash`. */
+function sealedGraphContent(author: string): { bytes: Uint8Array; graphContentHash: string } {
+  const encoded = encodeGraphContent(graphContentRecord(author));
+  if (!encoded.ok) {
+    throw new Error(`graph content reseal refused at encode: ${encoded.issues[0]?.code ?? "?"}`);
+  }
+  return { bytes: encoded.value.bytes, graphContentHash: encoded.value.graphContentHash };
+}
+
+/** One content's canonical bytes carrying ANOTHER content's production-sealed hash. Both
+ *  halves are real: the envelope still parses, the schema tag is untouched, the fields still
+ *  read and the declared completion node still agrees, so the re-derived digest comparison is
+ *  the first thing on the path that can possibly refuse. */
+function forgedGraphBytes(): Uint8Array {
+  const donor = sealedGraphContent("dev-author-a");
+  const carrier = sealedGraphContent("dev-author-b");
+  return utf8.encode(
+    decoder.decode(carrier.bytes).replace(carrier.graphContentHash, donor.graphContentHash),
+  );
+}
+
+/** The sealed bytes with the ENVELOPE keys REVERSED. `readContentEnvelope` checks the key
+ *  SET, so shape, schema and the digest all still pass and the canonical re-encode is
+ *  provably the only branch left that can answer. */
+function reSpelledGraphBytes(): Uint8Array {
+  const parsed: unknown = JSON.parse(decoder.decode(sealedGraphContent("dev-author-a").bytes));
+  const record = parsed as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(record).reverse().map((key) => [key, record[key]])),
+  ));
+}
+
+/** A DUPLICATED `hash` key. `JSON.parse` keeps the last, so the envelope reads clean and the
+ *  digest still matches — but the bytes are not the canonical spelling of their own content. */
+function duplicateKeyGraphBytes(): Uint8Array {
+  const sealed = sealedGraphContent("dev-author-a");
+  return utf8.encode(
+    decoder.decode(sealed.bytes).replace('"hash":', `"hash":"${"0".repeat(64)}","hash":`),
+  );
+}
+
+const graphContentCases: readonly HostileCase[] = [
+  before(
+    "GRAPH_CONTENT_LAYERS", "canonical graph-content bytes truncated mid-envelope",
+    {
+      code: "GRAPH_CONTENT_UNREADABLE",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_CONTENT_CODEC"),
+    },
+    // Forty bytes lands inside the `hash` string, so the input never becomes one JSON
+    // document. Exactly two guards sit earlier and both ADMIT it — it is a real Uint8Array
+    // and it is far under the size ceiling — so the bounded read is provably the branch that
+    // answered, and nothing later on the path is reachable.
+    async () => soleIssue(
+      decodeGraphContent(sealedGraphContent("dev-author-a").bytes.slice(0, 40)),
+    ),
+  ),
+  before(
+    "GRAPH_CONTENT_LAYERS", "a structurally invalid snapshot keeps the graph kernel's own code",
+    {
+      code: "GRAPH_SELF_EDGE",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_VALIDATION"),
+    },
+    // All six caller-stated fields are the sealed fixture's own, so the field reader admits
+    // the record and the graph kernel is provably the branch that answered. The expected code
+    // is the KERNEL's, not one of this codec's: the arm reddens if a structural failure is
+    // ever restamped as GRAPH_CONTENT_MALFORMED, which is the whole point of `passthrough`.
+    async () => soleIssue(
+      encodeGraphContent(graphContentRecord("dev-author-a", selfEdgeGraph())),
+    ),
+  ),
+  forged(
+    "GRAPH_CONTENT_LAYERS", "one content's sealed hash carried onto a different content",
+    {
+      code: "GRAPH_CONTENT_DIGEST_MISMATCH",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_CONTENT_IDENTITY"),
+    },
+    // HALF ONE. Both halves of the forgery are re-sealed through the PRODUCTION encoder and
+    // the forged bytes are asserted to be EXACTLY the carrier's own canonical bytes with the
+    // donor's production hash substituted. Without this the case is indistinguishable from a
+    // stale-digest probe and would pass against a codec that binds no subject at all.
+    async () => {
+      const donor = encodeGraphContent(graphContentRecord("dev-author-a"));
+      const carrier = encodeGraphContent(graphContentRecord("dev-author-b"));
+      if (!donor.ok || !carrier.ok) return { ok: false };
+      const resealed = decoder.decode(carrier.value.bytes)
+        .replace(carrier.value.graphContentHash, donor.value.graphContentHash);
+      return { ok: resealed === decoder.decode(forgedGraphBytes()) };
+    },
+    // HALF TWO. Shape, schema tag, field read and the completion reconciliation all pass, and
+    // the digest recompute runs BEFORE the canonical re-encode (`graph-content.ts:216` vs
+    // `:224`), so IDENTITY answers with a mismatch rather than the misleading NONCANONICAL.
+    async () => soleIssue(decodeGraphContent(forgedGraphBytes())),
+  ),
+  racing(
+    "GRAPH_CONTENT_LAYERS", "a re-spelled envelope races a duplicated hash key",
+    async () => soleIssue(decodeGraphContent(reSpelledGraphBytes())),
+    async () => soleIssue(decodeGraphContent(duplicateKeyGraphBytes())),
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...contractCases, ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
+  ...graphContentCases,
 ]);
