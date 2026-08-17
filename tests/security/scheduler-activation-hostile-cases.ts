@@ -99,6 +99,9 @@ import {
   DEV_READY, devBundle, devBundlesWith, devFact, devGraph, devInput,
 } from "../../packages/scheduler/src/readiness/test-fixtures.js";
 
+import {
+  AGENT_STAFFING_LAYER, createAgentSessionFence,
+} from "../../apps/daemon/src/orchestrator/agent-session-fence.js";
 import { hostileRoot } from "./hostile-harness.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
 
@@ -640,6 +643,36 @@ function graphRequest(snapshot: unknown): FoundationAttemptDispatchRequest {
   };
 }
 
+const STAFFING_ITEM = "work-item-staffed";
+/** Fixed, so the claim leg's expiry arithmetic is deterministic across runs. */
+const STAFFING_NOW = "2026-08-15T00:00:00.000Z";
+
+/**
+ * A staffing fence over a store that already holds a LIVE child record, built through the
+ * production writer only — the aggregate id is derived inside the module and is deliberately not
+ * reconstructed here, so these fixtures cannot drift from it.
+ *
+ * `alive` is the injected CHILD probe. `false` is what makes the admitted case reachable at all,
+ * and a THROWING probe is a third state the fence must not read as "dead".
+ */
+function staffingFenceWithLiveChild(
+  label: string, alive: () => boolean, cycles = 1,
+): ReturnType<typeof createAgentSessionFence> {
+  const store = openHostileStore(label);
+  const fence = createAgentSessionFence({
+    isProcessAlive: alive, projectId: "project-1", store,
+  });
+  for (let cycle = 0; cycle < cycles; cycle += 1) {
+    if (cycle > 0) fence.retireLiveChild(STAFFING_ITEM);
+    const errors = fence.recordLiveChild({
+      childPid: 4242, claimAggregateVersion: 0, sessionId: `session-${label}`,
+      workItemId: STAFFING_ITEM,
+    });
+    if (errors.length > 0) throw new Error(`staffing fixture could not record: ${label}`);
+  }
+  return fence;
+}
+
 export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze([
   {
     constant: "ACTIVATION_INGRESS_LAYER", arm: "BEFORE",
@@ -647,6 +680,26 @@ export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze(
     arranged: ACTIVATION_INGRESS_LAYER,
     expected: { code: "ACTIVATION_INGRESS_REQUEST_MALFORMED", layer: ACTIVATION_INGRESS_LAYER },
     run: async () => ingressOf(runEffectActivateCommand(openHostileStore("ingress-before"), "not-bytes")),
+  },
+  {
+    constant: "AGENT_STAFFING_LAYER", arm: "BEFORE",
+    // The defect this fence exists to close: the durable claim has expired, so it can no longer
+    // speak for the child, and the child record is the only thing left that can refuse.
+    name: "a live recorded child refuses a second staffing pass before any retire",
+    arranged: AGENT_STAFFING_LAYER,
+    expected: { code: "AGENT_STAFFING_CHILD_LIVE", layer: AGENT_STAFFING_LAYER },
+    run: async () =>
+      staffingFenceWithLiveChild("staffing-before", () => true).admit(STAFFING_ITEM, STAFFING_NOW),
+  },
+  {
+    constant: "AGENT_STAFFING_LAYER", arm: "AFTER",
+    // A COMPLETED prior cycle, so the refusal is not an artifact of a virgin aggregate: the fold
+    // takes the last transition, and a record re-admitted after a retire still fences.
+    name: "a re-recorded child still refuses after a full record/retire cycle already committed",
+    arranged: AGENT_STAFFING_LAYER,
+    expected: { code: "AGENT_STAFFING_CHILD_LIVE", layer: AGENT_STAFFING_LAYER },
+    run: async () =>
+      staffingFenceWithLiveChild("staffing-after", () => true, 2).admit(STAFFING_ITEM, STAFFING_NOW),
   },
   {
     constant: "ACTIVATION_INGRESS_LAYER", arm: "AFTER",
@@ -1694,6 +1747,22 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
     },
   },
   {
+    constant: "AGENT_STAFFING_LAYER",
+    // The live/dead probe pair. A recorded child that IS alive must refuse both racing passes:
+    // this fence grants no exclusivity of its own, so the correct outcome is zero admissions,
+    // and a fixture that let either side through would be the second-agent defect itself.
+    name: "two staffing passes racing against one live child both refuse and neither is admitted",
+    arranged: AGENT_STAFFING_LAYER,
+    expected: { code: "AGENT_STAFFING_CHILD_LIVE", layer: AGENT_STAFFING_LAYER },
+    maxAdmitted: 0,
+    run: async () => {
+      const fence = staffingFenceWithLiveChild("staffing-race", () => true);
+      return [
+        fence.admit(STAFFING_ITEM, STAFFING_NOW), fence.admit(STAFFING_ITEM, STAFFING_NOW),
+      ] as const;
+    },
+  },
+  {
     constant: "SPAWN_INVOCATION_LAYER",
     name: "two unquotable arguments racing both refuse and neither yields a command line",
     arranged: SPAWN_INVOCATION_LAYER,
@@ -1707,6 +1776,7 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
 ]);
 
 export {
+  AGENT_STAFFING_LAYER,
   ACTIVATION_BUDGET_LAYER,
   CONVERGENCE_BREAKER_LAYER,
   DEV_READY,

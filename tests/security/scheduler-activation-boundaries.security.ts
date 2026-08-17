@@ -109,7 +109,7 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
   it("reads a positive number of scheduler-activation entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_AXIS.length).toBeGreaterThan(0);
-    expect(ROSTER_AXIS).toHaveLength(24);
+    expect(ROSTER_AXIS).toHaveLength(25);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
