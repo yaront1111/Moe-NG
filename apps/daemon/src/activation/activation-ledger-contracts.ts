@@ -43,6 +43,14 @@ export const ACTIVATION_LEDGER_RECORD_VERSION = "moe-activation-ledger/1" as con
 export const ACTIVATION_LEDGER_EVENT_TYPE = "EffectActivationCommitted" as const;
 
 /**
+ * The command kind the writer commits under: this ledger's INTERNAL durable
+ * identity, exported so a provenance reader can reject a self-consistent foreign
+ * command without copying a literal that would drift. NOT a `RuntimeCommandKind`:
+ * those are gated at envelope decode, and this one never crosses that boundary.
+ */
+export const ACTIVATION_LEDGER_COMMAND_KIND = "activation.commit" as const;
+
+/**
  * The refusing layer. Disjoint from "STORE" and from the work kernel's
  * authority labels on purpose: a caller that sees this layer knows the
  * activation ledger itself refused, not something underneath it.

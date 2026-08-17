@@ -19,10 +19,11 @@ import { Worker } from "node:worker_threads";
 
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import type { CommandDecisionResponse, CommitExpectedVersionDecisionInput } from "@moe/store";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { commitActivationLedgerRecord } from "./activation-ledger-commit.js";
 import {
+  ACTIVATION_LEDGER_COMMAND_KIND,
   ACTIVATION_LEDGER_EVENT_TYPE,
   ACTIVATION_LEDGER_LAYER,
   deriveActivationAggregateId,
@@ -530,6 +531,193 @@ describe("activation ledger commit adapter", () => {
     },
     30_000,
   );
+});
+
+/**
+ * THE COMMAND KIND IS ONE VALUE, AND THE DURABLE ROWS SAY SO.
+ *
+ * The writer's command kind used to be a private literal, so a reader wanting to
+ * reject a self-consistent foreign command had no choice but to copy the string.
+ * Two copies of a protocol literal drift: the writer changes, the reader keeps
+ * granting authority on the old one, and nothing goes red. The constant is now
+ * exported and the writer consumes it — these cases are what stops that export
+ * from being decorative.
+ *
+ * WHY THIS IS NOT A CONSTANT COMPARED TO ITSELF. Asserting only that the durable
+ * `commandKind` equals `ACTIVATION_LEDGER_COMMAND_KIND` would stay green if both
+ * moved together, which is exactly the change this task must make impossible.
+ * Three independent things close it:
+ *
+ *   1. the LITERAL ratchet below — the constant is pinned to the string itself,
+ *      not to whatever the writer happens to emit;
+ *   2. the TYPE ratchet — a widening to `string` is a typecheck failure, so the
+ *      export cannot quietly stop being a literal type;
+ *   3. the IDENTITY GOLDENS — `commandKind` is hashed into the store's request
+ *      identity (`identifyExpectedVersionRequest`), so changing the string moves
+ *      `requestSha256`. Measured, not assumed: mutating the export alone drives
+ *      the decision's `requestSha256` from `5b7ecc51…` to `be96c146…`.
+ *
+ * `decisionId` is NOT that golden and cannot stand in for it. It survived that
+ * same mutation unchanged, because it is derived from the decision KEY —
+ * projectId, principalId, commandId — and not from the request. Pinning only
+ * `decisionId` would have produced a replay case that looked identity-bound and
+ * was blind to the exact drift this task exists to prevent. `requestSha256` is
+ * therefore asserted on BOTH the accepted and the replayed path.
+ *
+ * All five hashes were measured against the production writer BEFORE the
+ * constant existed, so they cannot have been produced by it.
+ */
+const GOLDEN = Object.freeze({
+  /** Store-derived decision identity; covers commandKind by construction. */
+  decisionId: "1e0590ddaec1767f9bc3ce4cdf66bf5806fb0cb29739693d5a73b7eb59e91dda",
+  /** The scoped-command-request domain. Distinct from the effect domain below. */
+  decisionRequestSha256: "5b7ecc51684b7bf7c78867d7c7bf4b20d18617773378fdfaabc5f888cb9f450b",
+  effectSha256: "dfbae7275ff136e1f8a509198a71fe4e49a84e6be1237eb430a4e2422b88b208",
+  /** The effect domain: the event and the receipt share it, the decision does not. */
+  eventRequestSha256: "732eaf14278101935db9574841d68bf8e255d69a3a6568d5e5ec8d6b232029dc",
+  resultSha256: "0289b674efd23ee6618ee5e4350432e0fae15fa55d782c87fddb706a453a2a4e",
+});
+
+describe("activation ledger command identity", () => {
+  it("pins the exported constant to the literal and to its literal TYPE", () => {
+    expect(ACTIVATION_LEDGER_COMMAND_KIND).toBe("activation.commit");
+    // Widening to `string` would let any writer satisfy a reader that imports
+    // this, which is the whole point of exporting it. `tsc --project
+    // tsconfig.json` covers src/**/*.ts, so this line is enforced by the gate.
+    expectTypeOf<typeof ACTIVATION_LEDGER_COMMAND_KIND>().toEqualTypeOf<"activation.commit">();
+  });
+
+  it("binds the stored decision, receipt and event trace to the exported command kind", () => {
+    withDirectory("provenance", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        const committed = commitActivationLedgerRecord(store, input());
+        expect(committed.ok).toBe(true);
+        if (!committed.ok) return;
+        expect(committed.disposition).toBe("COMMITTED");
+
+        // POSITIVE and singular. "Exactly one" over an empty aggregate would
+        // satisfy every field assertion below vacuously.
+        const events = store.readEvents(DERIVED);
+        expect(events).toHaveLength(1);
+        const event = events[0];
+        expect(event).toBeDefined();
+        if (event === undefined) return;
+
+        const decision = store.getCommandDecision(input().key);
+        expect(decision).not.toBeNull();
+        if (decision === null) return;
+
+        // ASSERTED FIRST, so a wrong-kind mutation names the command kind in the
+        // failure rather than reddening on a downstream hash whose message says
+        // nothing about what drifted.
+        expect(decision.commandKind).toBe(ACTIVATION_LEDGER_COMMAND_KIND);
+        expect(event.decisionTrace?.commandKind).toBe(ACTIVATION_LEDGER_COMMAND_KIND);
+
+        expect(decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+        if (decision.effectDisposition !== "EFFECTS_COMMITTED") return;
+        expect(decision.resultCode).toBe("EFFECTS_COMMITTED");
+        expect(decision.targetAggregateId).toBe(DERIVED);
+        // 0 -> 1: the activation is the FIRST event on its own derived aggregate.
+        expect(decision.expectedVersion).toBe(0);
+        expect(decision.observedVersion).toBe(0);
+        expect(decision.previousVersion).toBe(0);
+        expect(decision.currentVersion).toBe(1);
+        expect(decision.businessEventIds).toEqual([GRANT_ID]);
+        expect(decision.outboxMessageIds).toEqual([]);
+        // The durable record IS the event payload, so there is no second copy of
+        // the activation that could disagree with the decision's result bytes.
+        expect(decision.resultBytes).toEqual(event.payload);
+
+        expect(decision.decisionId).toBe(GOLDEN.decisionId);
+        expect(decision.requestSha256).toBe(GOLDEN.decisionRequestSha256);
+        expect(decision.effectSha256).toBe(GOLDEN.effectSha256);
+        expect(decision.resultSha256).toBe(GOLDEN.resultSha256);
+
+        expect(event.eventType).toBe(ACTIVATION_LEDGER_EVENT_TYPE);
+        expect(event.eventId).toBe(GRANT_ID);
+        expect(event.aggregateId).toBe(DERIVED);
+        expect(event.aggregateSequence).toBe(1);
+        expect(event.requestSha256).toBe(GOLDEN.eventRequestSha256);
+        expect(event.decisionTrace?.commandId).toBe(input().key.commandId);
+        expect(event.decisionTrace?.requestSha256).toBe(GOLDEN.decisionRequestSha256);
+
+        // The receipt is keyed by the store's INTERNAL effect command id, not by
+        // the caller's `command-1`. Looking it up under the caller's id returns
+        // null, so the binding is asserted through the event's own commandId and
+        // that id is required to carry the decision identity — the two rows are
+        // then provably the same commit rather than two rows that merely agree.
+        expect(store.getCommandReceipt(input().key.commandId)).toBeNull();
+        expect(event.commandId).toContain(GOLDEN.decisionId);
+        const receipt = store.getCommandReceipt(event.commandId);
+        expect(receipt).not.toBeNull();
+        if (receipt === null) return;
+        expect(receipt.commandId).toBe(event.commandId);
+        expect(receipt.aggregateId).toBe(DERIVED);
+        expect(receipt.eventIds).toEqual([GRANT_ID]);
+        expect(receipt.previousVersion).toBe(0);
+        expect(receipt.currentVersion).toBe(1);
+        expect(receipt.outboxMessageIds).toEqual([]);
+        expect(receipt.effectSha256).toBe(GOLDEN.effectSha256);
+        // The receipt shares the EFFECT request domain with the event, and the
+        // decision's own `requestSha256` is a different domain over different
+        // inputs. Asserting one hash for both would pass while the writer bound
+        // the wrong one.
+        expect(receipt.requestSha256).toBe(GOLDEN.eventRequestSha256);
+        expect(receipt.requestSha256).not.toBe(decision.requestSha256);
+      });
+    });
+  });
+
+  it("replays the identical command without adding a raw event or decision row", () => {
+    withDirectory("provenance-replay", (directory) => {
+      const databasePath = join(directory, "store.sqlite");
+      withStore(databasePath, (store) => {
+        const first = commitActivationLedgerRecord(store, input());
+        expect(first.ok).toBe(true);
+        if (!first.ok) return;
+
+        // RAW counts, taken store-wide rather than per aggregate: a second
+        // decision row or a second event anywhere is what a re-executed replay
+        // would leave, and a per-aggregate read could miss one written elsewhere.
+        const eventsBefore = store.readEventsAfter(0n, 100).items;
+        const decisionsBefore = store.readCommandDecisionsAfter(0n, 100).items;
+        // Positive, so "unchanged" below is a real comparison and not 0 === 0.
+        expect(eventsBefore).toHaveLength(1);
+        expect(decisionsBefore).toHaveLength(1);
+        const durablePayload = eventsBefore[0]?.payload;
+        const durableDecisionSha256 = decisionsBefore[0]?.decisionSha256;
+        expect(durablePayload).toBeDefined();
+        expect(durableDecisionSha256).toBe(
+          store.getCommandDecision(input().key)?.decisionSha256,
+        );
+
+        const replayed = commitActivationLedgerRecord(store, input());
+        expect(replayed.ok).toBe(true);
+        if (!replayed.ok) return;
+        expect(replayed.disposition).toBe("REPLAYED");
+        expect(replayed.digest).toBe(first.digest);
+        expect(replayed.record).toEqual(first.record);
+
+        const eventsAfter = store.readEventsAfter(0n, 100).items;
+        const decisionsAfter = store.readCommandDecisionsAfter(0n, 100).items;
+        expect(eventsAfter).toHaveLength(eventsBefore.length);
+        expect(decisionsAfter).toHaveLength(decisionsBefore.length);
+        // Byte-identical, not merely equal in number.
+        expect(eventsAfter[0]?.payload).toEqual(durablePayload);
+        expect(decisionsAfter[0]?.decisionSha256).toBe(durableDecisionSha256);
+        expect(decisionsAfter[0]?.commandKind).toBe(ACTIVATION_LEDGER_COMMAND_KIND);
+        expect(decisionsAfter[0]?.decisionId).toBe(GOLDEN.decisionId);
+        expect(eventsAfter[0]?.decisionTrace?.commandKind).toBe(ACTIVATION_LEDGER_COMMAND_KIND);
+        // The two assertions above compare production against the constant, so
+        // they hold if BOTH move together; `decisionId` is key-derived and does
+        // not move with the command kind at all. These two are what make the
+        // replayed row identity-bound rather than self-consistent.
+        expect(decisionsAfter[0]?.requestSha256).toBe(GOLDEN.decisionRequestSha256);
+        expect(eventsAfter[0]?.requestSha256).toBe(GOLDEN.eventRequestSha256);
+      });
+    });
+  });
 });
 
 interface RaceResult {

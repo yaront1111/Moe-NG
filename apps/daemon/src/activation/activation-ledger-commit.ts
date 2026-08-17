@@ -37,6 +37,7 @@ import type { CommandDecisionResponse, StoredEvent } from "@moe/store";
 
 import { encodeActivationLedgerRecord } from "./activation-ledger-codec.js";
 import {
+  ACTIVATION_LEDGER_COMMAND_KIND,
   ACTIVATION_LEDGER_EVENT_TYPE,
   activationLedgerRefusal,
   deriveActivationAggregateId,
@@ -47,8 +48,6 @@ import type {
   ActivationLedgerStore,
 } from "./activation-ledger-contracts.js";
 import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
-
-const COMMAND_KIND = "activation.commit";
 
 /** Every activation is the FIRST event on its own derived aggregate. */
 const EXPECTED_VERSION = 0;
@@ -188,7 +187,7 @@ export function commitActivationLedgerRecord(
   let response: CommandDecisionResponse;
   try {
     response = store.commitExpectedVersionDecision({
-      commandKind: COMMAND_KIND,
+      commandKind: ACTIVATION_LEDGER_COMMAND_KIND,
       committedResultBytes: encoded.bytes,
       correlationId: input.correlationId,
       decidedAt: input.decidedAt,
