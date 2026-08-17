@@ -2,10 +2,11 @@ import { createDeadEndJournal } from "@moe/context";
 import type { DeadEndJournalEntry } from "@moe/context";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { IdempotencyConflictError } from "@moe/store";
-import type { SqliteEventStore, StoredEvent } from "@moe/store";
+import type { CommandDecisionRecord, SqliteEventStore, StoredEvent } from "@moe/store";
 
-import { readCurrentEffectSessionBinding } from "../activation/activation-ledger-reader.js";
-import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
+import {
+  readCurrentEffectSessionBinding, readFoundationActivationHistory,
+} from "../activation/activation-ledger-reader.js";
 import { FOUNDATION_DISPATCH_EVENT_TYPES } from "../work/foundation-attempt-contracts.js";
 import {
   decodeFoundationPayload, deriveDispatchAggregateId, encodeFoundationPayload, exactKeys,
@@ -29,13 +30,12 @@ import { readCurrentAttemptJournal } from "./journal-reader.js";
  * channel at all and are refused STRUCTURALLY by the seam's allow-list at stage
  * PAYLOAD_SHAPE, one layer above this module. Everything persisted here is
  * re-derived from committed evidence:
- *   - `readCurrentEffectSessionBinding` IS the attempt/session/lease fence. It
- *     requires intent ACTIVE, attempt RUNNING, the lease parsed, ACTIVE, equal to
- *     the intent's own lease binding and not past its wall deadline, and the
- *     activation commit coherent — all from committed rows, with the caller's
- *     values used for equality and nothing else. Its refusals are carried under
- *     ITS code and ITS layer: a stale lease must stay distinguishable from an
- *     absent attempt, and restamping would destroy exactly that difference.
+ *   - `readCurrentEffectSessionBinding` IS the attempt/session/lease fence: intent
+ *     ACTIVE, attempt RUNNING, lease parsed, ACTIVE, equal to the intent's own
+ *     lease binding and not past its wall deadline, activation commit coherent —
+ *     all from committed rows, the caller's values used for equality and nothing
+ *     else. Its refusals keep ITS code and ITS layer: a stale lease must stay
+ *     distinguishable from an absent attempt, and restamping destroys that.
  *   - the journal aggregate is derived from the BINDING's activationDigest, a
  *     server-derived value, so no caller can name a journal stream into being.
  *     `attemptAggregateId` only LOCATES the activation record; the digest
@@ -168,7 +168,10 @@ export function runJournalAppendCommand(
     store, request.projectId, request.effectId, request.principalId,
     Date.parse(request.decidedAt));
   if (binding.status !== "BOUND") return journalRefusal(binding.code, binding.layer);
-  const { activationDigest, sessionId } = binding;
+  // The BINDING's OWN values: it answers `effectId` as the COMMITTED intentId and
+  // uses the caller's string for equality only, so no caller-supplied string
+  // reaches the durable body at all.
+  const { activationDigest, effectId, sessionId } = binding;
   const facts = agreeingAttempt(store, request, activationDigest, sessionId);
   if (isRefusal(facts)) return facts;
   const nodeKey = durableNodeKey(store, request.attemptAggregateId);
@@ -188,7 +191,7 @@ export function runJournalAppendCommand(
   // never restamped, never truncated, never retried with fewer entries.
   if (journal.kind !== "ADMITTED") return journalRefusal(journal.code, journal.layer);
   const encoded = encodeFoundationPayload({
-    activationDigest, attemptRef: facts.attemptRef, effectId: request.effectId,
+    activationDigest, attemptRef: facts.attemptRef, effectId,
     entries: journal.journal.entries, journalDigest: journal.journal.digest,
     leaseRef: facts.leaseRef, nodeKey, projectId: request.projectId,
     recordVersion: JOURNAL_RECORD_VERSION, sessionId, truthClass: "DAEMON_VERIFIED",
@@ -203,9 +206,23 @@ function commitAppend(
 ): JournalAppendOutcome {
   const unavailable = journalRefusal("JOURNAL_COMMIT_UNAVAILABLE");
   const targetAggregateId = deriveAttemptJournalAggregateId(activationDigest);
-  let existing: readonly StoredEvent[];
-  try { existing = store.readEvents(targetAggregateId); } catch { return unavailable; }
   const { commandId, correlationId, decidedAt, principalId, projectId } = request;
+  const key = { commandId, principalId, projectId };
+  let existing: readonly StoredEvent[];
+  let prior: CommandDecisionRecord | null;
+  try {
+    existing = store.readEvents(targetAggregateId);
+    prior = store.getCommandDecision(key);
+  } catch { return unavailable; }
+  // THE REPLAY'S expectedVersion IS THE ORIGINAL'S, NOT TODAY'S TAIL.
+  // `identifyExpectedVersionRequest` hashes expectedVersion alongside the request
+  // bytes (packages/store/src/store-digests.ts:92), so re-deriving it from a tail
+  // this very command already moved would make a byte-identical retry hash
+  // DIFFERENTLY and come back as an idempotency conflict instead of a replay.
+  // Reusing the recorded value keeps the STORE the sole authority on identity:
+  // same key + same bytes still replays, same key + different bytes still
+  // conflicts, and neither judgement is reimplemented here.
+  const expectedVersion = prior === null ? existing.length : prior.expectedVersion;
   try {
     const written = store.commitExpectedVersionDecision({
       commandKind: JOURNAL_APPEND_COMMAND_KIND, committedResultBytes: payload, correlationId,
@@ -216,8 +233,8 @@ function commitAppend(
       }],
       // APPEND-ONLY: the tail as it stands now, so a racing second append loses
       // its version check rather than both landing.
-      expectedVersion: existing.length,
-      key: { commandId, principalId, projectId }, requestBytes, targetAggregateId,
+      expectedVersion,
+      key, requestBytes, targetAggregateId,
     });
     if (written.decision.effectDisposition !== "EFFECTS_COMMITTED") return unavailable;
     return Object.freeze({

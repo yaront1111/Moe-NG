@@ -59,51 +59,85 @@
     {
       "stepId": "step-4",
       "description": "ADD REAL BEFORE/AFTER/RACE CASES AND DURABLE PROOFS. In `scheduler-activation-hostile-cases.ts`, import the production GOAL prerequisite/qualification surfaces and reuse the established bootstrap and goal-closure arrangers (`openStore`, `driveThrough`, `send`, `envelope`, `acceptancePayload`, `decisionCount`, `GOAL_ID`, `approveNodes`, `seedReviewAcceptance`, `seedVerifiedNode`) only to create real SQLite facts. Add GOAL cases beside the existing `GOAL_LAYER` entries in `EXPANSION_SUPERSESSION_CASES/RACES`: BEFORE drives a real execution-enabled goal with an approved node but no durable verification receipt and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` at `DAEMON_PREREQUISITE`; AFTER fully qualifies one node and asserts `qualifyGoalClosure(...).ok === true`, then commits a second real PASSED receipt for the same node and must return `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS` at that same layer; RACE submits two distinct real `goal.close` command identities against the approved/no-receipt state, requires both exact ABSENT refusals, and sets `maxAdmitted: 0`. Route all three through one capture helper that returns the exact `send(...)` object unchanged while recording before/after raw decision counts, goal event counts, `GoalCompleted` counts, and durable goal result bytes. Export read-only proof accessors/cleanup, prove four actual hostile command outcomes were captured, and close bootstrap stores before cleaning temporary verification roots. No production file or test helper may synthesize the refusal.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/scheduler-activation-hostile-cases.ts"
       ],
-      "startedAt": "2026-08-17T18:27:37.030Z"
+      "modifiedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "Real BEFORE/AFTER/RACE cases + the accepted control landed, all driving `send -> runBootstrapCommand -> GOAL_HANDLERS[\"goal.close\"]` over real SQLite facts. Nothing synthesizes a refusal.\n\nDRIVER (`captureGoalClose`): snapshots `goalResidue` (raw decisionCount via readDurableLedger, goal aggregate event count, GoalCompleted count, JSON of the durable goal result) BEFORE and AFTER the real `send(...)`, records the proof, and RETURNS THE EXACT `send(...)` OBJECT UNCHANGED. `goalProjectionOf` then hands the case table the RECORDED `asLayered(outcome,\"refusedBy\")` copy — needed because hostile-harness.readRefusal reads only `layer`/`reasonLayer` while the daemon spells it `refusedBy`; it copies production's own two fields and invents nothing. Returning the recorded object is what makes the suite's `===` identity check meaningful.\n\nARRANGERS (real, no reimplementation):\n- `approvedGoalWithoutReceipt()` = openStore + approveNodes([\"node-1\"]) -> EXECUTION_ENABLED at version 2, valid at ingress AND at the core, missing only durable evidence.\n- `ambiguouslyReceiptedGoal()` = approve + seedReviewAcceptance + seedVerifiedNode, then records `qualifyGoalClosure(...)` (exposed as `goalAfterPrecondition()`), then a SECOND real PASSED receipt for the same node.\n- `runAcceptedGoalCloseControl()` = approve + review acceptance + one PASSED receipt, then the same driver.\n\nRACE uses ONE store and TWO distinct commandIds (`cmd-goal.close-race-left`/`-right`) so the daemon's replay path cannot echo the first side; maxAdmitted 0.\n\n`npx tsc -p tests/security/tsconfig.json` EXIT 0.\nFocused run -> EXIT=1, `Tests 1 failed | 127 passed (128)`. The ONE remaining red is the step-5 ratchet: `expected [...] to have a length of 25 but got 26` at scheduler-activation-boundaries.security.ts:130. Every goal assertion is green.\n\nVerbose per-case wall clock proves the fixtures did real work rather than short-circuiting (a real verifier child process per seeded node):\n  GOAL_PREREQUISITE_LAYER BEFORE ... 23ms\n  GOAL_PREREQUISITE_LAYER AFTER (two seeds + qualification) ... 157ms\n  GOAL_PREREQUISITE_LAYER RACE ... 54ms\n  accepted goal-closure control (one seed + real close) ... 89ms\nThe control's green assertions are durable readbacks — lifecycle COMPLETED, version 4, activeGraphRevisionRef null, exactly one GoalCompleted, decisions +1 — which are unreachable unless the production chain actually minted a PASSED receipt (`seedVerifiedNode` throws on any other verdict).\n\nNOTE: `verifierLaunchCount()` stayed 0 and its whole-slice assertion still passes — the goal fixtures use the shipped launcher, not the module's `recordingLauncher`, so the two never interfere.",
+      "startedAt": "2026-08-17T18:27:37.030Z",
+      "completedAt": "2026-08-17T18:29:58.284Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN — PIN THE ANSWERING LAYER, ZERO RESIDUE, AND AN ACCEPTED CONTROL. In `scheduler-activation-boundaries.security.ts`, update the measured scheduler-axis cardinality 25→26 and complete the RED assertions. For every GOAL hostile outcome assert the exact code and raw production `refusedBy === GOAL_PREREQUISITE_LAYER` (not merely a projected layer), object identity with the captured service return, unchanged decision/event/result snapshots, and zero `GoalCompleted` admissions. Add one accepted control through the SAME capture/command helper: approve one node, seed its accepted review and one real PASSED verification, submit real `goal.close`, and assert the returned production object is `ok:true`, `disposition:\"DECIDED\"`, `authority:\"DURABLE_DECISION\"`; decision count rises by exactly one; exactly one `GoalCompleted` lands; and production readback is lifecycle `COMPLETED`, version 4, with no active graph revision. Assert the GOAL case/control counts are nonzero so generated coverage cannot silently vanish and a refuse-everything implementation cannot pass.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/scheduler-activation-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "GREEN. `npx tsc -p tests/security/tsconfig.json` EXIT 0; focused run `pnpm exec vitest run --root tests/security --config vitest.config.ts scheduler-activation-boundaries.security.ts` -> EXIT=0, `Test Files 1 passed (1)`, `Tests 129 passed (129)` (nonzero executed count).\n\nRatchet: scheduler-activation axis cardinality 25 -> 26, parsed from the roster's committed bytes by the file's own regex, with a comment naming this task.\n\nAssertions now standing over the GOAL group (7 named tests):\n- \"is rostered on this axis with exactly one BEFORE, one AFTER and one RACE arm\" — armsFor(GOAL_PREREQUISITE_LAYER) filtered per arm, each exactly 1, plus ROSTER_AXIS containment.\n- \"captured one outcome per goal command it actually sent, and the count is positive\" — proofs >0, exactly 4, arms sorted === [AFTER,BEFORE,RACE,RACE]. A group that generated nothing reddens here.\n- \"was answered by this layer itself, read off production's own refusal field\" — RAW `outcome.refusedBy === GOAL_PREREQUISITE_LAYER` (not the projected `layer`) plus `ok === false`, per proof; pins GOAL_PREREQUISITE_LAYER === \"DAEMON_PREREQUISITE\" by hand.\n- \"qualified the AFTER arm's closure before its evidence was made ambiguous\" — `goalAfterPrecondition()` non-null, `ok:true`, both derived witnesses present. This is what stops AFTER from degenerating into a second initially-invalid fixture.\n- \"carries the exact prerequisite code arranged for each arm\" — BEFORE [ABSENT], AFTER [AMBIGUOUS], RACE [ABSENT, ABSENT], hand-written literals; ABSENT and AMBIGUOUS deliberately not collapsed.\n- \"left zero decision, event, completion and result residue behind every refusal\" — after === before for all four durable facts, completedEvents 0.\n- \"surfaced the captured service return itself, never a refusal minted in the fixture\" — `collected.some(v => v === proof.projected)`, spelled with `===` rather than trusting a matcher's equality mode; covers the 4 hostile proofs AND the control (expects exactly 5).\n\nAccepted control (\"the accepted goal-closure control\" describe, runs before the properties read it): production object `ok:true`, `disposition:\"DECIDED\"`, `authority:\"DURABLE_DECISION\"`; decisions before+1; completedEvents 0 -> 1; durable readback `{activeGraphRevisionRef:null, lifecycle:\"COMPLETED\", version:4}`. Exactly one control required (`toHaveLength(1)`), so an absent control cannot pass vacuously.\n\nWhole-slice: admission allowance = races' maxAdmitted + `goalAcceptedControls().filter(isAdmitted).length`, i.e. read off the value production returned rather than a hard-coded +1; collected length = CASES + RACES*2 + controls, with controls > 0 asserted separately.",
+      "startedAt": "2026-08-17T18:30:01.087Z",
+      "completedAt": "2026-08-17T18:30:51.614Z"
     },
     {
       "stepId": "step-6",
       "description": "MUTATION DRILLS — prove the assertions remain attached to production. Drill 1 is a transient, never-staged mutation of the completed producer: first require `git status --short -- apps/daemon/src/goals/goal-qualification.ts` empty, record its SHA-256, replace exactly the single `receipt === undefined` refusal guard at the measured range, record the mutant hash, and run the focused scheduler suite; the named BEFORE/RACE exact-code tests must redden on the production behavior. Restore only by the exact inverse replacement if the current hash still equals the mutant hash, then require the original hash and clean status; if the path changes concurrently, stop and report rather than overwriting foreign work. Drill 2 makes one exact reversible edit in the owned hostile-case driver so it returns a literal/copy of the expected refusal instead of the actual `send(...)` object; the named production-object-identity/accepted-control assertion must redden. Restore exact bytes and verify hashes/status. Record the applied range, the intended failing test, and the red output for both drills. These are test mutations only: the final diff and commit remain restricted to the three `tests/security` paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/scheduler-activation-hostile-cases.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/scheduler-activation-hostile-cases.ts"
+      ],
+      "note": "Both drills applied, reddened, and restored byte-for-byte. No production file appears in the final diff.\n\nDRILL 1 — production guard removal (transient, NEVER staged).\nTarget `apps/daemon/src/goals/goal-qualification.ts`. Precondition: `git status --short` on it EMPTY; sha256 476a9c0602c1f91bbdc908fdf5c00bd418c6aa735858a2b56f10b9c392db23a0.\nApplied range = the receipt-absent guard inside `qualify()` (lines 212-216), replaced exactly:\n    if (receipt === undefined) {\n      return refuse(GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,\n        \"no durable verification receipt names this approved node\");\n    }\n  ->  if (receipt === undefined) continue;\nMutant sha256 7de6dfb9e7c61acc7695fe696b76be90824cca04bfcf1f9a23eeda3dc161e467.\nFocused run EXIT=1, `Tests 6 failed | 123 passed (129)`. Named reds, all on production behavior:\n  x GOAL_PREREQUISITE_LAYER BEFORE: ... -> HostileHarnessMisuseError \"refusal carries no string `code`\" (the close was ADMITTED, so there was no refusal to read)\n  x GOAL_PREREQUISITE_LAYER RACE: ... -> \"at most 0 may be admitted: expected 1 to be +0\"\n  x was answered by this layer itself ... -> \"BEFORE: this layer must answer: expected undefined to be 'DAEMON_PREREQUISITE'\"\n  x carries the exact prerequisite code arranged for each arm\n  x left zero decision, event, completion and result residue behind every refusal\n  x never admits an activation, consumes a grant, or raises a truth class above UNKNOWN\nThe drill therefore proves the real defect, not a cosmetic one: with the guard gone an unqualified goal CLOSES.\n\nGOTCHA — RESTORE ANCHOR WENT AMBIGUOUS. The inverse replacement REFUSED (exit 2, \"expected exactly 1 occurrence of the restore anchor, found 2\"): `zeroAuthority()` already carries an identical `if (receipt === undefined) continue;` at line 153, so my mutant line 213 made the single-line anchor non-unique. The helper refused rather than corrupting line 153. Restored instead with a UNIQUE two-line anchor (`const receipt = indexed.index.get(nodeRef);` + the mutant line) -> exit 0, sha256 back to 476a9c06..., `git status --short -- apps/daemon/src/goals/` EMPTY, `git diff --numstat -- apps/daemon/` shows only the FOREIGN in-flight `journal/journal-append.ts` and `journal/journal-idempotence.test.ts`, which are not mine and were untouched.\n\nDRILL 2 — owned driver detached from production's object.\nTarget `tests/security/scheduler-activation-hostile-cases.ts`, pre-drill sha256 ab66052479df8de3c71d475e7ea8adeb9c3f9468220c3ca01fe23f8dff8c61c0. One line in `goalProjectionOf`: `return proof.projected;` -> `return { ...(proof.projected as Record<string, unknown>) };` (mutant sha256 86061bad497558cb1cef6f4ceb976c1f58b8a9cc017f792860779282224909b3).\nFocused run EXIT=1, `Tests 1 failed | 128 passed (129)`. The single named red is exactly the intended one:\n  x the goal-closure prerequisite boundary > surfaced the captured service return itself, never a refusal minted in the fixture\n  AssertionError: BEFORE: the suite must see the captured service return itself: expected false to be true\nEvery code, layer, residue and accepted-control assertion stayed GREEN under a COPY — which is the whole reason this assertion exists.\nRestored by exact inverse; sha256 back to ab660524..., and the post-restore focused run is EXIT=0 `Tests 129 passed (129)`.\n\nDrill helpers were written to /tmp (outside the repo), so no scratch file can enter the commit.",
+      "startedAt": "2026-08-17T18:31:25.968Z",
+      "completedAt": "2026-08-17T18:33:33.788Z"
     },
     {
       "stepId": "step-7",
       "description": "ADVERSARIAL REVIEW. Confirm the roster is hand-written/source-compared at 91 total, 35 apps/daemon, and 26 scheduler-activation; GOAL has exactly BEFORE/AFTER/RACE while GRAPH remains unrostered; every hostile case crosses real `send -> runBootstrapCommand -> GOAL_HANDLERS[\"goal.close\"]`; the AFTER precondition was genuinely accepted before the second receipt; exact code plus raw refusing layer identify the GOAL guard rather than an earlier core/ingress guard; all refusal snapshots prove zero decision, completion-event, and durable-result residue; the accepted control derives admission from the actual returned service object and durable readback; generated counts are positive; cleanup closes SQLite before filesystem removal on Windows; both drills were restored; no production path appears in the final diff; and only the three owned security files are staged.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/scheduler-activation-hostile-cases.ts",
         "tests/security/scheduler-activation-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW done. Two of the step's stated preconditions are STALE and corrected by measurement.\n\nCORRECTION 1 — roster totals: 92, not 91. `apps/daemon` 35 and scheduler-activation 26 as stated. Peer task-e3d5fd05 rostered GRAPH itself, so 91 was the PRE-my-entry number.\nCORRECTION 2 — \"GRAPH remains unrostered\" is false as of commit 991dd14: GRAPH_CONTENT_LAYERS is rostered on the INTEGRITY axis by its own task. I neither added, classified nor touched it.\n\nFOREIGN WHOLE-TREE COMMIT CAPTURED MY IN-PROGRESS BYTES (global rail hazard, not repaired by me): commit 991dd14 `feat(task-e3d5fd05...)` committed 13/4 of boundary-roster.security.ts (my GOAL entry + both ratchets), 153/2 of scheduler-activation-boundaries.security.ts and 183/0 of scheduler-activation-hostile-cases.ts — all scheduler-activation bytes are mine and unrelated to that task. Not amended, not reset, no empty claim commit. Consequence for QA: `boundary-roster.security.ts` now has ZERO uncommitted delta, so my step-8 pathspec will stage nothing for it. Review the whole slice with:\n  git diff 38e94e3..HEAD -- tests/security/boundary-roster.security.ts tests/security/scheduler-activation-hostile-cases.ts tests/security/scheduler-activation-boundaries.security.ts\nplus the working tree. Total owned delta vs merge-base 38e94e3: roster 23/6, boundaries 173/3, hostile-cases 235/0. Note 991dd14 froze an INTERMEDIATE state of my files (it contains a `label === \"\" ? \"node-1\" : \"node-1\"` placeholder in `approvedGoalWithoutReceipt`); the worktree fixes it and my commit carries the fix.\n\nCHECKLIST RESULTS\n- Every hostile arm and the control cross real `send -> runBootstrapCommand -> GOAL_HANDLERS[\"goal.close\"]`; nothing mints a refusal. Drill 1 proved it by making an unqualified goal actually CLOSE.\n- AFTER precondition genuinely accepted first: `goalAfterPrecondition()` records `qualifyGoalClosure(...)` BEFORE the second receipt; the suite requires non-null, ok:true, and both derived witnesses.\n- Layer identity: `refuse()` (bootstrap-ledger.ts:144) builds a FRESH frozen object per call, so the race's two sides are distinct references and `goalProjectionOf`'s `outcome ===` lookup cannot collide. `ServiceAccepted` (line 67) has NO `refusedBy`, so `asLayered` returns the IDENTICAL reference for the control — the comment claiming that is verified, not assumed.\n- Residue: `readDurableLedger` increments `decisionCount` BEFORE the EFFECTS_COMMITTED filter (line 130), so my snapshot counts audit rows too — any durable trace at all reddens it, not merely a committed one.\n- Concurrency/ordering: lane is isolate:true, fileParallelism:false, maxConcurrency:1, sequence.concurrent:false, retry:0, so module-level proof arrays cannot interleave and cannot double-fill. The control describe is declared BEFORE the property describe that reads it, and `collected.push` happens BEFORE the control's value assertions so a failing control cannot hide its admission from the slice ledger.\n- Cleanup: afterAll runs closeHostileStores() -> closeGoalPrerequisiteFixtures() (closeStores() SQLite handles, THEN cleanupGoalClosureFixtures() rmSync of scratch roots) -> cleanupHostileRoots(). Correct win32 order.\n- `verifierLaunchCount()` still 0: the goal fixtures use the shipped launcher, never the module's recordingLauncher.\n- Noted, not a defect: importing bootstrap-test-fixtures sets APPROVAL_MODE/SPEED_MODE_DELAY env with `??=` at module load. No case in this file consumes approval policy, and isolate:true gives the file its own worker.\n- File sizes (test tier, per-file production cap not applicable): roster 612, hostile-cases 2042, boundaries 487.\n\nFULL GATE at this point: `pnpm test:security` EXIT=1, `Test Files 1 failed | 8 passed (9)`, `Tests 3 failed | 476 passed (479)`. ALL THREE reds are foreign, in `tests/security/integrity-boundaries.security.ts` (a path I never touched — `git diff --numstat 38e94e3 -- integrity-boundaries.security.ts` is EMPTY), and every one names GRAPH_CONTENT_LAYERS on the INTEGRITY axis:\n  expected [ …(14) ] to have a length of 13 but got 14        (integrity-boundaries.security.ts:106)\n  expected [ 'GRAPH_CONTENT_LAYERS' ] to deeply equal []       (integrity-boundaries.security.ts:111)\n  expected 0 to be greater than 0                              (integrity-boundaries.security.ts:124, GRAPH arms)\nPath-attributed baseline: merge-base 38e94e3 had 4 failures (roster scan/cardinality, both files); HEAD+worktree has 3, all in integrity-boundaries.security.ts; the delta set intersected with my owned paths is EMPTY. My GOAL scan/coverage delta is gone and the roster + scheduler-activation suites are green.",
+      "startedAt": "2026-08-17T18:33:36.500Z",
+      "completedAt": "2026-08-17T18:36:28.460Z"
     },
     {
       "stepId": "step-8",
       "description": "FINAL GATE AND EXPLICIT-PATH COMMIT. First run the focused scheduler-activation Vitest command in the foreground and require an exit-0 nonzero file/test count. The task's exact verification command is `pnpm test:security`; run it separately, never piped or semicolon-masked, and read its `Test Files`/`Tests` lines. Apply the path-attributed baseline: this task's GOAL scan/coverage delta must be gone and the only remaining roster red may be the pre-existing foreign `GRAPH_CONTENT_LAYERS` key/92-versus-91 cardinality, quoted verbatim; do not claim the suite globally green. Check `git status --porcelain`, unstage any foreign entry without touching its worktree bytes, stage/commit only `tests/security/boundary-roster.security.ts`, `tests/security/scheduler-activation-hostile-cases.ts`, and `tests/security/scheduler-activation-boundaries.security.ts` using explicit pathspecs, and verify `git show --stat` contains only those paths. Completion evidence must include both drills' named red tests, the focused nonzero green counts, the standalone security counts/exit, and the exact disclosed foreign GRAPH failure.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/boundary-roster.security.ts",
         "tests/security/scheduler-activation-hostile-cases.ts",
         "tests/security/scheduler-activation-boundaries.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/scheduler-activation-hostile-cases.ts",
+        "tests/security/scheduler-activation-boundaries.security.ts"
+      ],
+      "note": "FINAL GATE + explicit-path commit. Nothing piped, nothing `;`-masked; each command's own exit code captured.\n\n1) FOCUSED / OWNED-SCOPE, foreground, fresh AFTER the commit:\n   pnpm exec vitest run --root tests/security --config vitest.config.ts boundary-roster.security.ts scheduler-activation-boundaries.security.ts\n   EXIT=0, `Test Files 2 passed (2)`, `Tests 160 passed (160)` — nonzero executed counts, so not a vacuous lane.\n\n2) NAMED VERIFICATION COMMAND, standalone: `pnpm test:security`\n   EXIT=1, `Test Files 1 failed | 8 passed (9)`, `Tests 3 failed | 476 passed (479)`.\n   The exit-1 is NOT mine. All three reds are in `tests/security/integrity-boundaries.security.ts`, a path I never touched (`git diff --numstat 38e94e3 -- tests/security/integrity-boundaries.security.ts` is EMPTY), and every one names the foreign GRAPH_CONTENT_LAYERS boundary that peer task-e3d5fd05 rostered on the INTEGRITY axis in commit 991dd14 without landing its integrity coverage. Quoted verbatim:\n     FAIL integrity-boundaries.security.ts > ... > reads a positive number of integrity entries off the roster\n       AssertionError: expected [ …(14) ] to have a length of 13 but got 14   (integrity-boundaries.security.ts:106)\n     FAIL integrity-boundaries.security.ts > ... > covers every integrity boundary the roster declares (roster minus covered is empty)\n       AssertionError: expected [ 'GRAPH_CONTENT_LAYERS' ] to deeply equal [] (integrity-boundaries.security.ts:111)\n     FAIL integrity-boundaries.security.ts > ... > generates a positive, three-armed case count for GRAPH_CONTENT_LAYERS\n       AssertionError: expected 0 to be greater than 0                        (integrity-boundaries.security.ts:124)\n   PATH-ATTRIBUTED BASELINE: merge-base 38e94e3 = 4 failures (roster scan-minus-roster + cardinality, in boundary-roster.security.ts and its importer durable-store-boundaries.security.ts). HEAD+worktree = 3 failures, all in integrity-boundaries.security.ts. Failing-path delta intersected with my owned paths is EMPTY. The suite is NOT globally green and I do not claim it is. The step text's expectation of a \"92-versus-91 cardinality\" roster red is stale — that red is GONE; the roster suite is fully green at 92/92.\n\n3) COMMIT, explicit pathspec only: `git add -- tests/security/boundary-roster.security.ts tests/security/scheduler-activation-hostile-cases.ts tests/security/scheduler-activation-boundaries.security.ts` then commit.\n   Index was empty beforehand, so no foreign entry needed unstaging and no foreign worktree byte was touched.\n   Commit afe9940 `test(task-a46d4f99574a4d1b89212425c280c68d): cover GOAL_PREREQUISITE_LAYER on the scheduler-activation security axis`; `git show --stat` lists EXACTLY:\n     tests/security/scheduler-activation-boundaries.security.ts | 29 +++++--\n     tests/security/scheduler-activation-hostile-cases.ts       | 58 ++++++++--\n   `boundary-roster.security.ts` staged NOTHING because the foreign whole-tree commit 991dd14 had already captured its bytes; disclosed, not repaired (no amend, no reset, no empty claim commit). Its committed bytes ARE the gated bytes.\n   Committed bytes == gated bytes, verified by sha256 after the commit: hostile-cases ab66052479df8de3c71d475e7ea8adeb9c3f9468220c3ca01fe23f8dff8c61c0, boundaries 164822307701621da1786d1d69bb7e8592e3d1b1548e747c65809f8c052aebd0, roster 39aaf453f0e10401b7ee94325760c2a739b9b9ca33de7940006f2c8781c7f248. `git status --porcelain -- tests/security` is EMPTY.\n\n4) DRILL EVIDENCE (step 6): drill 1 removed the production receipt-absent guard in apps/daemon/src/goals/goal-qualification.ts (476a9c06 -> 7de6dfb9) and reddened 6 named tests including \"GOAL_PREREQUISITE_LAYER BEFORE ...\", \"GOAL_PREREQUISITE_LAYER RACE ...\" (at most 0 may be admitted: expected 1 to be +0), \"was answered by this layer itself ...\" and \"never admits an activation ...\"; restored to 476a9c06 with a unique two-line anchor after the single-line anchor went ambiguous against the identical line in `zeroAuthority`. Drill 2 made `goalProjectionOf` return a copy and reddened exactly \"surfaced the captured service return itself, never a refusal minted in the fixture\" while every other assertion stayed green; restored to ab660524. No production path is in the final diff.\n\nQA REVIEW POINTER: review the whole slice with\n  git diff 38e94e3..HEAD -- tests/security/boundary-roster.security.ts tests/security/scheduler-activation-hostile-cases.ts tests/security/scheduler-activation-boundaries.security.ts",
+      "startedAt": "2026-08-17T18:36:44.129Z",
+      "completedAt": "2026-08-17T18:38:12.820Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -115,12 +149,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:57:50.708Z",
-  "updatedAt": "2026-08-17T18:27:37.031Z",
+  "updatedAt": "2026-08-17T18:39:42.151Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T17:48:22.504Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 3
+    "executedStepCount": 8
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -129,7 +163,12 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T17:58:29.705Z",
@@ -149,8 +188,21 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-17T18:36:28.517Z"
   },
   "planApprovedAt": "2026-08-17T17:58:31.777Z",
-  "workStartedAt": "2026-08-17T18:15:34.084Z"
+  "workStartedAt": "2026-08-17T18:15:34.084Z",
+  "reviewStartedAt": "2026-08-17T18:39:42.151Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root tests/security --config vitest.config.ts boundary-roster.security.ts scheduler-activation-boundaries.security.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  2 passed (2)\n     Tests  160 passed (160)\n  Start at  21:37:12\n  Duration  3.11s (transform 1.67s, setup 0ms, import 2.08s, tests 862ms, environment 0ms)\n\n[owned-scope legs of `pnpm test:security`, run fresh AFTER commit afe9940. The named command `pnpm test:security` was ALSO run standalone and unpiped: EXIT=1, `Test Files 1 failed | 8 passed (9)`, `Tests 3 failed | 476 passed (479)`. All 3 reds are FOREIGN, in tests/security/integrity-boundaries.security.ts, naming GRAPH_CONTENT_LAYERS on the integrity axis: \"expected [ ...(14) ] to have a length of 13 but got 14\" (line 106), \"expected [ 'GRAPH_CONTENT_LAYERS' ] to deeply equal []\" (line 111), \"expected 0 to be greater than 0\" (line 124). I never touched that file; merge-base 38e94e3 had 4 reds, HEAD has 3 in a different file, delta INTERSECT owned paths = EMPTY.]",
+    "reportedAt": "2026-08-17T18:39:42.151Z"
+  },
+  "filesModified": [
+    "tests/security/scheduler-activation-hostile-cases.ts",
+    "tests/security/scheduler-activation-boundaries.security.ts",
+    "tests/security/boundary-roster.security.ts"
+  ]
 }

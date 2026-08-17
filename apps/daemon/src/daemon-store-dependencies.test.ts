@@ -375,7 +375,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
         "approval.decide", "effect.activate", "escalation.decide", "goal.close",
-        "goal.create", "integration.accept_output", "plan.propose", "policy.install",
+        "goal.create", "integration.accept_output", "journal.append",
+        "plan.propose", "policy.install",
         "policy.validate", "project.activate", "project.bind_repository", "project.register",
         "provider.probe", "qualification.replan", "recovery.complete", "review.submit",
         "session.close", "session.open", "session.renew", "work.claim", "work.release",

@@ -76,6 +76,33 @@ describe("journal.append — replay, conflict and append ordering", () => {
     expect(after.entries).toEqual(before.entries);
   });
 
+  it("still replays the FIRST command after a later append moved the tail", () => {
+    // THE CASE THE writer's `prior.expectedVersion` REUSE EXISTS FOR. The store
+    // hashes expectedVersion into the request identity alongside the bytes
+    // (packages/store/src/store-digests.ts:92), so a writer that re-derived it
+    // from today's tail would send 2 where the original sent 0, and this
+    // byte-identical retry would come back as an idempotency conflict instead of
+    // a replay — a plain retry made indistinguishable from hostile id reuse.
+    const harness = openJournalHarness("replay-after-tail-moved");
+    expect(append(harness, "cmd-first", FIRST).ok).toBe(true);
+    expect(append(harness, "cmd-second", SECOND).ok).toBe(true);
+    expect(rows(harness)).toBe(2);
+    const before = durable(harness);
+
+    expect(append(harness, "cmd-first", FIRST)).toMatchObject({
+      decision: { disposition: "REPLAYED" }, ok: true, outcome: "ACCEPTED",
+    });
+    expect(rows(harness)).toBe(2);
+    const after = durable(harness);
+    expect(after.journalDigest).toBe(before.journalDigest);
+    expect(after.entries).toEqual(before.entries);
+    // And the SECOND command's own replay is unaffected by the first one's.
+    expect(append(harness, "cmd-second", SECOND)).toMatchObject({
+      decision: { disposition: "REPLAYED" }, ok: true,
+    });
+    expect(rows(harness)).toBe(2);
+  });
+
   it("refuses conflicting bytes under the STORE's own code, before mutating", () => {
     const harness = openJournalHarness("conflict");
     expect(append(harness, "cmd-conflict", FIRST).ok).toBe(true);
@@ -148,7 +175,14 @@ function wireMutations(): readonly { readonly entries: unknown; readonly label: 
     cases.push({ entries: [{ ...base, [key]: null }], label: `null ${key}` });
     cases.push({ entries: [{ ...base, [key]: [] }], label: `array ${key}` });
   }
-  cases.push({ entries: [{ ...base, __proto__: { polluted: true } }], label: "a __proto__ key" });
+  // `{ __proto__: x }` in a literal SETS THE PROTOTYPE and creates no own key, so
+  // the key has to be defined explicitly or the case tests nothing. JSON.stringify
+  // then emits it and the bounded parser reads it back as a real own property.
+  const polluted: Record<string, unknown> = { ...base };
+  Object.defineProperty(polluted, "__proto__", {
+    configurable: true, enumerable: true, value: { polluted: true }, writable: true,
+  });
+  cases.push({ entries: [polluted], label: "a __proto__ key" });
   cases.push({ entries: [{ ...base, recipeDigest: "A".repeat(64) }], label: "an uppercase digest" });
   cases.push({ entries: [{ ...base, occurredAt: "2026-08-15T00:00:01.000" }],
     label: "an occurredAt without Z" });

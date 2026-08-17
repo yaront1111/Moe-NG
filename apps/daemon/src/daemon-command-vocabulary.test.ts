@@ -47,6 +47,10 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE", kind: "recovery.complete",
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
+  // STANDALONE and WORK-capable: the agent holding the attempt's lease is exactly
+  // who records why an approach failed, so this is never operator-gated.
+  { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "journal.append",
+    payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -102,11 +106,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the twenty-three wired kinds in their registration order", () => {
+  it("carries exactly the twenty-four wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(23);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(23);
+    expect(ROWS).toHaveLength(24);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(24);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
