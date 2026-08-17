@@ -1,8 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { canonicalJson } from "./canonical-bytes.js";
 import { applyImport } from "./import-apply.js";
-import type { ImportCommitInput, ImportStorePort } from "./import-apply.js";
+import type { ImportCommitInput, ImportEventDraft, ImportStorePort } from "./import-apply.js";
 import { deriveImportedId } from "./import-canonical.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
 import { IMPORTED_CLAIM_STATUSES, LEGACY_LINK_KINDS } from "./import-contract.js";
@@ -89,6 +89,15 @@ function reported(result: ReturnType<typeof applyImport>): ImportReport {
   return result;
 }
 
+/**
+ * Reads the envelope stamp off the PRODUCTION draft WITHOUT going through the declared
+ * type, so this assertion keeps its meaning whatever the interface says: a draft that
+ * merely declares the member but never assigns it still reads `undefined` here.
+ */
+function stampOf(draft: ImportEventDraft): unknown {
+  return Reflect.get(draft, "domainSchemaVersion");
+}
+
 describe("the whole import is one commit, or it is refused", () => {
   it("writes every event in a single commit", () => {
     const spy = spyStore();
@@ -99,6 +108,37 @@ describe("the whole import is one commit, or it is refused", () => {
     expect(spy.commits.length).toBe(1);
     expect(spy.commits[0]?.events.length).toBe(2);
     expect(report.counts.claims).toBe(2);
+  });
+
+  it("stamps every committed draft with the exact import-facts domain schema", () => {
+    // The store substitutes its generic `moe-domain-schema/0` for a draft that omits the
+    // field, so an unstamped event persists a schema its payload does not speak. The
+    // producer declares it instead of letting a default answer for it.
+    const spy = spyStore();
+    reported(run([
+      record({ legacyId: "a" }),
+      record({ legacyId: "b", sourcePath: "tasks/two.json" }),
+    ], spy));
+    const events = spy.commits[0]?.events ?? [];
+    // A sweep over zero drafts passes while testing nothing, so the count is pinned first.
+    expect(events.length).toBe(2);
+    for (const event of events) {
+      expect(stampOf(event)).toBe(IMPORT_EVENT_FACTS_VERSION);
+    }
+  });
+
+  it("declares the stamp as a required member of exactly the constant's type", () => {
+    // TYPE-LEVEL, and therefore enforced by `pnpm --filter @moe/import typecheck`: this
+    // package's test script runs without `--typecheck`, so `expectTypeOf` is a runtime
+    // no-op. A widened `string` would readmit a wrong stamp; an OPTIONAL member would
+    // readmit the store default, which is the exact defect this task closes.
+    expectTypeOf<ImportEventDraft["domainSchemaVersion"]>()
+      .toEqualTypeOf<typeof IMPORT_EVENT_FACTS_VERSION>();
+    type StampRequired = Omit<ImportEventDraft, "domainSchemaVersion"> extends ImportEventDraft
+      ? never
+      : true;
+    const required: StampRequired = true;
+    expect(required).toBe(true);
   });
 
   it("refuses rather than splitting when the import exceeds the per-commit bound", () => {
@@ -158,6 +198,14 @@ describe("nothing imported is active, and no link is a hard edge", () => {
   });
 });
 
+/** Measured off production for the two-record MANIFEST fixture BEFORE the stamp landed. */
+const GOLDEN_COMMAND_ID = "dceabb9ccb6efb7049dc02e0f60354fdb20432534f02528a7146c50570f6f08a";
+const GOLDEN_COMMAND_BYTES = "cbf3ab0e8715e75c3dca6a5b0036626fd27b029b862ef021e8ba0b02ae9860ae";
+const GOLDEN_EVENT_IDS = Object.freeze([
+  "ec4597cf0649a12018122abc8a16199754c3637d5ba0fa0fa2e2dd053e45c204",
+  "aaf6423c5562cb8ea6106b8d55c4db9bdc21f2ab8353f601da38cc533f7f4229",
+]);
+
 describe("the commit itself is deterministic", () => {
   it("derives committedAt from source time, never from a clock", () => {
     const spy = spyStore();
@@ -183,6 +231,20 @@ describe("the commit itself is deterministic", () => {
     expect(right?.committedAt).toBe(left?.committedAt);
     expect(right?.events.map((event) => event.eventId))
       .toEqual(left?.events.map((event) => event.eventId));
+    // The GOLDENS, measured through production before the envelope stamp was added. Two
+    // post-change runs agreeing with each other cannot see an identity that MOVED, and
+    // @moe/store deliberately keeps domainSchemaVersion out of its request and effect
+    // digests precisely so adding it may not disturb a durable receipt.
+    expect(left?.commandId).toBe(GOLDEN_COMMAND_ID);
+    expect(new TextDecoder().decode(left?.commandBytes)).toBe(GOLDEN_COMMAND_BYTES);
+    expect(left?.events.map((event) => event.eventId)).toEqual(GOLDEN_EVENT_IDS);
+    expect(left?.events.map((event) => event.eventType))
+      .toEqual(["legacy.task.imported", "legacy.task.imported"]);
+    expect(right?.events.map((event) => [...event.payload]))
+      .toEqual(left?.events.map((event) => [...event.payload]));
+    expect(left?.events.map(stampOf))
+      .toEqual([IMPORT_EVENT_FACTS_VERSION, IMPORT_EVENT_FACTS_VERSION]);
+    expect(right?.events.map(stampOf)).toEqual(left?.events.map(stampOf));
   });
 });
 

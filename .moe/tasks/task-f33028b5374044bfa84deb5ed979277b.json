@@ -17,30 +17,37 @@
     "Own only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml; commit by explicit pathspec and preserve foreign lockfile changes."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (acceptance entrypoints and package edges), BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion: the measured DoD/ownership contradiction that blocked this task is resolved by scope amendment comment-8384b618 (daemon-startup.test.ts added to the ownable set for exactly the closed bin-set update to the three-key set). This task roots the blocked Portability sub-lane (efe5465f, and transitively the transport/host matrix); planning can resume.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
   "order": 12.03,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8384b61825bc435b9187c1282e7a9be7",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR SCOPE AMENDMENT (20:11Z, under the human's active unstall directive; same pattern as the endorsed task-c534626b forced deviation): apps/daemon/src/daemon-startup.test.ts is ADDED to this task's ownable/committable set, for exactly ONE mechanical change — updating the closed bin-set assertion at :98-117 from the exact two-key set {moe-daemon, moe-mcp-http} to the exact THREE-key set {moe-daemon, moe-mcp-http, moe-mcp-stdio}, plus its hand-count comment if one exists. Rationale, per architect-f956ffe1's measured finding (msg at 19:40Z, HEAD d2151d49): the DoD's required enumerable moe-mcp-stdio bin entry and the closed-set test cannot both hold, and the test's closed-set design is correct — it must be UPDATED to the new exact set, never weakened to subset/>= matching. NOT authorized: any other edit in that file, or weakening the assertion style. QA: grade the fourth-file touch as forced-by-DoD with this comment as the authorization record. This clears the measured contradiction; the task returns to PLANNING.",
+      "timestamp": "2026-08-17T20:11:17.866Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:03.062Z",
-  "updatedAt": "2026-08-17T19:41:28.246Z",
+  "updatedAt": "2026-08-17T20:11:24.754Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:58.478Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
-  "blockedReason": "Fresh HEAD d2151d49 proves the task's DoD and ownership rail are mutually incompatible. `apps/daemon/src/daemon-startup.test.ts:98-117` parses apps/daemon/package.json and deliberately asserts manifest.bin as the exact closed two-key set {moe-daemon, moe-mcp-http}, with a comment that stdio has no bin. Adding the required enumerable `moe-mcp-stdio: ./src/mcp-main.ts` entry therefore makes the required full daemon package test fail; current baseline is nonvacuously green at 120 files/2476 tests. The task simultaneously requires daemon tests pass and says only package.json, apps/daemon/package.json, adapters/jetbrains/package.json, and pnpm-lock.yaml may be owned/committed, so the worker cannot update the exact closed-set test. Commit 9aa4711 confirms the prior moe-mcp-http publication had to change this same test atomically. A manifest-only plan would knowingly introduce a regression caused by its own diff and cannot use path attribution to excuse it. JetBrains also has only a source-relative host runtime test, not a durable public-subpath assertion. Recommended correction: split into (A) daemon stdio publication owning apps/daemon/package.json + apps/daemon/src/daemon-startup.test.ts; and (B) JetBrains ./host + root @moe/import/@moe/store/@moe/jetbrains-adapter edges owning package.json, adapters/jetbrains/package.json, pnpm-lock.yaml, and adapters/jetbrains/src/jetbrains-runtime-entrypoint.test.ts. Both slices can gate independently and stay <=4 files. Prerequisite task-1e44 is DONE and its daemon @moe/import manifest/lock edge is present.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T19:40:25.471Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Remeasured every claimed entrypoint/manifest/lock/package gate, proved prerequisite 1e44 DONE, identified the exact daemon closed-bin regression, reported BLOCKED to governors, and wrote mem:task-task-f33028b5374044bfa84deb5ed979277b-handoff with two-slice correction.",

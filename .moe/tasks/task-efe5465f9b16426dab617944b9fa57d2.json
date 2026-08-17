@@ -18,7 +18,7 @@
     "Own only the transport/host matrix test and at most two focused fixture/helper files under tests/integration/portability; TDD with an accepted control and production-surface mutation drill."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-17T11:20:30.671Z"
+  "updatedAt": "2026-08-17T20:11:08.453Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-17T20:10:20.845Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "The task explicitly hard-depends on task-f33028b5374044bfa84deb5ed979277b, which is currently BLOCKED, and fresh HEAD 926f6db probes confirm none of its required production boundaries are available: apps/daemon/package.json exposes only moe-daemon and moe-mcp-http (no moe-mcp-stdio); node_modules/.bin has no stdio shim; adapters/jetbrains/package.json exports only '.' (no './host'); root dependencies remain only @moe/daemon and @moe/runner; and root import('@moe/jetbrains-adapter/host') fails ERR_MODULE_NOT_FOUND. This acceptance task owns only tests, so it cannot publish/install those subjects itself or source-import them. Planning now would necessarily violate its public-installed-boundary rail. Reopen only after task-f330 is DONE, then re-measure installed stdio/HTTP shims, public host subpath, root manifest+lock links, and the exact production error/stage/layer vocabularies before drafting the matrix.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T20:10:49.660Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured all three required installed/public subjects, reported BLOCKED on task-f330, and wrote Serena handoff memory.",
+      "whatRemains": "Complete task-f330, then remeasure installed shims/public host and plan the matrix.",
+      "pitfalls": "No direct source imports; JetBrains does not own MCP identity.",
+      "openQuestions": "task-f330 must be rescoped because its current ownership conflicts with closed-set package tests.",
+      "releasedAt": "2026-08-17T20:11:08.452Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit handoff after recording the hard dependency blocker; continuing to other planning tasks."
+    }
+  ]
 }

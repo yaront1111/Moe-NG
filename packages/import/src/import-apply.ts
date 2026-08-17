@@ -1,24 +1,14 @@
 import { canonicalDigest } from "./canonical-bytes.js";
 import {
-  canonicalPayload,
-  deriveImportedId,
-  deriveProvenance,
-  orderRecords,
+  canonicalPayload, deriveImportedId, deriveProvenance, orderRecords,
 } from "./import-canonical.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
 import { IMPORT_RECORD_VERSION, refuseImport } from "./import-contract.js";
 import type {
-  ImportCounts,
-  ImportProvenance,
-  ImportRefused,
-  ImportReport,
-  ImportedClaim,
-  LegacyLink,
+  ImportCounts, ImportProvenance, ImportRefused, ImportReport, ImportedClaim, LegacyLink,
 } from "./import-contract.js";
 import {
-  decodeImportEventFacts,
-  encodeImportEventFacts,
-  refuseImportEvent,
+  IMPORT_EVENT_FACTS_VERSION, decodeImportEventFacts, encodeImportEventFacts, refuseImportEvent,
 } from "./import-event-codec.js";
 import type { ImportEventRefused } from "./import-event-codec.js";
 import { reconcileImport } from "./import-reconcile.js";
@@ -46,6 +36,11 @@ import type { SourceManifest } from "./source-manifest.js";
  */
 
 export interface ImportEventDraft {
+  /**
+   * REQUIRED, and exactly the payload's own version: an omitted field takes the store's
+   * generic default, persisting an envelope schema the stored bytes do not speak.
+   */
+  readonly domainSchemaVersion: typeof IMPORT_EVENT_FACTS_VERSION;
   readonly eventId: string;
   readonly eventType: string;
   readonly payload: Uint8Array;
@@ -163,7 +158,12 @@ function foldRecord(
   into.seen.set(eventId, text);
   into.claims.push(stored.claim);
   into.links.push(...stored.links);
-  into.events.push({ eventId, eventType: `legacy.${record.kind}.imported`, payload });
+  into.events.push({
+    domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION,
+    eventId,
+    eventType: `legacy.${record.kind}.imported`,
+    payload,
+  });
   return null;
 }
 

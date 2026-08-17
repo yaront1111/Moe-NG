@@ -20,36 +20,52 @@
     {
       "stepId": "step-1",
       "description": "BASELINE AND PIN THE PRE-CHANGE IDENTITY. At HEAD 08e3445d1748223dd60e96f332ba0b5c3eb5e1d5, confirm the three owned paths are clean and record physical lines/CR bytes: import-apply.ts is exactly 250 lines, import-apply.test.ts 674, migration test 226, all LF-only. Re-run the four task legs separately and capture each exit/count line: @moe/import typecheck EXIT 0; @moe/import test 8 files/132 tests; migration 3/25; store has the pre-existing foreign failure packages/store/src/recovery-anchor.test.ts:694 (`RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root`, 1 failed + 43 passed files, 1 failed + 526 passed tests). Record the golden production commit for the fixed two-record MANIFEST fixture BEFORE editing: commandId `dceabb9ccb6efb7049dc02e0f60354fdb20432534f02528a7146c50570f6f08a`, decoded commandBytes `cbf3ab0e8715e75c3dca6a5b0036626fd27b029b862ef021e8ba0b02ae9860ae`, eventIds `[ec4597cf0649a12018122abc8a16199754c3637d5ba0fa0fa2e2dd053e45c204,aaf6423c5562cb8ea6106b8d55c4db9bdc21f2ab8353f601da38cc533f7f4229]`. These literals make “identity unchanged” observable; comparing two post-change runs alone would not.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.ts",
         "packages/import/src/import-apply.test.ts",
         "tests/migration/import/import-determinism.test.ts"
-      ]
+      ],
+      "note": "BASELINE PINNED (HEAD moved since planning: now 926f6dbdd138de49a658fa5d8f99152a18d86982, merge-base with main cf272f67).\n\nOWNED PATHS CLEAN (git status --porcelain over the three paths returned nothing):\n- packages/import/src/import-apply.ts 250 lines, 0 CR bytes, blob 4e60e362701b87aaa2a661c2a9925cf7deea7c82\n- packages/import/src/import-apply.test.ts 674 lines, 0 CR, blob 149de54055c46dc43862a3b08072bb0696c88a94\n- tests/migration/import/import-determinism.test.ts 226 lines, 0 CR, blob d3f15682e86ddd0ed25241f266c80fb453591c6a\n\nFRESH GATE LEGS (each its own foreground invocation, PIPESTATUS[0] captured):\n- pnpm --filter @moe/import typecheck EXIT=0\n- pnpm --filter @moe/import test: \"Test Files 8 passed (8) / Tests 132 passed (132)\" EXIT=0\n- pnpm test:migration: \"Test Files 3 passed (3) / Tests 25 passed (25)\" EXIT=0\n- pnpm test:store: EXIT=1, \"Test Files 1 failed | 43 passed (44) / Tests 1 failed | 526 passed (527)\", sole failure packages/store/src/recovery-anchor.test.ts:694 `expect(root[name], `${name} leaked onto the root`).toBeUndefined()`. Foreign: this task owns no packages/store path.\n\nGOLDEN PRE-CHANGE IDENTITY, measured (not assumed) through the production applyImport bridge over the fixed two-record MANIFEST fixture (records legacyId a/tasks/one.json and b/tasks/two.json, payload {owner:\"alice\"}):\n- commandId dceabb9ccb6efb7049dc02e0f60354fdb20432534f02528a7146c50570f6f08a\n- commandBytes UTF-8 text cbf3ab0e8715e75c3dca6a5b0036626fd27b029b862ef021e8ba0b02ae9860ae\n- eventIds [ec4597cf0649a12018122abc8a16199754c3637d5ba0fa0fa2e2dd053e45c204, aaf6423c5562cb8ea6106b8d55c4db9bdc21f2ab8353f601da38cc533f7f4229]\n- eventTypes [legacy.task.imported, legacy.task.imported]; committedAt 2024-03-04T05:06:07.000Z; aggregateId legacy-import:a*64; counts {claims:2,links:0,reconciliations:0,sourceFiles:2}\nAll three plan literals reproduce exactly. Current draft keys are exactly [\"eventId\",\"eventType\",\"payload\"] — the omission is confirmed on disk, not inferred.\n\nSTRUCTURE RE-VERIFIED: IMPORT_EVENT_FACTS_VERSION = \"moe-import-event-facts/1\" (import-event-facts.ts:39), public via index.ts:81 with decodeImportEventFacts. @moe/store EventDraft.domainSchemaVersion is optional string validated by requireIdentifier (non-empty, <=512 UTF-8 bytes, no NUL) so the literal is accepted; StoredEvent.domainSchemaVersion is required string; store-input-commit.ts:143 substitutes DOMAIN_EVENT_SCHEMA_VERSION \"moe-domain-schema/0\" only when omitted. event-ledger-transaction.ts:126-136 replays on receipt match (requestSha256 equal) so the second identical applyImport returns disposition REPLAYED, and store-internals.ts:45 plus store-domain-schema-version.test.ts:140 confirm the field is outside both request and effect digests, so the goldens above cannot move.",
+      "startedAt": "2026-08-17T20:05:53.494Z",
+      "completedAt": "2026-08-17T20:09:12.354Z"
     },
     {
       "stepId": "step-2",
       "description": "TDD RED AT THE PRODUCER PORT in packages/import/src/import-apply.test.ts. Extend the existing one-commit/determinism cases rather than add a parallel fixture. Assert a positive production-draft count, then for every draft read the not-yet-typed property with Reflect.get and require `domainSchemaVersion === IMPORT_EVENT_FACTS_VERSION`; add a Vitest `expectTypeOf<ImportEventDraft[\"domainSchemaVersion\"]>()` assertion proving the member is required and exactly the constant’s literal type. Extend the fixed two-record deterministic case to pin the golden commandId, decoded commandBytes, ordered eventIds, eventTypes and payload bytes, then include domainSchemaVersion in the two-run equality. Before production changes, the runtime assertion must RED on received `undefined` (and typecheck may also expose the absent indexed member); record the named failing assertion. Keep the existing exact IMPORT_COMMIT_FAILED/APPLY and identity-conflict/APPLY refusal assertions unchanged—this task adds no refusal vocabulary.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "packages/import/src/import-apply.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "packages/import/src/import-apply.test.ts"
+      ],
+      "note": "TDD RED AT THE PRODUCER PORT — packages/import/src/import-apply.test.ts only (no production edit yet).\n\nAdded, extending the existing cases rather than a parallel fixture:\n1. helper `stampOf(draft)` reading the envelope member via `Reflect.get`, so the assertion keeps meaning independently of the declared type (a declared-but-never-assigned member still reads undefined).\n2. new case in describe(\"the whole import is one commit, or it is refused\"): \"stamps every committed draft with the exact import-facts domain schema\" — pins `events.length === 2` FIRST (a sweep over zero drafts would pass vacuously), then requires every production draft's stamp to equal IMPORT_EVENT_FACTS_VERSION.\n3. new type-level case \"declares the stamp as a required member of exactly the constant's type\": `expectTypeOf<ImportEventDraft[\"domainSchemaVersion\"]>().toEqualTypeOf<typeof IMPORT_EVENT_FACTS_VERSION>()` plus `type StampRequired = Omit<ImportEventDraft,\"domainSchemaVersion\"> extends ImportEventDraft ? never : true` consumed by an `expect`. Optional or widened `string` both stop compiling; enforced by the package typecheck since this test script runs without --typecheck.\n4. extended the fixed two-record deterministic case with the pre-change goldens: commandId dceabb9c..., decoded commandBytes cbf3ab0e..., ordered eventIds [ec4597cf..., aaf6423c...], eventTypes both legacy.task.imported, cross-run payload-byte equality, and the stamp in the two-run equality.\n\nRED PROVEN, both layers, before any production change:\n- runtime `pnpm --filter @moe/import test` EXIT 1, \"Test Files 1 failed | 7 passed (8) / Tests 2 failed | 132 passed (134)\". Named failing assertions: import-apply.test.ts:126 `expect(stampOf(event)).toBe(IMPORT_EVENT_FACTS_VERSION)` received undefined, and import-apply.test.ts:246 `expected [ undefined, undefined ] to deeply equal [ 'moe-import-event-facts/1', 'moe-import-event-facts/1' ]`.\n- typecheck EXIT 1 with exactly `src/import-apply.test.ts(135,35): error TS2339: Property 'domainSchemaVersion' does not exist on type 'ImportEventDraft'.` and `(140,11): error TS2322: Type 'true' is not assignable to type 'never'.`\n- The four golden identity assertions were already GREEN in the same run, so the pins are honest measurements of the pre-change surface, not values invented to match the post-change code.\n\nRefusal vocabulary untouched: the IMPORT_COMMIT_FAILED/APPLY, IMPORT_TOO_LARGE_FOR_ONE_COMMIT/APPLY and IMPORT_EVENT_IDENTITY_CONFLICT/APPLY assertions are byte-unchanged, and no new code was added to EMITTED_CODES.",
+      "startedAt": "2026-08-17T20:09:14.590Z",
+      "completedAt": "2026-08-17T20:10:49.747Z"
     },
     {
       "stepId": "step-3",
       "description": "TDD RED THROUGH REAL SQLITE in tests/migration/import/import-determinism.test.ts. Import public `IMPORT_EVENT_FACTS_VERSION` and `decodeImportEventFacts`. Wrap one real SqliteEventStore only to delegate `commit` unchanged while recording its actual dispositions, then run production applyImport twice over the identical root/manifest/records and the SAME store; assert dispositions exactly COMMITTED then REPLAYED. After the first import require a positive full global/aggregate event count and `hasMore:false`; for EVERY StoredEvent decode the production payload and assert outer `domainSchemaVersion === decoded.schemaVersion === IMPORT_EVENT_FACTS_VERSION`, eventId === decoded.claim.claimId, and aggregateId === `legacy-import:${report.manifestDigest}`. Snapshot horizon, aggregate version, receipt, and each event’s aggregate/sequence/id/type/schema/commandId/requestSha/payload bytes; after replay require byte-identical snapshots, unchanged horizon/version/event counts, no duplicate row, and the real command-decision page exactly zero items/hasMore:false before and after (plain applyImport uses commit, not the decision API). Before implementation this must RED specifically on stored `moe-domain-schema/0`, while all identity/count controls prove the case executed and did not merely refuse.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/migration/import/import-determinism.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/migration/import/import-determinism.test.ts"
+      ],
+      "note": "TDD RED THROUGH REAL SQLITE — tests/migration/import/import-determinism.test.ts only (still no production edit).\n\nAdded describe(\"the durable event envelope declares the import facts schema\") with one case driving production applyImport twice over the identical root/manifest/records and the SAME real SqliteEventStore. `recordingPort` delegates commit to the real store unchanged and only records the returned disposition and the commit input, so the disposition asserted is SQLite's own answer.\n\nAsserted, in order: global page items === report.counts.claims AND > 0 AND hasMore false; aggregate page same count, hasMore false; real command-decision page items [] and hasMore false BEFORE (plain applyImport uses commit, never the decision API, so zero is the correct pinned value). Then per StoredEvent: decode the production payload through public decodeImportEventFacts and require event.domainSchemaVersion === IMPORT_EVENT_FACTS_VERSION, facts.schemaVersion === event.domainSchemaVersion, event.eventId === facts.claim.claimId, event.aggregateId === `legacy-import:${report.manifestDigest}`. Snapshots horizon, aggregate version, command receipt and a per-row envelope (aggregateId/aggregateSequence/commandId/domainSchemaVersion/eventId/eventType/globalPosition/payload bytes/requestSha256); pins receipt.eventIds against the stored ids and version === row count. After replay: dispositions exactly [\"COMMITTED\",\"REPLAYED\"], same manifestDigest, byte-identical envelope list, unchanged horizon/version/receipt, unchanged aggregate row count (no duplicate row), decision page still [].\n\nRED PROVEN: `pnpm test:migration` EXIT 1, \"Test Files 1 failed | 2 passed (3) / Tests 1 failed | 25 passed (26)\". Named failing assertion import/import-determinism.test.ts:294 `expect(event.domainSchemaVersion).toBe(IMPORT_EVENT_FACTS_VERSION)` — \"expected 'moe-domain-schema/0' to be 'moe-import-event-facts/1'\". Exactly the generic store default the plan predicted, and the failure lands AFTER the positive-count, hasMore and zero-decision controls all passed, so the case demonstrably executed rather than refused early. The migration tsc leg compiled clean.",
+      "startedAt": "2026-08-17T20:10:51.690Z",
+      "completedAt": "2026-08-17T20:12:10.780Z"
     },
     {
       "stepId": "step-4",
       "description": "MINIMUM IMPLEMENTATION in packages/import/src/import-apply.ts only. Reuse the existing public package constant by adding `IMPORT_EVENT_FACTS_VERSION` to the codec import; make `ImportEventDraft.domainSchemaVersion` a REQUIRED `typeof IMPORT_EVENT_FACTS_VERSION`; and stamp every foldRecord event with `domainSchemaVersion: IMPORT_EVENT_FACTS_VERSION`. Do not change claim/link derivation, eventId, eventType, payload, aggregate, commandId, commandBytes, committedAt, counts, or refusal behavior, and do not edit @moe/store/codec/barrels. The store deliberately excludes domainSchemaVersion from request/effect identity, so the golden identities must remain unchanged. Keep import-apply.ts at <=250 physical lines by compacting the existing codec import/removing redundant blank layout—not by dropping the why-comments or adding a new responsibility. This fixes future first commits only: identical replay preserves an already-stamped row; it does NOT restamp pre-fix generic rows.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "packages/import/src/import-apply.ts"
-      ]
+      ],
+      "startedAt": "2026-08-17T20:12:12.967Z"
     },
     {
       "stepId": "step-5",
@@ -73,7 +89,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b8af1a87",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,16 +101,22 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T19:53:43.483Z",
-  "updatedAt": "2026-08-17T20:01:08.992Z",
+  "updatedAt": "2026-08-17T20:12:12.967Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:54:53.573Z",
     "plannedStepCount": 6,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-b8af1a87"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T20:01:06.925Z",
   "planningNotes": {
@@ -112,5 +134,6 @@
   "budget": {
     "wallClockMs": 5400000
   },
-  "planApprovedAt": "2026-08-17T20:01:08.992Z"
+  "planApprovedAt": "2026-08-17T20:01:08.992Z",
+  "workStartedAt": "2026-08-17T20:05:53.494Z"
 }

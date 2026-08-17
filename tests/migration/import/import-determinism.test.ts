@@ -5,16 +5,21 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  IMPORT_EVENT_FACTS_VERSION,
   applyImport,
   buildSourceManifest,
+  decodeImportEventFacts,
 } from "../../../packages/import/src/index.js";
 import type {
+  ImportCommitInput,
+  ImportEventFacts,
   ImportReport,
   ImportStorePort,
   LegacySourceRecord,
   SourceManifest,
 } from "../../../packages/import/src/index.js";
 import { SqliteEventStore } from "../../../packages/store/src/index.js";
+import type { StoredEvent } from "../../../packages/store/src/index.js";
 
 /**
  * DoD 1 (identical bytes produce identical imports) and DoD 3 (an interrupted import
@@ -206,6 +211,114 @@ describe("DoD 3 — an interrupted import commits wholly or not at all", () => {
     });
     expect("outcome" in result).toBe(true);
     expect(sourceSnapshot(root)).toEqual(before);
+  });
+});
+
+interface Recorder {
+  readonly commits: ImportCommitInput[];
+  readonly dispositions: string[];
+  readonly port: ImportStorePort;
+}
+
+/**
+ * Delegates `commit` to the REAL store unchanged and only records what came back, so the
+ * disposition asserted below is SQLite's own answer rather than a fake's restatement of it.
+ */
+function recordingPort(store: SqliteEventStore): Recorder {
+  const commits: ImportCommitInput[] = [];
+  const dispositions: string[] = [];
+  return {
+    commits,
+    dispositions,
+    port: {
+      commit(input) {
+        commits.push(input);
+        const result = store.commit(input);
+        dispositions.push(result.disposition);
+        return result;
+      },
+    },
+  };
+}
+
+/** Everything durable about one row, so a replay that rewrote any of it is visible. */
+function envelope(event: StoredEvent): Record<string, unknown> {
+  return {
+    aggregateId: event.aggregateId,
+    aggregateSequence: event.aggregateSequence,
+    commandId: event.commandId,
+    domainSchemaVersion: event.domainSchemaVersion,
+    eventId: event.eventId,
+    eventType: event.eventType,
+    globalPosition: String(event.globalPosition),
+    payload: [...event.payload],
+    requestSha256: event.requestSha256,
+  };
+}
+
+function factsOf(event: StoredEvent): ImportEventFacts {
+  const facts = decodeImportEventFacts(event.payload);
+  if ("outcome" in facts) throw new Error(`decode refused: ${facts.code}/${facts.layer}`);
+  return facts;
+}
+
+describe("the durable event envelope declares the import facts schema", () => {
+  it("stamps every stored event, and an identical replay changes nothing", () => {
+    const root = tree(FIXTURE);
+    const store = openStore();
+    const recorder = recordingPort(store);
+    const report = importInto(root, recorder.port);
+    const aggregateId = `legacy-import:${report.manifestDigest}`;
+    const commandId = recorder.commits[0]?.commandId;
+    if (commandId === undefined) throw new Error("production issued no commit");
+
+    // The sweep below is only worth anything over a non-empty page, and `hasMore` proves
+    // the page is the WHOLE ledger rather than a first slice that happened to agree.
+    const global = store.readEventsAfter(0n);
+    const aggregate = store.readAggregateEvents(aggregateId);
+    expect(global.items.length).toBe(report.counts.claims);
+    expect(global.items.length).toBeGreaterThan(0);
+    expect(global.hasMore).toBe(false);
+    expect(aggregate.items.length).toBe(global.items.length);
+    expect(aggregate.hasMore).toBe(false);
+    // Plain applyImport commits; it never touches the decision API. Zero is the CORRECT
+    // count here, so it is pinned rather than left as an unexamined absence.
+    const decisions = store.readCommandDecisionsAfter(0n);
+    expect(decisions.items).toEqual([]);
+    expect(decisions.hasMore).toBe(false);
+
+    for (const event of global.items) {
+      const facts = factsOf(event);
+      // The envelope and the payload it carries must agree, and both must be the exact
+      // published constant — the store's generic default would satisfy neither.
+      expect(event.domainSchemaVersion).toBe(IMPORT_EVENT_FACTS_VERSION);
+      expect(facts.schemaVersion).toBe(event.domainSchemaVersion);
+      expect(event.eventId).toBe(facts.claim.claimId);
+      expect(event.aggregateId).toBe(aggregateId);
+    }
+
+    const before = {
+      envelopes: global.items.map(envelope),
+      horizon: String(store.readEventHorizon()),
+      receipt: store.getCommandReceipt(commandId),
+      version: store.getAggregateVersion(aggregateId),
+    };
+    expect(before.receipt?.eventIds).toEqual(global.items.map((event) => event.eventId));
+    expect(before.version).toBe(global.items.length);
+
+    // The SAME store, the SAME bytes: the store replays its receipt instead of writing a
+    // second copy. An already-stamped row therefore stays stamped, and no row is rewritten.
+    const replayed = importInto(root, recorder.port);
+    expect(recorder.dispositions).toEqual(["COMMITTED", "REPLAYED"]);
+    expect(replayed.manifestDigest).toBe(report.manifestDigest);
+    const after = store.readEventsAfter(0n);
+    expect(after.hasMore).toBe(false);
+    expect(after.items.map(envelope)).toEqual(before.envelopes);
+    expect(String(store.readEventHorizon())).toBe(before.horizon);
+    expect(store.getAggregateVersion(aggregateId)).toBe(before.version);
+    expect(store.getCommandReceipt(commandId)).toEqual(before.receipt);
+    expect(store.readAggregateEvents(aggregateId).items.length).toBe(before.envelopes.length);
+    expect(store.readCommandDecisionsAfter(0n).items).toEqual([]);
   });
 });
 

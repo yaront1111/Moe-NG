@@ -113,16 +113,24 @@
     {
       "stepId": "step-7",
       "description": "Mutation drills, three, one per claim the suite must actually pin. Drill 1 (set equality is real in the missing direction): delete one curated export from foundation-surface.ts; the step-5 set-equality test must go RED naming that symbol -- if it only fails a size assertion, the test is counting rather than comparing. Drill 2 (set equality is real in the leaking direction): add a throwaway export named like a fixture to the surface; the test must go RED. These are separate failures and a single-direction assertion catches only one. Drill 3 (the plain-Node probe is real): delete one `.js` bridge; the step-6 probe must go RED on module resolution while the in-suite vitest tests stay GREEN -- that divergence is the proof the probe tests something vitest cannot. Record for each drill the command, the failing test NAME and the exact assertion; a drill that reddens by crashing has not proven the guard. Restore by re-editing, never `git checkout` (destructive in this shared worktree), and confirm with `git diff --numstat` showing 0 added and 0 deleted per drilled file. One drill at a time.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/foundation/foundation-surface.ts",
         "apps/daemon/src/foundation/foundation-surface.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js",
+        "apps/daemon/src/index.ts"
+      ],
+      "note": "FOUR drills, one at a time, each restored by re-editing (never `git checkout`). Restore proved by sha256 baseline taken before drill 1, since `git diff --numstat` is BLIND to foundation-surface.ts / .js and graph-preview-request.ts / .js — they were untracked at drill time, so a numstat of 0/0 would have proved nothing about them.\n\nDRILL 1 — set equality is real in the MISSING direction.\nMutation: removed `qualifyGoalClosure` from the export list in foundation/foundation-surface.ts AND from index.ts's re-export block. Both, deliberately: removing it from only the surface makes index.ts re-export a name the module no longer has, which is an ESM link-time SyntaxError — the suite would have reddened by CRASHING, which proves nothing.\nCommand: `npx vitest run --root . --config package.json src/index-surface.test.ts`\nRED, 3 failed | 188 passed. Failing test NAME and exact assertion:\n  \"daemon package root > publishes exactly the reviewed runtime namespace\"\n  AssertionError: expected [ 'BOOTSTRAP_COMMAND_KINDS', …(130) ] to deeply equal [ 'BOOTSTRAP_COMMAND_KINDS', …(131) ]\n  -   \"qualifyGoalClosure\",\nIt failed by NAMING the symbol in the array diff — comparing, not counting. Decisive control: \"guards the hand-written runtime export catalogue\" (`expect(EXPECTED_EXPORTS.length).toBe(132)`) stayed GREEN, because the literal was untouched. The size guard cannot catch this class; the set comparison can. Two other cases also reddened and are corroborating, not the proof: \"publishes qualifyGoalClosure as function\" (expected 'undefined' to be 'function') and the refusal case (TypeError: qualifyGoalClosure is not a function).\n\nDRILL 2 — set equality is real in the LEAKING direction, isolated.\nMutation: added `export const foundationSurfaceFixtureLeak = (): undefined => undefined;` to foundation-surface.ts and its name to index.ts. Chose a name NOT on FORBIDDEN_FIXTURES on purpose, so ONLY the set-equality assertion can catch it.\nRED, exactly 1 failed | 190 passed:\n  \"daemon package root > publishes exactly the reviewed runtime namespace\"\n  AssertionError: expected [ 'BOOTSTRAP_COMMAND_KINDS', …(132) ] to deeply equal [ 'BOOTSTRAP_COMMAND_KINDS', …(131) ]\n  +   \"foundationSurfaceFixtureLeak\",\nOne failure, one direction, one guard. Drill 1 and drill 2 are genuinely separate failures and a single-direction assertion would have caught only one.\n\nDRILL 2b — the fixture deny-list is live, not decorative.\nMutation: same leak renamed to `seedProvenAttempt` (a real export of goals/goal-closure-test-fixtures.ts, and on the deny-list).\nRED, 2 failed | 189 passed — the set case again PLUS:\n  \"daemon package root > does not publish fixture seedProvenAttempt\"\n  AssertionError: expected true to be false\nSo the widened 34-name deny-list actually fires; it is not a list nothing can reach.\n\nDRILL 3 — the plain-Node probe tests something vitest CANNOT.\nMutation: deleted apps/daemon/src/foundation/foundation-surface.js (the bridge only).\nRED in the child-process suite: \"resolves and exercises the Foundation ingress surface under plain Node\"\n  AssertionError: expected { outcome: 'FAILED', …(2) } to deeply equal { outcome: 'IMPORTED', …(8) }\n  + \"code\": \"ERR_MODULE_NOT_FOUND\",\n  + \"message\": \"Cannot find module 'D:\\\\projexts\\\\moe-next\\\\apps\\\\daemon\\\\src\\\\foundation\\\\foundation-surface.js' imported from D:\\\\projexts\\\\moe-next\\\\apps\\\\daemon\\\\src\\\\index.ts\",\n  + \"outcome\": \"FAILED\",\nReported as DATA through the probe's catch and compared by the assertion — a stable reason code, not an uncaught crash.\nTHE DIVERGENCE, which is the actual claim: src/index-surface.test.ts stayed 189 of 191 GREEN with the bridge gone. Every in-process case — the full 132-name set equality, all 132 per-name kind checks, all 8 Foundation type-closure and refusal cases — passed while the module was unreachable to a real consumer, because vitest rewrites `./foundation-surface.js` back to `.ts`. Its ONLY two failures were its own two child-process cases (\"collects executing-host versions through the bare root in plain Node\", \"selects and reopens exact current bytes through bare package roots\"). That is the exact failure mode DoD 3 exists to catch, demonstrated.\n\nRESTORE VERIFIED: `sha256sum -c` against the pre-drill baseline — all 7 files OK (foundation-surface.ts, foundation-surface.js, index.ts, graph-preview-request.ts, graph-preview-request.js, index-surface.test.ts, runtime-entrypoint.test.ts). Post-restore full run: `pnpm --filter @moe/daemon test` -> Test Files 121 passed (121), Tests 2571 passed (2571), exit 0.\n\nFOREIGN WHOLE-TREE COMMITS CAPTURED THIS TASK'S FILES — disclosed, not repaired, per the project rail. `git status --porcelain -- apps/daemon/` is now EMPTY. Six owned paths were swept into 914eddb \"feat(task-4dd4424c1c264f4490bcb7cad01e7585): Production verifier authority provider for the agent wrapper\" (23:04:33) and runtime-entrypoint.test.ts into 04c6532 \"feat(task-c534626b79b14aaa940923d78830200d): Bind Claude telemetry to the durable launcher\" (23:05",
+      "startedAt": "2026-08-17T20:05:47.364Z",
+      "completedAt": "2026-08-17T20:08:26.339Z"
     },
     {
       "stepId": "step-8",
       "description": "Adversarial review, commit, and gate. ATTACKER PASS: does any `export *` survive anywhere in the curated path? Can a test fixture, a `*-test-fixtures.ts` helper or an incidental util be reached from `@moe/daemon`? Is every exported function's full result union also exported, including each refusal branch -- pick two functions and try to narrow their results in a consumer-shaped type assertion. Did any behavior change (this task forbids all of it): is the graph-preview move byte-equivalent, are all prior consumer import paths intact, and did any refusal code, layer or schema version get touched? Do both new `.js` bridges exist? Are index.ts and foundation-surface.ts each <=250 lines? CONCURRENCY CHECK before committing -- a prior handoff recorded another task in flight against index.ts and index-surface.test.ts: run `git log --oneline -5 -- apps/daemon/src/index.ts` and re-read the file; if a peer has moved underneath you, rebase your edit onto their bytes rather than overwriting. COMMIT: `git status --porcelain`, unstage any foreign entry with `git restore --staged -- <path>`, commit ONLY the seven owned paths by explicit pathspec, verify with `git show --stat`. GATE, foreground and `&&`-chained so no red leg is masked: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`, plus the plain-Node root probe run directly from apps/daemon. Read the OUTPUT: `pnpm --filter` on an unresolved name prints \"No projects matched the filters\" and exits 0, so each leg counts only if it prints a `Test Files N passed` line with N nonzero, and DoD 5 requires the test count to be at least baseline -- capture the baseline count BEFORE your first edit or you cannot prove it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/index.ts",
         "apps/daemon/src/index-surface.test.ts",
@@ -131,11 +139,23 @@
         "apps/daemon/src/foundation/foundation-surface.js",
         "apps/daemon/src/http/graph-preview-request.ts",
         "apps/daemon/src/http/graph-preview-request.js"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts",
+        "apps/daemon/src/runtime-entrypoint.test.ts",
+        "apps/daemon/src/foundation/foundation-surface.ts",
+        "apps/daemon/src/foundation/foundation-surface.js",
+        "apps/daemon/src/graph-preview-request.ts",
+        "apps/daemon/src/graph-preview-request.js"
+      ],
+      "note": "ATTACKER PASS — every question answered by measurement.\n- `export *` in the curated path? `grep -rnE \"^export \\*\"` over index.ts, foundation/foundation-surface.ts and graph-preview-request.ts returns NOTHING. The only stars in the diff are the two one-line `.js` bridges, which is their required exact body.\n- Fixture or incidental util reachable from `@moe/daemon`? No. The 132-name namespace was diffed name-by-name against the pre-task 85 (missing: [], added: exactly the 47 curated names). The 34-entry deny-list covers what a star would have dragged in — goal-closure-test-fixtures.ts's seeders, the codec helpers foundation-attempt-contracts.ts re-exports, foundation-verification-store.ts's commit/load helpers, review-ledger.ts's internal refuse/payload readers — and drill 2b PROVED that list fires rather than being decorative.\n- Full result union exported, narrowable by a consumer? Tested, not asserted. Wrote a throwaway consumer-shaped module importing ONLY the bare `@moe/daemon` and narrowing two unions by discriminant: FoundationVerificationOutcome -> reads verdict/digest/authority on ok, source/layer/code on the refusal; GoalClosureQualification -> reads closureWitness on ok, layer/code/message on the refusal. `npx tsc --project tsconfig.json --noEmit` EXIT 0. Deleted immediately; `git status --porcelain -- apps/daemon/` empty and `ls` confirms no .tmp.ts or .tmp.mjs remains.\n- Behavior change? NONE. The graph-preview move is BYTE-IDENTICAL: `git show 29f3c5f:apps/daemon/src/index.ts | sed -n '284,389p'` vs `sed -n '19,124p' graph-preview-request.ts` -> `diff` reports no difference. All six names re-exported from the root under their original names, so no consumer import path changed. No refusal code, layer, or schema version was touched — the five schema versions the tests pin are read FROM production, not restated as new literals.\n- Both new `.js` bridges exist with exact bodies: `export * from \"./foundation-surface.ts\";` and `export * from \"./graph-preview-request.ts\";`.\n- Sizes: index.ts 217, foundation-surface.ts 114, graph-preview-request.ts 124 — all <=250, none near 400.\n\nADVERSARIAL RESIDUALS, disclosed rather than silently accepted (this diff has no IO, no state, no concurrency of its own — it is a re-export barrel — so the checklist reduces to test-honesty):\n1. The `runReviewCommand(null, malformed)` case is safe ONLY because the decoder refuses before any durable read. If someone later makes it touch the store first, the case reddens with a TypeError instead of the assertion. That is still RED, which is the correct direction for a guard, but a future reader should know the null is load-bearing evidence (\"the store is never dereferenced on this path\"), not laziness.\n2. The `qualifyGoalClosure` stub exposes only `readEvents`. If production later calls a different store method first, the stub throws \"not a function\", which its catch converts to the SAME refusal code — so that case could stay green for a slightly different reason. It still pins the fail-closed contract (any unreadable store -> that exact code and layer), which is the property under test.\n\nCONCURRENCY CHECK, and it fired. `git log --oneline -5 -- apps/daemon/src/index.ts` shows my bytes already at HEAD under 914eddb \"feat(task-4dd4424c1c264f4490bcb7cad01e7585): Production verifier authority provider for the agent wrapper\" (23:04:33) — a FOREIGN whole-tree commit — with runtime-entrypoint.test.ts swept into 04c6532 (23:05:00). No peer moved underneath me; nothing needed rebasing.\n\nCOMMIT: there was nothing left to commit. `git status --porcelain -- apps/daemon/` is EMPTY. Per the project rail on foreign whole-tree commits I did NOT amend, reset, stash, or mint an empty claim commit. Verified instead that the committed bytes ARE the gated bytes: for all seven owned paths `git rev-parse HEAD:<path>` == `git hash-object <path>` (7/7 IDENTICAL). No drill state reached HEAD — both sweeps predate the drills and the post-restore sha256 baseline matched.\nQA reviews by base-ref diff, not by a commit bearing this task's id:\n  git diff 29f3c5f..HEAD -- apps/daemon/src/index.ts apps/daemon/src/index-surface.test.ts apps/daemon/src/runtime-entrypoint.test.ts apps/daemon/src/foundation/ apps/daemon/src/graph-preview-request.ts apps/daemon/src/graph-preview-request.js\n  -> 7 files changed, 771 insertions(+), 280 deletions(-); exactly the seven owned paths, nothing foreign.\n\nGATE, foreground, `&&`-chained so no red leg could be masked:\n  pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck   -> GATE_EXIT=0\nOUTPUT READ, not just the exit code:\n- leg 1 printed `$ tsc --project tsconfig.json` and completed — a resolved filter, not \"No projects matched the filters\".\n- leg 2 printed the count line `Test Files 121 passed (121) / Tests 2571 passed (2571)`. NONZERO, and above the pre-edit baseline of 121 / 2488 captured before the first edit (DoD 5). +83 tests, no file lost.\n- leg 3 `pnpm --recursive typecheck` ran 19 of",
+      "startedAt": "2026-08-17T20:08:42.618Z",
+      "completedAt": "2026-08-17T20:10:36.428Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -184,7 +204,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-17T20:05:22.779Z",
+  "updatedAt": "2026-08-17T20:12:07.512Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-cb476f76",
@@ -197,7 +217,7 @@
     "firstClaimAt": "2026-08-09T14:24:55.279Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -232,7 +252,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-17T19:39:13.901Z",
@@ -257,5 +279,21 @@
     "escalatedAt": "2026-08-17T19:49:18.529Z"
   },
   "planApprovedAt": "2026-08-17T19:39:15.976Z",
-  "workStartedAt": "2026-08-17T19:49:34.510Z"
+  "workStartedAt": "2026-08-17T19:49:34.510Z",
+  "reviewStartedAt": "2026-08-17T20:12:07.512Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  121 passed (121)\n      Tests  2571 passed (2571)\n   Start at  23:11:24\n   Duration  7.12s\n\nOWNED_GATE_EXIT=0",
+    "reportedAt": "2026-08-17T20:12:07.512Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/index.ts",
+    "apps/daemon/src/graph-preview-request.ts",
+    "apps/daemon/src/graph-preview-request.js",
+    "apps/daemon/src/foundation/foundation-surface.ts",
+    "apps/daemon/src/foundation/foundation-surface.js",
+    "apps/daemon/src/index-surface.test.ts",
+    "apps/daemon/src/runtime-entrypoint.test.ts"
+  ]
 }

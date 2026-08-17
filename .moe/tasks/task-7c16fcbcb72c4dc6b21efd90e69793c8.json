@@ -146,7 +146,7 @@
       "completedAt": "2026-08-17T20:04:03.883Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -159,12 +159,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:18:14.797Z",
-  "updatedAt": "2026-08-17T20:05:20.561Z",
+  "updatedAt": "2026-08-17T20:13:17.809Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:06.293Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T20:13:17.809Z",
+    "wallClockMs": 2531516
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -199,7 +201,8 @@
   },
   "planApprovedAt": "2026-08-17T19:34:13.189Z",
   "contextFetchedBy": [
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "workStartedAt": "2026-08-17T19:34:37.533Z",
   "reviewStartedAt": "2026-08-17T20:05:20.561Z",
@@ -222,5 +225,8 @@
     "tests/security/runtime-provider-invariants.ts",
     "tests/security/runtime-provider-supervision-cases.ts",
     "tests/security/runtime-provider-evidence.security.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T20:13:17.809Z",
+  "reviewCompletedAt": "2026-08-17T20:13:17.809Z",
+  "reviewSummary": "APPROVED. QA re-ran the gates as separate foreground legs: `pnpm --filter @moe/runner typecheck` EXIT=0; `pnpm --filter @moe/runner test` EXIT=0, `Test Files 68 passed (68)` / `Tests 2442 passed | 1 skipped (2443)`; `pnpm test:security` EXIT=0, 487 passed (run because a new *_LAYER is rostered and that suite runs in no other gate).\n\nDoD1: the exact 7-key input cannot express target/outcomeClass/uncertainty/adoptedAt/result/terminal intent — pinned by a sorted key-set assertion plus 7 conditional-type aliases the package typecheck enforces (expectTypeOf is a no-op here). runRef.effectIntentId is bound in admission, before any derivation.\nDoD2: 120 cases GENERATED from the frozen vocabularies via the package root, asserting 120, >0 and 120 distinct keys. Four admitted cells; ACTIVE+CANCELLED asserted as the MUST_DRAIN KIND (drainRequired / versionDelta 0 / unmoved version), not a refusal code.\nDoD3: delegates to production applyEffectCommand and returns it unchanged; all 9 settlement codes have live tests at PROVIDER_EFFECT_SETTLEMENT, while reducer refusals keep LIFECYCLE (TERMINAL_ABSORBED, TRANSITION_NOT_ADMITTED, COUNTER_EXHAUSTED — code AND layer asserted).\nDoD4: counterexample, accessor/__proto__/proxy/non-record, binding mismatch, three distinct completion-instant arms, absorption, and an accepted control naming every EffectResult field with an independently hand-written digest preimage.\nDoD5: published from the runner root, ratchet 232->239 both axes, consumer task-1879166d7f12474fad8038e2a9d2433a in the module header.\n\nTHREE INDEPENDENT QA DRILLS (hash snapshot, content restore, hash re-verified, status clean): MAX_TURNS_EXHAUSTED+NONE->FAILED reddened 4 named tests; COMPLETED+CAPTURE_TRUNCATED->SUCCEEDED reddened the swept cell and the uncertainty test; dropping runRef from settlementPreimage reddened the epoch-digest test and the accepted control.\n\nProduction files 210 and 137 lines; both .js bridges tracked; committed bytes == gated bytes."
 }

@@ -137,8 +137,8 @@
       "completedAt": "2026-08-17T20:01:22.875Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,7 +150,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:47:27.141Z",
-  "updatedAt": "2026-08-17T20:03:47.682Z",
+  "updatedAt": "2026-08-17T20:07:56.971Z",
   "stepsCompleted": [
     "step-1",
     "step-2",
@@ -167,7 +167,9 @@
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
     "firstClaimAt": "2026-08-16T22:13:51.833Z",
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T20:07:56.971Z",
+    "wallClockMs": 78845138
   },
   "planningNotes": {
     "approachesConsidered": "THIS PLAN REPLACES AN EARLIER ONE. The first attempt blocked correctly at its own step-1 gate: two of three VerifierAuthorityFacts fields had no durable writer, and the worker refused to mint six 64-hex digests from three scalars. That block was right, and it also caught an architect error -- my original notes claimed package items were derivable from `readReviewLedger`, when `submitRound` was discarding them. Both gaps are now closed by task-5edf037f (calibration) and task-92031b0a (package items), so the provider is buildable from real durable sources and this plan composes them. REJECTED NOW: (a) reimplementing either reader inside the provider -- both are landed public surfaces and a local copy would drift and then police the copy rather than production; (b) reading `record.packageItems.items` directly -- it is reachable and typechecks, but it skips `verifyStoredPackageItems`, which is the only thing making stored items trustworthy; drill 3 exists to catch exactly that shortcut; (c) widening the port to return a diagnostic refusal code instead of `null` -- `NodeVerifierConfig.verificationAuthority` is node-verifier's contract and the task rails put it out of scope, so the tests carry the discrimination instead by seeding one gap at a time; (d) defaulting any field -- see the risks; a legal-but-unproven calibration is the single most dangerous wrong answer here and the landed reader already refuses rather than synthesising one.",
@@ -222,5 +224,8 @@
     "apps/daemon/src/review/verifier-authority-provider.js",
     "apps/daemon/src/orchestrator/node-verifier.test.ts",
     "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T20:07:56.971Z",
+  "reviewCompletedAt": "2026-08-17T20:07:56.971Z",
+  "reviewSummary": "APPROVED. 6/6 DoD verified against bytes at HEAD.\n\nDoD1: grep at HEAD shows createVerifierAuthorityProvider({projectId, store: verifierStore}) at agent-wrapper-main.ts:281; `verificationAuthority: () => null` grep EXIT 1 (gone from production). DoD2: 3/3 fields durable — calibration<-readReviewerCalibration, policy<-installed moe-verifier-policy/1 slice validated by the core's evaluatePolicy, packageItems<-latest ACCEPT round via verifyStoredPackageItems only. Closure declared (nodeRef), no `brief` param; hostile-brief + \"differs from every plausible default\" tests pin non-fabrication. DoD3: node-verifier.test.ts drives REAL createNodeVerifier with the REAL provider, asserting receipt IDENTITY (receiptId, subjectRef, source.decisionId), execution.outputSha256/byteCount, calibration+policy+packageItems byte-equal to what was INSTALLED, plus ledger.accepted.verifierReceiptId proving accept_output committed. DoD4: literal VERIFICATION_AUTHORITY_UNAVAILABLE, runs===0 (ordering), VERIFIER_RECEIPT_NOT_FOUND, accepted undefined.\n\nDoD5 - my own drills. A (hard-coded calibration): RED at node-verifier.test.ts:452:40 on the receipt calibration assertion, AssertionError not crash. B (fabricated facts instead of null): RED at :486:23 on the outcome literal. Restored by re-edit; sha256 de5af6a2...a8f4dd matched baseline, git diff --numstat empty, suites green after.\n\nDoD6: pnpm typecheck EXIT 0 (apps/daemon Done); pnpm --filter @moe/daemon test EXIT 0 - Test Files 121 passed (121), Tests 2571 passed (2571). provider.ts 178 lines. agent-wrapper-main.ts 392 but was 388 pre-task (blob 88b7560): pre-existing, under 400, not task-caused.\n\nProvider files were first added by foreign sweep 29f3c5f, so 08e3445 carries only 3 files - verified by base-ref bytes per global rail, not commit membership. Canary note: nothing in production installs moe-verifier-policy/1 or moe-reviewer-calibration/1; both are operator policy.install commands."
 }

@@ -20,8 +20,8 @@
     "Own only the provider matrix test and at most two focused fixture/helper files under tests/integration/portability."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -40,11 +40,26 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:36.183Z",
-  "updatedAt": "2026-08-17T20:03:42.276Z",
+  "updatedAt": "2026-08-17T20:10:15.613Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:03:37.681Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
+  ],
+  "blockedReason": "Fresh current-byte audit confirms the prior decision dec-a8923b1e17bf460390742b6b8ddb5eab remains blocking.\n\nThe @moe/daemon Foundation names are now present and runtime-load at HEAD 926f6db, but their producer task-5e43a9e294ef48fdab23817c8c6cfc45 is still WORKING, not an approved dependency. The integration root also lacks @moe/store: package.json/pnpm-lock declare only daemon+runner and plain import('@moe/store') returns ERR_MODULE_NOT_FOUND. This task owns only tests; task-f33028b5374044bfa84deb5ed979277b is the existing blocked package-edge prerequisite.\n\nThe literal accepted Claude evidence arm conflicts with the read-only rails. Foundation dispatch calls runEffectActivateCommand, commits reservation/attempt/release rows, constructs the durable launcher, and may start a child. readFoundationAttemptRecord can only read pre-existing evidence; no lawful committed receipt/DB exists. Service construction is only a factory PASS, and empty read is FOUNDATION_ATTEMPT_RECORD_ABSENT@DAEMON_FOUNDATION_ATTEMPT—not accepted dispatch evidence. Synthetic seeding/deep writers would forge the subject.\n\nThe Codex root edge is live, but no production host observer/probe port exists. probeCodexRuntime accepts caller reports; a PROVEN control would be caller-forged. Codex observation/stream/render failures expose code/message but no refusing layer (CODEX_RENDER_LAYERS are content layers), reconcile is total, and unsupported-platform/surface-disagreement have no production refusal pair.\n\nHUMAN CHOICE: (A) amend/reapprove this task to compare the actual asymmetric public read-only shaping surfaces, mark execution/host truth UNKNOWN, and explicitly permit absent refusal layer; or (B) retain the literal DoD and first land sealed Foundation dispatch-capability evidence/readback plus a real Codex host-observation/refusal-attribution surface and the root @moe/store edge. Do not infer either route.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-17T20:09:50.166Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured public roots and package edges, traced Claude dispatch effects and Codex evidence/failure shapes, reported the task BLOCKED, and wrote Serena handoff memory.",
+      "whatRemains": "Human must choose amended asymmetric read-only scope or literal sealed-evidence prerequisites; then prerequisite surfaces/edges must land before replanning.",
+      "pitfalls": "Do not synthesize a durable attempt, caller-forge a Codex probe report, treat render layers as refusal layers, or label service factory construction as dispatch evidence.",
+      "openQuestions": "Resolve dec-a8923b1e17bf460390742b6b8ddb5eab.",
+      "releasedAt": "2026-08-17T20:10:15.612Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after recording the unresolved production-evidence/design blocker; continuing with other queued planning tasks."
+    }
   ]
 }
