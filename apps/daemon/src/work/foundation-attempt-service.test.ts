@@ -8,7 +8,44 @@ import {
 } from "@moe/runner";
 import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+const providerBoundaryProbe = vi.hoisted(() => ({
+  commits: [] as Array<{
+    readonly input: { readonly launch: unknown }; readonly result: unknown;
+  }>,
+  launches: [] as Array<{ readonly input: unknown; readonly result: unknown }>,
+}));
+
+vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../activation/activation-telemetry-launch.js")
+  >();
+  return {
+    ...actual,
+    launchActivationProviderRun: async (
+      ...args: Parameters<typeof actual.launchActivationProviderRun>
+    ) => {
+      const result = await actual.launchActivationProviderRun(...args);
+      providerBoundaryProbe.launches.push({ input: args[1], result });
+      return result;
+    },
+  };
+});
+
+vi.mock("../activation/activation-run-commit.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../activation/activation-run-commit.js")>();
+  return {
+    ...actual,
+    commitActivationProviderRun: (
+      ...args: Parameters<typeof actual.commitActivationProviderRun>
+    ) => {
+      const result = actual.commitActivationProviderRun(...args);
+      providerBoundaryProbe.commits.push({ input: args[1], result });
+      return result;
+    },
+  };
+});
 
 import { readAttemptRelease } from "./attempt-release-disposition.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
@@ -23,6 +60,10 @@ import { readFoundationActivationHistory } from "../activation/activation-ledger
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
+import {
+  PROVIDER_RUN_COMMAND_KIND, PROVIDER_RUN_EVENT_TYPE,
+} from "../telemetry/provider-run-contracts.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import {
   DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES, FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, decodeFoundationAttemptRequest, decodeFoundationPayload,
@@ -54,7 +95,11 @@ import {
 const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
 
-afterEach(cleanupRestoreHarnesses);
+afterEach(() => {
+  providerBoundaryProbe.commits.length = 0;
+  providerBoundaryProbe.launches.length = 0;
+  cleanupRestoreHarnesses();
+});
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
@@ -1093,5 +1138,221 @@ describe("foundation attempt dispatch — the record event type is stable", () =
     expect(FOUNDATION_DISPATCH_EVENT_TYPES).toStrictEqual({
       RECORDED: "FoundationAttemptRecorded", RESERVED: "FoundationDispatchReserved",
     });
+  });
+});
+
+/**
+ * THE PHYSICAL PROVIDER-RUN BOUNDARY, composed at the real dispatch call site.
+ *
+ * Every fact below is read back through the SHIPPED reader
+ * (`readCurrentProviderRun`) rather than off the value dispatch returned: the
+ * claim is that a durable, decision-verified provider run exists, and a return
+ * value cannot say that. The launch here is the real launcher's own non-Windows
+ * refusal, which is a BLIND handoff — `ok: true` carrying UNKNOWN facts — and a
+ * blind handoff is exactly the case a composition that only ever ran on the
+ * happy path would drop.
+ */
+describe("foundation attempt dispatch — the provider run reaches the ledger", () => {
+  /** Every provider-run event in the store, read off the reserved type. */
+  function providerEvents(store: SqliteEventStore) {
+    return store.readEventsByTypeAfter(PROVIDER_RUN_EVENT_TYPE, 0n, 100).items;
+  }
+
+  /** The provider-run commit decisions, read from the durable decision log. */
+  function providerDecisions(store: SqliteEventStore) {
+    return store.readCommandDecisionsAfter(0n, 200).items
+      .filter((decision) => decision.commandKind === PROVIDER_RUN_COMMAND_KIND);
+  }
+
+  it("commits one blind provider record bound to the DURABLE lease session", async () => {
+    const store = readyStore("provider-blind");
+    const { service } = harness(store);
+
+    const outcome = await service.dispatch(dispatchRequest());
+
+    // The Foundation answer is unchanged: the launcher's own refusal, its own
+    // layer. Composing the provider run must not restamp it.
+    expectRefusal(outcome, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+
+    // EXACTLY ONE physical composition: one event, one decision.
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+    expect(providerBoundaryProbe.commits[0]?.input.launch)
+      .toBe(providerBoundaryProbe.launches[0]?.result);
+    expect(providerEvents(store)).toHaveLength(1);
+    const decisions = providerDecisions(store);
+    expect(decisions).toHaveLength(1);
+
+    const read = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    if (!("record" in read)) {
+      const code = "code" in read ? String(read.code) : "UNKNOWN";
+      const layer = "layer" in read ? String(read.layer) : "UNKNOWN";
+      throw new Error(`provider reader refused ${code}@${layer}`);
+    }
+    expect(read.ok).toBe(true);
+
+    // THE RUN IDENTITY, server-derived field by field. `runRef` is the dispatch
+    // aggregate the service already derived; nothing here is caller-supplied.
+    expect(read.record.providerRunRef).toEqual({
+      attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
+      provider: "claude", runRef: DISPATCH_AGGREGATE,
+    });
+
+    // THE BINDING THE READER ENFORCES. The reader requires the decision's
+    // principal to be the lease's owner session; the two are deliberately
+    // different values in this fixture, so a writer that used the envelope
+    // principal would refuse PROVIDER_RUN_BINDING_MISMATCH instead of reading.
+    expect(read.sessionId).toBe(SESSION_ID);
+    expect(SESSION_ID).not.toBe(PRINCIPAL_ID);
+
+    // A REFUSED launch is durable UNKNOWN evidence, not a success and not a gap.
+    expect(read.record.launch.kind).toBe("REFUSED");
+    expect(read.record.terminal).toBe("REFUSED");
+    expect(read.record.infrastructure).toBe("LAUNCH_REFUSED");
+    expect(read.record.upstreamRefusal?.code).toBe("TELEMETRY_LAUNCH_REFUSED");
+    expect(read.record.upstreamRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+    // No daemon boot/monotonic observation exists to read, so both stay null
+    // rather than being invented from the launcher's wall stamps.
+    expect(read.record.observedStart).toBeNull();
+    expect(read.record.observedEnd).toBeNull();
+
+    const [decision] = decisions;
+    expect(decision?.key.projectId).toBe(PROJECT_ID);
+    expect(decision?.key.principalId).toBe(SESSION_ID);
+  });
+
+  /**
+   * THE CALLER-AUTHORITY FENCE. Every name below is a fact only the physical
+   * boundary may supply; a request carrying one must die at the decoder, before
+   * any authority is built and before a single durable row exists.
+   */
+  const SMUGGLED_FIELDS = [
+    "providerRun", "providerRunRef", "runRef", "epoch",
+    "exit", "reconciliation", "terminal", "infrastructure",
+    "observation", "safeBoundaryObserved", "launcher", "launch", "deps", "clock",
+  ] as const;
+
+  it.each(SMUGGLED_FIELDS.map((field) => [field]))(
+    "refuses a request smuggling %s before any provider row exists",
+    async (field: string) => {
+      const store = readyStore(`smuggle-${field}`);
+      const { service } = harness(store);
+
+      const outcome = await service.dispatch({ ...dispatchRequest(), [field]: {} });
+
+      expectRefusal(outcome, "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", DAEMON_FOUNDATION_ATTEMPT);
+      // Nothing was launched, composed or committed — not even an activation.
+      expect(providerEvents(store)).toHaveLength(0);
+      expect(providerDecisions(store)).toHaveLength(0);
+      expect(store.readEvents(ACTIVATION_AGGREGATE)).toHaveLength(0);
+      expect(store.readEvents(DISPATCH_AGGREGATE)).toHaveLength(0);
+    },
+  );
+
+  it("generated a nonempty smuggling sweep", () => {
+    // A sweep that silently produced zero cases passes while testing nothing.
+    expect(SMUGGLED_FIELDS.length).toBeGreaterThan(0);
+  });
+
+  /** Everything a second dispatch must not move. Counts AND bytes: a re-commit
+   *  that happened to produce identical bytes would still move the counts. */
+  function providerSnapshot(store: SqliteEventStore): {
+    readonly bytes: readonly number[]; readonly decisions: number; readonly digest: string;
+    readonly events: number; readonly horizon: bigint;
+    readonly rawDecisions: number; readonly rawEvents: number;
+  } {
+    const read = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    if (!("recordDigest" in read)) throw new Error("a provider record must exist to snapshot");
+    const providerEvent = providerEvents(store)[0];
+    if (providerEvent === undefined) throw new Error("a provider event must exist to snapshot");
+    return {
+      bytes: Array.from(providerEvent.payload),
+      decisions: providerDecisions(store).length, digest: read.recordDigest,
+      events: providerEvents(store).length, horizon: store.readEventHorizon(),
+      rawDecisions: store.readCommandDecisionsAfter(0n, 200).items.length,
+      rawEvents: store.readEventsAfter(0n, 200).items.length,
+    };
+  }
+
+  it("replays without launching, committing or moving a single provider byte", async () => {
+    const store = readyStore("provider-replay");
+    const run = harness(store);
+
+    const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const before = providerSnapshot(store);
+    expect(before.events).toBe(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+
+    const replay = await run.service.dispatch(dispatchRequest());
+
+    // A SECOND physical launch is the defect this whole task can introduce, and
+    // even an idempotent provider commit cannot hide it from the adapter counter.
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+    // The replay adopts the stored Foundation record rather than dispatching.
+    expect(replay.ok).toBe(true);
+    expect(providerSnapshot(store)).toEqual(before);
+  });
+
+  it("refuses a drifted command before the provider boundary and preserves the run", async () => {
+    const store = readyStore("provider-drift");
+    const run = harness(store);
+
+    const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const before = providerSnapshot(store);
+
+    const changed = { ...structuredClone(LAUNCH_TEMPLATE), cwd: "D:/other-worktree" };
+    const drifted = await run.service.dispatch(dispatchRequest({ launchTemplate: changed }));
+
+    // The reservation fence answers FIRST — before any authority, adapter or
+    // provider commit — so the drifted command never reaches the boundary.
+    expectRefusal(drifted, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+    expect(providerSnapshot(store)).toEqual(before);
+  });
+
+  it("keeps the provider ledger's own refusal when the provider commit aborts", async () => {
+    const real = readyStore("provider-commit-abort");
+    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch commits, in
+    // order: (1) the activation ledger record, (2) the durable attempt-resource
+    // set, (3) the Foundation reservation, (4) THIS provider-run commit. If a
+    // commit is added anywhere earlier, this case silently starts aborting a
+    // different one — count again rather than trusting the number.
+    const injected = abortingStore(real, 4);
+    const run = harness(injected.store);
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expect(injected.fired()).toBe(1);
+    // The LEDGER's own code and layer, preserved rather than restamped as a
+    // Foundation code: which authority refused is the fact worth keeping.
+    expectRefusal(outcome, "PROVIDER_RUN_STORE_UNAVAILABLE", "PROVIDER_RUN_LEDGER");
+    // Zero residue at the provider boundary, and no false reader authority.
+    expect(providerEvents(real)).toHaveLength(0);
+    expect(providerDecisions(real)).toHaveLength(0);
+    const read = readCurrentProviderRun(real, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    expect(read).toMatchObject({ code: "PROVIDER_RUN_EVIDENCE_ABSENT", ok: false });
+  });
+
+  it("refuses a foreign project against an accepted record and changes no counts", async () => {
+    const store = readyStore("provider-foreign");
+    const run = harness(store);
+
+    await run.service.dispatch(dispatchRequest());
+    const before = providerSnapshot(store);
+
+    const foreign = readCurrentProviderRun(
+      store, { attemptRef: "attempt-1", projectId: "proj-someone-else" });
+
+    // The project gate answers before a single page is read: a store scoped to
+    // another project holds no evidence about this one.
+    expect(foreign).toMatchObject({
+      code: "PROVIDER_RUN_BINDING_MISMATCH", layer: "PROVIDER_RUN_READER", ok: false,
+    });
+    expect(providerSnapshot(store)).toEqual(before);
   });
 });

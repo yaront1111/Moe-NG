@@ -5,8 +5,10 @@ import {
 import { arch, release, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
-import { buildProviderRuntimeObservation, observeScope } from "@moe/runner";
-import type { GitObserver, ScopeObservation } from "@moe/runner";
+import {
+  buildProviderRuntimeObservation, discoverInstalledClaudeRuntime, observeScope,
+} from "@moe/runner";
+import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -21,6 +23,10 @@ import {
   DAEMON_FOUNDATION_ATTEMPT, deriveDispatchAggregateId,
 } from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
+import {
+  PROVIDER_RUN_COMMAND_KIND, PROVIDER_RUN_EVENT_TYPE,
+} from "../telemetry/provider-run-contracts.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 
 const WINDOWS_ONLY = process.platform === "win32";
@@ -379,5 +385,130 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
 
     expect(replay.ok && replay.digest).toBe(stored.ok ? stored.digest : "");
     expect(eventTypes(fixture.store, ACTIVATION_AGGREGATE)).toEqual(activation);
+  }, 300_000);
+});
+
+/**
+ * THE ONE REAL OBSERVED PHYSICAL CONTROL.
+ *
+ * The suite above states that no case reaches a PROVEN runtime because the
+ * public surface withholds `observeInstalledClaudeRuntime`. THAT PREMISE IS NOW
+ * STALE: `discoverInstalledClaudeRuntime()` is public, takes no argument, and
+ * mints the quote itself from the runtime this host really installed — which is
+ * precisely why it cannot be steered by a test. So the gap the older cases
+ * reported as a prerequisite is closed, and this control exercises it.
+ *
+ * WHAT IT DOES NOT CLAIM: `--version` proves a real child process started,
+ * exited on its own and was observed. It is NOT a completed provider result, and
+ * nothing below reads it as one.
+ */
+describe("foundation attempt dispatch — the observed physical control", () => {
+  /** The discovered runtime, or an explicit failure. Never a dynamic skip: a
+   *  missing prerequisite on a Windows host is a red, not a quiet pass. */
+  async function discovered(): Promise<{
+    readonly installedRoot: string; readonly observation: ProviderRuntimeObservation;
+  }> {
+    const found = await discoverInstalledClaudeRuntime();
+    if (!("ok" in found && found.ok === true)) {
+      throw new Error(`installed runtime discovery refused: ${JSON.stringify(found)}`);
+    }
+    return { installedRoot: found.installedRoot, observation: found.observation };
+  }
+
+  function providerEvents(store: SqliteEventStore) {
+    return store.readEventsByTypeAfter(PROVIDER_RUN_EVENT_TYPE, 0n, 100).items;
+  }
+
+  function providerDecisions(store: SqliteEventStore) {
+    return store.readCommandDecisionsAfter(0n, 200).items
+      .filter((decision) => decision.commandKind === PROVIDER_RUN_COMMAND_KIND);
+  }
+
+  it.runIf(WINDOWS_ONLY)("observes a real exited provider process and files it in the ledger", async () => {
+    const { installedRoot, observation } = await discovered();
+    const root = scratch("observed-control");
+    const store = readyStore(root);
+    const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
+    const pinRoot = join(root, "pins");
+    const request = {
+      activationRequestBytes: activationBytes(observation.observationDigest),
+      binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
+      graphSnapshot: structuredClone(GRAPH),
+      inputManifest: structuredClone(INPUT_MANIFEST),
+      launchTemplate: {
+        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+        bootstrapCredentialDigest: DIGEST_B, cwd: root,
+        environment: {
+          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        },
+        launchSelection: SELECTION,
+        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+        runtime: { installedRoot, pinRoot, quotedObservation: observation },
+      },
+    };
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer, launchOptions: { platform: "win32" }, store,
+    });
+
+    try {
+    const outcome = await service.dispatch(request);
+
+    expect(outcome.ok).toBe(true);
+    // The runner's pin root is its FIRST physical act; its existence is evidence
+    // the boundary was actually reached rather than short-circuited.
+    expect(existsSync(pinRoot)).toBe(true);
+
+    const read = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    expect(read).toMatchObject({ ok: true });
+    if (!("record" in read)) throw new Error("the observed run must be readable");
+    expect(read.record.providerRunRef).toEqual({
+      attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
+      provider: "claude", runRef: DISPATCH_AGGREGATE,
+    });
+    expect(read.sessionId).toBe(SESSION_ID);
+    expect(SESSION_ID).not.toBe(PRINCIPAL_ID);
+    // A REAL process ran and exited on its own. This is the arm the blind cases
+    // in the sibling suite cannot reach.
+    expect(read.record.launch.kind).toBe("OBSERVED");
+    expect(read.record.launch.exit).toMatchObject({ code: 0, kind: "EXITED" });
+    // AND THE HONEST LIMIT OF THIS CONTROL, pinned rather than hidden: the process
+    // ran and exited, but `--version` output is not a provider stream, so the
+    // runner refuses its telemetry with its OWN code and layer. Asserting `null`
+    // here would have been the "mislabel version output as a completed provider
+    // result" defect — the physical facts are proven, the provider facts are not.
+    expect(read.record.upstreamRefusal).toMatchObject({
+      code: "TELEMETRY_STREAM_ANOMALOUS", layer: "TELEMETRY_SCHEMA", ok: false,
+    });
+    expect(read.record.terminal).not.toBe("SUCCEEDED");
+    expect(Object.isFrozen(read.record)).toBe(true);
+    expect(providerEvents(store)).toHaveLength(1);
+    expect(providerDecisions(store)).toHaveLength(1);
+
+    const eventsBefore = eventTypes(store, ACTIVATION_AGGREGATE);
+    const digestBefore = read.recordDigest;
+
+    // REPLAY: no second physical launch, no second provider row, same bytes.
+    const replay = await service.dispatch(structuredClone(request));
+    expect(replay.ok).toBe(true);
+    expect(providerEvents(store)).toHaveLength(1);
+    expect(providerDecisions(store)).toHaveLength(1);
+    expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(eventsBefore);
+    const reread = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+    expect("recordDigest" in reread && reread.recordDigest).toBe(digestBefore);
+
+    // CONFLICT: one identity-covered byte, refused BEFORE the physical boundary.
+    const changed = structuredClone(request);
+    (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(root, "other");
+    const refused = await service.dispatch(changed);
+    expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(providerEvents(store)).toHaveLength(1);
+    expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(eventsBefore);
+
+    } finally {
+      // Handles first, temp root after: a held handle throws EPERM on cleanup.
+      store.close();
+    }
   }, 300_000);
 });
