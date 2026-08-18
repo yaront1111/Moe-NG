@@ -22,8 +22,9 @@ import type { StoredEvent } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
-  DURABLE_COMMIT_LAYER, commitLegacyImport, runImportCommit,
-} from "../../../tools/import/import-commit.js";
+  DURABLE_COMMIT_LAYER, commitLegacyImport,
+} from "../../../tools/import/durable-import-store.js";
+import { runImportCommit } from "../../../tools/import/import-commit.js";
 
 const KNOWN_FIELDS: readonly string[] = Object.freeze(["dependsOn", "held", "owner", "parent"]);
 const PROJECT = "moe-legacy-import";
@@ -175,14 +176,14 @@ describe("commitLegacyImport", () => {
     const result = commit(store, MANIFEST, RECORDS);
     if (result.outcome !== "COMMITTED") throw new Error(`refused: ${JSON.stringify(result)}`);
 
-    const legacyIds: string[] = [];
+    const claimIds: string[] = [];
     for (const row of rowsOf(store, DIGEST)) {
       const facts = decodeImportEventFacts(row.payload);
       if ("outcome" in facts) throw new Error(`row did not decode: ${facts.code}`);
-      legacyIds.push(facts.claim.legacyId);
+      claimIds.push(facts.claim.claimId);
     }
-    expect(legacyIds.length).toBeGreaterThan(0);
-    expect(legacyIds).toEqual(result.report.claims.map((claim) => claim.legacyId));
+    expect(claimIds.length).toBeGreaterThan(0);
+    expect(claimIds).toEqual(result.report.claims.map((claim) => claim.claimId));
   });
 
   it("adds no event of its own: the durable ids are exactly the drafted ids", () => {
