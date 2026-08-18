@@ -10,6 +10,10 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { createFoundationDispatchHandler, foundationSyncHandler }
   from "./daemon-foundation-command.js";
+import { createFoundationVerificationHandler }
+  from "./daemon-foundation-verification-command.js";
+import { FOUNDATION_VERIFICATION_COMMAND_KIND }
+  from "./evidence/foundation-verification-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
@@ -114,13 +118,21 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   });
 
   const dispatchFoundationAttempt = createFoundationDispatchHandler({ store });
+  const verifyFoundationAttempt = createFoundationVerificationHandler({ projectId, store });
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
-    // Answered first and returned whole: this kind's service is asynchronous, so it
-    // carries an async handler and none of the synchronous wiring below applies to it.
+    // Answered first and returned whole: these kinds' services are asynchronous, so each
+    // carries an async handler and none of the synchronous wiring below applies to it. The
+    // sync handler they share refuses; the seam refuses above it before it can be called.
     if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) {
       return Object.freeze({
         asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler, kind,
+        payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
+      });
+    }
+    if (kind === FOUNDATION_VERIFICATION_COMMAND_KIND) {
+      return Object.freeze({
+        asyncHandler: verifyFoundationAttempt, handler: foundationSyncHandler, kind,
         payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
       });
     }

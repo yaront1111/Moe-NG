@@ -1,6 +1,8 @@
 import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
+import { FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS }
+  from "./evidence/foundation-verification-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
   from "./journal/journal-contracts.js";
@@ -57,8 +59,8 @@ export const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Objec
 export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
-  | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof JOURNAL_APPEND_COMMAND_KIND
-  | typeof RECOVERY_COMPLETION_COMMAND_KIND;
+  | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
+  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -68,6 +70,11 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // Dispatching the attempt an agent already holds is work authority: the human gate on
   // this path is the launcher's own boundary admission, not a wider capability.
   if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Verifying an attempt is work authority for the same reason: every input the verifier
+  // trusts is server-side sealed state -- the recipe, the activation, the attempt record --
+  // and the payload only NAMES which verification. The human gate here is recipe sealing,
+  // not a wider capability, so ADMIN would fence reach without fencing anything real.
+  if (kind === FOUNDATION_VERIFICATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   // Resuming an interrupted attempt is work authority, not admin: the human-only
   // gate on this path is the runner's boundary admission, not a wider capability.
   if (kind === CONTINUATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
@@ -98,6 +105,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
     [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
     [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
+    [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],

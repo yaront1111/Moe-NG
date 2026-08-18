@@ -59,6 +59,14 @@ const ROWS: readonly VocabularyRow[] = [
       "activationRequestBytesBase64", "binding", "graphSnapshot", "inputManifest",
       "launchTemplate",
     ] },
+  // Also asynchronous, also STANDALONE, and WORK-only rather than operator-gated: every
+  // authority the verifier trusts is server-side sealed state and the payload only NAMES
+  // which verification, so the human gate on this path is recipe sealing.
+  { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "foundation.verification",
+    payloadKeys: [
+      "attemptAggregateId", "candidateRoot", "expectedRecordDigest", "recipeAggregateId",
+      "verificationId",
+    ] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -114,11 +122,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the twenty-five wired kinds in their registration order", () => {
+  it("carries exactly the twenty-six wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(25);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(25);
+    expect(ROWS).toHaveLength(26);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(26);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
