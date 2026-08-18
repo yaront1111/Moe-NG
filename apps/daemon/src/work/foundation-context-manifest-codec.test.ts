@@ -17,7 +17,14 @@
  * and stays green while a code is silently added or renamed.
  */
 
-import { CONTEXT_MANIFEST_VERSION, renderContext, selectContext } from "@moe/context";
+import {
+  CONTEXT_MANIFEST_VERSION,
+  DEFAULT_CONTEXT_BYTE_BUDGET,
+  MAX_JOURNAL_ENTRY_COUNT,
+  MAX_JOURNAL_TEXT_CHARACTERS,
+  renderContext,
+  selectContext,
+} from "@moe/context";
 import type {
   AdmittedContextSelection,
   ContextRenderManifest,
@@ -565,5 +572,85 @@ describe("foundation context record digest binds every outer field", () => {
     expect(other.digest).not.toBe(baseManifest.digest);
     expect(deriveFoundationContextRecordDigest({ ...base, manifest: other }))
       .not.toBe(deriveFoundationContextRecordDigest(base));
+  });
+});
+
+// --- realistic context sizes -------------------------------------------------
+
+/**
+ * WHY THE CEILING IS SIZED FROM THE DESIGN AND NOT FROM THE DoD FLOOR.
+ *
+ * `manifest.binding.exactBytes` is the rendered context as a NUMBER ARRAY, one
+ * entry per byte, and it passes through `snapshotFoundationValue`, whose generic
+ * array bound is 512 items. So the codec refused any context over 512 rendered
+ * bytes — measured at 513.
+ *
+ * The requirement is not 4KiB. `@moe/context` publishes its own limits:
+ *   DEFAULT_CONTEXT_BYTE_BUDGET     = 64 * 1024  =  65,536 rendered bytes
+ *   MAX_JOURNAL_ENTRY_COUNT         = 8
+ *   MAX_JOURNAL_TEXT_CHARACTERS     = 12 * 1024  =  12,288 characters
+ * so journal content alone reaches 8 * 12,288 = 98,304 characters BEFORE the
+ * mandatory items, the optional selection and the exclusions are added. A cap
+ * chosen to clear the DoD's 4KiB floor would still refuse a legitimate context,
+ * which is how this defect was filed in the first place.
+ *
+ * The number the fix uses is therefore the file's OWN byte ceiling,
+ * MAX_BYTES = 1_048_576, already enforced on `Uint8Array.byteLength` — so a byte
+ * payload is bounded identically whether it arrives as a typed array or as a
+ * JSON number array, rather than by two unrelated magic numbers.
+ */
+const JOURNAL_CHARACTER_CEILING = MAX_JOURNAL_ENTRY_COUNT * MAX_JOURNAL_TEXT_CHARACTERS;
+
+/** A real render of roughly `contentBytes` of ASCII content, through the real chain. */
+export function largeManifest(contentBytes: number): ContextRenderManifest {
+  const selected = selectContext({
+    mandatory: [mandatory("m-1", "x".repeat(contentBytes))],
+    optional: [],
+    exclusions: [],
+    byteBudget: Math.max(contentBytes * 2, DEFAULT_CONTEXT_BYTE_BUDGET),
+  });
+  if (selected.kind !== "ADMITTED") {
+    throw new Error(`large fixture selection refused: ${selected.code}`);
+  }
+  return renderContext(selected.selection).manifest;
+}
+
+/** The record shape the codec seals, carrying a genuinely large rendered context. */
+function largeRecord(contentBytes: number): Record<string, unknown> {
+  return validRecord({ manifest: largeManifest(contentBytes) });
+}
+
+describe("a context of realistic size", () => {
+  it("renders more bytes than the design's own journal ceiling would need", () => {
+    // The fixture must actually be large, or every arm below proves nothing.
+    expect(JOURNAL_CHARACTER_CEILING).toBe(98_304);
+    expect(largeManifest(4_096).binding.exactBytes.length).toBeGreaterThan(4_096);
+  });
+
+  it.each([
+    ["the DoD floor, 4KiB", 4_096],
+    ["a realistic full-budget context, 64KiB", DEFAULT_CONTEXT_BYTE_BUDGET],
+    ["the design's journal ceiling, 96KiB", JOURNAL_CHARACTER_CEILING],
+  ])("seals and re-admits %s with both digests intact", (_label: string, contentBytes: number) => {
+    const record = largeRecord(contentBytes);
+    const manifest = record["manifest"] as ContextRenderManifest;
+    // The fixture is only evidence if it really is that large: a selection that
+    // silently dropped content would leave this arm proving the small case twice.
+    expect(manifest.binding.exactBytes.length).toBeGreaterThan(contentBytes);
+
+    const encoded = encodeFoundationContextManifestRecord(record);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) throw new Error(`a ${contentBytes}-byte context refused: ${encoded.code}`);
+
+    const decoded = decodeFoundationContextManifestRecord(encoded.bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error(`a ${contentBytes}-byte context failed: ${decoded.code}`);
+    // The round trip is only evidence if BOTH digests survive it: the claim is
+    // that widening the bound did not perturb canonical bytes at size.
+    expect(decoded.record.recordDigest).toBe(record["recordDigest"]);
+    expect(decoded.record.manifest.digest).toBe(manifest.digest);
+    // And the bytes themselves come back, not a truncation that still digests.
+    expect(decoded.record.manifest.binding.exactBytes)
+      .toEqual(manifest.binding.exactBytes);
   });
 });

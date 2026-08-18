@@ -12,6 +12,34 @@ import type {
 
 const MAX_DEPTH = 12, MAX_KEYS = 64, MAX_ITEMS = 512;
 const MAX_TEXT = 8_192, MAX_BYTES = 1_048_576;
+/**
+ * The ceiling for an array that carries BYTES rather than arbitrary values.
+ *
+ * It is `MAX_BYTES` itself, not a new number: the same payload bounded at
+ * `Uint8Array.byteLength` below must be bounded identically when it arrives as a
+ * JSON number array — a rendered context manifest carries its bytes that way.
+ * Two independent byte ceilings would drift apart, and the looser one would then
+ * be the real bound.
+ *
+ * Generic arrays keep `MAX_ITEMS`. Widening that constant instead would relax the
+ * hostile-input bound for every consumer of this helper — the evidence service and
+ * store, goal qualification, journal append and read, and attempt release — to
+ * serve one caller.
+ */
+const MAX_BYTE_ITEMS = MAX_BYTES;
+
+/**
+ * A byte, as this codec means it. `-0` is excluded deliberately: `-0 === 0` and
+ * `Number.isInteger(-0)` are both true and `JSON.stringify(-0)` is `"0"`, so a
+ * negative zero survives a canonical round trip as a DIFFERENT value than the one
+ * admitted. `Object.is` is the only check that sees it.
+ */
+const isByte = (value: unknown): boolean =>
+  typeof value === "number" && Number.isInteger(value)
+  && value >= 0 && value <= 255 && !Object.is(value, -0);
+/** The ceiling the request guard below enforces, published so a transport that
+ *  materializes those bytes bounds itself by THIS number rather than a copy. */
+export { MAX_BYTES as FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES };
 const HOSTILE = Symbol("hostile");
 const encoder = new TextEncoder();
 
@@ -25,13 +53,28 @@ function copyValue(value: unknown, depth: number): unknown {
   if (kind !== "object") return HOSTILE;
   const array = Array.isArray(value);
   if (!array && Object.getPrototypeOf(value) !== Object.prototype) return HOSTILE;
+  // LENGTH BEFORE MATERIALIZATION. Building the key list for an array is itself
+  // one string allocation per element, so asking for it first hands a hostile
+  // ten-million-element array the very walk this ceiling exists to refuse —
+  // measured at 251ms for 5M elements before this check was hoisted.
+  if (array && (value as unknown[]).length > MAX_BYTE_ITEMS) return HOSTILE;
   const keys = array ? (value as unknown[]).map((_, index) => String(index))
     : Object.keys(value as object);
-  if (keys.length > (array ? MAX_ITEMS : MAX_KEYS)) return HOSTILE;
+  // THE HARD CEILING ANSWERS FIRST, BEFORE ANY TRAVERSAL. Deciding whether an
+  // over-length array is "really bytes" costs one visit per element, so asking that
+  // question first would let a hostile ten-million-element array buy a full walk —
+  // the exact denial this bound exists to refuse. Length alone is checked here;
+  // the byte test below runs only inside the walk that was already going to happen.
+  if (keys.length > (array ? MAX_BYTE_ITEMS : MAX_KEYS)) return HOSTILE;
+  // Past the generic array bound, ONLY a byte vector may continue, and every
+  // element has to earn it: a sampled or first-element check would admit an array
+  // of bytes carrying one smuggled value.
+  const bytesOnly = array && keys.length > MAX_ITEMS;
   const out: Record<string, unknown> = {};
   for (const key of keys) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor)) return HOSTILE;
+    if (bytesOnly && !isByte(descriptor.value)) return HOSTILE;
     const copied = copyValue(descriptor.value, depth + 1);
     if (copied === HOSTILE) return HOSTILE;
     out[key] = copied;
