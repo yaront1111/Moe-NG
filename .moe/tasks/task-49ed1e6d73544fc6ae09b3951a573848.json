@@ -107,8 +107,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,7 +157,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.468Z",
-  "updatedAt": "2026-08-18T03:09:38.372Z",
+  "updatedAt": "2026-08-18T03:12:52.336Z",
   "metrics": {
     "firstClaimAt": "2026-08-09T14:28:11.847Z",
     "plannedStepCount": 9,
@@ -171,11 +171,20 @@
     "governor-a627169a",
     "worker-f144c751"
   ],
-  "blockedReason": null,
+  "blockedReason": "Step-1 landed (comment-303782aba93540b7ae787a8264b49c40). Blocked INSIDE step-2. FULL EVIDENCE: comment-50ab412b071647858f6b6a2920810495.\n\nPlan core - wiring foundation.dispatch/foundation.verification into daemon-command-vocabulary.ts + daemon-command-registry.ts - impossible in owned paths. Four blockers at HEAD 8222b9e:\n\n1. CLOSED ENUM, UNOWNED PACKAGE. CommandRegistryEntry.kind is RuntimeCommandKind (http-contract.ts:176,181). RUNTIME_COMMAND_KINDS is frozen, 92 members, ZERO foundation-prefixed, at packages/contracts/src/runtime/runtime-vocabulary.ts:85-108. Compiled probe, deleted same command: error TS2322: Type '\"foundation.dispatch\"' is not assignable to type '\"approval.decide\" | ... | \"work.resume\"'. Same for foundation.verification.\n\n2. ENVELOPE REFUSES BEFORE THE REGISTRY IS CONSULTED. runtime-envelope.ts:141: if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput()). All three transports funnel through it, so \"one registry edit fixes all three\" holds only for kinds already in the vocabulary.\n\n3. SYNC HANDLER vs ASYNC SERVICE. CommandHandler = (input) => DurableDecision (http-contract.ts:167). dispatch() -> Promise (foundation-attempt-service.ts:106); verify() -> Promise (foundation-verification-service.ts:54).\n\n4. BINARY FIELD vs JsonObject PAYLOAD. activationRequestBytes is Uint8Array, enforced at foundation-attempt-codec.ts:89 -> FOUNDATION_ATTEMPT_REQUEST_MALFORMED. payload is JsonObject; requestOf JSON-encodes; base64 dies on that guard.\n\n3+4 survive closing the enum, so re-mapping onto effect.activate/evidence.run does not rescue it. captureResult also has ZERO production producers.\n\nNEEDED: (a) packages/contracts task adding both kinds with \"satisfies RuntimeCommandKind\"; (b) apps/daemon task fixing the async-handler and binary-payload seams; (c) a captureResult producer.\n\nSteps 4-6 (receipts, DoD 3) are unblocked but deliberately NOT half-built. No code written; tree unchanged.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-18T03:10:14.333Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 landed in full (measurement recorded in comment-303782aba93540b7ae787a8264b49c40). Step 2 was entered, measured, and stopped on four hard blockers at HEAD 8222b9e; full evidence in comment-50ab412b071647858f6b6a2920810495 and mirrored in blockedReason. NO CODE WRITTEN — working tree carries no source path from this task.",
+      "whatRemains": "Steps 2-3 (wiring foundation.dispatch/foundation.verification into daemon-command-vocabulary.ts + daemon-command-registry.ts) are IMPOSSIBLE inside the owned paths and must not be attempted as-specified. Steps 4-6 (receipts, DoD 3) are unblocked but deliberately NOT half-built, so they are still open. Three prerequisite tasks must be filed and land first: (a) a packages/contracts task adding both kinds to RUNTIME_COMMAND_KINDS with 'satisfies RuntimeCommandKind'; (b) an apps/daemon task fixing the sync-CommandHandler-vs-async-service and Uint8Array-vs-JsonObject seams; (c) a captureResult producer (zero production producers exist).",
+      "pitfalls": "DO NOT re-plan this task from the description alone — the description's premise that one registry edit serves all three transports is DISPROVEN. runtime-envelope.ts:141 refuses on isCommandKind BEFORE the registry is consulted, so that premise holds only for kinds already in the frozen 92-member vocabulary (zero foundation-prefixed). Blockers 3 (sync CommandHandler vs async dispatch()/verify()) and 4 (activationRequestBytes: Uint8Array vs JsonObject payload; base64 dies on FOUNDATION_ATTEMPT_REQUEST_MALFORMED at foundation-attempt-codec.ts:89) SURVIVE closing the enum — re-mapping onto effect.activate/evidence.run does not rescue it. Also: this release clears the assignee only. Status MUST stay BLOCKED; if you find it WORKING, someone ran unblock_worker and the reason may have been wiped — read the two comments above before trusting the task text.",
+      "openQuestions": "Who files the three prerequisite tasks (a/b/c)? packages/contracts is outside this task's owned paths, so the enum change needs its own owner. Governor/architect call.",
+      "releasedAt": "2026-08-18T03:12:52.334Z",
+      "releasedBy": "worker-f144c751",
+      "reason": "Releasing my own assignment on a task I blocked 2 min ago, to free the worker slot for CRITICAL task-c7f2530b. The block is REAL and must stay: status must remain BLOCKED. Not using unblock_worker deliberately — it flips BLOCKED to WORKING and destroys blockedReason, re-serving a known trap to the next worker."
+    },
     {
       "whatIsDone": "Re-read prior remeasurements, confirmed the @moe/mcp HTTP root/composition gap is closed, confirmed Foundation daemon surface is still absent/blocked, and reported this host BLOCKED only on task-5e43.",
       "whatRemains": "After task-5e43 is QA-approved DONE, probe the bare @moe/daemon Foundation surface and plan the real host; include event cursor advancement and bounded session reclamation tests.",

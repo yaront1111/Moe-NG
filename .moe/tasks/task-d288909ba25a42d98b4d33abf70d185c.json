@@ -19,13 +19,50 @@
     "No external API calls, credentials, child processes, deep imports, or caller-forged runtime/provider truth; unsupported host evidence remains UNKNOWN.",
     "Own only the provider matrix test and at most two focused fixture/helper files under tests/integration/portability."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Confirm the dissolved blocker and probe every named symbol at committed HEAD before writing a row. Read-only. (1) THE BLOCKER IS GONE: dec-a8923b1e's premise was that createFoundationAttemptService/readFoundationAttemptRecord are not exported by @moe/daemon. They now are -- apps/daemon/src/index.ts:212-214 re-exports them from ./foundation/foundation-surface.js (landed by task-5e43a9e2, QA-approved). Verify with a temporary compiled probe from tests/integration that imports BOTH names from the bare `@moe/daemon` specifier plus `probeCodexRuntime`, `renderCodexContext`, `reconcileCodexRun`, `assessCapabilities`, `CODEX_CAPABILITIES` from bare `@moe/runner`, typechecks exit 0, and is deleted in the same command. The root @moe/store edge landed with task-f33028b5 -- prove it the same way, since the matrix seeds a scratch store. (2) THE HALF THAT STAYS TRUE: a valid DISPATCH writes durable authority and builds the real launcher -- so no arm may dispatch; Claude evidence is CONSTRUCTION + DURABLE READER only, and execution is UNKNOWN for BOTH providers. The prior architect's pitfall list is binding: never synthesize a durable attempt, never caller-forge a Codex probe report, never treat render layers as refusal layers, never label service-factory construction as dispatch evidence -- the matrix's evidence-provenance column exists precisely to keep those distinct. (3) Enumerate the capability vocabularies: CODEX_CAPABILITIES is the frozen 12-member list at packages/runner/src/providers/codex/codex-capabilities.ts:6-19 with CODEX_PROOF_METHODS (:25) and statuses SUPPORTED/UNSUPPORTED; find the Claude counterpart in packages/runner/src/providers/claude/claude-capabilities.ts and record BOTH rosters in the step note -- the matrix covers 'every capability both actually publish', which is only checkable against the frozen lists, never against a hand-typed copy.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED on the matrix skeleton. Create tests/integration/portability/provider-shadow-matrix.test.ts (the task owns 'the provider matrix test and at most two focused fixture/helper files' under tests/integration/portability -- a new directory; check whether tests/integration files are typechecked by anything first, because the known gotcha is that they are typechecked by NOTHING unless a tsconfig or script names them, and if so, add the coverage the same way the existing tests/integration suites get it, not a new mechanism). Failing tests first, structural: (1) the matrix generator yields one row per (provider, capability, platform) for every capability EACH provider publishes, derived from the imported frozen rosters -- assert a POSITIVE row count and assert the per-provider row counts equal the roster lengths, so a silently-skipped capability reddens; (2) every row's verdict is exactly PASS, FAIL, or UNKNOWN and carries the production reason code, refusing layer, and an evidence-provenance tag from a closed set (e.g. CONSTRUCTION, DURABLE_READ, OBSERVATION, PROBE, RENDER, RECONCILE, ABSENT_CALL_SITE) -- the provenance column is what keeps 'constructed' from masquerading as 'dispatched'; (3) rows serialize deterministically: two generator runs over the same inputs produce byte-identical canonical JSON, all rows bind the same checkout source commit (read HEAD once, thread it through -- never per-row) and one canonical case digest; (4) the execution-portability rows for BOTH providers are UNKNOWN with provenance ABSENT_CALL_SITE -- pin the Codex one to the literal fact the rail names (no production Codex execution call site) and the Claude one to 'dispatch writes authority, forbidden in this matrix'.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN the Codex rows, using ONLY the shipped public observe/probe/render/reconcile surface from the bare @moe/runner root (export * from ./surface/codex-surface.js at packages/runner/src/index.ts:192): `probeCodexRuntime` turns a probe report into a capability profile, `assessCapabilities` maps it over CODEX_CAPABILITIES, `renderCodexContext` and `reconcileCodexRun` cover the render/reconcile arms. One ACCEPTED control: a well-formed observation/probe fixture yielding a SUPPORTED assessment with its proof method -- assert the exact CodexProofMethod member, not just SUPPORTED, because UNPROVEN_PROBE_REPORT (codex-capabilities.ts:101) exists precisely to make unproven-but-well-formed distinguishable. Hostile arms, each pinning the exact production code and layer: missing runtime, hostile version/output bytes, unsupported platform, unverifiable observation, and provider-surface disagreement (a probe report contradicting the declared capability profile). Fixtures may CREATE probe-report input records -- that is caller data the production surface validates -- but must never construct a CodexProbeReport the production validator did not accept: the forged-probe pitfall means every fixture flows through the real probe/assessment functions and the test asserts the REFUSAL when the fixture is hostile, never hand-builds the verdict object.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "GREEN the Claude rows through public @moe/daemon + @moe/runner roots. CONSTRUCTION row: `createFoundationAttemptService({captureResult, store})` over a scratch SqliteEventStore on a temp file -- construction succeeding is evidence of exactly and only construction; provenance CONSTRUCTION, and a hostile-deps arm (malformed store handle) pinning the service's own refusal. DURABLE READER rows: seed the scratch store IN SETUP (before any arm runs) with the minimal durable records the reader accepts, then `readFoundationAttemptRecord` arms: an accepted read control, an absent-aggregate read pinning the reader's exact not-found code, and a corrupted-record read pinning its distinct unreadable code. OBSERVATION rows: the Claude runtime observation surface from @moe/runner (the server-obtainable quoted-observation path from task-99cb56a7) with its own accepted control plus missing-runtime / hostile-version / unsupported-platform arms pinning literal codes -- on THIS Windows host the unsupported-platform arm uses a platform override parameter if the public surface accepts one, else that row is UNKNOWN with provenance stated, never a mocked os module. THE READ-ONLY INVARIANT, DoD 4: capture raw event count, decision count, and the mtime/digest of the scratch store file after setup, re-capture after EVERY arm, assert unchanged -- seeding happens once in setup, arms write nothing, and no process count moves (assert no child process spawned by lack of any spawn import plus the launch-free surfaces chosen).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "Mutation drills, three, one per load-bearing distinction. Drill 1 (provenance honesty -- the prior architect's central pitfall): relabel the Claude CONSTRUCTION row's provenance as dispatch-grade evidence (or upgrade its verdict from the construction fact to an execution PASS); a NAMED test must go RED on the provenance/verdict assertion. If nothing reddens, the matrix is not actually asserting provenance per row and step 2 must be strengthened. Drill 2 (roster coverage is real): remove one capability's row generation for one provider; the per-provider row-count-equals-roster-length assertion must go RED naming the count, and the missing-capability set assertion (roster minus covered) must name the capability. Drill 3 (refusal arms test production, not fixtures): make one hostile Codex fixture VALID (so the production surface accepts it); the arm's exact-code assertion must go RED because the refusal it pins no longer occurs -- proving the arm exercises the production validator rather than asserting on fixture shape. Record command, failing test NAME, exact assertion for each. Restore by re-editing, never `git checkout` (shared worktree), confirm `git diff --numstat` 0/0 per drilled file, one drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial review, commit, gate. ATTACKER PASS: can any row reach PASS without an accepted-control production call behind it? Does any fixture hand-build a verdict, profile, or attempt record the production surface never produced? Is any render-layer failure being counted as a refusal layer (the prior architect's explicit pitfall)? Does any arm write -- re-check the count/mtime invariant covers EVERY arm including the hostile ones, whose failure paths are where stray writes hide? Is the source commit read once and threaded, or could two rows bind different HEADs mid-run? Are the two Claude names imported from bare @moe/daemon (never a deep path)? Do the row serializations avoid nondeterministic fields (timestamps, map iteration order)? Confirm owned files: the matrix test plus at most TWO fixture/helper files, each <=250 lines. COMMIT by explicit pathspec after `git status --porcelain` and unstaging any foreign entry; verify `git show --stat`. GATE, foreground, exit codes captured separately: `pnpm typecheck` and `pnpm test:integration` -- note test:integration runs typecheck:packaging first and vitest over tests/integration; read the OUTPUT and require a nonzero `Test Files N passed` line INCLUDING the new portability file by name, plus whatever typecheck mechanism step 2 established for the new directory. In the completion note: name dec-a8923b1e as dissolved-by-landing (5e43a9e2 + f33028b5), state that execution portability is UNKNOWN for both providers by design, and name task-22cfca91 (shadow comparison) as the adjacent consumer of the same read-only posture.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (provider capability shadow matrix), BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion under the human's standing unstall directive: both clauses of the stored blockedReason are cleared — task-5e43a9e2 (Foundation daemon ingress, the producer of the @moe/daemon Foundation names) is QA-approved DONE, and the root @moe/store dependency edge landed with task-f33028b5 (DONE 03:13Z). Planning architect: dec-a8923b1e was the blocking decision — re-read it and re-probe the root package/lock edges at current HEAD; if any part of that decision is unresolved beyond the two measured clauses, re-block on the specific remainder.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -40,17 +77,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:36.183Z",
-  "updatedAt": "2026-08-17T20:10:15.613Z",
+  "updatedAt": "2026-08-18T03:38:20.748Z",
   "metrics": {
-    "firstClaimAt": "2026-08-17T20:03:37.681Z"
+    "firstClaimAt": "2026-08-17T20:03:37.681Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 0
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
-  "blockedReason": "Fresh current-byte audit confirms the prior decision dec-a8923b1e17bf460390742b6b8ddb5eab remains blocking.\n\nThe @moe/daemon Foundation names are now present and runtime-load at HEAD 926f6db, but their producer task-5e43a9e294ef48fdab23817c8c6cfc45 is still WORKING, not an approved dependency. The integration root also lacks @moe/store: package.json/pnpm-lock declare only daemon+runner and plain import('@moe/store') returns ERR_MODULE_NOT_FOUND. This task owns only tests; task-f33028b5374044bfa84deb5ed979277b is the existing blocked package-edge prerequisite.\n\nThe literal accepted Claude evidence arm conflicts with the read-only rails. Foundation dispatch calls runEffectActivateCommand, commits reservation/attempt/release rows, constructs the durable launcher, and may start a child. readFoundationAttemptRecord can only read pre-existing evidence; no lawful committed receipt/DB exists. Service construction is only a factory PASS, and empty read is FOUNDATION_ATTEMPT_RECORD_ABSENT@DAEMON_FOUNDATION_ATTEMPT—not accepted dispatch evidence. Synthetic seeding/deep writers would forge the subject.\n\nThe Codex root edge is live, but no production host observer/probe port exists. probeCodexRuntime accepts caller reports; a PROVEN control would be caller-forged. Codex observation/stream/render failures expose code/message but no refusing layer (CODEX_RENDER_LAYERS are content layers), reconcile is total, and unsupported-platform/surface-disagreement have no production refusal pair.\n\nHUMAN CHOICE: (A) amend/reapprove this task to compare the actual asymmetric public read-only shaping surfaces, mark execution/host truth UNKNOWN, and explicitly permit absent refusal layer; or (B) retain the literal DoD and first land sealed Foundation dispatch-capability evidence/readback plus a real Codex host-observation/refusal-attribution surface and the root @moe/store edge. Do not infer either route.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T20:09:50.166Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured public roots and package edges, traced Claude dispatch effects and Codex evidence/failure shapes, reported the task BLOCKED, and wrote Serena handoff memory.",
@@ -61,5 +100,27 @@
       "releasedBy": "architect-f956ffe1",
       "reason": "Explicit architect handoff after recording the unresolved production-evidence/design blocker; continuing with other queued planning tasks."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:38:18.677Z",
+  "planningNotes": {
+    "approachesConsidered": "THE BLOCKING DECISION DISSOLVED RATHER THAN NEEDING A CHOICE. dec-a8923b1e offered (A) symmetric read-only comparison with execution UNKNOWN, or (B) ship a sealed Foundation-attempt evidence receipt first. Its factual premise -- createFoundationAttemptService/readFoundationAttemptRecord not exported by @moe/daemon -- is now false: task-5e43a9e2 landed the curated foundation-surface and apps/daemon/src/index.ts:212-214 root-exports both names; the @moe/store root edge landed with task-f33028b5. The still-true half (a valid dispatch writes durable authority and launches) is honoured by construction: Claude rows exercise CONSTRUCTION + DURABLE READER through public roots, execution stays UNKNOWN for BOTH providers -- which is what the task's own DoD 2 literally says. Announced as resolved-as-moot in #general (msg-169dd8bd) for the governor to stamp. REJECTED: (a) option B's sealed-receipt prerequisite -- unnecessary now, and it would add a durable-authority surface just to feed a read-only matrix; (b) seeding the Claude reader rows by driving a real dispatch in setup -- dispatch launches the real launcher and writes authority, forbidden by DoD 4 and the no-child-process rail, so setup seeds the minimal durable records the reader validates instead; (c) an os-module mock for the unsupported-platform arm -- a mocked host is caller-forged runtime truth; use a platform override if the public surface accepts one, else that row is honestly UNKNOWN; (d) hand-building any CodexProbeReport verdict -- UNPROVEN_PROBE_REPORT exists in the production vocabulary precisely so tests never need to forge one. Evidence-provenance as a closed per-row column is the plan's spine: it is the mechanism that keeps 'constructed' from ever reading as 'dispatched', which was the prior architect's central pitfall.",
+    "codebaseInsights": "Measured at committed HEAD (post-f33028b5). DAEMON SIDE: apps/daemon/src/index.ts:212-214 exports createFoundationAttemptService, createFoundationVerificationService, qualifyGoalClosure, readFoundationAttemptRecord, readReconciliationRecords from ./foundation/foundation-surface.js; the surface file's comment at :196 explains why export-star would be unsound -- import by name only. CODEX SIDE: packages/runner/src/index.ts:192 `export * from ./surface/codex-surface.js`; the surface doc-comments name probeCodexRuntime (probe report -> capability profile, :81-87), renderCodexContext (:141-152), renderCodexAdvisorySkills (:174), and reconcileCodexRun lives at providers/codex/codex-cancel-reconcile.ts:85 with CODEX_RECONCILIATION_VERSION and CODEX_RECONCILED_OUTCOMES (:5-6). CODEX_CAPABILITIES is a frozen 12-member roster (codex-capabilities.ts:6-19): CANCEL_ON_READING, CONTEXT_LIMIT_DECLARATION, CWD_OBSERVATION, PIN_METHOD, PROCESS_TREE_TERMINATION, RAW_STREAM, RESUME, RUN_ENUMERATION_NEGATIVE_PROOF, SCHEMA_VERSION_REPORT, STRUCTURED_STREAM, TOKENIZER_AVAILABILITY, VERSION_REPORT; statuses SUPPORTED/UNSUPPORTED (:22); CODEX_PROOF_METHODS 12-member (:25-38); UNPROVEN_PROBE_REPORT frozen constant (:101); assessCapabilities (:184); capabilitySchemaDigestOf (:204). CLAUDE SIDE: providers/claude/claude-capabilities.ts exists -- worker enumerates its roster in step 1 and the matrix derives Claude rows from it the same way. TEST HOME: tests/integration/portability/ does not exist yet; sibling suites live at tests/integration/{control-room,distribution}/ and root files; `pnpm test:integration` = typecheck:packaging && vitest run tests/integration && node --test release-supply-chain.test.mjs. KNOWN GOTCHA: integration tests are typechecked by NOTHING unless named -- step 2 must establish coverage the same way existing integration suites get it. Windows host: the MSYS-tar integration gotcha means test:integration may need PowerShell.",
+    "risks": "The load-bearing risk is evidence-class laundering: a green construction call or a parsed render output quietly upgraded into execution evidence -- exactly what the prior architect's pitfalls forbid ('do not label service factory construction as dispatch evidence', 'do not treat render layers as refusal layers'). The closed provenance column plus drill 1 make that laundering a named red instead of a silent upgrade. Second, forged Codex truth: a hand-built probe report or capability profile asserts provider facts nobody observed; every fixture must flow through the production probe/assessment path, and drill 3 proves the hostile arms exercise the production validator rather than fixture shape. Third, the read-only invariant must hold on FAILURE paths too -- hostile arms are where stray writes hide, so the count/mtime capture wraps every arm, not just the controls. Fourth, roster drift: the matrix must derive rows from the imported frozen rosters, never a transcribed list, or a capability added later silently gets no row; the row-count-equals-roster-length assertion plus drill 2 pin it. Fifth, determinism: timestamps, Map iteration order, and per-row HEAD reads are the three usual nondeterminism leaks in a matrix serialization -- read the commit once, sort canonically, no clock anywhere. Sixth, the unsupported-platform arm on a Windows-only host: honesty beats coverage -- an os mock is caller-forged runtime truth, so without a public platform-override parameter the row is UNKNOWN with provenance stated. Seventh, tests/integration is typechecked by nothing by default and test:integration's chained legs each need their own read of the output. Finally, close every scratch store handle on every path -- a held SQLite handle kills the vitest worker.",
+    "keyFiles": [
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/foundation/foundation-surface.ts",
+      "packages/runner/src/surface/codex-surface.ts",
+      "packages/runner/src/providers/codex/codex-capabilities.ts",
+      "packages/runner/src/providers/codex/codex-cancel-reconcile.ts",
+      "packages/runner/src/providers/claude/claude-capabilities.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-18T03:38:20.748Z"
 }

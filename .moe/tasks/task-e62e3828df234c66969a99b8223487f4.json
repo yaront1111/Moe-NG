@@ -16,8 +16,8 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -42,13 +42,13 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-18T03:04:11.411Z",
+  "updatedAt": "2026-08-18T03:13:31.040Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": null,
-  "blockedAt": null,
-  "blockedReason": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T03:13:03.132Z",
+  "blockedReason": "Verify-or-block remeasurement at current HEAD c1ab42b: a BOUND control is impossible from production bytes. Core requires all 17 fields plus `{digest,ref}` handoff. The sole production `recordAttemptRelease` caller passes `effectsTerminal:false`, `resourcesTerminal:false`, `safeBoundaryObserved:false`, `handoff:null`; scheduler rejects the null handoff, so it writes zero release rows. Non-test daemon has zero `observationRef`, `receiptRef`, `terminalEffectRefs`, or `terminalResourceRefs`; resource records explicitly do not decide terminality. Even a direct accepted release row copies activation `attemptState=RUNNING` and provider slot `ACTIVE`; `releaseProviderSlot` has zero daemon callers and is not exported from `@moe/scheduler`. Its scheduler handoff is not core's `{digest,ref}`. A refusal-only reader would be fail-closed but would not deliver DoD 1/2 or the required real BOUND capability; a test-seeded true request would forge caller authority. Existing producer blockers remain ded026d6, 6d400781, af9454f4. Filed corrective chain task-9f51def1 -> task-2db11099 -> task-79f56ad5 for the oversized root surface, public slot transition, and atomic RELEASED attempt/lease/slot row. Replan only after all four direct producer tasks are DONE and the 17-field map is re-probed.",
   "contextFetchedBy": [
     "architect-a9210e34",
     "architect-94dd1835",
@@ -56,6 +56,15 @@
     "architect-f956ffe1"
   ],
   "priorHandoffs": [
+    {
+      "whatIsDone": "Re-ran the complete safe-release field/production-caller audit at current HEAD; proved no production BOUND row can exist; filed task-9f51def1, task-2db11099, and task-79f56ad5; reported BLOCKED and rewrote Serena handoff.",
+      "whatRemains": "Wait for ded026d6, 6d400781, af9454f4, and 79f56ad5 to reach DONE, then remeasure all 17 fields plus handoff and plan the strict reader.",
+      "pitfalls": "Do not accept direct-test true flags/handoff as production authority; do not treat the scheduler ReleaseHandoff as ExpansionHandoffBinding; do not treat pure releaseProviderSlot existence as a daemon consumer edge.",
+      "openQuestions": "None for the block. The released-attempt/provider-slot contradiction now has an explicit corrective task chain.",
+      "releasedAt": "2026-08-18T03:13:31.038Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after fresh verify-or-block audit and prerequisite filing; continue planning the new prerequisites."
+    },
     {
       "whatIsDone": "Answered the question three prior architects left open. Re-measured ExpansionReleaseEvidence field by field at HEAD a42ae2f: 15 of its 17 fields have ZERO production producers in apps/daemon/src (every apparent hit is inside a *-test-fixtures.ts). Confirmed the shape of the gap - the kernels that COMPUTE the facts all exist in packages/runner and packages/scheduler, but no daemon path PERSISTS any of them; attemptRecordBody (foundation-attempt-contracts.ts:182-199) carries none of the release, lease, slot, terminal, boundary, receipt or handoff facts. Audited the board for producer coverage, found 13 of the 15 already owned by task-740924b7 / task-6d400781 / task-ded026d6, and CREATED task-af9454f4 for the only two nobody owned (receiptRef and the {digest,ref} worker handoff). Reported this task BLOCKED naming all four. Serena memory task-task-e62e3828df234c66969a99b8223487f4-handoff rewritten with the reproducible grep and the per-task field split.",
       "whatRemains": "Nothing on this task until all four producers are DONE. Then re-measure the 15 fields (including the counts in my own note) and plan the reader as a pure composer over the durable records - no reconstruction, no caller-supplied truth. Downstream task-738a12a8 and task-c4171c1c unblock after that.",

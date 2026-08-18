@@ -17,13 +17,107 @@
     "Loopback only, no remote network, imported-state activation, best-tool selection, deep imports, or hand-built fake host.",
     "Own only the transport/host matrix test and at most two focused fixture/helper files under tests/integration/portability; TDD with an accepted control and production-surface mutation drill."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK GATE. This is an ACCEPTANCE task, so the global rail binds hardest here: name the production capability certified and the task that shipped it, and verify it ON DISK by probe rather than by reading the gate's DoD. All four were verified during planning at HEAD 61766074 and MUST be re-confirmed before any test is written; if one regressed, block rather than narrowing the matrix.\nCAPABILITY -> SHIPPING TASK (all task-f33028b5374044bfa84deb5ed979277b, QA-approved DONE at 03:13Z):\n(a) `ls node_modules/.bin | grep moe` -> moe-daemon, moe-mcp-http, moe-mcp-stdio, each with .CMD and .ps1 siblings on Windows. The stdio shim is the subject DoD item 1 names; without it this matrix has nothing to drive.\n(b) `node -e \"console.log(require('./apps/daemon/package.json').bin)\"` -> exactly three keys including `moe-mcp-stdio: ./src/mcp-main.ts`.\n(c) `node -e \"console.log(require('./adapters/jetbrains/package.json').exports)\"` -> `{\".\": \"./src/index.ts\", \"./host\": \"./src/host/jetbrains-host.js\"}`.\n(d) `node -e \"console.log(Object.keys(require('./package.json').dependencies))\"` -> includes @moe/import, @moe/jetbrains-adapter, @moe/store. These root edges are what let a repo-root test resolve the bare specifiers.\nALSO CONFIRM THE SUBJECT SURFACES: `grep -n '^export' adapters/jetbrains/src/host/jetbrains-host.ts` -> `JetBrainsHost` is exactly `{endpoint, reconnect, start, uninstall}` (no command method, which is why DoD item 3's MCP-translation arm is UNKNOWN by construction rather than by omission); `grep -rn DISTRIBUTION_MISMATCH packages/contracts/src/distribution/distribution-contract.ts` -> :36 and :112, so that code is @moe/contracts' and must be asserted verbatim, never re-declared locally.\n`tests/integration/portability/` does not exist yet; this task creates it.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "HARNESS FIRST: create tests/integration/portability/portability-harness.ts (helper file 1 of at most 2 permitted by task rail 5).\nIt owns process and resource lifecycle and NOTHING semantic — no assertions, no case tables, no expected codes. Provide:\n- a temp project: `mkdtempSync(join(tmpdir(), \"moe-portability-\"))`, a real SQLite store path, MOE_PROJECT_ID, and an operator credential, torn down in a `finally` on every path;\n- `spawnInstalledBin(name, env)` resolving through node_modules/.bin — the INSTALLED shim, never `node apps/daemon/src/mcp-main.ts`. Invoking the source directly would prove nothing about the bin that DoD item 1 is about;\n- stdio JSON-RPC framing helpers over the child's stdin/stdout, and an HTTP client for the Streamable HTTP host (`MOE_MCP_HTTP_PORT` unset -> ephemeral port; read the bound port from the child's own output rather than guessing, and use loopback only);\n- deterministic teardown: kill children, close HTTP sockets, remove temp dirs, and assert no orphan child and no listening port survives. `afterEach` must run teardown even when a case throws.\nWINDOWS IS FIRST-CLASS HERE, not an afterthought (DoD item 5): quote paths containing spaces, expect the .CMD/.ps1 shim variants, and normalise CRLF when splitting stdio frames — a line-splitter that assumes LF will hang waiting for a frame that already arrived.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/integration/portability/portability-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE CASE TABLE: create tests/integration/portability/portability-cases.ts (helper file 2 of 2). It declares the generated subject-by-case matrix as DATA — subject (STDIO | HTTP | JETBRAINS), case id, input shape, and the exact expected code, stage and layer — and contains no spawning and no assertions.\nDoD item 1 requires the generated subject-by-case count to be POSITIVE, so export the count and have the suite assert `CASES.length > 0` and that every declared subject appears at least once BEFORE running anything. A generated matrix that silently produces zero cases passes while testing nothing — this repo has been bitten by exactly that, which is why the epic rail names it.\nThe expected codes are IMPORTED from their owning packages, never retyped as string literals here: `DISTRIBUTION_MISMATCH` from @moe/contracts' distribution contract, MCP dispatch codes from @moe/mcp's public root, daemon refusals from the @moe/daemon root. A locally spelled code is a second vocabulary that drifts, and the drift shows up as a green test asserting a code production no longer emits.\nCover, per transport: one ACCEPTED control, malformed envelope, auth/capability refusal, unsupported method or protocol version, truncation/disconnect mid-frame, and replay-conflict. For JETBRAINS: distribution discovery match, DISTRIBUTION_MISMATCH, daemon probe failure, start, endpoint open, control-room open, reconnect, uninstall, and post-uninstall call.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/integration/portability/portability-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "ACCEPTED CONTROLS FIRST, in tests/integration/portability/transport-host-matrix.test.ts — the single matrix test task rail 5 permits.\nSeed the temp store with a real session through the production path (operator credential -> `session.open` with scoped capabilities), then drive ONE authenticated command successfully through EACH installed executable:\n- stdio: spawn `moe-mcp-stdio` with MOE_STORE_PATH / MOE_PROJECT_ID / MOE_DAEMON_CREDENTIAL / MOE_SESSION_CREDENTIAL, speak MCP over stdio, call the tool for the chosen runtime kind. Build the tool label with @moe/mcp's public `toolLabelForKind` / `STDIO_TOOL_INDEX` rather than hand-spelling it — a hand-spelled label that drifts from the generator fails as \"tool not found\" and reads like a transport bug.\n- HTTP: spawn `moe-mcp-http`, read its bound ephemeral port, issue the semantically equivalent Streamable HTTP call.\nBoth must ACCEPT. This pair is the control that keeps every refusal case below honest: without it, a suite where nothing can ever succeed would still report every refusal correctly.\nNo direct registry or handler import anywhere in this file, and no source-relative reach into apps/daemon for the subjects under test — DoD item 1 is explicit, and the existing tests/integration/control-room suite's deep relative imports are NOT the pattern to copy here.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "COMMAND-DECISION IDENTITY — the core claim of DoD item 2, and the assertion that makes this matrix worth running.\nIssue the SAME `commandId` (with the same principal and project) through stdio and then through HTTP. The durable decision key is {commandId, principalId, projectId}, so if both executables truly reach one pipeline the second call REPLAYS the first decision rather than deciding again. Assert:\n- the decision identity (decisionId and resultCode) is identical across the two transports;\n- the second call reports the REPLAYED disposition, not a fresh decision;\n- the raw command-decision row count in the store increased by exactly ONE across both calls.\nThat count is the part a return-value comparison cannot see: two independent pipelines that happen to compute equal answers would add two rows and still compare equal.\nThen strip framing and compare RESULTS byte-for-byte: decode the stdio JSON-RPC envelope and the HTTP response envelope down to the payload each carries and assert byte equality. Framing may differ; the answer may not. If a field is legitimately transport-specific, exclude it BY NAME with a comment, never by comparing a subset — an over-narrowed comparison passes every gate while proving nothing.\nRun the pair in BOTH orders (stdio-then-HTTP and HTTP-then-stdio) so the replay assertion cannot be an artifact of which transport went first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "TRANSPORT REFUSAL MATRIX — the remaining DoD item 2 arms, driven through both installed executables from the step-3 table, each asserting the exact CODE, the exact STAGE and the exact LAYER, never merely that the call failed.\n- malformed envelope: bytes that are not a valid MCP frame at all;\n- auth/capability: absent credential, wrong credential, and a session whose capabilities do not cover the requested kind — three distinct cases, because they fail at three different points;\n- unsupported method / protocol version;\n- truncation and disconnect: close the child's stdin mid-frame, and drop the HTTP connection mid-body;\n- replay-conflict: the same commandId with DIFFERENT request bytes, which must refuse rather than overwrite, with the store's own idempotency code and DURABLE_STORE layer preserved rather than restamped into a transport code.\nWHICH LAYER ANSWERED IS ITSELF THE ASSERTION (task rail 3): authentication and runtime-envelope decoding run BEFORE registry payload authority, so an auth failure sent with a deliberately malformed payload must still be answered by AUTH — a fence that can be probed by sending garbage is not a fence. Assert that ordering explicitly with at least one case that is invalid at two layers at once.\nAfter every refusal case assert the store's event and decision counts are UNCHANGED (DoD item 4): a transport that refuses after writing is indistinguishable from one that refuses cleanly, by return value alone.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE JETBRAINS HALF, and it must run through the PUBLIC SUBPATH IN A REAL CHILD NODE PROCESS.\nThis is not pedantry: vitest resolves workspace packages through its own aliasing, so an in-process `import(\"@moe/jetbrains-adapter/host\")` would resolve even if the exports map were missing entirely — a green in-process test proves nothing about the public boundary DoD item 1 claims. Drive it as the existing jetbrains-runtime-entrypoint suite does: `node --input-type=module -e ...` with cwd at the repository ROOT (where the root @moe/jetbrains-adapter dependency resolves it), importing `@moe/jetbrains-adapter/host` by bare specifier and reporting JSON on stdout.\nExercise ONLY the real surface, which step 1 confirmed is exactly `{endpoint, reconnect, start, uninstall}` over four ports (distribution discovery, daemon probe, daemon start, control-room open):\n- distribution discovery over a temp installRoot with a matching API range -> accepted;\n- a range that does not match -> exact `DISTRIBUTION_MISMATCH` with its `refusedBy`, imported from @moe/contracts;\n- daemon probe against a closed loopback port -> the IDE-layer outcome, exact code;\n- start with `daemonCommand` pointing at the INSTALLED moe-daemon shim, then endpoint() and control-room open through the supplied `BrowserOpener` port (supplying that port is configuration the host declares, NOT a hand-built fake host — task rail 4 forbids the latter, not the former);\n- reconnect after a probe failure;\n- uninstall, then a post-uninstall call, asserting the session is dropped rather than reused and that no endpoint is resurrected.\nAssert the host exposes NO command method — enumerate its keys and compare to the exact four — and record every MCP-command-translation case as explicitly UNKNOWN. Task rail 2 forbids asserting command identity for JetBrains at all: only stdio versus HTTP owns that.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "DETERMINISM, SOURCE BINDING AND RESOURCE HYGIENE — DoD items 4 and 5.\n- SOURCE BINDING: every request/result digest and every JetBrains handoff digest must bind to the same checkout source commit. Capture the commit ONCE via `git rev-parse HEAD` at suite start, include it in each recorded digest input, and assert every subject's digest carries that same commit. A matrix whose halves ran against different trees is comparing two systems.\n- DETERMINISM: run the whole matrix twice in one process and assert the recorded outcomes are byte-identical. If any field is genuinely time- or port-dependent, exclude it BY NAME with a comment rather than loosening the comparison.\n- READ-ONLY ARMS: for every refusal and every read-only case, assert event and decision counts are unchanged — measured from the store, not inferred from the response.\n- NO RESIDUE: after teardown assert no orphan child process, no listening port, no resurrected endpoint, and no post-uninstall call succeeded. Close child handles, HTTP servers and temp directories BEFORE cleanup runs, and hold no SQLite handle across teardown — a held handle kills the vitest worker with an error that looks unrelated to the test.\n- WINDOWS COVERAGE, asserted rather than assumed: at least one case exercises a path containing a space, one asserts CRLF-tolerant frame splitting, and the platform-neutral framing assertions run on whatever platform the suite is on rather than being skipped.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts",
+        "tests/integration/portability/portability-harness.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "MUTATION DRILLS against the PRODUCTION surface — task rail 5 requires one, and a matrix this large is exactly where a detached assertion hides. Run each, record the exact test name that reddened, restore, and confirm the restored bytes hash-match the original (git status alone is unreliable in this shared worktree).\n1. Remove `moe-mcp-stdio` from apps/daemon/package.json's bin. The stdio accepted control must redden with a resolution failure. If it stays green, the suite is not driving the installed shim — which is the single most likely way this matrix quietly becomes a source-relative test.\n2. Remove the `\"./host\"` key from adapters/jetbrains/package.json exports. The child-process JetBrains probe must redden with ERR_PACKAGE_PATH_NOT_EXPORTED. This is the drill that proves the public-subpath claim rather than assuming it.\n3. Change one production refusal code the matrix pins (a daemon or MCP dispatch code) to a near-miss spelling. The corresponding case must redden ON THE CODE, not on a generic failure.\n4. Make the HTTP path mint a fresh decision instead of replaying. The identity test AND the decision-count assertion must both redden — if only one does, the other is not measuring what it claims.\nRestore every production file afterwards; none of them is an owned path of this task and none may appear in the final diff.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "GATE. tests/integration is typechecked by NOTHING in this repo — the root `typecheck` script is `pnpm --recursive typecheck` over workspace packages, and `test:integration` only runs `typecheck:packaging` (tools/packaging) before vitest. So a type error in these three new files is invisible to every gate. Compensate explicitly: run a standalone `npx tsc --noEmit` over the three files with the same flag set `typecheck:packaging` uses (strict, module nodenext, moduleResolution nodenext, verbatimModuleSyntax) and require EXIT=0. Record that command — it is not part of any script, so QA cannot infer it ran.\nThen run the suite, FROM POWERSHELL: `pnpm test:integration` shells out through MSYS tar on Git Bash and fails on drive-letter paths for reasons unrelated to this task. Capture exit codes separately, no pipes (a piped run reports the pipe tail's code) and no `&&` chaining, and READ THE OUTPUT: the focused leg must print a `Test Files N passed` count line with a NONZERO count. Also run the focused form `vitest run tests/integration/portability` and confirm its count is nonzero — a path filter that matches nothing exits 0 with no count line.\nFinally attribute any red by the path-attributed baseline: repo-wide failures at the merge-base, again at HEAD, and confirm the delta intersected with this task's three owned paths is EMPTY. Report foreign red verbatim with exact failing paths; never hide it and never fabricate green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts",
+        "tests/integration/portability/portability-harness.ts",
+        "tests/integration/portability/portability-cases.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "ADVERSARIAL SELF-REVIEW, then complete. Load the `adversarial-self-review` skill and read the diff as an attacker:\n- Is every subject reached through an INSTALLED executable or a BARE public specifier? Grep the three files for `../../../apps` and `../../../packages` — any hit into a subject under test violates DoD item 1, even though the neighbouring control-room suite does exactly that.\n- Could the JetBrains probe be passing through vitest's aliasing rather than the exports map? If it does not run in a child process with cwd at the repo root, it is.\n- Does any assertion compare a SUBSET of a payload where the DoD says byte-equivalent? Name every excluded field and why.\n- Did any case leave a child, a port, a temp dir, or a SQLite handle behind? Re-run the suite twice in a row in one command — a teardown that has only ever run once has not been tested.\n- Are all expected codes imported from their owning packages rather than spelled locally?\nCOMPLETION MUST RECORD, per the acceptance rail: the capabilities this matrix certifies are the installed `moe-mcp-stdio` and `moe-mcp-http` executables, the public `@moe/jetbrains-adapter/host` subpath, and the root workspace dependency edges — ALL shipped by task-f33028b5374044bfa84deb5ed979277b, verified on disk in step 1 by probe rather than by reading its DoD. Also record the generated subject-by-case count, and state plainly that the JetBrains half certifies distribution/probe/start/endpoint/reconnect/uninstall ONLY and that MCP command translation is UNKNOWN because `JetBrainsHost` exposes no command method — not because the matrix declined to test one.\nStage and commit ONLY the three owned paths under tests/integration/portability by explicit pathspec; never `git add -A`, and make sure the step-9 drill edits to apps/daemon and adapters/jetbrains manifests are fully restored and absent from the diff.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/transport-host-matrix.test.ts",
+        "tests/integration/portability/portability-cases.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (daemon transport / JetBrains host matrix), BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion under the human's standing unstall directive: the sole recorded gate — task-f33028b5 — is QA-approved DONE as of 03:13Z, and every boundary the blockedReason measured absent has landed with it: moe-mcp-stdio bin published, adapters/jetbrains ./host subpath exported, root acceptance dependency edges declared, lockfile refreshed. Planning architect: re-probe the installed bin shims and the ./host export at current HEAD before planning.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -31,17 +125,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-17T20:11:08.453Z",
+  "updatedAt": "2026-08-18T03:39:40.907Z",
   "metrics": {
-    "firstClaimAt": "2026-08-17T20:10:20.845Z"
+    "firstClaimAt": "2026-08-17T20:10:20.845Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 3
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "architect-c9e91335"
   ],
-  "blockedReason": "The task explicitly hard-depends on task-f33028b5374044bfa84deb5ed979277b, which is currently BLOCKED, and fresh HEAD 926f6db probes confirm none of its required production boundaries are available: apps/daemon/package.json exposes only moe-daemon and moe-mcp-http (no moe-mcp-stdio); node_modules/.bin has no stdio shim; adapters/jetbrains/package.json exports only '.' (no './host'); root dependencies remain only @moe/daemon and @moe/runner; and root import('@moe/jetbrains-adapter/host') fails ERR_MODULE_NOT_FOUND. This acceptance task owns only tests, so it cannot publish/install those subjects itself or source-import them. Planning now would necessarily violate its public-installed-boundary rail. Reopen only after task-f330 is DONE, then re-measure installed stdio/HTTP shims, public host subpath, root manifest+lock links, and the exact production error/stage/layer vocabularies before drafting the matrix.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T20:10:49.660Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured all three required installed/public subjects, reported BLOCKED on task-f330, and wrote Serena handoff memory.",
@@ -52,5 +149,30 @@
       "releasedBy": "architect-f956ffe1",
       "reason": "Explicit handoff after recording the hard dependency blocker; continuing to other planning tasks."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:39:38.835Z",
+  "planningNotes": {
+    "approachesConsidered": "1) COPY THE NEIGHBOURING tests/integration/control-room HARNESS, which imports `startDaemon`, `http-test-fixtures` and the client transport by DEEP RELATIVE path. REJECTED for the subjects under test: DoD item 1 forbids a direct registry/handler or source-relative import, and task rail 1 requires installed executables and public roots. That suite is a fine model for lifecycle discipline and payload-equality reasoning, and a bad model for how to reach the subject. The drift is easy to make and invisible — hence the explicit grep in step 11.\n2) IMPORT `@moe/jetbrains-adapter/host` IN-PROCESS under vitest. REJECTED, and this is the sharpest trap in the task: vitest resolves workspace packages through its own aliasing, so that import succeeds even with no `exports` map at all. The public-subpath claim can only be proven in a real child Node process with cwd at the repository root. Drill #2 exists to keep it that way.\n3) DRIVE THE STDIO ENTRY AS `node apps/daemon/src/mcp-main.ts`. REJECTED: it proves the module runs and says nothing about the bin that task-f33028b5 shipped, which is precisely what DoD item 1 names. Spawn through node_modules/.bin. Drill #1 catches the substitution.\n4) COMPARE stdio AND HTTP BY RESULT EQUALITY ALONE. REJECTED as insufficient: two independent pipelines computing equal answers compare equal. The load-bearing assertion is that the SAME commandId REPLAYS across transports and the raw decision-row count rises by exactly one — identity, not agreement.\n5) ASSERT AN MCP COMMAND PATH FOR JETBRAINS. REJECTED by task rail 2 and impossible by construction: `JetBrainsHost` is exactly {endpoint, reconnect, start, uninstall}. The matrix records MCP translation as UNKNOWN and asserts the closed four-key surface, so the UNKNOWN is a measured fact rather than an untested gap.\n6) SPELL EXPECTED CODES AS LOCAL STRING LITERALS. REJECTED: a locally spelled code is a second vocabulary, and when production renames one the test stays green while asserting a code nothing emits. Import DISTRIBUTION_MISMATCH from @moe/contracts and dispatch codes from @moe/mcp / @moe/daemon roots.\n7) SPLIT THE TRANSPORT AND JETBRAINS HALVES INTO TWO TEST FILES. REJECTED by task rail 5, which permits one matrix test plus at most two helpers. The split is instead by ROLE — lifecycle in the harness, case data in the table, assertions in the test.",
+    "codebaseInsights": "MEASURED AT HEAD 61766074. Every capability this acceptance task certifies was verified ON DISK, not read from the gate's DoD.\n\nSHIPPED BY task-f33028b5 (QA-approved DONE 03:13Z), all four confirmed:\n- `ls node_modules/.bin | grep moe` -> moe-daemon, moe-mcp-http, moe-mcp-stdio, each with .CMD and .ps1 siblings. The stdio shim now EXISTS; when architect-f956ffe1 blocked this task it did not.\n- apps/daemon/package.json bin is exactly the three keys, `moe-mcp-stdio -> ./src/mcp-main.ts`.\n- adapters/jetbrains/package.json exports is `{\".\": \"./src/index.ts\", \"./host\": \"./src/host/jetbrains-host.js\"}` — pointed at the shipped .js bridge, as planned.\n- root package.json dependencies now include @moe/import, @moe/jetbrains-adapter and @moe/store, which is what lets a repo-root test resolve those bare specifiers in a child process.\n\nSUBJECT SURFACES:\n- `JetBrainsHost` (adapters/jetbrains/src/host/jetbrains-host.ts:51) is EXACTLY `{endpoint, reconnect, start, uninstall}`, built over four ports — controlRoom.openControlRoom, discovery.probeDaemon, distribution.discoverDistributions, start.startDaemon — each closed over its own config. So DoD item 3's list maps 1:1 onto the real surface, and \"MCP translation is UNKNOWN\" is structural: there is no command method to call.\n- `DISTRIBUTION_MISMATCH` is NOT in adapters/jetbrains at all. It lives in packages/contracts/src/distribution/distribution-contract.ts:36 and :112 (a refusal carrying `refusedBy`) and is registered in runtime-error-registry.ts:17,153 with lifecycle NEVER / HUMAN_DECISION / UNPROCESSABLE and source PROJECT. Import it; do not re-declare it.\n- apps/daemon/src/mcp-main.ts is 58 lines: `readBootstrapCredential` -> `readStoreDependencyEnv` -> `createStoreDependencies` -> `createStdioMcpServer({credential, port: createMcpDispatchPort({...}), serverName: \"moe-next\"})` -> `connectStdioTransport`. Its own header states \"every dispatch answered by the same durable pipeline the HTTP listener serves\" — that sentence is the claim DoD item 2 exists to verify, and the replay-identity assertion is how to verify it rather than restate it.\n- apps/daemon/src/mcp-http/mcp-http-main.ts reads MOE_MCP_HTTP_PORT (optional, ephemeral default) and an MCP_HTTP_HOST_ENV host. Read the bound port from the child rather than assuming one.\n- @moe/mcp publishes `STDIO_TOOL_ENTRIES`, `STDIO_TOOL_INDEX`, `toolLabelForKind`, `generateStdioToolEntries` and `ADAPTER_SUPPLIED_COMMAND_FIELDS` — build tool labels through those, never by hand.\n\nTEST LAYOUT: tests/integration currently holds control-room/, distribution/, expansion-protocol.test.ts, release-archive-cleanup.test.ts and release-supply-chain.test.mjs. `tests/integration/portability/` does NOT exist and is created by this task. The neighbouring control-room-transport.test.ts (312 lines) reaches its subjects by deep relative import — a good lifecycle model, an explicitly forbidden access pattern here.\n\nTYPECHECK HOLE, and it is load-bearing for how this plan gates: root `typecheck` is `pnpm --recursive typecheck` (workspace packages only) and `test:integration` runs `pnpm typecheck:packaging` (tools/packaging only) before vitest. NOTHING typechecks tests/integration. A type error in the three new files is invisible to every existing gate, so step 10 requires a standalone `npx tsc --noEmit` over them with the packaging flag set and requires that command be recorded, since no script would show it ran.",
+    "risks": "1) THE VITEST ALIASING TRAP IS THE BIGGEST RISK IN THIS TASK. An in-process `import(\"@moe/jetbrains-adapter/host\")` resolves through vitest's own workspace aliasing even if the exports map is absent, so the headline claim of DoD item 1 can be 'proven' by a test that would pass against the pre-gate tree. Only a child Node process with cwd at the repo root proves it. Same class for the executables: spawning the source file instead of the installed shim proves nothing about the bin. Drills 1 and 2 are the only mechanical defence.\n\n2) TESTS/INTEGRATION IS TYPECHECKED BY NOTHING. Run the standalone tsc leg and record it, or a broken type ships silently.\n\n3) `pnpm test:integration` MUST RUN FROM POWERSHELL — it shells through MSYS tar and fails on drive-letter paths under Git Bash, for reasons unrelated to this diff.\n\n4) RESULT EQUALITY IS NOT IDENTITY. Two separate pipelines can agree. The replay assertion plus the exactly-one-decision-row count is what proves both transports reach one pipeline; keep both, and run the pair in both orders so the replay is not an artifact of ordering.\n\n5) MULTI-LAYER CASES ARE WHERE VACUITY HIDES. An auth case sent with a malformed payload must still be answered by AUTH; if the envelope decoder answers first, the test silently stops testing auth. Assert WHICH layer answered, and include at least one deliberately double-invalid case.\n\n6) RESOURCE RESIDUE IS THE CLASSIC INTEGRATION FAILURE. Children, ephemeral ports, temp dirs and SQLite handles must all close before cleanup; a teardown that has only ever run once has not been tested, so run the suite twice in one command.\n\n7) WINDOWS SPECIFICS ARE DoD ITEMS, NOT CAVEATS: spaces in paths, .CMD/.ps1 shim variants, and CRLF-tolerant frame splitting. A splitter assuming LF will HANG rather than fail, which reads as a flaky timeout.\n\n8) DRILL RESTORATION: drills 1 and 2 edit manifests this task does NOT own. Snapshot hashes before and confirm restoration after; a foreign hook commit can swallow a drill so git status reads clean while the edit is gone.",
+    "keyFiles": [
+      "apps/daemon/src/mcp-main.ts",
+      "apps/daemon/src/mcp-http/mcp-http-main.ts",
+      "adapters/jetbrains/src/host/jetbrains-host.ts",
+      "adapters/jetbrains/src/jetbrains-runtime-entrypoint.test.ts",
+      "packages/contracts/src/distribution/distribution-contract.ts",
+      "packages/mcp/src/index.ts",
+      "tests/integration/control-room/control-room-transport.test.ts",
+      "package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9900000
+  },
+  "planApprovedAt": "2026-08-18T03:39:40.907Z"
 }

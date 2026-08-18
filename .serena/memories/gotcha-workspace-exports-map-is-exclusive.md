@@ -35,6 +35,36 @@ The control matters: without it, `DEEP FAIL` could be a broken workspace link ra
 exports map. Then **list the root export names** — resolution succeeding says nothing about
 which symbols are on it.
 
+### Add a THIRD control: prove the refusal CODE is specific (measured 2026-08-18, task-c7f2530b)
+
+The two controls above separate "broken link" from "exports map", but they still let you assert
+`ERR_PACKAGE_PATH_NOT_EXPORTED` without ever proving that code means what you think. A **typo in
+the deep path also rejects** — with a different code. So run a specifier that cannot resolve at all:
+
+```sh
+# SUBJECT   deep subpath of a REAL dep   -> DEEP_REFUSED ERR_PACKAGE_PATH_NOT_EXPORTED
+# CONTROL   package root                 -> BARE_OK function function function
+# DISCRIM   package that does not exist  -> TYPO_REFUSED ERR_MODULE_NOT_FOUND
+node -e 'import("@moe/context-does-not-exist").then(()=>process.exit(4)).catch(e=>console.log("TYPO_REFUSED",e.code))'
+```
+
+Two distinct codes is the evidence. If the discriminator also returned
+`ERR_PACKAGE_PATH_NOT_EXPORTED`, the subject assertion would be firing on "unresolvable" in
+general and the exports-map claim would be unproven. Assert the exact code, never merely that
+the deep import rejected.
+
+### The flag in the probes above is STALE for Node 24
+
+`--experimental-strip-types` is no longer needed. Measured on **Node v24.16.0**: a bare import of
+a workspace package whose export target is a `.ts` file resolves under **plain `node` with no
+flag** — Node 24 strips types natively. This repo already depends on that; `apps/daemon`'s own
+start script is `node ./src/daemon-main.ts`. Reaching for a loader flag now tends to *hide* a
+failure rather than fix one.
+
+Run the runtime probes from **PowerShell**, not the Bash tool — a plain-Node smoke on this repo
+has failed purely because Git Bash rewrote paths
+(`mem:qa-plain-node-smoke-fails-from-git-bash`).
+
 ## What it hid, in both directions
 
 - `@moe/scheduler` root exported **17 names, all graph-kernel**. The entire `authority/` and

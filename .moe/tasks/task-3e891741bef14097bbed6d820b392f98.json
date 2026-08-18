@@ -15,8 +15,74 @@
     "Use public @moe/context `digestContextManifest`; never copy its canonical digest, accept a caller digest/reference, or claim its inner digest binds outer authority fields.",
     "No store, launch, registry, graph reader, or provider behavior in this codec task; exact stable code/layer assertions and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "TDD the roster and the record shape. Create `apps/daemon/src/work/foundation-context-manifest-codec.test.ts` RED. Pin BY HAND, transcribed rather than derived from production, three things DoD 4 calls the \"complete roster\": the five decoder codes (MALFORMED, VERSION_UNSUPPORTED, MANIFEST_DIGEST_MISMATCH, RECORD_DIGEST_MISMATCH, NONCANONICAL), the single frozen layer `FOUNDATION_CONTEXT_CODEC`, and the exact outer key set — projectId, sessionId, nodeKey, attemptRef, graphRevisionRef, graphContentHash, graphEpoch, configurationDigest, inputManifestDigest, manifest, recordDigest. Assert the code list length equals 5 and every member is distinct; a derived roster would grow on both sides and stay green. Also pin the version literal `context-manifest.v1` — import `CONTEXT_MANIFEST_VERSION` from the `@moe/context` ROOT and assert the transcribed string equals it, so the constant and the expectation are checked against each other rather than one being copied from the other.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD the encoder's admission rules, each as its own arm with its exact code and the `FOUNDATION_CONTEXT_CODEC` layer, and each asserting NOTHING is returned as authority. (a) `manifest.version` other than `context-manifest.v1` -> VERSION_UNSUPPORTED, kept separate from MALFORMED because a knowingly-declined real shape and a shape that is not what it claims lead to opposite operator actions. (b) An `exactBytes` entry outside 0..255, a non-integer, or a NEGATIVE ZERO -> MALFORMED. Negative zero is named explicitly in DoD 4 and is the subtle one: `JSON.stringify(-0)` is `\"0\"`, so a canonical round-trip silently normalises it and a naive equality check never sees the difference — detect it with `Object.is(value, -0)`, and apply the same check to `graphEpoch`. (c) Empty `exactBytes` -> MALFORMED; the render manifest never legitimately carries zero bytes. (d) A `manifest.digest` that does not equal a fresh `digestContextManifest(manifest.binding)` -> MANIFEST_DIGEST_MISMATCH. (e) A caller-supplied `recordDigest` that disagrees with the derived one -> RECORD_DIGEST_MISMATCH; rail 2 forbids accepting a caller digest at all, so the encoder DERIVES and the mismatch is how that is proven rather than asserted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD the hostile-input sweep and the accepted control. HOSTILE, with a POSITIVE GENERATED COUNT asserted so a sweep that silently produced zero cases cannot pass: accessor (getter) properties on the outer record and on `manifest.binding`, a revoked Proxy, `__proto__` and other unknown keys, a null-prototype object, oversize payloads past the bounded-decode limit, and truncated bytes. Each must refuse with its exact code and layer; none may let a value survive into the returned record. Reuse `exactKeys`, `isRecord` and `snapshotFoundationValue` from `./foundation-attempt-codec.js` — the descriptor-safe helpers already exist in this directory and a second implementation would drift from them. THE ACCEPTED CONTROL, which DoD 4 requires and which a refusal-only suite is blind without: build a REAL `AdmittedContextSelection`, run the REAL `selectContext` then the REAL `renderContext` from the `@moe/context` root, feed the resulting `ContextRenderManifest` into the encoder with plausible outer identities, and assert the encode succeeds and the decode returns a deeply frozen record whose every field round-trips. Do not hand-forge the manifest — the whole point is that a genuine renderContext output is admitted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD the property that the outer digest binds EVERY outer field, which is the real deliverable and the one DoD 4's mutation clause targets. Write a per-field sweep over the ten non-digest outer fields (projectId, sessionId, nodeKey, attemptRef, graphRevisionRef, graphContentHash, graphEpoch, configurationDigest, inputManifestDigest, manifest): for each, mutate that field alone, re-derive, and assert `recordDigest` CHANGES. Assert the generated case count is exactly 10 and greater than zero. This is what makes \"an outer binding field was omitted from the digest\" a red test rather than an invisible defect — omitting `graphEpoch` from the hashed input leaves every other assertion green. Separately assert the inner and outer digests are independent: changing an outer identity must NOT change `manifest.digest`, and changing `manifest.binding` must change BOTH. Rail 2 is explicit that the inner digest does not bind outer authority fields, so this pair is the executable form of that rule.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement `apps/daemon/src/work/foundation-context-manifest-codec.ts` plus its bridge `foundation-context-manifest-codec.js`. THE BRIDGE IS ONE LINE, `export * from \"./foundation-context-manifest-codec.ts\";`, and rail 1 says LF exactly — every sibling bridge in this directory is LF and a CRLF written by a Windows editor is a byte difference in a tracked file that no typecheck or vitest run will surface. Verify the committed bytes rather than trusting the editor. Exports: the frozen record version, the frozen five-code list, the `FOUNDATION_CONTEXT_CODEC` layer, the record type, `encodeFoundationContextManifestRecord` and `decodeFoundationContextManifestRecord`. Compose the existing helpers from `./foundation-attempt-codec.js` — `exactKeys`, `encodeFoundationPayload`, `decodeFoundationPayload`, `sameBytes`, `sha256Hex`, `isRecord` — rather than writing a second canonical layer. The decoder does the same byte discipline its siblings do: bounded decode, then RE-ENCODE and byte-compare against the input bytes before returning authority, answering NONCANONICAL when they differ (`readStoredFoundationAttempt` at foundation-attempt-store.ts:132-148 is the template, and it keeps ABSENT/AMBIGUOUS/DRIFT distinct for the same reason this codec keeps its five distinct). `digestContextManifest` comes from the `@moe/context` ROOT and is never reimplemented. Everything returned is deeply frozen. Target <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+        "apps/daemon/src/work/foundation-context-manifest-codec.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+        "apps/daemon/src/work/foundation-context-manifest-codec.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Verification gate, four legs, exit codes captured SEPARATELY — DoD 5 says \"execute separately with nonzero counts\", and an `&&` chain that dies at a typecheck leg hides every later count line: `pnpm --filter @moe/context typecheck`, `pnpm --filter @moe/context test`, `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`. Both names resolve (`@moe/context` is packages/context, `@moe/daemon` is apps/daemon, each declaring both scripts — verified at plan time). READ THE OUTPUT: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for an absent package, so a leg with no `Test Files N passed` line is UNVERIFIED rather than passing; record the count for both test legs. The context legs matter even though rail 3 forbids editing that package — this codec calls its public `digestContextManifest`, so a context change would surface here first. The daemon suite can be red at baseline from foreign in-flight slices: attribute by the merge-base-versus-HEAD failing-path delta intersected with the three owned paths, disclose foreign red verbatim with exact failing lines, and never fabricate green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Mutation drills and adversarial review, then stop. FOUR drills, each restored before the next, each naming the test that reddens — the first two are named by DoD 4 directly: (i) hash a REFERENCE instead of canonical bytes when deriving `recordDigest` (for example digest the object identity or a `[object Object]` coercion) — the per-field sweep from step 4 must redden, because two different records would then collide; (ii) OMIT one outer field from the hashed input — that field's arm in the step-4 sweep must redden while the other nine stay green, which is exactly what proves the sweep is per-field rather than a single lump assertion; (iii) delete the re-encode byte-comparison so non-canonical bytes decode — the NONCANONICAL arm must redden; (iv) accept the caller's `recordDigest` instead of deriving it — the RECORD_DIGEST_MISMATCH arm must redden. A drill that reddens the WRONG test, or hangs, is not a pass; record the exact failing test names. Drills run in a SHARED worktree — snapshot each file's hash and restore by CONTENT, never `git checkout`, and re-verify the `.js` bridge is still LF after any restore. Then run `adversarial-self-review`: a manifest whose `exactBytes` is at the bounded-decode ceiling, a `graphEpoch` of 0 versus -0, duplicate keys in the encoded JSON, and the production file's physical line count against the 250 target.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -29,5 +95,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:29.449Z",
-  "updatedAt": "2026-08-17T17:48:12.030Z"
+  "updatedAt": "2026-08-18T03:36:27.959Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T03:34:28.014Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:36:25.876Z",
+  "planningNotes": {
+    "approachesConsidered": "COMPOSE THE EXISTING DAEMON CODEC HELPERS RATHER THAN WRITE A SECOND CANONICAL LAYER. `apps/daemon/src/work/foundation-attempt-codec.ts` (194 lines) already exports `exactKeys`, `snapshotFoundationValue`, `encodeFoundationPayload`, `decodeFoundationPayload`, `sameBytes`, `sha256Hex`, `isRecord` and `textOf` — the exact descriptor-safe and canonical-byte primitives this codec needs, in the same directory. A parallel implementation would drift from them, and the drift would live in durable bytes where it cannot be corrected after the fact.\n\nTHE OUTER DIGEST IS DERIVED, NEVER ACCEPTED. Considered letting the encoder validate a caller-supplied `recordDigest` and pass it through. Rejected: rail 2 forbids accepting a caller digest at all. Deriving it and refusing RECORD_DIGEST_MISMATCH on disagreement is strictly stronger, and it turns \"the caller cannot supply authority\" into a tested behaviour rather than a comment.\n\nFIVE DISTINCT CODES, NOT ONE \"BAD BYTES\" CODE. MALFORMED, VERSION_UNSUPPORTED, MANIFEST_DIGEST_MISMATCH, RECORD_DIGEST_MISMATCH and NONCANONICAL answer five different operator questions and must never stand in for each other. This mirrors the sibling `readStoredFoundationAttempt`, which keeps ABSENT / AMBIGUOUS / DRIFT separate for the same reason, and the `@moe/import` contract's own note that \"the four DECODE codes are deliberately distinct rather than one bad-file code\".\n\nTHE PER-FIELD DIGEST SWEEP IS THE CENTRAL TEST, not a nicety. DoD 4's mutation clause (\"omitting an outer binding field\") is only detectable if each of the ten outer fields is mutated INDIVIDUALLY and asserted to move the digest. A single \"the digest changes when the record changes\" assertion stays green while nine of ten fields are unbound.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The premise is confirmed exactly.\n\nTHE INNER DIGEST REALLY DOES BIND ONLY SEVEN FIELDS. `digestContextManifest(binding)` (packages/context/src/context-render.ts:57-62) is `canonicalSha256({version: CONTEXT_MANIFEST_VERSION, binding})`, and `ContextDigestBinding` (:24-32) has exactly seven members: optionalSelection, journalCountLimit, journalTextLimit, ordering, rendererVersion, exclusions, exactBytes. No projectId, sessionId, nodeKey, attemptRef, graphRevisionRef, graphContentHash, graphEpoch, configurationDigest or inputManifestDigest appears anywhere in it. So the task's claim is precise: an OUTER envelope with its own digest is genuinely required, and it is daemon-owned because @moe/context must not change (rail 1 and 3).\n\n`ContextRenderManifest` (:34-38) is `{version: \"context-manifest.v1\", binding, digest}`. `CONTEXT_MANIFEST_VERSION` is declared at context-contract.ts:2 and is exported from the package root. `renderContext` (:64-83) returns `{bytes, manifest}` deep-frozen, with `exactBytes` being the rendered byte array — so a genuine manifest always has nonempty exactBytes, which is why the empty case is malformed rather than a legitimate edge.\n\nTHE ROOT BARREL IS FIVE `export *` LINES (index.ts: context-contract, context-render, context-selection, dead-end-journal, release-handoff), so a grep for `digestContextManifest` in index.ts returns NOTHING while the symbol is genuinely exported. Probe, do not grep — I confirmed by compiled probe and by plain-Node import that `selectContext`, `renderContext` and `digestContextManifest` all resolve from the bare specifier.\n\nTHE DEPENDENCY EDGE IS ALREADY LANDED, so this task plans no manifest work: `apps/daemon/package.json` declares `@moe/context` and `pnpm-lock.yaml:107-110` carries the importer link. That was task-c7f2530b, which measured complete-on-arrival.\n\nHELPERS TO COMPOSE, all in the owned directory's sibling: foundation-attempt-codec.ts exports `exactKeys` (:47), `encodeFoundationPayload` (:150), `decodeFoundationPayload` (:161), `sha256Hex` (:169), `sameBytes` (:171), `isRecord` (:187), `snapshotFoundationValue` (:43).\n\nTHE BYTE-DISCIPLINE TEMPLATE is `readStoredFoundationAttempt` (foundation-attempt-store.ts:132-148): decode, RE-ENCODE, byte-compare against the stored payload, and keep the failure modes as separate codes. Mirror that shape rather than inventing a fourth idiom in this package.\n\nGATES RESOLVE BY NAME: `@moe/context` is packages/context and `@moe/daemon` is apps/daemon, each with `typecheck` and `test`.",
+    "risks": "1. NEGATIVE ZERO IS THE SUBTLE ONE, and DoD 4 names it deliberately. `JSON.stringify(-0)` is `\"0\"`, so a canonical encode/decode round-trip silently normalises it and every byte comparison still passes. Detect it with `Object.is(value, -0)` on `graphEpoch` and on every `exactBytes` entry; a `value === 0` check cannot see it, and neither can a digest comparison.\n2. THE PER-FIELD SWEEP MUST BE PER FIELD. A lump assertion that \"the digest changes when the record changes\" passes while nine of the ten outer fields are unhashed. Assert the case count is exactly 10, and require drill (ii) to redden exactly one arm.\n3. THE INNER DIGEST DOES NOT BIND OUTER FIELDS, and a plausible-looking shortcut is to reuse `manifest.digest` as the record's identity. That would let two records with different projectId or graphEpoch share an identity. The independence pair in step 4 exists to make that a red test.\n4. THE `.js` BRIDGE MUST BE LF and rail 1 says so explicitly. It is invisible to typecheck and vitest, and a drill restore can silently reintroduce CRLF — re-verify the committed bytes after every restore.\n5. DO NOT TOUCH packages/context. Rail 1 and rail 3 both forbid it, and rail 2 forbids copying its canonical digest. If `digestContextManifest` appears to need a change, that is a different task.\n6. A refusal-only suite is blind to a wrong ACCEPTED value. The accepted control must run the REAL `selectContext` -> `renderContext` chain; a hand-forged manifest would prove only that the codec accepts what the test happens to build.\n7. Reuse the sibling descriptor-safe helpers rather than writing new ones — a second `exactKeys` that admits an accessor while the original refuses it is a divergence living in durable bytes.\n8. Mutation drills run in a shared worktree; snapshot hashes and restore by content, never `git checkout`.",
+    "keyFiles": [
+      "packages/context/src/context-render.ts",
+      "packages/context/src/context-contract.ts",
+      "packages/context/src/context-selection.ts",
+      "apps/daemon/src/work/foundation-attempt-codec.ts",
+      "apps/daemon/src/work/foundation-attempt-store.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-18T03:36:27.959Z"
 }

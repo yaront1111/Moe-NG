@@ -1,0 +1,40 @@
+{
+  "id": "task-2db110998677498abb11f65142a6fe25",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Publish provider-slot release on the scheduler root",
+  "description": "Prerequisite for the daemon's atomic attempt/lease/provider-slot release composition. Hard-depend on task-9f51def13fb1484482bcb6d68ce3708d. The pure authority already exists and is QA-approved: `releaseProviderSlot` and `ProviderSlotReleaseCommand` are re-exported by `authority/lease-resource.ts`, but current `@moe/scheduler` root has zero `releaseProviderSlot` export, so a daemon consumer would have to deep-import a package-private module. Publish only this existing transition from the focused scheduler execution surface and ratchet the root namespace. Consumer: the daemon release-state composition task created immediately after this task, then task-e62e3828df234c66969a99b8223487f4.",
+  "definitionOfDone": [
+    "`@moe/scheduler` publicly exports the existing `releaseProviderSlot` value and `ProviderSlotReleaseCommand` type from their owning module; no duplicate transition or vocabulary is introduced.",
+    "The hand-written runtime root roster adds exactly the one new function in reviewed order, updates the explicit count, and pins its defined function binding while retaining exact namespace equality/freeze checks.",
+    "The daemon manifest declares `@moe/scheduler`, the lock importer links it, and a temporary compiled probe inside apps/daemon imports and calls `releaseProviderSlot` plus its type from the bare specifier, typechecks exit 0, and is deleted in the same guarded command.",
+    "A mutation removing the production root export reddens the named root-roster/probe assertion rather than only a helper; restoring it returns the suite green.",
+    "`pnpm --filter @moe/scheduler typecheck` and `pnpm --filter @moe/scheduler test` run separately with a nonzero test-count line and no owned-path regression."
+  ],
+  "taskRails": [
+    "Hard-depend on task-9f51def13fb1484482bcb6d68ce3708d; own only its focused scheduler execution-surface TypeScript file and packages/scheduler/src/index-surface.test.ts.",
+    "Public-surface slice only: do not edit provider-slot-release.ts, lease-resource.ts, daemon composition, package manifests, lockfile, RuntimeCommandKind or schemas.",
+    "Use the existing public transition and exact root roster; explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e62e3828df234c66969a99b8223487f4",
+  "priority": "CRITICAL",
+  "order": 85.2,
+  "comments": [
+    {
+      "id": "comment-bc7ecb70663247c28e7a94836c71239d",
+      "author": "architect-f956ffe1",
+      "content": "Consumer edge now has an exact task id: task-79f56ad581794b3fb195aeb441b16725 imports `releaseProviderSlot` from bare `@moe/scheduler` and composes/persists the released slot. Record that ID in the plan/completion.",
+      "timestamp": "2026-08-18T03:12:43.932Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:12:02.766Z",
+  "updatedAt": "2026-08-18T03:12:43.932Z"
+}

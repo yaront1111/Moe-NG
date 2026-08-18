@@ -1,0 +1,36 @@
+{
+  "id": "task-79f56ad581794b3fb195aeb441b16725",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Atomically record released attempt and provider-slot state",
+  "description": "Corrective producer prerequisite for task-e62e3828df234c66969a99b8223487f4. Hard-depend on task-2db110998677498abb11f65142a6fe25, task-740924b741754955b94a7ccf7fc16bb1 and task-4731ba34d3b3463685dccd325a11f325. Current live bytes contradict core safe-release: `attempt-release-disposition.ts` copies activation `attempt.state` (`RUNNING`) and provider slot `state` (`ACTIVE`) even when `releaseWork` returns RELEASED; `releaseProviderSlot` has zero daemon production callers. At the same release composition point, derive the exact slot-release command from the decision-verified activation slot/attempt, invoke the public scheduler transition, and persist its successor together with the scheduler release outcome in the one AttemptReleaseRecorded decision. The release row's `attemptState` is the safe-boundary transaction outcome (`DRAINING` or `RELEASED`), not the earlier activation slice. No second event/partial authority may survive a slot refusal. This task does not supply safe-boundary, terminal, receipt or handoff evidence; those remain separate producers.",
+  "definitionOfDone": [
+    "When the scheduler release outcome is RELEASED, the daemon derives a provider-slot release command only from the durable activation slot and attempt, calls public `releaseProviderSlot`, and persists the returned exact slot ref/state; no caller slot state or command is accepted.",
+    "The same single AttemptReleaseRecorded body records `attemptState === \"RELEASED\"`, `leaseState === \"RELEASED\"`, and `providerSlotState === \"RELEASED\"`; DRAINING records the kernel's DRAINING attempt/lease outcome and retains the non-released slot without claiming safe release.",
+    "A malformed, mismatched, RESERVED, or otherwise refused slot transition preserves the scheduler code under a distinct provider-slot-release layer and commits zero release rows/decisions; it is never restamped as a lease-drain refusal.",
+    "Replay returns the original durable row with unchanged raw event/decision counts; conflicting bytes or a later divergent slot fact refuse before a second write.",
+    "Real SqliteEventStore tests seed activation only through the production activation path, assert exact code/layer and one accepted released composition, and read all three states from canonical durable bytes rather than the input/result echo.",
+    "Mutations that copy activation RUNNING into `attemptState` or hardcode/skip the provider-slot successor each redden a named production-surface assertion.",
+    "`pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` run separately with a nonzero count line and no owned-path regression."
+  ],
+  "taskRails": [
+    "Own only apps/daemon/src/work/attempt-release-disposition.ts, attempt-release-store.ts, and attempt-release-disposition.test.ts; do not edit activation-ledger state, scheduler reducers, schemas, RuntimeCommandKind or the current-reader task.",
+    "Hard-depend on task-2db110998677498abb11f65142a6fe25; consume `releaseProviderSlot` only from bare `@moe/scheduler`, with manifest+lock+compiled-probe edge verified before implementation.",
+    "The release decision is all-or-none: a slot refusal leaves no release row, and DRAINING never upgrades attempt or slot to RELEASED.",
+    "This task does not accept or manufacture safeBoundaryObserved, terminal refs/flags, receiptRef or handoff; those remain tasks ded026d6, 6d400781 and af9454f4."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e62e3828df234c66969a99b8223487f4",
+  "priority": "CRITICAL",
+  "order": 86.2,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:12:35.367Z",
+  "updatedAt": "2026-08-18T03:12:35.367Z"
+}

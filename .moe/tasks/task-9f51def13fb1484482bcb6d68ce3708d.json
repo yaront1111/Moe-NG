@@ -1,0 +1,40 @@
+{
+  "id": "task-9f51def13fb1484482bcb6d68ce3708d",
+  "epicId": "epic-e0c54bddb3004bf29e98b2a43cea2dc2",
+  "title": "Split the oversized scheduler root execution surface",
+  "description": "Prerequisite for publishing the already-landed provider-slot release transition to the daemon. Measured at HEAD c1ab42b: `packages/scheduler/src/index.ts` is 430 physical lines, beyond the binding split-before-400 cap. It currently curates authority, resource, budget and fairness value/type exports inline. Move that execution-facing export group into one focused root-reachable surface module and have index.ts forward it, without changing the `@moe/scheduler` namespace. Deliverable is a behavior-free barrel split that leaves both production files <=250 lines and makes a later two-file task able to add `releaseProviderSlot` without editing an oversized source. Consumer: the provider-slot root-publication task created immediately after this task, then the daemon release-state composition task and task-e62e3828df234c66969a99b8223487f4.",
+  "definitionOfDone": [
+    "`packages/scheduler/src/index.ts` forwards an exact-LF root-reachable execution-surface module containing the moved authority/resource/budget/fairness exports; the runtime namespace remains byte-for-byte the same reviewed 94-name set and no new capability is published.",
+    "`index.ts` and the new production TypeScript surface are each <=250 physical lines; the new `.js` bridge is exactly one LF-terminated export line.",
+    "The existing scheduler index-surface suite passes unchanged and a compiled bare-specifier probe from apps/daemon imports representative moved values and types from `@moe/scheduler`, typechecks exit 0, and is deleted in the same command.",
+    "A mutation removing one moved forwarding export reddens the named production root-roster assertion; restoring it returns the focused suite green.",
+    "`pnpm --filter @moe/scheduler typecheck` and `pnpm --filter @moe/scheduler test` run separately, with a nonzero test-count line and no owned-path regression."
+  ],
+  "taskRails": [
+    "Own only packages/scheduler/src/index.ts and a new focused execution-surface `.ts` plus exact one-line LF `.js` bridge; do not edit index-surface.test.ts or change the public namespace.",
+    "Pure export move only: no reducer, vocabulary, contract, behavior, package manifest or lockfile change.",
+    "Preserve foreign work; TDD/mutation against the existing production root surface; explicit owned-path commit."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-e62e3828df234c66969a99b8223487f4",
+  "priority": "CRITICAL",
+  "order": 84.2,
+  "comments": [
+    {
+      "id": "comment-c5e7d4561d9e4a73a452896dd8e8e412",
+      "author": "architect-f956ffe1",
+      "content": "Consumer edge now has an exact task id: task-2db110998677498abb11f65142a6fe25 publishes `releaseProviderSlot` from the split surface. Record that ID in the plan/completion; this split itself must not change the namespace.",
+      "timestamp": "2026-08-18T03:12:43.545Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:11:46.355Z",
+  "updatedAt": "2026-08-18T03:12:43.545Z"
+}

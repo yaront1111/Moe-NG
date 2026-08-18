@@ -15,13 +15,71 @@
     "Do not modify activation-run-commit.ts, expose runner private ports, accept caller deps, or create a wire/HTTP kind.",
     "Preserve runner codes/layers/result identity, use TDD and explicit owned-path commit, and keep the production file <=250 lines."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND FREEZE THE ROUTE BEFORE EDITING. Re-measure HEAD and require the three approved owned paths to be clean: apps/daemon/src/activation/activation-telemetry-launch.ts, its focused test, and apps/daemon/src/activation/activation-run-commit.test.ts (the human-approved third path is restricted to the three mechanical authority-argument updates; never edit activation-run-commit.ts). Confirm task-c534626b79b14aaa940923d78830200d is DONE and inspect the public @moe/runner surface: createTelemetryBoundClaudeLauncher(authority) must still return a function producing ClaudeBoundLaunchResult with the exact raw ClaudeLaunchResult and same-capture handoff. Verify the consuming edge in all three required ways: apps/daemon/package.json declares @moe/runner, pnpm-lock.yaml's apps/daemon importer links ../../packages/runner, and a temporary NodeNext probe inside apps/daemon imports the factory plus ClaudeLauncherAuthority/ClaudeBoundLaunchResult from the BARE specifier and typechecks exit 0; run a bogus-export negative control that fails with TS2305, and delete both probes/configs in the same guarded command. Record separate baselines: focused test, daemon typecheck, full daemon test, and their nonzero count lines. Current measurement at HEAD 61766074: production is 97 lines; the three downstream old-signature calls remain at lines 151/155/162; typecheck exits 0; focused suite is 1 file/7 tests; full daemon executes 129 files/2725 tests and is foreign RED only at src/projections/import-shadow-compare.test.ts:125 through import-shadow-reader.ts:237. Rebaseline rather than assuming those numbers remain current.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — PIN THE MANDATORY AUTHORITY EDGE AND CLOSED INPUT SURFACE in activation-telemetry-launch.test.ts. Add a hoisted TRANSPARENT instrumentation wrapper for the public @moe/runner export: importOriginal, delegate to the real createTelemetryBoundClaudeLauncher, wrap only its returned function to record factory/run calls, exact argument references, order (factory -> run:start -> run:end), and the exact real answer, then return that answer untouched. Never fabricate a launcher result, handoff, authority success, or private runner port. Assert launchActivationProviderRun has runtime arity 2, receives a separate ClaudeLauncherAuthority, calls the real factory once with that same object, calls the returned runner once, forwards providerRun as providerRunRef and request/options by reference with exact input keys, and returns the captured real answer by toBe identity. Add compile-time @ts-expect-error fixtures proving the one-argument form, options.deps, and input launcher/exit/observation/registration/reconciliation/handoff fields are unrepresentable; the only option keys are platform and signal. Use a two-method fail-fast/recording authority only as an UNREACHED witness—its methods must append then throw, never grant authority.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — PIN REAL RESULTS, ORDERING, AND EXACT REFUSALS through the production adapter. (a) Accepted no-process control: a well-formed accessor-backed ProviderRunRef plus the existing duplicate-delivery input must traverse the real bound factory once and return a frozen exact {handoff,ok,result} answer; pin raw EXIT_BEFORE_LAUNCH (code/layer null, launched false, PROVEN no-process truth), the same raw kind/code/layer/truth in handoff.launch, TELEMETRY_LAUNCH_NOT_ATTEMPTED@TELEMETRY_LAUNCH, terminal UNKNOWN, and an accessor count of exactly one. (b) Refused control: current model mismatch must preserve raw CLAUDE_LAUNCH_MODEL_MISMATCH@TELEMETRY_CONFIGURATION/UNKNOWN and separately preserve TELEMETRY_LAUNCH_REFUSED@TELEMETRY_LAUNCH plus UNKNOWN quantities with no value. (c) Add a labelled hostile run-ref matrix (including missing/extra/bad epoch, space/overlong text, throwing or revoked proxy, and invalid accessor), assert labels are unique and generated count is positive/exact, and require TELEMETRY_RUN_REF_MALFORMED@TELEMETRY_INPUT with no result/handoff, zero authority calls, and untouched hostile request getters. (d) Runtime-cast smuggling: extra input authority/result/handoff getters stay unread, while an options.deps object is forwarded—not silently stripped or honoured—and the real bound launcher returns CLAUDE_LAUNCH_REQUEST_MALFORMED@LAUNCHER with TELEMETRY_LAUNCH_REFUSED@TELEMETRY_LAUNCH and zero dependency/authority calls. Retain and update the existing REFUSED vs NOT_ATTEMPTED and UNKNOWN-fact tests to read the richer result without restamping either layer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "MECHANICALLY PREPARE THE THREE COMPILED DOWNSTREAM TEST CALL SITES, using the human-approved scope amendment only. In activation-run-commit.test.ts define one local frozen fail-fast ClaudeLauncherAuthority witness whose two methods throw if unexpectedly reached, and pass it as the first argument to exactly the three launchActivationProviderRun calls currently used by refusedLaunch, notAttemptedLaunch, and malformedRefLaunch. Do not change those helpers' expected ClaudeTelemetryLaunchResult annotation (the richer bound success is structurally compatible), fixtures, production assertions, telemetry commit behavior, or any other line in this 599-line test file. At this RED stage daemon typecheck may fail on the not-yet-changed production signature; that is the expected signature failure, not permission to add an overload.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-run-commit.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MINIMUM IMPLEMENTATION in activation-telemetry-launch.ts only. Replace raw launchClaudeWithTelemetry with the public createTelemetryBoundClaudeLauncher; import only public ClaudeLauncherAuthority and ClaudeBoundLaunchResult types. Change the API to exactly launchActivationProviderRun(authority, input): Promise<ClaudeBoundLaunchResult>. Narrow ActivationTelemetryLaunchInput.options to a focused readonly platform/signal type rather than ClaudeLaunchOptions so deps cannot be named statically. Construct the authority-bound factory exactly once, invoke its returned runner exactly once, and pass {providerRunRef: providerRun, request} plus the original options object only when present. Return/await that result object unchanged: no spreading, projection, decode, cached pairing, code/layer mapping, request/ref inspection, fallback to the raw launcher, or optional one-argument compatibility arm. Update the module's inline rationale to say this seam consumes an already-authorized internal dependency and c534 owns raw-result/handoff capture. Keep the production file <=250 physical lines; do not touch the existing bridge or the 250-line runner producer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "MUTATION DRILLS after GREEN, one at a time with an exact applied-range record and content-hash restoration before the next. (1) Switch the adapter back to launchClaudeWithTelemetry: the named factory-count/raw-result test must red on factory=0/missing result. (2) invoke the bound runner twice: the named ordering/accessor test must red on runCalls/getter count=2. (3) spread/project providerRun before forwarding: the hostile proxy/accessor test must red at the intended TELEMETRY_INPUT/untouched-getter assertion. (4) return {...answer} or rebuild {result,handoff}: the toBe exact-answer identity test must red. (5) silently strip or honour a smuggled deps value: the exact CLAUDE_LAUNCH_REQUEST_MALFORMED@LAUNCHER plus zero-dependency-call test must red. Confirm every mutation actually changed the production range, failed the intended assertion rather than an import/type crash, then inverse-restore only if the mutant hash matches and verify the pre-drill hash. No scratch/probe/generated evidence file may remain.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.ts",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "FINAL CONCENTRATED GATE, ADVERSARIAL REVIEW, AND EXPLICIT COMMIT. Run each leg standalone with its own exit code—never a pipe or semicolon-masked aggregate—and read nonzero count output: focused activation-telemetry-launch test; pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (this exact command is the fresh moe.complete_task evidence); then the repository-required pnpm typecheck, pnpm test, pnpm verify:foundation, and pnpm verify:store. Re-run the guarded compiled positive/TS2305-negative @moe/runner bare-specifier probes and prove deletion. Apply the path-attributed baseline: merge-base failures versus HEAD failures intersected with these three owned paths must be empty; disclose foreign red verbatim, including import-shadow if still present, and never invent full green. Adversarial review: mandatory arity 2/no raw fallback; authority remains separate from input; platform/signal are the only typed options and runtime deps refuse at LAUNCHER; runner sees the exact unread references; one factory/one run/one exact returned object; malformed identity answers at TELEMETRY_INPUT before authority/request/process; raw launcher and telemetry reason code/layer remain distinct; hostile/generated counts are positive; downstream test diff contains only its witness and three arguments; production <=250; no runner/private/wire/bridge/manifest edits; consumer task-00e4827dd9374ec79625351d560c82c8 is named in completion. Confirm git status shows only the three approved paths, stage/commit by explicit pathspec only, and verify git show --stat contains nothing else.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.ts",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+        "apps/daemon/src/activation/activation-run-commit.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "reopenReason": "Rail proposal prop-b5d5ebf5 APPROVED by the human via TUI (03:34Z): apps/daemon/src/activation/activation-run-commit.test.ts is added to this task's ownership, restricted to the mechanical authority-argument updates at the three old call sites (lines 150/154/161 at 01820a8) required by the mandatory launchActivationProviderRun(authority, input) signature — no other edits in that file, no optional/overloaded fallback. The architect's complete 3-file plan can now be submitted.",
   "createdBy": "WORKER",
   "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
   "priority": "CRITICAL",
@@ -29,5 +87,39 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:53.316Z",
-  "updatedAt": "2026-08-17T17:42:51.670Z"
+  "updatedAt": "2026-08-18T03:39:30.987Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T03:13:35.678Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:39:28.911Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Keep calling raw launchClaudeWithTelemetry. Rejected: it bypasses durable ClaudeLauncherAuthority and drops the original ClaudeLaunchResult, failing DoD 1. 2) Let the adapter construct createFoundationLauncherAuthority from store/options. Rejected: the task explicitly consumes an existing ClaudeLauncherAuthority; authority construction belongs to the downstream Foundation call site, and putting store configuration in this adapter would conflate persistence with launch composition. 3) Preserve a one-argument overload/default authority for old tests. Rejected: that leaves the unauthoritative production path reachable and contradicts the mandatory-authority DoD. The human instead approved the atomic mechanical updates in activation-run-commit.test.ts. 4) Keep options typed as ClaudeLaunchOptions. Rejected: that public type exposes deps, directly violating DoD 2. Use a narrow platform/signal type and let the production runner refuse runtime-cast deps exactly. 5) Rebuild or normalize {result,handoff} in daemon. Rejected: result identity and same-capture binding are c534 authority; the daemon must return the exact object. 6) Duplicate snapshotRunRef/request validation or restamp errors in daemon. Rejected: it changes the first refusing layer and detaches the runner's hostile-object tests. 7) Mock a launcher/result or copy runner-private authority fixtures. Rejected: it would prove a test double, not the production composition. A transparent partial wrapper delegates to the real public factory only to observe one-call ordering and answer identity. 8) Spawn a real Claude process in this adapter test. Rejected as redundant and nonportable: c534 already proves one admitted bound-run invocation maps to one physical launch; this task proves its consumer invokes that runner exactly once using real portable refused/no-process results.",
+    "codebaseInsights": "Re-measured at HEAD 61766074a7ca55a55b0a3b335f879b0679473f55. The three owned paths are clean; activation-telemetry-launch.ts remains 97 lines and still calls raw launchClaudeWithTelemetry. activation-run-commit.test.ts remains 599 lines with exactly three old one-argument calls at lines 151, 155, and 162. Relevant bytes are unchanged from audited HEAD 01820a8. task-c534's createTelemetryBoundClaudeLauncher is present at the public @moe/runner root, runtime probe prints factory=function,arity=1, and its implementation snapshots ProviderRunRef before calling an authority-bound createClaudeLauncher once, then deep-freezes {ok:true,result,handoff}. apps/daemon/package.json line 23 declares @moe/runner workspace:*; pnpm-lock's daemon importer links ../../packages/runner at lines 129-131. A consuming-package NodeNext probe importing the factory and ClaudeLauncherAuthority/ClaudeBoundLaunchResult from the bare specifier exited 0; a bogus symbol control failed TS2305; probes were deleted. Current daemon typecheck exits 0. Focused test exits 0 with Test Files 1 passed/Tests 7 passed. Full daemon test executes nonvacuously but exits 1 with Test Files 1 failed | 128 passed (129), Tests 1 failed | 2724 passed (2725); the only current foreign failure is src/projections/import-shadow-compare.test.ts:125, thrown through src/projections/import-shadow-reader.ts:237. The human approved rail proposal prop-b5d5ebf5741647b98ae0820d2c304303 to add activation-run-commit.test.ts, restricted to the authority witness/three mechanical arguments required by the mandatory signature.",
+    "risks": "1) ESM/Vitest hoisting can make a spy tautological if it replaces the factory with fabricated output. The wrapper must call importOriginal, invoke the real factory/runner, capture its exact answer, and assertions must also pin real raw/telemetry codes. 2) A generated hostile sweep can silently run zero cases; assert exact positive count and unique labels. 3) A second invocation may still return equal bytes; use both transparent run counts and a valid accessor-backed ProviderRunRef whose getter count becomes two. 4) A daemon pre-validator or object spread can read hostile getters before the runner and change the refusal layer; pin untouched traps and TELEMETRY_RUN_REF_MALFORMED@TELEMETRY_INPUT. 5) Narrow TypeScript options alone does not stop runtime casts; forward the object unchanged and pin the runner's exact deps refusal, never silently drop it. 6) ClaudeBoundLaunchResult has a provider-telemetry refusal arm with no raw result; tests must distinguish it from ok:true raw REFUSED/EXIT_BEFORE_LAUNCH arms. 7) The downstream 599-line test is human-approved only for the witness and three arguments; any assertion/fixture cleanup is scope drift. 8) Shared-tree HEAD and foreign daemon red can move during the task; rebaseline and use owned-path failure delta, never repair or claim foreign work. 9) Do not grow or edit the c534 producer, already exactly 250 lines. 10) The accepted duplicate-delivery control proves the adapter executes and returns a real bound answer without spawning; do not mislabel PROVEN no-process truth as proven provider execution.",
+    "keyFiles": [
+      "apps/daemon/src/activation/activation-telemetry-launch.ts",
+      "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+      "apps/daemon/src/activation/activation-run-commit.test.ts",
+      "packages/runner/src/providers/telemetry/claude-telemetry-launch.ts",
+      "packages/runner/src/surface/claude-surface.ts",
+      "packages/runner/src/providers/claude/claude-launcher-contract.ts",
+      "apps/daemon/package.json",
+      "pnpm-lock.yaml"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-18T03:39:30.987Z"
 }

@@ -151,8 +151,8 @@
       "completedAt": "2026-08-18T03:07:42.238Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -171,12 +171,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:03.062Z",
-  "updatedAt": "2026-08-18T03:08:40.148Z",
+  "updatedAt": "2026-08-18T03:13:43.944Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:58.478Z",
     "plannedStepCount": 10,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 10
+    "executedStepCount": 10,
+    "doneAt": "2026-08-18T03:13:43.944Z",
+    "wallClockMs": 27705466
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -251,5 +253,8 @@
     "adapters/jetbrains/package.json",
     "package.json",
     "pnpm-lock.yaml"
-  ]
+  ],
+  "completedAt": "2026-08-18T03:13:43.944Z",
+  "reviewCompletedAt": "2026-08-18T03:13:43.944Z",
+  "reviewSummary": "APPROVED. c1ab42b = exactly the 5 owned paths, 20+/5-. Verified independently, not from summaries.\n\nDoD1: bin gains \"moe-mcp-stdio\":\"./src/mcp-main.ts\" (shipped 58-line entry, shebang byte 0); other two byte-identical. Smoked BOTH installed shims from C:\\...\\AppData\\Local\\Temp via node_modules/.bin (PowerShell): stdio -> \"MOE_SESSION_CREDENTIAL is unset or empty; refusing to start\" exit 1; with dummy credential ADVANCES to \"STORE_DEPENDENCIES_ENV_MISSING: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL\" exit 1 (real program, not line-1 death); http -> same store refusal exit 1. Refusals, not resolution errors.\n\nDoD2: exports gains \"./host\":\"./src/host/jetbrains-host.js\" (37-byte LF bridge). grep host in adapters/jetbrains/src/index.ts = EMPTY: no root re-export, no cycle.\n\nDoD3: root deps + lock root importer carry all 3 link: entries; apps/daemon importer carries @moe/import and @moe/store.\n\nDoD4: re-ran probes myself, deleted in-command, zero residue. Compiled bare-specifier probe EXIT 0; negative control TS2307 EXIT 1 proves leg live. Plain-node child: applyImport=function, EVENT_RECORD_VERSION=string, createJetBrainsHost=function; root WITHHOLDS createJetBrainsHost=true, createJetBrainsSession=function; negatives pin ERR_PACKAGE_PATH_NOT_EXPORTED + ERR_MODULE_NOT_FOUND.\n\nDoD5: JTC=0 JT=0, JetBrains 3/69. Fifth file daemon-startup.test.ts authorized by governor comment-8384b618; assertion still closed toEqual, NOT weakened.\n\nFOREIGN RED disclosed: daemon typecheck+test now exit 1, sole cause activation-attempt-reader.test.ts(31,51) TS2307 \"Cannot find module './activation-attempt-reader.js'\". That file was UNTRACKED, swept into HEAD by hook whole-tree commit 01820a8 (also swept .moe board JSON, reusing this task's message) — POST-DATES the gated state. Owner task-6d319381 (WORKING); producer absent on disk. Owned-path intersection EMPTY; 121 files / 2574 tests still pass, identical to gated counts."
 }
