@@ -62,3 +62,6 @@ Thumbs.db
 /.moe/debug/
 /.moe/tmp/
 /.moe/scratch/
+
+# moe-up dev launcher scratch state (stores, credentials) - never commit
+.moe-dev/
