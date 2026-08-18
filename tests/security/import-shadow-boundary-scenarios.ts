@@ -127,6 +127,15 @@ export interface ImportShadowOutcome {
   /** Rows the store actually holds for the seeded import, read back after the arm ran. */
   readonly durableRecords: number;
   readonly refusal: unknown;
+  /**
+   * The refusal's `detail`, or "" when the answer carried none. Exposed on EVERY arm because
+   * the code/layer tuple cannot distinguish production's answer from a hand-built object
+   * carrying the same two fields -- measured, not assumed. The detail's operands come out of
+   * the store, so an arm that checks them is comparing production against the durable bytes.
+   */
+  readonly refusalDetail: string;
+  /** `refuseImportShadow` freezes what it builds; an echoed object literal does not. */
+  readonly refusalFrozen: boolean;
 }
 
 /** Read back off the LIVE store, never off the narrowed port the arm handed the reader. */
@@ -144,11 +153,36 @@ export function importShadowClosedStore(root: string): ImportShadowOutcome {
   const closed = SqliteEventStore.openForProject(join(root, "closed.sqlite"), PROJECT_ID);
   closed.getAggregateVersion("pre-close-probe");
   closed.close();
+  // WHICH read failed is graded by the slice, not thrown here: `readEvents` fails on a closed
+  // handle too and answers the same code from a different branch, so the detail is the only
+  // thing that can say the horizon read was the gate. A throw would redden on a crash instead.
+  const refusal = readImportShadowProjection(closed, { manifestDigest: ABSENT_MANIFEST_DIGEST });
   return {
     durableComplete: true,
     durableRecords: 0,
-    refusal: readImportShadowProjection(closed, { manifestDigest: ABSENT_MANIFEST_DIGEST }),
+    refusal,
+    refusalDetail: detailOf(refusal),
+    refusalFrozen: Object.isFrozen(refusal),
   };
+}
+
+export interface ImportShadowControlledOutcome extends ImportShadowOutcome {
+  /**
+   * THE POSITIVE CONTROL, produced by the SAME driver on the SAME seeded import through an
+   * INTACT port. A refusal-only arm cannot tell a reader that refuses correctly from a
+   * driver that echoes the expectation back, because both answer with the same tuple. This
+   * one cannot be echoed: it is an ACCEPTANCE whose entity count comes out of
+   * `projectDaemonImportShadow` walking the importer's own committed bytes.
+   */
+  readonly acceptedEntities: number;
+  readonly acceptedOk: boolean;
+  /**
+   * The aggregateSequence the SURVIVING first row actually carries, read back off the live
+   * store. Production's refusal detail quotes this number, so an arm that checks the detail
+   * against it is comparing production's answer with the store's own bytes -- neither
+   * operand is written down here, which is what a hand-built refusal cannot reproduce.
+   */
+  readonly holeAt: number;
 }
 
 /**
@@ -156,21 +190,41 @@ export function importShadowClosedStore(root: string): ImportShadowOutcome {
  * commit and the read. Every earlier layer passes: the digest is the one the importer
  * reported, the store is open and healthy, and the surviving row is the importer's own
  * bytes. Only the sequence hole can refuse.
+ *
+ * The intact read runs FIRST, so the refusal below is known to be caused by the hidden row
+ * and nothing else about the fixture.
  */
-export function importShadowMissingRow(root: string): ImportShadowOutcome {
+export function importShadowMissingRow(root: string): ImportShadowControlledOutcome {
   const store = SqliteEventStore.openForProject(join(root, "events.sqlite"), PROJECT_ID);
   try {
     const manifestDigest = seedLegacyImport(root, store);
+    const intact = readImportShadowProjection(store, { manifestDigest });
     const port: ImportShadowStorePort = {
       readEventHorizon: () => store.readEventHorizon(),
       readEvents: (aggregateId) => dropFirst(store.readEvents(aggregateId)),
     };
     const refusal = readImportShadowProjection(port, { manifestDigest });
     const survivors = store.readEvents(`legacy-import:${manifestDigest}`);
-    return { durableComplete: completeness(survivors), durableRecords: survivors.length, refusal };
+    return {
+      acceptedEntities: intact.ok ? intact.projection.entities.length : 0,
+      acceptedOk: intact.ok,
+      durableComplete: completeness(survivors),
+      durableRecords: survivors.length,
+      holeAt: Number(survivors[1]?.aggregateSequence ?? 0),
+      refusal,
+      refusalDetail: detailOf(refusal),
+      refusalFrozen: Object.isFrozen(refusal),
+    };
   } finally {
     store.close();
   }
+}
+
+/** Reads `detail` without interpreting it: a shape carrying none yields "" rather than a pass. */
+function detailOf(refusal: unknown): string {
+  if (typeof refusal !== "object" || refusal === null || !("detail" in refusal)) return "";
+  const { detail } = refusal as { detail: unknown };
+  return typeof detail === "string" ? detail : "";
 }
 
 /** Removing the FIRST row leaves index 0 holding aggregateSequence 2 — a hole, not a truncation. */
@@ -233,6 +287,8 @@ export function importShadowMidReadCommit(root: string): ImportShadowRaceOutcome
       durableRecords: store.readEvents(aggregateId).length,
       horizons: Object.freeze([...horizons]),
       refusal,
+      refusalDetail: detailOf(refusal),
+      refusalFrozen: Object.isFrozen(refusal),
       seededRecords: store.readEvents(aggregateId).length,
     };
   } finally {

@@ -29,7 +29,9 @@ import {
 import type { RaceCase } from "./durable-store-boundary-scenarios.js";
 import {
   SEEDED_IMPORT_ROWS,
+  importShadowClosedStore,
   importShadowMidReadCommit,
+  importShadowMissingRow,
   importShadowRoot,
 } from "./import-shadow-boundary-scenarios.js";
 
@@ -172,6 +174,11 @@ function gradeImportShadowRace(hostileCase: RaceCase): void {
   expect(outcome.durableEvents).toBe(hostileCase.expectedDurableEvents);
   expect(outcome.seededRecords).toBe(SEEDED_IMPORT_ROWS);
   expect(outcome.durableComplete).toBe(true);
+  // Same anti-echo pair as the AFTER arm: production freezes its refusals, and this one
+  // quotes BOTH horizons the store actually moved between. Neither operand is written down.
+  expect(outcome.refusalFrozen).toBe(true);
+  expect(outcome.refusalDetail)
+    .toContain(`from ${outcome.horizons[0] ?? ""} to ${outcome.horizons[1] ?? ""}`);
 }
 
 describe("durable-store roster coverage", () => {
@@ -184,6 +191,53 @@ describe("durable-store roster coverage", () => {
     expect(hostileBeforeCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
     expect(hostileAfterCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
     expect(hostileRaceCases.filter((entry) => entry.boundary === boundary).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * THE POSITIVE CONTROL FOR THE IMPORT-SHADOW ARMS.
+ *
+ * Every other assertion about this boundary is a refusal, and a refusal-only subject cannot
+ * distinguish a reader that fails closed from a driver that hands back the expectation it
+ * was given. This asks the same driver, on the same seeded import, for the answer no echo
+ * can fabricate: an ACCEPTANCE whose entity count `projectDaemonImportShadow` derived from
+ * the importer's own committed bytes. Mutate the driver to stop calling
+ * `readImportShadowProjection` and this is what reddens.
+ */
+describe("the import-shadow read admits what it should", () => {
+  it("ACCEPT IMPORT_SHADOW_READ_LAYER: an intact committed import projects real entities", () => {
+    const outcome = importShadowMissingRow(importShadowRoot("control"));
+    expect(outcome.acceptedOk).toBe(true);
+    // EXACTLY three, not "at least": two CLAIM entities plus the one RELATED link the second
+    // corpus record declares. A >= would stay green if the mapper started dropping the link.
+    expect(outcome.acceptedEntities).toBe(SEEDED_IMPORT_ROWS + 1);
+    expect(outcome.durableRecords).toBe(SEEDED_IMPORT_ROWS);
+  });
+
+  /**
+   * The refusal TUPLE cannot police its own driver: a hand-built object carrying the same
+   * code and layer satisfies it exactly. Measured, not assumed -- echoing the AFTER refusal
+   * left every tuple assertion green. These two operands are the ones an echo has to earn:
+   * production FREEZES what `refuseImportShadow` builds, and it quotes the aggregateSequence
+   * the surviving row actually carries, a number read back out of the store rather than
+   * written down anywhere in this lane.
+   */
+  /**
+   * The BEFORE arm's own provenance check. `readEvents` on a closed handle answers the SAME
+   * IMPORT_SHADOW_STORE_UNREADABLE from a DIFFERENT branch, so the tuple alone cannot claim
+   * the horizon read is the gate that answered -- only the detail can.
+   */
+  it("ACCEPT IMPORT_SHADOW_READ_LAYER: the closed reader refuses at the horizon, not later", () => {
+    const outcome = importShadowClosedStore(importShadowRoot("closed-provenance"));
+    expect(outcome.refusalFrozen).toBe(true);
+    expect(outcome.refusalDetail).toMatch(/^horizon unreadable: /u);
+  });
+
+  it("ACCEPT IMPORT_SHADOW_READ_LAYER: the refusal is production's own frozen object, naming the real hole", () => {
+    const outcome = importShadowMissingRow(importShadowRoot("provenance"));
+    expect(outcome.refusalFrozen).toBe(true);
+    expect(outcome.holeAt).toBeGreaterThan(1);
+    expect(outcome.refusalDetail).toContain(`aggregateSequence ${String(outcome.holeAt)}`);
   });
 });
 
