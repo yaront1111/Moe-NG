@@ -22,14 +22,18 @@
     {
       "stepId": "step-1",
       "description": "Confirm the measurement and settle PLACEMENT, the one genuinely open decision. Read-only. Re-verify at committed HEAD: (a) `applyImport` (packages/import/src/import-apply.ts:196) commits through `ImportStorePort` at :219-228 with `expectedVersion: 0`, wrapping only THROWN failures as IMPORT_COMMIT_FAILED / APPLY; (b) the only non-test composer is tools/import/import-shadow.ts:141 passing DISCARDING_STORE (:111), whose file header asserts read-only ON BYTES (pre/post digest of every manifest-covered file) -- that posture is rail-protected and must not change; (c) `grep -rn \"@moe/import\" apps/daemon/src --include=*.ts | grep -v '\\.test\\.'` returns ZERO. THE SHAPE LUCK THAT MAKES THIS ADAPTER THIN, verify each: `ImportCommitInput` {aggregateId, commandBytes, commandId, committedAt, events, expectedVersion} is field-for-field a subset-compatible shape of the store's `CommitInput` (store-contracts.ts:46-53); `ImportEventDraft` {domainSchemaVersion, eventId, eventType, payload} maps onto the store's `EventDraft` whose `domainSchemaVersion` is OPTIONAL with a generic default (:36-44) -- which is precisely why the import draft made it REQUIRED (import-apply.ts:39-42's own comment: an omitted field persists an envelope schema the stored bytes do not speak). PLACEMENT DECISION, recorded here per the task rail's invitation: the adapter and its CLI entry live in `tools/import/` as a NEW file beside import-shadow.ts -- NOT inside packages/import (the rail forbids @moe/import depending on @moe/store), NOT inside apps/daemon (zero @moe/import references exist there today, and inventing a daemon command kind for import would widen the frozen command vocabulary, a far larger change this task must not smuggle), and NOT inside import-shadow.ts (read-only by rail). tools/ is not a workspace package, so imports are deep relative specifiers with the file named in a root typecheck script -- import-shadow.ts's own header documents this exact precedent and why it does not trip TS6059.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED AT HEAD 76e7396 (not the 8222b9e the description names — re-measured per the staleness rail).\n\n(a) CONFIRMED. applyImport at packages/import/src/import-apply.ts:196; commits at :219-228 with expectedVersion 0 and aggregateId `legacy-import:${manifest.digest}`; the try/catch at :229-231 wraps only THROWN failures as IMPORT_COMMIT_FAILED/APPLY.\n(b) CONFIRMED. Only non-test composer is tools/import/import-shadow.ts:141 with DISCARDING_STORE (:111). Read-only-on-bytes posture verified in its header; untouched.\n(c) STALE, CORRECTED. The description says `grep @moe/import apps/daemon/src` returns ZERO. It now returns 11 hits: task-80fce1d1 landed apps/daemon/src/projections/import-shadow-{contracts,mapper,reader,test-fixtures}.ts. Still no PRODUCER there — the fixtures module is test-only support and the reader is read-only. The producer gap this task closes is real and unchanged.\n\nSHAPE LUCK, each verified: ImportCommitInput{aggregateId,commandBytes,commandId,committedAt,events,expectedVersion} (import-apply.ts:49-57) is field-for-field assignable to store CommitInput (store-contracts.ts:46-53). ImportEventDraft.domainSchemaVersion is REQUIRED and literal-typed (:38-47); store EventDraft.domainSchemaVersion is OPTIONAL defaulting to DOMAIN_EVENT_SCHEMA_VERSION (:36-44).\n\nCONFLICT MECHANISM MEASURED FROM SOURCE (step-2 asked for this). packages/store/src/event-ledger-transaction.ts:119-152 `resolveCommand`: it THROWS. Three distinct answers, all reachable from applyImport's deterministic identity —\n  1. receipt found AND requestSha256 equal -> returns { disposition: \"REPLAYED\" }, writes nothing. A byte-identical re-import lands here, NOT on a conflict: commandId = canonicalDigest({manifest,version}) and commandBytes/committedAt/events are all deterministic.\n  2. receipt found AND requestSha256 differs -> throws CommandIdConflictError, code \"COMMAND_ID_CONFLICT\". Reached by the SAME manifest digest with different records (commandId depends only on the digest).\n  3. no receipt, previousVersion !== expectedVersion -> throws ExpectedVersionConflictError, \"EXPECTED_VERSION_CONFLICT\".\nSince applyImport's catch restamps every throw, the adapter must CATCH the DurableStoreError, record the store's own `code` verbatim, and rethrow; the composer then answers from the recorded refusal rather than from applyImport's restamped result. Non-conflict throws (closed handle) are recorded as nothing and flow through to IMPORT_COMMIT_FAILED/APPLY — that is the DoD-4/DoD-5 discriminator.\n\nPLACEMENT: tools/import/import-commit.ts as planned, using deep relative `.js` specifiers exactly like its sibling. Bridges confirmed present: packages/import/src/index.js, packages/store/src/sqlite-event-store.js, packages/store/src/store-contracts.js (there is NO packages/store/src/index.js, so the barrel is not reachable that way).\n\nDEPENDENCY EDGE PROBED (rail): a temp tools/import/edge-probe.ts importing BARE @moe/import and @moe/store typechecked exit 0 and was deleted in the same command. Root package.json declares both, pnpm-lock's `.` importer carries both, node_modules/@moe/{import,store} symlinks exist. So the edge exists both ways; the production file still uses relative specifiers for node-runtime parity with import-shadow.ts, while the test uses bare specifiers like tests/integration/portability does.\n\nTEST PLACEMENT FORCED, and it is a plan deviation the plan itself authorised. tools/ has NO test convention (`find tools -name \"*.test.ts\"` -> empty) and root vitest.config.ts includes only adapters/**, packages/**, tests/** — a suite under tools/ would be run by NOTHING. So it goes to tests/integration/import/ with its own tsconfig.json, mirroring the tests/integration/portability precedent. NOT into portability/ itself: that directory is task-d288909b's owned path. Root `pnpm test` and `pnpm test:integration` both reach tests/integration/**.\n\nSECURITY-ROSTER BASELINE recorded BEFORE any edit, per mem:gotcha-new-layer-constant-reddens-the-boundary-roster: `npx vitest run --config tests/security/vitest.config.ts boundary-roster` is ALREADY RED at 96 scanned vs EXPECTED_ROSTER_SIZE 93, 3 unrostered constants, exit 1. Not mine. My layer constant lands in tools/, which is outside SCAN_ROOTS (apps, packages, adapters), so this number must still read 96 at the gate.\n\nTRAP CARRIED IN FROM MEMORY: SqliteEventStore.open(path) sets projectId null and refuses EVERY commit with PROJECT_SCOPE_REQUIRED (mem:gotcha-sqlite-open-without-project-refuses-every-commit). The CLI must take a project id and use openForProject.",
+      "startedAt": "2026-08-18T03:58:38.597Z",
+      "completedAt": "2026-08-18T04:04:16.738Z"
     },
     {
       "stepId": "step-2",
       "description": "RED. Create tools/import/import-commit.test.ts (or the location's existing test convention if tools/ tests live elsewhere -- check for one first; if tools/ has NO test convention, put the suite at tests/integration and note why). Tests against a REAL SqliteEventStore on a temp file, driving the REAL `applyImport` with a small fixture manifest and records -- never a hand-built ImportCommitInput, because the DoD's byte-identity claim is about what applyImport DRAFTED. Failing tests: (1) HAPPY PATH: after applyImport succeeds through the adapter, read the `legacy-import:<manifestDigest>` aggregate back and assert a nonzero event count, each row's `domainSchemaVersion` === IMPORT_EVENT_FACTS_VERSION (the literal, imported from the package), and each stored payload byte-identical to the drafted payload; decode the rows through public `decodeImportEventFacts` and assert a NONZERO decoded claim count -- a zero-claim decode passes vacuously and DoD 5 names this. (2) DUPLICATE MANIFEST: a second applyImport over the same manifest digest must CONFLICT, not append -- assert the refusal carries the STORE'S own conflict code and layer, NOT restamped as IMPORT_COMMIT_FAILED, and assert raw event and decision counts prove the original aggregate survived unchanged. Note the subtlety: applyImport catches THROWN commit failures as IMPORT_COMMIT_FAILED/APPLY, so the adapter must let a version-conflict answer flow through as a RETURN or a typed refusal rather than throwing it -- decide the mechanism from the store's actual conflict behaviour (measure whether SqliteEventStore.commit throws or returns on expectedVersion mismatch) and pin WHICH layer answers in the test. (3) STORE FAILURE: a genuinely broken store (closed handle) surfaces as IMPORT_COMMIT_FAILED / APPLY from applyImport itself -- assert exact code and layer.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-18T04:04:21.238Z"
     },
     {
       "stepId": "step-3",
@@ -55,7 +59,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b8af1a87",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -67,13 +71,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:04:03.531Z",
-  "updatedAt": "2026-08-18T03:08:33.968Z",
+  "updatedAt": "2026-08-18T04:04:21.238Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:06:31.506Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 1
+    "plannedDistinctFileCount": 1,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:08:31.891Z",
   "planningNotes": {
@@ -93,5 +100,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-18T03:08:33.968Z"
+  "planApprovedAt": "2026-08-18T03:08:33.968Z",
+  "contextFetchedBy": [
+    "worker-b8af1a87"
+  ],
+  "workStartedAt": "2026-08-18T03:58:38.597Z"
 }

@@ -113,16 +113,23 @@
     {
       "stepId": "step-7",
       "description": "Mutation drills and adversarial review, then stop. FOUR drills, each restored before the next, each naming the test that reddens — the first two are named by DoD 4 directly: (i) hash a REFERENCE instead of canonical bytes when deriving `recordDigest` (for example digest the object identity or a `[object Object]` coercion) — the per-field sweep from step 4 must redden, because two different records would then collide; (ii) OMIT one outer field from the hashed input — that field's arm in the step-4 sweep must redden while the other nine stay green, which is exactly what proves the sweep is per-field rather than a single lump assertion; (iii) delete the re-encode byte-comparison so non-canonical bytes decode — the NONCANONICAL arm must redden; (iv) accept the caller's `recordDigest` instead of deriving it — the RECORD_DIGEST_MISMATCH arm must redden. A drill that reddens the WRONG test, or hangs, is not a pass; record the exact failing test names. Drills run in a SHARED worktree — snapshot each file's hash and restore by CONTENT, never `git checkout`, and re-verify the `.js` bridge is still LF after any restore. Then run `adversarial-self-review`: a manifest whose `exactBytes` is at the bounded-decode ceiling, a `graphEpoch` of 0 versus -0, duplicate keys in the encoded JSON, and the production file's physical line count against the 250 target.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/work/foundation-context-manifest-codec.ts",
         "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
       ],
-      "startedAt": "2026-08-18T03:56:51.725Z"
+      "modifiedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+        "apps/daemon/src/work/foundation-context-manifest-codec.js",
+        "apps/daemon/src/work/foundation-context-manifest-codec.test.ts"
+      ],
+      "note": "STEP 7 — FOUR DRILLS, ALL KILLED THEIR INTENDED TEST. One drill at a time, each restored and hash-verified before the next.\n\n(i) HASH A REFERENCE instead of canonical bytes (`encodeFoundationPayload({ ref: String(bound) })`) -> **12 failed | 38 passed**. All TEN per-field arms reddened plus both independence arms, which is the correct blast radius: `String(object)` is `\"[object Object]\"` for every distinct record, so every record collides on one digest.\n\n(ii) OMIT `graphEpoch` from the hashed input -> **1 failed | 49 passed**, failing EXACTLY `moves the recordDigest when graphEpoch alone changes` while the other nine arms stayed green. This is the result the plan singled out and it is the proof the sweep is genuinely per-field rather than one lump assertion wearing ten names. A lump assertion would have reddened on any field or none.\n\n(iii) DELETE THE RE-ENCODE BYTE COMPARISON -> **1 failed | 49 passed**, failing exactly `refuses non-canonical bytes that still parse to the same record`. Confirms the byte comparison, not the parse, is what answers NONCANONICAL.\n\n(iv) ACCEPT THE CALLER'S `recordDigest` (replace the derivation check with a mere well-formedness check) -> **1 failed | 49 passed**, failing exactly `refuses a caller recordDigest that disagrees with the derived one`. Rail 2's \"never accept a caller digest\" is therefore load-bearing rather than decorative.\nNo drill hung, and none reddened a test other than its target.\n\nRESTORE DISCIPLINE: `sha256sum` snapshots taken before drilling; after the last restore, `diff` of baseline vs final hashes reports **BOTH_FILES_BYTE_IDENTICAL** for the production source and the bridge. No `git checkout` at any point (the tree carries untracked peer work). The bridge was re-verified at the BYTES after all four drills — 56 bytes, `b\"\\r\" in data` is False, still LF.\n\n=== ADVERSARIAL PASS — one substantive finding, disclosed rather than smoothed over ===\n```\nepoch0=OK | epochNeg0=FOUNDATION_CONTEXT_MALFORMED | dupKeys=FOUNDATION_CONTEXT_MALFORMED\nexactBytes512=FOUNDATION_CONTEXT_MANIFEST_DIGEST_MISMATCH | exactBytes513=FOUNDATION_CONTEXT_MALFORMED\n```\n- `graphEpoch` 0 is ACCEPTED and -0 is REFUSED, so the guard is about the SIGN and not about zero.\n- DUPLICATE KEYS injected into the encoded JSON are refused by the bounded parser before this codec sees them.\n- **THE PRACTICAL CEILING IS 512 RENDERED BYTES, and this is the finding QA should weigh.** `snapshotFoundationValue`'s `MAX_ITEMS = 512` (foundation-attempt-codec.ts:13) applies to `binding.exactBytes`, so a manifest with 513 bytes is MALFORMED. At 512 the structure passes and the digest check answers instead. My fixture renders 70 bytes so the suite never approaches it — but a REAL agent context is thousands of bytes, and this codec would refuse to seal it. The bound is honest and the DoD only requires \"bounded\", so this is compliant; it is also, in my judgement, too low to be useful in production. I did NOT raise it: `foundation-attempt-codec.ts` is not among this task's three owned paths, and writing a second copy of the snapshot helper with a different limit is exactly the drift the plan forbids. NEEDS A FOLLOW-UP owning `foundation-attempt-codec.ts` — either raise `MAX_ITEMS` for byte arrays or give the shared snapshot a bytes-aware path. Filing this as the one thing that would stop this record from working on real input.\n\nFOREIGN WHOLE-TREE COMMIT, SECOND TIME THIS SESSION. My three files were already at HEAD before I could stage them: **76e7396 `feat(task-14ea45a5...)`, a 28-FILE commit**, added all three. Verified rather than assumed — `git log --diff-filter=A` names that commit for my production file, and `git show HEAD:<path> | sha256sum` MATCHES the working-tree hash for all three. Per epic rail 3 and the hook rail I did not amend, reset, or fake a commit, so there is no commit bearing this task's id — which the rail states is never a rejection reason.\nBASE-REF DIFF FOR QA, `git diff --numstat 0be0763..HEAD -- <three owned paths>`: `250/0` production, `528/0` test, `1/0` bridge — all additions, zero deletions. `packages/context/` diff over the same range is EMPTY, so rail 3's \"do not edit that package\" holds by measurement, not by intent. `git status --porcelain -- apps/daemon/src/work/` is empty: nothing of mine is left uncommitted.\n\nFRESH GATE AT THE NEW HEAD, four legs, separate exit codes: `CTC=0 CT=0 DTC=0 DT=0`, with `Test Files 5 passed (5) | Tests 24 passed (24)` for context and `Test Files 130 passed (130) | Tests 2799 passed (2799)` for the daemon. Production file is 250 lines, at the rail's cap, with no line over 100 columns. No scratch residue from me — every probe was removed and `git status --untracked-files=all | grep -iE \"__adv|__probe\"` reports none. (One untracked `tests/integration/portability/zz-probe-resolve.test.ts` is a PEER's and I left it alone.)",
+      "startedAt": "2026-08-18T03:56:51.725Z",
+      "completedAt": "2026-08-18T03:59:38.037Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -134,12 +141,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:29.449Z",
-  "updatedAt": "2026-08-18T03:56:51.725Z",
+  "updatedAt": "2026-08-18T04:00:30.489Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:34:28.014Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "stepsCompleted": [
     "step-1",
@@ -147,7 +154,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:36:25.876Z",
@@ -170,5 +178,17 @@
   "contextFetchedBy": [
     "worker-f144c751"
   ],
-  "workStartedAt": "2026-08-18T03:45:02.617Z"
+  "workStartedAt": "2026-08-18T03:45:02.617Z",
+  "reviewStartedAt": "2026-08-18T04:00:30.489Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json src\n Test Files  130 passed (130)\n      Tests  2799 passed (2799)\n\nRun fresh at HEAD 76e7396 after all four drills were restored and byte-identity re-verified. DoD 5 requires the four legs to EXECUTE SEPARATELY; all four were, with individual exit codes and no && chaining:\n  pnpm --filter @moe/context typecheck   CTC=0\n  pnpm --filter @moe/context test        CT=0   Test Files 5 passed (5)     | Tests 24 passed (24)\n  pnpm --filter @moe/daemon  typecheck   DTC=0\n  pnpm --filter @moe/daemon  test        DT=0   Test Files 130 passed (130) | Tests 2799 passed (2799)\nNot vacuous: all four captured logs were grepped for \"No projects matched the filters\" -> NONE. Both test legs printed real count lines.",
+    "reportedAt": "2026-08-18T04:00:30.489Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/work/foundation-context-manifest-codec.test.ts",
+    "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+    "apps/daemon/src/work/foundation-context-manifest-codec.js"
+  ]
 }

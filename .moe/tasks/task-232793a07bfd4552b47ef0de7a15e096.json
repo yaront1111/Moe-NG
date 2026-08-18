@@ -100,17 +100,24 @@
     {
       "stepId": "step-7",
       "description": "FINAL CONCENTRATED GATE, ADVERSARIAL REVIEW, AND EXPLICIT COMMIT. Run each leg standalone with its own exit code—never a pipe or semicolon-masked aggregate—and read nonzero count output: focused activation-telemetry-launch test; pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (this exact command is the fresh moe.complete_task evidence); then the repository-required pnpm typecheck, pnpm test, pnpm verify:foundation, and pnpm verify:store. Re-run the guarded compiled positive/TS2305-negative @moe/runner bare-specifier probes and prove deletion. Apply the path-attributed baseline: merge-base failures versus HEAD failures intersected with these three owned paths must be empty; disclose foreign red verbatim, including import-shadow if still present, and never invent full green. Adversarial review: mandatory arity 2/no raw fallback; authority remains separate from input; platform/signal are the only typed options and runtime deps refuse at LAUNCHER; runner sees the exact unread references; one factory/one run/one exact returned object; malformed identity answers at TELEMETRY_INPUT before authority/request/process; raw launcher and telemetry reason code/layer remain distinct; hostile/generated counts are positive; downstream test diff contains only its witness and three arguments; production <=250; no runner/private/wire/bridge/manifest edits; consumer task-00e4827dd9374ec79625351d560c82c8 is named in completion. Confirm git status shows only the three approved paths, stage/commit by explicit pathspec only, and verify git show --stat contains nothing else.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
         "apps/daemon/src/activation/activation-run-commit.test.ts"
       ],
-      "startedAt": "2026-08-18T03:56:40.295Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.ts",
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+        "apps/daemon/src/activation/activation-run-commit.test.ts"
+      ],
+      "note": "FINAL GATE, ADVERSARIAL REVIEW, AND COMMIT DISPOSITION. Every leg run standalone with its own exit code — no pipe, no semicolon-masked aggregate — and every count line read.\n\nGATE (final readings, at HEAD 76e7396):\n- focused activation-telemetry-launch: EXIT 0, `Test Files 1 passed (1)`, `Tests 30 passed (30)`.\n- `pnpm --filter @moe/daemon typecheck`: EXIT 0, zero `error TS` lines.\n- `pnpm --filter @moe/daemon test`: EXIT 0, `Test Files 130 passed (130)`, `Tests 2799 passed (2799)` — this is the fresh moe.complete_task evidence.\n- `pnpm typecheck` (repo-wide): EXIT 0, zero errors.\n- `pnpm test` (repo-wide): EXIT 1, `Test Files 3 failed | 290 passed (293)`, `Tests 4 failed | 7148 passed | 2 skipped (7154)`.\n- `pnpm verify:foundation`: EXIT 1, `Tests 1 failed | 660 passed (661)`.\n- `pnpm verify:store`: EXIT 1, `Tests 1 failed | 526 passed (527)`.\n\nTWO TRANSIENT REDS SEEN AND RESOLVED BY RE-MEASUREMENT, disclosed rather than hidden. (i) `src/work/foundation-context-manifest-codec.test.ts` failed 6 then 12 tests while the file was UNTRACKED; a peer landed the fix and it now passes. (ii) `src/planning/graph-body-record.test.ts` failed once with `expected true to be false` while `git status` showed `M apps/daemon/src/planning/graph-body-record.ts` — a peer writing mid-run; the immediate re-run is fully green. Neither file has any import edge to my owned paths.\n\nPATH-ATTRIBUTED BASELINE. Merge-base 0be0763 (my step-1 measurement) vs HEAD failing-path set = {packages/store/src/recovery-anchor.test.ts, packages/testkit/src/foundation/foundation-spec.test.ts, tests/integration/release-archive-cleanup.test.ts}. Intersected with my three owned paths: EMPTY. Attribution proved, not asserted: `git status --porcelain packages/store packages/testkit tests/integration apps/daemon/src/index.ts` returns NOTHING and `git diff --numstat HEAD -- apps/daemon/src/index.ts` is empty, so all three failing areas are byte-identical to committed HEAD. FOREIGN RED VERBATIM: `RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root: expected [ 'PREPARE', 'INACTIVE_INSTALL', …(6) ] to be undefined` at packages/store/src/recovery-anchor.test.ts:694; `keeps the held-out models out of every production module` -> `expected [ 'apps\\daemon\\src\\index.ts' ] to deeply equal []` at packages/testkit/src/foundation/foundation-spec.test.ts:224; plus 2 failures in tests/integration/release-archive-cleanup.test.ts. The foundation one is decisively not mine: its regex is /(?:from|import|require)\\s*\\(?\\s*[\"'][^\"']*foundation[\\\\/][^\"']*[\"']/u, my three owned paths produce ZERO matches, and the actual violator is the unmodified apps/daemon/src/index.ts:232 `} from \"./foundation/foundation-surface.js\";`. No import edge exists from packages/store, packages/testkit or tests/integration to apps/daemon.\n\nBARE-SPECIFIER PROBES re-run guarded and deleted: positive probe importing createTelemetryBoundClaudeLauncher plus ClaudeBoundLaunchResult/ClaudeLauncherAuthority from the BARE \"@moe/runner\" -> EXIT 0; negative control `createTelemetryBoundClaudeLauncherBOGUS` -> EXIT 1 with `error TS2724: '\"@moe/runner\"' has no exported member named 'createTelemetryBoundClaudeLauncherBOGUS'`. Deletion proved: `ls apps/daemon/src/activation | grep -c probe` = 0.\n\nADVERSARIAL REVIEW of the base-ref diff, read as a hostile reviewer:\n- Mandatory arity 2, no raw fallback, no overload, no default authority. The only `launchClaudeWithTelemetry` token left in the file is inside the comment explaining why it is NOT used.\n- Authority stays a separate parameter; nothing reads an authority off `input`, and the smuggled-getter test proves it.\n- platform/signal are the only typed option keys; a runtime-cast `deps` is FORWARDED and refused at LAUNCHER with the deps-specific message.\n- One factory, one run, one exact returned object; production is 143 lines (<=250).\n- CONCURRENCY: the module holds no state and caches nothing. The factory is built per call deliberately — a cached factory keyed by authority would be shared mutable state and could serve one caller's run under another caller's authority. Two concurrent calls each bind their own launcher; duplicate-delivery resolution stays the runner's job.\n- CONSIDERED AND DELIBERATELY NOT GUARDED: a runtime-cast `options: null` fails `snapshotLaunchEntry` and the runner forwards to raw `launchClaude`, which produces its own refusal (claude-launcher-authority.ts:183-184). Adding a daemon-side null guard would MOVE the refusing layer and is exactly the pre-validation this module's rationale forbids. Likewise a runtime-cast `input: null` throws on destructuring rather than refusing — identical to the pre-existing signature, no regression, and unguardable without daemon-side validation of caller input.\n- MOCK HONESTY: the focused suite wraps the factory transparently, so to prove the UNMOCKED production import path also works I checked that activation-run-commit.test.ts contains ZERO `vi.mock` calls — its 16 tests drive the real production function with no",
+      "startedAt": "2026-08-18T03:56:40.295Z",
+      "completedAt": "2026-08-18T04:03:11.022Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,12 +129,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:53.316Z",
-  "updatedAt": "2026-08-18T03:56:40.295Z",
+  "updatedAt": "2026-08-18T04:04:49.512Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:13:35.678Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -143,7 +150,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:39:28.911Z",
@@ -166,5 +174,17 @@
     "wallClockMs": 6300000
   },
   "planApprovedAt": "2026-08-18T03:39:30.987Z",
-  "workStartedAt": "2026-08-18T03:42:25.022Z"
+  "workStartedAt": "2026-08-18T03:42:25.022Z",
+  "reviewStartedAt": "2026-08-18T04:04:49.512Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  130 passed (130)\n      Tests  2799 passed (2799)\n   Start at  07:03:19\n   Duration  13.75s (transform 43.94s, setup 0ms, import 112.88s, tests 84.40s, environment 10ms)",
+    "reportedAt": "2026-08-18T04:04:49.512Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
+    "apps/daemon/src/activation/activation-run-commit.test.ts",
+    "apps/daemon/src/activation/activation-telemetry-launch.ts"
+  ]
 }

@@ -31,9 +31,11 @@
     "verify:release": "pnpm typecheck:release && pnpm test:integration && pnpm release:evidence"
   },
   "dependencies": {
+    "@moe/contracts": "workspace:*",
     "@moe/daemon": "workspace:*",
     "@moe/import": "workspace:*",
     "@moe/jetbrains-adapter": "workspace:*",
+    "@moe/mcp": "workspace:*",
     "@moe/runner": "workspace:*",
     "@moe/store": "workspace:*"
   },

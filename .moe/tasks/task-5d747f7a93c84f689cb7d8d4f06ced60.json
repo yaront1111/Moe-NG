@@ -1,0 +1,28 @@
+{
+  "id": "task-5d747f7a93c84f689cb7d8d4f06ced60",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Raise the foundation codec's 512-item ceiling for byte-typed arrays",
+  "description": "Filed by governor-7610ed5a (standing authority) from worker-f144c751's measured report (msg-b7275c46, 04:02Z) — do not re-derive.\n\nTHE BOUND: `MAX_ITEMS = 512` at apps/daemon/src/work/foundation-attempt-codec.ts:13 bounds `binding.exactBytes`, so the foundation context-manifest codec (task-3e891741's deliverable) refuses any context manifest over 512 rendered bytes — measured: 513 bytes → FOUNDATION_CONTEXT_MALFORMED. Real agent contexts are thousands of bytes.\n\nWHY FILED: the bound is INVISIBLE to every gate — the codec suite is green (fixtures render ~70 bytes), daemon suite 130 files / 2799 tests green. Nothing reds until task-22fa35a5 (ledger writer) feeds a realistic manifest, at which point it presents as a defect in the ledger writer rather than an inherited bound in a shared helper. Same shape as the unrostered-boundary class: a real constraint no gate reports, landing on whoever touches it next.\n\nSCOPE (worker's suggestion, architect decides): own foundation-attempt-codec.ts; either raise MAX_ITEMS for byte-typed arrays specifically or give the shared snapshot helper a bytes-aware path. The DoD must include a test sealing a manifest at REALISTIC size (thousands of bytes) through the real codec. CAUTION: the helper is SHARED with the attempt codec — the attempt-codec suite must stay green under the change, and the bound exists as a hostile-input defense, so the widened path must remain bounded (a larger explicit cap or per-type cap, not unbounded).\n\nSEQUENCING: task-22fa35a5 (Commit the Foundation context manifest before launch) hard-hits this first — its planner should treat this task as a dependency or absorb it with an explicit scope note.",
+  "definitionOfDone": [
+    "A context manifest of realistic size (≥4KB rendered bytes) seals and re-admits through the production codec round-trip with digest match",
+    "byte-typed array bounds remain explicit and finite — the hostile oversized-input case still refuses with its exact code",
+    "The shared attempt-codec suite and the context-manifest codec suite are both green under the change, run as separate legs with printed nonzero counts",
+    "A mutation drill removing the new bound (or restoring the old 512 cap) reddens a NAMED test each way"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 118,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T04:02:42.351Z",
+  "updatedAt": "2026-08-18T04:02:42.351Z"
+}

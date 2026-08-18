@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@moe/contracts':
+        specifier: workspace:*
+        version: link:packages/contracts
       '@moe/daemon':
         specifier: workspace:*
         version: link:apps/daemon
@@ -17,6 +20,9 @@ importers:
       '@moe/jetbrains-adapter':
         specifier: workspace:*
         version: link:adapters/jetbrains
+      '@moe/mcp':
+        specifier: workspace:*
+        version: link:packages/mcp
       '@moe/runner':
         specifier: workspace:*
         version: link:packages/runner
