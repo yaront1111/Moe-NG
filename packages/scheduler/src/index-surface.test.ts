@@ -30,7 +30,18 @@ import type {
   ReservationCancelCommand, ReservationLine, ReservationRecord, ReservationState,
 } from "@moe/scheduler";
 import type {
-  BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome, BudgetReservePurpose,
+  BudgetAccountRecord, BudgetAccountState, BudgetMeterBuckets, BudgetPolicyOutcome,
+  BudgetReservePurpose,
+} from "@moe/scheduler";
+import type {
+  BudgetAccountIssue, BudgetAccountIssueCode, BudgetAuthorization, BudgetCloseCommand,
+  BudgetLedgerEntry, BudgetLedgerEntryKind, BudgetLedgerResult, BudgetLedgerState,
+  BudgetMeterAmount, BudgetMovementCommand,
+} from "@moe/scheduler";
+import type {
+  BudgetOverrun, BudgetSettlementIssue, BudgetSettlementIssueCode, BudgetSettlementResult,
+  CloseCommand, ConservativeCommand, LineDisposition, ReconcileEvidence, SettleCommand,
+  SettleEvidence, SettlementCommand, SettlementLine, SettlementRecord, SettlementState,
 } from "@moe/scheduler";
 import type {
   BudgetIssueCode, BudgetMeasurementCoverage, BudgetMeasurementSource, LayeredIssue,
@@ -88,14 +99,19 @@ type ExportKind = "array" | "function" | "number" | "record";
  * revision needs to tell a framing refusal from an identity refusal) + the design-765
  * release authority `releaseWork`, the sole composer of a lease's RELEASED/DRAINING/NO_OP
  * transition. Its four types travel with it but are invisible here — a type publishes no
- * runtime key — so they are proven by annotation in the release block further down.
+ * runtime key — so they are proven by annotation in the release block further down. Plus
+ * the 16 conserved-budget ledger values: the 8 account-ledger transition/vocabulary values
+ * and the 8 settlement/reconciliation ones, so a durable budget consumer never has to copy
+ * the subtree aggregation, the settlement identity, or the version ceiling. Their 25 types
+ * are likewise invisible here and are proven by annotation in the two transition blocks.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ABSOLUTE_MAX_GRAPH_HARD_EDGES", "number"], ["ABSOLUTE_MAX_GRAPH_NODES", "number"],
   ["ABSOLUTE_MAX_GRAPH_TOTAL_EDGES", "number"], ["ADMISSION_PURPOSES", "array"],
-  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_ISSUE_CODES", "array"],
+  ["ADMISSION_PURPOSE_RESERVE_CONTRACT", "record"], ["BUDGET_ACCOUNT_ISSUE_CODES", "array"],
+  ["BUDGET_ISSUE_CODES", "array"],
   ["BUDGET_MEASUREMENT_COVERAGES", "array"], ["BUDGET_MEASUREMENT_SOURCES", "array"],
-  ["BUDGET_RESERVATION_ISSUE_CODES", "array"],
+  ["BUDGET_RESERVATION_ISSUE_CODES", "array"], ["BUDGET_SETTLEMENT_ISSUE_CODES", "array"],
   ["DEFAULT_GRAPH_POLICY", "record"], ["DEFAULT_MAX_HARD_EDGES", "number"],
   ["DEFAULT_MAX_NODES", "number"], ["DEFAULT_MAX_TOTAL_EDGES", "number"],
   ["EXPANSION_ADMISSION_ISSUE_CODES", "array"], ["EXPANSION_ADMISSION_ORIGINS", "array"],
@@ -112,11 +128,12 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["GRAPH_CONTENT_ISSUE_CODES", "array"], ["GRAPH_CONTENT_LAYERS", "array"],
   ["GRAPH_CONTENT_SCHEMA_VERSION", "number"],
   ["GRAPH_REVISION_CONTENT_KEYS", "array"],
-  ["GraphAnalysisError", "function"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
+  ["GraphAnalysisError", "function"], ["LINE_DISPOSITIONS", "array"],
+  ["MAX_BUDGET_VERSION", "number"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
   ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
   ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
-  ["RESERVATION_STATES", "array"], ["SLOT_STATES", "array"],
+  ["RESERVATION_STATES", "array"], ["SETTLEMENT_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
   ["SUPERSESSION_DISPOSITION_LAYERS", "array"], ["SUPERSESSION_REFUSAL_CODES", "array"],
@@ -124,24 +141,28 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["activateProviderSlot", "function"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
   ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
-  ["analyzeGraphStructure", "function"],
+  ["allocateToChild", "function"], ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
   ["bindCurrentExpansionHold", "function"], ["bindExpansionAdmission", "function"],
   ["buildSupersessionDispositions", "function"], ["bypassesToForced", "function"],
   ["cancelReservation", "function"],
-  ["carryWaitProjection", "function"],
+  ["carryWaitProjection", "function"], ["closeBudgetAccount", "function"],
+  ["closeSettledView", "function"], ["conservativeSettle", "function"],
   ["createTraversalCounter", "function"], ["decodeGraphContent", "function"],
   ["deriveExpansionEvidence", "function"],
-  ["deriveReservationId", "function"], ["encodeGraphContent", "function"],
+  ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
+  ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
   ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
+  ["openBudgetRoot", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
-  ["releaseProviderSlot", "function"],
-  ["releaseWork", "function"],
+  ["reconcileSettlement", "function"], ["releaseProviderSlot", "function"],
+  ["releaseWork", "function"], ["replayBudgetLedger", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
-  ["resourceRotationOrder", "function"], ["rotateOnce", "function"],
+  ["resourceRotationOrder", "function"], ["returnToParent", "function"],
+  ["rotateOnce", "function"], ["settleReservation", "function"],
   ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
   ["validateGraphSnapshot", "function"], ["validateOpportunityAttestation", "function"],
   ["validateResourceCapacity", "function"],
@@ -153,7 +174,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(95);
+  expect(EXPECTED_EXPORTS.length).toBe(111);
 });
 
 /**
@@ -1942,4 +1963,200 @@ it("publishes the measurement vocabularies as frozen non-empty closed sets", () 
     scheduler.BUDGET_MEASUREMENT_COVERAGES, scheduler.BUDGET_MEASUREMENT_SOURCES]) {
     expect(Object.isFrozen(frozen)).toBe(true);
   }
+});
+
+/**
+ * The conserved budget ledger, reached only through the bare package root. Each published TYPE
+ * below is invisible to the count and namespace guards above — a type publishes no runtime key —
+ * so every one is proven by annotating a value the root transitions produce or consume. An
+ * unpublished type becomes a tsc error here rather than a silently green test.
+ */
+const LEDGER_ATTEMPTS = "attempt.count";
+const LEDGER_MS = "runner.authorized_ms";
+const LEDGER_ROOT = "account:budget-root";
+const LEDGER_CHILD = "account:budget-child";
+const AUTHORIZED: readonly BudgetMeterAmount[] = [
+  { meter: LEDGER_ATTEMPTS, amount: 10 }, { meter: LEDGER_MS, amount: 1000 },
+];
+const AUTHORIZATION: BudgetAuthorization = {
+  rootAccountId: LEDGER_ROOT, ownerRef: "goal:1", graphRevisionRef: "graph:rev-1",
+  amounts: AUTHORIZED,
+};
+const MOVE: BudgetMovementCommand = {
+  parentAccountId: LEDGER_ROOT, childAccountId: LEDGER_CHILD, childOwnerRef: "node:1",
+  expectedParentVersion: 0, expectedChildVersion: null,
+  amounts: [{ meter: LEDGER_ATTEMPTS, amount: 4 }],
+};
+const zero = (meter: string, available: number): BudgetMeterBuckets =>
+  ({ meter, available, reserved: 0, quarantined: 0, committed: 0 });
+
+/** Names both arms of BudgetLedgerResult without any deep import. */
+function ledgerState(result: BudgetLedgerResult): BudgetLedgerState {
+  if (!result.ok) {
+    throw new Error(result.issues.map((issue: BudgetAccountIssue) => issue.code).join(","));
+  }
+  return result.state;
+}
+function ledgerCodes(result: BudgetLedgerResult): readonly BudgetAccountIssueCode[] {
+  expect(result.ok).toBe(false);
+  if (result.ok) return [];
+  return result.issues.map((issue: BudgetAccountIssue) => issue.code);
+}
+const accountOf = (state: BudgetLedgerState, id: string): BudgetAccountRecord | undefined =>
+  state.accounts.find((record: BudgetAccountRecord) => record.accountId === id);
+
+it("opens, funds, drains and closes a conserved account through the root exports", () => {
+  const opened: BudgetLedgerState = ledgerState(scheduler.openBudgetRoot(AUTHORIZATION));
+  const first: BudgetLedgerEntry | undefined = opened.entries[0];
+  const kind: BudgetLedgerEntryKind | undefined = first?.kind;
+  expect(kind).toBe("ROOT_OPENED");
+  expect(accountOf(opened, LEDGER_ROOT)?.meters)
+    .toEqual([zero(LEDGER_ATTEMPTS, 10), zero(LEDGER_MS, 1000)]);
+
+  // Real movement: exactly four attempt units leave the root and the sibling meter is untouched.
+  const funded: BudgetLedgerState = ledgerState(scheduler.allocateToChild(opened, MOVE));
+  const child: BudgetAccountRecord | undefined = accountOf(funded, LEDGER_CHILD);
+  expect([child?.parentRef, child?.version, child?.state]).toEqual([LEDGER_ROOT, 0, "OPEN"]);
+  expect(child?.meters).toEqual([zero(LEDGER_ATTEMPTS, 4)]);
+  expect(accountOf(funded, LEDGER_ROOT)?.meters)
+    .toEqual([zero(LEDGER_ATTEMPTS, 6), zero(LEDGER_MS, 1000)]);
+  // The published roll-up, so a consumer never re-derives the subtree aggregation itself.
+  const totals: readonly BudgetMeterAmount[] = scheduler.deriveSubtreeTotals(funded);
+  expect([...totals]).toEqual([...AUTHORIZED]);
+
+  const returned: BudgetLedgerState = ledgerState(scheduler.returnToParent(funded,
+    { ...MOVE, expectedParentVersion: 1, expectedChildVersion: 0 }));
+  expect(accountOf(returned, LEDGER_CHILD)?.meters).toEqual([zero(LEDGER_ATTEMPTS, 0)]);
+  const close: BudgetCloseCommand = { accountId: LEDGER_CHILD, expectedVersion: 1 };
+  const closed: BudgetLedgerState = ledgerState(scheduler.closeBudgetAccount(returned, close));
+  expect(accountOf(closed, LEDGER_CHILD)?.state).toBe("CLOSED");
+  // The recorded stream folds back to the same state through the same published core.
+  expect(ledgerState(scheduler.replayBudgetLedger(AUTHORIZATION, closed.entries))).toEqual(closed);
+});
+
+it("refuses a stale parent version from the root with BUDGET_ACCOUNT_STALE_VERSION", () => {
+  const opened = ledgerState(scheduler.openBudgetRoot(AUTHORIZATION));
+  // Duplicate-identity, unknown-account and counter-exhaustion all sit ABOVE the version fence
+  // in allocateToChild, so a single-element array names the guard that ANSWERED rather than
+  // merely recording that the move did not land.
+  expect(ledgerCodes(scheduler.allocateToChild(opened, { ...MOVE, expectedParentVersion: 7 })))
+    .toEqual(["BUDGET_ACCOUNT_STALE_VERSION"]);
+  // An absent child on the return arm is answered by a DIFFERENT published code, so the
+  // assertion above is not satisfied by a surface that answers one code for everything.
+  expect(ledgerCodes(scheduler.returnToParent(opened, { ...MOVE, expectedChildVersion: 0 })))
+    .toEqual(["BUDGET_ACCOUNT_UNKNOWN_ACCOUNT"]);
+  expect(accountOf(opened, LEDGER_ROOT)?.version).toBe(0);
+  expect(scheduler.MAX_BUDGET_VERSION).toBe(Number.MAX_SAFE_INTEGER - 1_000_000);
+  expect([...scheduler.BUDGET_ACCOUNT_ISSUE_CODES]).toStrictEqual([
+    "BUDGET_ACCOUNT_COMMAND_MALFORMED", "BUDGET_ACCOUNT_COUNTER_EXHAUSTED",
+    "BUDGET_ACCOUNT_DUPLICATE_IDENTITY", "BUDGET_ACCOUNT_ILLEGAL_CLOSE",
+    "BUDGET_ACCOUNT_INSUFFICIENT_AVAILABLE", "BUDGET_ACCOUNT_PARENT_MISMATCH",
+    "BUDGET_ACCOUNT_STALE_VERSION", "BUDGET_ACCOUNT_UNKNOWN_ACCOUNT",
+    "BUDGET_ACCOUNT_UNKNOWN_METER",
+  ]);
+});
+
+/** The settlement view is sized so the whole admission is reserved and AVAILABLE reaches zero,
+ * which is what `closeSettledView` requires — a hand-set view would not prove the chain. */
+const SETTLE_VIEW: BudgetAvailableView = {
+  accountId: "account:settle", state: "OPEN", version: 4, meters: [zero("usd", 10)],
+};
+const SETTLE_ADMISSION: AdmissionRequest = {
+  admissionRef: "admission:settle", expectedVersion: 4, amounts: LINES,
+};
+function settlementOf(result: BudgetSettlementResult): SettlementRecord {
+  if (!result.ok || result.settlement === null) {
+    throw new Error(result.ok ? "no settlement"
+      : result.issues.map((issue: BudgetSettlementIssue) => issue.code).join(","));
+  }
+  return result.settlement;
+}
+function settlementCodes(result: BudgetSettlementResult): readonly BudgetSettlementIssueCode[] {
+  expect(result.ok).toBe(false);
+  if (result.ok) return [];
+  return result.issues.map((issue: BudgetSettlementIssue) => issue.code);
+}
+function settlementView(result: BudgetSettlementResult): BudgetAvailableView {
+  expect(result.ok).toBe(true);
+  return result.view;
+}
+/** Drives the published prefix so the settlement input is a real reservation, never a literal. */
+function activated(): { reservation: ReservationRecord; view: BudgetAvailableView } {
+  const admitted = scheduler.reserveForAdmission(SETTLE_VIEW, SETTLE_ADMISSION, GATE);
+  if (!admitted.ok) throw new Error(admitted.issues.map((issue) => issue.code).join(","));
+  const command: ReservationActivateCommand = { expectedVersion: 0, attemptRef: "attempt:1" };
+  const live = scheduler.activateReservation(admitted.view, admitted.reservation, command);
+  if (!live.ok) throw new Error(live.issues.map((issue) => issue.code).join(","));
+  return { reservation: live.reservation, view: live.view };
+}
+const SETTLE_COMMAND: SettleCommand =
+  { expectedViewVersion: 5, expectedReservationVersion: 1, prior: null };
+const NO_EVIDENCE: SettleEvidence = { measurements: [] };
+/** Settles with no receipt at all: the units are HELD, never silently committed or refunded. */
+function quarantined(): { settlement: SettlementRecord; view: BudgetAvailableView } {
+  const live = activated();
+  const result = scheduler.settleReservation(live.view, live.reservation, NO_EVIDENCE,
+    SETTLE_COMMAND);
+  return { settlement: settlementOf(result), view: settlementView(result) };
+}
+
+it("settles an unmeasured reservation into a quarantined hold through the root exports", () => {
+  const live = activated();
+  const result = scheduler.settleReservation(live.view, live.reservation, NO_EVIDENCE,
+    SETTLE_COMMAND);
+  const settlement: SettlementRecord = settlementOf(result);
+  const state: SettlementState = settlement.state;
+  const line: SettlementLine | undefined = settlement.lines[0];
+  const disposition: LineDisposition | undefined = line?.disposition;
+  const overrun: readonly BudgetOverrun[] = settlement.overrun;
+  expect([state, disposition]).toEqual(["QUARANTINED", "UNKNOWN_HELD"]);
+  expect(line).toEqual({ meter: "usd", reserved: 10, committed: 0, refunded: 0, quarantined: 10,
+    disposition: "UNKNOWN_HELD", identity: null, sequence: null });
+  expect(settlement.settlementId)
+    .toBe(scheduler.deriveSettlementId(live.reservation.reservationId));
+  expect([...overrun]).toEqual([]);
+  expect(settlementView(result).meters)
+    .toEqual([{ meter: "usd", available: 0, reserved: 0, quarantined: 10, committed: 0 }]);
+  expect(scheduler.SETTLEMENT_STATES).toStrictEqual(["QUARANTINED", "SETTLED", "WRITTEN_OFF"]);
+  expect(scheduler.LINE_DISPOSITIONS).toStrictEqual(["EXACT", "LOWER_BOUND", "UNKNOWN_HELD",
+    "CONSERVATIVE_WRITE_OFF", "NEVER_STARTED_REFUND"]);
+});
+
+it("reconciles, writes off and closes a quarantined hold through the root exports", () => {
+  const held = quarantined();
+  const proof: ReconcileEvidence = { measurements: null, neverStartedProofRef: "never:1" };
+  const fence: SettlementCommand = { expectedViewVersion: 6, expectedSettlementVersion: 0 };
+  const refunded = scheduler.reconcileSettlement(held.view, held.settlement, proof, fence);
+  expect(settlementOf(refunded).state).toBe("SETTLED");
+  expect(settlementOf(refunded).lines[0]?.disposition).toBe("NEVER_STARTED_REFUND");
+  expect(settlementView(refunded).meters).toEqual([zero("usd", 10)]);
+
+  // The other exit from the SAME hold: acknowledged conservative write-off commits the units.
+  const ack: ConservativeCommand = { ...fence, acknowledgementRef: "ack:human:1",
+    enforceableUpperBound: true };
+  const written = scheduler.conservativeSettle(held.view, held.settlement, ack);
+  const record: SettlementRecord = settlementOf(written);
+  expect([record.state, record.lines[0]?.disposition, record.unknownExternalLiability])
+    .toEqual(["WRITTEN_OFF", "CONSERVATIVE_WRITE_OFF", false]);
+  const drained: BudgetAvailableView = settlementView(written);
+  expect(drained.meters)
+    .toEqual([{ meter: "usd", available: 0, reserved: 0, quarantined: 0, committed: 10 }]);
+  const close: CloseCommand = { expectedVersion: 7 };
+  expect(settlementView(scheduler.closeSettledView(drained, [record], close)).state).toBe("CLOSED");
+});
+
+it("refuses settling a reservation the root has not activated, by its own reason code", () => {
+  const admitted = scheduler.reserveForAdmission(SETTLE_VIEW, SETTLE_ADMISSION, GATE);
+  if (!admitted.ok) throw new Error("admission refused");
+  // Identity mismatch is checked BEFORE the activation gate, so this single-element array names
+  // the guard that answered — the reservation is honest in every way except its state.
+  expect(settlementCodes(scheduler.settleReservation(admitted.view, admitted.reservation,
+    NO_EVIDENCE, { ...SETTLE_COMMAND, expectedReservationVersion: 0 })))
+    .toEqual(["BUDGET_SETTLEMENT_NOT_ACTIVATED"]);
+  // A still-quarantined settlement is not closable, under a DIFFERENT published code.
+  const held = quarantined();
+  expect(settlementCodes(scheduler.closeSettledView(held.view, [held.settlement],
+    { expectedVersion: 6 }))).toEqual(["BUDGET_SETTLEMENT_ILLEGAL_CLOSE"]);
+  expect(scheduler.BUDGET_SETTLEMENT_ISSUE_CODES).toContain("BUDGET_SETTLEMENT_NOT_ACTIVATED");
+  expect(scheduler.BUDGET_SETTLEMENT_ISSUE_CODES.length).toBe(16);
 });
