@@ -63,9 +63,27 @@ afterEach(() => {
   cleanupRestoreHarnesses();
 });
 afterAll(() => {
+  // Close every tracked store FIRST: three fixture tests never closed theirs, and a
+  // held SQLite handle turns the rmSync below into a guaranteed EPERM on its root.
+  while (openedStores.length > 0) {
+    try {
+      openedStores.pop()?.close();
+    } catch {
+      // Already closed by a test's own finally — double-close is not a defect here.
+    }
+  }
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    if (root === undefined) continue;
+    try {
+      // 20×250ms: under full-fleet parallelism a trailing child/scanner handle can
+      // hold the scratch root past 5×100ms. Seen reddening the whole file 2026-08-18.
+      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
+    } catch (error) {
+      // Best-effort per root: one held handle must neither fail a green suite nor
+      // abort cleanup of the remaining roots. The OS temp cleaner owns the leftover.
+      console.warn(`scratch root left behind: ${root}`, error);
+    }
   }
 });
 
@@ -75,8 +93,12 @@ function scratch(label: string): string {
   return root;
 }
 
+/** Every store this module opens, closed by afterAll before its root is removed. */
+const openedStores: SqliteEventStore[] = [];
+
 function readyStore(root: string): SqliteEventStore {
   const store = openHarnessStore(join(root, "project.db"));
+  openedStores.push(store);
   seedReadyProject(store);
   return store;
 }

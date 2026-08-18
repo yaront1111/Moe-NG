@@ -114,7 +114,9 @@ it("refuses tracked bytes changed after containment observation as stale", () =>
   } finally {
     rmSync(repository.root, { force: true, recursive: true });
   }
-});
+  // 30s: each case runs real execFileSync git work (~3s unloaded); the 5s default
+  // times out under full-fleet parallelism. QA reject on task-a3e8a02d named this.
+}, 30_000);
 
 it("refuses an inode swap hidden inside an already-dirty observation", () => {
   const repository = fixture();
@@ -136,7 +138,7 @@ it("refuses an inode swap hidden inside an already-dirty observation", () => {
   } finally {
     rmSync(repository.root, { force: true, recursive: true });
   }
-});
+}, 30_000);
 
 it("refuses a directory link swapped after containment observation as stale", () => {
   const repository = fixture();
@@ -158,4 +160,4 @@ it("refuses a directory link swapped after containment observation as stale", ()
     rmSync(repository.root, { force: true, recursive: true });
     rmSync(outside, { force: true, recursive: true });
   }
-});
+}, 30_000);
