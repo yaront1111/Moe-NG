@@ -10,7 +10,7 @@
  * execution call site exists at all.
  */
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -44,13 +44,28 @@ let sourceCommit = "";
 let baseline: StoreSnapshot | null = null;
 const armSnapshots: StoreSnapshot[] = [];
 
+/**
+ * The main database file AND its write-ahead log: in WAL mode a durable write
+ * lands in `-wal` first, so digesting only the main file could read as unchanged
+ * while an event was in fact committed. `-shm` is excluded on purpose - it is
+ * mutated by plain READS and would make the invariant flaky rather than strict.
+ */
+function storeBytesDigest(): string {
+  const hash = createHash("sha256");
+  for (const suffix of ["", "-wal"]) {
+    const path = `${storePath}${suffix}`;
+    hash.update(suffix).update(existsSync(path) ? readFileSync(path) : Buffer.alloc(0));
+  }
+  return hash.digest("hex");
+}
+
 function snapshotStore(): StoreSnapshot {
   const open = store;
   if (open === null) throw new Error("scratch store is not open");
   const stat = statSync(storePath);
   return {
     decisions: open.readCommandDecisionsAfter(0n, 100).items.length,
-    digest: createHash("sha256").update(readFileSync(storePath)).digest("hex"),
+    digest: storeBytesDigest(),
     horizon: open.readEventHorizon().toString(),
     mtimeMs: stat.mtimeMs,
   };
@@ -73,7 +88,7 @@ afterAll(() => {
   store?.close();
   store = null;
   closedStore = null;
-  rmSync(root, { force: true, recursive: true });
+  if (root !== "") rmSync(root, { force: true, maxRetries: 3, recursive: true, retryDelay: 50 });
 });
 
 const capabilityRows = (provider: ProviderId): readonly ShadowRow[] =>
@@ -97,14 +112,14 @@ describe("provider shadow matrix — coverage", () => {
     const roster = CAPABILITY_ROSTERS[provider];
     expect(roster.length).toBeGreaterThan(0);
     const covered = capabilityRows(provider);
-    expect(covered.length).toBe(roster.length * PLATFORM_CASES.length);
     for (const platform of PLATFORM_CASES) {
       const onPlatform = covered.filter((entry) => entry.platform === platform.id);
-      expect(onPlatform.length).toBe(roster.length);
       const missing = roster.filter((capability) =>
         !onPlatform.some((entry) => entry.subject === capability));
-      expect(missing).toStrictEqual([]);
+      expect(missing, `uncovered on ${platform.id}`).toStrictEqual([]);
+      expect(onPlatform.length).toBe(roster.length);
     }
+    expect(covered.length).toBe(roster.length * PLATFORM_CASES.length);
   });
 
   it("keeps the two published rosters distinct rather than assuming they agree", () => {

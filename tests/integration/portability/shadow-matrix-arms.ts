@@ -15,7 +15,9 @@
  * no arm reaches a launcher: the Claude side stops at construction, at a request
  * refusal raised before the store is touched, and at the durable reader.
  */
-import { createFoundationAttemptService, readFoundationAttemptRecord } from "@moe/daemon";
+import {
+  DAEMON_FOUNDATION_ATTEMPT, createFoundationAttemptService, readFoundationAttemptRecord,
+} from "@moe/daemon";
 import {
   CODEX_ACCEPTED_SCHEMA_VERSIONS, CODEX_MIRRORED_SKILL_RENDERER_INPUT_VERSION,
   buildCodexRuntimeObservation, buildProviderRuntimeObservation, probeCodexRuntime,
@@ -27,74 +29,16 @@ import type {
 import type { SqliteEventStore } from "@moe/store";
 
 import {
-  CAPABILITY_ROSTERS, HOSTILE_PLATFORM, PLATFORM_CASES, PLATFORM_NEUTRAL,
+  CAPABILITY_ROSTERS, CLOSURE_SHA, FIXED_CLOCK, HOSTILE_PLATFORM, OVERLONG, PLATFORM_CASES,
+  PLATFORM_NEUTRAL, acceptedCodexReport, firstPlatform, portFor, row, throwingPort, withheld,
 } from "./shadow-matrix-cases.js";
-import type { PlatformCase, ProviderId, RowSubject, Verdict } from "./shadow-matrix-cases.js";
-
-const FIXED_CLOCK = { observedAt: (): string => "2026-08-18T00:00:00.000Z" };
-const CLOSURE_SHA = "a".repeat(64);
-const OVERLONG = "v".repeat(500);
-
-/** A probe report with a provable observation behind every capability. */
-function acceptedCodexReport(): Record<string, unknown> {
-  return {
-    cancelObservation: { requestedAtSequence: 1, terminatedAtSequence: 2 },
-    cwdObservation: { observedCwd: "/work/moe", requestedCwd: "/work/moe" },
-    declaredContextLimit: { kind: "EXACT_TOKENS", tokens: 272_000 },
-    helpText: "codex --help",
-    pinningMethod: "CONTENT_ADDRESSED_COPY",
-    processTreeObservation: { childrenAfter: 0, childrenBefore: 2 },
-    rawSampleBase64: Buffer.from("raw codex bytes", "utf8").toString("base64"),
-    reportedVersion: "codex-cli 1.4.2",
-    resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: "/opt/codex/bin/codex", sha256: CLOSURE_SHA }],
-    resumeClaim: "documents --resume",
-    runEnumeration: { enumeratedRunIds: ["run-1"], provenAbsentRunId: "run-2" },
-    schemaVersion: "codex-stream-json/1",
-    structuredSample: { jsonLines: ['{"type":"item.completed"}'] },
-    tokenizer: { sampleText: "hello", sampleTokenCount: 1, tokenizerId: "o200k" },
-  };
-}
-
-type ReportPatch = Record<string, unknown>;
-const portFor = (report: ReportPatch): { report: () => never } =>
-  ({ report: () => report as never });
-const throwingPort = { report: (): never => { throw new Error("probe port is unreachable"); } };
+import type { ProviderId, RowSubject } from "./shadow-matrix-cases.js";
 
 function probe(
   port: { readonly report: () => never }, identity: PlatformIdentity,
 ): ReturnType<typeof probeCodexRuntime> {
   return probeCodexRuntime({ clock: FIXED_CLOCK, platformIdentity: identity, port });
 }
-
-interface RowInput {
-  readonly family: RowSubject["family"];
-  readonly platform: string;
-  readonly provenance: RowSubject["provenance"];
-  readonly provider: ProviderId;
-  readonly reasonCode?: string;
-  readonly reasonVocabulary?: RowSubject["reasonVocabulary"];
-  readonly refusedBy?: string;
-  readonly subject: string;
-  readonly unknownBecause?: RowSubject["unknownBecause"];
-  readonly verdict: Verdict;
-}
-
-const row = (sourceCommit: string, input: RowInput): RowSubject => Object.freeze({
-  family: input.family, platform: input.platform, provenance: input.provenance,
-  provider: input.provider, reasonCode: input.reasonCode ?? null,
-  reasonVocabulary: input.reasonVocabulary ?? null, refusedBy: input.refusedBy ?? null,
-  sourceCommit, subject: input.subject, unknownBecause: input.unknownBecause ?? null,
-  verdict: input.verdict,
-});
-
-const withheld = (
-  commit: string, provider: ProviderId, subject: string,
-  unknownBecause: NonNullable<RowSubject["unknownBecause"]>,
-  provenance: RowSubject["provenance"] = "ABSENT_CALL_SITE",
-): RowSubject => row(commit, {
-  family: "SURFACE", platform: PLATFORM_NEUTRAL, provenance, provider, subject,
-  unknownBecause, verdict: "UNKNOWN",
-});
 
 /** Codex capability rows, one per roster member per platform, lifted from the profile. */
 export function codexCapabilityRows(commit: string): readonly RowSubject[] {
@@ -233,12 +177,6 @@ export function codexSurfaceRows(commit: string): readonly RowSubject[] {
   return rows;
 }
 
-function firstPlatform(): PlatformCase {
-  const platform = PLATFORM_CASES[0];
-  if (platform === undefined) throw new Error("platform axis is empty");
-  return platform;
-}
-
 type ObservationLike = { readonly ok: true } | { readonly ok: false; readonly code: string };
 
 function observationRefusal(
@@ -363,7 +301,7 @@ export async function claudeDaemonRows(
   return [
     row(commit, {
       family: "SURFACE", platform: PLATFORM_NEUTRAL, provenance: "CONSTRUCTION",
-      provider: "claude", reasonCode: constructed ? "DAEMON_FOUNDATION_ATTEMPT" : "NOT_CONSTRUCTED",
+      provider: "claude", reasonCode: constructed ? DAEMON_FOUNDATION_ATTEMPT : "NOT_CONSTRUCTED",
       reasonVocabulary: "DAEMON_FOUNDATION_LAYERS", subject: "attempt-service-construction",
       verdict: constructed ? "PASS" : "FAIL",
     }),

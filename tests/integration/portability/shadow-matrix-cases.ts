@@ -184,3 +184,68 @@ export function readSourceCommit(): string {
     throw new Error(`unresolvable HEAD ref ${ref}`);
   }
 }
+
+export const FIXED_CLOCK = { observedAt: (): string => "2026-08-18T00:00:00.000Z" };
+export const CLOSURE_SHA = "a".repeat(64);
+export const OVERLONG = "v".repeat(500);
+
+/** A probe report with a provable observation behind every capability. */
+export function acceptedCodexReport(): Record<string, unknown> {
+  return {
+    cancelObservation: { requestedAtSequence: 1, terminatedAtSequence: 2 },
+    cwdObservation: { observedCwd: "/work/moe", requestedCwd: "/work/moe" },
+    declaredContextLimit: { kind: "EXACT_TOKENS", tokens: 272_000 },
+    helpText: "codex --help",
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    processTreeObservation: { childrenAfter: 0, childrenBefore: 2 },
+    rawSampleBase64: Buffer.from("raw codex bytes", "utf8").toString("base64"),
+    reportedVersion: "codex-cli 1.4.2",
+    resolvedRuntimeClosure: [{ kind: "EXECUTABLE", path: "/opt/codex/bin/codex", sha256: CLOSURE_SHA }],
+    resumeClaim: "documents --resume",
+    runEnumeration: { enumeratedRunIds: ["run-1"], provenAbsentRunId: "run-2" },
+    schemaVersion: "codex-stream-json/1",
+    structuredSample: { jsonLines: ['{"type":"item.completed"}'] },
+    tokenizer: { sampleText: "hello", sampleTokenCount: 1, tokenizerId: "o200k" },
+  };
+}
+
+type ReportPatch = Record<string, unknown>;
+export const portFor = (report: ReportPatch): { report: () => never } =>
+  ({ report: () => report as never });
+export const throwingPort = { report: (): never => { throw new Error("probe port is unreachable"); } };
+
+export interface RowInput {
+  readonly family: RowSubject["family"];
+  readonly platform: string;
+  readonly provenance: RowSubject["provenance"];
+  readonly provider: ProviderId;
+  readonly reasonCode?: string;
+  readonly reasonVocabulary?: RowSubject["reasonVocabulary"];
+  readonly refusedBy?: string;
+  readonly subject: string;
+  readonly unknownBecause?: RowSubject["unknownBecause"];
+  readonly verdict: Verdict;
+}
+
+export const row = (sourceCommit: string, input: RowInput): RowSubject => Object.freeze({
+  family: input.family, platform: input.platform, provenance: input.provenance,
+  provider: input.provider, reasonCode: input.reasonCode ?? null,
+  reasonVocabulary: input.reasonVocabulary ?? null, refusedBy: input.refusedBy ?? null,
+  sourceCommit, subject: input.subject, unknownBecause: input.unknownBecause ?? null,
+  verdict: input.verdict,
+});
+
+export const withheld = (
+  commit: string, provider: ProviderId, subject: string,
+  unknownBecause: NonNullable<RowSubject["unknownBecause"]>,
+  provenance: RowSubject["provenance"] = "ABSENT_CALL_SITE",
+): RowSubject => row(commit, {
+  family: "SURFACE", platform: PLATFORM_NEUTRAL, provenance, provider, subject,
+  unknownBecause, verdict: "UNKNOWN",
+});
+
+export function firstPlatform(): PlatformCase {
+  const platform = PLATFORM_CASES[0];
+  if (platform === undefined) throw new Error("platform axis is empty");
+  return platform;
+}
