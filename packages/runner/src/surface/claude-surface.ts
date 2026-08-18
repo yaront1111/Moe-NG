@@ -136,6 +136,27 @@ export {
   type ClaudeRegistrationCommit,
   type ClaudeStreamEvidence,
 } from "../providers/claude/claude-launcher.js";
+/**
+ * The launch-LIMIT admission vocabulary a launch-template producer composes
+ * against, published from the module that ENFORCES it so exactly one authority
+ * decides a bound. `ClaudeLaunchLimits` is already named by the launcher block.
+ */
+export {
+  CLAUDE_LAUNCH_LIMIT_CEILINGS,
+  CLAUDE_LAUNCH_LIMIT_FIELDS,
+  CLAUDE_LAUNCH_LIMIT_ISSUE_CODES,
+  validateClaudeLaunchLimits,
+  type ClaudeLaunchLimitField,
+  type ClaudeLaunchLimitIssue,
+  type ClaudeLaunchLimitIssueCode,
+  type ClaudeLaunchLimitLayer,
+  type ClaudeLaunchLimitsResult,
+} from "../providers/claude/claude-launcher-input.js";
+/**
+ * Re-exported from the binding the real verifier consumes, never copied: the
+ * producer and the gate that judges it must read one frozen roster.
+ */
+export { CLAUDE_LAUNCH_RESUME_FLAGS } from "../providers/claude/claude-launch-selection.js";
 export {
   CLAUDE_STREAM_ANOMALIES,
   CLAUDE_STREAM_DISPOSITIONS,

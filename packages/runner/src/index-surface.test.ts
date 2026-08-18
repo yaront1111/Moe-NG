@@ -143,6 +143,17 @@ import type {
   ClaudeRuntimePinRequestInput, ClaudeRuntimePinRequestResult,
 } from "@moe/runner";
 /**
+ * The launch-LIMIT admission seam's type closure, through the same root. Type
+ * exports are invisible to the runtime export count below, so the only proof
+ * that this closure is published is that each name is USED in an annotation —
+ * which the limit cases further down do. `ClaudeLaunchLimits` itself is already
+ * named by the launcher block above and is not re-imported here.
+ */
+import type {
+  ClaudeLaunchLimitField, ClaudeLaunchLimitIssue, ClaudeLaunchLimitIssueCode,
+  ClaudeLaunchLimitLayer, ClaudeLaunchLimitsResult,
+} from "@moe/runner";
+/**
  * The DISCOVERY seam's type closure, through the same root. `WindowsProcessUnknown`
  * is one of the four arms its result can carry — a consumer that cannot name it
  * cannot branch on the layer that refused, which is precisely the fact DoD 3
@@ -291,6 +302,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   // itself before it prepares a runtime or consumes a grant.
   ["CLAUDE_LAUNCH_SELECTION_ENV", "object"], ["CLAUDE_LAUNCH_SELECTION_FLAGS", "object"],
   ["CLAUDE_MODEL_EVIDENCE_KINDS", "array"], ["CLAUDE_REASONING_EFFORTS", "array"],
+  // The launch-LIMIT admission vocabulary, published from the module that
+  // ENFORCES it, plus the resume roster the real selection verifier consumes.
+  // The request SNAPSHOT that applies the validator stays internal — see the
+  // withheld-name control below.
+  ["CLAUDE_LAUNCH_LIMIT_CEILINGS", "object"], ["CLAUDE_LAUNCH_LIMIT_FIELDS", "array"],
+  ["CLAUDE_LAUNCH_LIMIT_ISSUE_CODES", "array"], ["CLAUDE_LAUNCH_RESUME_FLAGS", "array"],
+  ["validateClaudeLaunchLimits", "function"],
   // The durable-authority overlay. The FACTORY is published; the shipped default
   // port set behind it is not, so the two authority slots are the only ones a
   // consumer can reach. See the withheld-name control below.
@@ -390,7 +408,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(239);
+  expect(EXPECTED_EXPORTS.length).toBe(244);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -814,17 +832,67 @@ it("withholds the launcher's default ports and internals from the root", () => {
  * and then hand `launchClaude` a different one — the claimed selection and the
  * launched selection would be free to disagree, which is the whole failure this
  * seam exists to make impossible.
+ *
+ * `snapshotClaudeLaunchRequest` is withheld for the same reason: the launcher is
+ * the only thing entitled to apply it to the actual request. Its LIMIT decision
+ * is published separately, as `validateClaudeLaunchLimits` — a producer may ask
+ * whether four bounds are admissible without being handed the seam that decides
+ * what request the launcher will run.
  */
-it("withholds the selection snapshot and verifier from the root", () => {
+it("withholds the selection snapshot, the verifier and the request snapshot", () => {
   const withheld = ["snapshotLaunchSelection", "verifyLaunchSelection", "isHostileObject",
-    "refuseSelection"];
-  expect(withheld.length).toBe(4);
+    "refuseSelection", "snapshotClaudeLaunchRequest"];
+  expect(withheld.length).toBe(5);
   expect(withheld.filter((name) => name in surface)).toEqual([]);
   // Positive control: the same membership test finds the names this seam DOES
   // publish, so the assertion above cannot be passing because `in` is broken.
   expect(["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]
     .filter((name) => name in surface)).toEqual(
     ["CLAUDE_LAUNCH_SELECTION_FLAGS", "CLAUDE_REASONING_EFFORTS"]);
+});
+
+/**
+ * The resume roster, re-exported from the binding the real selection verifier
+ * consumes rather than copied. A daemon that builds a launch template has to
+ * know which argv tokens make a `--model` claim unprovable, and it may not
+ * discover that set by reimplementing it.
+ */
+it("publishes the exact six-member resume roster the verifier applies", () => {
+  expect([...runner.CLAUDE_LAUNCH_RESUME_FLAGS]).toEqual(
+    ["--resume", "-r", "--continue", "-c", "--from-pr", "--cloud"]);
+  expect(runner.CLAUDE_LAUNCH_RESUME_FLAGS.length).toBe(6);
+  expect(Object.isFrozen(runner.CLAUDE_LAUNCH_RESUME_FLAGS)).toBe(true);
+});
+
+/**
+ * The launch-limit admission surface, exercised through the BARE namespace: the
+ * validator, its ceiling table and both closed vocabularies have to be reachable
+ * by a consumer that only holds `@moe/runner`. The accepted arm is kept beside
+ * the refusal — a refusal-only smoke cannot see a ceiling that silently moved
+ * the wrong way. Consumer: task-9a1eb61d566e47838c9f79c030da1f70.
+ */
+it("admits and refuses launch limits through the package root", () => {
+  const fields: readonly ClaudeLaunchLimitField[] = [...runner.CLAUDE_LAUNCH_LIMIT_FIELDS];
+  expect(fields).toEqual(["stdoutBytes", "stderrBytes", "tailBytes", "timeoutMs"]);
+  const codes: readonly ClaudeLaunchLimitIssueCode[] = [...runner.CLAUDE_LAUNCH_LIMIT_ISSUE_CODES];
+  expect(codes).toEqual(["CLAUDE_LAUNCH_LIMITS_MALFORMED", "CLAUDE_LAUNCH_LIMIT_INVALID",
+    "CLAUDE_LAUNCH_LIMIT_EXCEEDED"]);
+  expect(runner.CLAUDE_LAUNCH_LIMIT_CEILINGS).toEqual(
+    { stdoutBytes: 1_048_576, stderrBytes: 1_048_576, tailBytes: 65_536, timeoutMs: 600_000 });
+  const admitted: ClaudeLaunchLimitsResult = runner.validateClaudeLaunchLimits(
+    { stdoutBytes: 1_048_576, stderrBytes: 1_048_576, tailBytes: 65_536, timeoutMs: 600_000 });
+  expect(admitted.ok).toBe(true);
+  if (!admitted.ok) throw new Error("expected admission");
+  const limits: ClaudeLaunchLimits = admitted.limits;
+  expect(limits.tailBytes).toBe(65_536);
+  const refused: ClaudeLaunchLimitsResult = runner.validateClaudeLaunchLimits(
+    { stdoutBytes: 1_048_576, stderrBytes: 1_048_576, tailBytes: 65_537, timeoutMs: 600_000 });
+  expect(refused.ok).toBe(false);
+  if (refused.ok) throw new Error("expected a refusal");
+  const layer: ClaudeLaunchLimitLayer = "LAUNCH_LIMITS";
+  const issue: ClaudeLaunchLimitIssue = refused.issue;
+  expect(issue).toEqual(
+    { code: "CLAUDE_LAUNCH_LIMIT_EXCEEDED", layer, field: "tailBytes" });
 });
 
 /**
