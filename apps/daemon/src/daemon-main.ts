@@ -3,7 +3,11 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { isDependencyProvider, refuseEntry, startDaemon } from "./daemon-entry.js";
-import type { DaemonDependencyProvider, DaemonEntryRefused } from "./daemon-entry.js";
+import type {
+  DaemonDependencyProvider, DaemonEntryRefused, ShutdownResult,
+} from "./daemon-entry.js";
+import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
+import type { FoundationPublishResult } from "./host/foundation-receipts.js";
 
 /**
  * The process wrapper: argv in, exit code out. Kept apart from `daemon-entry`
@@ -11,8 +15,12 @@ import type { DaemonDependencyProvider, DaemonEntryRefused } from "./daemon-entr
  * that only make sense with a real argv and a real signal.
  */
 export interface MainOptions {
+  /** The environment this host was started with; the store identity lives here. */
+  readonly env?: Readonly<Record<string, string | undefined>>;
+  /** The receipt clock, INJECTED: the receipts module itself holds none. */
+  readonly instant?: () => string;
   readonly log?: (line: string) => void;
-  readonly onStarted?: (shutdown: () => Promise<unknown>) => void;
+  readonly onStarted?: (shutdown: (trigger?: string) => Promise<ShutdownResult>) => void;
 }
 
 function flag(argv: readonly string[], name: string): string | null {
@@ -43,6 +51,53 @@ function parsePort(raw: string | null): number | undefined {
   // Anything unparseable falls back to ephemeral rather than to a well-known
   // port: guessing a fixed port is how a transport collides with a live service.
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
+}
+
+/** This entry's identity in a receipt: the control-room HTTP host. */
+const CONTROL_ROOM_ENTRY = "CONTROL_ROOM_HTTP" as const;
+
+/**
+ * Publishes the readiness receipt and returns the drain that publishes the
+ * shutdown half.
+ *
+ * Called only after `startDaemon` answered ok, which is after the boot
+ * reconciliation sweep it runs BEFORE binding: the ordering is inherited from
+ * the entry rather than rebuilt here, so a daemon cannot announce READY while
+ * the last crash is still unclassified. The identities come from the very
+ * variables the shipped dependency provider opens its store with, so a receipt
+ * names the store this process actually serves.
+ */
+function announceHost(
+  shutdown: () => Promise<ShutdownResult>,
+  options: MainOptions,
+  log: (line: string) => void,
+): (trigger?: string) => Promise<ShutdownResult> {
+  const env = options.env ?? process.env;
+  const instant = options.instant ?? ((): string => new Date().toISOString());
+  const identity = {
+    entry: CONTROL_ROOM_ENTRY,
+    pid: process.pid,
+    projectId: env["MOE_PROJECT_ID"] ?? "",
+    storePath: env["MOE_STORE_PATH"] ?? "",
+  };
+  const receipts = createFoundationReceiptPublisher({ sink: log });
+  // A receipt this host cannot honestly stamp is DISCLOSED by code and layer,
+  // never invented and never fatal: the listener is already serving.
+  const disclose = (result: FoundationPublishResult): void => {
+    if (!result.ok) log(`${result.code} ${result.layer}`);
+  };
+  disclose(receipts.publishReadiness({ ...identity, instant: instant() }));
+  return async (trigger = "PROGRAMMATIC_STOP"): Promise<ShutdownResult> => {
+    const stopped = await shutdown();
+    // The entry owns the lifecycle. A second drain is ITS refusal, copied
+    // verbatim, and publishes no second receipt.
+    if (!stopped.ok) {
+      log(`${stopped.code} ${stopped.layer}`);
+      return stopped;
+    }
+    disclose(receipts.publishShutdown({ ...identity, instant: instant(), trigger }));
+    return stopped;
+  };
 }
 
 export async function runDaemonMain(
@@ -79,7 +134,7 @@ export async function runDaemonMain(
     return 1;
   }
 
-  options.onStarted?.(started.shutdown);
+  options.onStarted?.(announceHost(() => started.shutdown(), options, log));
   return 0;
 }
 
@@ -88,12 +143,14 @@ if (meta.main === true) {
   process.exitCode = await runDaemonMain(process.argv.slice(2), {
     onStarted: (shutdown) => {
       // Closed on every exit path. A surviving handle keeps its port and
-      // surfaces later on Windows as EBUSY rather than as the real error.
-      const stop = (): void => {
-        void shutdown().then(() => process.exit(0));
+      // surfaces later on Windows as EBUSY rather than as the real error. The
+      // signal NAME travels into the shutdown receipt, so a supervisor reading
+      // stdout can tell an operator stop from a supervisor kill.
+      const stop = (trigger: "SIGINT" | "SIGTERM") => (): void => {
+        void shutdown(trigger).then(() => process.exit(0));
       };
-      process.once("SIGINT", stop);
-      process.once("SIGTERM", stop);
+      process.once("SIGINT", stop("SIGINT"));
+      process.once("SIGTERM", stop("SIGTERM"));
     },
   });
 }
