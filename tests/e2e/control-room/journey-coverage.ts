@@ -50,7 +50,7 @@ export const GRAPH_OWNER = "task-779d6804d4a44440ad4d48a832a351d6 (ARCHIVED — 
  * The honest answer for every daemon-backed scenario, and it is not the graph task.
  * A real transport landed (task-318379ea, DONE: apps/daemon http-listener +
  * packages/control-room-client client-transport), and apps/control-room/src/main.tsx
- * already has a `?live=1` path. What does not exist anywhere is a browser lane that
+ * now mounts that live path by DEFAULT. What does not exist anywhere is a browser lane that
  * STARTS a daemon, seeds a scenario fixture and serves the bundle against it.
  * task-3f503779 used to hold that and was archived for duplicating this task, so this
  * cause currently has NO owner on the board.
@@ -197,9 +197,9 @@ export const LOADING_OWNER =
  * SURFACE_NOT_COMPOSED, never SURFACE_ABSENT — a file-existence check passes for
  * every one of them.
  *
- * IT IS UNREACHABLE ON BOTH SERVED PATHS, measured rather than assumed:
- *   main.tsx:40 -> ControlRoomScaffold -> kernel.tsx -> ControlRoomPreview, which
- *   contains no `loading` at all; and main.tsx's `?live=1` branch into
+ * IT IS UNREACHABLE ON EVERY SERVED PATH, measured rather than assumed:
+ *   main.tsx -> shell-mode-view.tsx -> ControlRoomScaffold -> kernel.tsx ->
+ *   ControlRoomPreview, which contains no `loading` at all; and the default arm into
  *   live/live-app.tsx, which contains none either. The only production module that
  *   ever sets `loading: true` is a11y/ui-wide-core-fixtures.tsx, imported solely by
  *   tests and by another fixture module.
@@ -213,8 +213,8 @@ export const LOADING_RECORD = Object.freeze({
   cause: "SURFACE_NOT_COMPOSED" as const,
   id: "CR-LOADING",
   missingInput:
-    "No served entry point ever passes loading=true. ControlRoomPreview (the fixture path) "
-    + "and live/live-app.tsx (the ?live=1 path) both contain zero references to `loading`, so "
+    "No served entry point ever passes loading=true. ControlRoomPreview (the ?fixtures=1 path) "
+    + "and live/live-app.tsx (the default live path) both contain zero references to `loading`, so "
     + "cr.board.skeleton, cr.goals.loading, cr.health.loading and cr.health.skeleton render in "
     + "no browser despite existing as committed production. Needs a served composition that "
     + "supplies a pending state; creating one from this gate would be fabricated evidence.",

@@ -24,8 +24,8 @@ contracts rather than from contracts into consumers.
   packages — see the README "What runs today" list for one-line roles
   (`benchmark` is DEVELOPMENT_ONLY and parked to v0.2).
 - `apps/daemon`: bounded ingress composing the workspace packages.
-- `apps/control-room`: the board UI (fixtures by default; `?live=1` is
-  development-only).
+- `apps/control-room`: the board UI (the live daemon by default when the build
+  carries credentials; `?fixtures=1` for the frozen development fixtures).
 - `adapters/ide-contract`, `adapters/jetbrains`: implemented external
   integration boundaries; IDE/portability scope is parked to v0.2.
 

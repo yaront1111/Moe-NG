@@ -80,10 +80,8 @@ node src/daemon-main.ts --dependencies=src/daemon-store-dependencies.ts \
   --port=39123 --csrf-token=<dev-token>
 ```
 
-Loopback-only by design. The control room dev server proxies to it:
-`apps/control-room && pnpm dev`, then `http://localhost:5173/?live=1` with
-`VITE_MOE_LIVE_CSRF` / `VITE_MOE_LIVE_CREDENTIAL` set — live board with
-dispatch and drag.
+Loopback-only by design. The control room reaches it through the dev server's
+proxy — see "Control room (serving story)" below.
 
 Reading the ledger by hand (what the live board does):
 
@@ -118,6 +116,49 @@ already-consumed cursors refuse with `SUBSCRIPTION_CURSOR_NOT_ISSUED`. The proto
 Authentication runs before compatibility or body decoding. `/affordances/read`
 takes `{}` or `{"projectId":"<the bound project>"}` and answers the same
 SURFACE the MCP `work_get_context` tool returns.
+
+## Control room (serving story)
+
+The board's DEFAULT view is the live daemon. There is no flag to turn live on.
+
+```
+MOE_DAEMON_ORIGIN=http://127.0.0.1:39123 \
+VITE_MOE_LIVE_CSRF=<dev-token> \
+VITE_MOE_LIVE_CREDENTIAL=$MOE_DAEMON_CREDENTIAL \
+  pnpm --filter @moe/control-room dev
+```
+
+Then open `http://localhost:5173/`. Three arms, and which one you get is decided
+by `apps/control-room/src/shell-mode.ts`:
+
+| URL | Requires | What renders |
+| --- | --- | --- |
+| `/` | both `VITE_MOE_LIVE_*` values | the live board, read-only except the approval decision |
+| `/?fixtures=1` | nothing | frozen fixtures under a persistent `DEVELOPMENT_ONLY/NOT_CONFIRMATORY` banner |
+| `/` with either value unset | — | a notice naming both variables; **never** fixtures standing in for live data |
+
+`/?live=1` still resolves to the live board, so older links keep working. An
+explicit `?fixtures=1` wins if both appear in the same URL.
+
+The two `VITE_MOE_LIVE_*` values are read at BUILD time, not at page load: change
+either and the dev server must be restarted (`pnpm build`, for a preview build).
+`VITE_MOE_LIVE_CREDENTIAL` must be a credential the daemon already accepts —
+rotate the daemon's and a stale build surfaces the daemon's own auth refusal on
+the board rather than an empty one.
+
+**Topology, and its limit.** The browser never talks to the daemon directly. Vite
+proxies `/command`, `/events/read`, `/events/ack`, `/affordances/read` and
+`/documents/dossier/read` to `MOE_DAEMON_ORIGIN` (default `127.0.0.1:39123`) and
+REWRITES the `Origin` header to that target — `apps/control-room/vite.config.ts`.
+That rewrite is load-bearing: the daemon's listener guards refuse a non-loopback
+`Origin` with `LISTENER_ORIGIN_INVALID`, so serving the built bundle from any
+origin the daemon does not recognise fails closed rather than degrading. Opening
+`dist/index.html` from the filesystem fails the same way.
+
+This is the v0.1 topology: a trusted local workspace, one operator, dev server in
+front of a loopback daemon. Production-honest serving — a real origin, a real
+session handshake, credentials that are not build-time constants — is explicitly
+deferred to v0.2 and nothing here should be read as it.
 
 ## MCP surfaces (what an agent session sees)
 
@@ -191,12 +232,21 @@ node's `node.deliver` step is READY, printing every dispatched command id. Any
 daemon refusal is echoed with the daemon's own code and layer and exits nonzero.
 
 The DAEMON must be started with `MOE_APPROVAL_MODE=SPEED` and
-`MOE_SPEED_MODE_DELAY_MS=<ms>` for the approval step to proceed without a human.
+`MOE_SPEED_MODE_DELAY_MS=0` for the approval step to proceed without a human.
 Both are required together and the decoder fails closed by design
 (`approval-policy-settings.ts`), so a daemon started without them answers the
 seed's last command `APPROVAL_HUMAN_REVIEW_REQUIRED` / `APPROVAL_POLICY` — which
-the seed echoes verbatim. That is the daemon's policy, not a seed setting: leave
+the seed echoes verbatim. The delay must be exactly `0`: this approval path is
+synchronous and holds no timer, so `approvalDelayDisposition` (approval-gate.ts)
+calls any positive delay DEFERRED and answers the same refusal. Measured — a
+daemon started at `MOE_SPEED_MODE_DELAY_MS=1` commits the first six commands and
+refuses `approval.decide`. That is the daemon's policy, not a seed setting: leave
 those two unset when you WANT a human to approve on the board.
+
+The DAEMON must ALSO see the same `MOE_NODE_SPECS_DIR`. It loads the node specs
+itself (`daemon-store-dependencies.ts`), so a daemon started without it publishes
+no `node.deliver` step: every command still commits and the seed then exits
+nonzero with `node.deliver@<nodeRef> is absent on /affordances/read`.
 
 It reads four variables and refuses each missing one BY NAME, never printing a
 value: `MOE_DAEMON_ORIGIN` (a bare origin — the Origin guard compares it

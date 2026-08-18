@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { DragEvent, JSX } from "react";
+import type { JSX } from "react";
 
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
@@ -7,12 +7,21 @@ import { dispatchAffordance } from "./live-dispatch.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
 
 /**
- * The chain board: what the daemon offers, blocks, and has committed — and the
- * one interaction the truth model allows: handing a daemon-minted affordance
- * back to the daemon. Dragging a READY card onto Committed dispatches exactly
- * that; the card itself only moves when the next surface poll says the ledger
- * moved. Any other drop refuses visibly with the reason.
+ * The chain board: what the daemon offers, blocks, and has committed.
+ *
+ * READ-ONLY, with exactly one exception. The board reports the daemon's own
+ * chain and hands nothing back except {@link BOARD_DISPATCH_COMMAND_KIND} — the
+ * approval decision, which a human is the only legitimate author of. Every other
+ * offer the daemon lists is rendered as the fact it is and nothing more: there is
+ * no control, no drag target, and no code path that can emit it from here.
+ *
+ * The drag-to-dispatch gesture that used to sit on READY cards is gone with the
+ * rest of the mutation surface. Nothing on this board moves a card either; only
+ * the next surface poll does, because only the ledger moves cards.
  */
+
+/** The one command kind this surface may hand back to the daemon. */
+export const BOARD_DISPATCH_COMMAND_KIND = "approval.decide" as const;
 
 export interface LiveBoardProps {
   readonly client: ControlRoomClientSurface;
@@ -33,7 +42,19 @@ const COLUMNS = [
   { key: "COMMITTED", title: "Committed" },
 ] as const;
 
-const DRAG_STEP_IDENTITY = "application/x-moe-surface-step";
+/**
+ * The whole dispatch rule, in one place, exported so it can be swept over every
+ * command kind rather than inferred from whichever fixture a test happened to
+ * render. The board renders its control through this function and calls
+ * `dispatchAffordance` from nowhere else, so a kind this refuses has no path out.
+ *
+ * READY is required as well as the kind: an approval the ledger has already
+ * committed, or one still waiting on prerequisites, is a fact to read, not an
+ * offer to hand back.
+ */
+export function boardMayDispatch(step: SurfaceStep): boolean {
+  return step.status === "READY" && step.kind === BOARD_DISPATCH_COMMAND_KIND;
+}
 
 function stepIdentity(step: SurfaceStep): string {
   return JSON.stringify([step.kind, step.aggregateId, step.version]);
@@ -57,7 +78,6 @@ function offerFor(
 export function LiveBoard(props: LiveBoardProps): JSX.Element {
   const { client, frame, sessionCredential, transport } = props;
   const [reports, setReports] = useState<Readonly<Record<string, CardReport>>>({});
-  const [dropNote, setDropNote] = useState("");
   const pendingDispatches = useRef(new Set<string>());
 
   if (frame === null) {
@@ -115,30 +135,8 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     }));
   };
 
-  const onDropCommitted = (event: DragEvent): void => {
-    event.preventDefault();
-    const identity = event.dataTransfer.getData(DRAG_STEP_IDENTITY);
-    const step = frame.steps.find(
-      (entry) => entry.status === "READY" && stepIdentity(entry) === identity,
-    );
-    if (step === undefined) {
-      setDropNote("the daemon offers no command for this move");
-      return;
-    }
-    setDropNote("");
-    void dispatch(step);
-  };
-
-  const refuseDrop = (event: DragEvent): void => {
-    event.preventDefault();
-    setDropNote("the daemon offers no command for this move");
-  };
-
   return (
     <div data-testid="cr.liveboard">
-      {dropNote === "" ? null : (
-        <p data-testid="cr.liveboard.dropnote" role="status">{dropNote}</p>
-      )}
       <div className="cr-liveboard-columns" data-testid="cr.liveboard.columns">
         {COLUMNS.map((column) => (
           <section
@@ -147,8 +145,6 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
             data-column={column.key}
             data-testid={`cr.liveboard.column.${column.key.toLowerCase()}`}
             key={column.key}
-            onDragOver={(event) => { event.preventDefault(); }}
-            onDrop={column.key === "COMMITTED" ? onDropCommitted : refuseDrop}
           >
             <h2>{column.title}</h2>
             {frame.steps.filter((step) => step.status === column.key).map((step) => {
@@ -161,11 +157,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                   className="cr-liveboard-card"
                   data-status={step.status}
                   data-testid={`cr.liveboard.card.${key}`}
-                  draggable={step.status === "READY" && !dispatchPending}
                   key={identity}
-                  onDragStart={(event) => {
-                    event.dataTransfer.setData(DRAG_STEP_IDENTITY, stepIdentity(step));
-                  }}
                 >
                   <header>
                     <span>{step.kind}</span>
@@ -177,7 +169,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                       needs {step.missing.join(", ")}
                     </small>
                   ) : null}
-                  {step.status === "READY" ? (
+                  {boardMayDispatch(step) ? (
                     <button
                       aria-label={dispatchLabel(step)}
                       data-testid={`cr.liveboard.dispatch.${step.kind}`}

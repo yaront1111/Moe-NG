@@ -3,10 +3,11 @@ import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
-import { ControlRoomScaffold } from "./kernel.js";
-import { LiveControlRoom, resolveLiveSetupFromBuild } from "./live/live-app.js";
+import { resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
+import { resolveShellMode } from "./shell-mode.js";
+import { ShellModeRoot } from "./shell-mode-view.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
@@ -31,13 +32,19 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
 });
 
 /**
- * `?live=1` mounts the DEVELOPMENT-ONLY live attachment (see live/live-app.tsx);
- * the flag carries no secret — credentials arrive via Vite env into headers only.
- * Anything else mounts the fixture experience.
+ * The daemon is the DEFAULT: a credentialed build attaches to it with no flag at
+ * all. Frozen fixtures are behind an explicit `?fixtures=1` and render under a
+ * banner saying so, and a build with no credentials gets a notice naming what is
+ * missing — never fixtures standing in silently for live data.
+ *
+ * No URL flag carries a secret; credentials arrive via Vite env into headers
+ * only. See `shell-mode.ts` for the decision and `shell-mode-view.tsx` for what
+ * each arm paints.
  */
 function chooseRoot(): JSX.Element {
-  const live = new URLSearchParams(globalThis.location?.search ?? "").get("live") === "1";
-  return live ? <LiveControlRoom setup={resolveLiveSetupFromBuild()} /> : <ControlRoomScaffold />;
+  const setup = resolveLiveSetupFromBuild();
+  const mode = resolveShellMode(globalThis.location?.search ?? "", setup);
+  return <ShellModeRoot mode={mode} setup={setup} />;
 }
 
 /** Mounts the application into a caller-supplied container and returns its root. */

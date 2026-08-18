@@ -27,9 +27,11 @@ entry points, environment, and knobs):
   READY, unclaimed non-human steps with a scoped agent session and a real
   `claude -p` process; human approval and goal closure are never delegated. A
   daemon-side development verifier reruns a node test before acceptance.
-- **Control room** (`apps/control-room`): the truth-preserving board; `?live=1`
-  over the Vite proxy renders the daemon's own offer surface and dispatches
-  offers back verbatim.
+- **Control room** (`apps/control-room`): the truth-preserving board. It renders
+  the daemon's own offer surface by DEFAULT over the Vite proxy, read-only apart
+  from the approval decision, which it hands back verbatim. Frozen development
+  fixtures live behind `?fixtures=1` and render under a banner saying so; a build
+  with no credentials shows a configuration notice, never fixtures in their place.
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
   decision storage, subscriptions, snapshots, recovery), `runner`,

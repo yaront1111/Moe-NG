@@ -27,14 +27,6 @@ function admittedClient() {
   return null;
 }
 
-function dragTransfer(): DataTransfer {
-  const entries = new Map<string, string>();
-  return {
-    getData: (format: string): string => entries.get(format) ?? "",
-    setData: (format: string, value: string): void => { entries.set(format, value); },
-  } as DataTransfer;
-}
-
 describe("frameOfSurface", () => {
   it("copies SURFACE steps and offers verbatim", () => {
     const frame = frameOfSurface({
@@ -170,15 +162,23 @@ describe("createBoardFeed", () => {
 describe("LiveBoard", () => {
   afterEach(cleanup);
 
+  /**
+   * `approval.decide` throughout: it is the ONE kind the board still dispatches
+   * (see live-board-readonly.test.tsx), so a fixture built on any other kind
+   * would now be asserting over a control that no longer exists.
+   */
   const READY_SURFACE = frameOfSurface({
     nextAllowedCommands: [{
       commandEnvelopeVersion: "moe-runtime-command/1", commandId: "afford-77",
-      commandKind: "project.register", expectedVersion: 0,
-      inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: "proj-x",
+      commandKind: "approval.decide", expectedVersion: 0,
+      inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: "approval-x",
     }],
     outcome: "SURFACE",
     steps: [
-      { aggregateId: "proj-x", kind: "project.register", missing: [], status: "READY", version: 0 },
+      {
+        aggregateId: "approval-x", kind: "approval.decide", missing: [],
+        status: "READY", version: 0,
+      },
     ],
   });
 
@@ -191,7 +191,7 @@ describe("LiveBoard", () => {
     void gate;
     const client = {
       commands: {
-        "project.register": (affordance: unknown, caller: unknown) => ({
+        "approval.decide": (affordance: unknown, caller: unknown) => ({
           envelope: {
             ...(affordance as Record<string, unknown>),
             ...(caller as Record<string, unknown>),
@@ -220,9 +220,9 @@ describe("LiveBoard", () => {
         }}
       />,
     );
-    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.project.register"));
+    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.approval.decide"));
     await waitFor(() => {
-      expect(screen.getByTestId("cr.liveboard.report.project.register@proj-x").textContent)
+      expect(screen.getByTestId("cr.liveboard.report.approval.decide@approval-x").textContent)
         .toContain("EFFECTS_COMMITTED");
     });
     const envelope = sent[0] as unknown as Record<string, unknown>;
@@ -237,7 +237,7 @@ describe("LiveBoard", () => {
     let sends = 0;
     const client = {
       commands: {
-        "project.register": (affordance: unknown, caller: unknown) => ({
+        "approval.decide": (affordance: unknown, caller: unknown) => ({
           envelope: {
             ...(affordance as Record<string, unknown>),
             ...(caller as Record<string, unknown>),
@@ -254,7 +254,7 @@ describe("LiveBoard", () => {
         transport={{ sendCommand: () => { sends += 1; return pending; } }}
       />,
     );
-    const button = screen.getByTestId("cr.liveboard.dispatch.project.register");
+    const button = screen.getByTestId("cr.liveboard.dispatch.approval.decide");
 
     fireEvent.click(button);
     fireEvent.click(button);
@@ -272,26 +272,34 @@ describe("LiveBoard", () => {
     await waitFor(() => { expect((button as HTMLButtonElement).disabled).toBe(false); });
   });
 
-  it("dispatches the exact dragged target when command kinds repeat", async () => {
+  /**
+   * This used to be driven by dragging one of two same-kind cards onto Committed.
+   * The drag surface is gone, but the claim underneath it is not: with two cards
+   * of the SAME kind on the board, the control the operator used must dispatch
+   * that card's affordance and not its neighbour's. It is now driven through the
+   * target-specific accessible name, which is the only thing distinguishing the
+   * two controls once the shared `data-testid` no longer can.
+   */
+  it("dispatches the exact target the operator used when command kinds repeat", async () => {
     const repeatedKindSurface = frameOfSurface({
       nextAllowedCommands: [
         {
-          commandId: "afford-a", commandKind: "project.register", expectedVersion: 1,
-          targetAggregateId: "proj-a",
+          commandId: "afford-a", commandKind: "approval.decide", expectedVersion: 1,
+          targetAggregateId: "approval-a",
         },
         {
-          commandId: "afford-b", commandKind: "project.register", expectedVersion: 2,
-          targetAggregateId: "proj-b",
+          commandId: "afford-b", commandKind: "approval.decide", expectedVersion: 2,
+          targetAggregateId: "approval-b",
         },
       ],
       outcome: "SURFACE",
       steps: [
         {
-          aggregateId: "proj-a", kind: "project.register", missing: [],
+          aggregateId: "approval-a", kind: "approval.decide", missing: [],
           status: "READY", version: 1,
         },
         {
-          aggregateId: "proj-b", kind: "project.register", missing: [],
+          aggregateId: "approval-b", kind: "approval.decide", missing: [],
           status: "READY", version: 2,
         },
       ],
@@ -299,7 +307,7 @@ describe("LiveBoard", () => {
     const sent: RuntimeCommandEnvelope[] = [];
     const client = {
       commands: {
-        "project.register": (affordance: unknown, caller: unknown) => ({
+        "approval.decide": (affordance: unknown, caller: unknown) => ({
           envelope: {
             ...(affordance as Record<string, unknown>),
             ...(caller as Record<string, unknown>),
@@ -328,19 +336,15 @@ describe("LiveBoard", () => {
         }}
       />,
     );
-    const transfer = dragTransfer();
-    fireEvent.dragStart(screen.getByTestId("cr.liveboard.card.project.register@proj-b"), {
-      dataTransfer: transfer,
-    });
-    fireEvent.drop(screen.getByTestId("cr.liveboard.column.committed"), {
-      dataTransfer: transfer,
-    });
+    await userEvent.click(screen.getByRole("button", {
+      name: "Dispatch approval.decide for approval-b, version 2",
+    }));
 
     await waitFor(() => { expect(sent).toHaveLength(1); });
     expect(sent[0]).toMatchObject({
       commandId: "afford-b",
       expectedVersion: 2,
-      targetAggregateId: "proj-b",
+      targetAggregateId: "approval-b",
     });
   });
 
@@ -349,12 +353,12 @@ describe("LiveBoard", () => {
       connection: "CONNECTED" as const,
       detail: "",
       offers: [{
-        commandId: "afford-old", commandKind: "project.register", expectedVersion: 1,
-        targetAggregateId: "proj-x",
+        commandId: "afford-old", commandKind: "approval.decide", expectedVersion: 1,
+        targetAggregateId: "approval-x",
       }],
       outcome: "SURFACE",
       steps: [{
-        aggregateId: "proj-x", kind: "project.register", missing: [],
+        aggregateId: "approval-x", kind: "approval.decide", missing: [],
         status: "READY" as const, version: 2,
       }],
     };
@@ -367,16 +371,16 @@ describe("LiveBoard", () => {
       />,
     );
 
-    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.project.register"));
+    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.approval.decide"));
 
-    expect(screen.getByTestId("cr.liveboard.report.project.register@proj-x").textContent)
+    expect(screen.getByTestId("cr.liveboard.report.approval.decide@approval-x").textContent)
       .toBe("the daemon offers no command for this move");
   });
 
   it("renders a daemon refusal verbatim on the card", async () => {
     const client = {
       commands: {
-        "project.register": () => ({ envelope: {} as RuntimeCommandEnvelope, ok: true }),
+        "approval.decide": () => ({ envelope: {} as RuntimeCommandEnvelope, ok: true }),
       },
     } as never;
     render(
@@ -396,9 +400,9 @@ describe("LiveBoard", () => {
         }}
       />,
     );
-    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.project.register"));
+    await userEvent.click(screen.getByTestId("cr.liveboard.dispatch.approval.decide"));
     await waitFor(() => {
-      expect(screen.getByTestId("cr.liveboard.report.project.register@proj-x").textContent)
+      expect(screen.getByTestId("cr.liveboard.report.approval.decide@approval-x").textContent)
         .toContain("BOOTSTRAP_PREREQUISITE_MISSING");
     });
   });

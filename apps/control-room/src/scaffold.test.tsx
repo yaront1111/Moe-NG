@@ -31,20 +31,53 @@ afterEach(cleanup);
 const readOwnSource = (fileName: string): string =>
   readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 
+/**
+ * The entry point mounts on evaluation and reads `location.search` while it does,
+ * so each arm needs its own URL in place BEFORE the import and put back after.
+ */
+async function mountEntryPointAt(search: string): Promise<HTMLElement> {
+  const original = globalThis.location.href;
+  const container = document.createElement("div");
+  container.id = "root";
+  document.body.append(container);
+  globalThis.history.replaceState({}, "", search);
+  try {
+    vi.resetModules();
+    await act(async () => void (await import("./main.js")));
+  } finally {
+    globalThis.history.replaceState({}, "", original);
+  }
+  return container;
+}
+
 describe("control-room scaffold mounts", () => {
   it("mounts through the production entry point, not just its exported helper", async () => {
-    const container = document.createElement("div");
-    container.id = "root";
-    document.body.append(container);
+    // Fixtures are behind an EXPLICIT request now; the bare URL is the live board.
+    const container = await mountEntryPointAt("/?fixtures=1");
     try {
-      vi.resetModules();
-      await act(async () => void (await import("./main.js")));
+      expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.context.title").textContent)
         .toBe("Ship the J1 vertical slice");
       expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
       const main = await import("./main.js");
       expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("refuses closed at the real entry point when the build carries no credentials", async () => {
+    // DoD 1's fail-closed clause, asserted at the composition root rather than at
+    // the component: this build has no VITE_MOE_LIVE_* values, and the default URL
+    // must therefore produce a NOTICE — not the frozen fixtures below it.
+    const container = await mountEntryPointAt("/");
+    try {
+      const notice = within(container).getByTestId("cr.config.notice");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CSRF");
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+      expect(container.textContent).not.toContain(CONTROL_ROOM_FIXTURE_KIND);
     } finally {
       container.remove();
     }

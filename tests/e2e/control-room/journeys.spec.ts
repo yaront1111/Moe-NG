@@ -21,9 +21,24 @@ import { createStaticControlRoomPorts } from "./static-ports.js";
  * (`preview-data.ts` selects the disconnected snapshot), which is why the
  * banner/enabled-action invariant is checkable at all.
  *
+ * THE FIXTURE ARM IS NOW REQUESTED EXPLICITLY. The board's default view is the live
+ * daemon; this lane's bundle is built with no `VITE_MOE_LIVE_*` values, so its bare
+ * URL is the configuration notice, not fixtures. Every journey below therefore opens
+ * `?fixtures=1`. That is not a workaround — it is this lane naming what it drives,
+ * which the old bare URL could no longer do. The two arms a daemonless bundle CAN
+ * honestly assert about the gate itself are pinned in their own test at the bottom.
+ *
  * Bundle serving, port selection and readiness belong to `harness.ts` /
  * `static-ports.ts` and are composed, never reimplemented here.
  */
+
+/**
+ * HAND-TRANSCRIBED from apps/control-room/src/shell-mode.ts (`FIXTURES_QUERY_PARAM`),
+ * for the same reason `SUPPLIED_COMMANDS` below is: the e2e tsconfig cannot reach into
+ * apps/control-room (TS6059), and deriving the URL from the module that reads it would
+ * make the assertion self-referential.
+ */
+const FIXTURES_QUERY = "?fixtures=1";
 
 /** Every workspace the nav rail offers, by its committed test id. */
 const WORKSPACES = ["goals", "approvals", "runs", "resources", "health", "policy"] as const;
@@ -67,7 +82,7 @@ interface ChipRecord {
  */
 async function journey(body: (page: Page) => Promise<void>, page: Page): Promise<void> {
   const outcome = await withStaticControlRoom(createStaticControlRoomPorts(), async (baseUrl) => {
-    await page.goto(baseUrl);
+    await page.goto(`${baseUrl}${FIXTURES_QUERY}`);
     await expect(page.getByTestId("cr.shell.root")).toHaveCount(1);
     await body(page);
     return "journey-complete";
@@ -326,6 +341,42 @@ test("an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell"
     expect(unknown.label?.trim()).not.toBe("");
     expect(unknown.value?.trim()).not.toBe("");
   }, page);
+});
+
+/**
+ * THE GATE ITSELF, in a real browser, over the real bundle.
+ *
+ * A daemonless bundle can honestly assert exactly two of the three arms: the bare URL
+ * is the configuration notice (this build carries no `VITE_MOE_LIVE_*` values), and
+ * `?fixtures=1` is the labelled fixture board. The LIVE arm needs a daemon and belongs
+ * to the daemon-backed journey task; nothing here fakes one.
+ *
+ * The notice arm's real claim is the NEGATIVE one: an unconfigured build must not
+ * quietly serve frozen fixtures where live data belongs. So it asserts the shell root
+ * and the fixture marker are ABSENT, not merely that a notice appeared.
+ */
+test("the bare URL is a configuration notice, and fixtures are behind an explicit flag", async ({ page }) => {
+  const outcome = await withStaticControlRoom(createStaticControlRoomPorts(), async (baseUrl) => {
+    await page.goto(baseUrl);
+    const notice = page.getByTestId("cr.config.notice");
+    await expect(notice).toHaveCount(1);
+    // Both variable names, so the notice tells an operator what to actually set.
+    await expect(notice).toContainText("VITE_MOE_LIVE_CREDENTIAL");
+    await expect(notice).toContainText("VITE_MOE_LIVE_CSRF");
+    // Fail closed: no fixture board underneath, and no fixture data anywhere.
+    await expect(page.getByTestId("cr.shell.root")).toHaveCount(0);
+    await expect(page.getByTestId("cr.banner.fixture")).toHaveCount(0);
+    expect(await page.content()).not.toContain("DEVELOPMENT_ONLY/NOT_CONFIRMATORY");
+
+    await page.goto(`${baseUrl}${FIXTURES_QUERY}`);
+    await expect(page.getByTestId("cr.shell.root")).toHaveCount(1);
+    // Labelled as a fixture, from the fixture module's own marker.
+    await expect(page.getByTestId("cr.banner.fixture"))
+      .toContainText("DEVELOPMENT_ONLY/NOT_CONFIRMATORY");
+    await expect(page.getByTestId("cr.config.notice")).toHaveCount(0);
+    return "gate-complete";
+  });
+  expect(outcome).toEqual({ ok: true, value: "gate-complete" });
 });
 
 /**

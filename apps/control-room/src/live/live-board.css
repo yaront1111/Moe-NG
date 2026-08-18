@@ -37,11 +37,6 @@
   padding: 0.7rem 0.8rem;
 }
 
-.cr-liveboard-card[draggable="true"] {
-  border-color: color-mix(in srgb, var(--cr-action) 45%, var(--cr-line));
-  cursor: grab;
-}
-
 .cr-liveboard-card header {
   display: flex;
   flex-wrap: wrap;
@@ -90,13 +85,6 @@
   color: var(--cr-attention);
 }
 
-[data-testid="cr.liveboard.dropnote"] {
-  background: var(--cr-attention-wash);
-  border: 1px solid color-mix(in srgb, var(--cr-attention) 38%, var(--cr-line));
-  border-radius: var(--cr-radius-xs);
-  font-size: 0.72rem;
-  padding: 0.4rem 0.6rem;
-}
 
 @media (max-width: 959px) {
   .cr-liveboard-columns {
