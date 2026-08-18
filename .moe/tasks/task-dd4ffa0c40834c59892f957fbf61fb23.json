@@ -79,7 +79,7 @@
     {
       "stepId": "step-5",
       "description": "GREEN the projection. Create apps/daemon/src/planning/active-graph-projection.ts plus its `.js` bridge. Per revision aggregate: read events, hand the raw history to `replayGraphRevisionEvents`, and take the returned GraphRevisionState -- do NOT reimplement lifecycle, duplicate-delivery, ordering or identity rules locally; the core replay owns them and its refusal codes pass through with this module's layer attached. Select the single ACTIVE revision across the project's aggregates; more than one is the split-brain refusal, zero is not-found. Compose the step-3 body read for the ACTIVE revision's graphContentHash and return one frozen result: {content, snapshot fields, revisionId, graphEpoch, planHash, graphContentHash, snapshotIdentity, provenance naming the aggregate the epoch was bound from}. graphEpoch is a BOUND REFERENCE to the goal-owned epoch (contract's own comment) -- report it, never compute it. Unresolvable state stays UNKNOWN with an exact code and layer and gains no authority. Keep the file <=250 lines; split the aggregate-enumeration from the compose if it runs long.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/active-graph-projection.js"
@@ -88,21 +88,29 @@
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/active-graph-projection.js"
       ],
-      "startedAt": "2026-08-18T04:07:07.944Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts"
+      ],
+      "note": "STEP 5 (REOPEN #1) — GREEN. `Test Files 4 passed (4) | Tests 61 passed (61)` (was 59; +2 for the create-less case and its empty-project control). Production is **219 lines**, still under 250.\n\nTHE FIX, exactly the direction QA specified. `enumerateAggregateIds` no longer keys discovery on the `GraphRevisionCreated` event. It now pages `store.readEventsAfter(cursor, ENUMERATION_PAGE)` over ALL stored events and keeps every `aggregateId` starting with `graphRevisionAggregateId(projectId, \"\")` — the `graph-revision:<projectId>:` prefix. A create-less aggregate can no longer escape enumeration by lacking the one event discovery used to depend on, so it reaches `replayGraphRevisionEvents` and the core answers with its own `GRAPH_REVISION_REPLAY_MISSING_CREATE` under `sourceLayer: CORE_GRAPH_REVISION_REPLAY`.\n\nThe prefix is built from the module's OWN `graphRevisionAggregateId` deriver rather than a hand-written string. If the keying scheme ever changes, enumeration follows it automatically instead of silently matching nothing — a hardcoded `\"graph-revision:\"` would have been a second statement of the same fact, free to drift.\n\n`enumerateAggregateIds` now takes `projectId`, which it needed all along: the old signature could not scope discovery to a project at all, and only got away with it because the store is opened project-bound. Passing it explicitly makes the scoping visible rather than incidental.\n\nQA'S PREDICTED CODES ALL CONFIRMED AGAINST THE RUNNING PROJECTION. In step 4 I flagged that the sweep threw on its first case, so cases 2 and 3 were still unverified, and said I would report honestly if either differed. Both matched: with the fix in place the full three-case sweep passes as written — \"missing create\" and \"reversed\" -> `GRAPH_REVISION_REPLAY_MISSING_CREATE`, \"activation before submission\" -> `GRAPH_REVISION_REPLAY_VERSION_BREAK`, all three `sourceLayer: CORE_GRAPH_REVISION_REPLAY`. No expectation was edited to match an observed value; the table was written from QA's measurement before the fix existed.\n\nTHE THREE SITUATIONS NOW ANSWER DISTINCTLY, which is the whole point of the reject:\n- empty project -> `ACTIVE_GRAPH_ABSENT`, `sourceLayer: null`\n- DRAFT-only project -> `ACTIVE_GRAPH_ABSENT`, `sourceLayer: null` (correct — a real history that simply never reached ACTIVE is an absence, not a corruption)\n- create-less-but-activated -> `GRAPH_REVISION_REPLAY_MISSING_CREATE`, `sourceLayer: CORE_GRAPH_REVISION_REPLAY`\nDoD 2's \"corrupt histories fail closed under DISTINCT stable code/layer mappings\" now holds by measurement rather than by the vocabulary merely containing distinct codes — which was my original error.\n\nDELEGATION IS UNCHANGED AND STILL THE DESIGN: the projection gained no lifecycle knowledge from this fix. It does not now know what a create event means; it simply stopped using one event kind as a proxy for \"this aggregate exists\" and lets the core replay be the only thing with an opinion about history validity.\n\nNothing else touched — `graph-body-record.*` remain byte-identical to the reviewed bytes, and everything on QA's \"VERIFIED GOOD, do not rework\" list is untouched.",
+      "startedAt": "2026-08-18T04:07:07.944Z",
+      "completedAt": "2026-08-18T04:07:52.898Z"
     },
     {
       "stepId": "step-6",
       "description": "Mutation drills, three. Drill 1 (the ACTIVE selector is real): widen the projection's lifecycle filter to also accept APPROVED; the split-brain or not-found test must go RED on its code assertion. Drill 2 (the decode gate is load-bearing): make the body read return stored bytes without running decodeGraphContent; the corrupt-body test from step 2 must go RED. Drill 3 (delegation is real, not decorative): make the projection swallow the core replay's refusal and fold whatever partial state it can; the step-4 case (5) test must go RED on the core code assertion -- if it stays green, the test is not actually driving a corrupted history through the production path and must be strengthened. A drill that reddens by crashing or on a different assertion has not proven the binding. Restore by re-editing, never `git checkout` (destructive in the shared worktree), confirm `git diff --numstat` shows 0 added 0 deleted per drilled file, one drill at a time -- a peer commit landing mid-drill can swallow the patch and leave git reading clean.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/graph-body-record.ts"
-      ]
+      ],
+      "note": "STEP 6 (REOPEN #1) — QA'S TWO REQUIRED RE-DRILLS PLUS THE THREE ORIGINALS. All five killed their intended test on a CODE assertion. Final state: both production files byte-identical to their pre-drill baselines, `Test Files 4 passed (4) | Tests 61 passed (61)`.\n\nDRILL A (QA-required): make `collectActive` swallow the replay refusal and skip the aggregate. **THREE tests red, ALL on code assertions:**\n```\n> surfaces the CORE REPLAY's own code ... expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT'\n> refuses every hostile ordering ...     missing create code: expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_MISSING_CREATE'\n> distinguishes a create-less history ... expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_MISSING_CREATE'\n```\nThis is the exact check QA specified — \"the sweep must go RED on a CODE assertion, not on `ok===false` alone; if it stays green the sweep is still detached from its subject.\" Under the OLD sweep this same drill left it green, because swallowing a refusal still produces `ok === false`. The sweep is now attached to its subject.\n\nDRILL B (QA-required): revert enumeration to create-event-only. **2 failed | 11 passed**, failing `distinguishes a create-less history from an empty project` on `expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_MISSING_CREATE'` and the sweep's matching case. So the enumeration fix is load-bearing and the new test genuinely detects its absence — it is not passing for some incidental reason.\n\nTHE THREE ORIGINAL DRILLS RE-RUN, to prove the fix regressed nothing QA had already banked:\n- Widen the lifecycle filter to accept APPROVED -> 1 failed, exactly `treats an APPROVED revision as NOT active, even with its body stored`.\n- Body read trusts the row and skips `decodeGraphContent` -> 1 failed, exactly `surfaces the DECODER's own code under this module's layer for a corrupt row`.\n- (Delegation is covered by drill A above, which is the stronger form of the original drill 3.)\n\nRESTORE VERIFICATION: `sha256` of both production files matches the pre-drill baselines exactly — `c3722bc8...` for the projection, `322306187...` for the body record. One drill at a time; every restore by re-editing content, never `git checkout`.\n\n=== A THIRD FOREIGN WHOLE-TREE COMMIT LANDED DURING THIS STEP, AND I CHECKED WHAT IT CAPTURED ===\n`git diff --numstat HEAD -- apps/daemon/src/planning/` came back EMPTY mid-drill, which is the tell that a foreign commit had swallowed my working tree. HEAD is now **39a1b2c `feat(task-d288909b...)`**. The dangerous version of this is a hook committing a MUTATED file, leaving a mutant in history while git reads clean, so I audited every commit that has ever touched the file:\n```\n39a1b2c  drilledEnum=0  drilledAPPROVED=0  drilledSwallow=0   <- current HEAD, the FIXED bytes\n9b9e44e  drilledEnum=1  drilledAPPROVED=0  drilledSwallow=0   <- the pre-fix version QA reviewed\n```\n`drilledEnum=1` on 9b9e44e is the ORIGINAL create-event-only enumeration, i.e. the defect QA rejected — not a drill artifact. **No drilled state was ever committed.** HEAD holds `readEventsAfter` (the fix) and `lifecycle === \"ACTIVE\"` (unwidened), and all three files' HEAD blobs hash-match my working tree. The capture happened after my restores, which I confirmed rather than assumed.\n\nThat makes three foreign whole-tree captures in this session (9b9e44e, 76e7396, 39a1b2c). Consequence for QA: as before, no commit bears this task's id, and the correct review instrument is the base-ref diff over owned paths.",
+      "startedAt": "2026-08-18T04:07:56.862Z",
+      "completedAt": "2026-08-18T04:09:37.146Z"
     },
     {
       "stepId": "step-7",
       "description": "Adversarial review, consumer edge, commit, gate. ATTACKER PASS: can a caller-supplied snapshot or raw content reach the durable body without passing through encodeGraphContent's success value? Can two ACTIVE revisions ever yield a snapshot instead of refusing? Can the projection return content whose re-derived hash was never checked? Does any read path append? Is any store handle left open (a held SQLite handle kills the vitest worker)? Does any refusal collapse two distinct causes into one code? Is snapshotIdentity ever equated with graphContentHash anywhere, including in a test helper? CONSUMER EDGE per the global composition rail: name the consumer tasks in the completion note -- task-c4b807784 (authenticated current-graph query) reads this projection, and task-eacea969/task-32c1ba45 consume it for transitions; all are BLOCKED, so record the ids and state plainly that no live call site exists yet. COMMIT by explicit pathspec, only the six owned paths, after `git status --porcelain` and unstaging any foreign entry; verify with `git show --stat`; if a foreign whole-tree completion already captured these bytes, do NOT amend or reset -- record the merge-base diff for QA. GATE, foreground, `&&`-chained: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Read the OUTPUT -- a filtered leg is evidence only with a nonzero `Test Files N passed` line; `@moe/daemon` is apps/daemon and root `pnpm test` does not cover apps/**. Confirm both new test files appear by name and the hostile sweep printed a nonzero count.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-body-record.ts",
         "apps/daemon/src/planning/graph-body-record.js",
@@ -110,11 +118,18 @@
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/active-graph-projection.js",
         "apps/daemon/src/planning/active-graph-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ],
+      "note": "STEP 7 (REOPEN #1) — GATE GREEN, ATTACKER PASS RE-RUN AGAINST THE DEFECT THAT GOT THROUGH.\n\nGATE: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` -> **GATE_EXIT=0**, `Test Files 130 passed (130) | Tests 2801 passed (2801)`. Up exactly +2 from the 2799 QA measured — the create-less case and its empty-project control. Both my suites still present; the planning slice is 4 files / 61 tests.\n\nATTACKER PASS, re-asked with the question that failed last time. My first-pass answer to \"does any refusal collapse two distinct causes into one code?\" was NO, and it was wrong — I had checked that the code VOCABULARY contained distinct codes rather than probing which code each situation actually produces. Existing-but-never-fired is indistinguishable from absent to any caller. This time the answer is grounded in the suite's own assertions: **eight distinct codes are now pinned** across the projection suite — `ACTIVE_GRAPH_ABSENT`, `ACTIVE_GRAPH_SPLIT_BRAIN`, `ACTIVE_GRAPH_BODY_UNAVAILABLE`, `GRAPH_REVISION_REPLAY_MISSING_CREATE`, `GRAPH_REVISION_REPLAY_VERSION_BREAK`, `GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT`, plus `GRAPH_BODY_ABSENT`/`GRAPH_BODY_RECORD` on the wrapped-source path — each asserted with its `sourceLayer`.\nRe-checked and unchanged by the fix: `grep -c \"\\.commit(\"` in the projection is **0**, so no read path appends; `grep -cE \"sha256|createHash|canonical\"` is **0**, so the fix introduced no local hashing; the fix touched enumeration only and gave the projection no lifecycle knowledge.\n\nTHE FIX DELTA QA SHOULD REVIEW — `git diff --numstat 9b9e44e..HEAD -- apps/daemon/src/planning/`, i.e. rejected version -> now:\n```\n70  12  active-graph-projection.test.ts\n17  11  active-graph-projection.ts\n```\nProduction is 17 added / 11 removed: the `REVISION_CREATED_EVENT` constant deleted, `enumerateAggregateIds` switched from `readEventsByTypeAfter(\"GraphRevisionCreated\", ...)` to `readEventsAfter(...)` filtered by the `graph-revision:<projectId>:` prefix (derived from the module's own `graphRevisionAggregateId`, not a hand-written string), and the one call site updated to pass `projectId`. `graph-body-record.*` do not appear in the delta at all — untouched, exactly as QA's \"do not rework\" list requires.\n\nCOMMIT: nothing to stage. `git status --porcelain -- apps/daemon/src/planning/` is EMPTY because **a THIRD foreign whole-tree commit — 39a1b2c `feat(task-d288909b...)` — captured the fix**, after 9b9e44e captured the original. Per epic rail 3 I did not amend or reset. I verified what was captured rather than assuming: HEAD holds `readEventsAfter` (the fix) and `lifecycle === \"ACTIVE\"` (unwidened), all three files' HEAD blobs hash-match my working tree, and an audit of every commit that ever touched the file shows **no drilled state was ever committed** (`drilledEnum=0 drilledAPPROVED=0 drilledSwallow=0` at HEAD; the `drilledEnum=1` at 9b9e44e is the original defect QA rejected, not a drill artifact).\n\nCONSUMER EDGE unchanged and still route (a), ids re-verified on disk: task-c4b807784f434b05b34ea62207ea34f8 (authenticated current-graph query), task-eacea969d636420b8f5c47304039e056 (atomic active-graph transition service), task-32c1ba453469448d87bf0925b3590657 (durable supersession preparation) — all BLOCKED, so no live production call site exists yet.\n\nWHAT I'D WANT A REVIEWER TO CHECK HARDEST, since my own attacker pass missed this class once: that the create-less test and the sweep's \"missing create\" case are not passing for an incidental reason. Drill B is the evidence — reverting enumeration to create-event-only reddens both on their code assertions, so they detect the specific defect rather than merely coexisting with the fix.",
+      "startedAt": "2026-08-18T04:09:40.053Z",
+      "completedAt": "2026-08-18T04:10:39.965Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -133,12 +148,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:45:45.041Z",
-  "updatedAt": "2026-08-18T04:07:07.944Z",
+  "updatedAt": "2026-08-18T04:17:06.140Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:11:17.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 11,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -157,7 +172,10 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -193,20 +211,19 @@
   },
   "planApprovedAt": "2026-08-18T03:06:26.815Z",
   "workStartedAt": "2026-08-18T03:21:34.494Z",
-  "reviewStartedAt": "2026-08-18T03:43:29.332Z",
+  "reviewStartedAt": "2026-08-18T04:11:13.229Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
     "exitCode": 0,
-    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  129 passed (129)\n      Tests  2726 passed (2726)\n   Duration  17.13s\nGATE_EXIT=0\napps/control-room typecheck: Done\npackages/runner typecheck: Done\napps/daemon typecheck: Done\n\nRun fresh at HEAD 9b9e44e. Nonzero count line present, so no leg was a vacuous filter pass; counts rose from the 123 files / 2580 tests measured mid-task. Both new suites confirmed by name with --reporter=verbose: Test Files 2 passed (2) | Tests 20 passed (20).",
-    "reportedAt": "2026-08-18T03:43:29.332Z"
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n Test Files  130 passed (130)\n      Tests  2801 passed (2801)\n   Duration  13.26s\nGATE_EXIT=0\n\nRun fresh at HEAD 39a1b2c after both QA-required re-drills were restored and byte-identity re-verified. 2801 is +2 on the 2799 QA measured: the create-less case and its empty-project control. Planning slice alone: 4 files / 61 tests (was 59).",
+    "reportedAt": "2026-08-18T04:11:13.229Z"
   },
   "filesModified": [
+    "apps/daemon/src/planning/active-graph-projection.test.ts",
     "apps/daemon/src/planning/graph-body-record.test.ts",
     "apps/daemon/src/planning/graph-body-record.ts",
     "apps/daemon/src/planning/graph-body-record.js",
-    "apps/daemon/src/planning/active-graph-projection.test.ts",
-    "apps/daemon/src/planning/active-graph-projection.ts",
-    "apps/daemon/src/planning/active-graph-projection.js"
+    "apps/daemon/src/planning/active-graph-projection.ts"
   ],
   "reviewCompletedAt": "2026-08-18T04:04:07.843Z",
   "rejectionDetails": {

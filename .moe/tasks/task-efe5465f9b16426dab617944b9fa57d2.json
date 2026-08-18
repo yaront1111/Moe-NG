@@ -34,20 +34,27 @@
     {
       "stepId": "step-2",
       "description": "HARNESS FIRST: create tests/integration/portability/portability-harness.ts (helper file 1 of at most 2 permitted by task rail 5).\nIt owns process and resource lifecycle and NOTHING semantic — no assertions, no case tables, no expected codes. Provide:\n- a temp project: `mkdtempSync(join(tmpdir(), \"moe-portability-\"))`, a real SQLite store path, MOE_PROJECT_ID, and an operator credential, torn down in a `finally` on every path;\n- `spawnInstalledBin(name, env)` resolving through node_modules/.bin — the INSTALLED shim, never `node apps/daemon/src/mcp-main.ts`. Invoking the source directly would prove nothing about the bin that DoD item 1 is about;\n- stdio JSON-RPC framing helpers over the child's stdin/stdout, and an HTTP client for the Streamable HTTP host (`MOE_MCP_HTTP_PORT` unset -> ephemeral port; read the bound port from the child's own output rather than guessing, and use loopback only);\n- deterministic teardown: kill children, close HTTP sockets, remove temp dirs, and assert no orphan child and no listening port survives. `afterEach` must run teardown even when a case throws.\nWINDOWS IS FIRST-CLASS HERE, not an afterthought (DoD item 5): quote paths containing spaces, expect the .CMD/.ps1 shim variants, and normalise CRLF when splitting stdio frames — a line-splitter that assumes LF will hang waiting for a frame that already arrived.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "tests/integration/portability/portability-harness.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/portability/portability-harness.ts"
+      ],
+      "note": "HARNESS LANDED: tests/integration/portability/portability-harness.ts (370 lines, tsc --noEmit exit 0 under the packaging flag set + --skipLibCheck). Lifecycle only - zero assertions, zero case data, zero expected codes.\n\nSurface: createWorkspace/removeWorkspace, readStoreCounts, environmentFor, spawnInstalledBin, killTree, portIsFree, stdioClient, httpClient, runNodeChild.\n\nEvery subject is reached through node_modules/.bin (the INSTALLED shim, .CMD on win32 because the sh shim carries a WSL-stamped NODE_PATH=/mnt/d/...), never `node apps/daemon/src/mcp-main.ts`.\n\nMEASURED HAZARDS THE HARNESS EXISTS TO CLOSE, each reproduced live this session before being coded around:\n1. ORPHAN CHILD IS REAL. `shell:true` spawns cmd.exe which spawns node; `child.kill()` reaps cmd.exe and leaves node holding the ephemeral port. Reproduced: an orphan `mcp-http-main.ts` (PID 47852) survived kill and kept its port bound until `taskkill /PID n /T /F`. killTree uses taskkill on win32 and SIGKILL elsewhere; portIsFree then proves the listener actually went (measured PORT_FREE_AFTER_TASKKILL=true).\n2. CRLF FRAME SPLITTING. stdio frames are split on LF with a trailing CR stripped, per DoD-5.\n3. WINDOWS PATH WITH A SPACE, asserted rather than assumed: the temp dir is `mkdtemp(tmpdir()/\"moe portability-\")`, so MOE_STORE_PATH carries a space through the environment and through the cmd.exe shim on every case. The shim path itself is quoted because cmd.exe splits an unquoted path.\n4. NO HELD SQLITE HANDLE. readStoreCounts opens read-only, reads both counts, closes in a finally - a handle held across teardown kills the vitest worker.\n5. THE HTTP PORT IS READ FROM THE CHILD, never guessed: mcp-http-main writes the bound origin as its first stdout line.\n\nSIZE, stated plainly: 370 lines is over the 250 target and under the 400 cap. It is structurally forced - task rail 5 permits exactly two helper files, so lifecycle cannot be split further without a third file the rail forbids.\n\nEND-TO-END PRE-VERIFICATION (throwaway probes, each deleted in the command that ran it): the installed moe-mcp-stdio.CMD initialises, lists 108 generated tools, and answers project_register with {disposition:\"DECIDED\",resultCode:\"EFFECTS_COMMITTED\"}; a second identical call answers REPLAYED with the same effectId. The installed moe-mcp-http.CMD prints `http://127.0.0.1:<ephemeral>`, initialises with a session id, and answers the same tool call. Store tables confirmed: command_decisions and domain_events.",
+      "startedAt": "2026-08-18T04:13:30.480Z",
+      "completedAt": "2026-08-18T04:15:45.028Z"
     },
     {
       "stepId": "step-3",
       "description": "THE CASE TABLE: create tests/integration/portability/portability-cases.ts (helper file 2 of 2). It declares the generated subject-by-case matrix as DATA — subject (STDIO | HTTP | JETBRAINS), case id, input shape, and the exact expected code, stage and layer — and contains no spawning and no assertions.\nDoD item 1 requires the generated subject-by-case count to be POSITIVE, so export the count and have the suite assert `CASES.length > 0` and that every declared subject appears at least once BEFORE running anything. A generated matrix that silently produces zero cases passes while testing nothing — this repo has been bitten by exactly that, which is why the epic rail names it.\nThe expected codes are IMPORTED from their owning packages, never retyped as string literals here: `DISTRIBUTION_MISMATCH` from @moe/contracts' distribution contract, MCP dispatch codes from @moe/mcp's public root, daemon refusals from the @moe/daemon root. A locally spelled code is a second vocabulary that drifts, and the drift shows up as a green test asserting a code production no longer emits.\nCover, per transport: one ACCEPTED control, malformed envelope, auth/capability refusal, unsupported method or protocol version, truncation/disconnect mid-frame, and replay-conflict. For JETBRAINS: distribution discovery match, DISTRIBUTION_MISMATCH, daemon probe failure, start, endpoint open, control-room open, reconnect, uninstall, and post-uninstall call.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [],
       "newFiles": [
         "tests/integration/portability/portability-cases.ts"
-      ]
+      ],
+      "startedAt": "2026-08-18T04:15:47.729Z"
     },
     {
       "stepId": "step-4",
@@ -145,12 +152,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-18T04:03:05.101Z",
+  "updatedAt": "2026-08-18T04:15:47.729Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:10:20.845Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -176,7 +183,8 @@
     "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:39:38.835Z",

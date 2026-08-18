@@ -18,7 +18,7 @@
     "Preserve upstream source/context refusal code and layer, TDD exact assertions/nonzero cases, and explicit owned-path commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:13.563Z",
-  "updatedAt": "2026-08-17T17:48:20.499Z"
+  "updatedAt": "2026-08-18T04:15:36.518Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:13:16.193Z"
+  },
+  "blockedReason": "Blocked at planning per this task's own rail 2: \"if planning cannot verify every reader, report blocked and file measured prerequisites.\" Measured at HEAD 39a1b2c; the hard-dep list and the DoD-1 reader matrix both fail.\n\nHARD DEPS: c7f2530b (context edge) DONE; 04dd5a0a (journal) DONE; a3e8a02d (server-derived attempt input/launch authority) still BLOCKED at 1/8 -- it owns the input tree/workspace/launch rows, so the matrix cannot be frozen without it. dd4ffa0c (graph projection) is REVIEW at 7/7 -- close, not landed authority.\n\nDoD-1 READER MATRIX at HEAD:\n- PRESENT: graph/manifest (active-graph-projection.ts + graph-body-record.ts committed, pending QA); journal (journal-reader.ts:132 readCurrentAttemptJournal); policy revision (installPolicy slices); legal next commands (affordance-read.ts); goal state only generically via ledger stateOf.\n- ABSENT in apps/daemon/src: approved plan (grep readPlan/plan-read/approvedPlan over planning/ = zero); node authority/dependency/artifact closure (NodeMission comes from spec FILES via nodeSpecsDir -- shared-tree-writable, not durable authority); criteria (none); budgets/coverage (none); input tree/lease/epoch/workspace/scope (owned by BLOCKED a3e8a02d).\n\nThe rail forbids the escape hatches: a fixture or caller item list is not the missing source, and Optional=[] needs an explicit Foundation policy decision.\n\nUNBLOCK: (1) a3e8a02d lands; (2) dd4ffa0c QA-approved; (3) EITHER reader prerequisites are filed for approved-plan/criteria/node-closure/budgets OR the policy decision narrows the mandatory list to readers that exist. That routing is a governor call -- not filing four reader tasks unilaterally while the ingress lane owns adjacent surfaces.\n\nUnblock test is a grep, not a status: every mandatory DoD-1 item must name a production reader symbol reachable from apps/daemon at committed HEAD.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T04:15:21.738Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Full DoD-1 reader matrix measured at HEAD 39a1b2c and recorded in the blockedReason: five mandatory context items have durable readers (graph projection pending QA, journal, policy slices, affordances, generic goal stateOf), five do not (approved plan, criteria, node closure, budgets/coverage, input-tree family owned by BLOCKED a3e8a02d).",
+      "whatRemains": "Wait for a3e8a02d to land and dd4ffa0c to clear QA, then a governor decision: either file focused reader prerequisites for approved-plan/criteria/node-closure/budgets or narrow DoD 1's mandatory list by explicit Foundation policy decision. Then re-freeze the matrix and plan.",
+      "pitfalls": "NodeMission is read from spec FILES via nodeSpecsDir -- any agent in the shared tree can write those, so it is NOT a durable authority source for node closure; do not let a replanner treat it as one. Optional=[] is not an implicit default; the rail requires an explicit policy decision. A fixture or caller item list is never the missing source.",
+      "openQuestions": "Which lane owns the four missing readers -- new focused tasks, or absorption into the a9fd91c3 ingress lane that already owns adjacent surfaces? Deliberately not decided unilaterally.",
+      "releasedAt": "2026-08-18T04:15:36.516Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Releasing assignment only; BLOCKED state and reader-matrix reason stand. Continuing the sweep."
+    }
+  ]
 }

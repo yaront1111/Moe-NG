@@ -88,8 +88,8 @@
       "completedAt": "2026-08-18T03:56:02.752Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,12 +114,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T16:20:57.866Z",
-  "updatedAt": "2026-08-18T04:06:01.589Z",
+  "updatedAt": "2026-08-18T04:15:59.975Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:23:28.762Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-18T04:15:59.975Z",
+    "wallClockMs": 107551213
   },
   "stepsCompleted": [
     "step-1",
@@ -188,5 +190,8 @@
     "outputTail": "mode=extractfail: MOE_MENTION_EXTRACTION_FAILED PASS\nmode=countfail: MOE_MENTION_COUNT_UNPARSEABLE PASS\nmention-provenance.sh PASSED (8 stored cases + 2 synthetic delivery-failure cases, 4 modes)\ncommit-scope scenarios run: 5\nPASS postflight.sh\n== mode=faithful ==\n  mode=faithful cases=10 delivered=10\n    ascii PASS / shellmeta PASS / multiline PASS / oversize PASS / hookimpersonation PASS / unicode PASS / fenceescape PASS / short PASS / notinstore PASS / unsafechannel PASS\n  PASS: mode=faithful all 10 cases byte-identical to the store\n== mode=substitute ==\n  mode=substitute cases=10 delivered=10\n    ascii PASS / shellmeta PASS / multiline PASS / oversize PASS / hookimpersonation PASS / unicode PASS / fenceescape PASS / short PASS / notinstore PASS / unsafechannel PASS\n  PASS: mode=substitute all 10 cases byte-identical to the store\nmention-provenance.ps1 PASSED (8 stored cases + 2 synthetic delivery-failure cases, 2 modes)\ncommit-scope scenarios run: 5\nPASS postflight.ps1\nGATE_EXIT=0",
     "reportedAt": "2026-08-18T03:57:44.453Z"
   },
-  "filesModified": []
+  "filesModified": [],
+  "completedAt": "2026-08-18T04:15:59.975Z",
+  "reviewCompletedAt": "2026-08-18T04:15:59.975Z",
+  "reviewSummary": "APPROVED. Work is in D:/projexts/moes (21529d2, 7607b70, b3eb5a1 -- 7 files, +1190/-29, all owned); zero moe-next files.\n\nGATE RE-RUN BY ME, foreground, 4/4 exit 0: mention-provenance.sh (4 modes; faithful+substitute each cases=10 delivered=10, all 10 NAMED cases PASS incl hookimpersonation/fenceescape/oversize/unicode/short; extractfail+countfail each deliver 1 marker with its OWN reason code), postflight.sh (5 scenarios), mention-provenance.ps1 (2 modes x same 10 named), postflight.ps1 (5).\n\nMY OWN DRILLS, one at a time, exact-byte restore proven (md5 + `git diff --numstat` empty):\nA) sh: deliver the RPC body when the store disagrees -> RED on 8 NAMED cases in mode=substitute (\"delivered body != stored body ... 'SessionStart:startup hook success...'\").\nB) ps1: same mutation -> RED, same 8 cases. Both twins load-bearing.\nC) sh: removed the fencing -> RED \"2 <routed_mentions> blocks found; a body escaped its container\".\nRestored sh 24203e9b, ps1 0A51E069; `git status --porcelain -- scripts/` empty.\n\nDEPLOY PROVEN, not a green no-op: installed PyCharm-plugin moe-agent.ps1 md5 0a51e069 == repo sandbox == scripts/moe-agent.ps1 == git blob at HEAD; planning-time value was 520aa672, so the RUNNING file changed.\n\nDoD: (1) byte-identity asserted PER DELIVERY against an INDEPENDENT jsonl read (seed.py read_store never touches the chat_read response) plus delivered-count, sender, sweep-nonzero guards -- PASS. (2) MOE_MENTION_DELIVERY_FAILED reason=<code> id= channel= on every failure path; both silent drops closed -- PASS. (3) named-test drill -- PASS (3 of mine). (4) 11+ instance record cited in step-7 note; jsonl-grep recovery convention in the handoff memory -- PASS.\n\nNOTED, not rejections: moe-next commit 76e7396 bears this task id but came from the OLD whole-tree hook and swept foreign files (.probe-resolve.json, daemon tests) -- known hazard per global rail. moe-vscode .sh drift disclosed, out of scope."
 }

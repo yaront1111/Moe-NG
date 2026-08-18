@@ -44,29 +44,56 @@
     {
       "stepId": "step-3",
       "description": "GREEN. Create tools/import/import-commit.ts: the durable `ImportStorePort` implementation plus a minimal CLI entry. The port maps ImportCommitInput -> the store's CommitInput field-for-field: same aggregateId, same commandBytes, same commandId, same committedAt, same expectedVersion, and each ImportEventDraft passed through with its REQUIRED domainSchemaVersion preserved -- no spread-with-defaults that could let the store's generic version leak in, no re-encoding of any payload (pass the Uint8Array through untouched), no derived fact, no added event. THE WHOLE ADAPTER IS THE ABSENCE OF TRANSFORMATION, and the DoD's mutation drills exist to prove that absence. Handle the conflict path per the step-2 measurement: surface the store's own conflict code/layer distinctly from a thrown infrastructure failure. The CLI entry composes buildSourceManifest -> decodeLegacySources -> applyImport with THIS port over a real store path given by flag, prints one JSON report, and refuses to run against a store path that does not exist (fail closed; never create a store implicitly). Add the file to the root `typecheck:import` script alongside import-shadow.ts and shadow-input.ts -- that script enumerates files explicitly, so a new file NOT added is silently untypechecked, the exact class the integration-tests-typechecked-by-nothing gotcha records. Keep the production file <=250 physical lines.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json"
       ],
-      "startedAt": "2026-08-18T04:07:22.102Z"
+      "modifiedFiles": [
+        "tools/import/import-commit.ts",
+        "tools/import/durable-import-store.ts",
+        "tools/import/durable-import-store.js",
+        "tests/integration/import/legacy-import-commit.test.ts",
+        "package.json"
+      ],
+      "note": "GREEN. `npx vitest run tests/integration/import` -> Test Files 1 passed (1), Tests 9 passed (9), EXIT=0. `pnpm typecheck:import` EXIT=0. `npx tsc -p tests/integration/import/tsconfig.json` EXIT=0.\n\nSPLIT, forced by the per-FILE line target. One file came out at 278 physical lines, over the <=250 target, so it is two files along the seam its sibling already uses (import-shadow.ts + shadow-input.ts):\n- tools/import/durable-import-store.ts (140 lines) — the port and `commitLegacyImport`.\n- tools/import/import-commit.ts (158 lines) — argv, the store open, the CLI report, the main guard.\n\nTHE ADAPTER IS ONE LINE OF MAPPING, and that is the point. `const commitInput: CommitInput = input;` then `store.commit(commitInput)`. `ImportCommitInput` IS a `CommitInput` structurally, so there is no field list to drift, no spread, no default, no re-encode, no copy. `ImportEventDraft.domainSchemaVersion` is required and literal-typed, so the store's optional generic default can never be the one persisted.\n\nCONFLICT HANDLING as measured in step 1. `durablePort` catches, and only if `cause instanceof DurableStoreError && CONFLICT_CODES.includes(cause.code)` (COMMAND_ID_CONFLICT, EXPECTED_VERSION_CONFLICT) records `{code: cause.code, layer: \"STORE\"}` — the code is COPIED off the error, never minted — then RETHROWS so applyImport cannot report a success it did not have. `commitLegacyImport` consults that record BEFORE applyImport's result, so the store's code and layer survive instead of being restamped IMPORT_COMMIT_FAILED/APPLY. Any other throw records nothing and is reported by applyImport itself, which is exactly the DoD-4/DoD-5 split. Success returns the store's own `disposition` verbatim as the outcome, so a REPLAY is never dressed up as a fresh commit.\n\nTHREE CORRECTIONS THE TYPECHECKER AND NODE FORCED, each proving a gate that would otherwise have been fictional:\n1. `ImportedClaim` has NO `legacyId` — it is {claimId, principal, provenance, status}. The decode test asserted `.legacyId`, vitest passed it as undefined === undefined, and only `tsc -p tests/integration/import/tsconfig.json` caught it (TS2339 x2). Now asserts `claimId`. This is precisely the \"integration tests are typechecked by nothing\" class; the directory tsconfig is why it was caught here rather than by QA.\n2. A plain-node run of the CLI failed with ERR_MODULE_NOT_FOUND on `./durable-import-store.js`. Node does not rewrite .js->.ts; vitest and tsc both do, so the suite was green while the tool was unrunnable. Added `tools/import/durable-import-store.js` (`export * from \"./durable-import-store.ts\";`), byte-identical in shape to the tracked `tools/import/shadow-input.js` bridge (verified with cmp).\n3. `parseOptions` dropped a redundant `flags.size !== 2` check that `args.length !== 5` already implies.\n\nREAL-RUNTIME SMOKE, plain `node --experimental-strip-types tools/import/import-commit.ts` against a real temp snapshot and a real store file, all temp material removed:\n- first run  -> EXIT 0, {\"outcome\":\"COMMITTED\",\"committedEvents\":1,\"currentVersion\":1,...}\n- second run -> EXIT 0, {\"outcome\":\"REPLAYED\",\"committedEvents\":1,\"currentVersion\":1,...} — idempotent, nothing appended.\n- absent store path -> EXIT 1, {\"code\":\"IMPORT_SOURCE_UNREADABLE\",\"layer\":\"INPUT\",...} and existsSync(path) === false, so nothing was created implicitly.\n\npackage.json: `typecheck:import` now names durable-import-store.ts and import-commit.ts alongside the two existing files (`git diff --stat package.json` -> 1 insertion, 1 deletion). Without that line both new files would be typechecked by nothing.",
+      "startedAt": "2026-08-18T04:07:22.102Z",
+      "completedAt": "2026-08-18T04:11:25.400Z"
     },
     {
       "stepId": "step-4",
       "description": "Mutation drills, the two DoD 3 names plus the vacuity guard. Drill 1 (no re-encoding): make the adapter re-encode one payload (decode + re-serialise) before committing; the step-2 byte-identity test must go RED on the byte comparison, not on a crash. Drill 2 (no extra event): make the adapter append one synthetic event to the drafted list; a NAMED test must go RED on the exact event count and the decoded claim count. Drill 3 (the decode assertion is real): empty the fixture so applyImport drafts zero claim events; the step-2 happy-path test must go RED on its nonzero-decoded-claims assertion -- if it stays green, the assertion is not actually gating on decoded content and must be strengthened. Record for each drill the command, the failing test NAME and the exact assertion. Restore by re-editing, never `git checkout` (destructive in the shared worktree), confirm `git diff --numstat` shows 0 added 0 deleted per drilled file, one drill at a time.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "tools/import/durable-import-store.ts",
+        "tests/integration/import/legacy-import-commit.test.ts"
+      ],
+      "note": "SIX DRILLS, one at a time, command `npx vitest run tests/integration/import` for every one. Restored by re-editing (never git checkout — these files are UNTRACKED, so git could not have restored them anyway) and verified by sha256 rather than by git status: durable-import-store.ts 676efa7dd7a03ce5, import-commit.ts 4c0b47c3133dd6a7, the suite 5a82804ae31fb5e9. All three match their pre-drill values now, and the suite is back to Test Files 1 passed (1), Tests 9 passed (9), EXIT=0, `pnpm typecheck:import` EXIT=0.\n\nDRILL 1a — re-encode via JSON.parse -> JSON.stringify. SURVIVED GREEN (9 passed). This is an honest EQUIVALENT MUTANT and it is worth recording rather than hiding: the payload is already canonical JSON, so a round trip through the same serializer is byte-identical by construction. No assertion can separate it, so the drill indicts itself, not the test.\nDRILL 1b — the same re-encode with `JSON.stringify(..., null, 1)`, which actually moves bytes. RED, 2 failed | 7 passed. \"commits the drafted events with the drafted envelope version and byte-identical payloads\" -> AssertionError: expected [ Array(644) ] to deeply equal [ 123, 34, 99, 108, 97, 105, …(567) ] — the byte comparison, 644 stored bytes against 573 drafted, not a crash. \"commits rows that decode back to a nonzero claim count through decodeImportEventFacts\" reddens too, independently: the public decoder refuses non-canonical bytes.\nDRILL 2 — append one synthetic event (`{...first, eventId: first.eventId + \"-extra\"}`). RED, 4 failed | 5 passed, including both DoD-named guards: \"adds no event of its own: the durable ids are exactly the drafted ids\" -> expected […(3)] to deeply equal […(2)]; \"commits rows that decode back to a nonzero claim count…\" -> the decoded claim list, 3 against 2; the happy path on row count 3 vs 2; and the CLI's committedEvents.\nDRILL 3a — the vacuity drill the plan named: empty the fixture so applyImport drafts zero events. RED, 4 failed | 5 passed, but NOT where the plan predicted, and the reason matters. The happy path reddens on `expect(drafts.length).toBeGreaterThan(0)` -> \"expected 0 to be greater than 0\", the generated-case guard. The decode test reddens on its precondition with the store's real answer: refused: {\"code\":\"IMPORT_COMMIT_FAILED\",\"detail\":\"STORE_INPUT_INVALID: events must contain at least one event\",\"layer\":\"APPLY\"}. So a zero-event commit is REFUSED by the store (store-input-commit.ts:42-44) and a zero-claim decode is unreachable through the production path — the vacuity DoD 5 worries about cannot be reached by emptying the input.\nDRILL 3b — therefore a second vacuity drill that CAN reach it: rewrite the aggregate id (`${input.aggregateId}-adapter`), so the commit succeeds but the read finds nothing. RED, 4 failed | 5 passed, and it lands exactly on the named assertion: \"commits rows that decode back to a nonzero claim count through decodeImportEventFacts\" -> AssertionError: expected 0 to be greater than 0. The nonzero-decoded-claims assertion is live, and the drill doubles as proof that the adapter must not rewrite the aggregate id applyImport derived.\nDRILL 4 — the DoD-4 guard. Swap the two lines in commitLegacyImport so applyImport's result is consulted before the recorded refusal. RED, 1 failed | 8 passed: \"refuses a second import of the same manifest digest with the store's own COMMAND_ID_CONFLICT\" -> AssertionError: expected 'IMPORT_COMMIT_FAILED' to be 'COMMAND_ID_CONFLICT'. That is the restamping the DoD forbids, caught by exact code, and the ordering of those two lines is the whole mechanism.\nDRILL 5 — replace `outcome: receipt.disposition` with a hardcoded \"COMMITTED\". RED, 1 failed | 8 passed: \"replays a byte-identical re-import instead of appending, leaving the rows untouched\" -> AssertionError: expected 'COMMITTED' to be 'REPLAYED'. The store's disposition is passed through verbatim rather than assumed.\n\nNothing else on disk was touched during any drill; only the two production files and the suite were edited, one at a time, each restored and hash-verified before the next.",
+      "startedAt": "2026-08-18T04:11:27.624Z",
+      "completedAt": "2026-08-18T04:13:55.894Z"
     },
     {
       "stepId": "step-5",
       "description": "Adversarial review, commit, gate. ATTACKER PASS: can any payload byte differ between draft and row -- including via a defensive copy that normalises, a TextEncoder round-trip, or `.slice()` consulting Symbol.species on hostile input? Does the adapter ever supply a default domainSchemaVersion? Can the CLI write anywhere except the explicitly-flagged store path? Did import-shadow.ts change AT ALL (it must not -- diff it against HEAD to prove zero bytes moved)? Is the conflict path distinguishable from infrastructure failure by code AND layer, and does neither get restamped? Is the new file in the typecheck:import script? DEPENDENCY-DIRECTION CHECK per the rail: packages/import must gain NO import of @moe/store -- grep it. COMMIT: `git status --porcelain`, unstage foreign entries, commit ONLY tools/import/import-commit.ts, its test file, and the package.json script line by explicit pathspec; verify with `git show --stat`. GATE, per DoD 6 with exit codes captured SEPARATELY (never `;`-chained, never piped): `pnpm typecheck:import` then `pnpm typecheck` then the test command for wherever the suite landed -- each must print its own nonzero `Test Files N passed` count line where applicable; a leg with no count line ran nothing. In the completion note name task-22cfca91c5134b24aaf3e5734444fb93 as the consumer this de-vacuates and state that task-80fce1d1's reader is independently correct and was never blocked by this task, exactly as the description records.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "package.json"
-      ]
+      ],
+      "modifiedFiles": [
+        "tools/import/durable-import-store.ts",
+        "tools/import/durable-import-store.js",
+        "tools/import/import-commit.ts",
+        "tests/integration/import/legacy-import-commit.test.ts",
+        "tests/integration/import/tsconfig.json",
+        "package.json"
+      ],
+      "note": "ATTACKER PASS, item by item.\n- PAYLOAD BYTES: the adapter performs NO copy, NO slice, NO TextEncoder round trip and NO defensive normalisation — `store.commit(input)` receives the drafted value itself, so there is no site where Symbol.species or a normalising copy could act. The only copy is the store's own `snapshotCommitInput`, which is upstream of my diff and unchanged. Drill 1b proves the byte assertion sees a difference when one exists.\n- DEFAULT ENVELOPE: no spread over events anywhere, so `DOMAIN_EVENT_SCHEMA_VERSION` can never displace the draft's required literal `domainSchemaVersion`. Type-enforced, not just intended.\n- WRITE SURFACE: the CLI writes only to the operator-named store path (plus SQLite's own -wal/-shm beside it). buildSourceManifest and decodeLegacySources are read-only, and NOTHING is written to the snapshot root. `existsSync` refuses a missing store BEFORE any open, so no ledger is ever created implicitly; verified by real run, `ABSENT_CREATED=false`.\n- IMPORT-SHADOW UNTOUCHED: `git diff --numstat HEAD -- tools/import/import-shadow.ts tools/import/shadow-input.ts tools/import/shadow-input.js` prints NOTHING. Zero bytes moved; the read-only posture and DISCARDING_STORE are exactly as they were.\n- CONFLICT vs INFRASTRUCTURE: distinguished by code AND layer, both drilled (drill 4 reddens on the exact code when the ordering is inverted).\n- TYPECHECK SCRIPT: both new .ts files are in `typecheck:import`; the diff of package.json is exactly one line.\n- DEPENDENCY DIRECTION: `grep -rn \"@moe/store\\|packages/store\" packages/import/src/` returns only two COMMENTS (import-apply.ts:32 and a test comment). No import edge added; @moe/import still depends on nothing.\n\nTHREE THINGS I FOUND AND AM DISCLOSING RATHER THAN HIDING.\n1. TOCTOU on the store guard. `existsSync(options.store)` then `openForProject` is check-then-act: if the file is deleted in that window, the open CREATES it. The store API exposes no open-if-exists mode, so this cannot be made atomic here. Window is microseconds and the path is operator-named. Theoretical, disclosed, not fixed.\n2. When EVERY source file fails to decode, `decoded.records` is empty, applyImport drafts zero events and the store refuses with STORE_INPUT_INVALID, which surfaces as IMPORT_COMMIT_FAILED/APPLY. Correct and fail-closed, but the refusal report does NOT carry the per-file decode refusals the success report does. import-shadow already reports those; widening refusedText was out of scope.\n3. `commitLegacyImport`'s `receipt === null` arm is currently unreachable (a successful applyImport always means commit returned). It is a fail-closed guard against a future applyImport that reports success without committing, and I claim no drill for it.\n\nCOMMIT 219076d, by explicit pathspec, 5 files changed, 307 insertions, 7 deletions: tools/import/durable-import-store.ts, tools/import/durable-import-store.js, tools/import/import-commit.ts, tests/integration/import/legacy-import-commit.test.ts, package.json. Nothing foreign staged. Committed bytes equal gated bytes, verified by sha256 of `git show HEAD:<path>` against disk for all three sources.\n\nFOREIGN COMMIT NOTICE, per the global rail. Commit 39a1b2c (task-d288909b, \"Portability: Claude and Codex capability shadow matrix\") whole-tree-committed my in-progress tests/integration/import/legacy-import-commit.test.ts and tsconfig.json before I was finished — a STALE copy, 7 added / 6 deleted against my current bytes. I did not amend, reset, or claim it; my own commit simply carries the corrected file forward. QA should review by base-ref diff: `git diff cf272f67c3e34fe1d8c4dd00675512c67f165c05..HEAD -- tools/import tests/integration/import package.json`.\n\nGATE, each leg run separately with its own exit code, never `;`-chained and never piped:\n- `pnpm typecheck:import` -> EXIT 0\n- `npx tsc -p tests/integration/import/tsconfig.json` -> EXIT 0\n- `npx vitest run tests/integration/import` -> EXIT 0, `Test Files 1 passed (1)`, `Tests 9 passed (9)` (a nonzero executed count line, not a silent zero-test pass)\n- `pnpm typecheck` (repo-wide, recursive) -> EXIT 0\n- combined fresh run of the three legs chained with && -> EXIT 0, count line printed.\n\nREPO-WIDE RED, disclosed verbatim and attributed. `pnpm test` -> EXIT 1, `Test Files 5 failed | 289 passed (294)`, `Tests 6 failed | 7155 passed | 2 skipped (7163)`. Failing files: packages/testkit/src/foundation/foundation-spec.test.ts (\"keeps the held-out models out of every production module\" -> expected [ 'apps\\daemon\\src\\index.ts' ] to deeply equal []), packages/store/src/recovery-anchor.test.ts, tests/integration/release-archive-cleanup.test.ts (2), packages/runner/src/providers/claude/claude-launcher.windows.test.ts, packages/runner/src/providers/claude/claude-runtime-discovery.test.ts. My files are named in ZERO failure messages (grepped). The failing-path set intersected with my owned paths is EMPTY. The two runner files are LOAD FLAKES, not regressions: re-run in isolation ->",
+      "startedAt": "2026-08-18T04:14:01.014Z",
+      "completedAt": "2026-08-18T04:17:27.191Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b8af1a87",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -78,16 +105,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:04:03.531Z",
-  "updatedAt": "2026-08-18T04:07:22.102Z",
+  "updatedAt": "2026-08-18T04:18:24.080Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:06:31.506Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 2
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:08:31.891Z",
@@ -113,5 +143,20 @@
   "contextFetchedBy": [
     "worker-b8af1a87"
   ],
-  "workStartedAt": "2026-08-18T03:58:38.597Z"
+  "workStartedAt": "2026-08-18T03:58:38.597Z",
+  "reviewStartedAt": "2026-08-18T04:18:24.080Z",
+  "verification": {
+    "command": "npm run typecheck:import --silent && npx tsc -p tests/integration/import/tsconfig.json && npx vitest run tests/integration/import",
+    "exitCode": 0,
+    "outputTail": " Test Files  1 passed (1)\n      Tests  9 passed (9)\n   Start at  07:17:36\n   Duration  707ms (transform 398ms, setup 0ms, import 500ms, tests 113ms, environment 0ms)",
+    "reportedAt": "2026-08-18T04:18:24.080Z"
+  },
+  "filesModified": [
+    "tests/integration/import/legacy-import-commit.test.ts",
+    "tests/integration/import/tsconfig.json",
+    "tools/import/import-commit.ts",
+    "tools/import/durable-import-store.ts",
+    "tools/import/durable-import-store.js",
+    "package.json"
+  ]
 }

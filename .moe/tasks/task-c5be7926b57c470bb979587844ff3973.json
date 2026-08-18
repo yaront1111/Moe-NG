@@ -14,8 +14,45 @@
     "Do not weaken the roster to subset/>= matching and do not rename constants to evade the scan regex",
     "If task-80fce1d1 is not DONE when planning starts, verify the reader surface from its committed bytes and re-block on it by id if the surface moved"
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Reproduce the red and verify the subject. Read-only. (1) `npx vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts` currently fails 2 tests (architect reproduced: 2 failed | 32 passed) -- \"scan minus roster\" naming IMPORT_SHADOW_READ_LAYER@apps/daemon/src/projections/import-shadow-contracts.ts and the cardinality scan expecting 93 receiving 94. (2) task-80fce1d1 is DONE (verified), so the rail's re-block clause does not fire; the reader surface is committed: `IMPORT_SHADOW_READ_LAYER = \"DAEMON_IMPORT_SHADOW\"` (import-shadow-contracts.ts:24), the frozen 9-member `IMPORT_SHADOW_REFUSAL_CODES` (:29-39: ABSENT, BINDING_MISMATCH, EVENT_UNSUPPORTED, EVIDENCE_MALFORMED, HORIZON_DRIFT, INPUT_INVALID, LEGACY_UNREADABLE, SCHEMA_UNSUPPORTED, STORE_UNREADABLE), and the production functions `readImportShadowProjection` (import-shadow-reader.ts:143) and `compareImportShadow` (:215), both root-exported from @moe/daemon (index.ts:44 exports the layer and codes too -- import everything from the bare root, never the deep path). (3) THE STRUCTURAL FACT THAT SHAPES THIS TASK: the durable-store axis is NOT a flat case list. `DURABLE_BOUNDARY_NAMES` (durable-store-boundary-scenarios.ts:28) is a closed union; `expectations()` is an exhaustive switch over it, `questions` is an exhaustive `Record<DurableBoundaryName, [string, string]>`, and `casesFor` GENERATES one BEFORE and one AFTER case per name (:130-146) with `hostileRaceCases` mapped the same way (:155). Adding the name makes the file non-compiling until every coupled site gains its branch -- the closed-enum coupling is the mechanism, not an accident. Find the per-boundary DRIVER too: `runRefusalCase` (:300) and the race runner must know how to drive the import-shadow reader; locate where each boundary's drive function lives before writing anything.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Roster first: add the hand-written entry `{ constant: \"IMPORT_SHADOW_READ_LAYER\", file: \"apps/daemon/src/projections/import-shadow-contracts.ts\", axis: \"durable-store\" }` to tests/security/boundary-roster.security.ts beside the other apps/daemon durable-store entries (:143-152 region), and bump BOTH pins: EXPECTED_ROSTER_SIZE 93 -> 94 and EXPECTED_DISTRIBUTION[\"apps/daemon\"] 35 -> 36. Axis choice is durable-store, matching the failing slice's own scan and the reader's nature -- a read seam over the durable store whose port is deliberately declared structurally rather than as SqliteEventStore (contracts.ts:44's comment). Add a provenance comment line in the roster's existing style (the file documents each bump with task id and date -- follow the 91->92 GRAPH_CONTENT_LAYERS precedent at :104). Do NOT weaken the scan to subset/>= matching; the two-directional equality is the ratchet.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "Wire the boundary through every coupled site in tests/security/durable-store-boundary-scenarios.ts, letting the compiler enumerate them: add `IMPORT_SHADOW_READ_LAYER` to DURABLE_BOUNDARY_NAMES, then fix each resulting type error. (a) `expectations()` switch: BEFORE -> `{ code: \"IMPORT_SHADOW_STORE_UNREADABLE\", layer: \"DAEMON_IMPORT_SHADOW\" }` (hostile/closed store bytes -- nothing later on the path is reachable, so the read seam is provably the branch that answered); AFTER -> `{ code: \"IMPORT_SHADOW_EVIDENCE_MALFORMED\", layer: \"DAEMON_IMPORT_SHADOW\" }` (rows were seeded through the REAL import-commit path, then one stored payload truncated in the store between seed and read -- shape and store health both pass, only evidence decoding can refuse). (b) `questions` record: two one-line questions in the file's existing voice, e.g. \"an unreadable store yields no shadow rows\" / \"a truncated imported payload cannot become evidence\". (c) The RACE arm per the recorded spec is a MID-READ COMMIT racing the reader -- expected refusal `IMPORT_SHADOW_HORIZON_DRIFT` at the same layer, following how hostileRaceCases builds its runs. (d) The DRIVER: wherever the per-boundary drive functions live (found in step 1), add the import-shadow drive that calls the REAL `readImportShadowProjection` from the bare @moe/daemon root -- never a local reimplementation of the reader, and never the deep projections path. Seed fixtures only through production writers; a hand-inserted store row that the import path never wrote would test a shape production cannot produce.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Green, then check the neighbour gates this landing touches. Run the durable-store slice and the roster slice to green, then the FULL `pnpm test:security` foreground -- task-3b1cbdf9's completeness ratchet is committed at 6176607 and its normaliser reads the durable-store phase-split exports, so the new boundary flows into its union/coverage assertions automatically; if its cross-axis union or per-axis subset-size assertions redden, the fix is THERE being stale pins in this task's blast radius, not a reason to retag the entry. Also confirm `armsFor`-style resolution in the completeness gate now reports BEFORE, AFTER and RACE for IMPORT_SHADOW_READ_LAYER, since a name added to DURABLE_BOUNDARY_NAMES with a driver that silently no-ops would pass generation counts while exercising nothing -- the per-case runner's own assertions (durableRecords, refusal tuple) are what prove the arms ran against the production reader.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "Mutation drill per DoD 3, plus one extra the generated table makes necessary. Drill A: change the AFTER arm's expected code to a different IMPORT_SHADOW_* member; the named durable-store case must go RED on its code comparison, not on a crash -- proving the expectation is pinned against the production reader's actual answer. Drill B (the generated-table hazard): make the new driver return a hand-built refusal object instead of calling `readImportShadowProjection`; the case must go RED on whichever assertion distinguishes production truth from an echoed expectation (durableRecords count, refusal tuple shape) -- if it stays GREEN, the runner is comparing the expectation to itself and the driver must be rewritten so production is actually invoked. Record command, failing test NAME, exact assertion for each. Restore byte-identically by re-editing (never `git checkout` in this shared worktree) and confirm `git diff --numstat` reads 0/0 for the drilled file. One drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "Adversarial review, commit, gate. ATTACKER PASS: does any arm assert only refusal without pinning code AND layer? Could an earlier guard (input validation) answer the AFTER arm instead of evidence decoding -- is the fixture valid at every earlier layer so only the truncation can refuse? Does the RACE arm actually interleave through the race runner rather than running two sequential calls? Is anything imported from apps/daemon/src/projections/ by deep path (must be the bare @moe/daemon root)? Were apps/daemon/src/projections/** bytes touched (forbidden -- task-80fce1d1's deliverable)? Is the roster still two-directional equality? COMMIT only the tests/security/** owned paths by explicit pathspec after `git status --porcelain` and unstaging any foreign entry; verify `git show --stat`. GATE per DoD 4: foreground `pnpm test:security` at final HEAD, exit 0, with the printed nonzero Test Files/Tests count line quoted in the completion note -- this suite runs in NO other gate, so this run is the only evidence there is. Also note in completion: task-3b1cbdf9's gate should now be green -- say whether it is, since unblocking it is this task's stated purpose.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,5 +72,31 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:42:43.880Z",
-  "updatedAt": "2026-08-18T03:45:11.748Z"
+  "updatedAt": "2026-08-18T04:17:58.520Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:15:43.472Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:17:56.421Z",
+  "planningNotes": {
+    "approachesConsidered": "The task description carries a worker-measured unblock spec and says do-not-re-derive; the plan follows it and adds the one thing the spec did not know: the durable-store axis is a GENERATED, closed-enum-coupled table, not a flat case list like integrity's codecCases. The description's 'following the codecCases template shape' is therefore adapted, not obeyed literally -- codecCases is the INTEGRITY axis shape (flat array, arm field per entry); the durable-store axis generates one BEFORE and one AFTER case per DURABLE_BOUNDARY_NAMES member through exhaustive switch/Record sites, and RACE arms are mapped from the same name list. Adding the name and letting the compiler enumerate the coupled sites is the correct mechanism (the closed-enum coupling exists to force exactly this), and it is why the plan has no hand-written case objects. REJECTED: (a) putting the entry on the integrity axis with flat codecCases-style arms -- the failing scan is durable-store's, the reader is a durable-store read seam, and a cross-axis entry would redden task-3b1cbdf9's no-overlap/union assertions; (b) hand-inserting hostile rows directly into the store for the AFTER arm -- rows must be seeded through the real import-commit path then corrupted, or the arm tests a shape production never writes; (c) asserting IMPORT_SHADOW_INPUT_INVALID for BEFORE -- input validation answers before the store is touched, so it would prove the wrong branch; STORE_UNREADABLE pins the read seam itself. Code-to-arm mapping follows the spec's own words: hostile store bytes -> STORE_UNREADABLE (BEFORE), truncated payload -> EVIDENCE_MALFORMED (AFTER), mid-read commit -> HORIZON_DRIFT (RACE).",
+    "codebaseInsights": "Verified at current HEAD (post-6336047, post-6176607). SUBJECT (task-80fce1d1, DONE): apps/daemon/src/projections/import-shadow-contracts.ts declares IMPORT_SHADOW_READ_LAYER = \"DAEMON_IMPORT_SHADOW\" (:24) and the frozen 9-code IMPORT_SHADOW_REFUSAL_CODES (:29-39); refuseImportShadow (:92) and forwardRefusal (:112) are the refusal constructors -- forwardRefusal exists because restamping an upstream code is forbidden (file comment :13). Production functions: projectDaemonImportShadow (import-shadow-mapper.ts:103), readImportShadowProjection (import-shadow-reader.ts:143), compareImportShadow (:215). ALL root-exported: apps/daemon/src/index.ts:44 carries IMPORT_SHADOW_READ_LAYER and IMPORT_SHADOW_REFUSAL_CODES. RED REPRODUCED: boundary-roster.security.ts fails 2/34 (scan-minus-roster naming the constant; cardinality 93 vs 94). ROSTER: entry belongs beside the apps/daemon durable-store block (:143-152); pins EXPECTED_ROSTER_SIZE=93 (:234 region) and EXPECTED_DISTRIBUTION[\"apps/daemon\"]=35; provenance-comment precedent at :104 (the 91->92 GRAPH_CONTENT_LAYERS bump). DURABLE-STORE AXIS SHAPE: DURABLE_BOUNDARY_NAMES closed union (durable-store-boundary-scenarios.ts:28-45); expectations() exhaustive switch (:70-112) returning {code, layer} per boundary AND PHASE (several boundaries return different codes for BEFORE vs AFTER -- the import-shadow entry will too); questions exhaustive Record (:114-129); casesFor generates BEFORE/AFTER per name (:130-146); hostileRaceCases maps the names (:155); runRefusalCase (:300) is the runner -- the per-boundary DRIVE function location must be found in step 1 (likely a switch in the scenarios file or the boundaries slice). CONSUMER CONTEXT: task-3b1cbdf9 (completeness ratchet) committed at 6176607, blocked solely on this gate; its normaliser derives durable-store arms from the phase-split exports, so the new boundary flows in automatically once the name is added. pnpm test:security runs in NO other gate.",
+    "risks": "The distinctive risk here is the generated-table echo: because durable-store cases are generated from the name list with expectations supplied per boundary, a driver that never actually invokes readImportShadowProjection -- or one that returns a hand-built refusal matching the expectation -- passes every count and set assertion while testing nothing. Drill B exists precisely for that, and the runner's own durableRecords/refusal-tuple assertions are the production-truth anchor. Second, wrong-branch pinning: INPUT_INVALID answers before the store is consulted, so using it for the BEFORE arm would green while proving input validation rather than the read seam; STORE_UNREADABLE is the seam's own code. Third, the AFTER fixture must be valid at every earlier layer -- seeded through the real import-commit path, then ONE payload truncated in place -- or an earlier guard answers and the EVIDENCE_MALFORMED assertion quietly tests the wrong refusal. Fourth, closed-enum coupling cuts both ways: adding the name breaks compilation at every coupled site, which is the enumerating mechanism, but a worker who silences one site with a default arm instead of a real branch defeats it -- no default arms in the exhaustive switch. Fifth, deep imports: everything needed is on the bare @moe/daemon root (index.ts:44); a deep projections/ path import would violate the rail and bypass the published surface. Sixth, blast radius: task-3b1cbdf9's committed completeness gate reads these same exports; if its union/size assertions redden after the landing, the fix is stale pins in ITS file per its own derive-not-hardcode design -- report, never retag the axis to dodge it. Finally, pnpm test:security is the ONLY gate running this suite -- the foreground run with quoted count lines is the entire evidence base, so a skipped run is an unverified task.",
+    "keyFiles": [
+      "tests/security/boundary-roster.security.ts",
+      "tests/security/durable-store-boundary-scenarios.ts",
+      "tests/security/durable-store-boundaries.security.ts",
+      "apps/daemon/src/projections/import-shadow-contracts.ts",
+      "apps/daemon/src/projections/import-shadow-reader.ts",
+      "apps/daemon/src/index.ts",
+      "tests/security/completeness.security.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-18T04:17:58.520Z"
 }

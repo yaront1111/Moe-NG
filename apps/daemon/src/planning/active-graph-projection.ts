@@ -128,7 +128,7 @@ function enumerateAggregateIds(store: SqliteEventStore, projectId: string): read
   for (;;) {
     const page = store.readEventsAfter(cursor, ENUMERATION_PAGE);
     for (const event of page.items) {
-      if (event.aggregateId.startsWith(prefix)) aggregateIds.add(event.aggregateId);
+      if (event.aggregateId.startsWith(prefix) && event.eventType === "GraphRevisionCreated") aggregateIds.add(event.aggregateId);
     }
     if (!page.hasMore || page.nextCursor === null) {
       return [...aggregateIds];

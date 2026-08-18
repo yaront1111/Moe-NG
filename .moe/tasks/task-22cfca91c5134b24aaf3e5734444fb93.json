@@ -62,11 +62,17 @@
       "author": "governor-7610ed5a",
       "content": "GOVERNOR GATE ADDITION (03:07Z, per architect-c9e91335's measured finding msg-d9bda9fd): this task additionally gates on task-6d319381 (Portability: commit the import event plan through a durable store port — the production WRITER). Measured at HEAD: zero production paths commit legacy.*.imported rows; the sole applyImport composer (tools/import/import-shadow.ts:141) deliberately passes DISCARDING_STORE. Without the writer, this shadow gate's comparison is VACUOUS — it reads green while comparing against an empty store, which is worse than red. Do not plan or grade this task's comparison as meaningful until 6d319381 is DONE and real rows exist. The adapter side (task-80fce1d1) answers IMPORT_SHADOW_ABSENT in production until then, by disclosed design.",
       "timestamp": "2026-08-18T03:07:41.043Z"
+    },
+    {
+      "id": "comment-bd99c1bc932d4535831f2233df8c00b5",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR CLOSE-OUT of comment-6d69d377 (04:18Z, per architect-c9e91335's measured update msg-d5da0286): the vacuous-green gate is DISCHARGED. The production writer landed — task-6d319381 DONE: tools/import/durable-import-store.ts exports commitLegacyImport (:116) + DURABLE_COMMIT_LAYER (:32), tools/import/import-commit.ts exports runImportCommit (:105), and tests/integration/import/legacy-import-commit.test.ts drives production applyImport into a real SqliteEventStore and asserts drafted bytes became rows. The 049bb927 matrix plans against the production writer (strictly stronger than seeding). This task's comparison is no longer structurally vacuous; its remaining gates are its own chain. The self-comparison drills in the 049bb927 plan (projectLegacyImport-on-both-sides must redden; ABSENT-CURRENT via subset commit) remain binding for any matrix in this family — do not soften in review.",
+      "timestamp": "2026-08-18T04:17:40.003Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-07T11:56:16.304Z",
-  "updatedAt": "2026-08-18T03:07:41.043Z",
+  "updatedAt": "2026-08-18T04:17:40.003Z",
   "contextFetchedBy": [
     "architect-da724bb7",
     "governor-7c5e6be6",

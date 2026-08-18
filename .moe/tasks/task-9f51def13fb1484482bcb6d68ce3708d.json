@@ -15,9 +15,69 @@
     "Pure export move only: no reducer, vocabulary, contract, behavior, package manifest or lockfile change.",
     "Preserve foreign work; TDD/mutation against the existing production root surface; explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the BASELINE before moving a byte, because a pure export move is proved by what does NOT change. Capture and keep: (a) `wc -l packages/scheduler/src/index.ts` — 430 at plan time, over the binding 400 cap, which is the whole justification; (b) the sorted runtime namespace, `node --input-type=module -e \"import('@moe/scheduler').then(m => console.log(Object.keys(m).sort().join('\\n')))\"` run from PowerShell with the working directory inside packages/scheduler, saved to a scratch file OUTSIDE the repo; (c) a green run of `pnpm --filter @moe/scheduler test`, noting the `Test Files N passed` count line. The namespace list from (b) is the artifact the final step diffs against — byte-for-byte equality of that sorted list IS DoD 1's \"same reviewed 94-name set\", and it is stronger than trusting the suite alone. NOTE the roster moved during planning: `index-surface.test.ts:154` now pins 94, not the 92 an earlier measurement saw, because `releaseWork` and its type closure landed at index.ts:126 from a peer task. Re-measure rather than trusting either number.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts"
+      ],
+      "note": "BASELINE RECORDED at HEAD 219076d (moved from the plan's a42ae2f; re-measured, not trusted). Read-only step, zero files written.\n\n(a) CAP VIOLATION CONFIRMED LIVE: `wc -l packages/scheduler/src/index.ts` = 430 physical lines, past the binding split-before-400 rule. The premise holds. `index-surface.test.ts` = 1843 lines and is NOT owned.\n\n(b) RUNTIME NAMESPACE BASELINE, the artifact step 4 diffs against. Run from PowerShell with cwd inside the package, `node --experimental-strip-types --input-type=module -e 'const ns = await import(\"@moe/scheduler\"); console.log(Object.keys(ns).sort().join(\"\\n\"))'`, saved OUTSIDE the repo to C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-task-9f51def-baseline-namespace.txt. Count = **94** sorted names. That live 94 agrees exactly with the hand-transcribed `expect(EXPECTED_EXPORTS.length).toBe(94)` at index-surface.test.ts:154, so the roster the plan warned had moved 92 -> 94 is now settled and BOTH independent measurements agree. Re-measured rather than trusting either number, per the plan.\n\n(c) GREEN BASELINE: `pnpm --filter @moe/scheduler test` -> EXIT=0 with a NONZERO count line, `Test Files 45 passed (45)` / `Tests 1411 passed (1411)`. Not a vacuous filter run: the count line is present, so the leg executed. Step 5 must reproduce these same two counts — a pure move changes neither.\n\nMEASUREMENTS BEYOND THE STEP, recorded because they change how steps 2-4 must be written:\n\n1. `Object.keys` SEES VALUES ONLY. All 94 roster entries are values (`EXPECTED_EXPORTS` kinds are \"function\"/\"array\"/\"record\"), and the per-export kind assertion at :276 reads RUNTIME `typeof`, not source text. So the TYPE half of the namespace is pinned by a different mechanism: the ~12 `import type { ... } from \"@moe/scheduler\"` blocks at the head of index-surface.test.ts, which fail with TS2724 under typecheck if a type export is dropped. Both halves are needed and the two legs of DoD 5 cover one each — this is exactly why DoD 5 says run them SEPARATELY.\n\n2. `export *` MAKES A COLLISION SILENT (`mem:gotcha-export-star-collision-is-silent`). Once index.ts stars the new surface, an EXPLICIT export left behind in index.ts for a name the surface also exports wins silently — no tsc error, no roster red, because the name count is unchanged. So a leftover duplicate is invisible to every assertion in the suite. Step 3 must therefore prove ZERO name overlap between the two files directly, not infer it from a green run.\n\n3. THE BOUNDARY TEST GREPS RAW FILE TEXT (`mem:gotcha-scheduler-boundary-check-reads-comments`) but `package-boundary.test.ts:302` skips `schedulerRoot` itself, so a new module inside this package is exempt. Confirmed by reading the walker, not assumed. Doc comments moving with their exports are safe.\n\n4. THE `.js` BRIDGE IS LOAD-BEARING, NOT BUILD OUTPUT (`mem:gotcha-scheduler-js-shims`). `tsconfig` sets `noEmit: true` and `include: [\"src/**/*.ts\"]`, so the bridge is typechecked by nothing and Vite resolves the `.ts` directly — omitting it fails ONLY the runtime entrypoint worker smoke with ERR_MODULE_NOT_FOUND. `package.json` exports is exactly `{ \".\": \"./src/index.ts\" }` and is pinned at package-boundary.test.ts:454, so rail 2's no-manifest-change rule is also machine-enforced.\n\n5. GATE RESOLVES FOR REAL: `@moe/scheduler` is packages/scheduler and declares both `typecheck` and `test` scripts; the test script is `vitest run --root ../.. packages/scheduler/src`. The count line above proves execution, not just exit 0.\n\nConsumer edge for the completion record, per the global composition rail: task-2db110998677498abb11f65142a6fe25 publishes `releaseProviderSlot` from this split surface, then the daemon release-state composition task and task-e62e3828df234c66969a99b8223487f4.",
+      "startedAt": "2026-08-18T04:16:17.560Z",
+      "completedAt": "2026-08-18T04:18:05.405Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Create the new execution surface `packages/scheduler/src/execution-surface.ts` plus its bridge `execution-surface.js`. THE BRIDGE IS EXACTLY ONE LF-TERMINATED LINE, `export * from \"./execution-surface.ts\";` — DoD 2 says exactly that, and every sibling in packages/scheduler/src/ ships one (analyze-graph.js, frontier.js, graph-model.js and the rest are all git-tracked). A CRLF from a Windows editor is a byte difference in a tracked file that neither tsc nor vitest will ever surface, so verify the committed bytes (`git show :packages/scheduler/src/execution-surface.js | od -c | tail`) rather than trusting the editor. Move the four named families — authority, resource, budget, fairness — carrying their doc comments with them, because those comments are the reviewed rationale for each seam and orphaning them in index.ts would leave the explanation pointing at nothing. The VALUE exports cluster at roughly lines 106-183 and the TYPE exports at roughly 283-389; they are two contiguous regions once supersession and expansion are excluded. Copy the export specifiers VERBATIM, re-pointing only the relative paths (they stay `./authority/...`, `./fairness/...` since the new file is a sibling of index.ts, so most need no change at all).",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "packages/scheduler/src/execution-surface.ts",
+        "packages/scheduler/src/execution-surface.js"
+      ],
+      "newFiles": [
+        "packages/scheduler/src/execution-surface.ts",
+        "packages/scheduler/src/execution-surface.js"
+      ],
+      "startedAt": "2026-08-18T04:18:09.339Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Forward from index.ts and hit BOTH line caps, which is the tightest constraint in this task. Replace the moved blocks in `packages/scheduler/src/index.ts` with a single forwarding block from `./execution-surface.js`, keeping the `@moe/scheduler` namespace identical. DO THE ARITHMETIC BEFORE COMMITTING: the moved regions total roughly 181 lines, leaving index.ts near 249 against a 250 target — ONE LINE of headroom, so a stray blank line or an extra comment breaks the cap. If index.ts lands over 250, the sanctioned escape is to ALSO move the `SUPERSESSION_BOUND_DISPOSITION_FIELDS` / `SUPERSESSION_DISPOSITION_*` / `SUPERSESSION_REFUSAL_CODES` block at :184-187 (and its type counterpart), which is execution-facing and sits mid-region anyway — that buys about five more lines. Do NOT instead create a second new module: rail 1 owns exactly one new `.ts`. And do NOT drop or reflow doc comments to save lines; DoD 1 asks for a behaviour-free split, and deleting reviewed rationale to fit a counter is a real loss disguised as formatting. Confirm both files with `wc -l` and record the numbers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Prove the namespace is unchanged, which is the entire correctness argument. THE EXISTING SUITE IS THE PROOF AND MUST NOT BE TOUCHED — rail 1 forbids editing `index-surface.test.ts`, and that is a feature here: its three hand-transcribed guards (`EXPECTED_EXPORTS.length` at :154, the sorted-key equality against `Object.keys(scheduler).sort()`, and the per-export `[name, ExportKind]` assertion) are exactly what a pure move must survive UNCHANGED. Run `pnpm --filter @moe/scheduler test` and require them green with no edit. Then re-run the runtime namespace dump from step 1 and diff it against the saved baseline — it must be byte-identical, including export KINDS, since a value accidentally re-exported as a type would keep the name list identical while changing the namespace. Finally the compiled bare-specifier probe DoD 3 names: a throwaway file inside apps/daemon importing representative MOVED values and types (for example `releaseWork` and `SLOT_STATES` as values, `LeaseRecord` and `DrainDisposition` as types) from the bare `@moe/scheduler` specifier, `npx tsc --project apps/daemon/tsconfig.json --noEmit` exit 0 with no diagnostic naming the probe, probe deleted in the SAME command, and `git status --porcelain -- apps/daemon/src` confirming no residue.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/execution-surface.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Verification gate. Run `pnpm --filter @moe/scheduler typecheck` and `pnpm --filter @moe/scheduler test` as SEPARATE legs with exit codes captured individually — DoD 5 says separately, and an `&&` chain that dies at typecheck hides the count line entirely. `@moe/scheduler` resolves to packages/scheduler and declares both scripts (verified at plan time), but READ THE OUTPUT anyway: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for an absent package, so a leg with no `Test Files N passed` line is UNVERIFIED rather than passing. Record the count and compare it to the step-1 baseline count — a pure move must not change how many tests ran. Rail 2 forbids any manifest or lockfile change, so `package.json` and `pnpm-lock.yaml` must not appear in `git status`; if they do, something other than an export move happened. Commit by explicit pathspec over exactly the three owned paths, then `git show --stat` to confirm the commit carries only those.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index.ts",
+        "packages/scheduler/src/execution-surface.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drill and adversarial review, then stop. THE DRILL DoD 4 NAMES: delete ONE moved forwarding export from `execution-surface.ts`, re-run the focused suite, and confirm the production root-roster assertion in `index-surface.test.ts` goes RED — record which assertion and which export by name. Restore and confirm green. That drill is what proves the forwarding is load-bearing rather than incidental: if the suite stays green with an export missing, the namespace was never really pinned and the whole \"behaviour-free\" claim is untested. Add a SECOND drill the DoD does not name but the risk warrants: re-export one moved VALUE as a type (`export type { releaseWork }`) and confirm the per-export `ExportKind` assertion reddens — the sorted NAME list alone cannot see that, and it is the one way a pure-looking move silently changes the namespace. Drills run in a SHARED worktree where a peer recently landed exports into this very file: snapshot each file's hash and restore by CONTENT, never `git checkout`, re-read before restoring in case the file moved underneath you, and re-verify the `.js` bridge is still exactly one LF-terminated line afterwards. Then run `adversarial-self-review` over the diff, checking both physical line counts and that no doc comment was orphaned or dropped.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/execution-surface.ts",
+        "packages/scheduler/src/index.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-a83aecdf",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -36,5 +96,35 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:11:46.355Z",
-  "updatedAt": "2026-08-18T03:12:43.545Z"
+  "updatedAt": "2026-08-18T04:18:09.339Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:13:41.392Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
+  },
+  "stepsCompleted": [
+    "step-1"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:15:50.082Z",
+  "planningNotes": {
+    "approachesConsidered": "MOVE THE FOUR NAMED FAMILIES ONLY, LEAVING SUPERSESSION AND EXPANSION IN index.ts. The task names \"authority, resource, budget and fairness\", and those cluster into two contiguous regions once supersession and expansion are excluded — values around 106-183 and types around 283-389. The `SUPERSESSION_*` block at :184-187 sits mid-region and is execution-facing, so it is the designated ESCAPE VALVE if index.ts lands over 250 rather than something to move by default. Naming that contingency in the plan matters because the arithmetic is razor thin.\n\nWHY NOT SPLIT BY GRAPH-VERSUS-EVERYTHING-ELSE: the graph family (validate-graph, analyze-graph, frontier, graph-preview, graph-model, hard-edge-counterfactual) is the other natural seam and is roughly the same size. Rejected because the task's stated consumer is the provider-slot root-publication task, which needs the AUTHORITY surface to be the one with headroom. Splitting the graph side would leave the authority exports in an index.ts still near the cap and the next task still unable to add `releaseProviderSlot` without editing an oversized source.\n\nTHE EXISTING SUITE IS THE PROOF, NOT AN OBSTACLE. Normally the three hand-transcribed roster guards in index-surface.test.ts are the thing an export change has to fight. Here rail 1 forbids touching them, which turns them into the correctness argument: a pure move must survive all three UNCHANGED. Considered adding a new assertion for the move; rejected as both forbidden and redundant.\n\nADDED A SECOND DRILL BEYOND THE DoD. DoD 4 names only the delete-an-export drill. A value accidentally re-exported as a type keeps the sorted NAME list identical while changing the namespace, and only the per-export `ExportKind` assertion catches it — so the plan drills that too.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The premise holds and the numbers are current.\n\nTHE CAP VIOLATION IS REAL: `packages/scheduler/src/index.ts` is 430 physical lines, past the binding split-before-400 rule. `index-surface.test.ts` is 1843 lines and is NOT owned by this task.\n\nTHE ROSTER MOVED DURING PLANNING, which is itself the most important thing to carry forward. An earlier measurement this same session read `expect(EXPECTED_EXPORTS.length).toBe(92)`; it now reads **94** at index-surface.test.ts:154, because `export { releaseWork } from \"./authority/lease-drain.js\"` landed at index.ts:126 along with its type closure (`DrainDisposition`, `ReleaseHandoff`, `ReleaseRequest`, `ReleaseResult` at :299-300) from a peer task. Re-measure both the count and the file layout before editing; a peer is actively working this exact file.\n\nEXPORT CLUSTERING, derived by mapping every `from \"./...\"` specifier to its source directory and collecting line numbers:\n- authority: 109, 115, 116, 126, 295, 296, 301, 314\n- budget: 137, 142, 156, 331, 342, 353\n- fairness: 163, 164, 165, 166, 167, 176, 183, 225, 363, 367, 372, 377, 381, 388, 389\n- supersession: 187, 235, 430\n- expansion: 204, 205, 208, 226, 230, 233, 397, 402, 405, 410\n- graph family: 52-57, 69, 70, 92, 100, 267, 277, 278, 282\nNote fairness:225 (`validateOpportunityAttestation`) sits INSIDE the expansion doc region, so the move is not perfectly contiguous — do not move by line range alone, move by specifier.\n\nARITHMETIC, and it is the binding constraint: the two execution regions total roughly 181 lines, so index.ts lands near 249 against a 250 target. ONE line of headroom. The supersession block at :184-187 is the sanctioned extra ~5 lines if needed.\n\nDOC COMMENTS ARE PART OF THE MOVE. The reviewed rationale blocks at :117-142 (the design-765 release authority, \"SOLE composer of a lease's RELEASED / DRAINING / NO_OP transition\"), :143-188 (the measurement authority) and :297-343 (the four shapes `releaseWork` reads and answers in) belong to the moved families and must travel with them rather than being orphaned or deleted to save lines.\n\nBRIDGES ARE MANDATORY AND UNIVERSAL in packages/scheduler/src/ — analyze-graph.js, frontier.js, graph-model.js, index.js and the rest are all git-tracked one-liners.\n\nGATE RESOLVES: `@moe/scheduler` is packages/scheduler with `typecheck` and `test` scripts.",
+    "risks": "1. ONE LINE OF HEADROOM. index.ts is projected to land at ~249 of a 250 target. A stray blank line, a reflowed comment, or a forwarding block written across four lines instead of two breaks the cap. Do the `wc -l` before committing, and use the supersession block as the escape valve rather than deleting documentation to fit.\n2. A PEER IS EDITING THIS EXACT FILE. `releaseWork` and its type closure landed at index.ts:126 and :299 between two measurements in one session, moving the roster from 92 to 94. Re-read before editing and BEFORE any drill restore — restoring a stale snapshot over a peer's landed export is the worst outcome available here, and it would also silently break the roster guard in a way that looks like your own regression.\n3. MOVE BY SPECIFIER, NOT BY LINE RANGE. `validateOpportunityAttestation` (fairness) sits at :225, inside the expansion documentation region. A range-based cut takes expansion exports with it or leaves a fairness export behind, and either one changes the namespace.\n4. THE SORTED NAME LIST CANNOT SEE AN EXPORT-KIND CHANGE. A value re-exported as a type keeps every name identical. Only the per-export `[name, ExportKind]` assertion catches it, which is why the second drill exists.\n5. THE `.js` BRIDGE MUST BE EXACTLY ONE LF-TERMINATED LINE (DoD 2 is explicit). It is invisible to typecheck and vitest, and a drill restore can reintroduce CRLF — re-verify the committed bytes afterwards.\n6. RAIL 2 FORBIDS ANY MANIFEST OR LOCKFILE CHANGE. If `package.json` or `pnpm-lock.yaml` shows up in `git status`, something other than an export move happened.\n7. Do not touch index-surface.test.ts. Rail 1 forbids it, and its unchanged green run is the proof the task exists to produce.",
+    "keyFiles": [
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts",
+      "packages/scheduler/src/authority/lease-drain.ts",
+      "packages/scheduler/src/authority/authority-kernel.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 5400000
+  },
+  "planApprovedAt": "2026-08-18T04:15:52.195Z",
+  "contextFetchedBy": [
+    "worker-a83aecdf"
+  ],
+  "workStartedAt": "2026-08-18T04:16:17.560Z"
 }

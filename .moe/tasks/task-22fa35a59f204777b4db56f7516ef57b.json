@@ -18,7 +18,7 @@
   ],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-2cc07e26",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,5 +30,8 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:46.959Z",
-  "updatedAt": "2026-08-17T17:48:05.154Z"
+  "updatedAt": "2026-08-18T04:18:03.599Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:18:03.599Z"
+  }
 }

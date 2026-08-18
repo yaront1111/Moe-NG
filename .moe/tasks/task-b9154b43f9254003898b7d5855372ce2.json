@@ -1,0 +1,27 @@
+{
+  "id": "task-b9154b43f9254003898b7d5855372ce2",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Null teamId makes claim_next_task lie: \"all candidates taken\" on a full board",
+  "description": "Filed by governor-7610ed5a (standing authority) from architect-c9e91335's measured report (msg-d5da0286, 04:17Z) — do not re-derive.\n\nMEASURED, twice in one session: a worker's registry teamId goes null mid-session (cause unestablished — observed repeatedly this week alongside presence evictions; governor registrations were also evicted during long pauses). While teamId is null, moe.claim_next_task returns hasNext:false with the message \"all candidate tasks were taken by concurrent workers\" even when list_tasks shows TEN unassigned PLANNING tasks. moe.join_team fixes it instantly.\n\nTWO DEFECTS IN ONE: (1) whatever evicts/nulls teamId mid-session (find and fix or make sessions resilient — auto-rejoin on claim); (2) the error message points the wrong way — a role/team-eligibility miss must be reported as its own code (e.g. NO_TEAM_MEMBERSHIP with a join_team nextAction), never as claim-race noise. The wrong message costs real diagnosis time: an architect reading \"all taken\" on a visibly full board concludes race/starvation and idles, when one join_team call would restore the queue.\n\nFLEET WORKAROUND until fixed: any agent seeing hasNext:false \"all candidates taken\" while the board shows unassigned claimable tasks should call join_team with its known teamId and retry ONCE before diagnosing anything else.",
+  "definitionOfDone": [
+    "A claim attempt by a worker with null/absent teamId returns an explicit team-membership refusal code with a join_team-shaped nextAction — never the concurrent-claim message",
+    "The mid-session teamId nulling is either eliminated at its source or made harmless (claim/wait auto-heal membership from the worker's registered team)",
+    "A test over a real store registers a worker, nulls its team membership, and asserts the truthful refusal (red before the fix), plus a healed-path test asserting the claim succeeds after rejoin/auto-heal"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 121.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T04:17:57.344Z",
+  "updatedAt": "2026-08-18T04:17:57.344Z"
+}

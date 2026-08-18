@@ -129,7 +129,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-a8258c2e",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -141,7 +141,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:29.449Z",
-  "updatedAt": "2026-08-18T04:00:30.489Z",
+  "updatedAt": "2026-08-18T04:12:58.943Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:34:28.014Z",
     "plannedStepCount": 7,
@@ -176,7 +176,8 @@
   },
   "planApprovedAt": "2026-08-18T03:36:27.959Z",
   "contextFetchedBy": [
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-a8258c2e"
   ],
   "workStartedAt": "2026-08-18T03:45:02.617Z",
   "reviewStartedAt": "2026-08-18T04:00:30.489Z",
