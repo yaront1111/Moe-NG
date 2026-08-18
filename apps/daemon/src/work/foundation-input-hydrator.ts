@@ -19,6 +19,7 @@ import {
   RUNNER_WORKSPACE_LAYER,
   type FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
+import { snapshotFoundationInputPaths } from "./foundation-input-file-snapshot.js";
 
 /**
  * Foundation input authority matrix (Graph Beta, input-manifest half):
@@ -204,22 +205,34 @@ export function hydrateFoundationInputManifest(
   if (worktreeMissing(input.worktreeRoot)) {
     return localRefusal("FOUNDATION_INPUT_WORKTREE_MISSING");
   }
-  const observed = observeScope({
+  const paths = snapshotFoundationInputPaths(input.pathObserver);
+  const scopeInput = {
     baseIdentity: input.baseIdentity,
     declaredScopePaths: input.declaredScopePaths,
     gitObserver: input.gitObserver,
     observedAt: input.observedAt,
     observerVersion: input.observerVersion,
-    pathObserver: input.pathObserver,
+    pathObserver: paths.observer,
     worktreeRoot: input.worktreeRoot,
-  });
+  } as const;
+  const observed = observeScope(scopeInput);
   if (!observed.ok) return foundationAttemptRefusal(observed.code, RUNNER_SCOPE_LAYER);
 
   const entries: WorkspaceInputEntry[] = [];
   for (const observedEntry of observed.observation.canonicalEntries) {
     const read = readObservedEntry(input.worktreeRoot, observedEntry.path);
     if (!read.ok) return read;
+    if (!paths.unchanged(join(input.worktreeRoot, observedEntry.path))) {
+      return localRefusal("FOUNDATION_INPUT_STALE_OBSERVATION");
+    }
     entries.push(read.entry);
+  }
+  // Optimistic snapshot verification: the scope authority must still describe
+  // the same workspace after every byte read. A changed file or swapped link
+  // either changes the observation digest or makes re-observation refuse.
+  const verified = observeScope(scopeInput);
+  if (!verified.ok || verified.observation.sha256 !== observed.observation.sha256) {
+    return localRefusal("FOUNDATION_INPUT_STALE_OBSERVATION");
   }
   const sealed = buildInputManifest({
     baseIdentity: observed.observation.baseIdentity,

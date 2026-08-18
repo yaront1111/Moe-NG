@@ -134,7 +134,11 @@ describe("foundation input byte stability and zero residue", { timeout: 30_000 }
       if (!first.ok || !reversed.ok) return;
       expect(JSON.stringify(first.manifest)).toBe(JSON.stringify(reversed.manifest));
       expect(first.manifest.entries.map((entry) => entry.path)).toEqual([...repository.paths].sort());
+      // Each hydration observes before reading and re-observes afterward. The
+      // second cycle is the optimistic snapshot check, not an incidental read.
       expect(calls).toEqual([
+        "head", "submodules", "status", "tracked", "ignored",
+        "head", "submodules", "status", "tracked", "ignored",
         "head", "submodules", "status", "tracked", "ignored",
         "head", "submodules", "status", "tracked", "ignored",
       ]);
