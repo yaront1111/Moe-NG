@@ -88,7 +88,7 @@
       "completedAt": "2026-08-17T20:12:43.828Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -101,14 +101,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T18:45:35.428Z",
-  "updatedAt": "2026-08-17T20:13:56.403Z",
+  "updatedAt": "2026-08-17T20:30:06.427Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:31:38.866Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 2,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-17T20:30:06.427Z",
+    "wallClockMs": 3507561
   },
   "stepsCompleted": [
     "step-1",
@@ -169,7 +171,7 @@
     "tests/security/integrity-hostile-cases.ts",
     "tests/security/integrity-boundaries.security.ts"
   ],
-  "reviewCompletedAt": "2026-08-17T19:54:06.035Z",
+  "reviewCompletedAt": "2026-08-17T20:30:06.427Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 3 - 'asserts the exact GRAPH_CONTENT_* code and layer it expects, never merely that the operation failed': the RACE arm asserts LESS than that - it passes when production succeeds.",
@@ -228,5 +230,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-17T20:30:06.427Z",
+  "reviewSummary": "APPROVED after reject #1. Deliverable 8ad555c (arms + 13->14 bump + reseal literal) and 63ca78e (fix, +37/-3), tests/security only, no packages/scheduler source. On-disk == HEAD, sha256 04fa03ea.\n\nGATES: `npx vitest run --config tests/security/vitest.config.ts` EXIT 0, Test Files 9 passed (9) / Tests 487 passed (487). `pnpm typecheck` EXIT 0 repo-wide - the foreign TS2339 in packages/import the worker disclosed has CLEARED (peer committed at 93e17b4).\n\nTHREE DRILLS, each restored to sha256 04fa03ea, `git status --porcelain -- tests/security/` empty between:\n1. REJECT REPRODUCTION: RACE left leg -> decodeGraphContent(sealedGraphContent(\"dev-author-a\").bytes), which production ADMITS. Was EXIT 0 / 63 passed before the fix; now RED BY NAME - `GRAPH_CONTENT_LAYERS RACE: a re-spelled envelope races a duplicated hash key` / `expected true to be false` at admitted(left), plus the slice invariant printing `[ { ok: true, value: ... } ]`. The one-line `if (record[\"ok\"] !== false) return value;` is real.\n2. FAIL-CLOSED LEG: discriminator inverted to `!== true` so refusals flow through unprojected -> RED, 4 named BEFORE/AFTER arms, `HostileHarnessMisuseError: refusal carries no string code/reasonCode`. Helper did not go blind on the refusal side.\n3. NEW ARM (reject issue 3): layer -> GRAPH_CONTENT_CODEC -> RED BY NAME, `refusal layer mismatch for GRAPH_CONTENT_NONCANONICAL: expected GRAPH_CONTENT_CODEC, observed GRAPH_CONTENT_IDENTITY`.\n\nDoD: (1) roster-minus-covered empty, three-armed count green; (2) 13->14 at :109, roster entry intact at boundary-roster.security.ts:201 still axis integrity, EXPECTED_ROSTER_SIZE untouched; (3) all arms go through encodeGraphContent/decodeGraphContent, forged thunk re-seals both halves, all pin code AND layer; (4) above. soleIssue scoped to graphContentCases (6 sites), reaches no sibling family."
 }

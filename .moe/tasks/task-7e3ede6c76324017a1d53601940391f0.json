@@ -16,13 +16,91 @@
     "Preserve existing activation binding codes/layer and upstream store code; do not mint a second lifecycle/history reducer.",
     "Use TDD exact codes/layers, nonzero generated cases, daemon typecheck/test count evidence, and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-f956ffe1",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE / RE-PROBE THE CLOSED PREREQUISITE. Record merge-base and HEAD, and confirm the three owned paths do not exist and are clean. Re-measure, do not trust the ticket: at HEAD 8222b9e `ACTIVATION_LEDGER_EVENT_TYPE=\"EffectActivationCommitted\"` and the QA-approved prerequisite now exports `ACTIVATION_LEDGER_COMMAND_KIND=\"activation.commit\"` from activation-ledger-contracts.ts:51; activation-ledger-commit.ts imports it and no private writer literal remains. Confirm the existing activation-ledger-reader.ts stays 371 lines and is off-limits. Verify all three cross-package edges, not just symbols: apps/daemon/package.json declares @moe/runner, @moe/scheduler and @moe/store; pnpm-lock.yaml links the daemon importer to ../../packages/{runner,scheduler,store}; create a uniquely named temporary source inside apps/daemon/src that bare-imports `validateActivationCommit`, `parseLeaseRecord`, `DurableStoreError`, `SqliteEventStore` and the required store types, run `pnpm --filter @moe/daemon typecheck`, and delete the probe in the same guarded command/finally. Record fresh daemon baselines separately: planning baseline is typecheck exit 0 and test `121 passed` files / `2574 passed` tests. Do not edit manifests, lockfile, the 249-line contracts file, or any existing reader.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BASELINE RE-MEASURED at HEAD 8222b9e25041442ad51364ad09848a8116e362d4; merge-base cf272f67c3e34fe1d8c4dd00675512c67f165c05.\n\nPREREQUISITE CLOSED (re-probed, not trusted): activation-ledger-contracts.ts:43 exports ACTIVATION_LEDGER_EVENT_TYPE=\"EffectActivationCommitted\"; :51 exports ACTIVATION_LEDGER_COMMAND_KIND=\"activation.commit\". activation-ledger-commit.ts:40-41 imports both; :190 writes commandKind: ACTIVATION_LEDGER_COMMAND_KIND. grep found no private writer literal.\n\nOWNED PATHS ABSENT/CLEAN: activation-attempt-reader.{ts,js,test.ts} all \"No such file or directory\".\nOFF-LIMITS FILES MEASURED: activation-ledger-reader.ts = 371 lines, activation-ledger-contracts.ts = 249 lines.\n\nCROSS-PACKAGE EDGES (all three legs, not just symbols):\n(a) apps/daemon/package.json dependencies declare @moe/runner, @moe/scheduler, @moe/store (all workspace:*).\n(b) pnpm-lock.yaml apps/daemon importer: '@moe/runner' -> link:../../packages/runner; '@moe/scheduler' -> link:../../packages/scheduler; '@moe/store' -> link:../../packages/store.\n(c) Compiled probe apps/daemon/src/zz-edge-probe-7e3ede6c.ts bare-imported validateActivationCommit (@moe/runner), parseLeaseRecord (@moe/scheduler), DurableStoreError + SqliteEventStore + types CommandDecisionRecord/CommandReceipt/CursorPage/DurableStoreErrorCode/StoreHealth/StoredEvent (@moe/store). `pnpm --filter @moe/daemon typecheck` => PROBE_TYPECHECK_EXIT=0; probe rm -f'd in the SAME command; post-delete `ls` confirms absent.\n\nFRESH DAEMON BASELINES (separate foreground runs, own exit codes):\n- `pnpm --filter @moe/daemon typecheck` TYPECHECK_EXIT=0\n- `pnpm --filter @moe/daemon test` TEST_EXIT=0, \"Test Files 121 passed (121)\", \"Tests 2574 passed (2574)\"\n\nSURFACE SURVEY (symbols verified on disk, not assumed): readFoundationActivationHistory(aggregateId, events, projectId) -> FoundationHistoryResult; FoundationBindingStore port; foundationBindingAbsent/foundationBindingUnknown + FOUNDATION_ACTIVATION_BINDING_LAYER; FoundationBindingResult has NO storeCode field (confirms the local UNKNOWN extension is required). isQueryText/sameLease/tracedProject in foundation-binding-predicates.ts. Store publics confirmed at sqlite-event-store.ts:282/286/290/338/342/354 (getCommandDecision, getCommandReceipt, getHealth, readEvents, readEventHorizon, readEventsByTypeAfter). StoredEvent carries commandId, decisionTrace{commandId,commandKind,principalId,projectId,requestSha256}, requestSha256, globalPosition, aggregateSequence, eventId, payload. EffectsCommittedDecision carries effectDisposition/resultCode \"EFFECTS_COMMITTED\", expectedVersion/observedVersion/previousVersion/currentVersion, businessEventIds, outboxMessageIds, resultBytes, requestSha256, effectSha256, commandKind, targetAggregateId. CommandReceipt carries aggregateId/commandId/committedAt/currentVersion/previousVersion/eventIds/outboxMessageIds/effectSha256/requestSha256. DurableStoreError.code is public DurableStoreErrorCode.\nTest seeding path confirmed: openHarnessStore/seedReadyProject/PROJECT_ID/PRINCIPAL_ID at recovery/restore-test-harness.ts:78/99/31/32; runEffectActivateCommand at activation-ingress.ts:287; journal-test-harness.ts:86-155 is the working activationBytes template. .js bridge byte shape confirmed by od: `export * from \"./<name>.ts\";\\n` (no BOM/CR). Worker+SharedArrayBuffer/Atomics race pattern confirmed at foundation-launch-authority.test.ts:1339-1427.\n\nNo manifest, lockfile, contracts, schema or existing-reader edit made.",
+      "startedAt": "2026-08-18T03:00:25.348Z",
+      "completedAt": "2026-08-18T03:02:42.540Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — ACCEPTED, ABSENT, AND READ-ONLY PROOF in the new activation-attempt-reader.test.ts. Build file-backed project-bound SqliteEventStore fixtures with `openHarnessStore` + `seedReadyProject`, and generate every accepted activation only by a parameterized request passed through production `runEffectActivateCommand`; never use `activation-ledger-fixtures.record()`, whose grant is codec-legal but activation-incoherent. Keep principalId deliberately different from lease.ownerSessionRef. Pin `readFoundationActivationByAttempt(store, projectId, attemptId)` to exactly three arguments after the store—no caller session/effect/epoch/limit. One accepted control must assert the exact deeply frozen own-key result `{status:\"BOUND\", activationAggregateId, attemptId, effectIntentId, epoch: parsed durable lease.epoch, ownerSessionRef, projectId, activationDigest}`; also assert repeated unchanged reads serialize identically. The absence control must contain at least one other valid activation so an always-NOT_FOUND implementation cannot pass, and must equal the existing exact `{status:\"ABSENT\", code:\"FOUNDATION_BINDING_NOT_FOUND\", layer:\"FOUNDATION_ACTIVATION_BINDING\"}`. Around every non-race read, snapshot positive raw event horizon/count, command-decision page/count, relevant aggregate versions/receipts, and database bytes/mtime, then assert the reader changed none of them. Capture the intended RED from the missing module rather than adding a test helper that answers the query.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ],
+      "note": "TDD RED captured from the MISSING MODULE, not from a helper that answers the query:\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/activation-attempt-reader.test.ts` => EXIT=1\n\"Error: Cannot find module './activation-attempt-reader.js' imported from .../activation-attempt-reader.test.ts\", \"Test Files 1 failed (1)\".\n\nLanded in the new focused test:\n- Parameterized `activationBytes(spec)` over {attemptId, epoch, sessionId, slug}; every accepted activation is committed by production `runEffectActivateCommand`. `activation-ledger-fixtures.record()` is NOT imported anywhere in the file.\n- `openStore` = mkdtempSync + `openHarnessStore` + `seedReadyProject` (file-backed, project-bound). `afterEach(cleanupRestoreHarnesses)` closes SQLite handles before Windows cleanup.\n- Call shape pinned to exactly three arguments after the store: `readFoundationActivationByAttempt(store, PROJECT_ID, attemptId)` — no caller session/effect/epoch/limit is expressible.\n- ACCEPTED control asserts the exact 8-own-key result {status:\"BOUND\", activationAggregateId, activationDigest, attemptId, effectIntentId, epoch, ownerSessionRef, projectId}; digest comes from production `readFoundationActivationHistory`, epoch 41 and ownerSessionRef \"session-owner\" come from the durable lease. Asserts Object.keys().sort() equals the exact list, Object.isFrozen(result), every own value primitive (deep-frozen by construction), and that a repeated read serializes byte-identically.\n- `expect(target.spec.sessionId).not.toBe(PRINCIPAL_ID)` pins the deliberate principal/owner-session divergence.\n- Second accepted case seeds two attempts with different epochs/sessions and queries the SECOND, so an answer-the-first reader cannot pass.\n- ABSENT control seeds a real activation first, then asserts equality with production `foundationBindingAbsent(\"FOUNDATION_BINDING_NOT_FOUND\")` AND with the literal {code:\"FOUNDATION_BINDING_NOT_FOUND\", layer: FOUNDATION_ACTIVATION_BINDING_LAYER, status:\"ABSENT\"}, the exact 3-key set, frozen — and then asserts the SAME store answers BOUND for the seeded attempt, so an always-ABSENT reader cannot pass.\n- READ-ONLY PROOF around every read: `positiveSnapshot` asserts raw event count > 0, command-decision count > 0, horizon > 0n and database bytes > 0 BEFORE comparing, then `expect(snapshot(store)).toEqual(before)` covers horizon, paged raw event count, paged decision count, db file size and mtimeMs; the accepted case additionally pins getAggregateVersion and getCommandReceipt across the read.",
+      "startedAt": "2026-08-18T03:02:44.788Z",
+      "completedAt": "2026-08-18T03:07:41.415Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — UNIQUENESS, PROVENANCE, BOUNDS, AND RACES in the same test. Seed 102 distinct valid activations through `runEffectActivateCommand`: 99 unrelated; two different activation aggregates sharing the queried attemptId at positions 100/101; then one unique page-2 target. Assert the duplicate query scans past the first hit and answers exact UNKNOWN/`FOUNDATION_BINDING_EVIDENCE_AMBIGUOUS`, while the unique page-2 query is BOUND and the indexed page-call count is >=2. Add a nonempty generated hostile table implemented only as thin read-only decorators over that real seeded store: invalid query; health or trace foreign project; malformed page/items/cursor/type; indexed-vs-history/canonical-history disagreement; missing and readable-wrong decision/receipt, wrong exported command kind, target/version/event/result/hash linkage; malformed leases; activation-digest disagreement; and thrown `DurableStoreError` plus generic throws. Pin the exact map at `FOUNDATION_ACTIVATION_BINDING`: QUERY_INVALID, PROJECT_MISMATCH, EVIDENCE_MALFORMED (preserving history AMBIGUOUS), ACTIVATION_INCOHERENT for readable receipt/decision/lease/activation identity disagreement, EVIDENCE_UNREADABLE for missing/throws, and SCAN_INCOMPLETE for page/cursor/ceiling/horizon faults. Every UNKNOWN arm must assert mandatory `storeCode` (exact DurableStoreError.code, otherwise null); ABSENT retains its existing byte shape. Test the literal preview ceilings—page size 100, at most 64 pages and 6,400 candidates—with a bounded decorator generated from a real nonmatching seed; assert a positive generated count and that crossing either ceiling returns SCAN_INCOMPLETE with zero authority. For the real race, copy the repository's proven Windows-safe data-URL Worker + SharedArrayBuffer/Atomics pattern: after the reader captures H, a second store handle invokes real `runEffectActivateCommand`, closes before signaling, and the parent continues. Any indexed event/history beyond H or a final horizon different from H must answer SCAN_INCOMPLETE. Snapshot counts after the intentional worker commit but before the reader resumes, then prove the reader adds nothing; await/terminate the worker and close all SQLite handles before recursive temp cleanup.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ],
+      "startedAt": "2026-08-18T03:07:43.530Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "MINIMUM IMPLEMENTATION — READ PORT, RESULT SHAPES, AND BOUNDED WALK in activation-attempt-reader.ts (<250 physical lines). Define an exported read-only structural port containing only `getHealth`, `readEventHorizon`, `readEventsByTypeAfter`, `readEvents`, `getCommandDecision`, and `getCommandReceipt`; no commit/apply, raw DatabaseSync, unfiltered readEventsAfter, caller callback, or clock. Define the BOUND primitive-only result and a local failure union: return `foundationBindingAbsent` unchanged for NOT_FOUND; for UNKNOWN spread the existing `foundationBindingUnknown(code)` into one newly frozen object with mandatory `storeCode: DurableStoreErrorCode|null`, populated only from public `DurableStoreError.code` and never an error message. Validate projectId/attemptId with production `isQueryText`, verify `getHealth().projectId`, capture one authoritative H, then page only exported ACTIVATION_LEDGER_EVENT_TYPE using PAGE_SIZE=100, MAX_SCAN_PAGES=64 and MAX_SCAN_CANDIDATES=6_400. Require a well-shaped page, <=100 items, strict increasing bigint positions, exact filtered event type, nonempty progress when hasMore, nextCursor equal to the last served position (or null on a terminal empty page), and no page/candidate beyond either ceiling. Any event position >H or changed final `readEventHorizon()` is SCAN_INCOMPLETE; a store throw is EVIDENCE_UNREADABLE with upstream storeCode. Scan to bounded exhaustion, never early-return or pick a highest epoch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "MINIMUM IMPLEMENTATION — VERIFY EVERY CANDIDATE BEFORE FILTERING. For each indexed activation at or below H, first verify its decisionTrace project and exported command kind. Look up the command decision by the trace key `{commandId: trace.commandId, principalId, projectId}` but the receipt by the store-internal `event.commandId`—never swap them. Require decision EFFECTS_COMMITTED, command kind, key, target aggregate, expected/observed/previous/current versions 0/0/0/1, singleton business event id, empty outbox, resultBytes byte-equal to the indexed payload, and decision.requestSha256 equal to trace.requestSha256. Separately require receipt command/aggregate, versions 0->1, singleton event id, empty outbox, committedAt, and effectSha256 equal to the decision; receipt.requestSha256 must equal `event.requestSha256`, NOT the decision/trace request hash because those are distinct digest domains. Read the full aggregate, refuse any history event beyond H, require its sequence-1 event byte/identity-equal to the indexed candidate, and delegate all lifecycle/tail semantics to production `readFoundationActivationHistory`, returning its exact refusal unchanged except for the new UNKNOWN storeCode shape. Parse both record.lease and effectIntent.leaseBinding with public `parseLeaseRecord`, require `sameLease`, then require public `validateActivationCommit` COHERENT with exact activationDigest. Only after all checks compare the durable `record.attempt.attemptId`. Keep scanning after a hit; zero verified matches returns exact NOT_FOUND, a second matching aggregate returns EVIDENCE_AMBIGUOUS, and exactly one returns the frozen durable primitive binding. Add only the exact LF bridge bytes `export * from \"./activation-attempt-reader.ts\";\\n`; no barrel or producer edit.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.ts",
+        "apps/daemon/src/activation/activation-attempt-reader.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL REVIEW + REQUIRED PRODUCTION MUTATIONS. With the intended task diff saved in memory and each mutation restored byte-for-byte in `finally` (no git checkout/reset and no scratch artifact), run two drills separately. (1) Change the production match accumulator to return/keep the first match without scanning to exhaustion; the named position-100/101 duplicate test must red specifically because EVIDENCE_AMBIGUOUS became BOUND, while its positive generated/seed count proves the second case existed. (2) Bypass the production call to `readFoundationActivationHistory` and answer from the indexed decoded event; the named indexed-valid/aggregate-history-mutated test must red on the lost EVIDENCE_MALFORMED/zero-authority assertion. Record the exact replaced range and intended red for each, then verify the original SHA-256 and focused green after restoration. Review null/empty/oversized inputs, repeated/concurrent reads, the two different request-SHA domains, decision-vs-receipt command IDs, final horizon drift, page/candidate off-by-one behavior, and Windows handle/worker cleanup. Confirm no caller authority, scan-all-events, write method, raw DB, second reducer, old-reader edit, or file over 250 entered production.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.ts",
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "FINAL VERIFICATION / QA HANDOFF / COMMIT. Run every leg in the foreground with its own captured exit code—no pipes and no `;`-masked success: (1) `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/activation/activation-attempt-reader.test.ts`, requiring a nonzero Test Files/Tests line; (2) `pnpm --filter @moe/daemon typecheck`; (3) exact task evidence command `pnpm --filter @moe/daemon test`, requiring a nonzero count above the 121-file/2574-test baseline; (4) repo-wide `pnpm typecheck`; (5) repo-wide `pnpm test`, also reading its count line. Apply the path-attributed baseline to any repo-wide foreign red and quote exact foreign lines/paths; daemon-owned legs must be green and no owned-path failure may be excused. Byte-check the `.js` bridge has no BOM/CR and one trailing LF, measure the new production file <250, confirm the 371-line ledger reader/contracts/schema/manifests remain untouched, verify only the three owned paths in `git status --porcelain`, and record consumer `task-00e4827dd9374ec79625351d560c82c8`. Commit with explicit three-path pathspec only and verify `git show --stat` contains no foreign file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/activation/activation-attempt-reader.ts",
+        "apps/daemon/src/activation/activation-attempt-reader.js",
+        "apps/daemon/src/activation/activation-attempt-reader.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-3d941382",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite, BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion under the human's standing unstall directive: the recorded gate is closed — task-cc3c4e59 (single-source activation-ledger command identity) is QA-approved DONE as of 20:43Z; ACTIVATION_LEDGER_COMMAND_KIND is now exported from activation-ledger-contracts.ts and the private COMMAND_KIND literal is retired. Planning architect: re-probe the exported identity at current HEAD before planning the reader.",
   "createdBy": "WORKER",
   "parentTaskId": "task-00e4827dd9374ec79625351d560c82c8",
   "priority": "CRITICAL",
@@ -30,11 +108,58 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:34:50.008Z",
-  "updatedAt": "2026-08-17T20:11:17.811Z",
+  "updatedAt": "2026-08-18T03:07:43.530Z",
   "metrics": {
-    "firstClaimAt": "2026-08-17T20:11:12.882Z"
+    "firstClaimAt": "2026-08-17T20:11:12.882Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 2
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
-  ]
+    "architect-f956ffe1",
+    "worker-3d941382"
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured the activation/read/store surfaces, identified the private activation.commit producer identity as the sole hard gap, filed prerequisite task-cc3c4e59daf5460490ff512e589cfd49, reported this task BLOCKED on it, and wrote the Serena handoff.",
+      "whatRemains": "After task-cc3c4e59daf5460490ff512e589cfd49 is DONE, re-claim and submit the three-file indexed/horizon reader plan described in the handoff.",
+      "pitfalls": "Do not copy the private activation.commit literal, seed accepted rows with hand-built ledger fixtures, select the first/highest epoch, or accept events/tails beyond the captured horizon.",
+      "openQuestions": "None for this task after the prerequisite; preserve storeCode through a local unreadable-arm result extension.",
+      "releasedAt": "2026-08-17T20:20:46.078Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing the required producer-identity prerequisite."
+    }
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T02:59:59.816Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Extend the existing 371-line activation-ledger-reader.ts. Rejected by the task rail and because it is already beyond the 250 target; the new attempt index/provenance concern belongs in a focused sibling. 2) Scan all global events. Rejected: the store already ships an indexed exact event-type read and task/architecture forbid lifetime-growing global scans. 3) Select the first or highest-epoch match. Rejected: no durable current pointer exists and the DoD requires ambiguity, not order-based authority. 4) Trust opaque requestBytes, FoundationAttemptRecorded, or caller session/effect/epoch. Rejected: none proves the activation's authenticated lease owner; only the decision-verified activation does. 5) Verify only the activation codec/history. Rejected: a self-consistent foreign command or missing receipt could still mint activation-shaped bytes; prerequisite cc3c exists precisely so command kind, decision and receipt can all be proven. 6) Compare every SHA field to one value. Rejected: decision/trace request identity and event/receipt effect request identity are intentionally different domains. 7) Use hand-built activation-ledger fixtures for accepted cases. Rejected: their grant is codec-legal but fails production `validateActivationCommit`; accepted authority must be produced through `runEffectActivateCommand`. 8) Chosen: a three-file, read-only indexed projection that validates every candidate before attempt filtering, captures H, scans to explicit preview ceilings, and fails closed on drift.",
+    "codebaseInsights": "Freshly measured at HEAD 8222b9e25041442ad51364ad09848a8116e362d4. The prerequisite is genuinely closed: activation-ledger-contracts.ts:51 exports `ACTIVATION_LEDGER_COMMAND_KIND = \"activation.commit\"`; activation-ledger-commit.ts imports/uses it at its decision write, and the private literal is gone. Owned reader/bridge/test paths are absent and clean. Existing activation-ledger-reader.ts is 371 lines and exports `readFoundationActivationHistory`; foundation-binding-predicates.ts exports `isQueryText` and `sameLease`; public @moe/runner/@moe/scheduler provide `validateActivationCommit`/`parseLeaseRecord`. SqliteEventStore publicly provides getHealth, horizon, indexed type pages, aggregate reads, decisions and receipts; DurableStoreError exposes a stable code. Daemon package.json declares @moe/runner/@moe/scheduler/@moe/store, the lock importer links all three, and a temporary compiled bare-specifier probe inside apps/daemon/src typechecked exit 0 and was deleted. Fresh daemon baseline is typecheck exit 0 and `Test Files 121 passed (121)`, `Tests 2574 passed (2574)`. Store identity detail that must not drift: decision lookup uses `event.decisionTrace.commandId`; receipt lookup uses internal `event.commandId`; decision.requestSha256 equals trace.requestSha256, while receipt.requestSha256 equals event.requestSha256; receipt and decision meet at effectSha256.",
+    "risks": "The production module is line-tight: estimated 220–245 lines. Keep helpers compact and split only if it would cross 250; do not spill into the 249-line contracts file or 371-line reader. The biggest correctness risk is filtering on attemptId before verifying unrelated candidates—a malformed second row would then be ignored and partial authority returned. Another is early return after the first page/hit, which misses a boundary duplicate. A third is crossing the two request-SHA domains or using trace.commandId for the receipt. A fourth is treating a concurrent post-H tail as current history; any indexed/history position >H plus final horizon drift must fail UNKNOWN. A fifth is a fake race: same-isolate timers cannot run during this synchronous reader, so use the repository's Worker/Atomics pattern and close handles before Windows cleanup. A sixth is a refusal-only suite; the accepted frozen control, page-2 accepted target, positive seeds/cases and raw no-write counts prevent refuse-all. The local mandatory storeCode extension is the only honest way to satisfy the rail because existing FoundationBindingResult has no storeCode; it adds no reason code or layer.",
+    "keyFiles": [
+      "apps/daemon/src/activation/activation-ledger-contracts.ts",
+      "apps/daemon/src/activation/activation-ledger-commit.ts",
+      "apps/daemon/src/activation/activation-ledger-reader.ts",
+      "apps/daemon/src/activation/foundation-activation-transition.ts",
+      "apps/daemon/src/activation/foundation-binding-predicates.ts",
+      "apps/daemon/src/activation/activation-ingress.ts",
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/sqlite-event-store.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-18T03:00:09.103Z",
+    "escalatedAt": "2026-08-18T03:00:09.103Z"
+  },
+  "planApprovedAt": "2026-08-18T03:00:01.892Z",
+  "workStartedAt": "2026-08-18T03:00:25.348Z"
 }

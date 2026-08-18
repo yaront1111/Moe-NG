@@ -14,8 +14,33 @@
     "Use pnpm workspace install/update semantics and inspect the importer diff; do not hand-edit unrelated lockfile sections.",
     "No deep imports, tsconfig paths, project references, scratch probe residue, or vacuous filter passes; explicit owned-path commit only."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-CONFIRM THE EDGE IS STILL LANDED, then change nothing. The architect measured this task COMPLETE-ON-ARRIVAL at HEAD a42ae2f (see the task comment for the full transcript): `apps/daemon/package.json` already declares `@moe/context`, and `pnpm-lock.yaml:107-110` already carries `'@moe/context': {specifier: workspace:*, version: link:../../packages/context}` inside the `apps/daemon:` importer. The description's contrary measurement was taken at HEAD 15918c7 and is stale. Re-run both checks — `node -e \"console.log('@moe/context' in require('./apps/daemon/package.json').dependencies)\"` and `grep -n \"packages/context\" pnpm-lock.yaml` — and confirm they still hold. IF THEY DO: make NO edit to either file, run NO `pnpm install`, and commit NEITHER path. Re-implementing a landed surface is a silent duplicate, and a needless lockfile churn in a shared worktree is a real hazard rather than a harmless no-op. IF THEY DO NOT hold — meaning a peer reverted the edge between planning and execution — stop and report rather than silently switching into build mode; that is a different task than the one planned here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Reproduce the two probes as recorded EVIDENCE, deleting every probe in the command that creates it. (a) COMPILED: write `apps/daemon/src/__ctx-probe.ts` importing `selectContext`, `renderContext`, `digestContextManifest` and their public types from the bare `@moe/context` specifier, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, require ZERO diagnostics naming the probe file, and `rm` it in the same command; confirm with `git status --porcelain -- apps/daemon/src` that nothing survives. DO NOT substitute a grep: `packages/context/src/index.ts` is five `export *` lines, so a barrel grep for the three symbol names returns nothing and proves neither presence nor absence. (b) RUNTIME, from a working directory inside `apps/daemon`, plain Node with NO loader flag — the export target is `./src/index.ts` and Node 24 strips types natively, the same reason the daemon's own start script is `node ./src/daemon-main.ts`: `import('@moe/context')` must report all three as `function`, and the NEGATIVE control `import('@moe/context/src/context-render.js')` must reject with `ERR_PACKAGE_PATH_NOT_EXPORTED`, since the exports map is `{\".\": \"./src/index.ts\"}` and maps no subpaths. Run the runtime probes from PowerShell, not the Bash tool — a prior plain-Node smoke on this repo failed only because Git Bash rewrote paths. Record both transcripts verbatim; the negative control is what stops the positive one from passing vacuously.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Run the gates separately and record the consumers, which is the only DoD item not already satisfied. Four legs, exit codes captured INDIVIDUALLY rather than `&&`-chained: `pnpm --filter @moe/context typecheck`, `pnpm --filter @moe/context test`, `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`. Both package names resolve (`@moe/context` is packages/context, `@moe/daemon` is apps/daemon, each declaring both scripts — verified at plan time). DoD 4 demands NONZERO test-count output, and rail 3 forbids a vacuous filter pass: `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for a package absent from the workspace, so record the `Test Files N passed` line for each test leg and treat a leg with no count line as UNVERIFIED, not as passing. The daemon suite can be red at baseline from foreign in-flight slices — this task owns no source, so any red is by definition foreign: attribute it with the merge-base-versus-HEAD failing-path delta, disclose it verbatim with exact failing lines, and do not fabricate green. Finally name the remaining context-manifest children of task-203a5ca7aada4375a98a95df8773e249 as the consumers in the completion evidence, as DoD 4 requires — this task deliberately lands no call site, so the consumers must be named rather than implied. Expect NO commit: a finished task with no diff is a legitimate outcome here and is not a missing-evidence problem.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/package.json"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -25,8 +50,38 @@
   "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
   "priority": "CRITICAL",
   "order": 80.01,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-4fe6ce9d0ea8473b9265b73f05874e55",
+      "author": "architect-77071474",
+      "content": "MEASUREMENT: this task is COMPLETE-ON-ARRIVAL. architect-77071474 at HEAD a42ae2f. The description's measurement was taken at HEAD 15918c7; the edge has landed since, so the gap it names is closed and there is nothing to build.\n\n**DoD 1 — SATISFIED.** `apps/daemon/package.json` declares `@moe/context` in dependencies, and `pnpm-lock.yaml:107-110` carries the apps/daemon importer entry:\n```\n  apps/daemon:\n    dependencies:\n      '@moe/context':\n        specifier: workspace:*\n        version: link:../../packages/context\n```\n\n**DoD 2 — SATISFIED, verified by compiled probe.** A temporary `apps/daemon/src/__ctx-probe.ts` importing `selectContext`, `renderContext` and `digestContextManifest` from the bare `@moe/context` specifier typechecks with ZERO diagnostics under `npx tsc --project apps/daemon/tsconfig.json --noEmit`. Probe deleted in the same command; `git status` confirms no residue.\n\nNote for anyone re-checking: `packages/context/src/index.ts` is FIVE `export *` lines (context-contract, context-render, context-selection, dead-end-journal, release-handoff). A root-barrel grep for the three symbol names returns NOTHING and is not evidence either way — probe, do not grep.\n\n**DoD 3 — SATISFIED, both halves, run from apps/daemon under plain Node v24.16.0 with no flags:**\n- `import('@moe/context')` → `BARE_OK function function function` — all three production functions resolve at runtime.\n- `import('@moe/context/src/context-render.js')` → `DEEP_REFUSED_GOOD ERR_PACKAGE_PATH_NOT_EXPORTED` — the deep path is refused by the package exports map, which is `{\".\": \"./src/index.ts\"}` and maps no subpaths.\n\nRuntime resolution works with no loader flag because the export target is a `.ts` file and Node 24 strips types natively — the same reason `node ./src/daemon-main.ts` is the daemon's own start script.\n\n**DoD 4 — the only part left**: run the daemon and context gates separately with nonzero test counts, and name the remaining context-manifest children of task-203a5ca7 as consumers. Plan submitted covers exactly that and nothing more.\n\nPer the stale-by-default rail: re-implementing a landed surface is a silent duplicate that collides with its owner in a shared worktree. There is no manifest edit and no `pnpm install` to run here — a needless lock churn would be a real hazard, not a no-op.",
+      "timestamp": "2026-08-18T03:06:26.525Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:45:52.527Z",
-  "updatedAt": "2026-08-17T17:48:22.528Z"
+  "updatedAt": "2026-08-18T03:07:15.888Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T03:05:20.908Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 1
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:07:13.762Z",
+  "planningNotes": {
+    "approachesConsidered": "PLANNING VERIFICATION ONLY, BECAUSE THE WORK IS ALREADY DONE. The obvious plan — edit the manifest, run `pnpm install`, prove the edge — would re-do an edge that is already committed. The stale-by-default rail names this exact failure: \"GAP CLAIMED PRESENT, actually closed ... re-implementing a landed surface is a silent duplicate that collides with its owner in a shared worktree, and it wastes the same context load as the opposite error.\" So the plan is three verification steps and an explicit instruction to change nothing.\n\nCONSIDERED AND REJECTED: `moe.report_blocked`. Nothing blocks this task; it is finished except for its gates. Blocking would park a CRITICAL prerequisite of the Foundation context-manifest chain for no reason.\n\nCONSIDERED AND REJECTED: asking a governor to close it administratively. DoD 4 still requires the gates to run with nonzero counts and the consumers to be named, and that evidence should be produced by the normal worker/QA path rather than asserted by an architect. Running it as a three-step task also leaves a durable record of WHY no diff exists, which a silent administrative close would not.\n\nA NO-DIFF COMPLETION IS THE EXPECTED OUTCOME and is called out in the final step so neither the worker nor QA reads the absent commit as missing evidence.",
+    "codebaseInsights": "MEASURED AND PROBED AT HEAD a42ae2f. The description's measurement is from HEAD 15918c7 and is stale in the GAP-CLOSED direction.\n\nDoD 1 ALREADY TRUE. `apps/daemon/package.json` declares `@moe/context`. `pnpm-lock.yaml` lines 107-110 hold the apps/daemon importer entry `'@moe/context': {specifier: workspace:*, version: link:../../packages/context}`, alphabetically first in that block — `@moe/import` is now present in the same block too, so the sibling importer task landed as well.\n\nDoD 2 ALREADY TRUE, PROVEN BY COMPILED PROBE. A temporary probe in apps/daemon importing `selectContext`, `renderContext` and `digestContextManifest` from the bare specifier produced ZERO tsc diagnostics; probe deleted in the same command.\n\nA GREP WOULD HAVE LIED HERE. `packages/context/src/index.ts` is exactly five lines, all `export *` — from ./context-contract.js, ./context-render.js, ./context-selection.js, ./dead-end-journal.js and ./release-handoff.js. `grep selectContext packages/context/src/index.ts` returns NOTHING while the symbol is genuinely exported. Root-barrel greps are blind to star re-exports; only a probe settles it.\n\nDoD 3 ALREADY TRUE, BOTH HALVES, PROBED UNDER PLAIN NODE v24.16.0 FROM apps/daemon WITH NO FLAGS. Bare root import reported `BARE_OK function function function`. The negative deep-import control `@moe/context/src/context-render.js` rejected with `ERR_PACKAGE_PATH_NOT_EXPORTED`. That refusal is structural: `packages/context/package.json` sets `exports: {\".\": \"./src/index.ts\"}` and maps no subpaths, so every deep path is blocked by Node's exports resolution rather than by convention.\n\nWHY RUNTIME RESOLUTION NEEDS NO LOADER. The export target is a `.ts` file and Node 24 strips types natively; this repo already depends on that, since apps/daemon's own `start` script is `node ./src/daemon-main.ts`. If an implementer finds themselves reaching for a flag, something else is wrong — the flag would be hiding a failure rather than fixing one.\n\nGATES RESOLVE BY NAME: `@moe/context` is packages/context and `@moe/daemon` is apps/daemon, each declaring `typecheck` and `test`.",
+    "risks": "1. THE LARGEST RISK IS A WORKER WHO FOLLOWS THE DESCRIPTION INSTEAD OF THE PLAN. It states plainly that the dependency is absent and a plain-Node import fails ERR_MODULE_NOT_FOUND. That was true at HEAD 15918c7 and is false now. Acting on it means running `pnpm install` against an already-correct lock and committing churn nobody asked for, in a worktree shared with other agents.\n2. DO NOT SUBSTITUTE A GREP FOR THE PROBE. index.ts is five `export *` lines; a grep for the three symbols returns nothing while all three resolve. Reading that silence as absence would flip this task straight back into a duplicate build.\n3. THE NEGATIVE CONTROL IS NOT OPTIONAL. Without the deep-import refusal, the positive bare import proves only that SOMETHING resolved. Assert the exact `ERR_PACKAGE_PATH_NOT_EXPORTED` code, not merely that the deep import rejected — a typo in the path also rejects, with a different code.\n4. RUN THE RUNTIME PROBES FROM POWERSHELL. A prior plain-Node smoke on this repo failed purely because Git Bash rewrote paths, and that failure looks exactly like a genuine resolution failure.\n5. EXPECT NO COMMIT, AND DO NOT MANUFACTURE ONE. There is nothing to stage. An empty commit to \"claim\" the task, or a whitespace edit to produce a diff, would be worse than the absent commit it is trying to explain.\n6. If a peer reverts the edge between planning and execution, that is a genuinely different task — stop and report rather than quietly switching into build mode under a plan that says change nothing.",
+    "keyFiles": [
+      "apps/daemon/package.json",
+      "pnpm-lock.yaml",
+      "packages/context/package.json",
+      "packages/context/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-18T03:07:15.888Z"
 }

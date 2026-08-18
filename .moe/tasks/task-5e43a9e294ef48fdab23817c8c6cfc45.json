@@ -154,8 +154,8 @@
       "completedAt": "2026-08-17T20:10:36.428Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -204,7 +204,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-09T12:29:11.364Z",
-  "updatedAt": "2026-08-17T20:19:16.088Z",
+  "updatedAt": "2026-08-17T20:24:42.119Z",
   "contextFetchedBy": [
     "architect-f39f0c46",
     "architect-cb476f76",
@@ -218,7 +218,9 @@
     "firstClaimAt": "2026-08-09T14:24:55.279Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-08-17T20:24:42.119Z",
+    "wallClockMs": 712786840
   },
   "blockedReason": null,
   "blockedResourceId": null,
@@ -296,5 +298,8 @@
     "apps/daemon/src/foundation/foundation-surface.js",
     "apps/daemon/src/index-surface.test.ts",
     "apps/daemon/src/runtime-entrypoint.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T20:24:42.119Z",
+  "reviewCompletedAt": "2026-08-17T20:24:42.119Z",
+  "reviewSummary": "APPROVED at HEAD 3997b07, base 29f3c5f. Gates re-run by QA with separate exit codes: daemon typecheck exit 0; daemon test exit 0, \"Test Files 121 passed / Tests 2571 passed\" (baseline 121/2488); pnpm typecheck exit 0 — the foreign packages/import TS2339 red cleared when that peer landed in 7a596d5. Independent plain-Node probe from apps/daemon: 132 runtime exports, missingEntrypoints [], undefinedBindings [], decode [\"REVIEW_INPUT_REJECTED\",\"DAEMON_INGRESS\"], command same + authority \"NONE\".\nDoD1 six families curated, explicit named exports, grep \"^export \\*\" over index.ts + both new production files = NONE. DoD2 test imports bare @moe/daemon; frozen EXPECTED_EXPORTS 132 with toBe(132), ordered set equality both directions, per-name kind, FORBIDDEN_FIXTURES 34 pinned. DoD3 real child node --experimental-strip-types, cwd PACKAGE_ROOT, 47-name table, resolved:47 anti-vacuity pin. DoD4 index.ts 217, foundation-surface.ts 114, graph-preview-request.ts 124, all <=250, no manifest change. DoD5 7 owned paths, committed bytes == disk 7/7 (rev-parse == hash-object). Commit 7a596d5 carries this task id but zero apps/daemon paths — foreign sweep reusing the message; real bytes swept in by 914eddb/04c6532, not a rejection reason per rail.\nNo behavior change: old index.ts 284-389 vs graph-preview-request.ts 19-124 diff EMPTY, imports verbatim; origin verified — index.ts now has zero import/const/function/interface lines. Name-loss check: 290 exported identifiers at base, 374 at HEAD, MISSING [], ADDED 84.\nFour QA mutation drills, all restored and hash-verified clean: (A) drop deriveRecipeAggregateId -> set equality RED naming it; (B) leak isRecord -> set equality RED + fixture deny-list RED; (C) remove foundation-surface.js bridge -> plain-Node suite RED ERR_MODULE_NOT_FOUND while index-surface stayed 189/191 GREEN, proving DoD3 catches what vitest cannot; (D) drop type FoundationVerificationRefusalSource -> tsc TS2724, so type closure is really pinned."
 }

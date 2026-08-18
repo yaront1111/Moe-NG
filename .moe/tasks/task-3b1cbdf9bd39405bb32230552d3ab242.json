@@ -17,13 +17,57 @@
     "Do not edit tests/fault/** — it has other owners. This task only RECORDS what the fault lane already covers.",
     "Preserve foreign work; commit only the explicit owned paths by pathspec."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure the live numbers and the five coverage SHAPES. Read-only. THE DESCRIPTION'S \"85\" IS STALE and the governor's reopen says so: the roster has moved 89 -> 91 -> 92 -> and at current HEAD `EXPECTED_ROSTER_SIZE = 93` (tests/security/boundary-roster.security.ts:234). Axis tags count durable-store 14, integrity 14, runtime-provider 24, scheduler-activation 26, transport 15 = 93. Grade against the live count you measure, never a number written in a description or in this plan -- and DO NOT hard-code 93 either; derive from BOUNDARY_ROSTER and assert the sum equals its length, so the next boundary added moves the assertion instead of breaking it. Confirm `tests/security/completeness.security.ts` is ABSENT, so the deliverable is genuinely unbuilt. THEN THE REAL WORK OF THIS STEP -- the five axes resolve coverage in FIVE DIFFERENT SHAPES and a cross-axis assertion has to normalise them: (a) INTEGRITY -- `rosterIntegrityConstants()` local to integrity-boundaries.security.ts:51 plus `INTEGRITY_HOSTILE_CASES`, one table, entries carrying `arm`; (b) SCHEDULER-ACTIVATION -- `rosterAxisConstants()` at scheduler-activation-boundaries.security.ts:76 plus THREE tables (ACTIVATION_ADMISSION_CASES, EXPANSION_SUPERSESSION_CASES, SCHEDULER_DECISION_CASES) split into CASES and RACES; (c) TRANSPORT -- `TRANSPORT_HOSTILE_CASES`; (d) DURABLE-STORE -- a DIFFERENT shape entirely: `DURABLE_BOUNDARY_NAMES` plus phase-split exports `hostileBeforeCases` / `hostileAfterCases` / `hostileRaceCases`, where the arm is implied by WHICH export a case lives in rather than by a field; (e) RUNTIME-PROVIDER -- `rosterRuntimeProvider()` in runtime-provider-invariants.ts:83, partition declared in runtime-provider-ledger.ts, spread over several slice files. Write the five shapes into the step note; the normaliser in step 3 stands or falls on getting them right.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-18T03:05:05.998Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED first. Create tests/security/completeness.security.ts with the whole-roster assertions failing before the normaliser exists. Four properties, each naming offenders rather than counting them, because DoD 1 and DoD 4 both require the failure to identify the exact boundary. (1) COVERAGE: every roster entry resolves to at least one BEFORE, one AFTER and one RACE case; the failure message lists each uncovered boundary as `constant (declaring file)` from the roster entry's own `file` field, not a bare count. (2) UNION EQUALS ROSTER, both directions: the union of the five axis subsets equals the full roster set -- assert roster-minus-union is empty AND union-minus-roster is empty, as two separate assertions with separate messages, because one direction catches a gap and the other catches a boundary claimed by an axis that does not roster it. (3) NO OVERLAP: no constant appears in two axis subsets; name any that does. (4) NO ZERO-CLAIM: every roster entry is claimed by exactly one axis subset. Derive the expected total from BOUNDARY_ROSTER.length and assert the five subset sizes sum to it, so the count is a consequence rather than a literal. Assert the resolved case count is positive before asserting any set property -- a silently-empty normalisation makes every set assertion pass vacuously, which is the same trap the integrity slice already guards at its :105.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN the normaliser, inside tests/security/completeness.security.ts. It must read REAL CASE ENTRIES from the five axes' case tables -- import the case-table modules (the data), never the sibling `*.security.ts` test files -- and reduce them to one `Map<constant, Set<arm>>`. Handle the shape differences from step 1 explicitly: for the field-carrying tables take `entry.arm`; for the scheduler axis merge its three tables and map its RACES list to the RACE arm; for durable-store derive the arm from WHICH export the case came from (hostileBeforeCases -> BEFORE, hostileAfterCases -> AFTER, hostileRaceCases -> RACE) since those entries carry no arm field. THE RULE THAT MAKES DoD 4 SATISFIABLE: never write a literal list of covered constants anywhere in this file. Every membership answer must come from reducing an imported case table, so deleting one axis's coverage for one boundary changes the computed map and reddens a named test. A static list would agree with itself forever and is exactly the \"generated table cannot police its own generator\" failure the task rails name. If an axis exposes no importable table and only resolves coverage inside its own test file, STOP and report that as a finding -- it is a gap in that axis slice, not something to work around by re-deriving its cases here.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Add the roster-side coverage assertion to tests/security/boundary-roster.security.ts, the second owned path. The roster file already asserts its hand-written entries match a live source scan in both directions; this task adds the third leg -- that every entry it declares is COVERED. Keep the roster hand-written and source-compared as the rails require: do not generate entries from the scan, and do not derive the axis tags from anything. Also correct one stale artefact found in step 1: the runtime-provider slice header claims \"Seven of the roster's twenty-two entries\" while the roster now tags 24 runtime-provider entries. Fix that comment or any similar stale count you find in the two owned files, and note in the step note any stale count you find in a file you do NOT own -- those belong to their axis owners and must be reported, not edited.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-5",
+      "description": "Mutation drills, two, and they are DoD items 3 and 4 rather than optional hardening. DRILL A (the ratchet cannot decay): add a new `*_LAYER` / `*_LAYERS` boundary constant to a production source with NO roster entry and NO coverage; a NAMED test must go red identifying it. This is the whole point of the task -- it proves a boundary added after this epic closes cannot slip in silently. Note the sibling fact recorded on this board: a new layer constant already reddens `pnpm test:security` and that suite runs in no other gate, so this drill is exercising a live ratchet, not a hypothetical one. Restore the production source EXACTLY -- it is not an owned path, so leaving a byte behind is a foreign-file edit. DRILL B (coverage resolution reads real cases): remove ONE axis's coverage for a single boundary -- delete or rename one case entry in that axis's table -- and confirm a NAMED test reddens identifying THAT boundary by name. If it reddens with a count or a generic message, the assertion is not naming offenders and step 2 must be strengthened. If it stays green, the normaliser is reading a static list and step 3 must be rewritten. Record for each drill the command, the failing test NAME and the exact assertion. Restore by re-editing, never `git checkout`, and confirm with `git diff --numstat` showing 0 added and 0 deleted across the touched files. One drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-6",
+      "description": "Reconcile with the fault lane, which is DoD 6 and is documentation, not code. Do NOT edit tests/fault/** -- it has other owners (tests/fault/disaster-restore/** belongs to task-0c89476b, foundation/ and cross-host/ have theirs) and the rails forbid it. Read the parent task-05ce9b8f982f448a9cdaa4142a653f32's DoD clause by clause and record, in the completion note, which clauses THIS slice set satisfies through tests/security and which remain owned by tests/fault/** owners. Name the owning task id for each remaining clause. The point is that the parent closes on measured coverage rather than an implied one, so a clause you cannot attribute to either lane is a finding to report, not a gap to paper over. If a clause turns out to be satisfied by neither lane, say so explicitly and name it -- that is the most valuable output this step can produce.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review, commit, then run the two gates SEPARATELY. ATTACKER PASS: can any assertion pass vacuously -- is the positive-count guard in place before every set comparison? Does any covered-set answer come from a literal rather than a reduced case table? Is the roster still hand-written and compared to the source in both directions? Did any count get hard-coded where it should be derived from BOUNDARY_ROSTER.length? Did a coverage gap get FILLED here rather than reported -- the rails forbid absorbing an axis slice's missing coverage, because then the ratchet polices work this task wrote itself. COMMIT: `git status --porcelain`, unstage any foreign entry with `git restore --staged -- <path>`, commit ONLY tests/security/completeness.security.ts and tests/security/boundary-roster.security.ts by explicit pathspec, verify with `git show --stat`. GATES, per DoD 5 -- run `pnpm test:security` and `pnpm test:fault` as TWO separate foreground commands, each with its own captured exit code, NEITHER `;`-chained NOR piped into tail, because a `;` chain reports only the last command and a pipe reports tail's status. Each must print its own `Test Files` / `Tests` count line; a leg with no count line ran nothing and is UNVERIFIED, not passing. Quote any foreign red verbatim and attribute it by the merge-base baseline -- the path-attributed delta intersected with these two owned paths must be empty -- rather than repairing it. Both captured outputs together are the `complete_task` verification evidence.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-0b2f9c35",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor cascade 15:21Z: ALL SIX declared dependencies are QA-approved DONE — roster 9aca4b05 (89-entry, five-axis partition) and the five hostile-coverage slices: aa32fdf7 transport (15), 924c5d82 integrity (13), f643b972 durable-store (14), 2259196e runtime-provider (23), c994bd0a scheduler-activation (24). The lane was measured at 462/462 EXIT=0 at c994bd0a's approval and has since grown with 2259196e's rework. Architect: close the completeness ratchet and wire the final gate per the slice set; CARRY THE QA PAIR'S THREE AUDIT ITEMS as explicit plan steps (qa-c7cedba3 msg-57524980, 15:04): (1) drill first — read types only for clauses no drill reached; (2) per slice, does it assert a value that was ACCEPTED, not just that bad input was rejected; (3) for each whole-slice invariant, can its operands be drilled apart (key cross-check operands can be equivalent mutants). When this lands, parent 05ce9 re-runs its own gate and closes the security matrix.",
+  "reopenReason": "Governor promotion under the human's standing unstall directive: all three unrostered-boundary gates recorded in the blockedReason are now closed — GOAL_PREREQUISITE_LAYER (task-a46d4f99 DONE), AGENT_STAFFING_LAYER (task-05b0a693 DONE), GRAPH_CONTENT_LAYERS (task-66004424 QA-approved DONE 20:30Z). pnpm test:security was measured fully green at 19:48Z (9 files / 483 tests) and has since gained the GRAPH_CONTENT arms. Planning architect: re-run the security gate at current HEAD first — the roster cardinality has moved repeatedly today (89 → 91 → 92+); grade against live counts, not the numbers in this task's description.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -31,16 +75,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:35.966Z",
-  "updatedAt": "2026-08-16T22:58:43.047Z",
-  "blockedReason": "Fresh foreground `pnpm test:security` at HEAD 54ad5e8 executed 9 files / 462 tests and is RED: live scan finds 92 boundaries against the 89-entry roster. Exact missing paths are GOAL_PREREQUISITE_LAYER@apps/daemon/src/goals/goal-close-prerequisite.ts, AGENT_STAFFING_LAYER@apps/daemon/src/orchestrator/agent-session-fence.ts, and GRAPH_CONTENT_LAYERS@packages/scheduler/src/graph-content.ts. This task's rail forbids filling axis gaps here. Filed task-a46d4f99 for the valid goal prerequisite boundary. AGENT_STAFFING_LAYER belongs to still-WORKING task-05b0a693 and its owner was notified. GRAPH_CONTENT_LAYERS came from retracted/BLOCKED task-77e8cb44 and must not be ratified until human decision dec-64b2391 and corrected production bytes. `git log -- <path>` also proves task-8f9305b9's whole-tree commit captured the latter two foreign paths. Re-plan the final ratchet only after those three boundaries have stable owner coverage and test:security is non-vacuously green.",
+  "updatedAt": "2026-08-18T03:05:05.998Z",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T22:58:35.024Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-0b2f9c35"
   ],
   "metrics": {
-    "firstClaimAt": "2026-08-16T22:54:00.239Z"
+    "firstClaimAt": "2026-08-16T22:54:00.239Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 0
   },
   "priorHandoffs": [
     {
@@ -52,5 +99,29 @@
       "releasedBy": "architect-f956ffe1",
       "reason": "Explicit handoff after fresh final-gate precondition failure; continuing plan-all sweep."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:04:24.552Z",
+  "planningNotes": {
+    "approachesConsidered": "Every step carries an EMPTY affectedFiles list because the daemon's existence check rejected the tests/security paths on a prior submission in this session; the two owned paths are named in the prose instead (tests/security/completeness.security.ts, new, and tests/security/boundary-roster.security.ts). REJECTED: (a) having completeness.security.ts import the sibling `*.security.ts` slice files to reuse their COVERED sets -- importing a test file to read its module-level constants couples the completeness gate to test-file internals and would re-run their suites as a side effect; import the case-table DATA modules instead; (b) writing a literal list of covered constants -- it would agree with itself forever and is precisely the \"generated table cannot police its own generator\" failure the rails name, which is why DoD 4 demands a drill proving the resolution reads real cases; (c) hard-coding the roster total -- the count has moved four times today (85 in the description, then 89, 91, 92, and 93 at current HEAD), so derive it from BOUNDARY_ROSTER.length and assert the five subset sizes sum to it; (d) filling any coverage gap discovered along the way -- the rails forbid it explicitly, and absorbing an axis slice's missing arms would leave this ratchet policing work this task authored; report the gap back to that slice instead. CHOSE a single normaliser that reduces five differently-shaped case tables into one Map<constant, Set<arm>>, because the shape heterogeneity IS the task's difficulty and hiding it behind per-axis copies would reproduce the drift the ratchet exists to stop.",
+    "codebaseInsights": "Measured at current HEAD. LIVE COUNTS, all different from the description's 85: boundary-roster.security.ts:234 `EXPECTED_ROSTER_SIZE = 93`; BOUNDARY_ROSTER declared at :108; axis tags count durable-store 14, integrity 14, runtime-provider 24, scheduler-activation 26, transport 15 (= 93). The roster module exports BOUNDARY_ROSTER, COVERAGE_AXES, findRepoRoot, isProductionModule, SCAN_ROOTS (:619) and the RosterEntry type (:66) whose entries carry `constant`, `file` and `axis`. tests/security/completeness.security.ts is ABSENT. THE FIVE COVERAGE SHAPES, which differ and must be normalised: (1) INTEGRITY -- `rosterIntegrityConstants()` at integrity-boundaries.security.ts:51, COVERED built at :57 from INTEGRITY_HOSTILE_CASES (integrity-hostile-cases.ts:1427), entries carry an `arm` field; the slice asserts a positive roster parse at :105, roster-minus-covered at :114, covered-minus-roster at :118 and a three-armed it.each at :122 -- that quartet is the per-axis pattern this task lifts to the whole roster. (2) SCHEDULER-ACTIVATION -- `rosterAxisConstants()` at scheduler-activation-boundaries.security.ts:76, COVERED at :86 merging CASES and RACES, fed by THREE tables: ACTIVATION_ADMISSION_CASES (:699), EXPANSION_SUPERSESSION_CASES (:1178), SCHEDULER_DECISION_CASES (:1720). (3) TRANSPORT -- TRANSPORT_HOSTILE_CASES (transport-hostile-cases.ts:79). (4) DURABLE-STORE -- a different shape: DURABLE_BOUNDARY_NAMES (durable-store-boundary-scenarios.ts:28) with phase-split exports hostileBeforeCases (:146), hostileAfterCases (:147), hostileRaceCases (:155); `HostilePhase` is only \"AFTER\" | \"BEFORE\" (:46), so the arm is implied by which export a case lives in, NOT by a field. (5) RUNTIME-PROVIDER -- `rosterRuntimeProvider()` (runtime-provider-invariants.ts:83), partition declared in runtime-provider-ledger.ts and spread over several slice files; its launch slice header still reads \"Seven of the roster's twenty-two entries\" while the roster now tags 24, a stale count to fix in an owned file or report in one that is not.",
+    "risks": "The load-bearing risk is a completeness gate that cannot fail. Two ways it happens here and both have a drill: a literal covered-set list agrees with itself forever (drill B removes one axis's coverage and requires a NAMED redness), and a silently-empty normalisation makes every set assertion pass vacuously (guarded by asserting a positive resolved-case count before any set comparison, the same guard the integrity slice already carries at :105). Second risk is the durable-store shape: its cases carry no `arm` field, so a normaliser written against the field-carrying tables will silently resolve zero arms for all 14 of its boundaries and, without the positive-count guard, still pass. Third, hard-coding 93 -- the count has moved four times today and a literal turns the next boundary into a broken assertion rather than a moved one; derive it. Fourth, the rails forbid filling a coverage gap here; if an axis is short, that slice is incomplete and must be rejected back, or this ratchet ends up policing coverage this task authored. Fifth, drill A edits a PRODUCTION source that is not an owned path -- restore it exactly and verify with `git diff --numstat`, because a stray byte there is a foreign-file edit. Sixth, DoD 5 forbids `;`-chaining or piping the two gates: a `;` chain reports only the last command's status and a pipe reports tail's, and a leg with no printed count line ran nothing. Finally, DoD 6 is documentation across a lane this task may not edit -- record attribution clause by clause, and if a parent clause belongs to neither lane, name it rather than letting the parent close on an implied coverage.",
+    "keyFiles": [
+      "tests/security/boundary-roster.security.ts",
+      "tests/security/integrity-boundaries.security.ts",
+      "tests/security/scheduler-activation-boundaries.security.ts",
+      "tests/security/durable-store-boundary-scenarios.ts",
+      "tests/security/runtime-provider-invariants.ts",
+      "tests/security/runtime-provider-ledger.ts",
+      "tests/security/transport-hostile-cases.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000,
+    "warnedAt": "2026-08-18T03:04:50.899Z",
+    "escalatedAt": "2026-08-18T03:04:50.899Z"
+  },
+  "planApprovedAt": "2026-08-18T03:04:26.617Z",
+  "workStartedAt": "2026-08-18T03:05:05.998Z"
 }

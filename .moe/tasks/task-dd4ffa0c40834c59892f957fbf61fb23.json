@@ -16,13 +16,90 @@
     "Fail closed with stable reason codes/layers and assert the reason code, layer, and nonzero generated-case count in every refusal sweep.",
     "Use TDD; target <=250 physical lines per production source and split before 400; preserve foreign shared-tree work and commit only explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify both producer surfaces at committed HEAD before composing them; the reopen reason names them but statuses are not proof. (1) REPLAY (from task-ee27ed7c): `replayGraphRevisionEvents(history: unknown)` at packages/core/src/planning/graph-revision-replay.ts:211, root-exported from @moe/core (index.ts:109) with GRAPH_REVISION_REPLAY_CODES and the result types. Read its contract comments -- the whole input is snapshotted before any discriminator is read; a byte-identical redelivery is idempotently ignored; same version with different bytes refuses GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT; a refusal returns code and layer alone, never partial state. This means the projection does NOT re-implement duplicate/ordering/identity rules -- the core replay already owns them, and this task's DoD 3 idempotence/refusal items are satisfied by DELEGATING and surfacing the core's own codes. (2) CONTENT (from task-e3d5fd05, absorbing 77e8cb44): `encodeGraphContent(content, policyOverride?)` and `decodeGraphContent(input)` on the @moe/scheduler root (index.ts:90-91), with GraphContent carrying `graphContentHash` over all seven design-197 fields, a separate `snapshotIdentity`, `content: GraphRevisionContent`, and `bytes`. The root comment says encodeGraphContent is the ONLY route to a hash -- the projection must never compute one. (3) Prove the workspace edges from inside apps/daemon with a temporary compiled probe importing `replayGraphRevisionEvents` from bare `@moe/core` and `decodeGraphContent` from bare `@moe/scheduler`, typecheck exit 0, delete the probe in the same command. Both packages are already declared in apps/daemon/package.json -- but prove it, don't read it. (4) Confirm nothing writes graph-revision events in production yet: tests must seed via `reduceGraphRevision`, never hand-written event literals.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED on the content-body record. Create apps/daemon/src/planning/graph-body-record.test.ts over a REAL SqliteEventStore on a temp file. The body stored is the CANONICAL CONTENT BYTES the scheduler codec produced -- never a hand-serialised snapshot, because encodeGraphContent is the only lawful route to a graphContentHash and this store must not mint a second serialisation. Failing tests: (1) `putGraphBody(store, projectId, graphContent)` -- where graphContent is an `encodeGraphContent` SUCCESS value -- durably appends one record keyed by its `graphContentHash` and returns that hash; (2) `readGraphBody(store, projectId, graphContentHash)` returns bytes that `decodeGraphContent` accepts AND whose re-derived hash equals the requested key -- run the real decoder in the assertion, because the decoder's digest check is the integrity authority, not a local comparison; (3) stored bytes that fail decodeGraphContent (corrupt them in the store between put and read) refuse with the DECODER'S own code surfaced plus this module's layer -- assert the literal code; (4) an absent hash refuses with a DISTINCT stable not-found code (absence is not corruption); (5) putting the same content twice is idempotent -- one record, same hash, raw event count unchanged on the second put; (6) reads never change the raw event count. Assert code AND layer literals on every refusal.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-body-record.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/graph-body-record.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN the body record. Create apps/daemon/src/planning/graph-body-record.ts plus its one-line `.js` bridge (`export * from \"./graph-body-record.ts\";` -- required or the module is invisible to the .js import graph). It accepts only an encodeGraphContent success value on the write side (refuse anything else -- accepting raw fields here would recreate the mint-your-own-hash seam the scheduler deliberately withholds), stores the canonical bytes keyed by graphContentHash, and on the read side runs decodeGraphContent over the stored bytes before returning anything, surfacing the decoder's refusal codes under this module's layer. No local hashing, no local canonicalisation, no second serialisation. Keep the file <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-body-record.ts",
+        "apps/daemon/src/planning/graph-body-record.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/graph-body-record.ts",
+        "apps/daemon/src/planning/graph-body-record.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "RED on the current-active fold. Create apps/daemon/src/planning/active-graph-projection.test.ts over a real store, seeding CANONICAL revision events by driving `reduceGraphRevision` from bare @moe/core and appending its emitted events -- NEVER hand-written event objects, or the projection is tested against shapes production would never write. Failing tests for `readCurrentActiveGraph(store, projectId)`: (1) one ACTIVE revision returns its revisionId, graphEpoch, planHash, graphContentHash, the decoded GraphRevisionContent from step 3's body read, AND the separately-named structural snapshotIdentity -- assert graphContentHash !== snapshotIdentity on the accepted control, pinning dec-64b2391c at the consumer; (2) zero ACTIVE revisions -> stable not-found code, NO snapshot authority; (3) TWO ACTIVE revisions across two aggregates for one project -> DISTINCT stable code -- split-brain refuses, never picks a winner; (4) SUPERSEDED predecessor plus ACTIVE successor -> only the successor, epoch exactly predecessor+1; (5) a corrupted per-revision history (reordered or conflicting bytes) surfaces the CORE REPLAY'S own refusal code (e.g. GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT) with this module's layer attached -- assert WHICH layer refused, since core and projection can both answer; (6) ACTIVE revision whose graphContentHash has no stored body, or whose body read refuses -> its own distinct code, no snapshot; (7) two consecutive reads are byte-stable and change no counts. Assert the hostile-ordering sweep's generated case count is nonzero before asserting its cases.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN the projection. Create apps/daemon/src/planning/active-graph-projection.ts plus its `.js` bridge. Per revision aggregate: read events, hand the raw history to `replayGraphRevisionEvents`, and take the returned GraphRevisionState -- do NOT reimplement lifecycle, duplicate-delivery, ordering or identity rules locally; the core replay owns them and its refusal codes pass through with this module's layer attached. Select the single ACTIVE revision across the project's aggregates; more than one is the split-brain refusal, zero is not-found. Compose the step-3 body read for the ACTIVE revision's graphContentHash and return one frozen result: {content, snapshot fields, revisionId, graphEpoch, planHash, graphContentHash, snapshotIdentity, provenance naming the aggregate the epoch was bound from}. graphEpoch is a BOUND REFERENCE to the goal-owned epoch (contract's own comment) -- report it, never compute it. Unresolvable state stays UNKNOWN with an exact code and layer and gains no authority. Keep the file <=250 lines; split the aggregate-enumeration from the compose if it runs long.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Mutation drills, three. Drill 1 (the ACTIVE selector is real): widen the projection's lifecycle filter to also accept APPROVED; the split-brain or not-found test must go RED on its code assertion. Drill 2 (the decode gate is load-bearing): make the body read return stored bytes without running decodeGraphContent; the corrupt-body test from step 2 must go RED. Drill 3 (delegation is real, not decorative): make the projection swallow the core replay's refusal and fold whatever partial state it can; the step-4 case (5) test must go RED on the core code assertion -- if it stays green, the test is not actually driving a corrupted history through the production path and must be strengthened. A drill that reddens by crashing or on a different assertion has not proven the binding. Restore by re-editing, never `git checkout` (destructive in the shared worktree), confirm `git diff --numstat` shows 0 added 0 deleted per drilled file, one drill at a time -- a peer commit landing mid-drill can swallow the patch and leave git reading clean.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/graph-body-record.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Adversarial review, consumer edge, commit, gate. ATTACKER PASS: can a caller-supplied snapshot or raw content reach the durable body without passing through encodeGraphContent's success value? Can two ACTIVE revisions ever yield a snapshot instead of refusing? Can the projection return content whose re-derived hash was never checked? Does any read path append? Is any store handle left open (a held SQLite handle kills the vitest worker)? Does any refusal collapse two distinct causes into one code? Is snapshotIdentity ever equated with graphContentHash anywhere, including in a test helper? CONSUMER EDGE per the global composition rail: name the consumer tasks in the completion note -- task-c4b807784 (authenticated current-graph query) reads this projection, and task-eacea969/task-32c1ba45 consume it for transitions; all are BLOCKED, so record the ids and state plainly that no live call site exists yet. COMMIT by explicit pathspec, only the six owned paths, after `git status --porcelain` and unstaging any foreign entry; verify with `git show --stat`; if a foreign whole-tree completion already captured these bytes, do NOT amend or reset -- record the merge-base diff for QA. GATE, foreground, `&&`-chained: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Read the OUTPUT -- a filtered leg is evidence only with a nonzero `Test Files N passed` line; `@moe/daemon` is apps/daemon and root `pnpm test` does not cover apps/**. Confirm both new test files appear by name and the hostile sweep printed a nonzero count.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-body-record.ts",
+        "apps/daemon/src/planning/graph-body-record.js",
+        "apps/daemon/src/planning/graph-body-record.test.ts",
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.js",
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Still blocked on task-77e8cb4439b148f386d2bbf244c79c16 and task-ee27ed7cdc704151bafae0ca30aa0509; unblock_worker released architect ownership only.",
+  "reopenReason": "Governor promotion under the human's active unstall directive: both recorded gates are terminal — task-ee27ed7c (graph revision event replay) is DONE, and task-77e8cb44 is ARCHIVED-as-ABSORBED into task-e3d5fd05 (canonical GraphRevisionContent contract/codec/content-hash, DONE and QA-approved), so the content-identity capability this task waited on EXISTS on the @moe/scheduler root. Planning architect: note ARCHIVED≠DONE as a status — the gate is satisfied via the absorbing task, verify encodeGraphContent/decodeGraphContent and the replay surface at current HEAD before planning; the daemon projection must consume those, not invent identity (original rail stands). Fresh measurement basis in this task's comments and e3d5fd05's QA record.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -37,15 +114,41 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:45:45.041Z",
-  "updatedAt": "2026-08-16T22:17:31.471Z",
+  "updatedAt": "2026-08-18T03:06:26.815Z",
   "metrics": {
-    "firstClaimAt": "2026-08-16T22:11:17.151Z"
+    "firstClaimAt": "2026-08-16T22:11:17.151Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 6
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
-  "blockedReason": "Still blocked on task-77e8cb4439b148f386d2bbf244c79c16 and task-ee27ed7cdc704151bafae0ca30aa0509; unblock_worker released architect ownership only.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T22:17:13.034Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:06:24.734Z",
+  "planningNotes": {
+    "approachesConsidered": "I drafted a plan for this task once before (ownership refused the submission -- it belonged to architect-f956ffe1 then), and this replan is BETTER than that draft in three specific ways because the producers have since landed. (1) The old draft had the body record canonicalise and hash the snapshot itself; that is now forbidden and unnecessary -- encodeGraphContent is the only lawful route to a graphContentHash (the scheduler root comment says exactly this and withholds the raw mechanics), so the body record stores the codec's canonical BYTES and the read side re-validates through decodeGraphContent, whose digest check is the integrity authority. (2) The old draft had the projection fold lifecycle events with locally-enforced ordering/duplicate rules; task-ee27ed7c landed replayGraphRevisionEvents with snapshotted input, idempotent redelivery, identity-conflict refusal and no-partial-state -- so the projection DELEGATES and surfaces core codes rather than reimplementing rules, which also kills a whole class of drift. (3) The old draft could not name the structural/content identity split; now the result carries BOTH graphContentHash and snapshotIdentity and the accepted control asserts they differ, pinning dec-64b2391c at the consumer. REJECTED: (a) storing decoded content JSON instead of canonical bytes -- a second serialisation invites a second identity; (b) accepting raw content fields at putGraphBody -- recreates the mint-your-own-hash seam; (c) a single combined module -- body record and lifecycle fold have separate refusal vocabularies and would breach the per-file line target; (d) waiting for a durable graph-revision event writer -- none exists in production yet, and this task's contract is the read/persist seam; tests seed through reduceGraphRevision, the same way the replay surface's own suite does.",
+    "codebaseInsights": "Measured at HEAD 8222b9e. REPLAY: packages/core/src/planning/graph-revision-replay.ts:211 replayGraphRevisionEvents(history: unknown) -> GraphRevisionReplayResult; root-exported at packages/core/src/index.ts:109 with GRAPH_REVISION_REPLAY_CODES and result types; admissible() enforces exact event keys per kind; byte-identical redelivery ignored; same-version-different-bytes -> GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT; missing create -> GRAPH_REVISION_REPLAY_MISSING_CREATE; refusals carry code+layer, never partial state. CONTENT: packages/scheduler root exports encodeGraphContent(content, policyOverride?) and decodeGraphContent(input) (index.ts:90-91); GraphContent = {schemaVersion, graphContentHash (all seven design-197 fields, lowercase hex64 -- the spelling @moe/core's revision gate requires), snapshotIdentity (structure-only, documented never equal), content: GraphRevisionContent, bytes}; decodeGraphContent refuses GRAPH_CONTENT_NOT_BYTES / TOO_LARGE / digest mismatch etc. from the frozen GRAPH_CONTENT_ISSUE_CODES over three frozen layers. GraphRevisionState (core contract :122) carries boundHashes/goalRef/graphContentHash/graphEpoch/lifecycle/planHash/revisionId/submissionRef/version; graphEpoch is a bound reference to the goal-owned epoch -- report, never compute. NOTHING writes graph-revision events in production yet (grep: zero non-test writers), so tests seed via reduceGraphRevision. apps/daemon/src/planning/ already exists (approval-activation, approval-gate, planning-services) -- the new modules sit beside them. apps/daemon/package.json already declares @moe/core, @moe/scheduler, @moe/store; step 1 still proves the edges with a compiled bare-specifier probe because a manifest line is not a resolution proof. A new .ts module needs its one-line .js bridge.",
+    "risks": "The load-bearing risk is identity theatre: a projection that returns content whose hash was never re-checked is authority-shaped without being authoritative. The design here routes ALL integrity through decodeGraphContent -- drill 2 proves the gate is load-bearing, and the accepted control asserts graphContentHash !== snapshotIdentity so the two-hash confusion (the exact failure dec-64b2391c was raised to prevent, still easy because a structural value once wore the content name) cannot re-enter through this consumer. Second, split-brain: two ACTIVE revisions must refuse, never disambiguate by epoch or recency -- picking a winner grants authority during precisely the condition the projection exists to detect. Third, silent local lifecycle rules: if the projection reimplements ordering/duplicate handling instead of delegating to replayGraphRevisionEvents, the two drift and the tests police the copy; drill 3 forces the delegation to be real. Fourth, hand-written event literals in tests let the projection pass against shapes production never writes -- seed through reduceGraphRevision only. Fifth, distinct causes need distinct codes: no-active, multiple-active, replay-refused, body-absent, body-corrupt are five failures; collapsing any two makes a later guard change invisible. Sixth, close every store handle on every path including refusals; a held SQLite handle kills the vitest worker. Seventh, consumers (c4b80778, eacea969, 32c1ba45) are all BLOCKED -- name them as the consumer edge honestly rather than implying a live call site. Finally, the shared worktree rules: restore drills by re-editing, commit by explicit pathspec only.",
+    "keyFiles": [
+      "packages/core/src/planning/graph-revision-replay.ts",
+      "packages/core/src/planning/graph-revision-reducer.ts",
+      "packages/scheduler/src/graph-content.ts",
+      "packages/scheduler/src/graph-content-issues.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "apps/daemon/src/planning/planning-services.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-18T03:06:26.815Z"
 }

@@ -109,7 +109,7 @@
       "completedAt": "2026-08-17T20:18:48.511Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -122,16 +122,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T19:53:43.483Z",
-  "updatedAt": "2026-08-17T20:20:02.507Z",
+  "updatedAt": "2026-08-17T20:34:32.181Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:54:53.573Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-17T20:34:32.181Z",
+    "wallClockMs": 2378608
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-b8af1a87"
+    "worker-b8af1a87",
+    "qa-12cda609"
   ],
   "stepsCompleted": [
     "step-1",
@@ -171,5 +174,8 @@
     "packages/import/src/import-apply.ts",
     "packages/import/src/import-apply.test.ts",
     "tests/migration/import/import-determinism.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-17T20:34:32.181Z",
+  "reviewCompletedAt": "2026-08-17T20:34:32.181Z",
+  "reviewSummary": "APPROVED. All gates re-run by QA, each its own foreground invocation with its own exit.\n\nGATES: pnpm --filter @moe/import typecheck EXIT 0 (tsc --project ran); pnpm --filter @moe/import test EXIT 0 \"Test Files 8 passed (8) / Tests 134 passed (134)\" (baseline 132); pnpm test:migration EXIT 0 \"3 passed (3) / 26 passed (26)\" (baseline 25), 10.98s real SQLite; pnpm test:store EXIT 1 foreign red verbatim packages/store/src/recovery-anchor.test.ts:694 \"RECOVERY_ANCHOR_FAULT_POINTS leaked onto the root\" (1 failed|43 passed files, 1 failed|526 passed tests). Path-attributed: diff touches ZERO packages/store paths (git diff --name-only 926f6db..HEAD -- packages/store = 0) and the leaking export exists already at baseline 926f6db. Owned intersection EMPTY.\n\nDoD 1: import-apply.ts:43 domainSchemaVersion REQUIRED and typed typeof IMPORT_EVENT_FACTS_VERSION; :162 stamps the sole event push site in foldRecord; public constant reused, no store/codec/barrel edit.\nDoD 2: import-determinism.test.ts:265-322 on real SqliteEventStore - count pinned positive (:280, hasMore false), per-event envelope==decoded facts.schemaVersion==constant (:294-295), eventId==facts.claim.claimId, aggregateId==legacy-import:<digest>.\nDoD 3: dispositions exactly [\"COMMITTED\",\"REPLAYED\"], envelopes deep-equal incl. payload bytes, horizon/version/receipt unchanged, decisions [] before and after.\nDoD 4: MY OWN compile-preserving drill (\"moe-domain-schema/0\" as typeof ...) reddens import-determinism.test.ts:294 on received 'moe-domain-schema/0', plus import-apply.test.ts:126 and :246; restored byte-identical (sha 5024336713982585...), worktree==HEAD after. Refusals still pin IMPORT_COMMIT_FAILED/APPLY and IMPORT_TOO_LARGE_FOR_ONE_COMMIT/APPLY.\nDoD 5: consumer task-80fce1d1d625453098bd526d61c5ddb8 recorded.\n\nDiff = 3 owned files (+64/-2, +14/-14, +113/-0); import-apply.ts exactly 250 lines, 0 CR, no BOM, no scratch. Goldens (commandId/commandBytes/eventIds) measured pre-change, still green."
 }

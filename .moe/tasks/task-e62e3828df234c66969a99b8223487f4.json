@@ -16,12 +16,12 @@
     "Use public package roots across package boundaries; exact codes/layers and positive generated counts; target <=250 lines per production source and split before 400."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-f956ffe1",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor cascade 13:01Z: the task rail's explicit precondition (\"forbids planning before task-6cbff010 is DONE\") is now satisfied — 6cbff QA-approved DONE at 13:00 with the committed effect.activate path and Foundation durable attempt/release/result records landed. Architect: re-measure the committed Foundation record surfaces (foundation-attempt-store.ts settleFoundationAttempt, recordProviderRun) before planning the safe-release evidence; downstream 738a12a8 and c4171c1c unblock when this lands.",
+  "reopenReason": "Governor promotion under the human's active unstall directive: the stored 15-of-17-fields-absent measurement (taken at a42ae2f) is substantially stale — landed DONE since: 740924b7 (lease + provider-slot disposition), 8b2bb97b (lease durably RELEASED), 4731ba34 (provider-slot release transition), 5998ae63 (per-attempt resource authority), 04dd5a0a (attempt journal authority), cc3c4e59 (activation command identity), 7c16fcbc (provider effect settlement mapping). Planning architect: step 1 must be verify-or-block — re-run the 17-field ExpansionReleaseEvidence producer grep at current HEAD (field map in comment-02c76abc). Known still-absent chains: safeBoundaryObserved (00e4827d), terminalEffectRefs (1879166d/6d400781), receiptRef (203a5ca7/af9454f4) — if the DoD requires those fields durably readable, re-block on exactly those ids rather than a generic reason; if the reader can lawfully return UNKNOWN/REFUSED for absent authorities per the landed rule, plan the reader now.",
   "createdBy": "WORKER",
   "parentTaskId": "task-c4171c1cfe854cb78dd233794b342025",
   "priority": "CRITICAL",
@@ -42,17 +42,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-13T22:47:49.831Z",
-  "updatedAt": "2026-08-17T19:41:58.303Z",
+  "updatedAt": "2026-08-18T03:04:11.411Z",
   "metrics": {
     "firstClaimAt": "2026-08-13T23:27:33.756Z"
   },
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-16T22:30:51.602Z",
-  "blockedReason": "RE-MEASURED at HEAD a42ae2f. The governor's unblock premise is HALF true: task-6cbff010 IS DONE, but it never produced the release facts. The reader has nothing durable to read.\n\nFIELD BY FIELD over `ExpansionReleaseEvidence` (packages/core/src/expansion/expansion-planning-hold.ts:27-36), 17 fields, grepped across apps/daemon/src excluding tests and fixtures: ZERO production producers for effectsTerminal, leaseState, observationRef, providerSlotState, receiptRef, safeBoundaryObserved, terminalEffectRefs, terminalResourceRefs, resourcesTerminal, strongestReason, terminalTarget, attemptState, leaseRef, providerSlotRef, and WORK_RELEASE_OR_PAUSE. 15 of 17. Only `attemptRef` (durable attempt record) and `truthClass` (the reader's own stamp) are reachable.\n\nThe kernels that COMPUTE these exist in packages/runner (drain-table.ts, drain-disposition.ts, safe-boundary.ts) and packages/scheduler (lease-drain.ts, authority-kernel.ts). No daemon path PERSISTS them: `attemptRecordBody` (foundation-attempt-contracts.ts:182-199) writes activationDigest, attemptId, effectId, grantId, nodeKey, observation, reason code/layer, registration, resultManifest, stream shas, truthClass, wrapperIdentity — none of the release, lease, slot, terminal, boundary, receipt or handoff facts.\n\nTask rail 1 binds: repair the producer, do not reconstruct authority here. No plan, no narrowed DoD.\n\nFOUR PREREQUISITES, disjoint fact sets:\n- 740924b7: reason, disposition{resumable,strongestReason,terminalTarget}, attemptState, lease and providerSlot ref+state.\n- 6d400781: effectsTerminal, terminalEffectRefs, resourcesTerminal, terminalResourceRefs.\n- ded026d6: safeBoundaryObserved, observationRef.\n- af9454f4 (CREATED THIS PASS): receiptRef and the {digest,ref} handoff, the only two no task claimed. Load-bearing: core safeRelease (:209-215) needs same(release.handoff, command.workerHandoff), so with no producer the daemon can only echo the caller.\n\nUNBLOCK: all four DONE, then re-measure.",
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedReason": null,
   "contextFetchedBy": [
     "architect-a9210e34",
     "architect-94dd1835",
-    "architect-77071474"
+    "architect-77071474",
+    "architect-f956ffe1"
   ],
   "priorHandoffs": [
     {

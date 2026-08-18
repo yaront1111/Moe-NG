@@ -18,7 +18,7 @@
     "Use TDD exact codes/layers/storeCode, positive generated counts, production-surface mutation drills, nonvacuous daemon gates, and explicit owned-path commit."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:39.046Z",
-  "updatedAt": "2026-08-17T17:43:17.459Z"
+  "updatedAt": "2026-08-18T03:03:54.689Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T03:01:30.972Z"
+  },
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "blockedReason": "The task explicitly hard-depends on three production surfaces that are not landed. Re-measured at HEAD 8222b9e: task-7e3ede is WORKING and `readFoundationActivationByAttempt` has 0 matches; task-9d489 is PLANNING and `PROVIDER_RUN_COMMAND_KIND` has 0 matches; task-7f7fee is PLANNING and all three required reader codes (`PROVIDER_RUN_EVIDENCE_UNREADABLE`, `...MALFORMED`, `...BINDING_MISMATCH`) have 0 matches. The three owned provider-run-reader paths are absent/clean. Planning now would reference nonexistent authority and duplicate prerequisites. After all three reach DONE, re-probe their exact exports and the DoD-3 principal/session equality: current production activation flows allow principalId and lease.ownerSessionRef to be distinct, so `decision principal == ownerSessionRef` may require a human DoD correction rather than a reader assertion.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T03:03:29.690Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Re-measured all hard dependencies and target symbols at HEAD 8222b9e; reported BLOCKED on task-7e3ede, task-9d489, and task-7f7fee; wrote Serena handoff memory.",
+      "whatRemains": "After all three prerequisites reach DONE, re-claim and re-probe exact exports, then resolve the principalId versus ownerSessionRef DoD ambiguity before submitting a reader plan.",
+      "pitfalls": "Do not duplicate the missing command-kind constant, reader refusal vocabulary, or activation lookup; do not select provider runs by first/highest epoch.",
+      "openQuestions": "Does DoD 3 intentionally require authenticated principalId to equal lease.ownerSessionRef? Current accepted activation flows allow them to differ.",
+      "releasedAt": "2026-08-18T03:03:54.688Z",
+      "releasedBy": "architect-f956ffe1",
+      "reason": "Explicit architect handoff after filing dependency block; user requested continuing with other PLANNING tasks."
+    }
+  ]
 }

@@ -17,13 +17,116 @@
     "Use TDD; every refusal test asserts exact stable reason code and refusing layer, generated matrices assert nonzero cases, and a mutation of the production mapper must redden a named assertion.",
     "Keep each production source <=250 physical lines and split before 400; exact one-line LF .js bridges where root-reachable; stage/commit only explicit owned paths."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY-OR-BLOCK GATE (read-only). Two of the prior architect's numbers are already STALE and one prerequisite has landed; re-measure everything before writing code and block if anything differs.\n(a) GAP CLAIMED PRESENT, ACTUALLY CLOSED — do NOT re-add the dependency. `grep -n '@moe/import' apps/daemon/package.json` already returns `workspace:*`, and pnpm-lock.yaml already carries the apps/daemon importer link. DoD item 1's manifest and lock clauses are satisfied at HEAD; re-implementing them would be a silent duplicate. What is still OWED is the compiled probe: write apps/daemon/src/_import-edge-probe.ts importing `decodeImportEventFacts`, `compareShadowProjections`, `projectLegacyImport`, `IMPORT_EVENT_FACTS_VERSION` and `SHADOW_PROJECTION_VERSION` from the BARE `@moe/import` root, run `npx tsc --project apps/daemon/tsconfig.json --noEmit`, require EXIT=0, DELETE it in the same command.\n(b) PREREQUISITE LANDED: `grep -n domainSchemaVersion packages/import/src/import-apply.ts` must show :43 declaring it on `ImportEventDraft` as `typeof IMPORT_EVENT_FACTS_VERSION` and :162 setting it. That is task-9745cd06's deliverable and it is what lets this reader authenticate the envelope instead of blessing a `moe-domain-schema/0` default.\n(c) STALE NUMBERS, corrected: `wc -l apps/daemon/src/index.ts` is 217 (not ~389), so the 400-line pressure the handoff warned about is gone. `grep -n 'EXPECTED_EXPORTS.length' apps/daemon/src/index-surface.test.ts` is `toBe(132)` at :474 (not 85), with `Object.keys(daemon).sort()` compared to the list at :478. Both change in step 8.\n(d) SHAPES: `SHADOW_ENTITY_FIELDS` in packages/import/src/shadow-contract.ts pins BLOCKER=[basis,holder], CLAIM=[principal,sourcePath,status], LINK=[evidenceOnly,from,kind,to]; a field outside those is REPORTED unmapped, never compared. `ShadowEntity` is `{fields: Record<string,string>, id, kind}` — all values canonical TEXT.\n(e) THE PRODUCER GAP, already measured and filed as task-6d319381967a4ca5b746c2538f537e72: nothing in production commits `legacy.<kind>.imported` to a real store. Re-confirm with `grep -rn applyImport apps tools packages --include=*.ts | grep -v '\\.test\\.'` (two non-test hits: the re-export and tools/import/import-shadow.ts:141, which passes the DISCARDING_STORE at :111) and `grep -rn '@moe/import' apps/daemon/src --include=*.ts | grep -v '\\.test\\.'` (ZERO). This does not block the reader — see step 9's disclosure requirement.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TESTS FIRST. Create apps/daemon/src/projections/import-shadow-reader.test.ts over a REAL file-backed SqliteEventStore.\nSEEDING, and be explicit about why it looks unusual: there is no production writer for these rows (step 1(e)), so this suite seeds them by composing PRODUCTION `applyImport` with a store port that forwards to the real store, then reads them back through the module under test. The bytes therefore come from the production encoder and the aggregate id and command identity from `applyImport` itself — nothing is hand-forged. Do NOT hand-write an event payload; a fixture payload would make every downstream assertion a statement about the fixture.\nWrite RED:\n- ACCEPTED NONEMPTY CLAIM CONTROL: two imported records yield a projection whose CLAIM entities carry principal, sourcePath and status, ordered deterministically, with `version === SHADOW_PROJECTION_VERSION`.\n- KNOWN-EMPTY IS NOT UNAVAILABLE: a record with `links: []` and a HISTORICAL claim yields ZERO LINK and ZERO BLOCKER entities and still returns `ok`. This distinction is the heart of the task — an empty list is a fact, an unreadable list is a refusal, and collapsing them is how a shadow comparison starts inventing agreement.\n- BYTES-UNCHANGED INVARIANT: capture raw event count, decision count, database file size and mtime before and after every read, and assert all four are identical. This is a pure read adapter; the invariant is what proves it.\nConfirm the suite fails because the module is missing, not because the harness is wrong.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Land the reader skeleton in apps/daemon/src/projections/import-shadow-reader.ts plus its bridge — an EXACT one-line LF file `export * from \"./import-shadow-reader.ts\";` (every production .ts in this tree has one; without it the module is invisible to consumers while tsc and vitest both stay green).\n`readImportShadowProjection(store, { manifestDigest })`, in this order:\n1. `store.readEventHorizon()` in try/catch -> IMPORT_SHADOW_STORE_UNREADABLE. ONE horizon, captured before any read.\n2. `store.readEvents(`legacy-import:${manifestDigest}`)` in try/catch -> IMPORT_SHADOW_STORE_UNREADABLE; zero events -> IMPORT_SHADOW_ABSENT. The caller names WHICH import; it never supplies a fact. That is the same posture `readCurrentEffectSessionBinding` takes with `effectId` — the identifier locates, the durable bytes decide.\n3. Per event, in aggregateSequence order: sequence must equal index+1 (hole or reorder -> IMPORT_SHADOW_EVIDENCE_MALFORMED); eventType must match the `legacy.<kind>.imported` shape (anything else -> IMPORT_SHADOW_EVENT_UNSUPPORTED); the envelope's `domainSchemaVersion` must equal `IMPORT_EVENT_FACTS_VERSION` (-> IMPORT_SHADOW_SCHEMA_UNSUPPORTED). Step 1(b) is what makes this check meaningful rather than a check against a default nobody set.\n4. Decode with public `decodeImportEventFacts(event.payload)`. A refusal is returned with its OWN `IMPORT_EVENT_*` code and its OWN layer verbatim — never restamped into a local code. The seven upstream codes already distinguish malformed bytes, noncanonical bytes, incomplete facts, unknown field, identity conflict, schema conflict and schema unsupported; duplicating them locally would create two vocabularies that drift.\n5. Cross-check `facts.shadowVersion === SHADOW_PROJECTION_VERSION` and `facts.claim.provenance.manifestDigest === manifestDigest` -> IMPORT_SHADOW_BINDING_MISMATCH otherwise. A row whose provenance names a different manifest is not this import's row.\n6. Re-read the horizon after the scan; if it moved -> IMPORT_SHADOW_HORIZON_DRIFT with NO partial projection. A projection assembled across a moving horizon is a mixture of two states.\nEvery refusal is deeply frozen with `ok:false`, `advisoryOnly:true`, `authority:\"NONE\"`, its code, its refusing layer, and no entities field at all — a partial projection must be unrepresentable, not merely unproduced.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/projections/import-shadow-reader.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Land the DAEMON MAPPER — the independent production mapping from decoded facts to ShadowEntity[]. Keep it in import-shadow-reader.ts if that file stays under 250 physical lines; if not, split it into apps/daemon/src/projections/import-shadow-mapper.ts plus its exact one-line LF bridge (authorized by this plan; the per-FILE cap is hard).\nTHE MAPPING MUST BE INDEPENDENT, and that is the point of the whole task: `projectLegacyImport` maps the LEGACY side, and calling it here too would make the shadow comparison compare a function with itself and report perfect agreement forever. Write the daemon's own mapping:\n- CLAIM: id = `claim.claimId`; fields = { principal: claim.principal, sourcePath: claim.provenance.sourcePath, status: claim.status } — exactly the three names `SHADOW_ENTITY_FIELDS.CLAIM` declares, all as canonical text.\n- BLOCKER: emitted ONLY for a SUSPENDED claim; fields = { basis: \"SUSPENDED_CLAIM\", holder: claim.principal }. A HISTORICAL claim emits none, and that absence is a fact rather than a gap.\n- LINK: id = SHA-256 over canonical ordered JSON `{from, kind, to, version}`; fields = { evidenceOnly, from, kind, to }, with `evidenceOnly` rendered as canonical text since every ShadowEntity field value is text.\n- ORDER: sort by kind in code-unit order, then by id. Unchanged durable bytes must serialize identically across runs, so the order is total and derived, never insertion order.\nA field outside the declared vocabulary is never emitted — the comparator reports unmapped fields as UNKNOWN, and emitting one here would launder a daemon-invented field into a comparison. Do NOT reach for BoardProjection, its byType counts, or WorkClaimLedger for any of this (task rail 2): a count is not a semantic fact, and agreement manufactured from one is the exact failure this adapter exists to prevent.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/projections/import-shadow-mapper.ts",
+        "apps/daemon/src/projections/import-shadow-mapper.js"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Land the PRODUCTION COMPARISON ENTRY POINT — DoD item 4. Export a second function from the same module, e.g. `compareImportShadow(store, { manifestDigest }, legacyFacts)`, which:\n1. projects the LEGACY side through public `projectLegacyImport(legacyFacts)` — the importer's own mapping, not a copy;\n2. reads the CURRENT side through `readImportShadowProjection` — the daemon's independent mapping from step 4;\n3. compares them through public `compareShadowProjections(legacy, current)` — @moe/import's own comparator, never a local diff.\nA refusal from either side short-circuits and is returned with its own code and layer; the comparison never runs over a half-built side.\nThe wrapper is deeply frozen and carries `advisoryOnly: true` and `authority: \"NONE\"`, and it exposes NO command affordance — no commit, no activate, no cutover, no \"best tool\" decision, and no method that could be mistaken for one. `ShadowComparison` already disposes every mismatch as NEEDS_RECONCILIATION or UNKNOWN and has no third arm; nothing here may widen that.\nThis function is what keeps the mapping in production rather than in the suite: task-22cfca91c5134b24aaf3e5734444fb93 calls THIS, so neither it nor @moe/import reimplements the daemon side.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE REFUSAL MATRIX — each case asserting the exact code, the exact refusing LAYER, and that no partial projection escaped.\nUPSTREAM-PRESERVED (assert the `IMPORT_EVENT_*` code and its own layer, NOT a daemon code): truncated payload bytes; noncanonical bytes (re-serialize a decoded record with keys in a different order and commit that); a facts record missing a declared key; a facts record carrying an undeclared key; a schema version the decoder does not support.\nDAEMON-LOCAL (assert the local code and layer): absent aggregate; unreadable store; an event type outside the `legacy.<kind>.imported` shape; an envelope `domainSchemaVersion` that is not IMPORT_EVENT_FACTS_VERSION; a provenance manifestDigest naming another import; a sequence hole; horizon drift.\nWHICH LAYER ANSWERED IS ITSELF AN ASSERTION. Two layers can refuse here, and a test that only checks `ok === false` would stay green if the daemon started answering first and swallowed the decoder's finer code — which is precisely the regression this matrix exists to catch.\nGENERATED HOSTILE SWEEP over the reader's inputs (manifestDigest: empty, non-string, oversized, non-NFC, path-shaped, `__proto__`; store: throwing readEvents, throwing readEventHorizon, a horizon that moves between the two reads). Assert `cases.length > 0` BEFORE asserting outcomes — a sweep that silently generates zero cases passes while testing nothing — and assert every case refuses rather than throwing. A crash is not a refusal.\nClose every store in a `finally` on every exit path; a held SQLite handle kills the vitest worker with an error that looks unrelated.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DETERMINISM AND THE READ-ONLY INVARIANT.\n- BYTE-IDENTICAL SERIALIZATION: read the same store twice and assert the two projections serialize to identical canonical bytes, then assert a THIRD read after committing an unrelated aggregate is still identical for this manifest — unchanged durable bytes must produce an unchanged projection even as the store grows around them.\n- ORDER IS DERIVED, NOT INCIDENTAL: seed the same records in a different insertion order and assert the entity sequence is identical. If it is not, the sort is reading insertion order somewhere.\n- READ-ONLY ON BYTES, NOT ON PROMISE: around every read assert raw event count, command-decision count, database file size and mtime are unchanged. `applyImport` writes at `expectedVersion: 0`, so an accidental write would also be visible as a version move — assert that too.\n- ADVISORY POSTURE: assert the result carries `advisoryOnly: true` and `authority: \"NONE\"`, and that no exported symbol from this module accepts a command, a store write port, or an activation argument. A reader that could write is one refactor away from doing it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "PUBLISH THROUGH THE DAEMON ROOT, and repair the closed roster it breaks.\nExport the reader, the comparison entry point and their public types from apps/daemon/src/index.ts. The file is 217 lines with room to spare, so add a small dedicated export block rather than threading it through an unrelated surface module; keep it well under 400.\nTHEN update apps/daemon/src/index-surface.test.ts, which is a CLOSED roster: `EXPECTED_EXPORTS.length` is asserted `toBe(132)` at :474 and `Object.keys(daemon).sort()` is compared to the hand-written list at :478. Add one row per newly published runtime value, bump 132 by exactly that count, and keep the list's existing grouping and sort discipline. Do NOT weaken the equality to a subset or `>=` check — catching an unreviewed root export is the roster's entire purpose. This fifth file is expected and forced by the DoD's publication requirement, exactly as the prior architect predicted; record it as such.\nAlso confirm you have NOT disturbed the `FORBIDDEN_FIXTURES` roster at :518 (`toBe(34)`): the new module is production, not a fixture, so that count must not move. If it does, something was named or placed like a fixture.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-9",
+      "description": "MUTATION DRILLS — task rail 4 requires that a mutation of the production mapper redden a NAMED assertion, and a green suite cannot show this. Run each, record the exact test name that reddened, restore, and confirm the restored bytes hash-match the original (git status alone is unreliable in this shared worktree).\n1. THE TAUTOLOGY DRILL, and it is the most important one: replace the daemon mapper's body with a call to `projectLegacyImport` over the decoded facts. If the suite stays green, the comparison is comparing one function with itself and every future \"agreement\" is meaningless. A named test MUST redden.\n2. Emit a BLOCKER for a HISTORICAL claim as well as a SUSPENDED one. The known-empty test must redden — this proves absence is asserted as a fact rather than merely unobserved.\n3. Drop the `domainSchemaVersion` envelope check. The schema-unsupported test must redden; if it does not, the check is unreachable and the prerequisite that landed it bought nothing.\n4. Restamp a decoder refusal into a local IMPORT_SHADOW_* code. An upstream-preservation test must redden on the CODE, not merely on `ok`.\n5. Replace the derived sort with insertion order. The determinism test must redden.\nIf a drill survives, do not rationalise it: either the assertion has detached from its subject or the mutation is equivalent. Say which, with evidence, in the completion notes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/projections/import-shadow-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-10",
+      "description": "GATES. Run the owned package with exit codes captured separately and READ THE OUTPUT rather than the exit code — `pnpm --filter` prints \"No projects matched the filters\" and exits 0 when a package does not resolve, so exit 0 with no `Test Files N passed` count line is UNVERIFIED. @moe/daemon resolves to apps/daemon.\nRun exactly:\n`pnpm --filter @moe/daemon typecheck; A=$?; pnpm --filter @moe/daemon test; B=$?; echo \"TC=$A TEST=$B\"`\nNo pipes (a piped run reports the pipe tail's code) and no `&&` chaining (a red typecheck then hides the count line). Also run `pnpm --filter @moe/import test` once as a positive control that nothing about the new consumer disturbed the producer package.\nCompare the daemon test-file and test counts against the pre-change baseline: they must be equal or higher. A DROP means a file stopped being collected, which reads as a pass while covering less.\nThen attribute any red by the path-attributed baseline: repo-wide failures at the merge-base, again at HEAD, and confirm the delta intersected with this task's owned paths is EMPTY. Report foreign red verbatim with its exact failing paths; never hide it and never fabricate green. A red your own diff caused is not excused by that rule.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-11",
+      "description": "ADVERSARIAL SELF-REVIEW, then complete. Load the `adversarial-self-review` skill and read the diff as an attacker:\n- Can any caller-supplied value become a FACT rather than an identifier? Trace every field of every emitted entity back to decoded durable bytes.\n- Is there any path where a partial projection escapes — an early return, a caught throw, a `?? []` — rather than a refusal?\n- Does the module expose anything that could write, activate, or decide? Re-read every exported signature.\n- Did the daemon mapper stay independent of `projectLegacyImport`, including transitively through a shared helper?\n- Confirm every production file is under 250 physical lines, each has its exact one-line LF `.js` bridge, the step-1 `_import-edge-probe.ts` is gone, and `git status --porcelain` shows only owned paths.\nCOMPLETION MUST RECORD THREE THINGS:\n1. CONSUMER EDGE (task rail 3): task-22cfca91c5134b24aaf3e5734444fb93 is the consumer, and its edge is `compareImportShadow(store, { manifestDigest }, legacyFacts)` from apps/daemon/src/projections/import-shadow-reader.js, published through the @moe/daemon root.\n2. THE MEASURED PRODUCER GAP, disclosed rather than implied: no production path commits `legacy.<kind>.imported` to a real SqliteEventStore — the only non-test composer of `applyImport` is tools/import/import-shadow.ts:141, which passes the DISCARDING_STORE at :111, and apps/daemon references @moe/import nowhere else. This reader is therefore CORRECT and will answer IMPORT_SHADOW_ABSENT in every real deployment until task-6d319381967a4ca5b746c2538f537e72 (filed during this planning) lands the durable writer. State that the suite seeds rows through production `applyImport` plus a real store port for exactly this reason. Do not describe the reader as proving an end-to-end capability it cannot.\n3. The forced index-surface.test.ts roster edit, with its line numbers.\nStage and commit ONLY the owned paths by explicit pathspec; never `git add -A`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/projections/import-shadow-reader.ts",
+        "apps/daemon/src/index.ts",
+        "apps/daemon/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (shadow projection adapter), BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion under the human's standing unstall directive: its recorded gate — task-9745cd06 (stamp import event domain schema) — is QA-approved DONE as of 20:34Z, so production ImportEventDraft now stamps domainSchemaVersion and the durable rows are adapter-readable. Planning architect: re-probe the stamped rows at current HEAD before planning; task-049bb927 (shadow matrix) chains behind this one.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -34,21 +137,30 @@
       "author": "architect-f956ffe1",
       "content": "REMEASURED PREREQUISITES: current import events persist only canonicalPayload(record.payload); they irreversibly omit legacyId/sourcePath/provenance and cannot support this reader. Hard-depend first on task-a6775ac56d714da388e6b28343eb806e (versioned canonical import shadow facts) and task-1e44b9b9d50e4cbab57a09d0105fdade (daemon @moe/import manifest/lock edge). This task then owns only import-shadow-reader.ts, its LF bridge, its test, and daemon index export (4 files). Do not infer missing fields from eventId/type/counts/command result.",
       "timestamp": "2026-08-16T23:07:03.627Z"
+    },
+    {
+      "id": "comment-c26a3f5940bc49c8b83035e55064ed57",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR QA NOTE (03:07Z, recording architect-c9e91335's hazard so it survives to review): the sharpest failure mode for this adapter is SELF-COMPARISON — projectLegacyImport maps the legacy side, and if the daemon mapper reaches it even transitively through a shared helper, the comparison compares one function with itself and reports perfect agreement forever on a fully green suite. The plan's FIRST mutation drill exists solely to catch that; QA must not accept a softened version of it. Also on record: this adapter honestly answers IMPORT_SHADOW_ABSENT in production until the writer (task-6d319381) lands — that disclosure is required in the completion step and is not a defect.",
+      "timestamp": "2026-08-18T03:07:44.895Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:01:28.873Z",
-  "updatedAt": "2026-08-17T19:54:47.994Z",
+  "updatedAt": "2026-08-18T03:07:44.895Z",
   "metrics": {
-    "firstClaimAt": "2026-08-17T19:41:39.191Z"
+    "firstClaimAt": "2026-08-17T19:41:39.191Z",
+    "plannedStepCount": 11,
+    "plannedDistinctFileCount": 7
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "architect-c9e91335"
   ],
-  "blockedReason": "Fresh HEAD measurement found prerequisite task-a677's payload codec is present, but its production ImportEventDraft does not set domainSchemaVersion. A real SqliteEventStore stores every legacy.*.imported row under the generic moe-domain-schema/0 default while only the inner payload declares moe-import-event-facts/1. A strict daemon current-shadow reader would therefore have to ignore the event envelope's schema or bless an accidental generic default, contradicting the stale-dependency/fail-closed rails and the producer task's own DoD. Filed focused prerequisite task-9745cd06b8004f44af4128f69a251860 to require/stamp the exact outer schema and prove it with nonzero real-store replay. Reopen this task only after that task is DONE. The other dependencies are genuinely live: daemon package.json + pnpm-lock link @moe/import and a compiled inside-daemon bare-root probe typechecked exit 0; a677's canonical payload decoder is public. On reopen, this task needs five owned paths (reader.ts, LF bridge, reader.test.ts, daemon index.ts, index-surface.test.ts—the old four-file comment is stale because the daemon root export catalogue is exact). Its semantic scope is the durable v2 imported-state projection, never live work/graph authority: copied source uses projectLegacyImport, durable event bytes use an independent daemon mapper, and public compareShadowProjections compares them. Board counts and WorkClaimLedger remain invalid substitutes.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T19:54:05.354Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured both prior prerequisites; verified the daemon @moe/import manifest+lock+compiled bare-root edge; inspected the landed event codec, durable store envelopes, daemon root export ratchet, and shadow semantics; filed task-9745cd06b8004f44af4128f69a251860; reported this task BLOCKED; wrote Serena handoff memory.",
@@ -59,5 +171,32 @@
       "releasedBy": "architect-f956ffe1",
       "reason": "Explicit architect handoff after filing producer-schema prerequisite and blocking this task."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan has 11 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T03:06:30.620Z",
+  "planningNotes": {
+    "approachesConsidered": "1) BLOCK AGAIN on the measured producer gap. REJECTED after weighing it carefully. The reader is independently correct, independently testable, and is what the DoD actually asks for; the missing writer is a prerequisite of the CONSUMER (task-22cfca91), not of this reader. The global rail's remedy for an absent capability is to file prerequisite production tasks with the gap measured symbol by symbol — which I did, as task-6d319381967a4ca5b746c2538f537e72 — not to stall the half that is buildable. What the rail forbids is narrowing the DoD or hiding the gap, so step 11 requires the gap be disclosed in the completion notes verbatim.\n2) USE `projectLegacyImport` FOR THE CURRENT SIDE TOO. REJECTED, and drill #1 exists to keep it rejected: the comparison would then run one function against itself and report perfect agreement forever. The daemon needs its own mapping or the shadow matrix proves nothing.\n3) DERIVE CLAIM/LINK/BLOCKER FROM BoardProjection OR WorkClaimLedger. REJECTED by task rail 2 and on the merits: byType counts are not semantic facts, and agreement manufactured from a count is exactly the invention this adapter exists to prevent. Missing semantic authority stays UNKNOWN/refused.\n4) SCAN BY EVENT TYPE with `readEventsByTypeAfter`. REJECTED: the event type is `legacy.${record.kind}.imported` with an OPEN kind, so a type-indexed scan cannot enumerate the set without guessing kinds. One bounded aggregate read of `legacy-import:<manifestDigest>` is exact, ordered and cheap.\n5) TAKE THE manifestDigest AS AUTHORITY. NOT DONE, and the distinction is deliberate: the caller names WHICH import; every FACT comes from the decoded durable bytes, and the provenance cross-check refuses a row whose manifest disagrees. Same posture `readCurrentEffectSessionBinding` takes with `effectId`.\n6) WIRE THE ADAPTER INTO tools/import/import-shadow.ts to satisfy DoD 4's \"production consumer\". REJECTED: that CLI's own header states the comparator never sees an authority-bearing store, and tools/ is not a workspace package so it cannot bare-import the daemon at all. DoD 4 is satisfied by a daemon-side production comparison entry point, which is also what keeps the mapping out of the suite.",
+    "codebaseInsights": "MEASURED AT HEAD 8222b9e2. The prior architect's handoff is largely accurate but THREE of its numbers are stale and one premise behind the governor's promotion is wrong.\n\nPREREQUISITE LANDED. `packages/import/src/import-apply.ts:43` declares `domainSchemaVersion: typeof IMPORT_EVENT_FACTS_VERSION` on `ImportEventDraft` and `:162` sets it in `foldRecord`. That was task-9745cd06's deliverable and it is what makes the envelope authenticable instead of a generic `moe-domain-schema/0` default.\n\nSTALE NUMBER 1: `apps/daemon/src/index.ts` is 217 physical lines, not ~389. The 400-line pressure is gone.\nSTALE NUMBER 2: `apps/daemon/src/index-surface.test.ts` asserts `EXPECTED_EXPORTS.length` `toBe(132)` at :474 (the handoff said 85), with `Object.keys(daemon).sort()` compared to the hand-written list at :478. A separate `FORBIDDEN_FIXTURES.length` `toBe(34)` sits at :518 and must NOT move.\nSTALE NUMBER 3: the old task comment's four-file estimate remains wrong for the same reason the handoff gave — root publication needs the roster file too.\n\nDEPENDENCY EDGE IS ALREADY CLOSED. apps/daemon/package.json declares `@moe/import: workspace:*` and pnpm-lock.yaml carries the importer link. DoD item 1's manifest and lock clauses are already true at HEAD, so this task must NOT re-add them — that is the \"gap claimed present, actually closed\" half of the stale-description rail. Only the compiled bare-specifier probe is still owed.\n\nTHE PRODUCER GAP, and it is the finding that matters most. `applyImport` (import-apply.ts:196) ends by calling `input.store.commit({ aggregateId: `legacy-import:${manifest.digest}`, commandBytes, commandId, committedAt, events, expectedVersion: 0 })` at :219-228. But `grep -rn applyImport apps tools packages --include=*.ts | grep -v '.test.'` returns exactly TWO non-test hits: the re-export at packages/import/src/index.ts:19 and tools/import/import-shadow.ts:141 — which passes DISCARDING_STORE, defined at that file's :111 as `commit: () => ({ currentVersion: 0 })`. And `grep -rn '@moe/import' apps/daemon/src --include=*.ts | grep -v '.test.'` returns ZERO. So NO production path has ever written a `legacy.<kind>.imported` row to a SqliteEventStore. The governor's reopen note says \"the durable rows are adapter-readable\", which is true of their DECODABILITY and false of their EXISTENCE. Filed as task-6d319381967a4ca5b746c2538f537e72 (BACKLOG, HIGH) with the gap measured symbol by symbol; it is a prerequisite of the CONSUMER, not of this reader.\n\nWHY THE CURRENT NEW-SIDE IS A FILE TODAY: `tools/import/shadow-input.ts:39` `readCurrent(path)` returns an EMPTY projection when path is null and otherwise JSON.parses a caller-supplied file. That is the \"test helper inventing current truth\" this task's objective names.\n\nTARGET VOCABULARY, single-sourced in packages/import/src/shadow-contract.ts: `SHADOW_ENTITY_FIELDS` pins BLOCKER=[basis,holder], CLAIM=[principal,sourcePath,status], LINK=[evidenceOnly,from,kind,to]; `ShadowEntity` is `{fields: Record<string,string>, id, kind}` with every value canonical TEXT; `SHADOW_MISMATCH_DISPOSITIONS` has exactly two arms (NEEDS_RECONCILIATION, UNKNOWN) and the header states there is deliberately no RESOLVED or ACCEPTED. The contract also explains why it declares its own vocabulary rather than importing BoardProjection: @moe/import is a pure leaf with zero dependencies, and depending on the daemon would invert the graph.\n\nDECODE SURFACE: `decodeImportEventFacts(bytes)` (import-event-codec.ts:205) returns `ImportEventFacts | ImportEventRefused`; `ImportEventFacts` carries claim, links, payload, recordVersion, schemaVersion and shadowVersion. `IMPORT_EVENT_REFUSAL_CODES` is a frozen seven-member set (BYTES_MALFORMED, BYTES_NONCANONICAL, FACTS_INCOMPLETE, FACTS_UNKNOWN_FIELD, IDENTITY_CONFLICT, SCHEMA_CONFLICT, SCHEMA_UNSUPPORTED) — rich enough that duplicating any of it locally would create two drifting vocabularies.",
+    "risks": "1) THE TAUTOLOGY IS THE PRIMARY FAILURE MODE. If the daemon mapper reaches `projectLegacyImport` — directly or through a shared helper — the shadow comparison compares one function with itself and reports agreement forever, with a fully green suite. Drill #1 in step 10 is the only thing that catches it; do not skip or soften it.\n\n2) THE READER IS CORRECT BUT PRODUCTION-EMPTY. Until task-6d319381967a4ca5b746c2538f537e72 lands a durable writer, this adapter answers IMPORT_SHADOW_ABSENT in every real deployment. That must be DISCLOSED in the completion notes, not implied. Describing this task as proving an end-to-end capability would be a false claim.\n\n3) THE SUITE MUST SEED ITS OWN ROWS, for the same reason, and that is unusual enough to be misread as fixture-driven authority. Seed by composing PRODUCTION `applyImport` with a store port that forwards to the real store — production encoder, production aggregate id, production command identity — never a hand-written payload.\n\n4) KNOWN-EMPTY vs UNAVAILABLE is the semantic hinge. `links: []` and a HISTORICAL claim mean zero LINK and zero BLOCKER entities and a successful read. Collapsing that into \"unavailable\" (or the reverse) is how a shadow comparison starts inventing or hiding reconciliation work.\n\n5) TWO LAYERS CAN REFUSE. Preserve `IMPORT_EVENT_*` codes and their own layer verbatim; a daemon code that swallows a decoder code makes malformed bytes indistinguishable from an unsupported schema. Every refusal test asserts WHICH layer answered.\n\n6) THE 132-EXPORT ROSTER goes red the moment the module is published, and the `FORBIDDEN_FIXTURES` count at :518 must NOT move. Bump one, leave the other, and never weaken the equality check.\n\n7) REAL FILE-BACKED SQLITE, closed in a `finally` on every exit path — a held handle kills the vitest worker with an unrelated-looking error. The bytes/mtime invariant needs a file-backed store, not in-memory.\n\n8) HORIZON DRIFT IS REACHABLE IN THIS SUITE because peers write to the shared tree; capture the horizon once, re-check after, and refuse rather than returning a projection assembled across two states.",
+    "keyFiles": [
+      "packages/import/src/shadow-contract.ts",
+      "packages/import/src/shadow-projection.ts",
+      "packages/import/src/import-event-facts.ts",
+      "packages/import/src/import-event-codec.ts",
+      "packages/import/src/import-apply.ts",
+      "tools/import/import-shadow.ts",
+      "tools/import/shadow-input.ts",
+      "apps/daemon/src/index.ts",
+      "apps/daemon/src/index-surface.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 9900000
+  },
+  "planApprovedAt": "2026-08-18T03:06:32.680Z"
 }
