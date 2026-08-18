@@ -40,8 +40,18 @@ export const DAEMON_ATTEMPT_RELEASE = "DAEMON_ATTEMPT_RELEASE" as const;
  *  ITS name: a daemon code standing in for a kernel refusal would hide the fact
  *  that the daemon no longer judges dispositions at all. */
 export const SCHEDULER_LEASE_DRAIN = "SCHEDULER_LEASE_DRAIN" as const;
-export type AttemptReleaseLayer =
-  typeof DAEMON_ATTEMPT_RELEASE | typeof SCHEDULER_LEASE_DRAIN;
+/** The THIRD layer, and the reason it is a layer rather than a code. The slot
+ *  transition is a second, independent scheduler kernel on this path, and both
+ *  kernels answer out of the SAME closed two-member `AuthorityErrorCode`
+ *  vocabulary — `releaseProviderSlot` in particular stamps AUTHORITY_STALE_LEASE
+ *  on all four of its identity, binding and state guards. Carrying its refusals
+ *  under `SCHEDULER_LEASE_DRAIN` would make a slot that cannot be released
+ *  indistinguishable from a lease that could not be fenced, and they demand
+ *  opposite repairs. The layer is what disambiguates; the code and the kernel's
+ *  own message ride along unchanged. */
+export const SCHEDULER_PROVIDER_SLOT_RELEASE = "SCHEDULER_PROVIDER_SLOT_RELEASE" as const;
+export type AttemptReleaseLayer = typeof DAEMON_ATTEMPT_RELEASE
+  | typeof SCHEDULER_LEASE_DRAIN | typeof SCHEDULER_PROVIDER_SLOT_RELEASE;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
  *  bytes that no longer re-encode stay three codes for the reason the sibling
@@ -88,16 +98,33 @@ export const refuse = (code: AttemptReleaseCode): AttemptReleaseRefused => Objec
   refusedBy: DAEMON_ATTEMPT_RELEASE,
 });
 
-/** The kernel's own rejection, surfaced UNCHANGED under the kernel's own layer.
+/** A kernel's own rejection, surfaced UNCHANGED under the kernel's own layer.
  *  Flattening it into a daemon code would leave a reviewer unable to tell a
- *  fencing refusal from a malformed row; they demand opposite repairs. */
-export function carryAuthorityRejection(rejection: AuthorityRejection): AttemptReleaseRefused {
+ *  fencing refusal from a malformed row; they demand opposite repairs. The layer
+ *  is a PARAMETER because two kernels refuse on this path and their shared code
+ *  vocabulary cannot tell them apart — see `SCHEDULER_PROVIDER_SLOT_RELEASE`. */
+function carryRejection(
+  rejection: AuthorityRejection, refusedBy: AttemptReleaseLayer,
+): AttemptReleaseRefused {
   const issue = rejection.issues[0];
   return Object.freeze({
     advisoryOnly: true as const, authority: "NONE" as const,
     code: issue?.code ?? "AUTHORITY_MALFORMED_INPUT",
-    message: issue?.message ?? null, ok: false as const, refusedBy: SCHEDULER_LEASE_DRAIN,
+    message: issue?.message ?? null, ok: false as const, refusedBy,
   });
+}
+
+/** `releaseWork`'s refusal: the lease could not be drained. Both carriers stay
+ *  HOISTED declarations, as this one always was — a const-initialised export
+ *  reached during another module's evaluation is a temporal-dead-zone crash
+ *  rather than a type error, which is the hazard this file's header names. */
+export function carryAuthorityRejection(rejection: AuthorityRejection): AttemptReleaseRefused {
+  return carryRejection(rejection, SCHEDULER_LEASE_DRAIN);
+}
+
+/** `releaseProviderSlot`'s refusal: the lease drained, the SLOT would not go. */
+export function carrySlotRejection(rejection: AuthorityRejection): AttemptReleaseRefused {
+  return carryRejection(rejection, SCHEDULER_PROVIDER_SLOT_RELEASE);
 }
 
 /** Re-states a durable answer under the outcome THIS call earned. The row is

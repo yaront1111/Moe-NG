@@ -19,6 +19,12 @@
  *     back out of the durable release row, falling back to the committed
  *     activation only when no release has happened yet. The `AuthorityProof` is
  *     built entirely from that lease; a caller-supplied proof is never consulted.
+ *   - `releaseProviderSlot`, from the same ROOT, is the sole authority over the
+ *     provider slot. The daemon derives its command from the durable activation
+ *     and persists the successor it answers; it never composes a slot state.
+ *     Its refusals are carried under a THIRD layer, because both kernels answer
+ *     out of one two-member code vocabulary and a slot that cannot be released
+ *     is not a lease that could not be fenced.
  *   - The attempt and provider-slot facts are RE-READ from the committed
  *     activation. The `record` argument is used for identity agreement only, so
  *     a caller-claimed lease or slot state cannot win.
@@ -32,14 +38,16 @@
  * re-exported below, so consumers keep one import site.
  */
 
-import { parseLeaseRecord, releaseWork } from "@moe/scheduler";
-import type { AuthorityProof, LeaseRecord, ReleaseResult } from "@moe/scheduler";
+import { parseLeaseRecord, releaseProviderSlot, releaseWork } from "@moe/scheduler";
+import type {
+  AuthorityProof, LeaseRecord, ProviderSlotReleaseCommand, ProviderSlotReservation, ReleaseResult,
+} from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import {
-  ATTEMPT_RELEASE_RECORD_VERSION, carryAuthorityRejection, commitRelease, durableActivation,
-  readAttemptRelease, refuse, sameActivation, withOutcome,
+  ATTEMPT_RELEASE_RECORD_VERSION, carryAuthorityRejection, carrySlotRejection, commitRelease,
+  durableActivation, readAttemptRelease, refuse, sameActivation, withOutcome,
 } from "./attempt-release-store.js";
 import type { AttemptReleaseOutcome } from "./attempt-release-store.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
@@ -48,7 +56,8 @@ import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 export {
   ATTEMPT_RELEASE_CODES, ATTEMPT_RELEASE_COMMAND_KIND, ATTEMPT_RELEASE_EVENT_TYPE,
   ATTEMPT_RELEASE_OUTCOMES, ATTEMPT_RELEASE_RECORD_VERSION, DAEMON_ATTEMPT_RELEASE,
-  SCHEDULER_LEASE_DRAIN, deriveAttemptReleaseAggregateId, readAttemptRelease,
+  SCHEDULER_LEASE_DRAIN, SCHEDULER_PROVIDER_SLOT_RELEASE, deriveAttemptReleaseAggregateId,
+  readAttemptRelease,
 } from "./attempt-release-store.js";
 export type {
   AttemptReleaseAnswer, AttemptReleaseCode, AttemptReleaseLayer, AttemptReleaseOutcome,
@@ -92,14 +101,34 @@ const proofOf = (lease: LeaseRecord): AuthorityProof => ({
   leaseToken: lease.leaseToken, ownerSessionRef: lease.ownerSessionRef,
 });
 
+/**
+ * The slot-release command, derived from the DURABLE ACTIVATION and nothing
+ * else: the slot's own three identity fields plus the attempt the activation
+ * committed. No caller can present a slot, a state or a command here — that is
+ * why `AttemptReleaseRequest` carries no slot field at all.
+ *
+ * `attemptRef` deliberately comes from the ATTEMPT rather than from the slot's
+ * own binding, so the kernel's binding guard stays a real cross-check between
+ * two durable facts instead of comparing the slot with itself. An activation
+ * whose slot names another attempt — or names none, `attemptRef` being `null`
+ * on a slot that was never activated and never a wildcard — is refused.
+ */
+const slotReleaseCommand = (durable: ActivationLedgerRecord): ProviderSlotReleaseCommand => ({
+  attemptRef: durable.attempt.attemptId, dimension: durable.providerSlot.dimension,
+  requestId: durable.providerSlot.requestId, slotRef: durable.providerSlot.slotRef,
+});
+
 function releaseRecordBody(
   bound: FoundationAttemptBound, durable: ActivationLedgerRecord,
   result: Extract<ReleaseResult, { outcome: "DRAINING" | "RELEASED" }>, reason: string,
+  slot: ProviderSlotReservation,
 ): Record<string, unknown> {
   const { disposition, lease } = result;
   return {
     attemptAggregateId: bound.aggregateId,
-    attemptRef: durable.attempt.attemptId, attemptState: durable.attempt.state,
+    // The SAFE-BOUNDARY TRANSACTION OUTCOME, not the activation slice. The row
+    // says what this release did to the attempt; the slice said RUNNING forever.
+    attemptRef: durable.attempt.attemptId, attemptState: result.outcome,
     disposition: {
       resumable: disposition.resumable, strongestReason: disposition.strongestReason,
       terminalTarget: disposition.terminalTarget,
@@ -110,10 +139,10 @@ function releaseRecordBody(
     leaseRef: lease.leaseId, leaseState: lease.state,
     nodeKey: bound.nodeKey,
     outcome: result.outcome,
-    // The provider slot is task-4731ba34's transition; `releaseWork` does not
-    // touch slots, so this stays the durable activation-time fact.
-    providerSlotRef: durable.providerSlot.slotRef,
-    providerSlotState: durable.providerSlot.state,
+    // The SUCCESSOR the slot kernel answered on a settled boundary, and the
+    // untouched durable fact on a draining one — never a state composed here.
+    providerSlotRef: slot.slotRef,
+    providerSlotState: slot.state,
     reason,
     reasons: [...disposition.reasons],
     recordVersion: ATTEMPT_RELEASE_RECORD_VERSION,
@@ -160,8 +189,21 @@ export function recordAttemptRelease(
     // aggregate keeps exactly one row and no second truth is composed.
     return prior.ok ? withOutcome(prior, "NO_OP") : refuse("ATTEMPT_RELEASE_RECORD_ABSENT");
   }
+  // THE SLOT TRANSITION RUNS BEFORE ANY WRITE, and that ORDER IS the all-or-none
+  // rule: once `commitRelease` lands a decision there is no compensating path,
+  // so a refused slot must leave zero rows rather than a row describing a
+  // transition that never happened. Only a SETTLED boundary reaches it — a
+  // draining release keeps the durable slot fact exactly as the activation left
+  // it, because a slot released mid-drain would claim the safe boundary the
+  // kernel just declined to certify.
+  let slot: ProviderSlotReservation = durable.providerSlot;
+  if (result.outcome === "RELEASED") {
+    const settled = releaseProviderSlot(durable.providerSlot, slotReleaseCommand(durable));
+    if (!settled.ok) return carrySlotRejection(settled);
+    slot = settled.value;
+  }
   const encoded =
-    encodeFoundationPayload(releaseRecordBody(bound, durable, result, request.reason));
+    encodeFoundationPayload(releaseRecordBody(bound, durable, result, request.reason, slot));
   if (!encoded.ok) return refuse("ATTEMPT_RELEASE_RECORD_DRIFT");
   // The event id is COPIED from the grant, never minted: a second release on the
   // same activation collides on store-wide event-id uniqueness instead of
