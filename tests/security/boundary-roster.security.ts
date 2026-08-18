@@ -18,11 +18,19 @@
  * vacuously when both sides are empty, and passes just as happily when a
  * silently-narrowed scan is compared against a roster built from that same narrow scan.
  *
- * THE COVERAGE RATCHET IS DELIBERATELY OPEN. This file asserts only that the roster
- * matches source and that every axis tag is used. It does NOT assert that every
- * boundary has hostile coverage — no sibling slice has landed that coverage yet, so
- * closing the ratchet here would fail permanently and block the very tasks meant to
- * satisfy it. task-3b1cbdf9bd39405bb32230552d3ab242 owns that flip.
+ * THE COVERAGE RATCHET IS NOW CLOSED, and it is closed NEXT DOOR rather than here.
+ * `completeness.security.ts` reduces the five sibling slices' REAL case entries to one
+ * `Map<constant, Set<arm>>` and asserts that every entry below resolves to a BEFORE, an
+ * AFTER and a RACE case, naming any that does not. It lives in its own file for a reason
+ * this one cannot dodge: resolving coverage means importing four case-table modules and
+ * scanning a fifth, and folding that into an artifact whose whole job is to stay
+ * hand-written would put the roster one refactor away from being generated.
+ *
+ * WHAT THIS FILE STILL OWES THE RATCHET is the one thing the gate cannot assert about
+ * itself: that it EXISTS and is COLLECTED. Delete or rename `completeness.security.ts`
+ * and the lane simply runs eight fewer cases — silently, and with this header still
+ * claiming the ratchet is closed. The final `describe` below is that claim's own
+ * regression test.
  */
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
@@ -478,6 +486,47 @@ describe("coverage axis partition", () => {
       0,
     );
     expect(total).toBe(EXPECTED_ROSTER_SIZE);
+  });
+});
+
+/**
+ * THE THIRD LEG. Scan-versus-roster proves the enumeration; this proves the enumeration is
+ * POLICED. The coverage judgement itself deliberately lives in `completeness.security.ts` —
+ * duplicating it here would make the roster derive from the case tables it is meant to be
+ * independent of — so what is asserted here is that the gate is present, collected, bound to
+ * THIS roster, and still resolving every axis the roster tags.
+ *
+ * The resolver check reads the gate's `RESOLVERS` keys, so an axis quietly dropped from the
+ * ratchet reddens here BY NAME. That couples this file to the gate's table name, which is the
+ * intended direction: renaming it fails loudly rather than opening the ratchet in silence.
+ */
+const SELF_FILE = fileURLToPath(import.meta.url).split(/[\\/]/u).pop() ?? "";
+const RATCHET_FILE = "completeness.security.ts";
+const RATCHET_PATH = join(dirname(fileURLToPath(import.meta.url)), RATCHET_FILE);
+/** One `"axis": someAxisPairs,` entry of the gate's resolver table. */
+const RESOLVER_KEY = /^\s+"?([a-z-]+)"?:\s*[A-Za-z]+Pairs,$/gmu;
+
+describe("the coverage ratchet is wired to this roster", () => {
+  it("collects a completeness gate in this lane", () => {
+    expect(existsAsFile(RATCHET_PATH)).toBe(true);
+    // The lane's include glob is `**/*.security.ts`. A gate renamed out of that suffix keeps
+    // existing, keeps typechecking, and stops running — the one decay this cannot allow.
+    expect(RATCHET_FILE.endsWith(".security.ts")).toBe(true);
+  });
+
+  it("resolves coverage for every axis this roster tags, naming any it dropped", () => {
+    const source = readFileSync(RATCHET_PATH, "utf8");
+    const resolved = new Set([...source.matchAll(RESOLVER_KEY)].map((match) => match[1] ?? ""));
+    // A regex that silently matched nothing would report every axis as dropped, so this
+    // cannot pass vacuously in either direction.
+    expect(resolved.size).toBeGreaterThan(0);
+    expect([...COVERAGE_AXES].filter((axis) => !resolved.has(axis))).toEqual([]);
+    expect([...resolved].filter((axis) => !COVERAGE_AXES.includes(axis as CoverageAxis))).toEqual([]);
+  });
+
+  it("reads THIS roster rather than a copy of it", () => {
+    expect(SELF_FILE).toBe("boundary-roster.security.ts");
+    expect(readFileSync(RATCHET_PATH, "utf8")).toContain(SELF_FILE);
   });
 });
 
