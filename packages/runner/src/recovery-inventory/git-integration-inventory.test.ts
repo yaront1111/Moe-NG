@@ -213,7 +213,10 @@ function factsOf(report: RecoveryInventoryReport, path: string): Record<string, 
   return { ...found.facts };
 }
 
-describe("enumeration over a real repository", () => {
+// 30s on the three real-git suites: each builds repositories via git subprocesses
+// (~seconds each unloaded); the 5s default times out under full-fleet parallelism.
+// Same repair as daemon 03fd290.
+describe("enumeration over a real repository", { timeout: 30_000 }, () => {
   it("binds every ref and on-disk integration target to the class, an identity and a proof", async () => {
     const report = await collect(inputFor(createNodeGitObserver(populatedRepository(), ENV)));
     expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
@@ -264,7 +267,7 @@ describe("enumeration over a real repository", () => {
  * two of these collapse, "we looked and found nothing" later reads the same as
  * "we could not look".
  */
-describe("empty, absent and unreadable are three different answers", () => {
+describe("empty, absent and unreadable are three different answers", { timeout: 30_000 }, () => {
   it("answers ENUMERATOR_UNAVAILABLE for a path that holds no repository", async () => {
     const report = await collect(inputFor(createNodeGitObserver(directory("not-a-repo"), ENV)));
     expectUnknown(report, "ENUMERATOR_UNAVAILABLE");
@@ -364,7 +367,7 @@ describe("the optional ref capability", () => {
   });
 });
 
-describe("silence, ceilings and rejected rows", () => {
+describe("silence, ceilings and rejected rows", { timeout: 30_000 }, () => {
   it("refuses NEGATIVE_PROOF_MISSING for an empty answer nothing can verify", async () => {
     // The answer this module must never produce, pinned against the class so a
     // regression that drops the proof is named rather than merely failing.

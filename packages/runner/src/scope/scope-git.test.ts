@@ -81,7 +81,9 @@ function record(refName: string, objectName: string, objectType: string): string
 const COMMIT = "0".repeat(40);
 const COMMIT_SHA256 = "a".repeat(64);
 
-describe("createNodeGitObserver().listRefs — real git", () => {
+// 30s: these cases run real git subprocesses (~seconds each unloaded); the 5s
+// default times out under full-fleet parallelism. Same repair as daemon 03fd290.
+describe("createNodeGitObserver().listRefs — real git", { timeout: 30_000 }, () => {
   it("enumerates refs/heads and refs/remotes with their target commits", () => {
     const listing = observe(temporaryRepository());
     const names = listing.refs.map((ref) => ref.refName);
