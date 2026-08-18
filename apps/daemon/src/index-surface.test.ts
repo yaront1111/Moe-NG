@@ -319,6 +319,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["HTTP_BOUNDARY_ERROR_CODES", "object"],
   ["HTTP_INPUT_BOUNDS", "object"],
   ["HTTP_REFUSAL_STAGES", "object"],
+  ["IMPORT_SHADOW_READ_LAYER", "string"],
+  ["IMPORT_SHADOW_REFUSAL_CODES", "object"],
   ["LISTENER_REFUSAL_CODES", "object"],
   ["MAX_COMMAND_PAYLOAD_FIELDS", "number"],
   ["MAX_EVENT_PAGE_SIZE", "number"],
@@ -367,6 +369,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["buildCommandRegistry", "function"],
   ["claimWork", "function"],
   ["collectDoctorVersionReport", "function"],
+  ["compareImportShadow", "function"],
   ["coordinationPresentationDigest", "function"],
   ["createCoordinationAdapter", "function"],
   ["createDaemonCommandPorts", "function"],
@@ -389,6 +392,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["readCurrentProjectConfiguration", "function"],
   ["readEventPage", "function"],
   ["readFoundationAttemptRecord", "function"],
+  ["readImportShadowProjection", "function"],
   ["readReconciliationRecords", "function"],
   ["readRecoveryCompletionEvidence", "function"],
   ["readRecoveryReconciliation", "function"],
@@ -471,7 +475,7 @@ const execFileAsync = promisify(execFile);
 
 describe("daemon package root", () => {
   it("guards the hand-written runtime export catalogue", () => {
-    expect(EXPECTED_EXPORTS.length).toBe(132);
+    expect(EXPECTED_EXPORTS.length).toBe(136);
   });
 
   it("publishes exactly the reviewed runtime namespace", () => {

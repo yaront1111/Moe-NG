@@ -34,6 +34,21 @@ export {
   parseWorkRequest, type WorkRequestEnvelope, type WorkRequestParse,
 } from "./work/work-ingress.js";
 export { claimWork } from "./work/work-claim.js";
+/**
+ * The advisory legacy-import shadow read (design §21.8). READ-ONLY: its port declares two
+ * readers and no writer, and every result carries `advisoryOnly` with `authority: "NONE"`.
+ * The consumer edge is task-22cfca91c5134b24aaf3e5734444fb93, which calls
+ * `compareImportShadow`.
+ */
+export {
+  IMPORT_SHADOW_READ_LAYER, IMPORT_SHADOW_REFUSAL_CODES,
+  type ImportShadowAccepted, type ImportShadowCompared, type ImportShadowComparison,
+  type ImportShadowRead, type ImportShadowReadLayer, type ImportShadowRefusalCode,
+  type ImportShadowRefused, type ImportShadowRequest, type ImportShadowStorePort,
+} from "./projections/import-shadow-contracts.js";
+export {
+  compareImportShadow, readImportShadowProjection,
+} from "./projections/import-shadow-reader.js";
 export {
   EVENT_STREAM_CLOCKS, EVENT_STREAM_LAYER, EVENT_STREAM_OBSERVERS,
   EVENT_STREAM_REFUSAL_CODES, EVENT_STREAM_UNKNOWN_CODES, MAX_EVENT_PAGE_SIZE,
