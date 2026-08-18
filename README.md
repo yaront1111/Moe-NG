@@ -54,10 +54,20 @@ returns an authoritative `decision: GO`, `status: VERIFIED`, or freeze-decision
 bytes; a non-caller-mintable trust boundary is still required before any
 authoritative decision can exist.
 
-The current verifier is not an adversarial trust boundary: it runs a shell
-recipe from an agent-modifiable workspace under the wrapper's OS account. The
-release inventory records source subjects rather than runnable daemon/control-room
-artifacts. These are release blockers, not operator configuration issues.
+This repository is stamped `0.1.0` under the MIT [LICENSE](./LICENSE), and every
+workspace package stays `private: true`. The version marks the scope-frozen v0.1
+line (Windows + Claude + linear execution + local single node); it is not a
+published release. Measured at this commit, v0.1 does not yet ship an
+installable artifact or a `moe` CLI: the only `bin` entries in the workspace are
+`apps/daemon`'s `moe-daemon` / `moe-mcp-http` / `moe-mcp-stdio`, which point at
+TypeScript sources inside a `private` package, so nothing installs a `moe`
+command; and the release inventory records source subjects rather than runnable
+daemon/control-room artifacts. The self-host canary is not green either — its
+chain is still open. The current verifier is not an adversarial trust boundary:
+it runs a shell recipe from an agent-modifiable workspace under the wrapper's OS
+account; for v0.1 it ships as a documented trusted-workspace limitation (human
+decision 2026-08-18), and a hermetic verifier is v0.2. The missing artifact and
+the unproven canary remain release blockers, not operator configuration issues.
 
 ## Commands
 
