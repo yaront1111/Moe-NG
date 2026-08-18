@@ -39,6 +39,9 @@ const EXPECTED_CODES = [
   "PROVIDER_RUN_RECORD_UNREADABLE",
   "PROVIDER_RUN_EVIDENCE_ABSENT",
   "PROVIDER_RUN_EVIDENCE_AMBIGUOUS",
+  "PROVIDER_RUN_EVIDENCE_UNREADABLE",
+  "PROVIDER_RUN_EVIDENCE_MALFORMED",
+  "PROVIDER_RUN_BINDING_MISMATCH",
   "PROVIDER_RUN_EVENT_TYPE_UNEXPECTED",
   "PROVIDER_RUN_AGGREGATE_MISMATCH",
   "PROVIDER_RUN_REPLAY_DIVERGED",
@@ -167,6 +170,48 @@ describe("provider-run refusals", () => {
     expect(providerRunUnknown("PROVIDER_RUN_RECORD_UNREADABLE", "PROVIDER_RUN_READER"))
       .toEqual({
         code: "PROVIDER_RUN_RECORD_UNREADABLE",
+        layer: "PROVIDER_RUN_READER",
+        ok: false,
+        outcome: "UNKNOWN",
+        storeCode: null,
+      });
+  });
+
+  /**
+   * The three reader answers this family keeps deliberately apart. Each is
+   * pinned by code, layer, outcome AND storeCode rather than by membership: a
+   * `toContain` over our own roster would stay green for every one of the three
+   * substituted for another, which is exactly the collapse the codes exist to
+   * prevent. Only UNREADABLE has an authority underneath it, so only UNREADABLE
+   * carries a store code — and it carries it verbatim, never folded into `code`.
+   */
+  it("preserves the store's own code on evidence the store could not hand over", () => {
+    const storeCode: DurableStoreErrorCode = "STORE_CORRUPT";
+    expect(providerRunUnknown("PROVIDER_RUN_EVIDENCE_UNREADABLE", "PROVIDER_RUN_READER", storeCode))
+      .toEqual({
+        code: "PROVIDER_RUN_EVIDENCE_UNREADABLE",
+        layer: "PROVIDER_RUN_READER",
+        ok: false,
+        outcome: "UNKNOWN",
+        storeCode: "STORE_CORRUPT",
+      });
+  });
+
+  it("answers malformed indexed evidence with no store code at all", () => {
+    expect(providerRunUnknown("PROVIDER_RUN_EVIDENCE_MALFORMED", "PROVIDER_RUN_READER"))
+      .toEqual({
+        code: "PROVIDER_RUN_EVIDENCE_MALFORMED",
+        layer: "PROVIDER_RUN_READER",
+        ok: false,
+        outcome: "UNKNOWN",
+        storeCode: null,
+      });
+  });
+
+  it("answers a disagreeing binding with no store code at all", () => {
+    expect(providerRunUnknown("PROVIDER_RUN_BINDING_MISMATCH", "PROVIDER_RUN_READER"))
+      .toEqual({
+        code: "PROVIDER_RUN_BINDING_MISMATCH",
         layer: "PROVIDER_RUN_READER",
         ok: false,
         outcome: "UNKNOWN",

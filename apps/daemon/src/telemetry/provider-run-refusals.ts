@@ -48,6 +48,17 @@ export type ProviderRunLayer = (typeof PROVIDER_RUN_LEDGER_LAYERS)[number];
  * with the same request bytes but a DIFFERENT record replays cleanly at the
  * store while describing a run nobody committed. That is this ledger refusing,
  * not the store, and it must be separately assertable.
+ *
+ * THE THREE EVIDENCE_* CODES BESIDE ABSENT AND AMBIGUOUS ANSWER THREE DIFFERENT
+ * QUESTIONS and are deliberately not merged. EVIDENCE_UNREADABLE means the store
+ * or the page could not be read at all — the STORE is the authority there, so
+ * its own code rides along verbatim in `storeCode`. EVIDENCE_MALFORMED means the
+ * bytes arrived intact and the indexed evidence does not parse — THIS module is
+ * the authority, so `storeCode` is null. BINDING_MISMATCH means everything
+ * parsed and the receipt / decision / activation bindings disagree with one
+ * another — the comparison is ours, so `storeCode` is null there too. Collapsing
+ * any pair would send an operator to retry a store that answered fine, or to
+ * hunt corruption in a page that read back byte-perfect.
  */
 export const PROVIDER_RUN_LEDGER_CODES = Object.freeze([
   "PROVIDER_RUN_RECORD_MALFORMED",
@@ -61,6 +72,9 @@ export const PROVIDER_RUN_LEDGER_CODES = Object.freeze([
   "PROVIDER_RUN_RECORD_UNREADABLE",
   "PROVIDER_RUN_EVIDENCE_ABSENT",
   "PROVIDER_RUN_EVIDENCE_AMBIGUOUS",
+  "PROVIDER_RUN_EVIDENCE_UNREADABLE",
+  "PROVIDER_RUN_EVIDENCE_MALFORMED",
+  "PROVIDER_RUN_BINDING_MISMATCH",
   "PROVIDER_RUN_EVENT_TYPE_UNEXPECTED",
   "PROVIDER_RUN_AGGREGATE_MISMATCH",
   "PROVIDER_RUN_REPLAY_DIVERGED",
@@ -95,10 +109,20 @@ export function providerRunRefusal(
   return Object.freeze({ code, layer, ok: false as const, outcome, storeCode });
 }
 
-/** Reader refusals are always UNKNOWN: unverifiable evidence confers nothing. */
+/**
+ * Reader refusals are always UNKNOWN: unverifiable evidence confers nothing.
+ *
+ * `storeCode` is the same optional pass-through `providerRunRefusal` takes, and
+ * exists so an UNKNOWN raised because a STORE call refused — EVIDENCE_UNREADABLE
+ * above — keeps the store's own code beside ours instead of losing it. Widening
+ * this constructor rather than adding a second UNKNOWN one is deliberate: two
+ * doors to the same outcome is how one of them quietly starts flattening the
+ * upstream code into `code`, which this family's shape forbids.
+ */
 export function providerRunUnknown(
   code: ProviderRunCode,
   layer: ProviderRunLayer,
+  storeCode: DurableStoreErrorCode | null = null,
 ): ProviderRunRefusal {
-  return providerRunRefusal("UNKNOWN", code, layer);
+  return providerRunRefusal("UNKNOWN", code, layer, storeCode);
 }
