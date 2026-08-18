@@ -8,8 +8,10 @@ Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRI
 
 ## What runs today
 
-The full agent loop runs on the durable pipeline and is live-proven end to end
-(see [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
+The full agent loop runs on the durable pipeline; it was live-proven end to end
+on 2026-08-09/10 — operational evidence from that dated run, not a release or
+security-boundary claim (see
+[docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
 entry points, environment, and knobs):
 
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`,
@@ -33,8 +35,10 @@ entry points, environment, and knobs):
   decision storage, subscriptions, snapshots, recovery), `runner`,
   `coordination`, `review`, `context`, `mcp`, `import` (deterministic read-only
   legacy import), `control-room-client` / `control-room-model`, `skills`,
-  `testkit` (DEVELOPMENT_ONLY / NOT_CONFIRMATORY references). Adapters under
-  `adapters/` (IDE contract, JetBrains) are integration boundaries.
+  `benchmark` (DEVELOPMENT_ONLY, parked to v0.2), `testkit` (DEVELOPMENT_ONLY /
+  NOT_CONFIRMATORY references). Adapters under `adapters/` (IDE contract,
+  JetBrains) are integration boundaries; IDE/portability work is parked to v0.2
+  under the 2026-08-18 scope freeze.
 
 Authority, persistence, provider effects, and presentation stay separated;
 missing or unverifiable evidence is `UNKNOWN` and gains no authority.
