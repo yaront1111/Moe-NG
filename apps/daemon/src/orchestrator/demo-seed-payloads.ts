@@ -1,3 +1,5 @@
+import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner";
+
 import type { DemoSeedInput } from "./demo-seed-plan.js";
 
 /**
@@ -30,6 +32,70 @@ export function repositoryObservation(input: DemoSeedInput): Record<string, unkn
 
 export function providerProfileRef(input: DemoSeedInput): string {
   return `${input.projectId}-provider-profile`;
+}
+
+/**
+ * The seed measures no provider, so the snapshot evidence kind is UNKNOWN. Claiming
+ * DATED_SNAPSHOT would vouch for a `claude --version` reading no demo ever took; the
+ * effort is a CONFIGURED choice rather than evidence, so naming one is honest. Both are
+ * typed against the runner's closed vocabularies, so a rename there is a compile error
+ * here instead of a runtime refusal.
+ */
+const DEMO_SNAPSHOT_KIND: ClaudeModelEvidenceKind = "UNKNOWN";
+const DEMO_REASONING_EFFORT: ClaudeReasoningEffort = "medium";
+
+/**
+ * The operator-configured Claude profile the demo probe registers, exactly the eleven
+ * keys `admitProviderProfile` admits — an unknown key refuses rather than being dropped.
+ *
+ * Two refs are easy to confuse and each carries its own refusal. `providerMinimumProfileRef`
+ * is the profile's IDENTITY and must equal the envelope's ref, or `recordProbe` refuses
+ * PROVIDER_PROFILE_REF_MISMATCH at PROVIDER_PROFILE_REGISTRATION; it is the ref
+ * `activationWitness` names too. `profileRevisionId` is the identity of this CONTENT and is
+ * deliberately a DIFFERENT string, because the durable stream refuses
+ * PROVIDER_PROFILE_IMMUTABILITY_CONFLICT when one revision id ever carries two bodies.
+ * Every value below is therefore derived from the caller's ids or is a literal — no clock,
+ * no randomness — so a second seed run over the same store re-sends byte-identical content
+ * and is admitted as the idempotent re-probe it is.
+ *
+ * The limits are shape-valid numbers, not a copied runner ceiling: this layer bounds shape
+ * only, and a ceiling copied here would drift silently from the one that governs.
+ */
+export function providerProfile(input: DemoSeedInput): Record<string, unknown> {
+  return {
+    capabilitySchemaDigest: hex64("ca9ab111"),
+    concurrencyCeiling: 2,
+    limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096, timeoutMs: 900_000 },
+    modelSnapshotEvidence: "demo seed: no provider snapshot was measured",
+    modelSnapshotKind: DEMO_SNAPSHOT_KIND,
+    profileRevisionId: `${input.projectId}-provider-profile-revision-1`,
+    provider: "claude",
+    providerMinimumProfileRef: providerProfileRef(input),
+    reasoningEffort: DEMO_REASONING_EFFORT,
+    selectedModelId: "claude-opus-5",
+    selection: {
+      modelRef: `${input.projectId}-model`,
+      profileRef: providerProfileRef(input),
+      providerRef: `${input.projectId}-provider-ref`,
+      reasoningEffortRef: `${input.projectId}-reasoning-effort`,
+      runtimeRef: `${input.projectId}-runtime`,
+      snapshotRef: `${input.projectId}-snapshot`,
+      structuredOutputSchemaRef: `${input.projectId}-structured-output-schema`,
+    },
+  };
+}
+
+/**
+ * The probe observation: the envelope's two strings PLUS the nested profile. The
+ * two-string form this seed shipped first is refused PROVIDER_PROFILE_INPUT_INVALID at
+ * PROVIDER_PROFILE_CODEC — `recordProbe` admits `observation.profile`, not the ref alone.
+ */
+export function probeObservation(input: DemoSeedInput): Record<string, unknown> {
+  return {
+    profile: providerProfile(input),
+    providerMinimumProfileRef: providerProfileRef(input),
+    truthClass: DEMO_VERIFIED,
+  };
 }
 
 /** The activation witness names the SAME minimum profile ref the probe committed. */

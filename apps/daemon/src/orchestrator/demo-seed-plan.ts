@@ -83,7 +83,7 @@ import {
   approvalRecord,
   planningActivation,
   planningChain,
-  providerProfileRef,
+  probeObservation,
   repositoryObservation,
 } from "./demo-seed-payloads.js";
 
@@ -125,12 +125,7 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
   return Object.freeze([
     build("project.register", 0, { owner: input.principalId }),
     build("project.bind_repository", 1, { observation: repositoryObservation(input) }),
-    build("provider.probe", 0, {
-      observation: {
-        providerMinimumProfileRef: providerProfileRef(input),
-        truthClass: DEMO_VERIFIED,
-      },
-    }),
+    build("provider.probe", 0, { observation: probeObservation(input) }),
     build("project.activate", 2, { witness: activationWitness(input) }),
     build("goal.create", 0, {
       budgetAccountRef: `${input.projectId}-budget-account`,
