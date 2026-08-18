@@ -27,6 +27,11 @@ import {
   runRefusalCase,
 } from "./durable-store-boundary-scenarios.js";
 import type { RaceCase } from "./durable-store-boundary-scenarios.js";
+import {
+  SEEDED_IMPORT_ROWS,
+  importShadowMidReadCommit,
+  importShadowRoot,
+} from "./import-shadow-boundary-scenarios.js";
 
 afterAll(cleanupHostileRoots);
 
@@ -144,9 +149,34 @@ async function runRaceCase(hostileCase: RaceCase): Promise<RaceCaseResult> {
   }
 }
 
+/**
+ * The import-shadow read owns no writer, so the two-worker version race above cannot reach
+ * it and its arm is graded SEPARATELY rather than through a fabricated `RaceOutcome`. Its
+ * race is the one a pure reader loses: a real commit from a second connection landing
+ * between the horizon it opened on and the horizon it closed on. Every value asserted here
+ * is read back off the live store after the read returned.
+ */
+const IMPORT_SHADOW_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "IMPORT_SHADOW_READ_LAYER");
+const WORKER_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary !== "IMPORT_SHADOW_READ_LAYER");
+
+function gradeImportShadowRace(hostileCase: RaceCase): void {
+  const outcome = importShadowMidReadCommit(importShadowRoot("race"));
+  // TWO horizons, and they DIFFER: the reader really re-read, and the racing commit really
+  // moved the store. Without both, HORIZON_DRIFT could be reported by a reader that never
+  // looked twice.
+  expect(outcome.horizons).toHaveLength(2);
+  expect(outcome.horizons[0]).not.toStrictEqual(outcome.horizons[1]);
+  assertRefusedWith(outcome.refusal, hostileCase.expected);
+  expect(outcome.durableEvents).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.seededRecords).toBe(SEEDED_IMPORT_ROWS);
+  expect(outcome.durableComplete).toBe(true);
+}
+
 describe("durable-store roster coverage", () => {
   it("takes the durable-store subset from the committed roster in both directions", () => {
-    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(14);
+    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(15);
     expect([...DURABLE_BOUNDARY_NAMES].sort()).toStrictEqual(rosterNames);
   });
 
@@ -158,15 +188,26 @@ describe("durable-store roster coverage", () => {
 });
 
 describe("hostile durable-store races", () => {
-  for (const hostileCase of hostileRaceCases) {
+  it("splits the race arms into the two runners with nothing left over", () => {
+    expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
+    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 1);
+  });
+
+  for (const hostileCase of WORKER_RACE_CASES) {
     it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, async () => {
       const result = await runRaceCase(hostileCase);
       expect(result.admittedSides).toBe(1);
       expect(result.outcome.left.status).toBe("fulfilled");
       expect(result.outcome.right.status).toBe("fulfilled");
       assertRefusedWith(result.refusal, hostileCase.expected);
-      expect(result.durableEvents).toBe(1);
+      expect(result.durableEvents).toBe(hostileCase.expectedDurableEvents);
       expect(result.winnerPayloads).toStrictEqual([result.winner]);
+    });
+  }
+
+  for (const hostileCase of IMPORT_SHADOW_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
+      gradeImportShadowRace(hostileCase);
     });
   }
 });
@@ -240,13 +281,18 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
     refusalResults.push({ hostileCase, result: await runRefusalCase(hostileCase) });
   }
   const raceResults = [];
-  for (const hostileCase of hostileRaceCases) raceResults.push(await runRaceCase(hostileCase));
+  for (const hostileCase of WORKER_RACE_CASES) {
+    raceResults.push({ hostileCase, result: await runRaceCase(hostileCase) });
+  }
+  for (const hostileCase of IMPORT_SHADOW_RACE_CASES) gradeImportShadowRace(hostileCase);
   expect(refusalResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length * 2);
-  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length);
+  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 1);
+  expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
   expect(refusalResults.every(({ hostileCase, result }) =>
     result.durableComplete && result.durableRecords === hostileCase.preexistingRecords
     && (result.truth === undefined || result.truth === "UNKNOWN")
     && (result.authority === undefined || result.authority === "NONE"))).toBe(true);
-  expect(raceResults.every((result) => result.admittedSides === 1 && result.durableEvents === 1
+  expect(raceResults.every(({ hostileCase, result }) => result.admittedSides === 1
+    && result.durableEvents === hostileCase.expectedDurableEvents
     && result.winnerPayloads.length === 1 && result.winnerPayloads[0] === result.winner)).toBe(true);
 });

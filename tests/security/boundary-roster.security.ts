@@ -103,8 +103,8 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 14,
- * runtime-provider 24, scheduler-activation 26 — sums to 93. These tags, NOT the subset
+ * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 15,
+ * runtime-provider 24, scheduler-activation 26 — sums to 94. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
@@ -140,6 +140,11 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
+  // The daemon's independent read of one committed legacy import. `durable-store` by
+  // SUBJECT: it answers for durable evidence read out of the event store — it captures a
+  // store horizon, refuses if that horizon moved, and owns no codec and no admission
+  // decision (producer task-80fce1d1, roster entry task-c5be7926).
+  { constant: "IMPORT_SHADOW_READ_LAYER", file: "apps/daemon/src/projections/import-shadow-contracts.ts", axis: "durable-store" },
   { constant: "DOCTOR_VERSION_LAYERS", file: "apps/daemon/src/recovery/doctor-version-contract.ts", axis: "durable-store" },
   { constant: "DURABLE_INVENTORY_ADAPTER_LAYER", file: "apps/daemon/src/recovery/durable-recovery-inventory-contract.ts", axis: "durable-store" },
   { constant: "RECOVERY_COMPLETION_LAYER", file: "apps/daemon/src/recovery/recovery-completion-digest.ts", axis: "integrity" },
@@ -238,8 +243,21 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * from it). `runtime-provider` by SUBJECT: it answers for a provider RUN's evidence,
  * not for a codec or an admission decision. Measured at HEAD 29f3c5f — scan 93,
  * roster 92 before this entry.
+ *
+ * 93 -> 94 for IMPORT_SHADOW_READ_LAYER (producer task-80fce1d1, entry task-c5be7926,
+ * 2026-08-18). `durable-store` by SUBJECT: the daemon's read of one committed legacy
+ * import, which captures a store horizon and refuses when it moves.
+ *
+ * THE SCAN IS 96 AT THIS HEAD, NOT 94, AND THAT IS NOT A STALE PIN. Two boundaries
+ * declared under `apps/daemon/src/planning/` — ACTIVE_GRAPH_PROJECTION_LAYER and
+ * GRAPH_BODY_RECORD_LAYER — are rostered nowhere and covered nowhere in this lane
+ * (`grep -rn GRAPH_BODY_RECORD tests/security/` is empty), so the cardinality assertion
+ * below is EXPECTED to fail until they are entered WITH arms. Entering them here alone
+ * would only move the red into `completeness.security.ts`, which resolves coverage per
+ * roster row. They are `scheduler-activation` by the tagging rule above and belong to a
+ * task of their own; task-c5be7926 filed the measured spec rather than widen its scope.
  */
-const EXPECTED_ROSTER_SIZE = 93;
+const EXPECTED_ROSTER_SIZE = 94;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -247,7 +265,7 @@ const EXPECTED_ROSTER_SIZE = 93;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 35,
+  "apps/daemon": 36,
   "packages/benchmark": 1,
   "packages/runner": 21,
   "packages/core": 10,

@@ -23,10 +23,18 @@ import { restoreRefusal } from "../../apps/daemon/src/recovery/restore-controlle
 import { inspectRecoveryAnchor, prepareRecoveryAnchor } from "../../packages/store/src/recovery-anchor.js";
 import { decodeRecoveryBinding } from "../../packages/store/src/recovery-install-codec.js";
 import { hostileRoot } from "./hostile-harness.js";
+import {
+  IMPORT_SHADOW_READ_LAYER,
+  SEEDED_IMPORT_ROWS,
+  importShadowClosedStore,
+  importShadowMissingRow,
+  importShadowRoot,
+} from "./import-shadow-boundary-scenarios.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
 
 export const DURABLE_BOUNDARY_NAMES = Object.freeze([
   "DOCTOR_VERSION_LAYERS",
+  "IMPORT_SHADOW_READ_LAYER",
   "DURABLE_INVENTORY_ADAPTER_LAYER",
   "DURABLE_STORE_LAYER",
   "RECOVERY_INCARNATION_LAYER",
@@ -71,6 +79,16 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
   switch (boundary) {
     case "DOCTOR_VERSION_LAYERS":
       return { code: "DOCTOR_PIN_RANGE_UNSUPPORTED", layer: "DOCTOR_VERSION" };
+    // BEFORE closes the store, so the horizon read is the first branch that can answer and
+    // nothing downstream is reachable. AFTER seeds a REAL import and then loses one row, so
+    // every earlier layer passes and only the sequence hole can refuse. Two different codes
+    // because two different branches answer -- a single code across both phases would be
+    // green no matter which one ran.
+    case "IMPORT_SHADOW_READ_LAYER":
+      return {
+        code: phase === "BEFORE" ? "IMPORT_SHADOW_STORE_UNREADABLE" : "IMPORT_SHADOW_EVIDENCE_MALFORMED",
+        layer: IMPORT_SHADOW_READ_LAYER,
+      };
     case "DURABLE_INVENTORY_ADAPTER_LAYER":
       return INVENTORY;
     case "DURABLE_STORE_LAYER":
@@ -111,6 +129,7 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
 
 const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>> = Object.freeze({
   DOCTOR_VERSION_LAYERS: ["unsupported declared range stays unknown", "stale declared range gains no authority"],
+  IMPORT_SHADOW_READ_LAYER: ["a closed durable reader yields no shadow projection", "an import missing a row cannot become evidence"],
   DURABLE_INVENTORY_ADAPTER_LAYER: ["malformed observation preserves its upstream tuple", "late malformed observation cannot write"],
   DURABLE_STORE_LAYER: ["a closed durable reader fails closed", "a stale closed reader cannot invent evidence"],
   RECOVERY_INCARNATION_LAYER: ["malformed mint input is refused", "one restore command cannot change generation"],
@@ -126,14 +145,27 @@ const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>
   RECOVERY_INSTALL_TRANSACTION_LAYER: ["unscoped install is refused", "one incarnation cannot occupy two slots"],
 });
 
+/**
+ * What the store legitimately holds when the AFTER arm runs. Written per boundary rather
+ * than defaulted, because the runner asserts the durable count EXACTLY: a refusal that
+ * created a fragment and a refusal that deleted a row both move this number.
+ */
+const preexistingAfter = (boundary: DurableBoundaryName): number => {
+  if (boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER" || boundary === "RECOVERY_ANCHOR_LAYER") return 1;
+  // The two claims the import corpus seeds through `commitLegacyImport`, both still durable:
+  // the row the reader never saw was hidden by the narrowing port, not removed from the store.
+  if (boundary === "IMPORT_SHADOW_READ_LAYER") return SEEDED_IMPORT_ROWS;
+  return 0;
+};
+
 const casesFor = (phase: HostilePhase): readonly RefusalCase[] =>
   Object.freeze(DURABLE_BOUNDARY_NAMES.map((boundary) => ({
     boundary,
     expected: expectations(boundary, phase),
     phase,
-    preexistingRecords: phase === "AFTER" && (
-      boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER" || boundary === "RECOVERY_ANCHOR_LAYER"
-    ) ? 1 : 0,
+    preexistingRecords: phase === "AFTER"
+      ? preexistingAfter(boundary)
+      : 0,
     question: questions[boundary][phase === "BEFORE" ? 0 : 1],
     ...(boundary === "DURABLE_INVENTORY_ADAPTER_LAYER"
       ? { upstream: { code: "RECOVERY_INVENTORY_INPUT_INVALID", layer: "INVENTORY_ADAPTER" } }
@@ -149,15 +181,33 @@ export const hostileAfterCases = casesFor("AFTER");
 export interface RaceCase {
   readonly boundary: DurableBoundaryName;
   readonly expected: RefusalExpectation;
+  /** Rows the store must hold once the race settles. Pinned so a lost or duplicated
+   *  write is a failure rather than an unnoticed change of subject. */
+  readonly expectedDurableEvents: number;
   readonly question: string;
 }
 
+/**
+ * Every boundary but one races two hostile WRITERS for a single durable version. The
+ * import-shadow read owns no writer at all, so its race is the one a pure reader can
+ * actually lose: a commit landing between the horizon it opened on and the horizon it
+ * closed on. Different question, different answering code, and `expectedDurableEvents`
+ * says so out loud rather than letting a shared literal hide it.
+ */
 export const hostileRaceCases: readonly RaceCase[] = Object.freeze(
-  DURABLE_BOUNDARY_NAMES.map((boundary) => ({
-    boundary,
-    expected: { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" },
-    question: `two ${boundary} callers cannot both claim one durable version`,
-  })),
+  DURABLE_BOUNDARY_NAMES.map((boundary) => (boundary === "IMPORT_SHADOW_READ_LAYER"
+    ? {
+      boundary,
+      expected: { code: "IMPORT_SHADOW_HORIZON_DRIFT", layer: IMPORT_SHADOW_READ_LAYER },
+      expectedDurableEvents: SEEDED_IMPORT_ROWS + 1,
+      question: `a commit landing mid-read cannot be projected into one ${boundary} answer`,
+    }
+    : {
+      boundary,
+      expected: { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" },
+      expectedDurableEvents: 1,
+      question: `two ${boundary} callers cannot both claim one durable version`,
+    })),
 );
 
 const digest = (character: string): string => character.repeat(64);
@@ -298,6 +348,18 @@ async function boundaryRefusal(
 }
 
 export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalCaseResult> {
+  if (hostileCase.boundary === "IMPORT_SHADOW_READ_LAYER") {
+    const root = importShadowRoot(hostileCase.phase.toLowerCase());
+    const outcome = hostileCase.phase === "BEFORE"
+      ? importShadowClosedStore(root)
+      : importShadowMissingRow(root);
+    return {
+      ...recordProperties(outcome.refusal),
+      durableComplete: outcome.durableComplete,
+      durableRecords: outcome.durableRecords,
+      refusal: outcome.refusal,
+    };
+  }
   const root = hostileRoot(`${hostileCase.phase.toLowerCase()}-${hostileCase.boundary.toLowerCase()}`);
   const path = join(root, "events.sqlite");
   const store = SqliteEventStore.openForProject(path, "security-project");
