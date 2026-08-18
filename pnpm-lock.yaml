@@ -11,9 +11,18 @@ importers:
       '@moe/daemon':
         specifier: workspace:*
         version: link:apps/daemon
+      '@moe/import':
+        specifier: workspace:*
+        version: link:packages/import
+      '@moe/jetbrains-adapter':
+        specifier: workspace:*
+        version: link:adapters/jetbrains
       '@moe/runner':
         specifier: workspace:*
         version: link:packages/runner
+      '@moe/store':
+        specifier: workspace:*
+        version: link:packages/store
     devDependencies:
       '@cyclonedx/cdxgen':
         specifier: 12.8.2

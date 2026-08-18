@@ -32,7 +32,10 @@
   },
   "dependencies": {
     "@moe/daemon": "workspace:*",
-    "@moe/runner": "workspace:*"
+    "@moe/import": "workspace:*",
+    "@moe/jetbrains-adapter": "workspace:*",
+    "@moe/runner": "workspace:*",
+    "@moe/store": "workspace:*"
   },
   "devDependencies": {
     "@cyclonedx/cdxgen": "12.8.2",
