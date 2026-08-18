@@ -17,6 +17,8 @@ import { createBoardProjectionService } from "./projections/board-projection-ser
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
 import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
+import { readCurrentActiveGraph } from "./planning/active-graph-projection.js";
+import type { GraphQueryPort } from "./planning/graph-query.js";
 import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
@@ -152,6 +154,16 @@ export function createStoreDependencies(
     store,
   });
 
+  /**
+   * Both fields are SERVER facts held by this root: the already-open store and
+   * the project this daemon was started for. Neither is reachable from a
+   * request, which is what makes `boundProjectId` a bound rather than a hint.
+   */
+  const graph = (): GraphQueryPort => Object.freeze({
+    boundProjectId: config.projectId,
+    readCurrentActiveGraph: (projectId: string) => readCurrentActiveGraph(store, projectId),
+  });
+
   const documentDossiers = (): DocumentDossierReadPort => Object.freeze({
     readLatest: (projectId: string) => readLatestDocumentWorkDossier(store, projectId),
   });
@@ -174,6 +186,7 @@ export function createStoreDependencies(
     affordances,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
+    graph,
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),

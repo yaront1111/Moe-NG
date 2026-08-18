@@ -8,6 +8,7 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
+import type { GraphQueryPort } from "../planning/graph-query.js";
 import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
 import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
@@ -29,6 +30,8 @@ import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 
 export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
+  /** The current-active-graph reader; absent means graph.get refuses. */
+  readonly graph?: GraphQueryPort | undefined;
   readonly deps: CommandAdapterDeps;
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
@@ -126,6 +129,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
         deps: options.deps,
+        graph: options.graph,
         subscriptions: options.subscriptions,
       }),
       ...(options.enableJsonResponse === undefined

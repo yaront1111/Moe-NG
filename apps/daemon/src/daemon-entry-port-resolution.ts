@@ -2,11 +2,14 @@ import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
+import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
   /** Every port is optional; absence is surfaced by its listener route. */
   affordances?(): AffordancePort;
   documentDossiers?(): DocumentDossierReadPort;
+  /** The current-active-graph reader, bound to this daemon's own project. */
+  graph?(): GraphQueryPort;
   /**
    * The restart reconciliation sweep. Absent only for a provider with no durable
    * store — the fixture provider has none, and a sweep it cannot run is not a
@@ -19,6 +22,7 @@ export interface OptionalDaemonPortProvider {
 export interface ResolvedOptionalDaemonPorts {
   readonly affordances?: AffordancePort;
   readonly documentDossiers?: DocumentDossierReadPort;
+  readonly graph?: GraphQueryPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly subscriptions?: SubscriptionPort;
 }
@@ -28,7 +32,7 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "documentDossiers", "reconciliation",
+  "subscriptions", "affordances", "documentDossiers", "graph", "reconciliation",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -78,6 +82,14 @@ export function resolveOptionalDaemonPorts(
     if (documentDossiers !== undefined && !hasMethods(documentDossiers, ["readLatest"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const graphFactory = provider.graph;
+    if (graphFactory !== undefined && typeof graphFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const graph = graphFactory?.call(provider);
+    if (graph !== undefined && !hasMethods(graph, ["readCurrentActiveGraph"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const reconciliationFactory = provider.reconciliation;
     if (reconciliationFactory !== undefined && typeof reconciliationFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -89,6 +101,7 @@ export function resolveOptionalDaemonPorts(
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
+      ...(graph === undefined ? {} : { graph }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(subscriptions === undefined ? {} : { subscriptions }),
     });

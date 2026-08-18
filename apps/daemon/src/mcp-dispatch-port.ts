@@ -5,7 +5,9 @@ import type { AffordancePort } from "./http/affordance-contract.js";
 import { readEventPage } from "./http/event-stream.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
+import { answerGraphQuery } from "./planning/graph-query.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
+import type { GraphQueryPort } from "./planning/graph-query.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 
 /**
@@ -27,6 +29,8 @@ export interface McpDispatchPortConfig {
   readonly affordances?: AffordancePort | undefined;
   /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
   readonly fallbackCredential?: string | undefined;
+  /** The current-active-graph reader; absent means graph.get refuses. */
+  readonly graph?: GraphQueryPort | undefined;
   readonly deps: CommandAdapterDeps;
   /** The daemon's committed subscription seam — the provider's, folded on read. */
   readonly subscriptions: SubscriptionPort;
@@ -69,7 +73,14 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
         protocolVersion: WIRE_PROTOCOL_VERSION,
       }),
     ),
-    dispatchQueryBytes: (bytes: Uint8Array): Uint8Array => {
+    // THE CONTEXT PARAMETER IS ADDITIVE, exactly as `dispatchCommandBytes`
+    // already carries one: `StdioDispatchPort` declares
+    // `dispatchQueryBytes(bytes)`, and an implementation taking one more
+    // OPTIONAL parameter still satisfies it, so no @moe/mcp change is needed.
+    // Without it no principal — and therefore no project — is reachable in the
+    // query path, which `work.get_context` and `events.read` never needed and
+    // `graph.get` cannot do without.
+    dispatchQueryBytes: (bytes: Uint8Array, context?: HttpDispatchContext): Uint8Array => {
       let parsed: unknown;
       try {
         parsed = JSON.parse(decoder.decode(bytes)) as unknown;
@@ -85,6 +96,20 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       if (envelope["queryKind"] === "work.get_context") {
         if (config.affordances === undefined) return queryRefusal();
         return bytesOf(config.affordances.readSurface());
+      }
+      // The one query that needs an identity. The shared handler owns the whole
+      // sequence — authenticate, compatibility, capability, availability,
+      // project — so this branch resolves the credential the way the command
+      // path does and adapts the answer to bytes, and decides nothing itself.
+      if (envelope["queryKind"] === "graph.get") {
+        if (config.graph === undefined) return queryRefusal();
+        return bytesOf(answerGraphQuery({
+          authenticator: authenticatorOf(config.deps),
+          body: envelope["payload"],
+          credential: context?.credential ?? config.fallbackCredential ?? null,
+          port: config.graph,
+          protocolVersion: WIRE_PROTOCOL_VERSION,
+        }));
       }
       if (envelope["queryKind"] !== "events.read") return queryRefusal();
       const payload = envelope["payload"];

@@ -220,6 +220,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined
       ? {} : { documentDossiers: resolved.documentDossiers }),
+    ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;

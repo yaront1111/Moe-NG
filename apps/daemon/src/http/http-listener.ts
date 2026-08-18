@@ -6,8 +6,10 @@ import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./docum
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
-import { authenticateHttpRequest, handleCommandRequest } from "./http-adapter.js";
+import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
+import { answerGraphQuery } from "../planning/graph-query.js";
+import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
   authorityOf,
@@ -56,6 +58,8 @@ export interface StartListenerOptions {
   readonly deps: CommandAdapterDeps;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
+  /** Absent means the graph route refuses rather than inventing a snapshot. */
+  readonly graph?: GraphQueryPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
@@ -68,6 +72,7 @@ const COMMAND_PATH = "/command";
 const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 const AFFORDANCE_PATH = "/affordances/read";
+const GRAPH_GET_PATH = "/graph/get";
 
 function reply(response: ServerResponse, status: number, body: unknown): void {
   const payload = JSON.stringify(body);
@@ -79,17 +84,20 @@ function refuseRequest(response: ServerResponse, code: ListenerRefusalCode): voi
   reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER });
 }
 
-function serveCommand(
+async function serveCommand(
   response: ServerResponse,
   request: IncomingMessage,
   options: StartListenerOptions,
   body: Uint8Array,
-): void {
+): Promise<void> {
   // The body stays RAW here. `credential` and `protocolVersion` travel out of
   // band precisely so authenticate and compatibility can both answer before
   // anything parses it — parsing first would move a decode ahead of
   // authenticate and change the committed refusal order.
-  const result: HttpCommandResult = handleCommandRequest(options.deps, {
+  // The ASYNC entry serves both kinds of registry entry: a synchronous handler runs
+  // through the same unchanged synchronous decision port, so routing every command here
+  // is not a per-kind decision living outside the registry.
+  const result: HttpCommandResult = await handleAsyncCommandRequest(options.deps, {
     body,
     credential: credentialOf(request),
     protocolVersion: protocolVersionOf(request),
@@ -187,6 +195,49 @@ function serveAffordances(
   reply(response, 200, options.affordances.readSurface());
 }
 
+/**
+ * THIN BY DESIGN. Authentication, capability, availability and the project
+ * derivation all live in `answerGraphQuery`, shared with the MCP transport; a
+ * second copy of that sequence here is exactly the divergence that lets one
+ * transport's guard order drift from the other's while both stay green. This
+ * function decodes bytes and replies, and does nothing else.
+ */
+function serveGraphQuery(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  // An empty body is a request that names no project, which is the normal call.
+  // Bytes that are not JSON are a decode fault of THIS transport, so they carry
+  // the listener's own code exactly as a malformed stream request does.
+  let parsed: unknown = {};
+  if (body.length > 0) {
+    try {
+      parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+    } catch {
+      refuseRequest(response, "LISTENER_GRAPH_REQUEST_INVALID");
+      return;
+    }
+  }
+  const answer = answerGraphQuery({
+    authenticator: options.deps.authenticator,
+    body: parsed,
+    credential: credentialOf(request),
+    port: options.graph,
+    protocolVersion: protocolVersionOf(request),
+  });
+  // An AUTHENTICATE or COMPATIBILITY refusal keeps the status the adapter chose,
+  // as every other route does. Everything else replies 200: the frame IS the
+  // answer and carries its own outcome, code and layer, and minting an HTTP
+  // status per frame would be the translation table this seam may not hold.
+  if (!answer.ok && "outcome" in answer) {
+    reply(response, answer.httpStatus, answer);
+    return;
+  }
+  reply(response, 200, answer);
+}
+
 function serveDocumentDossier(
   response: ServerResponse,
   request: IncomingMessage,
@@ -222,7 +273,7 @@ async function serve(
   options.log?.(`${request.method ?? "?"} ${path}`);
 
   if (path !== COMMAND_PATH && path !== EVENT_PAGE_PATH && path !== EVENT_ACKNOWLEDGE_PATH
-    && path !== AFFORDANCE_PATH
+    && path !== AFFORDANCE_PATH && path !== GRAPH_GET_PATH
     && path !== DOCUMENT_DOSSIER_PATH) {
     refuseRequest(response, "LISTENER_ROUTE_UNKNOWN");
     return;
@@ -242,10 +293,11 @@ async function serve(
     return;
   }
 
-  if (path === COMMAND_PATH) serveCommand(response, request, options, body);
+  if (path === COMMAND_PATH) await serveCommand(response, request, options, body);
   else if (path === EVENT_PAGE_PATH) serveEventPage(response, request, options, body);
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
+  else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);
 }
 

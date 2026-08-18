@@ -40,6 +40,7 @@ async function main(): Promise<void> {
       affordances: provider.affordances?.(),
       deps: provider.provide(),
       fallbackCredential: credential,
+      graph: provider.graph?.(),
       subscriptions,
     }),
     serverName: "moe-next",
