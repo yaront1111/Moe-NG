@@ -431,6 +431,20 @@ function probedEventText(store: SqliteEventStore): readonly string[] {
   return store.readEvents(PROVIDER_AGGREGATE).map((event) => decoder.decode(event.payload));
 }
 
+/**
+ * The durable identity -> content pairs, in commit order, read back off the event stream.
+ *
+ * The immutability rule is a property of the whole history, so a case about it has to read the
+ * whole history: a length assertion alone cannot tell a refused rebind apart from a rebind that
+ * was committed over the top of an earlier event.
+ */
+function probedIdentityContent(store: SqliteEventStore): readonly string[] {
+  return probedEvents(store).map((event) => {
+    const profile = event.profile as Record<string, unknown>;
+    return `${String(profile.profileRevisionId)}:${String(profile.concurrencyCeiling)}`;
+  });
+}
+
 describe("provider.probe — profile registration", () => {
   it("persists the canonical profile and its digest with the ProviderProbed event", () => {
     const store = registeredStore();
@@ -531,6 +545,72 @@ describe("provider.probe — profile registration", () => {
       refusedBy: REGISTRATION_LAYER,
     });
     expect(probedEvents(store).length).toBe(1);
+  });
+
+  it("refuses a profileRevisionId rebound after an intervening probe, at registration", () => {
+    // Immutability is a rule about the whole durable history, not about the previous probe.
+    // Comparing only the last committed decision lets one interleaved probe under a different
+    // identity launder a rebind: revision-1 leaves the comparison window and comes back
+    // carrying different content, and the operator's earlier decision is rewritten under its
+    // own name — precisely what this rule exists to forbid.
+    const store = registeredStore();
+    acceptedProbe(send(store, probeFor(validDraft(), { commandId: "probe-1" })));
+    acceptedProbe(
+      send(
+        store,
+        probeFor(
+          { ...validDraft(), concurrencyCeiling: 8, profileRevisionId: "profile-revision-2" },
+          { commandId: "probe-2", expectedVersion: 1 },
+        ),
+      ),
+    );
+
+    const outcome = send(
+      store,
+      probeFor(
+        { ...validDraft(), concurrencyCeiling: 16 },
+        { commandId: "probe-3", expectedVersion: 2 },
+      ),
+    );
+    expect(refusedProbe(outcome)).toEqual({
+      code: "PROVIDER_PROFILE_IMMUTABILITY_CONFLICT",
+      refusedBy: REGISTRATION_LAYER,
+    });
+    expect(probedEvents(store).length).toBe(2);
+    // The durable identity -> content map stays single-valued: revision-1 is still the
+    // ceiling-4 body it was admitted as, never the ceiling-16 body that was refused.
+    expect(probedIdentityContent(store)).toEqual([
+      "profile-revision-1:4",
+      "profile-revision-2:8",
+    ]);
+  });
+
+  it("still admits an identical re-probe of an EARLIER revisionId across an intervening one", () => {
+    // The positive control for the history scan: scanning every prior probe must refuse a
+    // rebind without also refusing idempotence. A check that matched on profileRevisionId
+    // alone would pass the case above and fail here.
+    const store = registeredStore();
+    const first = acceptedProbe(send(store, probeFor(validDraft(), { commandId: "probe-1" })));
+    acceptedProbe(
+      send(
+        store,
+        probeFor(
+          { ...validDraft(), concurrencyCeiling: 8, profileRevisionId: "profile-revision-2" },
+          { commandId: "probe-2", expectedVersion: 1 },
+        ),
+      ),
+    );
+
+    const again = acceptedProbe(
+      send(store, probeFor(validDraft(), { commandId: "probe-3", expectedVersion: 2 })),
+    );
+    expect(again.profileDigest).toBe(first.profileDigest);
+    expect(again.profile).toEqual(first.profile);
+    expect(probedIdentityContent(store)).toEqual([
+      "profile-revision-1:4",
+      "profile-revision-2:8",
+      "profile-revision-1:4",
+    ]);
   });
 
   it("admits changed content under a new profileRevisionId — immutability binds identity", () => {

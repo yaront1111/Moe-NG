@@ -7,7 +7,9 @@
  * its expected version remain the service's business and keep refusing at their own layer.
  */
 
+import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
+import type { SqliteEventStore } from "@moe/store";
 
 import { encodeProviderProfileBytes } from "./provider-profile-codec.js";
 import type {
@@ -22,6 +24,15 @@ import type {
  */
 export const PROFILE_REGISTRATION: ProviderProfileRegistrationLayer =
   "PROVIDER_PROFILE_REGISTRATION";
+
+/**
+ * The single event type this seam writes, and therefore the only one its history rule reads.
+ *
+ * The commit site and the history scan share this constant so the rule can never end up
+ * reading a stream the probe does not write: changing the written type changes what is read,
+ * in one edit, instead of leaving a scan that silently matches nothing.
+ */
+export const PROVIDER_PROBED_EVENT = "ProviderProbed";
 
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -53,14 +64,14 @@ function recordOf(value: JsonValue | undefined): Readonly<Record<string, JsonVal
 }
 
 /**
- * A `profileRevisionId` is an identity, so the content behind it may never change.
+ * Does ONE already-registered profile collide with the incoming revision?
  *
- * Re-probing the SAME content is idempotent: canonical encoding is deterministic, so an
- * identical body reproduces an identical digest and there is nothing to conflict with. The
- * same identity carrying different content is a conflict rather than an update — silently
- * accepting it would let an operator's earlier decision be rewritten under its own name.
+ * Deliberately module-private: a caller holding only the previous probe would enforce the rule
+ * against an adjacent pair, and one interleaved probe under a different identity would then be
+ * enough to rebind a revision id to new content. `conflictsWithProfileHistory` is the only
+ * supported entry point, so that mistake cannot be made from outside this module.
  */
-export function conflictsWithPriorProfile(
+function conflictsWithPriorProfile(
   prior: JsonValue | undefined,
   revision: ProviderProfileRevision,
 ): boolean {
@@ -70,4 +81,42 @@ export function conflictsWithPriorProfile(
   if (priorProfile === null) return false;
   if (priorProfile.profileRevisionId !== revision.profileRevisionId) return false;
   return priorProfile.profileDigest !== revision.profileDigest;
+}
+
+/**
+ * Every profile this aggregate has ever registered, in commit order.
+ *
+ * The durable event stream is read rather than the decision ledger because the ledger keeps a
+ * single row per aggregate and overwrites it on every commit — a rule read from it can only
+ * ever see the immediately preceding probe. A payload that does not decode cannot claim an
+ * identity, so it is skipped rather than treated as a match on one.
+ */
+function registeredProfiles(store: SqliteEventStore, aggregateId: string): readonly JsonValue[] {
+  const profiles: JsonValue[] = [];
+  for (const event of store.readEvents(aggregateId)) {
+    if (event.eventType !== PROVIDER_PROBED_EVENT) continue;
+    const decoded = decodeBoundedJsonBytes(event.payload);
+    if (decoded.ok) profiles.push(decoded.value);
+  }
+  return profiles;
+}
+
+/**
+ * A `profileRevisionId` is an identity, so the content behind it may never change — and that is
+ * a claim about the WHOLE history, not about the previous probe.
+ *
+ * Re-probing the SAME content is idempotent at any distance: canonical encoding is
+ * deterministic, so an identical body reproduces an identical digest and there is nothing to
+ * conflict with. The same identity carrying different content is a conflict rather than an
+ * update — silently accepting it would let an operator's earlier decision be rewritten under
+ * its own name, and would hand every downstream resolver an ambiguous id -> content map.
+ */
+export function conflictsWithProfileHistory(
+  store: SqliteEventStore,
+  aggregateId: string,
+  revision: ProviderProfileRevision,
+): boolean {
+  return registeredProfiles(store, aggregateId).some((prior) =>
+    conflictsWithPriorProfile(prior, revision),
+  );
 }

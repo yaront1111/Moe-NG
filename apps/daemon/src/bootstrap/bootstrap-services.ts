@@ -29,7 +29,8 @@ import { installPolicy, validatePolicy } from "./bootstrap-policy-services.js";
 import { admitProviderProfile } from "../provider-profile/provider-profile-codec.js";
 import {
   PROFILE_REGISTRATION,
-  conflictsWithPriorProfile,
+  PROVIDER_PROBED_EVENT,
+  conflictsWithProfileHistory,
   providerProbePayload,
 } from "../provider-profile/provider-profile-registration.js";
 
@@ -148,14 +149,14 @@ const recordProbe: CommandHandler = (context): ServiceOutcome => {
   if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
     return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
-  if (conflictsWithPriorProfile(stateOf(ledger, aggregateId), revision)) {
+  if (conflictsWithProfileHistory(store, aggregateId, revision)) {
     return refuse(request.kind, "PROVIDER_PROFILE_IMMUTABILITY_CONFLICT", PROFILE_REGISTRATION);
   }
   const persisted = providerProbePayload(profileRef, truthClass, revision);
   return commitAccepted(store, request, {
     aggregateId,
     eventPayload: persisted,
-    eventType: "ProviderProbed",
+    eventType: PROVIDER_PROBED_EVENT,
     expectedVersion: versionOf(ledger, aggregateId),
     result: persisted,
   });
