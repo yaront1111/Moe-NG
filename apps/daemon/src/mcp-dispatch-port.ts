@@ -4,7 +4,7 @@ import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import { readEventPage } from "./http/event-stream.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
-import { handleCommandRequest } from "./http/http-adapter.js";
+import { handleAsyncCommandRequest } from "./http/http-adapter.js";
 import { answerGraphQuery } from "./planning/graph-query.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
@@ -14,7 +14,7 @@ import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
  * The production dispatch port behind both MCP servers: the same committed adapter pipeline
  * the HTTP listener and stdio entry serve, with no second authority.
  *
- * Commands run through `handleCommandRequest` verbatim — authenticate,
+ * Commands run through `handleAsyncCommandRequest` verbatim — authenticate,
  * compatibility, bounded decode, registry, authorize, payload shape, durable
  * decision — and the daemon's answer returns as bytes. Queries serve the one
  * read surface that exists (`events.read` over the committed subscription
@@ -63,11 +63,11 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
       }
       return Object.freeze({ ok: true as const });
     },
-    dispatchCommandBytes: (
+    dispatchCommandBytes: async (
       bytes: Uint8Array,
       context?: HttpDispatchContext,
-    ): Uint8Array => bytesOf(
-      handleCommandRequest(config.deps, {
+    ): Promise<Uint8Array> => bytesOf(
+      await handleAsyncCommandRequest(config.deps, {
         body: bytes,
         credential: context?.credential ?? config.fallbackCredential ?? null,
         protocolVersion: WIRE_PROTOCOL_VERSION,

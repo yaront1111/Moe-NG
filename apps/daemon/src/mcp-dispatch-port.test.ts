@@ -8,8 +8,15 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import {
+  ACTIVATION_AGGREGATE, CREDENTIAL as FOUNDATION_CREDENTIAL, DISPATCH_AGGREGATE,
+  cleanupSeamHarnesses, commandRequest, dispatchPayload, seamHarness,
+} from "./http/foundation-registry-fixtures.js";
+import { streamPort } from "./http/event-stream-fixtures.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
+import { PROJECT_ID } from "./recovery/restore-test-harness.js";
+import { readFoundationAttemptRecord } from "./work/foundation-attempt-service.js";
 
 const CREDENTIAL = "mcp-operator-credential";
 const PROJECT = "proj-mcp-port";
@@ -38,6 +45,7 @@ const port = createMcpDispatchPort({
 afterAll(() => {
   provider.close();
   rmSync(directory, { force: true, recursive: true });
+  cleanupSeamHarnesses();
 });
 
 const encoder = new TextEncoder();
@@ -46,6 +54,15 @@ const decoder = new TextDecoder();
 function decode(bytes: Uint8Array): Record<string, unknown> {
   return JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
 }
+
+function requestBytes(request: ReturnType<typeof commandRequest>): Uint8Array {
+  if (!(request.body instanceof Uint8Array)) throw new Error("fixture body is not bytes");
+  return request.body;
+}
+
+const LAUNCH_REFUSAL = process.platform === "win32"
+  ? { code: "CLAUDE_RUNTIME_PATH_NOT_FILE", layer: "RUNTIME", truthClass: "SUSPECT" }
+  : { code: "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", layer: "LAUNCHER", truthClass: "UNKNOWN" };
 
 describe("createMcpDispatchPort", () => {
   it("refuses an unknown credential with the registry code", () => {
@@ -59,7 +76,7 @@ describe("createMcpDispatchPort", () => {
     expect(port.authenticate(CREDENTIAL, "goal.create")).toEqual({ ok: true });
   });
 
-  it("dispatches a command through the committed adapter to a durable decision", () => {
+  it("dispatches a command through the committed adapter to a durable decision", async () => {
     const payload = { owner: "operator-local" };
     const envelope = {
       commandId: "cmd-mcp-register",
@@ -73,7 +90,7 @@ describe("createMcpDispatchPort", () => {
       sessionCredential: CREDENTIAL,
       targetAggregateId: PROJECT,
     };
-    const answer = decode(port.dispatchCommandBytes(encoder.encode(JSON.stringify(envelope))));
+    const answer = decode(await port.dispatchCommandBytes(encoder.encode(JSON.stringify(envelope))));
     expect(answer).toMatchObject({
       decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" },
       ok: true,
@@ -81,31 +98,61 @@ describe("createMcpDispatchPort", () => {
     });
   });
 
-  it("refuses an async-only kind here, because this port has no asynchronous answer", () => {
-    // MEASURED BOUNDARY, asserted rather than assumed: `StdioDispatchPort`'s
-    // `dispatchCommandBytes(bytes): Uint8Array` is declared in @moe/mcp and returned
-    // straight out of a synchronous stdio call site, so this transport cannot carry a
-    // command whose service answers with a promise. It refuses with the seam's own
-    // stable code instead of hanging or inventing a decision. The HTTP listener, whose
-    // request handler is already async, serves the same kind through the async entry.
-    const payload = {
-      activationRequestBytesBase64: "AAAA", binding: {}, graphSnapshot: {},
-      inputManifest: {}, launchTemplate: {},
-    };
-    const answer = decode(port.dispatchCommandBytes(encoder.encode(JSON.stringify({
-      commandId: "cmd-mcp-foundation", commandKind: "foundation.dispatch",
-      correlationId: "corr-mcp-foundation", expectedVersion: 0, payload,
-      requestDigest: createHash("sha256")
-        .update(encoder.encode(JSON.stringify(payload))).digest("hex"),
-      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-      sessionCredential: CREDENTIAL, targetAggregateId: PROJECT,
-    }))));
+  it("dispatches the real async foundation service over MCP and records its evidence", async () => {
+    const harness = seamHarness("mcp-valid");
+    try {
+      const dispatch = createMcpDispatchPort({
+        deps: harness.deps, fallbackCredential: FOUNDATION_CREDENTIAL, subscriptions: streamPort(),
+      });
+      const answer = decode(await dispatch.dispatchCommandBytes(
+        requestBytes(commandRequest({ commandId: "cmd-mcp-foundation" }))));
+      expect(answer).toMatchObject({
+        httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
+        refusal: { code: LAUNCH_REFUSAL.code, layer: LAUNCH_REFUSAL.layer }, stage: "DISPATCH",
+      });
 
-    expect(answer).toMatchObject({
-      ok: false, outcome: "PORT_REFUSED",
-      refusal: { code: "COMMAND_ASYNC_ENTRY_REQUIRED", layer: "DAEMON_COMMAND_SEAM" },
-      stage: "DISPATCH",
-    });
+      const reader = SqliteEventStore.openForProject(harness.storePath, PROJECT_ID);
+      try {
+        expect(reader.readEvents(ACTIVATION_AGGREGATE).map((event) => event.eventType))
+          .toContain("EffectActivationCommitted");
+        expect(reader.readEvents(DISPATCH_AGGREGATE).map((event) => event.eventType)).toEqual([
+          "FoundationDispatchReserved", "FoundationAttemptRecorded",
+        ]);
+        const stored = readFoundationAttemptRecord(reader, ACTIVATION_AGGREGATE);
+        expect(stored.ok).toBe(true);
+        expect(stored.ok && stored.record).toMatchObject({
+          reasonCode: LAUNCH_REFUSAL.code, reasonLayer: LAUNCH_REFUSAL.layer,
+          resultManifest: null, truthClass: LAUNCH_REFUSAL.truthClass,
+        });
+      } finally {
+        reader.close();
+      }
+    } finally {
+      harness.close();
+    }
+  }, 30_000);
+
+  it("forwards corrupted activation bytes to the foundation codec refusal over MCP", async () => {
+    const harness = seamHarness("mcp-corrupt");
+    try {
+      const dispatch = createMcpDispatchPort({
+        deps: harness.deps, fallbackCredential: FOUNDATION_CREDENTIAL, subscriptions: streamPort(),
+      });
+      const payload = dispatchPayload({
+        bytesBase64: Buffer.from("not an activation envelope").toString("base64"),
+      });
+      const answer = decode(await dispatch.dispatchCommandBytes(
+        requestBytes(commandRequest({ commandId: "cmd-mcp-corrupt", payload }))));
+      expect(answer).toMatchObject({
+        httpStatus: 422, ok: false, outcome: "PORT_REFUSED",
+        refusal: {
+          code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", layer: "DAEMON_FOUNDATION_ATTEMPT",
+        },
+        stage: "DISPATCH",
+      });
+    } finally {
+      harness.close();
+    }
   });
 
   it("serves events.read as the SAME wire frame the HTTP listener serves, bigint and all", () => {

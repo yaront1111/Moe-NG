@@ -250,6 +250,54 @@ describe("stdio server error routing", () => {
 });
 
 describe("stdio server daemon response handling", () => {
+  it("awaits an asynchronous command dispatch and returns its daemon bytes verbatim", async () => {
+    const calls: string[] = [];
+    let markInvoked!: () => void;
+    let resolveResponse!: (bytes: Uint8Array) => void;
+    const invoked = new Promise<void>((resolve) => { markInvoked = resolve; });
+    const response = new Promise<Uint8Array>((resolve) => { resolveResponse = resolve; });
+    const port: StdioDispatchPort = {
+      authenticate: () => { calls.push("authenticate"); return { ok: true }; },
+      dispatchCommandBytes: () => {
+        calls.push("dispatchCommandBytes");
+        markInvoked();
+        return response;
+      },
+      dispatchQueryBytes: () => { throw new Error("query dispatch was not expected"); },
+    };
+    await withClient(port, async (client) => {
+      const pending = client.callTool({
+        arguments: { ...CONFORMANCE_COMMAND_ARGS }, name: CONFORMANCE_COMMAND_LABEL,
+      });
+      await invoked;
+      expect(calls).toEqual(["authenticate", "dispatchCommandBytes"]);
+      resolveResponse(new TextEncoder().encode(CONFORMANCE_COMMAND_RESPONSE_TEXT));
+      expect(textOf(await pending)).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+    });
+    expect(calls).toEqual(["authenticate", "dispatchCommandBytes"]);
+  });
+
+  it("contains a rejected asynchronous command dispatch as UNKNOWN_ERROR", async () => {
+    const secret = "async transport secret must not leak";
+    const port: StdioDispatchPort = {
+      authenticate: () => ({ ok: true }),
+      dispatchCommandBytes: async () => { throw new Error(secret); },
+      dispatchQueryBytes: () => { throw new Error("query dispatch was not expected"); },
+    };
+    let thrown: unknown;
+    try {
+      await withClient(port, (client) => client.callTool({
+        arguments: { ...CONFORMANCE_COMMAND_ARGS }, name: CONFORMANCE_COMMAND_LABEL,
+      }));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(McpError);
+    expect((thrown as McpError).code).toBe(-32603);
+    expect((thrown as McpError).data).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(JSON.stringify((thrown as McpError).data)).not.toContain(secret);
+  });
+
   it("refuses daemon bytes that are not valid UTF-8 instead of emitting replacements", async () => {
     const port = createRecordingPort({
       commandResponse: Uint8Array.from([0x7b, 0xff, 0xfe, 0x7d]),
@@ -263,7 +311,7 @@ describe("stdio server daemon response handling", () => {
 
   it("converts a port transport failure into a stable error without echoing its message", async () => {
     const secret = "connect ECONNREFUSED 127.0.0.1:65000";
-    const port: StdioDispatchPort = {
+    const port = {
       authenticate: () => ({ ok: true }),
       dispatchCommandBytes: () => {
         throw new Error(secret);
@@ -271,11 +319,12 @@ describe("stdio server daemon response handling", () => {
       dispatchQueryBytes: () => {
         throw new Error(secret);
       },
-    };
+    } satisfies StdioDispatchPort;
     const outcome = await subject.invoke(port, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS);
     expect(outcome.kind).toBe("error");
     if (outcome.kind !== "error") return;
     expect(outcome.mcpCode).toBe(-32603);
+    expect(outcome.data).toMatchObject({ code: "UNKNOWN_ERROR" });
     expect(JSON.stringify(outcome.data)).not.toContain("ECONNREFUSED");
   });
 });
@@ -288,22 +337,23 @@ describe("stdio server direct decoder invocation", () => {
     ["not json at all", new TextEncoder().encode("definitely not json")],
     ["invalid utf-8", Uint8Array.from([0x7b, 0xff, 0xfe, 0x7d])],
     ["empty body", new Uint8Array(0)],
-  ])("refuses %s with a stable error and zero port calls", (_label, bytes) => {
+  ])("refuses %s with a stable error and zero port calls", async (_label, bytes) => {
     const port = createRecordingPort();
     expect(commandEntry).toBeDefined();
     if (commandEntry === undefined) return;
     let thrown: unknown;
     try {
-      decodeAndDispatch(port, commandEntry, bytes);
+      await decodeAndDispatch(port, commandEntry, bytes);
     } catch (error) {
       thrown = error;
     }
     expect(thrown).toBeInstanceOf(McpError);
     expect((thrown as McpError).code).toBe(-32602);
+    expect((thrown as McpError).data).toMatchObject({ code: "INPUT_INVALID" });
     expect(port.calls).toEqual([]);
   });
 
-  it("dispatches verbatim bytes once the envelope decodes", () => {
+  it("dispatches verbatim bytes once the envelope decodes", async () => {
     const port = createRecordingPort();
     expect(commandEntry).toBeDefined();
     if (commandEntry === undefined) return;
@@ -319,7 +369,7 @@ describe("stdio server direct decoder invocation", () => {
       targetAggregateId: "goal-direct-1",
     };
     const bytes = new TextEncoder().encode(JSON.stringify(envelope));
-    const response = decodeAndDispatch(port, commandEntry, bytes);
+    const response = await decodeAndDispatch(port, commandEntry, bytes);
     expect(port.calls).toEqual([`authenticate:${CONFORMANCE_COMMAND_KIND}`, "dispatchCommandBytes"]);
     expect(port.dispatched[0]).toBe(bytes);
     expect(new TextDecoder().decode(response)).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);

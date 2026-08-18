@@ -121,11 +121,11 @@ function buildQueryEnvelopeBytes(
  * authentication refusal performs zero dispatch calls. Exported so hostile bytes can be
  * driven straight at it, which no protocol roundtrip can express.
  */
-export function decodeAndDispatch(
+export async function decodeAndDispatch(
   port: StdioDispatchPort,
   entry: StdioToolEntry,
   bytes: Uint8Array,
-): Uint8Array {
+): Promise<Uint8Array> {
   const isCommand = entry.surface === "command";
   const decoded = isCommand
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
@@ -134,18 +134,18 @@ export function decodeAndDispatch(
   const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
   if (!auth.ok) refuse(auth.error);
   try {
-    return isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes);
+    return await (isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes));
   } catch (error) {
     if (error instanceof McpError) throw error;
     refuseUnknown();
   }
 }
 
-function callTool(
+async function callTool(
   options: StdioServerOptions,
   toolLabel: string,
   args: Readonly<Record<string, unknown>> | undefined,
-): string {
+): Promise<string> {
   const entry = STDIO_TOOL_INDEX.get(toolLabel);
   if (entry === undefined) refuseInvalidInput();
   const supplied = args ?? {};
@@ -153,7 +153,7 @@ function callTool(
     entry.surface === "command"
       ? buildCommandEnvelopeBytes(entry.kind, options.credential, supplied)
       : buildQueryEnvelopeBytes(entry.kind, options.credential, supplied);
-  const response = decodeAndDispatch(options.port, entry, bytes);
+  const response = await decodeAndDispatch(options.port, entry, bytes);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(response);
   } catch {
@@ -212,10 +212,10 @@ export function createStdioMcpServer(options: StdioServerOptions): Server {
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: LISTED_TOOLS }));
 
-  server.setRequestHandler(CallToolRequestSchema, (request) => ({
+  server.setRequestHandler(CallToolRequestSchema, async (request) => ({
     content: [
       {
-        text: callTool(options, request.params.name, request.params.arguments),
+        text: await callTool(options, request.params.name, request.params.arguments),
         type: "text" as const,
       },
     ],
