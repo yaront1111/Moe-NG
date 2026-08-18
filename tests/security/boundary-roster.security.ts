@@ -104,14 +104,17 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * Axis totals for the sibling slices: transport 15, integrity 14, durable-store 15,
- * runtime-provider 24, scheduler-activation 26 — sums to 94. These tags, NOT the subset
+ * runtime-provider 24, scheduler-activation 28 — sums to 96. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
  * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
  * GRAPH_CONTENT_LAYERS integrity, task-e3d5fd05. 91→92 on 2026-08-17:
  * GOAL_PREREQUISITE_LAYER scheduler-activation, task-a46d4f99. 92→93 on 2026-08-17:
- * PROVIDER_EFFECT_SETTLEMENT_LAYER runtime-provider, task-7c16fcbc.)
+ * PROVIDER_EFFECT_SETTLEMENT_LAYER runtime-provider, task-7c16fcbc. 93→94 on
+ * 2026-08-18: IMPORT_SHADOW_READ_LAYER durable-store, task-c5be7926. 94→96 on
+ * 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER both
+ * scheduler-activation, task-c5be7926 — see the per-entry note below.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -140,6 +143,17 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
+  // The daemon's projection of the ACTIVE graph revision and the record carrying that
+  // revision's body. Both are `scheduler-activation` by SUBJECT: they answer for which
+  // planning graph is in force for admission, not for a codec's content identity — the
+  // digest vocabulary they consume (GraphContentIssueCode) is rostered separately as
+  // GRAPH_CONTENT_LAYERS on the integrity axis. Governor ruling msg-1fb4124c amends its
+  // own earlier integrity tag for the body record to this measurement. Provenance by
+  // `git log --follow`, not by the board: both files entered the tree in 9b9e44e (carried
+  // under task-80fce1d1's message), and the active-graph reader's own repair landed at
+  // d60a48f under task-dd4ffa0c. Roster entry and arms: task-c5be7926.
+  { constant: "ACTIVE_GRAPH_PROJECTION_LAYER", file: "apps/daemon/src/planning/active-graph-projection.ts", axis: "scheduler-activation" },
+  { constant: "GRAPH_BODY_RECORD_LAYER", file: "apps/daemon/src/planning/graph-body-record.ts", axis: "scheduler-activation" },
   // The daemon's independent read of one committed legacy import. `durable-store` by
   // SUBJECT: it answers for durable evidence read out of the event store — it captures a
   // store horizon, refuses if that horizon moved, and owns no codec and no admission
@@ -248,16 +262,17 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * 2026-08-18). `durable-store` by SUBJECT: the daemon's read of one committed legacy
  * import, which captures a store horizon and refuses when it moves.
  *
- * THE SCAN IS 96 AT THIS HEAD, NOT 94, AND THAT IS NOT A STALE PIN. Two boundaries
- * declared under `apps/daemon/src/planning/` — ACTIVE_GRAPH_PROJECTION_LAYER and
- * GRAPH_BODY_RECORD_LAYER — are rostered nowhere and covered nowhere in this lane
- * (`grep -rn GRAPH_BODY_RECORD tests/security/` is empty), so the cardinality assertion
- * below is EXPECTED to fail until they are entered WITH arms. Entering them here alone
- * would only move the red into `completeness.security.ts`, which resolves coverage per
- * roster row. They are `scheduler-activation` by the tagging rule above and belong to a
- * task of their own; task-c5be7926 filed the measured spec rather than widen its scope.
+ * 94 -> 96 for ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER (entry
+ * task-c5be7926, 2026-08-18; both constants entered the tree in 9b9e44e). Both
+ * `scheduler-activation` by
+ * SUBJECT: they decide which planning graph is in force for admission. They were
+ * entered together WITH their BEFORE/AFTER/RACE arms in
+ * `scheduler-activation-hostile-cases.ts`, because a roster row on its own only moves
+ * the red into `completeness.security.ts`, which resolves coverage per roster row.
+ * Measured with the suite at HEAD f96995d — scan 96, roster 94 before these entries;
+ * a hand-rolled grep returns 94 and is NOT the authority here.
  */
-const EXPECTED_ROSTER_SIZE = 94;
+const EXPECTED_ROSTER_SIZE = 96;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -265,7 +280,7 @@ const EXPECTED_ROSTER_SIZE = 94;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 36,
+  "apps/daemon": 38,
   "packages/benchmark": 1,
   "packages/runner": 21,
   "packages/core": 10,

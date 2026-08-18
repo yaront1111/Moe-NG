@@ -34,6 +34,21 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { MAX_BOUND_MS, assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import {
+  ACCEPTED_CONTROL_EXPECTATION,
+  ACTIVE_GRAPH_PROJECTION_LAYER,
+  BODY_CONTROL_EXPECTATION,
+  GRAPH_BODY_RECORD_CODES,
+  GRAPH_BODY_RECORD_LAYER,
+  PLANNING_GRAPH_CASES,
+  PLANNING_GRAPH_RACES,
+  closePlanningGraphStores,
+  graphBodyProofs,
+  planningGraphProofs,
+  runAcceptedActiveGraphControl,
+  runAcceptedGraphBodyControl,
+  runGraphBodyPassthroughControl,
+} from "./planning-graph-hostile-cases.js";
+import {
   ACTIVATION_ADMISSION_CASES,
   ACTIVATION_ADMISSION_RACES,
   DEV_READY,
@@ -80,8 +95,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -121,6 +136,9 @@ afterAll(() => {
   // The goal group opens its own bootstrap stores and verification scratch roots; the same
   // ordering applies, and win32 holds a just-exited child's cwd briefly.
   closeGoalPrerequisiteFixtures();
+  // The planning-graph arms open their own file-backed stores, including a SECOND
+  // connection per race; the same handles-before-roots ordering applies.
+  closePlanningGraphStores();
   cleanupHostileRoots();
 });
 
@@ -128,9 +146,11 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
   it("reads a positive number of scheduler-activation entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_AXIS.length).toBeGreaterThan(0);
-    // 25 -> 26 on 2026-08-17: GOAL_PREREQUISITE_LAYER (task-a46d4f99). Measured off the
-    // roster's committed bytes, not off this file's own case tables.
-    expect(ROSTER_AXIS).toHaveLength(26);
+    // 25 -> 26 on 2026-08-17: GOAL_PREREQUISITE_LAYER (task-a46d4f99). 26 -> 28 on
+    // 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER
+    // (task-c5be7926). Measured off the roster's committed bytes, not off this file's
+    // own case tables.
+    expect(ROSTER_AXIS).toHaveLength(28);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
@@ -454,6 +474,204 @@ describe("the scheduler group's unknown rule", () => {
   });
 });
 
+/** The two layer names and the three codes, restated BY HAND. A list derived from the
+ *  production vocabulary grows on both sides at once and stays green. */
+const PROJECTION_KEY = "ACTIVE_GRAPH_PROJECTION_LAYER";
+const BODY_UNAVAILABLE = "ACTIVE_GRAPH_BODY_UNAVAILABLE";
+const BODY_ABSENT = "GRAPH_BODY_ABSENT";
+
+const rawProof = (proof: { readonly outcome: unknown }): Record<string, unknown> =>
+  proof.outcome as Record<string, unknown>;
+
+/**
+ * The planning-graph ACCEPTED controls, from both groups. The whole-slice invariants count
+ * admissions off production's returned values, so a control that had silently refused still
+ * reddens them rather than being assumed present.
+ */
+const planningControls = (): readonly { readonly arm: string; readonly outcome: unknown }[] =>
+  [...planningGraphProofs(), ...graphBodyProofs()].filter((proof) => proof.arm === "CONTROL");
+
+/**
+ * THE ACCEPTED CONTROL for the current-graph read, and it runs BEFORE the properties below.
+ *
+ * Every planning-graph arm on this axis is a refusal, and a projection that refuses
+ * everything explains all of them equally well while holding no rule at all. This is the
+ * only case in the file that drives `readCurrentActiveGraph` over the whole lawful path —
+ * a revision driven to ACTIVE by the real reducer AND the body its content hash names.
+ */
+describe("the accepted current-graph control", () => {
+  it("answers a fully seeded ACTIVE revision with its identity, hash and structural identity", async () => {
+    const accepted = await runAcceptedActiveGraphControl();
+    collected.push(accepted);
+    const controls = planningGraphProofs().filter((proof) => proof.arm === "CONTROL");
+    // A silently absent control would leave "at least one lawful read is admitted" holding
+    // vacuously over an empty list.
+    expect(controls).toHaveLength(1);
+
+    const read = accepted as Record<string, unknown>;
+    expect(read["ok"], "a lawful ACTIVE revision with its body must be ADMITTED").toBe(true);
+    expect(read["revisionId"]).toBe(ACCEPTED_CONTROL_EXPECTATION.revisionId);
+    expect(read["graphContentHash"]).toBe(ACCEPTED_CONTROL_EXPECTATION.graphContentHash);
+    // The structural identity is answered BESIDE the content hash and is never equal to it,
+    // so a projection returning the hash twice cannot pass this.
+    expect(read["snapshotIdentity"]).toBe(ACCEPTED_CONTROL_EXPECTATION.snapshotIdentity);
+    expect(read["snapshotIdentity"]).not.toBe(read["graphContentHash"]);
+  }, CASE_BOUND_MS);
+});
+
+/**
+ * THE PLANNING-GRAPH PROJECTION — properties no `{code, layer}` case on this axis carries.
+ *
+ * Two layers can answer one `readCurrentActiveGraph`: this projection, and the body record
+ * behind it. The projection tags EVERY refusal with its own `layer` because it is what
+ * answered the caller, and names the layer that actually refused in `sourceLayer`. A
+ * case asserting code and layer alone cannot tell a wrapped refusal from an originated one
+ * — both carry the same two fields — so the separation is pinned here.
+ */
+describe("the planning-graph projection boundary", () => {
+  it("is rostered on this axis with exactly one BEFORE, one AFTER and one RACE arm", () => {
+    expect(ROSTER_AXIS).toContain(PROJECTION_KEY);
+    const arms = armsFor(PROJECTION_KEY);
+    expect(arms.filter((arm) => arm === "BEFORE")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "AFTER")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "RACE")).toHaveLength(1);
+  });
+
+  it("captured one outcome per read it actually sent, and the count is positive", () => {
+    const proofs = planningGraphProofs();
+    // A group that silently produced NOTHING would leave every property below quantified
+    // over an empty list and passing.
+    expect(proofs.length).toBeGreaterThan(0);
+    // BEFORE, AFTER, both sides of the race, and the accepted control.
+    expect(proofs).toHaveLength(5);
+    expect([...proofs].map((proof) => proof.arm).sort()).toEqual([
+      "AFTER", "BEFORE", "CONTROL", "RACE", "RACE",
+    ]);
+  });
+
+  it("answers every refusal under its own layer, read off production's own field", () => {
+    expect(ACTIVE_GRAPH_PROJECTION_LAYER).toBe("ACTIVE_GRAPH_PROJECTION");
+    const refusals = planningGraphProofs().filter((proof) => proof.arm !== "CONTROL");
+    expect(refusals).toHaveLength(4);
+    for (const proof of refusals) {
+      expect(rawProof(proof)["ok"], `${proof.arm}: a refusal must not be admitted`).toBe(false);
+      expect(rawProof(proof)["layer"], `${proof.arm}: this layer answered the caller`)
+        .toBe(ACTIVE_GRAPH_PROJECTION_LAYER);
+    }
+  });
+
+  it("names the body record as the SOURCE of the wrapped refusal, and null when it refused itself", () => {
+    expect(GRAPH_BODY_RECORD_LAYER).toBe("GRAPH_BODY_RECORD");
+    const refusals = planningGraphProofs().filter((proof) => proof.arm !== "CONTROL");
+    const wrapped = refusals.filter((proof) => rawProof(proof)["code"] === BODY_UNAVAILABLE);
+    // Exactly one arm is arranged to be answered through the body record. Zero would make
+    // the source assertions below vacuous; more would mean another arm drifted into it.
+    expect(wrapped).toHaveLength(1);
+    for (const proof of wrapped) {
+      expect(rawProof(proof)["sourceLayer"]).toBe(GRAPH_BODY_RECORD_LAYER);
+      // The underlying code too: "some body problem" is not the property — the body row
+      // for that hash is ABSENT, and a decode failure would be a different defect.
+      expect(rawProof(proof)["sourceCode"]).toBe(BODY_ABSENT);
+    }
+    for (const proof of refusals.filter((entry) => !wrapped.includes(entry))) {
+      // Originated here: a non-null source on these would mean the projection was blaming
+      // a layer that never saw the input.
+      expect(rawProof(proof)["sourceLayer"], `${proof.arm}: refused here, not below`).toBeNull();
+      expect(rawProof(proof)["sourceCode"], `${proof.arm}: no underlying code`).toBeNull();
+    }
+  });
+});
+
+/** The body record's roster key and its own codes, restated BY HAND. */
+const BODY_KEY = "GRAPH_BODY_RECORD_LAYER";
+
+/**
+ * THE ACCEPTED AND PASSTHROUGH CONTROLS for the durable body, run before the properties.
+ *
+ * The accepted one is the only case here that writes bytes through the real writer and
+ * reads them back through the real reader: without it, three refusals are equally well
+ * explained by a custodian that refuses everything. The passthrough one is the positive
+ * control for the OTHER refusal family — without a codec-answered refusal in hand, "every
+ * body refusal came from this module's own vocabulary" is a property nothing can break.
+ */
+describe("the graph-body record's controls", () => {
+  it("hands back a lawfully written body, re-validated through the decoder", async () => {
+    const accepted = await runAcceptedGraphBodyControl();
+    collected.push(accepted);
+    const read = accepted as Record<string, unknown>;
+    expect(read["ok"], "a body written by the real writer must be readable").toBe(true);
+    expect(read["graphContentHash"]).toBe(BODY_CONTROL_EXPECTATION.graphContentHash);
+    expect(read["snapshotIdentity"]).toBe(BODY_CONTROL_EXPECTATION.snapshotIdentity);
+    // The bytes come back as bytes, not as a re-serialisation: this record stores the
+    // codec's own output verbatim and is forbidden from minting a second one.
+    expect(read["bytes"]).toBeInstanceOf(Uint8Array);
+  }, CASE_BOUND_MS);
+
+  it("passes a CODEC verdict through, naming the codec as the source", async () => {
+    const refused = await runGraphBodyPassthroughControl();
+    const answer = refused as Record<string, unknown>;
+    expect(answer["ok"]).toBe(false);
+    // Reported by this record...
+    expect(answer["layer"]).toBe(GRAPH_BODY_RECORD_LAYER);
+    // ...but refused by the codec, and carrying the CODEC's vocabulary rather than this
+    // module's. Both halves matter: a record that relabelled codec failures as its own
+    // would satisfy the layer assertion alone.
+    expect(answer["sourceLayer"]).not.toBeNull();
+    expect(GRAPH_BODY_RECORD_CODES).not.toContain(answer["code"]);
+  }, CASE_BOUND_MS);
+});
+
+/**
+ * THE DURABLE BODY RECORD — the union its refusal code is typed with, made observable.
+ *
+ * `GraphBodyRefusal.code` is `GraphBodyRecordCode | GraphContentIssueCode`. A case asserting
+ * a code and a layer cannot say WHICH family answered, and the two mean different things: an
+ * own-family code is a custody failure (absent row, misfiled row, unencoded write), a
+ * codec-family one is a content failure passed through. Membership in production's own frozen
+ * list is what separates them here.
+ */
+describe("the durable graph-body boundary", () => {
+  it("is rostered on this axis with exactly one BEFORE, one AFTER and one RACE arm", () => {
+    expect(ROSTER_AXIS).toContain(BODY_KEY);
+    const arms = armsFor(BODY_KEY);
+    expect(arms.filter((arm) => arm === "BEFORE")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "AFTER")).toHaveLength(1);
+    expect(arms.filter((arm) => arm === "RACE")).toHaveLength(1);
+  });
+
+  it("captured one outcome per body call it actually made, and the count is positive", () => {
+    const proofs = graphBodyProofs();
+    expect(proofs.length).toBeGreaterThan(0);
+    // BEFORE, AFTER, both sides of the race, the accepted control and the passthrough one.
+    expect(proofs).toHaveLength(6);
+    expect([...proofs].map((proof) => proof.arm).sort()).toEqual([
+      "AFTER", "BEFORE", "CONTROL", "PASSTHROUGH", "RACE", "RACE",
+    ]);
+  });
+
+  it("answers every hostile arm from its OWN vocabulary, with no source layer to blame", () => {
+    expect(GRAPH_BODY_RECORD_LAYER).toBe("GRAPH_BODY_RECORD");
+    const arms = graphBodyProofs()
+      .filter((proof) => proof.arm !== "CONTROL" && proof.arm !== "PASSTHROUGH");
+    // Four: BEFORE, AFTER and both sides of the race. Zero would make the loop vacuous.
+    expect(arms).toHaveLength(4);
+    for (const proof of arms) {
+      const answer = rawProof(proof);
+      expect(answer["ok"], `${proof.arm}: a refusal must not be admitted`).toBe(false);
+      expect(answer["layer"], `${proof.arm}: this record answered`).toBe(GRAPH_BODY_RECORD_LAYER);
+      // The family, read off production's own frozen list rather than a local spelling.
+      expect(GRAPH_BODY_RECORD_CODES, `${proof.arm}: own vocabulary`).toContain(answer["code"]);
+      // Originated here, so nothing below is being blamed for it.
+      expect(answer["sourceLayer"], `${proof.arm}: refused here`).toBeNull();
+    }
+    // All three of this record's own codes are exercised, so the family assertion above is
+    // not satisfied by one code repeated four times.
+    expect([...new Set(arms.map((proof) => rawProof(proof)["code"]))].sort()).toEqual([
+      "GRAPH_BODY_ABSENT", "GRAPH_BODY_IDENTITY_MISMATCH", "GRAPH_BODY_NOT_ENCODED",
+    ]);
+  });
+});
+
 describe("the whole slice", () => {
   it("never admits an activation, consumes a grant, or raises a truth class above UNKNOWN", () => {
     // One assertion over every collected outcome rather than one per case, so a case added
@@ -466,15 +684,17 @@ describe("the whole slice", () => {
     // refused would leave this at `allowed` and pass, which is why the control's own case
     // asserts `ok: true` separately. Hard-coding a `+ 1` here would assume the admission.
     const admittedControls = goalAcceptedControls()
-      .filter((proof) => isAdmitted(proof.projected)).length;
+      .filter((proof) => isAdmitted(proof.projected)).length
+      + planningControls().filter((proof) => isAdmitted(proof.outcome)).length;
     expect(admittedTotal).toBe(allowed + admittedControls);
   });
 
   it("collected an outcome from every case, so nothing escaped by not running", () => {
     // Positive, so a control group that generated nothing cannot shrink this to the old total.
     expect(goalAcceptedControls().length).toBeGreaterThan(0);
+    expect(planningControls().length).toBeGreaterThan(0);
     expect(collected).toHaveLength(
-      CASES.length + RACES.length * 2 + goalAcceptedControls().length,
+      CASES.length + RACES.length * 2 + goalAcceptedControls().length + planningControls().length,
     );
   });
 

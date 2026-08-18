@@ -56,6 +56,10 @@ import {
   SCHEDULER_DECISION_CASES,
   SCHEDULER_DECISION_RACES,
 } from "./scheduler-activation-hostile-cases.js";
+import {
+  PLANNING_GRAPH_CASES,
+  PLANNING_GRAPH_RACES,
+} from "./planning-graph-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -108,17 +112,22 @@ const durableStorePairs = (): readonly CoveredPair[] => [
   ...hostileRaceCases.map((entry) => [entry.boundary, "RACE"] as const),
 ];
 
-/** Six tables: three carrying `arm`, three race tables carrying none. */
+/** Eight tables: four carrying `arm`, four race tables carrying none. The planning-graph
+ *  pair is a sibling MODULE rather than a fourth export of the hostile-cases file, so it
+ *  must be named here: this builder enumerates tables, and a table it does not import is
+ *  read as an uncovered roster row rather than as a missing registration (task-c5be7926). */
 const schedulerActivationPairs = (): readonly CoveredPair[] => [
   ...[
     ...ACTIVATION_ADMISSION_CASES,
     ...EXPANSION_SUPERSESSION_CASES,
     ...SCHEDULER_DECISION_CASES,
+    ...PLANNING_GRAPH_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
     ...EXPANSION_SUPERSESSION_RACES,
     ...SCHEDULER_DECISION_RACES,
+    ...PLANNING_GRAPH_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 
