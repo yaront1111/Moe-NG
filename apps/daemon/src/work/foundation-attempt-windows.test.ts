@@ -10,7 +10,29 @@ import {
 } from "@moe/runner";
 import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
-import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+
+import type { ActivationTelemetryLaunchInput } from "../activation/activation-telemetry-launch.js";
+
+const observedBoundaryProbe = vi.hoisted(() => ({
+  launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
+}));
+
+vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../activation/activation-telemetry-launch.js")
+  >();
+  return {
+    ...actual,
+    launchActivationProviderRun: async (
+      ...args: Parameters<typeof actual.launchActivationProviderRun>
+    ) => {
+      const result = await actual.launchActivationProviderRun(...args);
+      observedBoundaryProbe.launches.push({ input: args[1], result });
+      return result;
+    },
+  };
+});
 
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
@@ -36,7 +58,10 @@ const DIGEST = "a".repeat(64), DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(
 const DECIDED_AT = "2026-08-15T00:00:00.000Z", HEAD = "0".repeat(40);
 const NODE_KEY = "dev-done", SESSION_ID = "session-1";
 
-afterEach(cleanupRestoreHarnesses);
+afterEach(() => {
+  observedBoundaryProbe.launches.length = 0;
+  cleanupRestoreHarnesses();
+});
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
@@ -456,6 +481,11 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     const outcome = await service.dispatch(request);
 
     expect(outcome.ok).toBe(true);
+    expect(observedBoundaryProbe.launches).toHaveLength(1);
+    expect(observedBoundaryProbe.launches[0]?.input.providerRun).toEqual({
+      attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
+      provider: "claude", runRef: DISPATCH_AGGREGATE,
+    });
     // The runner's pin root is its FIRST physical act; its existence is evidence
     // the boundary was actually reached rather than short-circuited.
     expect(existsSync(pinRoot)).toBe(true);
@@ -492,6 +522,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     // REPLAY: no second physical launch, no second provider row, same bytes.
     const replay = await service.dispatch(structuredClone(request));
     expect(replay.ok).toBe(true);
+    expect(observedBoundaryProbe.launches).toHaveLength(1);
     expect(providerEvents(store)).toHaveLength(1);
     expect(providerDecisions(store)).toHaveLength(1);
     expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(eventsBefore);
@@ -503,6 +534,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     (changed["launchTemplate"] as Record<string, unknown>)["cwd"] = join(root, "other");
     const refused = await service.dispatch(changed);
     expectRefusal(refused, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(observedBoundaryProbe.launches).toHaveLength(1);
     expect(providerEvents(store)).toHaveLength(1);
     expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(eventsBefore);
 

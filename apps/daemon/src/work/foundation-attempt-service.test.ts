@@ -10,11 +10,14 @@ import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
+import type { ActivationRunCommitInput } from "../activation/activation-run-commit.js";
+import type { ActivationTelemetryLaunchInput } from "../activation/activation-telemetry-launch.js";
+
 const providerBoundaryProbe = vi.hoisted(() => ({
   commits: [] as Array<{
-    readonly input: { readonly launch: unknown }; readonly result: unknown;
+    readonly input: ActivationRunCommitInput; readonly result: unknown;
   }>,
-  launches: [] as Array<{ readonly input: unknown; readonly result: unknown }>,
+  launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
 }));
 
 vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
@@ -67,7 +70,7 @@ import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import {
   DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES, FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, decodeFoundationAttemptRequest, decodeFoundationPayload,
-  deriveDispatchAggregateId, encodeFoundationPayload, sameBytes,
+  deriveDispatchAggregateId, encodeFoundationPayload, identifyFoundationDispatch, sameBytes,
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
@@ -1164,11 +1167,28 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
       .filter((decision) => decision.commandKind === PROVIDER_RUN_COMMAND_KIND);
   }
 
+  /** Ask the production codec for the exact Foundation identity bytes. */
+  function dispatchIdentityBytes(input: unknown): Uint8Array {
+    const decoded = decodeFoundationAttemptRequest(input);
+    if (!decoded.ok) throw new Error(`dispatch decode refused: ${decoded.code}`);
+    const sealed = buildInputManifest({
+      baseIdentity: decoded.request.inputManifest.baseIdentity,
+      entries: decoded.request.inputManifest.entries as never,
+    });
+    if (!sealed.ok) throw new Error(`input manifest refused: ${sealed.code}`);
+    const identity = identifyFoundationDispatch(
+      decoded.request, sealed.manifest as unknown as Record<string, unknown>);
+    if (!identity.ok) throw new Error(`dispatch identity refused: ${identity.code}`);
+    return identity.bytes;
+  }
+
   it("commits one blind provider record bound to the DURABLE lease session", async () => {
     const store = readyStore("provider-blind");
     const { service } = harness(store);
+    const request = dispatchRequest();
+    const expectedRequestBytes = dispatchIdentityBytes(request);
 
-    const outcome = await service.dispatch(dispatchRequest());
+    const outcome = await service.dispatch(request);
 
     // The Foundation answer is unchanged: the launcher's own refusal, its own
     // layer. Composing the provider run must not restamp it.
@@ -1177,8 +1197,22 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     // EXACTLY ONE physical composition: one event, one decision.
     expect(providerBoundaryProbe.launches).toHaveLength(1);
     expect(providerBoundaryProbe.commits).toHaveLength(1);
-    expect(providerBoundaryProbe.commits[0]?.input.launch)
-      .toBe(providerBoundaryProbe.launches[0]?.result);
+    const launch = providerBoundaryProbe.launches[0];
+    const commit = providerBoundaryProbe.commits[0];
+    if (launch === undefined || commit === undefined) throw new Error("provider boundary not called");
+    expect(commit.input.launch).toBe(launch.result);
+    expect(launch.input.providerRun).toEqual({
+      attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
+      provider: "claude", runRef: DISPATCH_AGGREGATE,
+    });
+    const providerCommandId = `${DISPATCH_AGGREGATE}:provider-run`;
+    expect(commit.input.key).toEqual({
+      commandId: providerCommandId, principalId: SESSION_ID, projectId: PROJECT_ID,
+    });
+    expect(commit.input.correlationId).toBe(providerCommandId);
+    expect(commit.input.decidedAt).toBe(DECIDED_AT);
+    expect(commit.input.clock).toEqual({ observedEnd: null, observedStart: null });
+    expect(sameBytes(commit.input.requestBytes, expectedRequestBytes)).toBe(true);
     expect(providerEvents(store)).toHaveLength(1);
     const decisions = providerDecisions(store);
     expect(decisions).toHaveLength(1);
@@ -1331,11 +1365,20 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     // The LEDGER's own code and layer, preserved rather than restamped as a
     // Foundation code: which authority refused is the fact worth keeping.
     expectRefusal(outcome, "PROVIDER_RUN_STORE_UNAVAILABLE", "PROVIDER_RUN_LEDGER");
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(providerBoundaryProbe.commits).toHaveLength(1);
+    expect(providerBoundaryProbe.commits[0]?.result).toStrictEqual({
+      code: "PROVIDER_RUN_STORE_UNAVAILABLE", layer: "PROVIDER_RUN_LEDGER",
+      ok: false, outcome: "REFUSED", storeCode: null,
+    });
     // Zero residue at the provider boundary, and no false reader authority.
     expect(providerEvents(real)).toHaveLength(0);
     expect(providerDecisions(real)).toHaveLength(0);
     const read = readCurrentProviderRun(real, { attemptRef: "attempt-1", projectId: PROJECT_ID });
-    expect(read).toMatchObject({ code: "PROVIDER_RUN_EVIDENCE_ABSENT", ok: false });
+    expect(read).toStrictEqual({
+      code: "PROVIDER_RUN_EVIDENCE_ABSENT", layer: "PROVIDER_RUN_READER",
+      ok: false, outcome: "UNKNOWN", storeCode: null,
+    });
   });
 
   it("refuses a foreign project against an accepted record and changes no counts", async () => {
