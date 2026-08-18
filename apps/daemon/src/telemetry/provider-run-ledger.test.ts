@@ -28,6 +28,7 @@ import { describe, expect, it } from "vitest";
 
 import { decodeProviderRunRecord, encodeProviderRunRecord } from "./provider-run-codec.js";
 import {
+  PROVIDER_RUN_COMMAND_KIND,
   PROVIDER_RUN_EVENT_TYPE,
   PROVIDER_RUN_RECORD_VERSION,
   deriveProviderRunAggregateId,
@@ -199,6 +200,44 @@ describe("commitProviderRunRecord — first commit", () => {
     }
   });
 
+  /**
+   * THE BINDING ASSERTION the identity promotion exists for. Every read below comes
+   * from the STORE, never from `input()` or from the returned result: an assertion
+   * against the writer's own argument echoes whatever the writer sent and stays green
+   * however far the durable kind drifts. The expected value is IMPORTED, never retyped
+   * here -- a test literal would be a second owner of the command identity, which is
+   * exactly what promoting the constant is meant to prevent.
+   */
+  it("binds the exported command kind onto every durable artifact of the commit", () => {
+    const store = openStore();
+    try {
+      const result = accepted(commitProviderRunRecord(store, input()));
+
+      const events = store.readEvents(result.aggregateId);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.decisionTrace?.commandKind).toBe(PROVIDER_RUN_COMMAND_KIND);
+
+      const decision = store.getCommandDecision(KEY);
+      expect(decision?.commandKind).toBe(PROVIDER_RUN_COMMAND_KIND);
+
+      // The decision's own committed-effect record NAMES the event it sealed, and that
+      // event's trace is then read back and compared. Going through the effect record
+      // rather than trusting index 0 is what makes this a third INDEPENDENT binding
+      // instead of a restatement of the first assertion.
+      //
+      // `getCommandReceipt` is deliberately not used: it is addressed by an INTERNAL
+      // derived id (`internalReceiptCommandId(decisionId)`), not by the caller's
+      // `commandId`, and that derivation is not exported from the store package. A test
+      // that rebuilt the string would be reimplementing store authority inside the test.
+      expect(decision?.businessEventIds).toHaveLength(1);
+      const sealedId = decision?.businessEventIds[0];
+      const named = events.find((event: StoredEvent) => event.eventId === sealedId);
+      expect(named?.decisionTrace?.commandKind).toBe(PROVIDER_RUN_COMMAND_KIND);
+    } finally {
+      store.close();
+    }
+  });
+
   it("mints no digest of its own — the durable digest is the codec's", () => {
     const store = openStore();
     try {
@@ -272,6 +311,24 @@ describe("commitProviderRunRecord — replay", () => {
       expect(new Uint8Array(durable)).toStrictEqual(sealed(record()).bytes);
       expect(replay.record.recordDigest).toBe(first.digest);
       expect(store.readEvents(replay.aggregateId)).toHaveLength(1);
+    } finally {
+      store.close();
+    }
+  });
+
+  it("leaves the durable command kind untouched when an identical commit replays", () => {
+    const store = openStore();
+    try {
+      accepted(commitProviderRunRecord(store, input()));
+      const replay = accepted(commitProviderRunRecord(store, input()));
+      expect(replay.disposition).toBe("REPLAYED");
+
+      // A replay seals no second decision, so the kind on the durable artifacts is
+      // still the one the FIRST commit wrote -- read back, not echoed.
+      const events = store.readEvents(replay.aggregateId);
+      expect(events).toHaveLength(1);
+      expect(events[0]?.decisionTrace?.commandKind).toBe(PROVIDER_RUN_COMMAND_KIND);
+      expect(store.getCommandDecision(KEY)?.commandKind).toBe(PROVIDER_RUN_COMMAND_KIND);
     } finally {
       store.close();
     }

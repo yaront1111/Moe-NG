@@ -43,6 +43,7 @@ import type {
 
 import { decodeProviderRunRecord, encodeProviderRunRecord } from "./provider-run-codec.js";
 import {
+  PROVIDER_RUN_COMMAND_KIND,
   PROVIDER_RUN_EVENT_TYPE,
   PROVIDER_RUN_RECORD_VERSION,
   deriveProviderRunAggregateId,
@@ -53,7 +54,6 @@ import type { ProviderRunCode, ProviderRunRefusal } from "./provider-run-refusal
 
 const LEDGER = "PROVIDER_RUN_LEDGER";
 const READER = "PROVIDER_RUN_READER";
-const COMMAND_KIND = "provider-run.telemetry.commit";
 /** Every provider run is the FIRST event on its own derived aggregate. */
 const EXPECTED_VERSION = 0;
 const EVENT_NAMESPACE = `${PROVIDER_RUN_RECORD_VERSION}|event|sha256:`;
@@ -212,7 +212,7 @@ export function commitProviderRunRecord(
   let response: CommandDecisionResponse;
   try {
     response = store.commitExpectedVersionDecision({
-      commandKind: COMMAND_KIND,
+      commandKind: PROVIDER_RUN_COMMAND_KIND,
       committedResultBytes: encoded.bytes,
       correlationId: input.correlationId,
       decidedAt: input.decidedAt,

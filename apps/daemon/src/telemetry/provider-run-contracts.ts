@@ -60,6 +60,15 @@ export const PROVIDER_RUN_RECORD_VERSION = "moe-provider-run-record/1" as const;
 export const PROVIDER_RUN_EVENT_TYPE = "ProviderRunTelemetryCommitted" as const;
 
 /**
+ * The SOLE owner of the provider-run command identity. The store's replay identity
+ * hashes this kind together with the key and target aggregate, so a reader that
+ * retyped the string instead of importing it would be checking its own copy: the two
+ * could drift and every suite on both sides would stay green. It lives here, beside
+ * the record version and event type, so writer and reader bind to one value.
+ */
+export const PROVIDER_RUN_COMMAND_KIND = "provider-run.telemetry.commit" as const;
+
+/**
  * One usage envelope the SCHEDULER refused, kept in the record rather than
  * dropped. A dropped envelope and an envelope the provider never emitted are
  * indistinguishable in the durable bytes, so a benchmark reading a record with
