@@ -161,3 +161,25 @@ it("refuses a directory link swapped after containment observation as stale", ()
     rmSync(outside, { force: true, recursive: true });
   }
 }, 30_000);
+
+it("refuses a workspace change that lands after the observation digest is sealed", () => {
+  const repository = fixture();
+  const target = join(repository.root, PATH);
+  const intruder = join(repository.root, "scope/intruder.txt");
+  // Git status is read before containment resolves paths, so an untracked
+  // sibling created here is absent from the first observation and present in
+  // the re-observation. No tracked entry's own identity moves, so only the
+  // observation-digest comparison can refuse this.
+  const hook = mutateAfterContainment(target, () => {
+    writeFileSync(intruder, Buffer.from("late untracked bytes\n", "utf8"));
+  });
+  try {
+    const result = hydrateFoundationInputManifest(input(repository, hook.observer));
+    expect(hook.count()).toBe(1);
+    expect(readFileSync(intruder, "utf8")).toBe("late untracked bytes\n");
+    expect(readFileSync(target, "utf8")).toBe("observed bytes\n");
+    expectStale(result);
+  } finally {
+    rmSync(repository.root, { force: true, recursive: true });
+  }
+}, 30_000);
