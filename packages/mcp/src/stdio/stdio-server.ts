@@ -15,7 +15,11 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { STDIO_TOOL_ENTRIES, STDIO_TOOL_INDEX } from "./stdio-tool-schemas.js";
+import {
+  STDIO_TOOL_ENTRIES,
+  STDIO_TOOL_INDEX,
+  allowlistedToolEntries,
+} from "./stdio-tool-schemas.js";
 import type { StdioToolEntry } from "./stdio-tool-schemas.js";
 import type { StdioDispatchPort } from "./stdio-dispatch-port.js";
 
@@ -26,6 +30,12 @@ export interface StdioServerOptions {
   readonly credential: string;
   readonly port: StdioDispatchPort;
   readonly serverName?: string;
+  /**
+   * Runtime KIND strings this server may advertise. Absent means the full generated
+   * set, byte for byte, so a consumer that never passes one sees no change. Kinds, not
+   * tool names: the caller never learns this package's name-mangling rule.
+   */
+  readonly toolAllowlist?: readonly string[];
 }
 
 const encoder = new TextEncoder();
@@ -166,20 +176,24 @@ async function callTool(
  * mutable `Tool` shape, so this is a copy rather than the generated object itself; freezing
  * it keeps a single shared module-level value from being edited by any later consumer.
  */
-const LISTED_TOOLS = Object.freeze(
-  STDIO_TOOL_ENTRIES.map((entry) =>
-    Object.freeze({
-      description: entry.tool.description,
-      inputSchema: Object.freeze({
-        additionalProperties: entry.tool.inputSchema.additionalProperties,
-        properties: Object.freeze({ ...entry.tool.inputSchema.properties }),
-        required: Object.freeze([...entry.tool.inputSchema.required]),
-        type: entry.tool.inputSchema.type,
+const listedFrom = (entries: readonly StdioToolEntry[]) =>
+  Object.freeze(
+    entries.map((entry) =>
+      Object.freeze({
+        description: entry.tool.description,
+        inputSchema: Object.freeze({
+          additionalProperties: entry.tool.inputSchema.additionalProperties,
+          properties: Object.freeze({ ...entry.tool.inputSchema.properties }),
+          required: Object.freeze([...entry.tool.inputSchema.required]),
+          type: entry.tool.inputSchema.type,
+        }),
+        name: entry.tool.name,
       }),
-      name: entry.tool.name,
-    }),
-  ),
-);
+    ),
+  );
+
+/** The unfiltered advertisement, built once and shared by every allowlist-free server. */
+const LISTED_TOOLS = listedFrom(STDIO_TOOL_ENTRIES);
 
 /**
  * Low-level SDK `Server`, deliberately not `McpServer`: the high-level API accepts only a
@@ -210,7 +224,13 @@ export function createStdioMcpServer(options: StdioServerOptions): Server {
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: LISTED_TOOLS }));
+  // Filtered ONCE, at construction: an unknown or empty allowlist refuses here rather
+  // than at the first ListTools, so a misconfigured roster never reaches a client.
+  const tools = options.toolAllowlist === undefined
+    ? LISTED_TOOLS
+    : listedFrom(allowlistedToolEntries(options.toolAllowlist));
+
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request) => ({
     content: [

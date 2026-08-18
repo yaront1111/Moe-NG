@@ -8,6 +8,7 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
+import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
@@ -137,6 +138,8 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         : { enableJsonResponse: options.enableJsonResponse }),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
+      // Same roster as the stdio entry, from the same derivation.
+      toolAllowlist: wiredMcpToolKinds(),
     });
     return adapter;
   };

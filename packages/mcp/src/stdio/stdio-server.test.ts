@@ -43,7 +43,10 @@ import type { ConformanceOutcome, ConformanceSubject } from "../dispatch-conform
 import {
   ADAPTER_SUPPLIED_COMMAND_FIELDS,
   ADAPTER_SUPPLIED_QUERY_FIELDS,
+  MCP_TOOL_ALLOWLIST_EMPTY,
+  MCP_TOOL_ALLOWLIST_UNKNOWN_KIND,
   STDIO_TOOL_ENTRIES,
+  toolLabelForKind,
 } from "./stdio-tool-schemas.js";
 import {
   MOE_SESSION_CREDENTIAL_ENV,
@@ -410,5 +413,100 @@ describe("stdio bootstrap credential", () => {
     }
     expect(message).not.toContain(CREDENTIAL);
     expect(message.length).toBeGreaterThan(0);
+  });
+});
+
+describe("stdio server tool allowlist", () => {
+  const WIRED = Object.freeze(["project.register", "approval.decide", "work.get_context"]);
+
+  it("advertises exactly the allowlisted kinds, by name derived from the input", async () => {
+    const server = createStdioMcpServer({
+      credential: CREDENTIAL, port: createRecordingPort(), toolAllowlist: WIRED,
+    });
+    const client = new Client({ name: "allowlist-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const listed = await client.listTools();
+
+      // Derived from the input, never a hand-pinned roster: a kind added to the
+      // daemon's wired set flows through here without an edit.
+      expect(listed.tools.map((tool) => tool.name).sort())
+        .toEqual(WIRED.map(toolLabelForKind).sort());
+      // The schemas are the generated ones, unchanged by filtering.
+      const registerEntry = STDIO_TOOL_ENTRIES.find((entry) => entry.kind === "project.register");
+      expect(listed.tools.find((tool) => tool.name === "project_register")?.inputSchema)
+        .toEqual(registerEntry?.tool.inputSchema);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("advertises FEWER tools than the unfiltered set, so the filter is doing work", async () => {
+    const server = createStdioMcpServer({
+      credential: CREDENTIAL, port: createRecordingPort(), toolAllowlist: WIRED,
+    });
+    const client = new Client({ name: "allowlist-client", version: "0.0.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+    try {
+      const listed = await client.listTools();
+
+      expect(listed.tools.length).toBe(WIRED.length);
+      expect(listed.tools.length).toBeLessThan(STDIO_TOOL_ENTRIES.length);
+    } finally {
+      await client.close();
+      await server.close();
+    }
+  });
+
+  it("refuses an unknown kind AT CONSTRUCTION with its stable code", () => {
+    let message = "";
+    let created = false;
+    try {
+      createStdioMcpServer({
+        credential: CREDENTIAL,
+        port: createRecordingPort(),
+        toolAllowlist: ["project.register", "project.definitely_not_a_kind"],
+      });
+      created = true;
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+
+    expect(created).toBe(false);
+    expect(message).toContain(MCP_TOOL_ALLOWLIST_UNKNOWN_KIND);
+    expect(message).toContain("project.definitely_not_a_kind");
+    // The refusal names the offender, not the whole roster.
+    expect(message).not.toContain("approval.decide");
+  });
+
+  it("refuses an EMPTY allowlist with its own code: zero tools is a misconfiguration", () => {
+    let message = "";
+    let created = false;
+    try {
+      createStdioMcpServer({ credential: CREDENTIAL, port: createRecordingPort(), toolAllowlist: [] });
+      created = true;
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+
+    expect(created).toBe(false);
+    expect(message).toContain(MCP_TOOL_ALLOWLIST_EMPTY);
+  });
+
+  it("leaves the unfiltered advertisement byte-identical when no allowlist is given", async () => {
+    const listed = await withClient(createRecordingPort(), async (client) => client.listTools());
+
+    expect(listed.tools.map((tool) => tool.name))
+      .toEqual(STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name));
+    expect(listed.tools).toEqual(
+      STDIO_TOOL_ENTRIES.map((entry) => ({
+        description: entry.tool.description,
+        inputSchema: entry.tool.inputSchema,
+        name: entry.tool.name,
+      })),
+    );
   });
 });

@@ -14,7 +14,7 @@ import {
 import type { HttpAuthAccepted, HttpSessionPort, HttpSessionRegistry } from "./http-session.js";
 import { refuseResumption } from "./http-resume.js";
 import { closeAllDaemonSessions } from "./http-shutdown.js";
-import { createHttpMcpServer } from "./http-tool-bridge.js";
+import { createHttpMcpServer, httpListedTools } from "./http-tool-bridge.js";
 import type { HttpDispatchPort } from "./http-tool-bridge.js";
 
 /**
@@ -58,6 +58,8 @@ export interface HttpAdapterOptions {
   readonly serverName?: string;
   readonly sessionIdFactory?: () => string;
   readonly sessionPort: HttpSessionPort;
+  /** Runtime KIND strings this adapter may advertise; absent means the full set. */
+  readonly toolAllowlist?: readonly string[];
 }
 
 export interface HttpMcpAdapter {
@@ -203,8 +205,11 @@ async function openSessionTransport(
   registry: HttpSessionRegistry<SessionAttachment>,
   request: Request,
   verdict: HttpAuthAccepted,
+  listedTools: ReturnType<typeof httpListedTools>,
 ): Promise<OpenedSession> {
-  const server = createHttpMcpServer(options.dispatchPort, options.serverName ?? "moe-runtime");
+  const server = createHttpMcpServer(
+    options.dispatchPort, options.serverName ?? "moe-runtime", listedTools,
+  );
   const origin = request.headers.get("origin");
   let failed = false;
   // Defence in depth behind this adapter's own loopback screen: the session is PINNED to the
@@ -249,6 +254,9 @@ async function openSessionTransport(
  * transport-only command, and no path that reaches a tool without passing this screen.
  */
 export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapter {
+  // Resolved eagerly so an unknown or empty allowlist refuses at construction, not on
+  // the first request a client makes.
+  const listedTools = httpListedTools(options.toolAllowlist);
   const registry = createHttpSessionRegistry<SessionAttachment>();
 
   async function handleRequest(request: Request): Promise<Response> {
@@ -292,7 +300,9 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
       });
     }
     if (!isInitializePayload(body.value)) return refusalResponse("INPUT_INVALID");
-    const opened = await openSessionTransport(options, registry, request, screened.verdict);
+    const opened = await openSessionTransport(
+      options, registry, request, screened.verdict, listedTools,
+    );
     const response = await opened.transport.handleRequest(request, {
       authInfo,
       parsedBody: body.value,

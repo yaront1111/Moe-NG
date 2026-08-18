@@ -12,6 +12,7 @@ import {
 import { createFoundationReceiptPublisher } from "./host/foundation-receipts.js";
 import type { FoundationPublishResult } from "./host/foundation-receipts.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
+import { wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 
 /**
  * The agent-facing entry: one MCP stdio server per agent session, exactly the
@@ -125,6 +126,9 @@ async function main(): Promise<void> {
       subscriptions,
     }),
     serverName: "moe-next",
+    // Advertise only what this daemon wires: an agent never sees a tool that
+    // could only ever refuse.
+    toolAllowlist: wiredMcpToolKinds(),
   });
 
   const host = createStdioHost({
