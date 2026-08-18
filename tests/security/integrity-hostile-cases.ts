@@ -108,6 +108,15 @@ import {
   encodeAcceptanceContract,
 } from "../../packages/core/src/planning/acceptance-contract-codec.js";
 import {
+  PLAN_REVISION_LAYERS,
+  type PlanRevision,
+} from "../../packages/core/src/planning/plan-revision-contract.js";
+import {
+  createPlanRevision,
+  decodePlanRevisionBytes,
+  encodePlanRevision,
+} from "../../packages/core/src/planning/plan-revision-codec.js";
+import {
   SESSION_AUTH_LAYERS, authenticateSession,
 } from "../../packages/core/src/identity/authenticate-session.js";
 import type {
@@ -433,6 +442,121 @@ const acceptanceContractCases: readonly HostileCase[] = [
     },
     async () => decodeAcceptanceContractBytes(reorderedAcceptanceBytes()),
     async () => decodeAcceptanceContractBytes(duplicateAcceptanceKeyBytes()),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// PLAN_REVISION_LAYERS — @moe/core's canonical plan-revision body codec.
+// ---------------------------------------------------------------------------
+
+const PLAN_REVISION = PLAN_REVISION_LAYERS;
+
+function planRevisionDraft(tag: string): Record<string, unknown> {
+  return {
+    affectedCriterionIds: ["criterion-security"],
+    affectedNodeIds: ["node-security"],
+    approvalState: "PENDING_APPROVAL",
+    authorRef: "principal-security",
+    graphBinding: {
+      graphContentHash: "a".repeat(64), graphRevisionRef: "graph-revision-security",
+    },
+    parentRevisionId: null,
+    rejectionRef: null,
+    revisionId: `plan-revision-${tag}`,
+    steps: [{
+      description: `Step ${tag} remains verified.`, kind: "IMPLEMENTATION",
+      stepId: "step-security",
+    }],
+    verificationRecipeRefs: ["recipe-security"],
+  };
+}
+
+/** Mints both the digest and bytes through production; no test helper can bless either. */
+function sealedPlanRevision(tag: string): {
+  readonly bytes: Uint8Array;
+  readonly revision: PlanRevision;
+} {
+  const created = createPlanRevision(planRevisionDraft(tag));
+  if (!created.ok) {
+    throw new Error(`PlanRevision create refused: ${created.code}@${created.layer}`);
+  }
+  const encoded = encodePlanRevision(created.revision);
+  if (!encoded.ok) {
+    throw new Error(`PlanRevision encode refused: ${encoded.code}@${encoded.layer}`);
+  }
+  return { bytes: encoded.bytes, revision: created.revision };
+}
+
+function forgedPlanRevision(): PlanRevision {
+  const donor = sealedPlanRevision("donor").revision;
+  const carrier = sealedPlanRevision("carrier").revision;
+  return { ...carrier, planHash: donor.planHash };
+}
+
+/** Same valid revision and digest, but a spelling production never emits. */
+function reorderedPlanRevisionBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedPlanRevision("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** Duplicate a digest key in production-minted bytes; JSON.parse alone would hide this. */
+function duplicatePlanRevisionKeyBytes(): Uint8Array {
+  const source = decoder.decode(sealedPlanRevision("canonical").bytes);
+  const duplicated = source.replace(
+    '"planHash":',
+    `"planHash":"${"0".repeat(64)}","planHash":`,
+  );
+  if (duplicated === source) throw new Error("sealed PlanRevision carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const planRevisionCases: readonly HostileCase[] = [
+  before(
+    "PLAN_REVISION_LAYERS", "canonical plan-revision bytes truncated mid-envelope",
+    {
+      code: "PLAN_REVISION_BYTES_INVALID",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CODEC"),
+    },
+    async () => decodePlanRevisionBytes(
+      sealedPlanRevision("before").bytes.slice(0, 40),
+    ),
+  ),
+  forged(
+    "PLAN_REVISION_LAYERS", "one plan hash carried onto changed content",
+    {
+      code: "PLAN_REVISION_DIGEST_MISMATCH",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_DIGEST"),
+    },
+    async () => {
+      const donor = sealedPlanRevision("donor");
+      const carrier = sealedPlanRevision("carrier");
+      const forgedRevision = forgedPlanRevision();
+      return {
+        ok: donor.revision.planHash !== carrier.revision.planHash
+          && forgedRevision.planHash === donor.revision.planHash
+          && forgedRevision.revisionId === carrier.revision.revisionId,
+      };
+    },
+    // Admission accepts both revisions independently; the recomputed digest comparison is
+    // therefore the first guard that can answer for the combined record.
+    async () => encodePlanRevision(forgedPlanRevision()),
+  ),
+  racingExactly(
+    "PLAN_REVISION_LAYERS", "a re-spelled body races a duplicated digest key",
+    {
+      code: "PLAN_REVISION_NONCANONICAL",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CANONICALIZATION"),
+    },
+    {
+      code: "PLAN_REVISION_DUPLICATE_KEY",
+      layer: layerOf(PLAN_REVISION, "PLAN_REVISION_CODEC"),
+    },
+    async () => decodePlanRevisionBytes(reorderedPlanRevisionBytes()),
+    async () => decodePlanRevisionBytes(duplicatePlanRevisionKeyBytes()),
   ),
 ];
 
@@ -1560,7 +1684,7 @@ const graphContentCases: readonly HostileCase[] = [
 ];
 
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
-  ...codecCases, ...acceptanceContractCases, ...contractCases,
+  ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
   ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,

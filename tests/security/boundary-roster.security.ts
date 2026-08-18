@@ -103,8 +103,8 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 15, durable-store 15,
- * runtime-provider 24, scheduler-activation 28 — sums to 97. These tags, NOT the subset
+ * Axis totals for the sibling slices: transport 15, integrity 16, durable-store 15,
+ * runtime-provider 24, scheduler-activation 28 — sums to 98. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
@@ -115,7 +115,9 @@ interface ScannedBoundary {
  * 2026-08-18: IMPORT_SHADOW_READ_LAYER durable-store, task-c5be7926. 94→96 on
  * 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER both
  * scheduler-activation, task-c5be7926 — see the per-entry note below. 96→97 on
- * 2026-08-18: ACCEPTANCE_CONTRACT_LAYERS integrity, task-2ce5411e.)
+ * 2026-08-18: ACCEPTANCE_CONTRACT_LAYERS integrity, task-2ce5411e. 97→98 on
+ * 2026-08-18: PLAN_REVISION_LAYERS integrity, producer task-9fe1a0e0 — governor entry,
+ * landed with its three arms after the ratchet caught the unrostered constant.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -196,6 +198,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "ACCEPTANCE_CONTRACT_LAYERS", file: "packages/core/src/planning/acceptance-contract.ts", axis: "integrity" },
   { constant: "APPROVAL_AUTHORITY_LAYERS", file: "packages/core/src/planning/approval-authority.ts", axis: "integrity" },
   { constant: "GRAPH_REVISION_LAYER", file: "packages/core/src/planning/graph-revision-contract.ts", axis: "scheduler-activation" },
+  { constant: "PLAN_REVISION_LAYERS", file: "packages/core/src/planning/plan-revision-contract.ts", axis: "integrity" },
   { constant: "PLANNING_EXPANSION_LAYERS", file: "packages/core/src/planning/planning-expansion-validation.ts", axis: "scheduler-activation" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
   { constant: "IMPORT_REFUSAL_LAYERS", file: "packages/import/src/import-contract.ts", axis: "transport" },
@@ -277,8 +280,15 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * 96 -> 97 for ACCEPTANCE_CONTRACT_LAYERS (producer task-2ce5411e, 2026-08-18).
  * `integrity` by SUBJECT: this is the canonical criteria-body codec/digest vocabulary,
  * not an execution or scheduler decision. Its BEFORE/AFTER/RACE arms land atomically.
+ *
+ * 97 -> 98 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, 2026-08-18). `integrity`
+ * by SUBJECT: the canonical plan-revision body codec/digest vocabulary, the direct
+ * sibling of ACCEPTANCE_CONTRACT_LAYERS. The producer landed without the roster row and
+ * the ratchet reddened by name (scan 98 vs roster 97); this governor entry lands the
+ * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
+ * row on its own only moves the red into `completeness.security.ts`.
  */
-const EXPECTED_ROSTER_SIZE = 97;
+const EXPECTED_ROSTER_SIZE = 98;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -289,7 +299,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 38,
   "packages/benchmark": 1,
   "packages/runner": 21,
-  "packages/core": 11,
+  "packages/core": 12,
   "packages/scheduler": 8,
   "packages/store": 4,
   "apps/control-room": 4,

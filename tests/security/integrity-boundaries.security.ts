@@ -106,7 +106,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // 14 -> 15 for ACCEPTANCE_CONTRACT_LAYERS (task-2ce5411e), whose three arms land with
     // this bump. The pin is the true roster count, never the covered count: raising it
     // without the arms would redden the three-armed assertion instead of hiding anything.
-    expect(ROSTER_INTEGRITY).toHaveLength(15);
+    // 15 -> 16 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, governor entry), whose
+    // three arms land with this bump for the same reason.
+    expect(ROSTER_INTEGRITY).toHaveLength(16);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -147,6 +149,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
       // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
       // and omitting it would let the new `forged` arm redden a passing assertion.
       "GRAPH_CONTENT_LAYERS",
+      // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
+      // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
+      "PLAN_REVISION_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
       "REVIEW_DECISION_LAYERS",
