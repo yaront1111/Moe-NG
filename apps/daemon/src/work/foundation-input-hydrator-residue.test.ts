@@ -23,10 +23,8 @@ import { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import {
-  FOUNDATION_INPUT_HYDRATOR_LAYER,
   hydrateFoundationInputManifest,
   MAX_FOUNDATION_INPUT_FILE_BYTES,
-  RUNNER_SCOPE_LAYER,
 } from "./foundation-input-hydrator.js";
 
 const OBSERVED_AT = "2026-08-18T00:00:00Z";
@@ -159,7 +157,7 @@ describe("foundation input byte stability and zero residue", { timeout: 30_000 }
       expect(mismatch.ok).toBe(false);
       if (!mismatch.ok) {
         expect(mismatch.code).toBe("RUNNER_SCOPE_HEAD_MISMATCH");
-        expect(mismatch.refusedBy).toBe(RUNNER_SCOPE_LAYER);
+        expect(mismatch.refusedBy).toBe("RUNNER_SCOPE");
       }
       const nul = hydrateFoundationInputManifest(input(
         repository, ["scope/nul\0path"], countedObserver(repository.root, calls),
@@ -167,7 +165,7 @@ describe("foundation input byte stability and zero residue", { timeout: 30_000 }
       expect(nul.ok).toBe(false);
       if (!nul.ok) {
         expect(nul.code).toBe("FOUNDATION_INPUT_ENTRY_UNREADABLE");
-        expect(nul.refusedBy).toBe(FOUNDATION_INPUT_HYDRATOR_LAYER);
+        expect(nul.refusedBy).toBe("DAEMON_FOUNDATION_INPUT");
       }
       expect("manifest" in mismatch).toBe(false);
       expect("manifest" in nul).toBe(false);
@@ -193,7 +191,7 @@ describe("foundation input byte stability and zero residue", { timeout: 30_000 }
       expect(result.ok).toBe(false);
       if (!result.ok) {
         expect(result.code).toBe("FOUNDATION_INPUT_ENTRY_TOO_LARGE");
-        expect(result.refusedBy).toBe(FOUNDATION_INPUT_HYDRATOR_LAYER);
+        expect(result.refusedBy).toBe("DAEMON_FOUNDATION_INPUT");
       }
       expect("manifest" in result).toBe(false);
       expect(inventory(repository.root)).toEqual(before);

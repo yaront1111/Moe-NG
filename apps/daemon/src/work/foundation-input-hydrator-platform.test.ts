@@ -20,7 +20,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   hydrateFoundationInputManifest,
-  RUNNER_SCOPE_LAYER,
 } from "./foundation-input-hydrator.js";
 
 const OBSERVED_AT = "2026-08-18T00:00:00Z";
@@ -74,7 +73,7 @@ function refuse(result: ReturnType<typeof hydrate>, code: string): void {
   expect(result.ok).toBe(false);
   if (result.ok) return;
   expect(result.code).toBe(code);
-  expect(result.refusedBy).toBe(RUNNER_SCOPE_LAYER);
+  expect(result.refusedBy).toBe("RUNNER_SCOPE");
 }
 
 describe("foundation input platform semantics", { timeout: 30_000 }, () => {

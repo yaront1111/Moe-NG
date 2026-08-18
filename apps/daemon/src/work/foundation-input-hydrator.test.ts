@@ -22,11 +22,10 @@ import {
 } from "@moe/runner";
 import { describe, expect, it } from "vitest";
 
+import * as foundationInputHydratorSurface from "./foundation-input-hydrator.js";
 import {
-  FOUNDATION_INPUT_HYDRATOR_LAYER,
   hydrateFoundationInputManifest,
   MAX_FOUNDATION_INPUT_FILE_BYTES,
-  RUNNER_SCOPE_LAYER,
   type HydrateFoundationInputManifestInput,
 } from "./foundation-input-hydrator.js";
 
@@ -103,6 +102,13 @@ function expectRefusal(result: ReturnType<typeof hydrateFoundationInputManifest>
   expect(result.refusedBy).toBe(layer);
 }
 
+describe("foundation input hydrator public surface", () => {
+  it("keeps implementation-only refusal layers private", () => {
+    expect(foundationInputHydratorSurface).not.toHaveProperty("FOUNDATION_INPUT_HYDRATOR_LAYER");
+    expect(foundationInputHydratorSurface).not.toHaveProperty("RUNNER_SCOPE_LAYER");
+  });
+});
+
 describe("hydrateFoundationInputManifest accepted control", { timeout: 30_000 }, () => {
   it("observes raw workspace bytes and seals a stable deeply frozen input manifest", () => {
     const fixture = repositoryFixture();
@@ -140,7 +146,7 @@ describe("hydrateFoundationInputManifest caller-cannot-win matrix", { timeout: 3
       const result = hydrateFoundationInputManifest(hydratorInput(fixture, {
         baseIdentity: "f".repeat(40),
       }));
-      expectRefusal(result, "RUNNER_SCOPE_HEAD_MISMATCH", RUNNER_SCOPE_LAYER);
+      expectRefusal(result, "RUNNER_SCOPE_HEAD_MISMATCH", "RUNNER_SCOPE");
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
     }
@@ -177,7 +183,7 @@ describe("hydrateFoundationInputManifest caller-cannot-win matrix", { timeout: 3
     };
     try {
       const result = hydrateFoundationInputManifest(hydratorInput(fixture, { pathObserver }));
-      expectRefusal(result, "FOUNDATION_INPUT_STALE_OBSERVATION", FOUNDATION_INPUT_HYDRATOR_LAYER);
+      expectRefusal(result, "FOUNDATION_INPUT_STALE_OBSERVATION", "DAEMON_FOUNDATION_INPUT");
       expect("manifest" in result).toBe(false);
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
@@ -193,11 +199,11 @@ describe("hydrateFoundationInputManifest caller-cannot-win matrix", { timeout: 3
       const absent = hydrateFoundationInputManifest(hydratorInput(fixture, {
         gitObserver: createNodeGitObserver(missing, environment), worktreeRoot: missing,
       }));
-      expectRefusal(absent, "FOUNDATION_INPUT_WORKTREE_MISSING", FOUNDATION_INPUT_HYDRATOR_LAYER);
+      expectRefusal(absent, "FOUNDATION_INPUT_WORKTREE_MISSING", "DAEMON_FOUNDATION_INPUT");
       const notGit = hydrateFoundationInputManifest(hydratorInput(fixture, {
         gitObserver: createNodeGitObserver(nonRepository, environment), worktreeRoot: nonRepository,
       }));
-      expectRefusal(notGit, "RUNNER_SCOPE_OBSERVATION_FAILED", RUNNER_SCOPE_LAYER);
+      expectRefusal(notGit, "RUNNER_SCOPE_OBSERVATION_FAILED", "RUNNER_SCOPE");
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
       rmSync(nonRepository, { force: true, recursive: true });
@@ -210,10 +216,10 @@ describe("hydrateFoundationInputManifest caller-cannot-win matrix", { timeout: 3
       const directory = hydrateFoundationInputManifest(hydratorInput(fixture, {
         declaredScopePaths: ["scope"],
       }));
-      expectRefusal(directory, "FOUNDATION_INPUT_ENTRY_UNREADABLE", FOUNDATION_INPUT_HYDRATOR_LAYER);
+      expectRefusal(directory, "FOUNDATION_INPUT_ENTRY_UNREADABLE", "DAEMON_FOUNDATION_INPUT");
       writeFileSync(join(fixture.root, fixture.paths[0]!), Buffer.alloc(MAX_FOUNDATION_INPUT_FILE_BYTES + 1));
       const oversized = hydrateFoundationInputManifest(hydratorInput(fixture));
-      expectRefusal(oversized, "FOUNDATION_INPUT_ENTRY_TOO_LARGE", FOUNDATION_INPUT_HYDRATOR_LAYER);
+      expectRefusal(oversized, "FOUNDATION_INPUT_ENTRY_TOO_LARGE", "DAEMON_FOUNDATION_INPUT");
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
     }
@@ -222,11 +228,11 @@ describe("hydrateFoundationInputManifest caller-cannot-win matrix", { timeout: 3
 
 describe("hydrateFoundationInputManifest hostile paths", { timeout: 30_000 }, () => {
   const pathCases = [
-    { code: "RUNNER_SCOPE_PATH_ABSOLUTE", path: "/absolute" },
-    { code: "RUNNER_SCOPE_PATH_DOT_SEGMENT", path: "../escape" },
-    { code: "FOUNDATION_INPUT_ENTRY_UNREADABLE", path: "scope/nul\0path" },
-    { code: "RUNNER_SCOPE_PATH_NOT_NORMALIZED", path: "scope/e\u0301.txt" },
-    { code: "RUNNER_SCOPE_PATH_LENGTH_INVALID", path: "a".repeat(401) },
+    { code: "RUNNER_SCOPE_PATH_ABSOLUTE", layer: "RUNNER_SCOPE", path: "/absolute" },
+    { code: "RUNNER_SCOPE_PATH_DOT_SEGMENT", layer: "RUNNER_SCOPE", path: "../escape" },
+    { code: "FOUNDATION_INPUT_ENTRY_UNREADABLE", layer: "DAEMON_FOUNDATION_INPUT", path: "scope/nul\0path" },
+    { code: "RUNNER_SCOPE_PATH_NOT_NORMALIZED", layer: "RUNNER_SCOPE", path: "scope/e\u0301.txt" },
+    { code: "RUNNER_SCOPE_PATH_LENGTH_INVALID", layer: "RUNNER_SCOPE", path: "a".repeat(401) },
   ] as const;
 
   it("generates and refuses every hostile spelling at its exact layer", () => {
@@ -237,8 +243,7 @@ describe("hydrateFoundationInputManifest hostile paths", { timeout: 30_000 }, ()
         const result = hydrateFoundationInputManifest(hydratorInput(fixture, {
           declaredScopePaths: [hostile.path],
         }));
-        const layer = hostile.code.startsWith("RUNNER_") ? RUNNER_SCOPE_LAYER : FOUNDATION_INPUT_HYDRATOR_LAYER;
-        expectRefusal(result, hostile.code, layer);
+        expectRefusal(result, hostile.code, hostile.layer);
       }
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
@@ -254,7 +259,7 @@ describe("hydrateFoundationInputManifest hostile paths", { timeout: 30_000 }, ()
       const result = hydrateFoundationInputManifest(hydratorInput(fixture, {
         declaredScopePaths: ["scope/escape"],
       }));
-      expectRefusal(result, "RUNNER_SCOPE_SYMLINK_ESCAPE", RUNNER_SCOPE_LAYER);
+      expectRefusal(result, "RUNNER_SCOPE_SYMLINK_ESCAPE", "RUNNER_SCOPE");
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
       rmSync(outside, { force: true, recursive: true });
@@ -268,7 +273,7 @@ describe("hydrateFoundationInputManifest hostile paths", { timeout: 30_000 }, ()
         { length: MAX_WORKSPACE_ENTRIES + 1 }, (_, index) => `scope/${index}.txt`,
       );
       const result = hydrateFoundationInputManifest(hydratorInput(fixture, { declaredScopePaths }));
-      expectRefusal(result, "RUNNER_SCOPE_DECLARATION_LIMIT", RUNNER_SCOPE_LAYER);
+      expectRefusal(result, "RUNNER_SCOPE_DECLARATION_LIMIT", "RUNNER_SCOPE");
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });
     }
@@ -291,7 +296,7 @@ describe("hydrateFoundationInputManifest hostile input records", { timeout: 30_0
     try {
       for (const hostile of cases) {
         const result = hydrateFoundationInputManifest(hostile as never);
-        expectRefusal(result, "FOUNDATION_INPUT_REQUEST_MALFORMED", FOUNDATION_INPUT_HYDRATOR_LAYER);
+        expectRefusal(result, "FOUNDATION_INPUT_REQUEST_MALFORMED", "DAEMON_FOUNDATION_INPUT");
       }
     } finally {
       rmSync(fixture.root, { force: true, recursive: true });

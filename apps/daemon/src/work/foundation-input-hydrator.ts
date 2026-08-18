@@ -37,8 +37,8 @@ import {
  * runtime closure, slot, budget, lease, attempt, effect, or registration.
  */
 
-export const FOUNDATION_INPUT_HYDRATOR_LAYER = "DAEMON_FOUNDATION_INPUT" as const;
-export const RUNNER_SCOPE_LAYER = "RUNNER_SCOPE" as const;
+const FOUNDATION_INPUT_HYDRATOR_LAYER = "DAEMON_FOUNDATION_INPUT" as const;
+const RUNNER_SCOPE_LAYER = "RUNNER_SCOPE" as const;
 export const MAX_FOUNDATION_INPUT_FILE_BYTES = 1_048_576;
 
 export const FOUNDATION_INPUT_HYDRATOR_CODES = Object.freeze([
