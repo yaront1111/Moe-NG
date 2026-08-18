@@ -167,13 +167,17 @@ export function installBinding(
   if (!installed.ok) throw new Error(`recovery binding setup failed: ${installed.code}`);
 }
 
-export function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
+export function withStore<T>(
+  name: string,
+  run: (store: SqliteEventStore, storePath: string) => T,
+): T {
   const directory = mkdtempSync(join(tmpdir(), `moe-graph-query-${name}-`));
+  const storePath = join(directory, "store.sqlite");
   try {
-    const store = SqliteEventStore.openForProject(join(directory, "store.sqlite"), PROJECT_ID);
+    const store = SqliteEventStore.openForProject(storePath, PROJECT_ID);
     try {
       installBinding(store);
-      return run(store);
+      return run(store, storePath);
     } finally {
       store.close();
     }
@@ -228,6 +232,47 @@ export function commitEvents(
     })),
     expectedVersion: store.getAggregateVersion(aggregateId),
   });
+}
+
+/** Commit reducer-produced revision events through the real decision ledger. */
+export function commitDecisionEvents(
+  store: SqliteEventStore,
+  revisionId: string,
+  events: readonly GraphRevisionEvent[],
+): void {
+  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
+  const groups = new Map<string, GraphRevisionEvent[]>();
+  for (const event of events) {
+    const group = groups.get(event.commandId) ?? [];
+    group.push(event);
+    groups.set(event.commandId, group);
+  }
+  for (const [commandId, group] of groups) {
+    const commandKind = group[0]?.kind === "GraphRevisionCreated"
+      ? "graph_revision.create"
+      : group[0]?.kind === "GraphRevisionSubmitted" ? "graph_revision.submit" : "graph.approve";
+    store.commitExpectedVersionDecision({
+      commandKind,
+      committedResultBytes: ENCODER.encode(JSON.stringify(group)),
+      correlationId: `corr-${commandId}`,
+      decidedAt: "2026-08-18T00:00:00.000Z",
+      events: group.map((event, index) => ({
+        eventId: `decision-${commandId}-${index}`,
+        eventType: event.kind,
+        payload: ENCODER.encode(JSON.stringify(event)),
+      })),
+      expectedVersion: store.getAggregateVersion(aggregateId),
+      key: { commandId, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+      requestBytes: ENCODER.encode(JSON.stringify({ commandId })),
+      targetAggregateId: aggregateId,
+    });
+  }
+}
+
+/** Seed a whole ACTIVE revision through the durable decision writer. */
+export function seedDecisionActive(store: SqliteEventStore, revisionId = "graph-revision-1"): void {
+  commitDecisionEvents(store, revisionId, activePathFor(revisionId, PRIMARY));
+  putGraphBody(store, PROJECT_ID, PRIMARY);
 }
 
 /** Seed a revision AND the body its content hash names — the normal, whole path. */

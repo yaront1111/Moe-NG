@@ -571,6 +571,7 @@ describe("current active graph projection", () => {
     expect([...ACTIVE_GRAPH_PROJECTION_CODES].sort()).toEqual([
       "ACTIVE_GRAPH_ABSENT",
       "ACTIVE_GRAPH_BODY_UNAVAILABLE",
+      "ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE",
       "ACTIVE_GRAPH_SPLIT_BRAIN",
     ]);
   });

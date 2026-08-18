@@ -75,6 +75,7 @@ import {
   overMcpBytes,
   principalFor,
   seedActive,
+  seedDecisionActive,
   seedActiveWithoutBody,
   submit,
   withStore,
@@ -85,13 +86,14 @@ import {
 describe("graph.get accepted answer", () => {
   it("answers with the reader's exact snapshot, revision, epoch and both identities", () => {
     withStore("accept", (store) => {
-      seedActive(store);
+      seedDecisionActive(store);
       const reader = readCurrentActiveGraph(store, PROJECT_ID);
       expect(reader.ok).toBe(true);
       if (!reader.ok) throw new Error(`fixture did not reach ACTIVE: ${reader.code}`);
 
       const events = eventCount(store);
       const decisions = decisionCount(store);
+      expect(decisions).toBeGreaterThan(0);
       const answer = ask(store);
 
       expect(answer.ok).toBe(true);
@@ -162,6 +164,8 @@ interface Refused {
   readonly layer?: unknown;
   readonly outcome?: unknown;
   readonly refusal?: Readonly<{ readonly code?: unknown; readonly layer?: unknown }>;
+  readonly sourceCode?: unknown;
+  readonly sourceLayer?: unknown;
   readonly stage?: unknown;
 }
 
@@ -171,6 +175,9 @@ function refusalOf(answer: GraphQueryResult): Refused {
   // No authority may ride along on a refusal, whichever layer produced it.
   expect(answer).not.toHaveProperty("snapshot");
   expect(answer).not.toHaveProperty("revisionId");
+  expect(answer).not.toHaveProperty("graphEpoch");
+  expect(answer).not.toHaveProperty("planHash");
+  expect(answer).not.toHaveProperty("provenance");
   expect(answer).not.toHaveProperty("graphContentHash");
   expect(answer).not.toHaveProperty("snapshotIdentity");
   return answer as unknown as Refused;
@@ -397,7 +404,11 @@ async function withListener(
 
 async function overHttp(
   listener: ControlRoomListener,
-  init: { readonly body?: string; readonly credential?: string | null } = {},
+  init: {
+    readonly body?: string;
+    readonly credential?: string | null;
+    readonly protocolVersion?: string;
+  } = {},
 ): Promise<HttpReply> {
   const payload = init.body ?? JSON.stringify({});
   const headers: Record<string, string> = {
@@ -406,7 +417,7 @@ async function overHttp(
     host: `127.0.0.1:${listener.port}`,
     origin: listener.origin,
     "x-moe-csrf": CSRF,
-    "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
+    "x-moe-protocol-version": init.protocolVersion ?? WIRE_PROTOCOL_VERSION,
   };
   if (init.credential !== null) {
     headers["x-moe-session-credential"] = init.credential ?? GOOD_CREDENTIAL;
@@ -461,11 +472,37 @@ describe("graph.get over the MCP dispatch port", () => {
     });
   });
 
+  it("refuses a rejected credential at AUTHENTICATE, without reading", () => {
+    withStore("mcp-rejected", (store) => {
+      seedActive(store);
+      const port = countingPort(store);
+      const answer = overMcp(store, port, { credential: "credential-rejected" });
+      expect(answer["ok"]).toBe(false);
+      expect(answer["stage"]).toBe("AUTHENTICATE");
+      expect(answer["outcome"]).toBe("REFUSED");
+      expect((answer["error"] as Record<string, unknown> | undefined)?.["code"])
+        .toBe("AUTHENTICATION_FAILED");
+      expect(port.reads()).toBe(0);
+    });
+  });
+
   it("refuses a spoofed project over MCP, without reading", () => {
     withStore("mcp-spoof", (store) => {
       seedActive(store);
       const port = countingPort(store);
       const answer = overMcp(store, port, { payload: { projectId: "proj-somebody-else" } });
+      expect(answer["ok"]).toBe(false);
+      expect(answer["code"]).toBe("GRAPH_QUERY_PROJECT_MISMATCH");
+      expect(answer["layer"]).toBe("GRAPH_QUERY");
+      expect(port.reads()).toBe(0);
+    });
+  });
+
+  it("refuses a principal bound to another project over MCP, without reading", () => {
+    withStore("mcp-bound-project", (store) => {
+      seedActive(store);
+      const port = countingPort(store);
+      const answer = overMcp(store, port, {}, principalFor("proj-another-daemon"));
       expect(answer["ok"]).toBe(false);
       expect(answer["code"]).toBe("GRAPH_QUERY_PROJECT_MISMATCH");
       expect(answer["layer"]).toBe("GRAPH_QUERY");
@@ -532,6 +569,18 @@ describe("graph.get over the HTTP listener", () => {
           expect((unauthenticated.body["error"] as Record<string, unknown> | undefined)?.["code"])
             .toBe("AUTHENTICATION_FAILED");
 
+          const rejected = await overHttp(listener, { credential: "credential-rejected" });
+          expect(rejected.status).toBe(401);
+          expect(rejected.body["stage"]).toBe("AUTHENTICATE");
+          expect((rejected.body["error"] as Record<string, unknown> | undefined)?.["code"])
+            .toBe("AUTHENTICATION_FAILED");
+
+          const incompatible = await overHttp(listener, { protocolVersion: "0.0.0-not-ours" });
+          expect(incompatible.status).toBe(422);
+          expect(incompatible.body["stage"]).toBe("COMPATIBILITY");
+          expect((incompatible.body["error"] as Record<string, unknown> | undefined)?.["code"])
+            .toBe("DISTRIBUTION_MISMATCH");
+
           const spoofed = await overHttp(listener, {
             body: JSON.stringify({ projectId: "proj-somebody-else" }),
           });
@@ -552,6 +601,20 @@ describe("graph.get over the HTTP listener", () => {
           // Only the accepted request reached the reader.
           expect(port.reads()).toBe(1);
         });
+
+        await withListener(store, port, principalFor(PROJECT_ID, []), async (listener) => {
+          const denied = await overHttp(listener);
+          expect(denied.status).toBe(200);
+          expect(denied.body["code"]).toBe("GRAPH_QUERY_CAPABILITY_DENIED");
+          expect(denied.body["layer"]).toBe("GRAPH_QUERY");
+        });
+        await withListener(store, port, principalFor("proj-another-daemon"), async (listener) => {
+          const mismatched = await overHttp(listener);
+          expect(mismatched.status).toBe(200);
+          expect(mismatched.body["code"]).toBe("GRAPH_QUERY_PROJECT_MISMATCH");
+          expect(mismatched.body["layer"]).toBe("GRAPH_QUERY");
+        });
+        expect(port.reads()).toBe(1);
       } finally {
         store.close();
       }
@@ -604,6 +667,8 @@ describe("graph.get passes the reader's refusals through whole", () => {
       seedActive(store, "graph-revision-9", SECONDARY);
       const refusal = readerRefusalOf(ask(store));
       expect(refusal.code).toBe("ACTIVE_GRAPH_SPLIT_BRAIN");
+      expect(refusal.sourceLayer).toBeNull();
+      expect(refusal.sourceCode).toBeNull();
       // Distinct from absence: collapsing the two would hide a real split behind
       // "there is no graph", and a caller would go on to create one.
       expect(refusal.code).not.toBe("ACTIVE_GRAPH_ABSENT");
@@ -654,6 +719,7 @@ describe("graph.get passes the reader's refusals through whole", () => {
       // a test asserting only "refused" would stay green if they merged.
       expect(refusal.code).toBe("GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT");
       expect(refusal.sourceLayer).toBe("CORE_GRAPH_REVISION_REPLAY");
+      expect(refusal.sourceCode).toBeNull();
       expect(String(refusal.code).startsWith("GRAPH_REVISION_REPLAY_")).toBe(true);
     });
   });
@@ -679,6 +745,8 @@ describe("graph.get passes the reader's refusals through whole", () => {
         const refusal = refusalOf(answer as GraphQueryResult);
         expect(refusal.code).toBe("GRAPH_QUERY_READ_FAILED");
         expect(refusal.layer).toBe("GRAPH_QUERY");
+        expect(refusal.sourceCode).toBeUndefined();
+        expect(refusal.sourceLayer).toBeUndefined();
       } finally {
         if (!closed) graphStore.close();
         rmSync(directory, { force: true, maxRetries: 5, recursive: true });
@@ -708,12 +776,13 @@ describe("graph.get end to end, durable events to MCP bytes", () => {
     withStore("e2e", (store) => {
       // Seeded through the REAL reducer and the REAL body writer, then read back
       // through the REAL dispatch port. Nothing on this path is stubbed.
-      seedActive(store);
+      seedDecisionActive(store);
       const reader = readCurrentActiveGraph(store, PROJECT_ID);
       if (!reader.ok) throw new Error(`fixture did not reach ACTIVE: ${reader.code}`);
 
       const events = eventCount(store);
       const decisions = decisionCount(store);
+      expect(decisions).toBeGreaterThan(0);
       const first = overMcpBytes(store, countingPort(store));
       const answer = JSON.parse(DECODER.decode(first)) as Record<string, unknown>;
 

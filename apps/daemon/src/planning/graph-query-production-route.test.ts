@@ -11,14 +11,21 @@
  *
  * So this file injects nothing. A child process imports the default provider by
  * the same specifier the CLI uses, hands it to the real `startDaemon`, and POSTs
- * the real route over a real socket. The store is a real file seeded here by the
- * real reducer and the real body writer.
+ * the real route over a real socket. The store is a real file, seeded here by
+ * the real reducer and the real body writer.
  *
  * THE DISCRIMINATOR IS THE CODE, NOT THE STATUS. On an EMPTY store the daemon
  * must answer the durable reader's own `ACTIVE_GRAPH_ABSENT` — proof the request
  * reached the projection — and never the handler's `GRAPH_QUERY_UNAVAILABLE`,
- * which is what an unwired port answers. Those two are both "ok: false" at 200,
- * so any assertion coarser than the exact code would have blessed the omission.
+ * which is what an unwired port answers. Those two are both "ok: false", so any
+ * assertion coarser than the exact code would have blessed the omission. On a
+ * SEEDED store the answer is compared field by field against what
+ * `readCurrentActiveGraph` returns for the same durable file in this process:
+ * those values can only come from the projection folding this store's history.
+ *
+ * EACH CHILD ALSO SPOOFS, at no extra process cost. The second POST on the same
+ * live daemon names another project, and the guard that refuses it is the
+ * production one rather than a listener a test composed.
  *
  * A CHILD PROCESS, not a vitest import: the provider caches its environment in a
  * module-level singleton on first use, so the MOE_* variables have to be set
@@ -43,6 +50,7 @@ import { PROJECT_ID, installBinding, seedActive } from "./graph-query-test-fixtu
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const CREDENTIAL = "production-route-operator-credential";
+const FOREIGN_PROJECT = "proj-somebody-else";
 
 const CHILD_SOURCE = `
 const report = (value) => { process.stdout.write(JSON.stringify(value)); };
@@ -60,8 +68,8 @@ try {
   if (!started.ok) {
     report({ outcome: "START_REFUSED", code: started.code, graphFactoryKind });
   } else {
-    const payload = JSON.stringify({});
-    const answer = await new Promise((resolve, reject) => {
+    const post = (body) => new Promise((resolve, reject) => {
+      const payload = JSON.stringify(body);
       const outgoing = request({
         headers: {
           "content-length": String(Buffer.byteLength(payload)),
@@ -85,21 +93,36 @@ try {
       outgoing.on("error", reject);
       outgoing.end(payload);
     });
-    await started.shutdown();
-    report({ outcome: "ANSWERED", graphFactoryKind, ...answer });
+
+    // The request that names no project, then the one that names somebody
+    // else's — both against the same live daemon.
+    let answers;
+    try {
+      const answer = await post({});
+      const spoofed = await post({ projectId: process.env.MOE_FOREIGN_PROJECT });
+      answers = { answer, spoofed };
+    } finally {
+      await started.shutdown();
+    }
+    report({ outcome: "ANSWERED", graphFactoryKind, ...answers });
   }
 } catch (error) {
   report({ outcome: "FAILED", code: error?.code ?? "NO_CODE", message: String(error?.message) });
 }
 `;
 
+interface ChildReply {
+  readonly body: Record<string, unknown>;
+  readonly status: number;
+}
+
 interface ChildAnswer {
-  readonly body?: Record<string, unknown>;
+  readonly answer?: ChildReply;
   readonly code?: string;
   readonly graphFactoryKind?: string;
   readonly message?: string;
   readonly outcome: string;
-  readonly status?: number;
+  readonly spoofed?: ChildReply;
 }
 
 async function driveProductionRoute(storePath: string): Promise<ChildAnswer> {
@@ -111,6 +134,7 @@ async function driveProductionRoute(storePath: string): Promise<ChildAnswer> {
       env: {
         ...process.env,
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_FOREIGN_PROJECT: FOREIGN_PROJECT,
         MOE_PROJECT_ID: PROJECT_ID,
         MOE_STORE_PATH: storePath,
       },
@@ -129,8 +153,7 @@ async function driveProductionRoute(storePath: string): Promise<ChildAnswer> {
  * path.
  */
 function prepareStore(directory: string, seed: boolean): ActiveGraphAccepted | null {
-  const storePath = join(directory, "store.sqlite");
-  const store = SqliteEventStore.openForProject(storePath, PROJECT_ID);
+  const store = SqliteEventStore.openForProject(join(directory, "store.sqlite"), PROJECT_ID);
   try {
     installBinding(store);
     if (!seed) return null;
@@ -143,6 +166,30 @@ function prepareStore(directory: string, seed: boolean): ActiveGraphAccepted | n
   }
 }
 
+/**
+ * The same assertion on both probes: a request naming another project is refused
+ * by THIS module, and the refusal is not the unavailable arm wearing a different
+ * hat — so the spoof case cannot be satisfied by an unwired port.
+ */
+function expectSpoofRefused(spoofed: ChildReply | undefined): void {
+  expect(spoofed?.status).toBe(200);
+  expect(spoofed?.body["ok"]).toBe(false);
+  expect(spoofed?.body["code"]).toBe("GRAPH_QUERY_PROJECT_MISMATCH");
+  expect(spoofed?.body["layer"]).toBe("GRAPH_QUERY");
+  expect(spoofed?.body["code"]).not.toBe("GRAPH_QUERY_UNAVAILABLE");
+  expectNoGraphAuthority(spoofed?.body);
+}
+
+function expectNoGraphAuthority(body: Record<string, unknown> | undefined): void {
+  expect(body?.["revisionId"]).toBeUndefined();
+  expect(body?.["graphEpoch"]).toBeUndefined();
+  expect(body?.["planHash"]).toBeUndefined();
+  expect(body?.["provenance"]).toBeUndefined();
+  expect(body?.["graphContentHash"]).toBeUndefined();
+  expect(body?.["snapshotIdentity"]).toBeUndefined();
+  expect(body?.["snapshot"]).toBeUndefined();
+}
+
 describe("the shipped daemon serves graph.get from its default provider", () => {
   it("reaches the durable reader on an empty store, not the unavailable arm",
     { timeout: 180_000 }, async () => {
@@ -153,18 +200,21 @@ describe("the shipped daemon serves graph.get from its default provider", () => 
 
         expect(answered.outcome, JSON.stringify(answered)).toBe("ANSWERED");
         // The omission this test exists to catch: a default provider without a
-        // `graph` key still starts, still routes, and still answers 200.
+        // `graph` key still starts, still routes, and still answers.
         expect(answered.graphFactoryKind).toBe("function");
-        expect(answered.status).toBe(200);
-        expect(answered.body?.["ok"]).toBe(false);
+        const answer = answered.answer;
+        expect(answer?.status).toBe(200);
+        expect(answer?.body["ok"]).toBe(false);
         // THE DURABLE READER ANSWERED. `GRAPH_QUERY_UNAVAILABLE` here would mean
         // the request never left the handler, and `ACTIVE_GRAPH_ABSENT` can only
         // come from the projection folding this store's real history.
-        expect(answered.body?.["code"]).toBe("ACTIVE_GRAPH_ABSENT");
-        expect(answered.body?.["layer"]).toBe("ACTIVE_GRAPH_PROJECTION");
-        expect(answered.body?.["code"]).not.toBe("GRAPH_QUERY_UNAVAILABLE");
-        expect(answered.body?.["sourceCode"]).toBeNull();
-        expect(answered.body?.["sourceLayer"]).toBeNull();
+        expect(answer?.body["code"], JSON.stringify(answer?.body)).toBe("ACTIVE_GRAPH_ABSENT");
+        expect(answer?.body["layer"]).toBe("ACTIVE_GRAPH_PROJECTION");
+        expect(answer?.body["code"]).not.toBe("GRAPH_QUERY_UNAVAILABLE");
+        expect(answer?.body["sourceCode"]).toBeNull();
+        expect(answer?.body["sourceLayer"]).toBeNull();
+        expectNoGraphAuthority(answer?.body);
+        expectSpoofRefused(answered.spoofed);
       } finally {
         rmSync(directory, { force: true, maxRetries: 5, recursive: true });
       }
@@ -179,19 +229,23 @@ describe("the shipped daemon serves graph.get from its default provider", () => 
         const answered = await driveProductionRoute(join(directory, "store.sqlite"));
 
         expect(answered.outcome, JSON.stringify(answered)).toBe("ANSWERED");
-        expect(answered.status).toBe(200);
-        expect(answered.body?.["ok"]).toBe(true);
+        expect(answered.graphFactoryKind).toBe("function");
+        const answer = answered.answer;
+        expect(answer?.status).toBe(200);
+        expect(answer?.body["ok"], JSON.stringify(answer?.body)).toBe(true);
         // Compared against the READER's own values, read from the same durable
         // file in this process. Hard-coded hex on both sides would agree with
         // itself no matter what the daemon returned.
-        expect(answered.body?.["revisionId"]).toBe(reader.revisionId);
-        expect(answered.body?.["graphEpoch"]).toBe(reader.graphEpoch);
-        expect(answered.body?.["snapshot"]).toEqual(reader.snapshot);
-        expect(answered.body?.["graphContentHash"]).toBe(reader.graphContentHash);
-        expect(answered.body?.["snapshotIdentity"]).toBe(reader.snapshotIdentity);
+        expect(answer?.body["revisionId"]).toBe(reader.revisionId);
+        expect(answer?.body["graphEpoch"]).toBe(reader.graphEpoch);
+        expect(answer?.body["planHash"]).toBe(reader.planHash);
+        expect(answer?.body["provenance"]).toEqual(reader.provenance);
+        expect(answer?.body["snapshot"]).toEqual(reader.snapshot);
+        expect(answer?.body["graphContentHash"]).toBe(reader.graphContentHash);
+        expect(answer?.body["snapshotIdentity"]).toBe(reader.snapshotIdentity);
         // dec-64b2391c survives the whole production path, socket included.
-        expect(answered.body?.["graphContentHash"]).not
-          .toBe(answered.body?.["snapshotIdentity"]);
+        expect(answer?.body["graphContentHash"]).not.toBe(answer?.body["snapshotIdentity"]);
+        expectSpoofRefused(answered.spoofed);
       } finally {
         rmSync(directory, { force: true, maxRetries: 5, recursive: true });
       }

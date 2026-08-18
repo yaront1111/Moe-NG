@@ -20,6 +20,8 @@
  * them separate and this handler passes them through rather than flattening.
  */
 
+import { DatabaseSync } from "node:sqlite";
+
 import { CommandIdConflictError, SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
@@ -40,6 +42,7 @@ import {
   decisionCount,
   eventCount,
   overMcp,
+  seedDecisionActive,
   seedActive,
   withStore,
 } from "./graph-query-test-fixtures.js";
@@ -54,6 +57,17 @@ interface Quadruple {
   readonly sourceLayer?: unknown;
 }
 
+function rawRowCounts(storePath: string): readonly [number, number] {
+  const database = new DatabaseSync(storePath, { readOnly: true });
+  try {
+    const events = database.prepare("SELECT count(*) AS value FROM domain_events").get();
+    const decisions = database.prepare("SELECT count(*) AS value FROM command_decisions").get();
+    return [Number(events?.["value"]), Number(decisions?.["value"])];
+  } finally {
+    database.close();
+  }
+}
+
 /**
  * Every refusal in this file must arrive with NO authority attached. An UNKNOWN
  * that still carries a partial identity is authority granted by accident, and it
@@ -64,6 +78,8 @@ function refusedWithoutAuthority(answer: GraphQueryResult): Quadruple {
   if (answer.ok) throw new Error("an accepted answer was returned where a refusal was required");
   expect(answer).not.toHaveProperty("snapshot");
   expect(answer).not.toHaveProperty("revisionId");
+  expect(answer).not.toHaveProperty("planHash");
+  expect(answer).not.toHaveProperty("provenance");
   expect(answer).not.toHaveProperty("graphContentHash");
   expect(answer).not.toHaveProperty("snapshotIdentity");
   expect(answer).not.toHaveProperty("graphEpoch");
@@ -220,6 +236,37 @@ describe("graph.get refuses noncanonical body bytes with the codec's own code", 
 // --- receipt / decision mismatch ---------------------------------------------
 
 describe("graph.get refuses a receipt that disagrees with the decision", () => {
+  it("refuses a real command receipt whose effect identity disagrees with its decision", () => {
+    withStore("decision-receipt-mismatch", (store, storePath) => {
+      seedDecisionActive(store, REVISION);
+      const accepted = ask(store);
+      expect(accepted.ok).toBe(true);
+      expect(decisionCount(store)).toBeGreaterThan(0);
+      const counts = rawRowCounts(storePath);
+
+      const database = new DatabaseSync(storePath);
+      try {
+        const changed = database.prepare(`
+          UPDATE command_receipts SET effect_sha256 = ?
+          WHERE command_id = (
+            SELECT command_id FROM domain_events
+            WHERE aggregate_id = ? ORDER BY aggregate_sequence LIMIT 1
+          )
+        `).run("9".repeat(64), graphRevisionAggregateId(PROJECT_ID, REVISION));
+        expect(Number(changed.changes)).toBe(1);
+      } finally {
+        database.close();
+      }
+
+      const refusal = refusedWithoutAuthority(ask(store));
+      expect(refusal.code).toBe("ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE");
+      expect(refusal.layer).toBe("ACTIVE_GRAPH_PROJECTION");
+      expect(refusal.sourceLayer).toBe("GRAPH_DECISION_EVIDENCE");
+      expect(refusal.sourceCode).toBe("GRAPH_DECISION_EVIDENCE_UNVERIFIABLE");
+      expect(rawRowCounts(storePath)).toEqual(counts);
+    });
+  });
+
   it("refuses a body row filed under a hash it does not name", () => {
     withStore("receipt-identity", (store) => {
       // The revision DECIDES SECONDARY's content hash; the receipt stored under
@@ -312,6 +359,8 @@ describe("graph.get refuses a receipt that disagrees with the decision", () => {
         expectedVersion: 0,
       });
 
+      const events = eventCount(store);
+      const decisions = decisionCount(store);
       const answer = overMcp(store, {
         boundProjectId: PROJECT_ID,
         readCurrentActiveGraph: (projectId: string) => readCurrentActiveGraph(store, projectId),
@@ -324,7 +373,15 @@ describe("graph.get refuses a receipt that disagrees with the decision", () => {
       expect(answer["layer"]).toBe("ACTIVE_GRAPH_PROJECTION");
       expect(answer["sourceLayer"]).toBe("GRAPH_BODY_RECORD");
       expect(answer["sourceCode"]).toBe("GRAPH_BODY_IDENTITY_MISMATCH");
+      expect(answer["revisionId"]).toBeUndefined();
+      expect(answer["graphEpoch"]).toBeUndefined();
+      expect(answer["planHash"]).toBeUndefined();
+      expect(answer["provenance"]).toBeUndefined();
+      expect(answer["graphContentHash"]).toBeUndefined();
+      expect(answer["snapshotIdentity"]).toBeUndefined();
       expect(answer["snapshot"]).toBeUndefined();
+      expect(eventCount(store)).toBe(events);
+      expect(decisionCount(store)).toBe(decisions);
     });
   });
 
