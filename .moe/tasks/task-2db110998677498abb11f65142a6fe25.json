@@ -19,8 +19,9 @@
     {
       "stepId": "step-1",
       "description": "Verify the split landed and locate the owned file. Read-only. task-9f51def1 was WORKING at planning time: it splits packages/scheduler/src/index.ts (430 lines at its measurement) into a focused root-reachable execution-surface module that index.ts forwards, keeping the runtime namespace byte-identical at its reviewed 94-name set. THIS TASK'S OWNED FILE IS THE FILE THAT TASK CREATES -- its name is not knowable until it lands, so discover it at your committed HEAD: `git log --oneline -3 -- packages/scheduler/src/` and read index.ts's forwarding line. If 9f51def1 has NOT landed (no execution-surface module exists, index.ts still monolithic), re-block on it by id -- publishing from a 430-line file is exactly what the split exists to prevent. Then verify the subject: `releaseProviderSlot` and `ProviderSlotReleaseCommand` are QA-approved pure authority re-exported by packages/scheduler/src/authority/lease-resource.ts, and the @moe/scheduler ROOT has zero releaseProviderSlot export -- confirm both with `git grep -n \"releaseProviderSlot\" packages/scheduler/src/index.ts packages/scheduler/src/authority/lease-resource.ts` plus the new surface module. Also confirm the DoD-3 premise that needs NO edit: apps/daemon/package.json already declares @moe/scheduler and pnpm-lock.yaml carries the importer (measured earlier this session) -- rail 2 forbids manifest/lockfile edits, so DoD 3 is satisfied by VERIFICATION plus the probe, not by an edit; if the edge were somehow absent, that would be a re-block, not a manifest change.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-18T04:35:17.487Z"
     },
     {
       "stepId": "step-2",
@@ -56,7 +57,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-a83aecdf",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -75,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:12:02.766Z",
-  "updatedAt": "2026-08-18T04:24:22.571Z",
+  "updatedAt": "2026-08-18T04:35:17.487Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:23:03.441Z",
     "plannedStepCount": 5,
@@ -98,5 +99,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-18T04:24:22.571Z"
+  "planApprovedAt": "2026-08-18T04:24:22.571Z",
+  "contextFetchedBy": [
+    "worker-a83aecdf"
+  ],
+  "workStartedAt": "2026-08-18T04:35:17.487Z"
 }

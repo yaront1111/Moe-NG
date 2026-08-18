@@ -87,17 +87,22 @@
     {
       "stepId": "step-7",
       "description": "FINAL CONCENTRATED GATE, ADVERSARIAL REVIEW, AND EXPLICIT COMMIT. Run each leg standalone with its own exit code—never a pipe or semicolon-masked aggregate—and read nonzero count output: focused activation-telemetry-launch test; pnpm --filter @moe/daemon typecheck; pnpm --filter @moe/daemon test (this exact command is the fresh moe.complete_task evidence); then the repository-required pnpm typecheck, pnpm test, pnpm verify:foundation, and pnpm verify:store. Re-run the guarded compiled positive/TS2305-negative @moe/runner bare-specifier probes and prove deletion. Apply the path-attributed baseline: merge-base failures versus HEAD failures intersected with these three owned paths must be empty; disclose foreign red verbatim, including import-shadow if still present, and never invent full green. Adversarial review: mandatory arity 2/no raw fallback; authority remains separate from input; platform/signal are the only typed options and runtime deps refuse at LAUNCHER; runner sees the exact unread references; one factory/one run/one exact returned object; malformed identity answers at TELEMETRY_INPUT before authority/request/process; raw launcher and telemetry reason code/layer remain distinct; hostile/generated counts are positive; downstream test diff contains only its witness and three arguments; production <=250; no runner/private/wire/bridge/manifest edits; consumer task-00e4827dd9374ec79625351d560c82c8 is named in completion. Confirm git status shows only the three approved paths, stage/commit by explicit pathspec only, and verify git show --stat contains nothing else.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/activation/activation-telemetry-launch.ts",
         "apps/daemon/src/activation/activation-telemetry-launch.test.ts",
         "apps/daemon/src/activation/activation-run-commit.test.ts"
       ],
-      "startedAt": "2026-08-18T04:28:56.854Z"
+      "modifiedFiles": [
+        "apps/daemon/src/activation/activation-telemetry-launch.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW FOUND A DEFECT IN MY OWN REOPEN DIFF AND IT IS FIXED. The first version of the new roster gave the two plain-data cases a `reads()` tripwire backed by an array nothing ever writes, so `expect(reads()).toEqual([])` could not fail for 2 of 3 cases — a dead assertion of exactly the class this reopen is about. Replaced with a tripwire that is load-bearing on EVERY case: `expect(runner.runArguments[0].providerRunRef).toBe(ref)`, the caller's own object by identity. Re-ran the spread drill to prove the change earned its keep: before the fix that mutant reddened 1 of 3 smuggled cases (only the throwing accessor); after it, all 3 redden (6 failures total, mutant sha 9caef912, restored to 47469f38). The throwing-accessor case is retained because reading a hostile extra property is itself the failure.\n\nGATE LEGS, each standalone with its own exit code, no pipe- or semicolon-masked aggregate, count lines read as the evidence rather than the exit code:\n- focused activation-telemetry-launch: EXIT 0, Test Files 1 passed, Tests 34 passed (was 30 pre-reopen).\n- pnpm --filter @moe/daemon typecheck: EXIT 0.\n- pnpm --filter @moe/daemon test: EXIT 0, Test Files 130 passed (130), Tests 2808 passed (2808) — this is the fresh completion evidence, run at HEAD ceb0370.\n- pnpm typecheck (repo-wide): EXIT 0.\n- pnpm test (repo-wide): EXIT 1, Test Files 4 failed | 292 passed (296), Tests 4 failed | 7181 passed | 15 skipped (7200).\n- pnpm verify:foundation: EXIT 1, Test Files 1 failed | 31 passed (32).\n- pnpm verify:store: EXIT 1, Test Files 1 failed | 43 passed (44).\n- Guarded @moe/runner bare-specifier probes re-run: positive EXIT 0; negative control (bogus symbol) refused with TS2724, the near-miss sibling of TS2305 emitted because the bogus name is a prefix of the real export; both files deleted and proven absent by ls.\n\nFOREIGN RED, DISCLOSED VERBATIM AND NOT ATTRIBUTED TO THIS TASK. The four repo-wide failures are packages/testkit/src/foundation/foundation-spec.test.ts:224 \"expected [ 'apps\\\\daemon\\\\src\\\\index.ts' ] to deeply equal []\"; packages/store/src/recovery-anchor.test.ts \"publishes exactly the anchor surface a restore controller composes\"; tests/integration/portability/transport-host-matrix.test.ts \"portability: daemon transport and JetBrains host matrix\"; tests/integration/release-archive-cleanup.test.ts (two cases). The first two are the same pair QA already recorded at the 39a1b2c baseline. The other two are peer work that landed during this session — release-archive-cleanup was last touched by e9b3796 \"fix release archive cleanup result preservation\" and transport-host-matrix arrived with the ceb0370 sweep. PATH ATTRIBUTION IS STRUCTURAL, not merely a baseline diff: vitest.config.ts:6 sets include to [\"adapters/**/*.test.ts\",\"packages/**/*.test.ts\",\"tests/**/*.test.ts\"], so root pnpm test does not execute apps/** at all and cannot be reddened by this task's three owned paths. The (2)-minus-(1) delta intersected with the owned paths is EMPTY.\n\nONE TRANSIENT RED, DISCLOSED. An intermediate pnpm --filter @moe/daemon test run reported Test Files 1 failed | 129 passed, Tests 1 failed | 2807 passed. It did not reproduce: the two immediately following runs were 130/130 and 2808/2808 green. Two foreign uncommitted apps/daemon files (src/projections/import-shadow-reader.ts, src/work/foundation-context-manifest-codec.ts) were being written by peers during that window; a peer write mid-run is the known cause of this shape in this shared worktree.\n\nCOMMIT: NOTHING TO STAGE, AND THAT IS THE KNOWN HAZARD, NOT A DEFECT. git status over apps/daemon/src/activation/ is EMPTY because foreign whole-tree commit ceb0370 \"fix(task-3e891741bef14097bbed6d820b392f98): Seal the Foundation context manifest record\" captured my in-progress test file. Per the project rail I did not amend it, did not reset, and did not create an empty commit to claim the work. The committed bytes ARE the gated bytes, proven by hash: activation-telemetry-launch.ts HEAD 47469f38b372b924 == working tree; activation-telemetry-launch.test.ts HEAD a6fb193986e2a502 == working tree; activation-run-commit.test.ts HEAD bc634ff31eec07a7 == working tree. QA should review `git diff 0be0763..HEAD -- apps/daemon/src/activation/activation-telemetry-launch.ts apps/daemon/src/activation/activation-telemetry-launch.test.ts apps/daemon/src/activation/activation-run-commit.test.ts` — numstat 65/19, 525/15, 21/3 respectively; git diff --check is clean.\n\nADVERSARIAL CHECKLIST. Arity 2 with no raw fallback and no one-argument arm (pinned by launchActivationProviderRun.length and by drill 1). Authority stays a separate argument and is never read out of input. platform/signal are the only typed option keys and a runtime-cast deps refuses at the LAUNCHER with CLAUDE_LAUNCH_REQUEST_MALFORMED (drill 5). The runner receives the exact unread references (drills 3). One factory, one run, one exact returned object by toBe identity (drills 1, 2, 4). Malformed identity answers TELEME",
+      "startedAt": "2026-08-18T04:28:56.854Z",
+      "completedAt": "2026-08-18T04:34:16.041Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -116,12 +121,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:53.316Z",
-  "updatedAt": "2026-08-18T04:28:56.855Z",
+  "updatedAt": "2026-08-18T04:35:14.567Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:13:35.678Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 13,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
@@ -138,7 +143,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -168,12 +174,12 @@
   },
   "planApprovedAt": "2026-08-18T03:39:30.987Z",
   "workStartedAt": "2026-08-18T03:42:25.022Z",
-  "reviewStartedAt": "2026-08-18T04:04:49.512Z",
+  "reviewStartedAt": "2026-08-18T04:35:14.567Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon test",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  130 passed (130)\n      Tests  2799 passed (2799)\n   Start at  07:03:19\n   Duration  13.75s (transform 43.94s, setup 0ms, import 112.88s, tests 84.40s, environment 10ms)",
-    "reportedAt": "2026-08-18T04:04:49.512Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  130 passed (130)\n      Tests  2808 passed (2808)\n   Start at  07:33:11\n   Duration  15.75s (transform 57.60s, setup 0ms, import 131.73s, tests 95.43s, environment 11ms)\n\nEVIDENCE_EXIT=0  HEAD=ceb0370",
+    "reportedAt": "2026-08-18T04:35:14.567Z"
   },
   "filesModified": [
     "apps/daemon/src/activation/activation-telemetry-launch.test.ts",

@@ -9,9 +9,34 @@
     "A test with a real store covers the block-holding-worker scenario and is red before the fix"
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-2cc07e26",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "AUTHORIZE, then map both predicates on current bytes. Read-only; affectedFiles empty throughout because the daemon validates paths against moe-next and this lives in D:/projexts/moes -- obtain the per-task rail-2 human exception in chat first (fourth of its kind; precedents task-495ad5e8, task-14ea45a5, task-b017fe9f), record the message id, report_blocked if refused. THE TWO SIDES, measured by the architect: (1) claimNextTask.ts:99-135 -- any worker holding an active task other than the requested one gets hasNext:false alreadyAssigned{...}; a BLOCKED hold (:109) additionally gets the 'Do NOT work on it. End your session' hint (:127). getActiveTasksAssignedToWorker evidently INCLUDES BLOCKED holds -- confirm by reading its definition in the state layer, because the whole bug reduces to wait_for_task not consulting this same source. (2) waitForTask.ts:202 -- `findMatchingTask(state, statuses, params.epicId, workerId)` answers the immediate path with hasNext:true and a nextAction that says CLAIM IT (:205-212), with no check of the CALLER'S holds; the waiter-wake path has the same gap. READ CAREFULLY before touching: the comment at :103-110 (a blocked worker's wait must wake when its own task's RESOURCE is granted) and :120 ('any task that is wait-visible but claim-ineligible wakes the waiter') -- the second comment documents a DELIBERATE broad-wake choice for OTHER workers' visibility, and the fix must narrow only the CALLER-holds-a-block case, not the general wake semantics. Also confirm the third guidance text in reportBlocked.ts (:158 region, 'call wait_for_task') -- DoD 2 requires all three tools' hints to form one workable loop.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Extend waitForTask.test.ts and claimNextTask.test.ts with the DoD-3 regression over the real state store, red before the fix: SCENARIO -- worker W holds task A in BLOCKED; claimable task B (PLANNING, unassigned, matching statuses) exists. Assert: (1) wait_for_task for W does NOT return hasNext:true naming B (today it does -- red); instead it returns a response whose nextAction explains the blocked hold and the workable options (idle for the wrapper, or release_task to free the slot), consistent with what claim_next_task says; (2) claim_next_task for W still refuses with alreadyAssigned (existing behavior, keep green) but its blocked-hold nextAction now names the actionable pair -- `moe.release_task {taskId: A}` preserves the blockedReason and frees the worker to claim -- rather than only 'end your session'; (3) THE AGREEMENT PROPERTY, the test the DoD actually asks for: for the same (worker, board) state, wait_for_task's hasNext and claim_next_task's willingness agree -- assert it directly by driving both tools and comparing, not by duplicating each tool's logic in the test; (4) PRESERVED WAKES: W's wait still wakes when task A's blockedResourceId lease is granted (the :103-110 path), and a DIFFERENT unencumbered worker W2 still gets hasNext:true for B immediately -- the fix must not dim the queue for eligible workers.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN: one predicate, two consumers, three aligned hints. Extract the caller-eligibility check into the existing util layer beside claimableStatuses.ts (e.g. util/claimEligibility.ts): `blockingHold(state, workerId)` returning the held task or null, built on the SAME getActiveTasksAssignedToWorker source claimNextTask already uses -- one source of truth, per DoD 1's 'one eligibility predicate'. claimNextTask replaces its inline held-tasks block with the util (behavior identical; hint text improved to name the release_task option alongside end-session). waitForTask consults the util in BOTH answer paths (immediate findMatchingTask and waiter-wake): when the CALLER holds a blocking assignment, do not offer foreign work -- return hasNext:false with the blocked-hold explanation and the same release-or-idle guidance, while leaving intact the own-task resource wake and the broad wake semantics for other workers. Update reportBlocked's nextAction so the loop closes truthfully: after reporting blocked, the guidance should be 'end the session and let the wrapper idle (the daemon auto-unblocks on resource grant), or release_task if you intend to keep working other tasks' -- never a bare 'call wait_for_task' that re-enters the spin. Keep each edited file within its existing size band; the extraction should net-shrink claimNextTask.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Drill, gate, commit, propagate. DRILL: re-inline a divergent copy of the predicate into waitForTask (simulating the drift this fix prevents -- e.g. make the wait-side copy ignore BLOCKED holds); the step-2 agreement-property test must go RED, proving it compares the two tools' actual answers rather than restating one side's logic. Restore exactly; `git -C D:/projexts/moes diff --numstat` 0/0. GATE: run the moe-daemon package's test command foreground (discover from its package.json), exit code captured, printed count line naming waitForTask.test.ts and claimNextTask.test.ts. COMMIT in D:/projexts/moes by explicit pathspec: the new util, waitForTask.ts, claimNextTask.ts, reportBlocked.ts (hint line only), and the two test files; `git show --stat` clean of foreign paths. PROPAGATE honestly: the running daemon is the installed JetBrains plugin bundle, not repo source -- record the installed bundle hash before/after any rebuild, and if no rebuild happens state plainly that the fix is committed-not-live and name the rebuild as the remaining step. Cross-check containment: `git -C D:/projexts/moe-next status --porcelain` shows nothing owned by this task. Completion note: cite the measured spin (worker-0b2f9c35's msg-3b0f1bdf plus this architect's own repeated release-workaround this session) and state which of the three hint texts changed.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -30,8 +55,29 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:50:14.657Z",
-  "updatedAt": "2026-08-18T04:30:56.788Z",
+  "updatedAt": "2026-08-18T04:32:55.144Z",
   "metrics": {
-    "firstClaimAt": "2026-08-18T04:30:56.788Z"
-  }
+    "firstClaimAt": "2026-08-18T04:30:56.788Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:32:53.038Z",
+  "planningNotes": {
+    "approachesConsidered": "The description offers two fix shapes; DoD 1's wording ('the two tools apply one eligibility predicate', 'never woken for work claim will refuse') settles it as the shared-predicate design, so the real decisions were narrower. (1) WHAT THE BLOCK-HOLDING WAITER GETS instead of a false offer: hasNext:false plus guidance naming BOTH workable exits -- wrapper idle (the designed path: BLOCKED suppresses relaunch, resource grants auto-unblock) and release_task (the path every blocked-then-sweeping worker on this board has used, preserving blockedReason; measured by this architect a dozen times this session). Chose to present both rather than pick one because the right exit depends on whether the session is wrapper-driven or interactive, which the daemon cannot see. (2) RELEASE-AND-CLAIM AUTOMATICALLY inside claim_next_task -- rejected: releasing a hold is a state-visible act with a handoff-note contract; doing it implicitly inside a claim would silently drop the correction-note opportunity and surprise the wrapper's alreadyAssigned-keyed suppression. The hint NAMES the release; the worker performs it deliberately. (3) Where the predicate lives: beside claimableStatuses.ts in the existing util layer, built on getActiveTasksAssignedToWorker -- the same source claimNextTask uses today -- so there is exactly one definition of 'this worker is encumbered'; the drill simulates predicate drift and requires the agreement test to catch it, because the agreement PROPERTY (drive both tools, compare answers) is the only test shape that stays valid if either tool's internals change. (4) reportBlocked's hint is in scope because DoD 2 names the three-tool loop: today report_blocked says 'call wait_for_task', wait offers refused work, claim says 'end session' -- the spin is the three texts composed; aligning only two would leave the entry edge broken.",
+    "codebaseInsights": "Measured on current bytes in D:/projexts/moes (daemon source; the running fleet executes the installed JetBrains plugin copy -- see memory gotcha-running-wrapper-is-the-installed-plugin-not-the-repo). CLAIM SIDE: claimNextTask.ts:99-135 -- params.workerId's held tasks come from state.getActiveTasksAssignedToWorker, filtered of the requested taskId; any remainder returns hasNext:false alreadyAssigned with blockedHold branching at :109; the BLOCKED hint (:127) says 'End your session and let the wrapper idle, or check the queue with list_resources' -- list_resources is a dead-end suggestion for a non-resource block, one of the incoherences to fix. WAIT SIDE: waitForTask.ts:202 findMatchingTask(state, statuses, epicId, workerId) -- the workerId parameter exists but the caller-hold check does not; immediate path returns hasNext:true + 'claim it' (:205-212). TWO DELIBERATE BEHAVIORS TO PRESERVE, both documented in-file: the own-task resource wake (:103-110, 'wait_for_task while its task sat BLOCKED must wake when the resource is granted') and the broad wake for claim-ineligible-but-visible tasks (:120 comment) which serves OTHER workers' wakeups -- the fix narrows only the caller-encumbered case. REPORT SIDE: reportBlocked.ts:154-165 computes waitStatuses and its nextAction tells the blocked worker to wait_for_task -- the spin's entry edge. Sizes: claimNextTask 481 lines, waitForTask 362 -- the extraction should net-shrink claim; watch the 400 split threshold on claimNextTask if adding rather than moving. Both tools have existing test files with real-store fixtures to extend.",
+    "risks": "The subtle risk is over-narrowing the wake semantics: waitForTask's broad wake (:120) exists so a waiter learns the pool changed even when a specific task is claim-ineligible FOR OTHERS' reasons -- if the fix filters ALL ineligibility instead of only the caller's own blocking hold, workers stop waking for contested-but-releasable work and the queue dims fleet-wide; the preserved-wake assertions in step 2 (W2 still offered B; W still woken by its own resource grant) pin the boundary. Second, the agreement test must drive BOTH TOOLS and compare -- a test that reimplements the predicate and checks each tool against the copy is the classic helper-tautology and would stay green through exactly the drift the drill simulates. Third, the wrapper contract: alreadyAssigned{status:BLOCKED} is load-bearing for relaunch suppression (claimNextTask's own comments) -- the claim-side refusal must keep its shape; only the hint text and the wait-side offer change. Fourth, release-inside-claim temptation: an implicit release would break the handoff-note discipline and the refusal-cascade counter (third no-progress release parks to BACKLOG) -- the hint names the tool, the worker acts. Fifth, this daemon is live under the fleet while edited: repo-vs-installed divergence means the completion claim must separate committed from deployed, and the two governor-filed sibling tasks (b017fe9f, this one) touching the same tools directory in the same window should coordinate commits by pathspec to avoid sweeping each other's WIP -- both are cross-repo, both mine, and their owned file sets overlap on reportBlocked.ts (hint line here, no-op fix there); note it in both completion notes.",
+    "keyFiles": [
+      "D:/projexts/moes/packages/moe-daemon/src/tools/waitForTask.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/tools/claimNextTask.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/tools/reportBlocked.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/util/claimableStatuses.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/state/taskStore.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-18T04:32:55.144Z"
 }

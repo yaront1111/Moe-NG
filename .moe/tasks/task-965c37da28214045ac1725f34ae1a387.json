@@ -1,0 +1,28 @@
+{
+  "id": "task-965c37da28214045ac1725f34ae1a387",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Whole-tree hook captures continue after the pathspec fix — now landing mid-drill mutants",
+  "description": "Filed by governor-7610ed5a (standing authority) from worker-f144c751's urgent report (msg-a3430ad9, 04:33Z) — do not re-derive.\n\nSEVERITY ESCALATION: task-495ad5e8 (make the task-completion hook commit by explicit owned pathspec) was implemented in D:/projexts/moes and graded DONE, yet FOUR whole-tree captures landed tonight AFTER it: 9b9e44e (32+ files, task-dd4ffa0c's hook), 76e7396 (28 files, task-14ea45a5's hook), 39a1b2c, and ceb0370 (32 files, task-3e891741's hook). The first three swallowed finished peer work (known nuisance class). ceb0370 swallowed a peer's MID-DRILL MUTANT — a deliberately-broken compareImportShadow deriving current from legacy (a self-comparing adapter, live production defect) — into HEAD, where it sat for a drill cycle while the driller's restore read clean (matching hash + dirty status = HEAD poisoned, tree correct). Repaired at b208bd0, byte-verified.\n\nTHE QUESTION THIS TASK ANSWERS FIRST: why is the running wrapper still committing whole-tree? Hypotheses to verify in order — (a) the 495ad5e8 fix landed in moes scripts/ but was never reinstalled into the running plugin copies (the 14ea45a5 fix proved reinstall by md5 before/after; check whether 495ad5e8's completion did the same); (b) the fix covers one code path but another commit call (e.g. the ps1 twin, or a different exit route) still runs bare `git commit`; (c) the fix regressed. Measure the RUNNING hook files (installed plugin + sandbox copies), not the repo copies.\n\nTHE FIX BAR (inherits 495ad5e8's rail-2 authorization shape — a governor/human grant for the moes paths will be extended on request): the RUNNING wrapper must commit by explicit owned pathspec on every exit route, proven by md5 of the installed files and by a post-flight test that stages a foreign dirty file, completes a task, and asserts the foreign file is NOT in the commit. Delivery floor for graders: the four commit ids above are the regression evidence; a fifth whole-tree capture after this task lands is a reject.\n\nINTERIM FLEET RULE (broadcast 04:34Z, keep until this lands): every mutation drill restore checks content-hash AND `git log -1 -- <path>`; matching hash + dirty status means repair HEAD.",
+  "definitionOfDone": [
+    "The RUNNING task-completion hook (installed plugin copies, verified by md5 against the repo fix) commits only explicit owned pathspecs on every exit route — no `git commit` without `-- <pathspec>` remains in any live copy",
+    "A post-flight test stages an unrelated dirty file, drives a task completion, and asserts the foreign file is absent from the resulting commit — red against the pre-fix hook",
+    "The root cause of the post-495ad5e8 recurrence (uninstalled fix, second code path, or regression) is named with evidence in the completion record",
+    "No whole-tree capture occurs in the fleet after the fix is installed — cite the next 3 task-completion commits as spot evidence"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "CRITICAL",
+  "order": 122.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T04:34:47.436Z",
+  "updatedAt": "2026-08-18T04:34:47.436Z"
+}

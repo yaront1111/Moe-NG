@@ -231,6 +231,31 @@ export function toolEntryExists(label: string): boolean {
   return STDIO_TOOL_INDEX.get(label) !== undefined;
 }
 
+/**
+ * A session aggregate is independent of the project's bootstrap sequence, so this
+ * commits at expectedVersion 0 for every fresh `sessionId`. That is what makes it
+ * usable for the reversed-order identity pair, where `project.register` cannot be
+ * replayed a second time: its aggregate has already moved past version 0.
+ */
+export function sessionArguments(
+  commandId: string,
+  sessionId: string,
+  credentialSha256: string,
+): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    commandId,
+    correlationId: `corr-${commandId}`,
+    expectedVersion: 0,
+    payload: Object.freeze({
+      capabilities: ["work.write"],
+      credentialSha256,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      sessionId,
+    }),
+    targetAggregateId: sessionId,
+  });
+}
+
 export function registerArguments(
   commandId: string,
   projectId: string,

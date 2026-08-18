@@ -25,7 +25,7 @@ import {
   CASES, CODES, CONFLICT_TOOL_LABEL, CONTROL_TOOL_LABEL, JETBRAINS_ARMS, JETBRAINS_EXPECTED,
   JETBRAINS_HOST_KEYS, JETBRAINS_MCP_TRANSLATION, LAYERS, SESSION_TOOL_LABEL, STAGES, SUBJECTS,
   TRANSPORT_ARMS, TRANSPORT_SUBJECTS, TRUNCATED_NO_WRITE, UNKNOWN_TOOL_LABEL,
-  jetBrainsProbeSource, pin, registerArguments, toolEntryExists,
+  jetBrainsProbeSource, pin, registerArguments, sessionArguments, toolEntryExists,
 } from "./portability-cases.js";
 import type { Answerer, TransportSubject } from "./portability-cases.js";
 import {
@@ -100,20 +100,11 @@ function digestOf(commit: string, caseId: string, body: string): string {
 async function mintScopedSession(workspace: PortabilityWorkspace): Promise<void> {
   const driver = await stdioDriver(workspace, workspace.credential);
   try {
-    const answer = classify(
-      await driver.call(SESSION_TOOL_LABEL, {
-        commandId: "portability-open-session",
-        correlationId: "corr-open-session",
-        expectedVersion: 0,
-        payload: {
-          capabilities: ["work.write"],
-          credentialSha256: createHash("sha256").update(SCOPED_SECRET).digest("hex"),
-          expiresAt: "2099-01-01T00:00:00.000Z",
-          sessionId: "portability-scoped-session",
-        },
-        targetAggregateId: "portability-scoped-session",
-      }),
-    );
+    const answer = classify(await driver.call(SESSION_TOOL_LABEL, sessionArguments(
+      "portability-open-session",
+      "portability-scoped-session",
+      createHash("sha256").update(SCOPED_SECRET).digest("hex"),
+    )));
     if (answer.code !== "EFFECTS_COMMITTED") {
       throw new Error(`scoped session was not minted: ${String(answer.payload)}`);
     }
@@ -124,8 +115,8 @@ async function mintScopedSession(workspace: PortabilityWorkspace): Promise<void>
 
 /**
  * Drives every transport arm once in one fresh workspace and RECORDS what each
- * layer answered plus the store counts around it. Returning data rather than
- * asserting is what lets the whole matrix run twice and be compared.
+ * layer answered plus the store counts around it. Recording rather than asserting
+ * is what lets the whole matrix run twice and be compared.
  */
 async function runTransports(): Promise<RunRecord> {
   const workspace = createWorkspace(PROJECT_ID);
@@ -136,13 +127,13 @@ async function runTransports(): Promise<RunRecord> {
     answers[caseId] = answer;
     digests[caseId] = digestOf(SOURCE_COMMIT, caseId, answer.payload ?? `~${answer.answerer}`);
   };
-  const snapshot = (label: string): void => {
-    counts[label] = readStoreCounts(workspace.storePath);
+  const snapshot = async (label: string): Promise<void> => {
+    counts[label] = await readStoreCounts(workspace.storePath);
   };
 
   try {
     await mintScopedSession(workspace);
-    snapshot("seeded");
+    await snapshot("seeded");
     const stdio = await stdioDriver(workspace, workspace.credential);
     const http = await httpDriver(workspace, workspace.credential);
     try {
@@ -150,18 +141,24 @@ async function runTransports(): Promise<RunRecord> {
       // the identity claim below is a real replay rather than a coincidence.
       const shared = registerArguments("portability-shared-command", PROJECT_ID);
       record("STDIO:accepted-control", classify(await stdio.call(CONTROL_TOOL_LABEL, shared)));
-      snapshot("afterStdioAccept");
+      await snapshot("afterStdioAccept");
       record("HTTP:accepted-control", classify(await http.call(CONTROL_TOOL_LABEL, shared)));
-      snapshot("afterHttpReplay");
+      await snapshot("afterHttpReplay");
       // A third call back through stdio: its REPLAYED bytes and the HTTP REPLAYED
       // bytes above must be byte-identical, with no field excluded.
       record("STDIO:replayed-echo", classify(await stdio.call(CONTROL_TOOL_LABEL, shared)));
 
-      // Reversed, so the replay cannot be an artifact of which transport led.
-      const reversed = registerArguments("portability-reversed-command", PROJECT_ID);
-      record("HTTP:reversed-first", classify(await http.call(CONTROL_TOOL_LABEL, reversed)));
-      record("STDIO:reversed-second", classify(await stdio.call(CONTROL_TOOL_LABEL, reversed)));
-      snapshot("afterReversedPair");
+      // Reversed, so the replay cannot be an artifact of which transport led. It
+      // uses a fresh session aggregate because the project aggregate has already
+      // moved past version 0 and a second register would be refused as stale.
+      const reversed = sessionArguments(
+        "portability-reversed-command",
+        "portability-reversed-session",
+        createHash("sha256").update("portability-reversed-secret").digest("hex"),
+      );
+      record("HTTP:reversed-first", classify(await http.call(SESSION_TOOL_LABEL, reversed)));
+      record("STDIO:reversed-second", classify(await stdio.call(SESSION_TOOL_LABEL, reversed)));
+      await snapshot("afterReversedPair");
 
       const drivers: Readonly<Record<TransportSubject, Driver>> = { HTTP: http, STDIO: stdio };
       for (const subject of TRANSPORT_SUBJECTS) {
@@ -228,11 +225,11 @@ async function runTransports(): Promise<RunRecord> {
       );
       try {
         await cut.initialize();
-        const before = readStoreCounts(workspace.storePath);
+        const before = await readStoreCounts(workspace.storePath);
         cut.writeRaw('{"jsonrpc":"2.0","id":99,"method":"tools/');
         cut.child.stdin.end();
         const exited = await cut.waitForExit(8_000);
-        const after = readStoreCounts(workspace.storePath);
+        const after = await readStoreCounts(workspace.storePath);
         const clean = exited && after.decisions === before.decisions
           && after.events === before.events;
         record("STDIO:truncation-disconnect", { answerer: "NO_ANSWER", code: null, payload: null,
@@ -251,16 +248,16 @@ async function runTransports(): Promise<RunRecord> {
       }));
       // Truncation: a declared body that never arrives. The listener must neither
       // answer it nor wedge, and must have written nothing.
-      const httpBefore = readStoreCounts(workspace.storePath);
+      const httpBefore = await readStoreCounts(workspace.storePath);
       await truncateHttpBody(http.port, workspace.credential);
       const alive = await http.raw("tools/list", {});
-      const httpAfter = readStoreCounts(workspace.storePath);
+      const httpAfter = await readStoreCounts(workspace.storePath);
       const served = alive.status === 200 && alive.message.error === undefined
         && httpAfter.decisions === httpBefore.decisions && httpAfter.events === httpBefore.events;
       record("HTTP:truncation-disconnect", { answerer: "NO_ANSWER", code: null, payload: null,
         stage: served ? TRUNCATED_NO_WRITE : "TRUNCATED_BUT_DIRTY" });
 
-      snapshot("final");
+      await snapshot("final");
       return { answers, counts, digests, httpPort: http.port };
     } finally {
       await stdio.stop();
@@ -287,7 +284,6 @@ interface JetBrainsReport {
   readonly openedAfterPostUninstall: number;
   readonly openedAfterReconnect: number;
   readonly postUninstall: { readonly code: string };
-  readonly postUninstallEndpoint: string | null;
   readonly reconnect: { readonly code: string; readonly outcome: string };
   readonly startDead: IdeOutcome;
 }
@@ -439,17 +435,10 @@ describe("portability: daemon transport and JetBrains host matrix", () => {
   });
 
   it("refuses an incompatible distribution with the contract's exact refusal", () => {
-    expect(jetbrains.mismatch).toEqual({
-      code: CODES.distributionMismatch,
-      ok: false,
-      reason: "API_RANGE_MISMATCH",
-      refusedBy: "DISTRIBUTION_STARTUP",
-    });
-    expect(jetbrains.emptyRoot).toMatchObject({
-      code: CODES.distributionMismatch,
-      reason: "COMPONENT_SET_INCOMPLETE",
-      refusedBy: "DISTRIBUTION_STARTUP",
-    });
+    expect(jetbrains.mismatch).toEqual({ code: CODES.distributionMismatch, ok: false,
+      reason: "API_RANGE_MISMATCH", refusedBy: "DISTRIBUTION_STARTUP" });
+    expect(jetbrains.emptyRoot).toMatchObject({ code: CODES.distributionMismatch,
+      reason: "COMPONENT_SET_INCOMPLETE", refusedBy: "DISTRIBUTION_STARTUP" });
   });
 
   it("answers each JetBrains port arm with an exact IDE-layer code the contract publishes", () => {

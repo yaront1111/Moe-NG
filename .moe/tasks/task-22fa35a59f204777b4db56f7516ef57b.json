@@ -20,8 +20,9 @@
     {
       "stepId": "step-1",
       "description": "Verify the codec dependency and pin the store semantics this module's whole contract hangs on. Read-only. (1) DEP: task-3e891741's codec is committed and in REVIEW -- apps/daemon/src/work/foundation-context-manifest-codec.ts exports FOUNDATION_CONTEXT_RECORD_VERSION = \"foundation-context-manifest.v1\" (:41), layer FOUNDATION_CONTEXT_CODEC (:44), the FIVE deliberately distinct codes (MALFORMED, VERSION_UNSUPPORTED, MANIFEST_DIGEST_MISMATCH, RECORD_DIGEST_MISMATCH, NONCANONICAL, :46-53), FoundationContextManifestRecord (:74), encodeFoundationContextManifestRecord (:202) and decodeFoundationContextManifestRecord (:239). QA may still reject it -- if its surface has MOVED when you start, re-block on task-3e891741 by id; if it is merely still in REVIEW with these bytes, proceed against the committed surface and say so. (2) STORE SEMANTICS, measured, which the DoD encodes precisely: `commitExpectedVersionDecision` takes {commandKind, committedResultBytes, correlationId, decidedAt, events, expectedVersion, key, requestBytes, targetAggregateId} (store-contracts.ts:74-84). The replay identity is `requestSha256` -- computed over requestBytes ONLY, so PROPOSED EVENT BYTES ARE EXCLUDED from replay identity: a redelivery with the same key/requestBytes but different event bytes comes back disposition REPLAYED, not a conflict (decision-ledger-replay.ts:33). That is exactly why DoD 2 demands the REPLAYED branch RE-READ the exactly-one durable event and return the ORIGINAL canonical bytes -- returning the caller's candidate would be an echo of unfenced input. A replay whose requestSha256 DIFFERS under the same key throws IdempotencyConflictError (decision-ledger-replay.ts:29); a wrong expectedVersion yields resultCode EXPECTED_VERSION_CONFLICT (decision-ledger-canonical.ts:206). There is NO store code named REPLAY_DIVERGED -- that name is THIS module's own, mapped from IdempotencyConflictError in its frozen FOUNDATION_CONTEXT_LEDGER vocabulary.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-18T04:32:04.345Z"
     },
     {
       "stepId": "step-2",
@@ -67,7 +68,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b8af1a87",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -86,7 +87,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:46.959Z",
-  "updatedAt": "2026-08-18T04:20:13.356Z",
+  "updatedAt": "2026-08-18T04:32:04.345Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:18:03.599Z",
     "plannedStepCount": 5,
@@ -111,5 +112,9 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-18T04:20:13.356Z"
+  "planApprovedAt": "2026-08-18T04:20:13.356Z",
+  "contextFetchedBy": [
+    "worker-b8af1a87"
+  ],
+  "workStartedAt": "2026-08-18T04:32:04.345Z"
 }

@@ -135,21 +135,24 @@
     {
       "stepId": "step-9",
       "description": "MUTATION DRILLS against the PRODUCTION surface (task rail 4). Run each, record the exact test name that reddened, restore, and confirm the restored bytes hash-match the original — git status alone is unreliable in this shared worktree, where a foreign hook commit can swallow a drill.\n1. THE TAUTOLOGY DRILL, most important: in `apps/daemon/src/projections/import-shadow-reader.ts`, make `compareImportShadow` derive the CURRENT side from `projectLegacyImport(legacyFacts)` instead of from `readImportShadowProjection`. The CHANGED and ABSENT-CURRENT cases must redden. If they stay green, this matrix is comparing one function with itself and every future \"agreement\" it reports is meaningless.\n2. In `apps/daemon/src/projections/import-shadow-mapper.ts`, drop `sourcePath` from the CLAIM fields. The exact-match control must redden with a FIELD_ABSENT mismatch — proving the control is comparing real field sets rather than counting entities.\n3. Emit a BLOCKER for the HISTORICAL claim as well as the SUSPENDED one. The known-empty assertion must redden.\n4. Remove the `IMPORT_SHADOW_ABSENT` branch so an empty aggregate falls through. The absent-aggregate test must redden ON THE CODE, not on a generic failure.\n5. Delete the horizon re-read so drift goes unnoticed. The horizon-drift test must redden.\nRestore every production file afterwards; none is an owned path of this task and none may appear in the final diff.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/portability/projection-shadow-matrix.test.ts"
       ],
-      "startedAt": "2026-08-18T04:31:02.204Z"
+      "note": "STEP 9 — FIVE DRILLS, ALL KILLED THEIR INTENDED ASSERTION. Both production files restored byte-identical to baseline. Suite back to 24/24. **One drill was captured into HEAD by a foreign sweep and I had to repair production — details at the end, and it is the most important thing in this note.**\n\nDRILL 1, THE TAUTOLOGY DRILL (the one that matters most): made `compareImportShadow` derive the CURRENT side from the legacy facts (`compareShadowProjections(legacy, legacy)`, `current: legacy`). **4 failed | 20 passed**, reddening exactly what the plan demanded and two more besides:\n- `reports FIELD_DIFFERS when one CLAIM field is altered on the LEGACY side only` (the CHANGED case)\n- `reports ENTITY_ABSENT_ON_CURRENT when a claim was never committed durably` (the ABSENT-CURRENT case)\n- `reports ENTITY_ABSENT_ON_LEGACY` (bonus)\n- `produces byte-identical ordered output across two runs` — because its `some(mismatchCount > 0)` guard collapsed, which incidentally proves THAT guard is load-bearing too.\nThis is the result the whole task hangs on: the matrix is NOT comparing one function with itself, and the current side genuinely comes from durable rows.\n\nDRILL 2, drop `sourcePath` from the CLAIM fields: **3 failed**, reddening the exact-match control with `FIELD_ABSENT_ON_CURRENT` mismatches — exactly the kind the plan predicted, proving the control compares real FIELD SETS rather than counting entities.\n\nDRILL 3, emit a BLOCKER for HISTORICAL as well as SUSPENDED: **4 failed**, including `treats KNOWN-EMPTY links and a HISTORICAL claim as facts, not as gaps`. The known-empty assertion is load-bearing.\n\nDRILL 4, neuter the `IMPORT_SHADOW_ABSENT` branch: **1 failed**, `refuses a well-formed digest with no committed aggregate`.\nHONEST DEVIATION FROM THE PLAN'S WORDING: the plan says this must redden \"ON THE CODE, not on a generic failure\". It reddened on `expected a refusal, got a comparison` — the `ok` assertion, which runs first. That is not the test being loose: removing the branch removes the REFUSAL ENTIRELY, so an empty aggregate falls through to an accepted empty projection and there is no wrong code to observe. The code assertion is unreachable when no refusal exists, and `.code` is not readable off the accepted arm at all. I am reporting what happened rather than restructuring the test to manufacture the wording.\n\nDRILL 5, delete the horizon re-read comparison: **1 failed**, `refuses HORIZON_DRIFT when the horizon moves between the two reads`.\n\n=== A FOREIGN SWEEP COMMITTED MY LIVE DRILL INTO HEAD; I REPAIRED PRODUCTION ===\nAfter restoring, `sha256sum` matched my pre-drill baseline for both files — and `git status` still showed `M apps/daemon/src/projections/import-shadow-reader.ts`. **Matching hash plus dirty status means the working tree is right and HEAD is POISONED**, the mirror of the usual reading. `git log` named it: the 32-file whole-tree commit **`ceb0370`** (`fix(task-3e891741...): ... (retry after qa_reject #1)`) captured drill 1 while it was applied, so HEAD line 230 read `compareShadowProjections(legacy, legacy)`.\nThat is a LIVE PRODUCTION DEFECT, not a test artifact — a self-comparing shadow adapter whose every agreement is meaningless.\nREPAIRED in **`b208bd0`**: one file, 2 lines, restored to bytes identical to the file's legitimate landing commit `6336047`, verified by sha256 (`4d1192c2…`) AND by an empty `diff` against that revision. HEAD now reads `compareShadowProjections(legacy, current.projection)`.\n`import-shadow-reader.ts` is NOT an owned path of this task, and I committed it anyway. The defect originated in my drill window and leaving it would ship the mutant; that outranks the owned-path convention here, and I have disclosed the out-of-scope commit in chat (msg-a3430ad9) rather than burying it. The sibling `import-shadow-mapper.ts` (drills 2 and 3) is CLEAN at HEAD — those drills were restored before `ceb0370` landed — verified rather than assumed.\nThis is the FOURTH whole-tree capture I have hit tonight, and the first to catch a deliberately-broken file. Banked as `mem:gotcha-sweep-commit-captures-a-live-mutation-drill`, because the usual post-restore check misses it: hash-only reads \"fine\", `git status`-only reads \"restore failed\", and only running both plus `git log -1 -- <path>` reveals it.\n\nDISCIPLINE: one drill at a time, restored and hash-verified between each; restores by re-editing content, never `git checkout`.",
+      "startedAt": "2026-08-18T04:31:02.204Z",
+      "completedAt": "2026-08-18T04:34:39.608Z"
     },
     {
       "stepId": "step-10",
       "description": "GATE. tests/integration is typechecked by NOTHING in this repo: the root `typecheck` script is `pnpm --recursive typecheck` over workspace packages, and `test:integration` runs only `pnpm typecheck:packaging` (tools/packaging) before vitest. A type error in these three files is invisible to every existing gate. Compensate explicitly and RECORD the command, since no script would show it ran: `npx tsc --noEmit` over the three new files with the same flag set `typecheck:packaging` uses (strict, module nodenext, moduleResolution nodenext, verbatimModuleSyntax), EXIT=0 required.\nThen run the suite FROM POWERSHELL — `pnpm test:integration` shells through MSYS tar and fails on drive-letter paths under Git Bash for reasons unrelated to this diff. Capture exit codes separately; no pipes (a piped run reports the pipe tail's code) and no `&&` chaining (a red leg then hides the count line). READ THE OUTPUT: the focused leg `vitest run tests/integration/portability` must print a `Test Files N passed` count line with a NONZERO count — a path filter matching nothing exits 0 with no count line at all.\nRun the suite TWICE in a row in one command: a teardown that has only ever run once has not been tested, and this suite creates temp trees, real SQLite files and inventories on every case.\nThen attribute any red by the path-attributed baseline: repo-wide failures at the merge-base, again at HEAD, and confirm the delta intersected with this task's three owned paths is EMPTY. Report foreign red verbatim with exact failing paths; never hide it and never fabricate green. Expect peer churn in this directory — task-efe5465f owns three other files here.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/integration/portability/projection-shadow-matrix.test.ts",
         "tests/integration/portability/shadow-corpus-fixtures.ts",
         "tests/integration/portability/shadow-corpus-harness.ts"
-      ]
+      ],
+      "startedAt": "2026-08-18T04:34:43.044Z"
     },
     {
       "stepId": "step-11",
@@ -174,12 +177,12 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:35.974Z",
-  "updatedAt": "2026-08-18T04:31:02.204Z",
+  "updatedAt": "2026-08-18T04:34:43.044Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:02:30.952Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 8
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -212,7 +215,8 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T04:16:45.053Z",

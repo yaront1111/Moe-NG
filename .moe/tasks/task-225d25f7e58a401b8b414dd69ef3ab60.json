@@ -20,8 +20,11 @@
     {
       "stepId": "step-1",
       "description": "Verify both upstream surfaces at committed HEAD; both are in flight, so this is a verify-or-block gate, not a formality. (1) CODEC (task-3e891741, REVIEW): apps/daemon/src/work/foundation-context-manifest-codec.ts with the five distinct codes at layer FOUNDATION_CONTEXT_CODEC, encodeFoundationContextManifestRecord (:202), decodeFoundationContextManifestRecord (:239). (2) LEDGER (task-22fa35a5, just planned this session, may be WORKING or REVIEW when you start): apps/daemon/src/work/foundation-context-manifest-ledger.ts must exist with its derived-aggregate scheme, exported context command kind, and frozen FOUNDATION_CONTEXT_LEDGER vocabulary -- THIS READER MUST DERIVE THE AGGREGATE THE SAME WAY THE LEDGER WRITES IT, so import the ledger's exported derivation/constants rather than re-deriving locally; two independent derivations that agree today drift tomorrow. If the ledger file does not exist yet at your committed HEAD, re-block on task-22fa35a5 by id -- this reader has nothing durable to read without it. (3) STORE READ SURFACES, measured: `getCommandDecision(key)` and `getCommandReceipt(commandId)` (sqlite-event-store.ts:282-287); CommandReceipt carries {aggregateId, commandId, committedAt, currentVersion, effectIdentityVersion, effectSha256, eventIds, outboxMessageIds, previousVersion, requestSha256} (store-contracts.ts:138-149) -- so DoD 2's proof set maps directly: EFFECTS_COMMITTED 0->1 is previousVersion 0 / currentVersion 1, singleton event is eventIds.length === 1, zero outbox is outboxMessageIds.length === 0, exact target is aggregateId equality, and result bytes / effect digest come from the decision record and effectSha256.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "VERIFY-OR-BLOCK GATE EXECUTED AND IT FIRES. Read-only step, zero files written. Measured at committed HEAD ceb0370.\n\nUPSTREAM 1 — CODEC (task-3e891741, REVIEW): PRESENT and fully verified, not merely present. `git cat-file -e HEAD:apps/daemon/src/work/foundation-context-manifest-codec.ts` succeeds; 250 physical lines at HEAD; its `.js` bridge is committed too. Every symbol the plan names exists at or near its named line, checked by grepping the HEAD blob rather than the working copy (a peer has that file open — working-tree mtime 07:32, and its test file is uncommitted at 26378 bytes):\n  FOUNDATION_CONTEXT_CODEC = \"FOUNDATION_CONTEXT_CODEC\" :44  (the pass-through layer this reader must retain verbatim)\n  FOUNDATION_CONTEXT_MANIFEST_CODES, frozen :46 with FoundationContextManifestCode :54\n  FOUNDATION_CONTEXT_RECORD_KEYS :55, FoundationContextManifestRecord :74, FoundationContextRefusal :88\n  FoundationContextEncodeResult :94, FoundationContextDecodeResult :99\n  deriveFoundationContextRecordDigest :142, encodeFoundationContextManifestRecord :202, decodeFoundationContextManifestRecord :239\nThe plan predicted encode :202 and decode :239 and both are exact. This dependency is SATISFIED.\n\nUPSTREAM 2 — LEDGER (task-22fa35a59f204777b4db56f7516ef57b): ABSENT, and absent in the strongest sense available. Three independent measurements:\n  1. `git cat-file -e HEAD:apps/daemon/src/work/foundation-context-manifest-ledger.ts` -> \"fatal: path ... does not exist in 'HEAD'\".\n  2. Not in the working tree either: a repo-wide `find` for `*foundation-context*ledger*` returns nothing, and `ls apps/daemon/src/work/` shows only the three codec files. So this is not the ordinary \"landed but uncommitted peer work\" case.\n  3. `git log --oneline --all -- <path>` is EMPTY — the path has never existed on ANY branch, so there is no commit to check out, cherry-pick or read.\nBoard state agrees: task-22fa35a5 is status WORKING, assigned to live peer worker-b8af1a87, 5 plan steps, blockedReason empty. It is genuinely in flight, not finished and not stalled.\n\nWHY THIS IS A BLOCK AND NOT SOMETHING TO WORK AROUND. Step 1 states the rule outright: \"If the ledger file does not exist yet at your committed HEAD, re-block on task-22fa35a5 by id -- this reader has nothing durable to read without it.\" The coupling is the whole design of this task, not a convenience:\n - The reader MUST import the ledger's exported aggregate derivation, its exported context command kind, and its frozen FOUNDATION_CONTEXT_LEDGER vocabulary. planningNotes names derivation drift as THE load-bearing risk (\"two independent derivations that agree today drift tomorrow\"), and step-4 drill 3 exists solely to prove that import is load-bearing. There is nothing to import, so the only way to write the reader now is to invent the scheme locally — which is precisely the defect drill 3 is built to catch, shipped deliberately.\n - Step 2 requires the accepted-read fixture to be seeded through the LEDGER MODULE'S OWN WRITER, because \"a hand-inserted event tests a shape the ledger never writes\". With no writer, every arm would be built on hand-seeded bytes — a mock-backed journey, which the composition rail forbids and which would make the whole suite prove only its own fixtures.\n - The plan's stated failure mode if I guessed wrong is the worst available: a reader that answers ABSENT forever against real records while its entire suite stays green.\n\nThe codec half of step 1 is done and will not need re-measuring unless task-3e891741 changes; only the ledger half is outstanding. Reporting blocked on task-22fa35a5 by id, per the step's own instruction.",
+      "startedAt": "2026-08-18T04:32:04.444Z",
+      "completedAt": "2026-08-18T04:33:00.527Z"
     },
     {
       "stepId": "step-2",
@@ -66,7 +69,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -79,13 +82,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:47:04.539Z",
-  "updatedAt": "2026-08-18T04:21:48.409Z",
+  "updatedAt": "2026-08-18T04:35:05.393Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:20:17.105Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T04:21:46.323Z",
   "planningNotes": {
@@ -103,5 +109,24 @@
   "budget": {
     "wallClockMs": 4500000
   },
-  "planApprovedAt": "2026-08-18T04:21:48.409Z"
+  "planApprovedAt": "2026-08-18T04:21:48.409Z",
+  "contextFetchedBy": [
+    "worker-a83aecdf"
+  ],
+  "workStartedAt": "2026-08-18T04:32:04.444Z",
+  "blockedReason": "Step-1 verify-or-block gate FIRES as instructed. HEAD ceb0370. Full evidence in the step-1 completion note.\n\nSATISFIED - CODEC (task-3e891741): codec .ts present at HEAD, 250 lines, bridge committed. Symbols verified in the HEAD BLOB, not the working copy a peer is editing: FOUNDATION_CONTEXT_CODEC :44, FOUNDATION_CONTEXT_MANIFEST_CODES :46, deriveFoundationContextRecordDigest :142, encode :202, decode :239. Predicted encode/decode lines exact.\n\nBLOCKING - LEDGER (task-22fa35a5): foundation-context-manifest-ledger.ts ABSENT, three ways:\n1. `git cat-file -e HEAD:<path>` -> \"fatal: path ... does not exist in 'HEAD'\".\n2. Not in the working tree either - repo-wide find for *foundation-context*ledger* returns nothing; that directory holds only the three codec files. NOT the ordinary landed-but-uncommitted peer case.\n3. `git log --oneline --all -- <path>` EMPTY: never existed on any branch, nothing to cherry-pick.\nBoard agrees: task-22fa35a5 WORKING, live peer worker-b8af1a87, 5 steps, no blockedReason. In flight, not stalled.\n\nWHY NOT WORK AROUND IT. Step 1: \"If the ledger file does not exist yet at your committed HEAD, re-block on task-22fa35a5 by id.\"\n- The reader MUST IMPORT the ledger's aggregate derivation, command kind and FOUNDATION_CONTEXT_LEDGER vocabulary. planningNotes names derivation drift as THE load-bearing risk; drill 3 exists only to prove that import is load-bearing. Nothing to import means inventing the scheme locally - the exact defect drill 3 catches.\n- Step 2 requires seeding via the LEDGER'S OWN WRITER; a hand-inserted event tests a shape the ledger never writes. Without it every arm rests on hand-seeded bytes: a mock-backed journey the rail forbids.\n- Failure mode if guessed wrong: a reader answering ABSENT forever against real records while its suite stays green.\n\nUNBLOCK WHEN: ledger .ts at committed HEAD exports the derivation, command kind and vocabulary. Codec half needs no re-measurement. Nothing written or committed.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-08-18T04:33:52.435Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Step 1 (verify-or-block gate) COMPLETE, and it fired. Full measurement is in the step-1 completion note. Codec upstream (task-3e891741) is VERIFIED SATISFIED at HEAD ceb0370: foundation-context-manifest-codec.ts present, 250 lines, .js bridge committed, every plan-named symbol at its named line — FOUNDATION_CONTEXT_CODEC :44, FOUNDATION_CONTEXT_MANIFEST_CODES :46, deriveFoundationContextRecordDigest :142, encodeFoundationContextManifestRecord :202, decodeFoundationContextManifestRecord :239. I read the HEAD blob rather than the working copy on purpose, because that file and its 26KB uncommitted test were open under a peer at the time. That half needs NO re-measurement unless task-3e891741 changes. Zero files written, zero commits under this task.",
+      "whatRemains": "Steps 2-5: the RED suite over a real SqliteEventStore, the reader plus its one-line LF .js bridge, the three mutation drills, then adversarial review/commit/gate. Resume at step 2 — do not redo step 1's codec half.",
+      "pitfalls": "1. DO NOT PROCEED BY RE-DERIVING THE AGGREGATE LOCALLY. The reader must IMPORT the ledger's derivation; drill 3 exists solely to prove that import is load-bearing. Guessing the scheme produces the worst failure shape available — a reader answering ABSENT forever against real records while its entire suite stays green.\n2. DO NOT HAND-SEED THE ACCEPTED-READ FIXTURE. Step 2 requires seeding through the ledger's OWN writer; a hand-inserted event tests a shape the ledger never writes, which is the mock-backed journey the composition rail forbids. Raw-store seeding is correct in exactly ONE place: the AMBIGUOUS arm's second event, which no production writer can produce.\n3. VERIFY ABSENCE THREE WAYS, not one. `git cat-file -e HEAD:<path>` proves only that it is uncommitted; a peer's untracked file would still be readable. The decisive check was `git log --oneline --all -- <path>` returning EMPTY — the path has never existed on any branch, so there is nothing to cherry-pick or check out and no partial-progress route exists.\n4. Verification ORDER in step 3 is deliberate: existence -> decode -> re-encode/byte-compare -> decision+receipt proofs -> outer-binding comparison. Comparing bindings before proving the receipt would let a well-formed forged record pass most gates.\n5. Close every store handle on every path — a held SQLite handle kills the vitest worker.",
+      "openQuestions": "Whether task-22fa35a5's ledger will actually export the three things this reader's plan assumes: the aggregate derivation, the context command kind, and the frozen FOUNDATION_CONTEXT_LEDGER vocabulary. I posted that question to worker-b8af1a87 (holder of the ledger task) in the general channel. If their export surface differs, this reader's plan needs an amend rather than a guess.",
+      "releasedAt": "2026-08-18T04:35:05.391Z",
+      "releasedBy": "worker-a83aecdf",
+      "reason": "Releasing my own assignment on a task I blocked two minutes ago, to free the worker slot. THE BLOCK IS REAL AND MUST STAY: status must remain BLOCKED and blockedReason must survive verbatim. Deliberately NOT using unblock_worker, which flips BLOCKED to WORKING and destroys blockedReason, re-serving a known trap to the next worker as if it were ready work. The gate can only be cleared by the ledger landing, not by reassignment."
+    }
+  ]
 }

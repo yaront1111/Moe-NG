@@ -44,11 +44,8 @@ export interface PortabilityWorkspace {
   readonly storePath: string;
 }
 
-/**
- * The temp directory name carries a SPACE deliberately: the store path travels to
- * both executables through the environment and, on Windows, through a `cmd.exe`
- * shim. A path that never contains a space never exercises that.
- */
+/** The name carries a SPACE deliberately: the store path travels to both
+ *  executables through the environment and, on Windows, through a `cmd.exe` shim. */
 export function createWorkspace(projectId: string): PortabilityWorkspace {
   const directory = mkdtempSync(join(tmpdir(), "moe portability-"));
   return Object.freeze({
@@ -64,18 +61,36 @@ export function removeWorkspace(workspace: PortabilityWorkspace): void {
 }
 
 /**
- * Opened, read and CLOSED inside one call. A SQLite handle held across teardown
+ * Opened, read and CLOSED inside one call: a SQLite handle held across teardown
  * kills the vitest worker with an error that looks unrelated to the test.
+ *
+ * NOT read-only, and that is a fix rather than laxity. A `taskkill`ed child can
+ * leave a hot journal behind, and SQLite must WRITE to roll one back — a
+ * read-only connection cannot, and fails with a bare `disk I/O error` that reads
+ * like a broken test. Measured: 1 run in 4 failed exactly that way. The retry
+ * covers the window where Windows has not yet released the dead child's handle.
  */
-export function readStoreCounts(storePath: string): StoreCounts {
-  const database = new DatabaseSync(storePath, { readOnly: true });
-  const count = (table: string): number =>
-    Number((database.prepare(`select count(*) c from ${table}`).get() as { c: number }).c);
-  try {
-    return Object.freeze({ decisions: count("command_decisions"), events: count("domain_events") });
-  } finally {
-    database.close();
+export async function readStoreCounts(storePath: string): Promise<StoreCounts> {
+  let last: unknown;
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    let database: DatabaseSync | undefined;
+    try {
+      database = new DatabaseSync(storePath);
+      const open = database;
+      const count = (table: string): number =>
+        Number((open.prepare(`select count(*) c from ${table}`).get() as { c: number }).c);
+      return Object.freeze({
+        decisions: count("command_decisions"),
+        events: count("domain_events"),
+      });
+    } catch (error) {
+      last = error;
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    } finally {
+      database?.close();
+    }
   }
+  throw new Error(`store counts unreadable: ${String(last)}`);
 }
 
 export function environmentFor(
@@ -289,29 +304,19 @@ export async function httpClient(
     child: spawned.child,
     initialize: async (): Promise<void> => {
       nextId += 1;
-      await post(
-        JSON.stringify({
-          id: nextId,
-          jsonrpc: "2.0",
-          method: "initialize",
-          params: {
-            capabilities: {},
-            clientInfo: { name: "portability-matrix", version: "0" },
-            protocolVersion: "2025-06-18",
-          },
-        }),
-      );
+      await post(JSON.stringify({
+        id: nextId, jsonrpc: "2.0", method: "initialize",
+        params: { capabilities: {}, clientInfo: { name: "portability-matrix", version: "0" },
+          protocolVersion: "2025-06-18" },
+      }));
     },
     port: Number(new URL(origin).port),
     post,
   };
 }
 
-/**
- * Declares a body far larger than what is sent, then drops the connection. The
- * listener must neither answer nor wedge: the caller then proves a fresh request
- * is still served normally.
- */
+/** Declares a body far larger than what is sent, then drops the connection: the
+ *  listener must neither answer it nor wedge. */
 export function truncateHttpBody(port: number, credential: string): Promise<void> {
   return new Promise<void>((resolve) => {
     const socket = connect({ host: "127.0.0.1", port }, () => {
@@ -392,10 +397,10 @@ export async function httpDriver(
 }
 
 /**
- * Runs a real child Node process with an explicit cwd and reports its JSON stdout.
- * The JetBrains half needs this: vitest rewrites a `./x.js` specifier back to
- * `x.ts` while Node does not, so only a child proves the shipped `.js` bridge and
- * the package `exports` map are what actually resolve.
+ * A real child Node process with an explicit cwd, reporting JSON on stdout. The
+ * JetBrains half needs this: vitest rewrites a `./x.js` specifier back to `x.ts`
+ * and Node does not, so only a child proves the shipped `.js` bridge and the
+ * package `exports` map are what actually resolve.
  */
 export function runNodeChild(cwd: string, source: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {

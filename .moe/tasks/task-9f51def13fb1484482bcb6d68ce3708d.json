@@ -112,8 +112,8 @@
       "completedAt": "2026-08-18T04:30:28.845Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a83aecdf",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:11:46.355Z",
-  "updatedAt": "2026-08-18T04:30:28.845Z",
+  "updatedAt": "2026-08-18T04:31:49.787Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:13:41.392Z",
     "plannedStepCount": 6,
@@ -165,7 +165,20 @@
   },
   "planApprovedAt": "2026-08-18T04:15:52.195Z",
   "contextFetchedBy": [
-    "worker-a83aecdf"
+    "worker-a83aecdf",
+    "qa-12cda609"
   ],
-  "workStartedAt": "2026-08-18T04:16:17.560Z"
+  "workStartedAt": "2026-08-18T04:16:17.560Z",
+  "reviewStartedAt": "2026-08-18T04:31:46.318Z",
+  "verification": {
+    "command": "pnpm --filter @moe/scheduler typecheck  (EXIT=0, separate leg)  &&  pnpm --filter @moe/scheduler test  (EXIT=0, count line below)",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\nTYPECHECK_EXIT=0\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  45 passed (45)\n      Tests  1411 passed (1411)\n   Start at  07:30:37\n   Duration  1.60s (transform 12.39s, setup 0ms, import 16.31s, tests 2.63s, environment 5ms)\n\nTEST_EXIT=0\n\nRun fresh after the last drill restore. Both legs run SEPARATELY with exit codes captured individually, never &&-chained, because a chain dying at typecheck hides the count line. Count line present and NO_PROJECTS_MATCHED=0, so this is a real run and not a vacuous --filter. 45 files / 1411 tests are the SAME counts as the pre-change baseline in step 1.\nOwned-path git status clean; HEAD 3c4c470; index.ts 249 lines, execution-surface.ts 203 (wc -l).",
+    "reportedAt": "2026-08-18T04:31:46.318Z"
+  },
+  "filesModified": [
+    "packages/scheduler/src/index.ts",
+    "packages/scheduler/src/execution-surface.ts",
+    "packages/scheduler/src/execution-surface.js"
+  ]
 }
