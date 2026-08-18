@@ -8,6 +8,56 @@ autonomously. That is operational evidence, not a release or security-boundary
 claim. All entry points run with plain `node` (Node 24 strip-types) from
 `apps/daemon`.
 
+## One command (start here)
+
+From a clean checkout, with `ANTHROPIC_API_KEY` exported and nothing else:
+
+```
+pnpm start
+```
+
+That runs `apps/daemon/src/orchestrator/moe-up-main.ts`, which starts the daemon
+and the wrapper as child processes and prints the daemon's bound origin plus the
+control-room command to point at it. It is a DEVELOPMENT launcher: it defaults
+`MOE_STORE_PATH` to `<repo>/.moe-dev/store.sqlite`, defaults `MOE_PROJECT_ID` to
+`moe-next-dev`, and mints a random `MOE_DAEMON_CREDENTIAL` for the run (never
+printed). Any of the three you export yourself is used as-is. Do not use these
+dev defaults for anything you care about keeping.
+
+`ANTHROPIC_API_KEY` is the one variable the launcher refuses rather than invents
+— `MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY`, before either child is spawned, since
+`claude --bare` has no other way to authenticate. Setting `MOE_AGENT_COMMAND` to
+a non-claude command waives it.
+
+The daemon binds an EPHEMERAL port on purpose, so read the printed origin rather
+than assuming `39123`. Ctrl-C in this console stops both children; either child
+exiting also tears the other one down. On Windows an external `SIGTERM` does not
+reach a Node handler, so Ctrl-C (or killing the launcher's own process tree) is
+the teardown path — not `taskkill /PID <launcher>` without `/T`.
+
+The launcher runs both children with `node --experimental-transform-types`, and
+that flag is currently load-bearing rather than cosmetic. Measured on Windows at
+`b773de7`, the wrapper entry cannot start under plain `node` at all:
+
+```
+node apps/daemon/src/orchestrator/agent-wrapper-main.ts
+SyntaxError [ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX]:
+  TypeScript parameter property is not supported in strip-only mode
+  at apps/daemon/src/orchestrator/agent-spawn-contract.ts:53
+```
+
+Node 24 strips types but does not transform them, and
+`agent-spawn-contract.ts:53` declares `constructor(readonly reason: ...)`. vitest
+transpiles that fine, which is why the test suite never saw it. **So the manual
+wrapper recipe below is broken as written — add
+`--experimental-transform-types` to it, or use `pnpm start`.** The daemon recipe
+is unaffected. Removing the parameter property is a separate fix; the launcher
+does not repair it, and `moe-up-main.test.ts` carries a negative-control test
+that reddens once it is gone, so the flag can be dropped deliberately.
+
+Apart from that, the manual three-terminal recipe is what to reach for when you
+need a fixed port, a `--csrf-token`, or one component without the other.
+
 ## Environment (shared by every entry)
 
 | Variable | Meaning |

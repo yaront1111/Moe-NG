@@ -105,10 +105,13 @@ it("declares the source entry, bin and canonical clean-shell start command", asy
   // Closed set on purpose: a new bin is a new supported entry point and must be declared here
   // deliberately. `moe-mcp-http` is the Streamable HTTP MCP host (task-159be643); `moe-mcp-stdio`
   // is the stdio MCP host, published by task-f33028b5 so acceptance drives the installed shim.
+  // `moe-up` is the single-command development launcher (task-bc9b4bed): it starts the daemon and
+  // the wrapper as children and composes both entries above without modifying either.
   expect(manifest.bin).toEqual({
     "moe-daemon": "./src/daemon-main.ts",
     "moe-mcp-http": "./src/mcp-http/mcp-http-main.ts",
     "moe-mcp-stdio": "./src/mcp-main.ts",
+    "moe-up": "./src/orchestrator/moe-up-main.ts",
   });
   expect(manifest.scripts?.["start"]).toBe(
     "node ./src/daemon-main.ts --dependencies=./src/daemon-store-dependencies.ts --port=39123",
