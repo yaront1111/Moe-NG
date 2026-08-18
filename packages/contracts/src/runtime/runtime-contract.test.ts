@@ -18,6 +18,47 @@ import {
 } from "@moe/contracts";
 import type { NextAllowedCommand } from "@moe/contracts";
 
+// `isCommandKind` is deliberately not published from the root barrel, so the guard arm below
+// reaches it through the defining module rather than re-implementing the membership test.
+import {
+  FOUNDATION_DISPATCH_COMMAND_KIND,
+  FOUNDATION_VERIFICATION_COMMAND_KIND,
+  isCommandKind,
+} from "./runtime-vocabulary.js";
+
+/**
+ * Hand-transcribed, NOT derived from RUNTIME_COMMAND_KINDS: an expectation computed from the
+ * tuple under test can never fail, which is what the previous `commands.size ===
+ * RUNTIME_COMMAND_KINDS.length` arm did. Adding, removing or misspelling a command kind must
+ * force a deliberate edit here, exactly as the query and telemetry rosters already require.
+ */
+const EXPECTED_COMMAND_KINDS = [
+  "approval.decide", "blocker.challenge", "blocker.open", "blocker.resolve",
+  "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
+  "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
+  "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
+  "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
+  "escalation.decide", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
+  "finding.route", "foundation.dispatch", "foundation.verification",
+  "goal.cancel", "goal.close", "goal.create", "goal.pause",
+  "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",
+  "graph.release_preparation", "graph.request_expansion", "graph.supersede",
+  "integration.accept_output", "integration.resolve_finding", "integration.seal",
+  "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
+  "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
+  "planning.recover_absent", "planning.release", "policy.install", "policy.validate",
+  "profile.register", "project.activate", "project.bind_repository", "project.register",
+  "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
+  "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
+  "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
+  "recovery.reconcile_external", "replan.propose_unblock", "resource.confirm_released",
+  "resource.reconcile", "resource.release", "resource.renew", "resource.request",
+  "review.release", "review.start", "review.submit", "safe_boundary.observe",
+  "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",
+  "step.finish", "step.start", "wait.cancel", "wait.declare", "wait.extend", "work.cancel",
+  "work.claim", "work.release", "work.renew", "work.resume",
+];
+
 const SOURCE = Object.freeze({ aggregate: "GOAL", state: "EXECUTION_ENABLED" });
 
 function entry(commandKind: string, commandId: string): Record<string, unknown> {
@@ -54,11 +95,31 @@ describe("runtime vocabulary is closed and disjoint", () => {
     for (const kind of [...RUNTIME_QUERY_KINDS, ...RUNTIME_TELEMETRY_KINDS]) {
       expect(commands.has(kind)).toBe(false);
     }
-    expect(commands.size).toBe(RUNTIME_COMMAND_KINDS.length);
+    expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
+    // Literal 94, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(94);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
+    expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
+    expect(RUNTIME_COMMAND_KINDS).toContain("foundation.verification");
     for (const tuple of [RUNTIME_COMMAND_KINDS, RUNTIME_QUERY_KINDS, RUNTIME_AGGREGATES]) {
       expect(Object.isFrozen(tuple)).toBe(true);
+    }
+  });
+
+  it("admits both Foundation kinds through isCommandKind and refuses lookalikes", () => {
+    expect(isCommandKind("foundation.dispatch")).toBe(true);
+    expect(isCommandKind("foundation.verification")).toBe(true);
+    expect(isCommandKind(FOUNDATION_DISPATCH_COMMAND_KIND)).toBe(true);
+    expect(isCommandKind(FOUNDATION_VERIFICATION_COMMAND_KIND)).toBe(true);
+    expect(FOUNDATION_DISPATCH_COMMAND_KIND).toBe("foundation.dispatch");
+    expect(FOUNDATION_VERIFICATION_COMMAND_KIND).toBe("foundation.verification");
+    // Neighbouring strings stay out: membership is exact, not prefix- or fuzzy-matched.
+    for (const lookalike of [
+      "foundation.verify", "foundation.dispatch ", "Foundation.dispatch", "foundation",
+      "foundation.dispatch.v2",
+    ]) {
+      expect(isCommandKind(lookalike), `${lookalike} must not be a command kind`).toBe(false);
     }
   });
 

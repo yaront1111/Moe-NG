@@ -89,7 +89,8 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
   "escalation.decide", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
-  "finding.route", "goal.cancel", "goal.close", "goal.create", "goal.pause",
+  "finding.route", "foundation.dispatch", "foundation.verification",
+  "goal.cancel", "goal.close", "goal.create", "goal.pause",
   "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
@@ -110,6 +111,17 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
 
 export type RuntimeCommandKind = (typeof RUNTIME_COMMAND_KINDS)[number];
 export type RuntimeQueryKind = (typeof RUNTIME_QUERY_KINDS)[number];
+
+/**
+ * The two Foundation kinds, pinned by `satisfies` so that dropping either member from the
+ * frozen tuple above stops compiling here rather than silently narrowing the vocabulary.
+ * The annotation cannot live on the tuple entries themselves: `RuntimeCommandKind` is
+ * derived FROM that tuple, so annotating an entry with it would be circular.
+ */
+export const FOUNDATION_DISPATCH_COMMAND_KIND =
+  "foundation.dispatch" as const satisfies RuntimeCommandKind;
+export const FOUNDATION_VERIFICATION_COMMAND_KIND =
+  "foundation.verification" as const satisfies RuntimeCommandKind;
 
 const COMMAND_KIND_SET: ReadonlySet<string> = new Set<string>(RUNTIME_COMMAND_KINDS);
 const QUERY_KIND_SET: ReadonlySet<string> = new Set<string>(RUNTIME_QUERY_KINDS);

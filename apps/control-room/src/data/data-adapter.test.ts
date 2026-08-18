@@ -15,7 +15,7 @@ function admittedClient(): ControlRoomClientSurface {
     },
     buildToolVersions: { node: "24.16.0" },
     contractSchemaHash:
-      "1d96f39e6399ce63090405ca6168175540cce1c783154a52007a8905eaa47106",
+      "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8",
   });
   if (!gate.ok) throw new Error("compat gate refused the matching report");
   return gate.client;
