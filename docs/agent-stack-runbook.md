@@ -124,7 +124,41 @@ A node spec is one JSON file in `MOE_NODE_SPECS_DIR`:
 ```
 
 Nodes appear on the surface only after the plan's `approval.decide` is durably
-committed. Delivery is ledger truth: the agent runs the spec's test and records
+committed. Driving that chain by hand — the live board, or the `curl`
+recipe above — is no longer the only way:
+
+```
+pnpm seed
+```
+
+`apps/daemon/src/orchestrator/demo-seed-main.ts` dispatches the whole J1 chain
+over the daemon's own HTTP surface: `project.register`, `project.bind_repository`,
+`provider.probe`, `project.activate`, `goal.create`, `plan.propose`,
+`approval.decide` — in that order, because `project.activate` names the probe as
+a prerequisite. It CONFIRMS each command's durable commit on `/events/read`
+before sending the next, then reads `/affordances/read` and exits 0 only once the
+node's `node.deliver` step is READY, printing every dispatched command id. Any
+daemon refusal is echoed with the daemon's own code and layer and exits nonzero.
+
+The DAEMON must be started with `MOE_APPROVAL_MODE=SPEED` and
+`MOE_SPEED_MODE_DELAY_MS=<ms>` for the approval step to proceed without a human.
+Both are required together and the decoder fails closed by design
+(`approval-policy-settings.ts`), so a daemon started without them answers the
+seed's last command `APPROVAL_HUMAN_REVIEW_REQUIRED` / `APPROVAL_POLICY` — which
+the seed echoes verbatim. That is the daemon's policy, not a seed setting: leave
+those two unset when you WANT a human to approve on the board.
+
+It reads four variables and refuses each missing one BY NAME, never printing a
+value: `MOE_DAEMON_ORIGIN` (a bare origin — the Origin guard compares it
+exactly), `MOE_DAEMON_CREDENTIAL` (operator), `MOE_CSRF_TOKEN`, and
+`MOE_NODE_SPECS_DIR` (the demo node spec above; the first `.json` by name is
+seeded). Optional: `MOE_PROJECT_ID`, `MOE_GOAL_ID`, `MOE_RUN_ID`,
+`MOE_PRINCIPAL_ID`, and `MOE_EVENT_SUBSCRIBER` — which defaults to
+`control-room-1` because that is the only reader the daemon registers at startup
+and no route seats another. The seed changes no daemon contract; it is a client
+of `/command`, `/events/read`, `/events/ack` and `/affordances/read`. The manual
+recipe above still works and is what to reach for when you want one command at a
+time. Delivery is ledger truth: the agent runs the spec's test and records
 `review.submit` (round = expectedVersion + 1). It cannot call
 `integration.accept_output`; the daemon-side development verifier reruns the
 test and records the acceptance path. The step turns COMMITTED only when the
