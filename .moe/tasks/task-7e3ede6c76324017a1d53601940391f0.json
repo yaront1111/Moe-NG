@@ -131,8 +131,8 @@
       "completedAt": "2026-08-18T03:39:39.317Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3d941382",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -144,7 +144,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:34:50.008Z",
-  "updatedAt": "2026-08-18T03:39:39.318Z",
+  "updatedAt": "2026-08-18T03:41:21.583Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:11:12.882Z",
     "plannedStepCount": 7,
@@ -202,5 +202,17 @@
     "escalatedAt": "2026-08-18T03:00:09.103Z"
   },
   "planApprovedAt": "2026-08-18T03:00:01.892Z",
-  "workStartedAt": "2026-08-18T03:00:25.348Z"
+  "workStartedAt": "2026-08-18T03:00:25.348Z",
+  "reviewStartedAt": "2026-08-18T03:41:21.583Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  129 passed (129)\n      Tests  2726 passed (2726)\n   Start at  06:38:51\n   Duration  14.27s (transform 45.27s, setup 0ms, import 115.40s, tests 87.26s, environment 10ms)\n\n(baseline recorded at session start on HEAD 8222b9e: Test Files 121 passed (121), Tests 2574 passed (2574))",
+    "reportedAt": "2026-08-18T03:41:21.583Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/activation/activation-attempt-reader.test.ts",
+    "apps/daemon/src/activation/activation-attempt-reader.ts",
+    "apps/daemon/src/activation/activation-attempt-reader.js"
+  ]
 }

@@ -58,7 +58,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-a83aecdf",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -77,14 +77,15 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:36.183Z",
-  "updatedAt": "2026-08-18T03:38:20.748Z",
+  "updatedAt": "2026-08-18T03:41:16.342Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:03:37.681Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 0
   },
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-a83aecdf"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -120,7 +121,9 @@
     ]
   },
   "budget": {
-    "wallClockMs": 5400000
+    "wallClockMs": 5400000,
+    "warnedAt": "2026-08-18T03:41:16.133Z",
+    "escalatedAt": "2026-08-18T03:41:16.133Z"
   },
   "planApprovedAt": "2026-08-18T03:38:20.748Z"
 }
