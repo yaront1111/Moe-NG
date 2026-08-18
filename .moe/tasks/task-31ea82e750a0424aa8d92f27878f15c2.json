@@ -1,0 +1,119 @@
+{
+  "id": "task-31ea82e750a0424aa8d92f27878f15c2",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Production captureResult producer for the Foundation attempt service",
+  "description": "Filed by governor-7610ed5a (sweep #4) from worker-f144c751's measured evidence on task-49ed1e6d (comment-50ab412b) — prerequisite (c) of three; do not re-derive.\n\nMEASURED at 8222b9e: createFoundationAttemptService's captureResult port has ZERO production implementations — the service is constructible (root-exported since 5e43a9e2) but nothing real can deliver an attempt result into it. Since then, the telemetry-bound launcher chain has LANDED (c534626b createTelemetryBoundClaudeLauncher on the @moe/runner root; 232793a0 launchActivationProviderRun(authority, input) routing through it) — re-measure at current HEAD whether a captureResult composition point now exists in the activation path before designing a new one; the producer likely composes the bound launcher's ClaudeBoundLaunch result + telemetry handoff into the service's captureResult contract.\n\nSCOPE: architect decides placement (apps/daemon activation path vs runner surface); the producer must derive every captured field from the real launch result / durable records — no caller-supplied result facts (same no-minting bar as the verifier authority provider 4dd4424c, graded DONE).",
+  "definitionOfDone": [
+    "A production call path delivers a real launch result into createFoundationAttemptService's captureResult port — zero non-test implementations becomes at least one, verified by grep and a real-store test through the production path",
+    "Every captured field traces to the launch result or durable records — a hostile arm proves caller-supplied result bytes are refused or ignored with the exact code",
+    "A mutation drill severing the producer (captureResult never invoked) reddens a NAMED test",
+    "Owned-package gates run separately, exit 0, printed nonzero counts"
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Re-measure the premise at current HEAD, as the filing explicitly asks (\"re-measure at current HEAD whether a captureResult composition point now exists before designing a new one\"). Record: (a) `grep -rn \"captureResult\" apps packages --include=*.ts | grep -v '\\.test\\.'` returns exactly ONE hit outside tests — the port declaration at `foundation-attempt-service.ts:42` and its invocation at :144. Every other hit is a test file. So zero production implementations, confirmed. (b) `createFoundationAttemptService` is EXPORTED (foundation-surface.ts:60, index.ts:212) but never CONSTRUCTED in production — consistent with task-49ed1e6d's finding that the foundation kinds are not yet dispatchable, and the reason this task can land a producer without a full dispatch path. (c) `observeScope` likewise has ZERO production callers; every hit is a test or test fixture. Both halves of the capture are unwired, which is the gap. If any of these has changed, stop and re-scope rather than building a second producer beside a landed one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Record the PLACEMENT decision, which the filing leaves to the architect (\"apps/daemon activation path vs runner surface\"). DECISION: apps/daemon, in a new focused `apps/daemon/src/work/foundation-capture-producer.ts` plus its one-line LF `.js` bridge and focused test. THE REASON IS THE STORE: the producer must read the durable input manifest for the declared scope paths and base identity, and the runner is deliberately store-free — `observeScope` takes an injected `gitObserver` port precisely so the physical observation stays behind a seam the caller supplies. Putting the producer in the runner would either drag store access into a pure package or force the daemon to hand it pre-read facts, which is the caller-supplied-result-facts bar DoD 2 forbids. Placing it in the daemon keeps `observeScope` and `buildResultManifest` as the runner's pure authorities and makes this module a thin composition over them. Write that rationale into the module header so the next reader does not relitigate it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.ts",
+        "apps/daemon/src/work/foundation-capture-producer.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD the contract shape, RED first, in `foundation-capture-producer.test.ts`. The producer must return exactly the four `CAPTURE_KEYS` the service consumes — `authoredPaths`, `declaredArtifactRefs`, `resultTreeEntries`, `scopeObservation` (foundation-attempt-contracts.ts:44-46) — because `recordProvenFoundationAttempt` feeds them straight into `buildResultManifest` (foundation-attempt-store.ts:222). Assert the returned key set is EXACTLY those four: an extra key is not harmless here, since `exactKeys` fences the capture and a stray field refuses the whole attempt as `FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN`. DoD 2's no-minting bar is proved by SHAPE, not by validation: the producer's input type must have nowhere to put a result fact — no authoredPaths, no resultTreeEntries, no scopeObservation parameter — so a caller-supplied result is UNREPRESENTABLE rather than validated away, the same discipline `FoundationVerificationRequest` uses (\"a substitute for durable state is UNREPRESENTABLE rather than validated away, so no later refactor can stop calling the check\"). Assert the input key set by hand too.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD the derivation and its refusal arms. Every captured field must trace to the real launch result or a durable record (DoD 2): the declared scope paths and `baseIdentity` come from the durable input manifest the attempt sealed, and the observation comes from `observeScope` driven by a REAL git observer against the candidate root — not from a caller argument and not from a fixture object standing in for a scan. Cover the refusal arms with exact code AND layer, carrying the RUNNER's own code rather than restamping: `observeScope` refuses `RUNNER_SCOPE_HEAD_MISMATCH` when `gitObserver.headCommit()` disagrees with `baseIdentity` (scope-observation.ts:127-131), and it validates scalars and canonicalizes declared paths before that, each with its own refusal. A capture built on a workspace whose HEAD moved under the run is exactly the false-result this port exists to prevent, so that arm is the load-bearing one. Add the hostile arm DoD 2 names: caller-supplied result bytes are refused or ignored with the exact code — given the unrepresentable-input design, demonstrate it by showing the field cannot be passed at all and that a malformed durable record refuses rather than defaulting.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Implement `foundation-capture-producer.ts` plus the one-line LF `.js` bridge — every sibling in `apps/daemon/src/work/` ships a git-tracked bridge, and without it the module is invisible at runtime while tsc and vitest stay green. Compose, do not re-derive: `observeScope` from the `@moe/runner` ROOT for the scope observation and result tree, the durable input manifest for declared paths and base identity, and the durable declared outputs for `declaredArtifactRefs`. Return the four fields and nothing else. Carry every runner refusal with its own code and layer intact — restamping would make a HEAD mismatch indistinguishable from a malformed declaration, and the surrounding modules already keep that discipline (`carryWrapperRefusal`, `carryEvidenceRefusal`). Take the git observer as an injected port rather than reaching for a filesystem or git binary directly, matching how `observeScope` itself is written; that keeps this module testable without a fake result and keeps the physical seam explicit. Target <=250 physical lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.ts",
+        "apps/daemon/src/work/foundation-capture-producer.js"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Prove DoD 1 end to end, over a real store and through the production service. Construct `createFoundationAttemptService` with the NEW producer as its `captureResult` dependency and drive `dispatch` so a real launch result reaches the port and lands as a PROVEN attempt record — then read the four captured fields back from CANONICAL DURABLE BYTES via `readFoundationAttemptRecord`, not from the dispatch return value. That read-back is the difference between proving the producer ran and proving its output became durable truth. Re-run the DoD 1 grep and record the transition: `captureResult` non-test implementations goes from ZERO to ONE, and `observeScope` gains its first production caller. Seed the activation through the PRODUCTION activation path — `parseActivationGrant` demands a hex64 grantId derived from the whole successor intent, so a hand-forged activation refuses for the wrong reason and pins the test to an artefact. Close the store in `afterEach`; a held SQLite handle kills the vitest worker.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "Verification gate and mutation drills, then stop. Run `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test` as SEPARATE legs with exit codes captured individually (DoD 4 says separately with printed nonzero counts); `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and EXITS 0 for an absent package, so a leg with no `Test Files N passed` line is UNVERIFIED. Also run `pnpm --filter @moe/runner test` — this task lands the first production consumer of `observeScope`, so the runner suite is in the blast radius even though no runner source changes. DRILLS, each restored before the next, each naming the test that reddens: (i) DoD 3's drill — sever the producer so `captureResult` is never invoked; the step-6 durable read-back must redden, NOT merely the dispatch return, since a stubbed answer would keep the return shape intact; (ii) return a hardcoded `scopeObservation` instead of the one `observeScope` produced — the HEAD-mismatch arm from step 4 must redden, proving the observation is real rather than minted; (iii) add a fifth key to the returned capture — the exact-key assertion from step 3 must redden. Drills run in a SHARED worktree: snapshot each file's hash, restore by CONTENT never `git checkout`, and re-verify the bridge is still one LF line. Then run `adversarial-self-review`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-capture-producer.ts",
+        "apps/daemon/src/work/foundation-capture-producer.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 120,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T08:09:58.162Z",
+  "updatedAt": "2026-08-18T10:03:36.540Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T10:01:10.938Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 4
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T10:03:34.375Z",
+  "planningNotes": {
+    "approachesConsidered": "PLACEMENT: apps/daemon, not the runner surface. The filing leaves this to the architect. The deciding fact is the STORE: the producer must read the durable input manifest for declared scope paths and `baseIdentity`, and `@moe/runner` is deliberately store-free — `observeScope` takes an injected `gitObserver` port precisely so the physical observation stays behind a caller-supplied seam. Putting the producer in the runner would either drag store access into a pure package or force the daemon to hand it pre-read facts, and pre-read facts handed in by a caller are exactly the no-minting bar DoD 2 sets. In the daemon it is a thin composition over the runner's two pure authorities, `observeScope` and `buildResultManifest`.\n\nUNREPRESENTABLE INPUT RATHER THAN VALIDATED INPUT. DoD 2 forbids caller-supplied result facts. The strong form is to give the producer's input type nowhere to put one — no authoredPaths, no resultTreeEntries, no scopeObservation parameter — so a substitute cannot be expressed rather than being rejected at runtime. This repo already uses that discipline and states the reason at `FoundationVerificationRequest`: \"a substitute for durable state is UNREPRESENTABLE rather than validated away, so no later refactor can stop calling the check\". A validator can be removed in a refactor; a missing field cannot be passed.\n\nSCOPE BOUNDARY WITH THE SIBLING TASKS. This is prerequisite (c) of the three that task-49ed1e6d's block produced; (a) is the runtime vocabulary (task-a77bd540, DONE) and (b) is the async/binary registry seam (task-4bffcfdd). Wiring a full daemon dispatch path is (b)'s job, which is why this task proves itself by constructing the service directly in a real-store test rather than waiting on dispatch.",
+    "codebaseInsights": "MEASURED AT HEAD a42ae2f. The premise re-measures TRUE, and a second gap surfaced alongside it.\n\nZERO PRODUCTION IMPLEMENTATIONS, CONFIRMED. `grep -rn \"captureResult\" apps packages --include=*.ts` returns the port declaration at `foundation-attempt-service.ts:42` (`captureResult(input: Record<string, unknown>): unknown`) and its single invocation at :144; every other hit is in `foundation-attempt-service.test.ts` or `foundation-attempt-windows.test.ts`.\n\nTHE CALL SITE'S CONTRACT: `capture()` (:140-150) invokes `deps.captureResult({attemptId, baseIdentity, nodeKey, observation, sessionId})` through `contained(...)`, then hands the `answer` to `recordProvenFoundationAttempt`. `answer` is fenced by `exactKeys(capture.answer, CAPTURE_KEYS)` and refuses `FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN` on mismatch, so the returned key set must be EXACTLY `authoredPaths`, `declaredArtifactRefs`, `resultTreeEntries`, `scopeObservation` (foundation-attempt-contracts.ts:44-46) — an extra key fails the whole attempt. Those four feed `buildResultManifest` at foundation-attempt-store.ts:222.\n\nA SECOND UNWIRED SURFACE: `observeScope` also has ZERO production callers — all hits are `foundation-verification-service.test.ts`, `goal-closure-test-fixtures.ts`, `foundation-attempt-service.test.ts`, `foundation-attempt-windows.test.ts`. So this task lands its first production consumer too, which is why the runner suite belongs in the gate.\n\n`observeScope(input)` (packages/runner/src/scope/scope-observation.ts:117) validates scalars, canonicalizes `declaredScopePaths`, then calls `input.gitObserver.headCommit()` and refuses `RUNNER_SCOPE_HEAD_MISMATCH` when it disagrees with `input.baseIdentity` (:127-131). The gitObserver is an INJECTED PORT — the physical seam is the caller's to supply, which is what makes daemon placement natural.\n\nTHE LANDED LAUNCH CHAIN, for context: `launchActivationProviderRun(authority, input)` (activation-telemetry-launch.ts:134) composes `createTelemetryBoundClaudeLauncher` once and returns `ClaudeBoundLaunchResult` \"exactly as it arrived — not spread, not projected, not re-paired\", with a header explaining that a daemon rebuilding the pair \"would be asserting a launch and an observation belong together without having witnessed either\". `activation-run-commit.ts` consumes it into a durable `ProviderRunRecord`. NOTE the distinction that matters for design: that chain carries the RUN result and its telemetry handoff, while `captureResult` needs the WORKSPACE result — authored paths, result tree, scope observation. They are different facts from different sources, and conflating them would be exactly the unwitnessed pairing that header warns about.\n\n`createFoundationAttemptService` is exported (foundation-surface.ts:60, index.ts:212) but NEVER CONSTRUCTED in production — consistent with task-49ed1e6d's finding that the foundation kinds are not dispatchable yet.\n\nGATES RESOLVE: `@moe/daemon` is apps/daemon, `@moe/runner` is packages/runner, both with typecheck and test scripts.",
+    "risks": "1. THE CAPTURE KEY SET IS FENCED EXACTLY. `exactKeys(capture.answer, CAPTURE_KEYS)` means a fifth key does not degrade gracefully — it refuses the whole attempt as `FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN`, a code that names the capture rather than the extra field, so the cause reads as \"the producer failed\" rather than \"the producer returned one key too many\". Assert the exact key set.\n2. DO NOT CONFLATE THE RUN RESULT WITH THE WORKSPACE RESULT. The telemetry launcher chain carries the launch and its handoff; `captureResult` needs authored paths, result tree entries and a scope observation. `activation-telemetry-launch.ts`'s own header warns that a daemon re-pairing facts \"would be asserting a launch and an observation belong together without having witnessed either\". A producer that synthesises workspace facts from the launch result is that defect.\n3. THE HEAD-MISMATCH ARM IS THE LOAD-BEARING ONE. `observeScope` refuses `RUNNER_SCOPE_HEAD_MISMATCH` when the workspace HEAD moved under the run. A capture built on a moved workspace is precisely the false result this port exists to prevent, so carry the runner's code and layer rather than restamping.\n4. A STUBBED PRODUCER PASSES A RETURN-VALUE TEST. Drill (i) severs `captureResult` entirely; only the DURABLE read-back reddens, because a stub keeps the dispatch return shape intact. Assert against `readFoundationAttemptRecord`, not against the call's answer.\n5. HAND-FORGED ACTIVATIONS REFUSE FOR THE WRONG REASON. `parseActivationGrant` demands a hex64 grantId derived from the whole successor intent, so the only coherent route is the production activation chain; a fixture that fakes it pins the test to an artefact.\n6. THE RUNNER SUITE IS IN THE BLAST RADIUS even with no runner source change, because this lands `observeScope`'s first production caller.\n7. The `.js` bridge is invisible to tsc and vitest and a drill restore can drop or CRLF it; re-verify after every restore. A held SQLite handle kills the vitest worker.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-attempt-service.ts",
+      "apps/daemon/src/work/foundation-attempt-contracts.ts",
+      "apps/daemon/src/work/foundation-attempt-store.ts",
+      "packages/runner/src/scope/scope-observation.ts",
+      "apps/daemon/src/activation/activation-telemetry-launch.ts",
+      "apps/daemon/src/work/foundation-attempt-service.test.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-18T10:03:36.540Z"
+}

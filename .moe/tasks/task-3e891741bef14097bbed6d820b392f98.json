@@ -127,8 +127,8 @@
       "completedAt": "2026-08-18T04:29:21.405Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-a8258c2e",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -147,14 +147,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:29.449Z",
-  "updatedAt": "2026-08-18T04:30:36.781Z",
+  "updatedAt": "2026-08-18T04:35:29.178Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:34:28.014Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T04:35:29.178Z",
+    "wallClockMs": 3661164
   },
   "stepsCompleted": [
     "step-1",
@@ -212,7 +214,7 @@
     "apps/daemon/src/work/foundation-context-manifest-codec.ts",
     "apps/daemon/src/work/foundation-context-manifest-codec.js"
   ],
-  "reviewCompletedAt": "2026-08-18T04:19:56.733Z",
+  "reviewCompletedAt": "2026-08-18T04:35:29.178Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Focused tests pin the complete code/key/version roster, hostile accessors/proxies/unknown keys/oversize/truncation/negative-zero cases with a positive generated count, one accepted real renderContext control, and mutations hashing a reference or omitting an outer binding field that redden named assertions.",
@@ -267,5 +269,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-18T04:35:29.178Z",
+  "reviewSummary": "APPROVE at HEAD ceb0370 (reopen #1). Fix was test-only; production byte-identical to bytes I already passed (sha256 1fddeda6..., 250 lines), .js bridge 56 bytes LF via od -c, packages/context untouched, no scratch residue.\n\nDEFECT DEAD - I re-ran my own two surviving mutants:\n D1 codec:182 MALFORMED->NONCANONICAL => 6 FAILED (missing key, extra key, array, null, string, revoked-proxy-as-record). WAS 50/50 GREEN.\n D2 codec:184 MALFORMED->VERSION_UNSUPPORTED => 5 FAILED (both accessors, revoked-proxy-as-manifest, null-proto, oversize). WAS 50/50 GREEN.\nDisjoint red sets = sweep discriminates per GUARD, not per outcome. Fix: HOSTILE_CASES is [name, builder, code]; test:401 asserts result.code toBe(expected); 11->14 cases, non-constant column, hand-written assertion that the distinct codes are exactly four.\n\nThe three NEW arms drilled by me, all load-bearing: codec:154 VERSION_UNSUPPORTED->MALFORMED, codec:175 MANIFEST_DIGEST_MISMATCH->MALFORMED, codec:196 RECORD_DIGEST_MISMATCH->MALFORMED => each 2 red incl. its new arm.\n\nDoD 4 named mutations, re-run by me: (ii) omit graphEpoch from hashed input => EXACTLY 1 red, the graphEpoch arm (per-field, not a lump); (i) hash String(bound) => 13 red; (iii) drop re-encode byte compare => 1 red, NONCANONICAL arm. Drills restored by content from a hash snapshot, sha re-verified, never git checkout. Peer commit b208bd0 landed mid-window: does not touch owned paths, HEAD bytes == gated bytes.\n\nGATE, four legs run separately: context typecheck 0; context test 0 -> 5 files/24 tests; daemon typecheck 0; daemon test 0 -> 130 files/2808 tests (matches worker). Focused 1 file/53 tests. Test file is in the daemon tsc --listFiles set.\n\nDoD 5 consumer now on the board: comment-f36ac868 + verification name task-22fa35a5.\n\nNoted, not faulted: hook commit ceb0370 swept foreign files (global rail 5); 512-item exactBytes ceiling is a real hazard for task-22fa35a5, outside owned paths."
 }

@@ -101,7 +101,7 @@
       "completedAt": "2026-08-18T04:34:16.041Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -121,17 +121,21 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:53.316Z",
-  "updatedAt": "2026-08-18T04:35:14.567Z",
+  "updatedAt": "2026-08-18T10:03:36.481Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:13:35.678Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T04:41:25.996Z",
+    "wallClockMs": 5270318
   },
   "contextFetchedBy": [
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-a8258c2e",
+    "architect-f956ffe1"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -186,7 +190,7 @@
     "apps/daemon/src/activation/activation-run-commit.test.ts",
     "apps/daemon/src/activation/activation-telemetry-launch.ts"
   ],
-  "reviewCompletedAt": "2026-08-18T04:17:50.480Z",
+  "reviewCompletedAt": "2026-08-18T04:41:25.996Z",
   "rejectionDetails": {
     "failedDodItems": [
       "Definition of Done 4 / implementation-plan step 3: the focused production-adapter hostile run-identity matrix does not include the expressly promised extra-own-property case, so exact-record rejection at TELEMETRY_RUN_REF_MALFORMED@TELEMETRY_INPUT is not pinned for that category."
@@ -217,5 +221,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-18T04:41:25.996Z",
+  "reviewSummary": "APPROVED at HEAD 9788cef. Owned diff 0be0763..HEAD: production 65/19 (143 lines; one createTelemetryBoundClaudeLauncher(authority), one bound invocation, result unchanged, no raw fallback, options narrowed to platform/signal), focused test 525/15, run-commit test 21/3 = approved witness + 3 arguments only. Owned paths clean.\n\nGates re-run by me: focused EXIT 0, 1 file/34 tests; daemon typecheck EXIT 0 (so the @ts-expect-error closed-surface fixtures really error); pnpm --filter @moe/daemon test EXIT 0, 130 files/2808 tests.\n\nReopen #1 resolved. My prior reject demanded an extra-own-property case refusing at TELEMETRY_RUN_REF_MALFORMED@TELEMETRY_INPUT. I confirmed at provider-telemetry-contracts.ts:208 that snapshotRunRef is a 5-key whitelist PROJECTION: extra keys are dropped, never refused, so that assertion is unreachable without editing packages/runner (rail-forbidden). Worker measured it, pushed back, and covered the category on the ACCEPTED arm with 3 name-pinned exactly-counted cases (extra-scalar, extra-throwing-accessor, extra-handoff-shadow): exact 5-key handoff identity, hasOwnProperty absence, unshadowed handoff facts, runArguments[0].providerRunRef toBe the caller's object. Both rosters pin labels by name, so a vanishing category reddens.\n\nTwo QA drills, restored to hash 47469f38, HEAD unmoved: spread providerRun -> 6 named failures incl. all 3 smuggled cases + throwing-accessor tripwire; double invocation -> 20+ named failures incl. one-factory/one-run and raw-result.\n\nRepo-wide path-attributed, owned intersection EMPTY: pnpm test EXIT 1, 4 foreign failures (release-archive-cleanup x2, recovery-anchor, foundation-spec citing apps/daemon/src/index.ts); pnpm typecheck EXIT 1 from an uncommitted peer edit to packages/scheduler/src/index-surface.test.ts. 9788cef holds no owned bytes (hook capture; bytes in ceb0370). Consumer: task-00e4827dd9374ec79625351d560c82c8."
 }

@@ -35,12 +35,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-f956ffe1",
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 2,
+  "reopenReason": "Governor ruling (standing authority): the rail-2 waiver this block requests ALREADY EXISTS — per-task exception msg-72adc4cd, granted for task-b017fe9f specifically, scoped to exactly D:/projexts/moes packages/moe-daemon/src/tools/reportBlocked.ts + reportBlocked.test.ts, no wider. It is not speculative: commits ea3facd and 3995017 landed under it and QA graded both passes against it; continuity for this third pass re-confirmed in msg-350936517 (#architects, 08:53Z) and msg-c35926ff. Plan the residual only: QA reject #2 (msg-66ef53a3) — the queued-branch correction write reads the pre-await snapshot and can stamp blockedReason/blockedResourceId back onto a task concurrently unblocked inside the awaited acquireResource, answering BLOCKED about a WORKING task; ~4 lines, mirror of the granted-branch post-await re-read. The blocker's truthful-indicator design note is already the landed shape (alreadyBlocked/reasonUpdated flags) — keep it. Steps live against the moes repo via prose paths with empty affectedFiles, same as 9d5dfec6/b9154b43 did.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -48,14 +48,28 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:49:58.881Z",
-  "updatedAt": "2026-08-18T04:30:51.003Z",
+  "updatedAt": "2026-08-18T10:26:52.587Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:28:50.954Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 0
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 8,
+    "rejectCount": 2,
+    "reopenCount": 2
   },
   "stepsCompleted": [],
-  "failedDodItems": [],
+  "failedDodItems": [
+    {
+      "item": "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible",
+      "rejectedAt": "2026-08-18T08:32:10.772Z",
+      "rejectedBy": "qa-a8258c2e"
+    },
+    {
+      "item": "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible",
+      "rejectedAt": "2026-08-18T08:53:13.983Z",
+      "rejectedBy": "qa-12cda609"
+    }
+  ],
   "planSubmittedAt": "2026-08-18T04:30:48.896Z",
   "planningNotes": {
     "approachesConsidered": "The description offers two fix shapes and delegates the choice: (A) overwrite blockedReason on repeat, or (B) truthful no-op indicator. CHOSE A-PLUS-HONESTY: durably update the reason AND return alreadyBlocked/reasonUpdated flags. Rationale: the measured harm is a stale recipe steering the unblocker into an under-fix (the 93->94-vs-93->96 case), and the caller's mental model -- confirmed by the measured report -- is that the correction landed; making the repeat FAIL (success:false ALREADY_BLOCKED) would strand corrections because fleet callers demonstrably fire-and-forget these, and the interim add_comment workaround already exists for anyone who wants explicit control. The indicator preserves DoD 1's truthfulness requirement in both directions: first block (alreadyBlocked:false) vs correction (true), changed (reasonUpdated:true) vs identical repeat (false). THE SUBTLETY THAT MAKES A NAIVE FIX WRONG: the original updateTask writes blockedFromStatus: task.status -- correct on first block, catastrophic on repeat, because the task's status is now BLOCKED and the unblock path would restore to BLOCKED, wedging the task permanently. The correction branch therefore updates ONLY the reason (and resourceId when supplied), preserving blockedFromStatus/blockedAt/assignedWorkerId; the RED test asserts all three preserved fields. Also chose a distinct activity event (TASK_BLOCK_REASON_UPDATED) so log consumers can tell corrections from blocks, and idempotent-repeat suppression so a retried identical call does not spam #governors. Cross-repo: third per-task rail-2 exception this board; the gate-then-block pattern from tasks 495ad5e8/14ea45a5 is reused verbatim.",
@@ -69,7 +83,123 @@
     ]
   },
   "budget": {
-    "wallClockMs": 3600000
+    "wallClockMs": 3600000,
+    "warnedAt": "2026-08-18T08:09:16.012Z",
+    "escalatedAt": "2026-08-18T08:09:16.012Z"
   },
-  "planApprovedAt": "2026-08-18T04:30:51.003Z"
+  "planApprovedAt": "2026-08-18T04:30:51.003Z",
+  "contextFetchedBy": [
+    "architect-f956ffe1"
+  ],
+  "workStartedAt": "2026-08-18T08:09:42.051Z",
+  "reviewStartedAt": "2026-08-18T08:48:26.557Z",
+  "verification": {
+    "command": "cd D:/projexts/moes/packages/moe-daemon && npm test -- src/tools/reportBlocked.test.ts",
+    "exitCode": 0,
+    "outputTail": "Test Files  1 passed (1)\n     Tests  20 passed (20)\n  Start at  11:46:26\n  Duration  983ms (transform 203ms, setup 0ms, import 264ms, tests 623ms, environment 0ms)\nEXIT=0\n\nRun fresh AFTER commit 3995017; `git status --porcelain` for both files is empty, so the gated bytes ARE the committed bytes. 17 pre-existing arms + 3 new.",
+    "reportedAt": "2026-08-18T08:48:26.557Z"
+  },
+  "filesModified": [
+    "D:/projexts/moes/packages/moe-daemon/src/tools/reportBlocked.ts",
+    "D:/projexts/moes/packages/moe-daemon/src/tools/reportBlocked.test.ts"
+  ],
+  "reviewCompletedAt": "2026-08-18T08:53:13.983Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible"
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+        "line": 110,
+        "description": "flipped/alreadyBlocked/identicalRepeat (:110, :120, :121) are all computed from `task`, the PRE-await snapshot. On the queued branch acquireResource has already been awaited, so a concurrent unblock is invisible here. Hoist the same re-read you added on the granted branch — `const current = state.getTask(task.id) ?? task;` — above :110 and derive all three from `current`. Then every write and flag on this path describes the task as it is, not as it was."
+      },
+      {
+        "type": "missing_feature",
+        "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+        "line": 132,
+        "description": "The flip write also reads the stale snapshot: `assignedWorkerId: task.assignedWorkerId` (:129) and `blockedFromStatus: task.status` (:132). Once the re-read lands, use current.* for both, or a task unblocked mid-acquire gets blockedFromStatus stamped from a status it no longer has. Either outcome is acceptable — re-block from the post-await status, or decline to write — but the response's taskStatus/alreadyBlocked/reasonUpdated must match what the store holds after the call."
+      },
+      {
+        "type": "test_failure",
+        "file": "packages/moe-daemon/src/tools/reportBlocked.test.ts",
+        "line": 533,
+        "description": "Add the queued twin of your :533 arm: same acquireResource spy that unblocks task-1 mid-call, but return a NOT-granted result so control falls through to the correction branch. Assert the STORE first — a WORKING task must not come back carrying blockedReason or blockedResourceId — then the response flags. Confirm RED before the fix: today my probe returns status WORKING with reason 'late correction', resourceId 'benchmark-box', alreadyBlocked true, taskStatus 'BLOCKED'."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT (2nd). The grant-path gap I named IS fixed and drilled — but this task's NEW correction write on the sibling (queued) branch resurrects block fields onto a running task and answers with a stale status. Same awaited acquire, same hazard you fixed one branch above.\n\nGREEN FIRST (my runs @3995017; `git status` empty for both files, so gated bytes ARE committed bytes): `npm test -- src/tools/reportBlocked.test.ts` -> \"Test Files 1 passed (1)\", \"Tests 20 passed (20)\" EXIT=0; `npx tsc --noEmit` EXIT=0; full package 82 files / 931 tests EXIT=0. Three drills, target restored md5-exact (d8d22d6e…) each time, `git log -1 -- <path>` still 3995017: (1) delete the grant-path write -> \"expected 'STALE-93-94' to be 'CORRECTED-93-96'\" at test:480 — the STORE, as my last reject asked; (2) `const current = task` -> \"expected 'late correction' to be null\" at :554; (3) grantCorrects ignoring reason equality -> updatedAt churn at :519. Your arms are mutation-resistant.\n\nTHE NEW GAP, MEASURED (probe appended to your own fixture, then restored byte-exact — md5 b7927828… re-verified, suite re-run 20/20 green): block plainly, then repeat with a DIFFERENT reason and a BUSY resource, with a concurrent unblock inside the awaited acquireResource — the same spy your :533 arm uses. Result:\n{\"status\":\"WORKING\",\"reason\":\"late correction\",\"resourceId\":\"benchmark-box\",\"alreadyBlocked\":true,\"reasonUpdated\":true,\"taskStatus\":\"BLOCKED\"}\nThe store holds a WORKING task carrying blockedReason AND blockedResourceId, and the response reports BLOCKED. Your own comment on the granted branch names this verbatim (\"a concurrent unblock would otherwise get a dead blockedReason stamped back onto a running task\"); the queued branch still reads the pre-await snapshot. Before this task that branch wrote NOTHING for an already-BLOCKED task, so the resurrecting write is new here, and DoD 1's truthful-indicator clause fails on a response saying BLOCKED about a WORKING task. ~4 lines in the 2 granted files.",
+      "rejectedAt": "2026-08-18T08:53:13.983Z",
+      "reopenCount": 2,
+      "failedDodItems": [
+        "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible"
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+          "line": 110,
+          "description": "flipped/alreadyBlocked/identicalRepeat (:110, :120, :121) are all computed from `task`, the PRE-await snapshot. On the queued branch acquireResource has already been awaited, so a concurrent unblock is invisible here. Hoist the same re-read you added on the granted branch — `const current = state.getTask(task.id) ?? task;` — above :110 and derive all three from `current`. Then every write and flag on this path describes the task as it is, not as it was."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+          "line": 132,
+          "description": "The flip write also reads the stale snapshot: `assignedWorkerId: task.assignedWorkerId` (:129) and `blockedFromStatus: task.status` (:132). Once the re-read lands, use current.* for both, or a task unblocked mid-acquire gets blockedFromStatus stamped from a status it no longer has. Either outcome is acceptable — re-block from the post-await status, or decline to write — but the response's taskStatus/alreadyBlocked/reasonUpdated must match what the store holds after the call."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.test.ts",
+          "line": 533,
+          "description": "Add the queued twin of your :533 arm: same acquireResource spy that unblocks task-1 mid-call, but return a NOT-granted result so control falls through to the correction branch. Assert the STORE first — a WORKING task must not come back carrying blockedReason or blockedResourceId — then the response flags. Confirm RED before the fix: today my probe returns status WORKING with reason 'late correction', resourceId 'benchmark-box', alreadyBlocked true, taskStatus 'BLOCKED'."
+        }
+      ]
+    },
+    {
+      "reason": "DoD 1 has a MEASURED counterexample. The plain repeat path is fixed well; one input to the same tool, on the same subject (a repeat report_blocked on an already-BLOCKED task), still returns silent success over a stale blockedReason. Fix is ~5 lines inside the granted 2 files.\n\nVERIFIED (my runs, D:/projexts/moes @ f5c5079):\n- Gate on the COMMITTED bytes (I swapped HEAD blobs in, because a peer left an uncommitted 13/3 text edit in reportBlocked.ts for task-9d5dfec6; restored byte-exact): `npx vitest run src/tools/reportBlocked.test.ts` -> EXIT=0, `Test Files 1 passed (1)`, `Tests 17 passed (17)`. Real count line.\n- 4 independent drills, each restored md5-exact: (1) correction branch dead -> 2 failed, `expected 'bump 93 -> 94, one constant' to be 'CORRECTED: bump 93 -> 96, three constants'` — the arms pin the STORE; (2) naive re-stamp of blockedFromStatus -> 3 failed incl. `expected 'BLOCKED' to be 'REVIEW'`; (3) suppression dropped -> `length of 6 but got 8`; (4) wait hint from task.status -> `to match object { args: { statuses: ['REVIEW'] } }`. Tests are mutation-resistant.\n- reportBlocked.ts 243 lines (<250). Commits ea3facd/f5c5079 touch exactly the 2 granted files.\n- Full package suite: 5 failed | 910 passed, all 5 in claimNextTask.test.ts, which git status shows as a peer's uncommitted in-flight work. Foreign, not yours.\n\nTHE GAP (probe, deleted; details in issues): with a FREE resourceId the lease early-return at reportBlocked.ts:63-79 fires BEFORE the correction branch, so the corrected reason is dropped, alreadyBlocked/reasonUpdated are undefined, and the message claims \"task NOT blocked\" while the stored status is BLOCKED. Your step-4 note calls this pre-existing — true of the wording, but the reason-drop on a repeat is this task's subject and DoD 1's clause is unqualified: silent success with a stale field must be impossible.",
+      "rejectedAt": "2026-08-18T08:32:10.772Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible"
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+          "line": 70,
+          "description": "MEASURED (probe over a real StateManager): task blocked with reason 'STALE-93-94', then report_blocked(reason:'CORRECTED-93-96', resourceId:'free-box') where free-box is FREE. Stored blockedReason stays 'STALE-93-94'. Response: {success:true, granted:true, alreadyBlocked:undefined, reasonUpdated:undefined, message:'Resource free-box was free - lease granted, task NOT blocked...'} while getTask().status is 'BLOCKED'. The grant early-return at :70-78 precedes the correction branch at :116-125."
+        },
+        {
+          "type": "missing_feature",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.ts",
+          "line": 63,
+          "description": "To pass: in the granted branch, when task.status==='BLOCKED', either write the corrected reason before returning (keeping blockedFromStatus/blockedAt/assignedWorkerId untouched, as your correction branch already does) or return alreadyBlocked:true + reasonUpdated:false. Whichever you pick, the message must not claim 'task NOT blocked' for a task still BLOCKED on disk."
+        },
+        {
+          "type": "test_failure",
+          "file": "packages/moe-daemon/src/tools/reportBlocked.test.ts",
+          "line": 439,
+          "description": "Add a 5th arm beside 'a correction records blockedResourceId only when the repeat supplies one': block plainly, then repeat with a different reason and a FREE resourceId. Assert the STORE first (second reason stored, or unchanged if you take the refusal shape), then the response flags. Confirm RED before the fix - my probe reddens today with \"expected 'STALE-93-94' to be 'CORRECTED-93-96'\". The existing busy-resource arm never reaches this branch."
+        }
+      ]
+    }
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Diagnosed the task as unimplementable under this epic's rails and reported it BLOCKED with the measurement. grep over moe-next returns ZERO hits for report_blocked/reportBlocked across apps, packages, adapters and tools; the three blockedReason hits are unrelated graph/planning uses in approval-authority and readiness-projection. The real implementation is in D:/projexts/moes/packages/moe-daemon/src/ (plus vendored copies under moe-vscode and moe-jetbrains), and `git -C ../moes rev-parse --show-toplevel` confirms it is a separate git repository. Epic rail 2 confines development to D:/projexts/moe-next. Also recorded corroborating evidence that the defect is real, and a design recommendation for whoever implements it.",
+      "whatRemains": "A human or governor decides whether this task belongs on a moes-repo board or whether epic rail 2 is waived for it. If it moves repos, the implementing architect should read the design note in the block reason: prefer a truthful ALREADY_BLOCKED / reasonUnchanged indicator over silently overwriting blockedReason, because overwriting destroys the original block premise and this board's audit practice depends on reading why a task blocked the first time.",
+      "pitfalls": "Do not narrow the DoD to something implementable in moe-next. There is no partial surface here to build against - it is a different codebase, not a missing module. DoD 2 explicitly wants a test over a real store driving report_blocked twice, and that store belongs to the moes daemon.",
+      "openQuestions": "Repo ownership only. The defect itself is measured and uncontested: a repeat report_blocked on an already-BLOCKED task returns success and fires the governor notification while leaving blockedReason stale. The add_comment workaround is in circulation and works - get_context surfaces comments.",
+      "releasedAt": "2026-08-18T10:00:46.690Z",
+      "releasedBy": "architect-77071474",
+      "reason": "Block reported and fully diagnosed; releasing the claim so the slot frees. Nothing further an architect can do on this board."
+    }
+  ]
 }

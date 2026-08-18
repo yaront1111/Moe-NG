@@ -95,12 +95,12 @@
       "completedAt": "2026-08-18T03:39:58.295Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: all three unrostered-boundary gates recorded in the blockedReason are now closed — GOAL_PREREQUISITE_LAYER (task-a46d4f99 DONE), AGENT_STAFFING_LAYER (task-05b0a693 DONE), GRAPH_CONTENT_LAYERS (task-66004424 QA-approved DONE 20:30Z). pnpm test:security was measured fully green at 19:48Z (9 files / 483 tests) and has since gained the GRAPH_CONTENT arms. Planning architect: re-run the security gate at current HEAD first — the roster cardinality has moved repeatedly today (89 → 91 → 92+); grade against live counts, not the numbers in this task's description.",
+  "reopenReason": "Governor promotion (standing authority): the sole blocker is cleared — gate 2 (`pnpm test:security`) measured by the governor at 10:17Z: \"Test Files 10 passed (10) / Tests 528 passed (528)\", EXIT=0, after task-c5be7926 landed both remaining constants (commit d496b5e, QA-approved DONE 10:17Z). All 7 steps of this task were already done and committed at 6176607. IMPORTANT: the stored unblock recipe (comment-335ba397) and any 93→94 arithmetic are STALE — the roster moved to 96; do not re-apply old pin numbers. Remaining work: re-run both gates fresh at current HEAD, then complete_task. Nothing else to implement.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -115,11 +115,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T02:01:35.966Z",
-  "updatedAt": "2026-08-18T03:49:43.118Z",
-  "blockedReason": "ALL 7 STEPS DONE, COMMITTED at 6176607 (+340/-5, two owned paths). DoD 1-4 met and drilled, DoD 6 recorded. Blocking ONLY because gate 2 of 2 cannot return 0 for a cause I may not repair. Detail in the step-5 and step-7 notes.\n\nGATES, separate, own exit codes, not ;-chained, not piped, both printed count lines:\n  pnpm test:fault -> EXIT=0, \"Test Files 10 passed (10)\", \"Tests 83 passed (83)\"\n  pnpm test:security -> EXIT=1, \"Test Files 2 failed | 8 passed (10)\", \"Tests 4 failed | 497 passed (501)\"\n  FAIL boundary-roster.security.ts AND durable-store-boundaries.security.ts > roster versus live source scan > names every scanned constant in the roster (scan minus roster is empty)\n    expected [ Array(1) ] to deeply equal []\n    + [ \"IMPORT_SHADOW_READ_LAYER@apps/daemon/src/projections/import-shadow-contracts.ts\" ]\n  FAIL (both) > scans exactly the roster's cardinality -> expected 93, received 94\n\nATTRIBUTED BY COMMIT. `git log --diff-filter=A -1 -- apps/daemon/src/projections/import-shadow-contracts.ts` -> 6336047 feat(task-80fce1d1); `git show --stat 6336047 | grep -c boundary-roster` -> 0. It declares a boundary, does not roster it, lands AFTER my commit. My diff is two hunks (@@ -18,11 +18,19 @@, @@ -481,6 +489,47 @@); the failing assertions at :411/:420 are pre-existing and untouched. Baseline at c1ab42b7 before any edit of mine: EXIT=0, 9 files / 487 tests. My cases are green inside the red run (497/501).\n\nWHY NOT CLEARED HERE: rostering that constant now ALSO demands BEFORE/AFTER/RACE coverage — what this task landed — so clearing it would leave the ratchet policing coverage this task authored. Rail 1 forbids it; I cannot pick its axis.\n\nUNBLOCK: add the roster entry, bump EXPECTED_ROSTER_SIZE 93->94 and EXPECTED_DISTRIBUTION[\"apps/daemon\"] 35->36, land three arms. No code of mine changes.\n\nARCHITECT: pnpm test:security runs in NO other gate, so a new *_LAYER under apps/** reddens a suite its author never runs.",
+  "updatedAt": "2026-08-18T10:17:48.567Z",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-18T03:41:43.349Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "contextFetchedBy": [
     "architect-f956ffe1",
     "worker-0b2f9c35"

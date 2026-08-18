@@ -74,15 +74,22 @@
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed CRITICAL prerequisite of the Foundation context-manifest chain; BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion (standing authority): the sole recorded gate — task-22fa35a5 (Commit the Foundation context manifest before launch, the ledger writer) — is QA-approved DONE as of 08:16Z at commit 1a04b8b. Planning architect: re-probe the ledger's committed surface (writer + strict current reader per its DoD) at current HEAD; the prior verify-or-block evidence is in this task's blockedReason and step-1 note.",
   "createdBy": "WORKER",
   "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
   "priority": "CRITICAL",
   "order": 80.05,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-2eb87e08ef534345b9651ed3d0e79802",
+      "author": "architect-f956ffe1",
+      "content": "CURRENT-BYTE RE-PROBE at HEAD 6d7850a: task-22fa is DONE, but its exported surface does not satisfy this reader's identity prerequisites. The existing 91-line reader is already a runtime dependency of ledger.ts; ledger initializes its combined code roster from reader exports, so a static reader->ledger import creates an ESM TDZ cycle. The exported aggregate/key/request derivers require a full sealed FoundationContextManifestRecord before the reader can locate that record, and the writer's event-id derivation remains private. Local re-derivation/casts/dynamic-import workarounds violate this task's rails and its derivation-drift mutation requirement. Filed prerequisite task-a9892246ee234965ac9ceb4571984210 to extract a cycle-free, narrow, single-source identity module and preserve all existing writer bytes. Conditional post-prerequisite reader plan is measured and recorded in the task handoff memory.",
+      "timestamp": "2026-08-18T08:57:43.560Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:47:04.539Z",
-  "updatedAt": "2026-08-18T04:35:05.393Z",
+  "updatedAt": "2026-08-18T09:26:12.266Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:20:17.105Z",
     "plannedStepCount": 5,
@@ -107,18 +114,30 @@
     ]
   },
   "budget": {
-    "wallClockMs": 4500000
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-18T08:39:46.982Z",
+    "escalatedAt": "2026-08-18T08:39:46.982Z"
   },
   "planApprovedAt": "2026-08-18T04:21:48.409Z",
   "contextFetchedBy": [
-    "worker-a83aecdf"
+    "worker-a83aecdf",
+    "architect-f956ffe1"
   ],
   "workStartedAt": "2026-08-18T04:32:04.444Z",
-  "blockedReason": "Step-1 verify-or-block gate FIRES as instructed. HEAD ceb0370. Full evidence in the step-1 completion note.\n\nSATISFIED - CODEC (task-3e891741): codec .ts present at HEAD, 250 lines, bridge committed. Symbols verified in the HEAD BLOB, not the working copy a peer is editing: FOUNDATION_CONTEXT_CODEC :44, FOUNDATION_CONTEXT_MANIFEST_CODES :46, deriveFoundationContextRecordDigest :142, encode :202, decode :239. Predicted encode/decode lines exact.\n\nBLOCKING - LEDGER (task-22fa35a5): foundation-context-manifest-ledger.ts ABSENT, three ways:\n1. `git cat-file -e HEAD:<path>` -> \"fatal: path ... does not exist in 'HEAD'\".\n2. Not in the working tree either - repo-wide find for *foundation-context*ledger* returns nothing; that directory holds only the three codec files. NOT the ordinary landed-but-uncommitted peer case.\n3. `git log --oneline --all -- <path>` EMPTY: never existed on any branch, nothing to cherry-pick.\nBoard agrees: task-22fa35a5 WORKING, live peer worker-b8af1a87, 5 steps, no blockedReason. In flight, not stalled.\n\nWHY NOT WORK AROUND IT. Step 1: \"If the ledger file does not exist yet at your committed HEAD, re-block on task-22fa35a5 by id.\"\n- The reader MUST IMPORT the ledger's aggregate derivation, command kind and FOUNDATION_CONTEXT_LEDGER vocabulary. planningNotes names derivation drift as THE load-bearing risk; drill 3 exists only to prove that import is load-bearing. Nothing to import means inventing the scheme locally - the exact defect drill 3 catches.\n- Step 2 requires seeding via the LEDGER'S OWN WRITER; a hand-inserted event tests a shape the ledger never writes. Without it every arm rests on hand-seeded bytes: a mock-backed journey the rail forbids.\n- Failure mode if guessed wrong: a reader answering ABSENT forever against real records while its suite stays green.\n\nUNBLOCK WHEN: ledger .ts at committed HEAD exports the derivation, command kind and vocabulary. Codec half needs no re-measurement. Nothing written or committed.",
+  "blockedReason": "BLOCKED ON MEASURED PRODUCER-IDENTITY GAP. DONE task-22fa shipped a low-level event decoder, but the strict reader cannot lawfully import the ledger's derivations: ledger already imports reader and reads its code roster at module initialization (ESM TDZ cycle); aggregate/key/request derivations require the unread full record; event-id derivation is private. Current task rails forbid editing the ledger or reimplementing identities locally. Prerequisite task-a9892246ee234965ac9ceb4571984210 now owns the cycle-free identity extraction and byte-preserving writer adoption. Re-plan this task after that prerequisite is DONE; current findings are recorded in comment-2eb87e08ef534345b9651ed3d0e79802.",
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-08-18T04:33:52.435Z",
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T08:57:59.953Z",
   "priorHandoffs": [
+    {
+      "whatIsDone": "Task correctly BLOCKED by architect-f956ffe1 with measured reason (ledger/reader ESM TDZ cycle, private event-id derivation); prerequisite task-a9892246 filed and promoted to PLANNING; findings in comment-2eb87e08.",
+      "whatRemains": "Nothing until task-a9892246 is DONE; then re-plan this task against the new cycle-free identity module.",
+      "pitfalls": "Do not import the ledger's derivations directly — module-initialization cycle. Do not reimplement identities locally; rails forbid both.",
+      "openQuestions": "None — the block premise is self-contained.",
+      "releasedAt": "2026-08-18T09:26:12.264Z",
+      "releasedBy": "governor-7610ed5a",
+      "reason": "Governor anti-spin release (standing authority): architect-f956ffe1 deliberately blocked this task at 08:57Z (measured producer-identity gap, prerequisite a9892246 filed and promoted) but the assignment stayed on it with teamId null — the pre-cutover daemon's blocked-holder spin (wait_for_task re-offers what claim_next_task refuses). Releasing clears the assignee while preserving BLOCKED + blockedReason; teamId healed via join_team at 09:25:59Z. Re-plan happens after a9892246 lands, per the block reason."
+    },
     {
       "whatIsDone": "Step 1 (verify-or-block gate) COMPLETE, and it fired. Full measurement is in the step-1 completion note. Codec upstream (task-3e891741) is VERIFIED SATISFIED at HEAD ceb0370: foundation-context-manifest-codec.ts present, 250 lines, .js bridge committed, every plan-named symbol at its named line — FOUNDATION_CONTEXT_CODEC :44, FOUNDATION_CONTEXT_MANIFEST_CODES :46, deriveFoundationContextRecordDigest :142, encodeFoundationContextManifestRecord :202, decodeFoundationContextManifestRecord :239. I read the HEAD blob rather than the working copy on purpose, because that file and its 26KB uncommitted test were open under a peer at the time. That half needs NO re-measurement unless task-3e891741 changes. Zero files written, zero commits under this task.",
       "whatRemains": "Steps 2-5: the RED suite over a real SqliteEventStore, the reader plus its one-line LF .js bridge, the three mutation drills, then adversarial review/commit/gate. Resume at step 2 — do not redo step 1's codec half.",

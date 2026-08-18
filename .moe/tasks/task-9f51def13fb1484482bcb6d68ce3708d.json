@@ -112,8 +112,8 @@
       "completedAt": "2026-08-18T04:30:28.845Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -132,12 +132,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:11:46.355Z",
-  "updatedAt": "2026-08-18T04:31:49.787Z",
+  "updatedAt": "2026-08-18T04:36:43.853Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:13:41.392Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T04:36:43.853Z",
+    "wallClockMs": 1382461
   },
   "stepsCompleted": [
     "step-1",
@@ -180,5 +182,8 @@
     "packages/scheduler/src/index.ts",
     "packages/scheduler/src/execution-surface.ts",
     "packages/scheduler/src/execution-surface.js"
-  ]
+  ],
+  "completedAt": "2026-08-18T04:36:43.853Z",
+  "reviewCompletedAt": "2026-08-18T04:36:43.853Z",
+  "reviewSummary": "APPROVED. 5/5 DoD verified from disk at HEAD b208bd0; commit 3c4c470 carries exactly the 3 owned paths.\n\nDoD1 NAMESPACE UNCHANGED, statically and at runtime. Parsed every `export {..} from` block at 3c4c470^ vs HEAD (index.ts + execution-surface.ts): 266 names both sides, 94 values/172 types both sides, LOST=[], GAINED=[], KIND-CHANGED=[], SOURCE/ALIAS-CHANGED=[]. Runtime dump = 94 keys, set-equal to the static value set. No name in both files, so the new `export *` shadows nothing. NO NEW CAPABILITY: withheld validateUsageMeasurement still refuses at the consumer (TS2724).\n\nDoD2 index.ts 249, execution-surface.ts 203 (both <=250). Bridge 1 line/40 bytes, od -c ends `;\\n`, no CR, on disk and at HEAD.\n\nDoD3 index-surface.test.ts untouched (numstat empty, clean worktree), 212 passed. apps/daemon probe importing moved values (releaseWork, SLOT_STATES) + types (LeaseRecord, DrainDisposition) from the bare specifier: exit 0, zero diagnostics, deleted same command, no residue. Exit 0 NOT cached - 3 negative controls fired: TS2305, TS2749 (releaseWork is a value not a type), TS2724.\n\nDoD4 DRILLS RE-RUN BY ME. Deleting `export { releaseWork }` at surface:39 reddens the named roster assertion \"publishes exactly the reviewed root namespace, with no loss and no addition\" +5 more (6 failed). Restored byte-exact (sha 449d16ca) -> 212 passed. Second drill, name-preserving rebind `SLOT_STATES as releaseWork`: set-equality stays GREEN, only the per-export kind assertion reddens - it carries its own weight. HEAD identical across both drill windows; git status clean.\n\nDoD5 SEPARATE legs, exits captured individually: typecheck exit 0; test exit 0 with real count line `Test Files 45 passed (45)` / `Tests 1411 passed (1411)`. Green again post-drill.\n\nRAILS: pure move - zero imports/functions/consts in the new surface; 6 added lines in index.ts (doc block + one star); no manifest/lockfile change; 0 of 99 parent doc-comment lines lost."
 }

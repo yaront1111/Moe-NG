@@ -1,0 +1,36 @@
+{
+  "id": "task-9a1eb61d566e47838c9f79c030da1f70",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Graph Beta: mint the server-owned launch-template producers",
+  "description": "HALF B of the governor's SPLIT decision on task-a3e8a02ddb864c689ac66de7b66bfceb (comment-cf245bba, 2026-08-18 08:42Z, standing authority). Filed by architect-c9e91335 while re-planning Half A. Half A (task-a3e8a02d) is the input-manifest half and is now planned; THIS task is the launch-template half and is a PREREQUISITE of the same consumer.\n\nDO NOT RE-DERIVE the measurement below — it is worker-a83aecdf's, preserved by the governor and re-confirmed at HEAD f96995d8.\n\nTHE ROOT PROBLEM, and it is a design gap rather than a lookup: `FOUNDATION_ATTEMPT_TEMPLATE_KEYS` (apps/daemon/src/work/foundation-attempt-contracts.ts) declares seven fields — argv, bootstrapCredentialDigest, cwd, environment, launchSelection, limits, runtime. Three of them have NO server-owned producer anywhere in the repo:\n\n1. **argv** — `NodeMission` is `{instructions, test, title, workspace}` (apps/daemon/src/orchestrator/agent-wrapper.ts:47-52) and carries no argv. `providerCapabilities` / `ProviderCapabilities` has ZERO matches repo-wide. Nothing composes an argument vector from server facts.\n\n2. **launchSelection** — the only production surface is `snapshotLaunchSelection(value: unknown)` at packages/runner/src/providers/claude/claude-launch-selection.ts:167, which is a VALIDATOR OVER CALLER INPUT, not a selector. Zero matches for selectClaudeLaunch / chooseLaunch / resolveLaunch. Daemon production carries only the pass-through `template[\"launchSelection\"]` (foundation-attempt-codec.ts:125, contracts:215).\n\n3. **limits** — daemon production has only the `template[\"limits\"]` pass-through. The scheduler budget seam is explicitly \"Caller-supplied conserved-budget admission reservation\" over \"a caller-supplied account view\" (packages/scheduler/src/index.ts:20-24), and `projectBudgetFact` is DELIBERATELY WITHHELD because \"budget-policy projection is a different seam\" (:107-111).\n\nTHE TRAP THAT MAKES THIS DANGEROUS, quoted from the worker's own handoff: \"A bounded SHAPE is trivially constructible — which is exactly what makes this dangerous. Declaring a type does not create a source. Anyone who closes finding (a) and then fills the bounded type from the request has shipped a caller echo wearing a server-derived label, and the suite will be green.\" A `validate*()` over a request field is NOT a reader; the governor's directive says so in terms.\n\nDELIVERABLE: mint the three server-owned producers, or — where a field is legitimately caller-proposed — record that decision explicitly with an exact authenticated payload allow-list and bound, per the parent task's DoD 1. The provider-capability source is the ROOT gap: it feeds BOTH argv and launchSelection, so decide its owner and shape first. The limits producer needs a durable launch-limits projection whose seam the scheduler deliberately does not provide.\n\nNOT IN SCOPE: the input manifest (task-a3e8a02d owns it), attempt command registration, claim/activation, provider dispatch internals, widening effect.activate, or editing the authoritative design.\n\nCONSUMER: task-a9fd91c373c244c78df97945965a8038 (Foundation attempt ingress composition), the same consumer Half A names. Dependents citing the parent as a gating dep: task-203a5ca7 and task-933605a5.",
+  "definitionOfDone": [
+    "Planning notes record the per-field authority decision for argv, launchSelection and limits — server-derived/durable versus caller-proposed-but-bounded — with the reason for each; an unresolved field blocks rather than defaults, and any caller-proposed field carries an exact authenticated payload allow-list and bound.",
+    "A server-owned provider-capability source exists and is the authority feeding BOTH argv and launchSelection; `grep -rn 'providerCapabilities\\|ProviderCapabilities' --include=*.ts apps packages | grep -v '\\.test\\.'` returns a production producer where it returned zero repo-wide.",
+    "Each produced field is derived from durable or observed server facts, never from the dispatch request: a test supplies a caller-proposed argv, launchSelection and limits that CONTRADICT the server-derived values and asserts the server value is what lands, pinning the exact code and layer of whichever layer refused the caller's.",
+    "A mutation that fills any of the three fields from the request instead of the server source turns a NAMED test red — this is the caller-echo-wearing-a-server-label defect the split was made to prevent, and it is invisible to a green suite.",
+    "Repeated production of the same durable identity is byte-stable, and an unverifiable capability, selection or limit fails closed with an exact stable code and layer rather than defaulting.",
+    "Focused tests use real durable/host seams with nonzero generated hostile-case counts and one accepted control; daemon typecheck and test run with exit codes captured separately and nonzero Test Files/Tests count lines."
+  ],
+  "taskRails": [
+    "A validate*() over a request field is NOT a reader. Declaring a bounded type does not create a source — a bounded shape filled from the request is a caller echo wearing a server-derived label, and it passes a green suite.",
+    "Decide the provider-capability source FIRST: it is the root gap feeding both argv and launchSelection, and nothing by that name exists repo-wide, so it is a design decision rather than a lookup.",
+    "Do not reimplement launch selection or workspace sealing; reuse public @moe/runner roots. `snapshotLaunchSelection` is a validator and may not be presented as the selector.",
+    "Keep this seam separate from Foundation ingress, graph projection, activation and launch execution. Do not widen effect.activate.",
+    "Fail closed with stable reason codes and layers, use TDD, target <=250 physical lines per production source, and commit only explicit owned paths by pathspec — this epic's rail 3 forbids a bare git commit because the index is shared."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promotion (standing authority): Half B of the a3e8a02d split is the design work itself — minting server-owned producers for argv/launchSelection/limits — with nothing external gating it; parking it in BACKLOG would stall the 203a5ca7/933605a5/a9fd91c3 chain that needs BOTH halves. Measurement preserved verbatim in the description; do not re-derive.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 122,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T10:01:56.300Z",
+  "updatedAt": "2026-08-18T10:05:25.881Z"
+}

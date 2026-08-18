@@ -18,30 +18,49 @@
     {
       "stepId": "step-1",
       "description": "Verify, then RED. Measured state: apps/daemon/src/telemetry/provider-run-refusals.ts (104 lines) holds the frozen 17-member PROVIDER_RUN_LEDGER_CODES (:52-70, including the existing EVIDENCE_ABSENT :62, EVIDENCE_AMBIGUOUS, RECORD_UNREADABLE), the 3-member layer set with PROVIDER_RUN_READER (:29), the ProviderRunRefusal shape whose `storeCode` doc says it carries the store's own code verbatim when a store call refused and is NEVER flattened into `code` (:81-88), and two constructors -- providerRunRefusal (:89, takes storeCode) and providerRunUnknown (:99, does NOT take storeCode). Note the DoD-2 consequence: EVIDENCE_UNREADABLE reader answers must be UNKNOWN AND carry the upstream DurableStoreErrorCode, which providerRunUnknown cannot express today -- so the task adds either an optional storeCode parameter there or a third focused constructor; prefer the optional parameter (defaulted null) because it keeps one UNKNOWN constructor and cannot break the existing call sites. RED in provider-run-refusals.test.ts: extend the hand-written roster assertion with the three new members in reviewed order (roster is HAND-LISTED, count asserted, order asserted, freeze and disjointness asserted -- never derived from the production array, per DoD 3), and add per-constructor pins: EVIDENCE_UNREADABLE -> outcome UNKNOWN, layer PROVIDER_RUN_READER, storeCode carrying a real DurableStoreErrorCode verbatim; EVIDENCE_MALFORMED and BINDING_MISMATCH -> outcome UNKNOWN, layer PROVIDER_RUN_READER, storeCode null. Run RED and confirm the only failures are the three missing members and constructor pins.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
+      ],
+      "note": "VERIFIED then RED. Measured at HEAD: provider-run-refusals.ts 104 lines, PROVIDER_RUN_LEDGER_CODES frozen 17 members (EVIDENCE_ABSENT :62, EVIDENCE_AMBIGUOUS :63, RECORD_UNREADABLE :61), PROVIDER_RUN_LEDGER_LAYERS 4 members incl PROVIDER_RUN_READER :29 (plan text said 3; file and its docblock both say four - COMPOSITION/CODEC/LEDGER/READER), providerRunRefusal :89 takes storeCode defaulted null, providerRunUnknown :99 does NOT. DurableStoreErrorCode confirmed in packages/store/src/store-contracts.ts:192 (17 members; picked STORE_CORRUPT for the pin - deliberately NOT the STORE_BUSY the existing pin uses, so a copy-paste cannot satisfy it). All 18 providerRunUnknown call sites (codec x15, ledger x3, tests/security/runtime-provider-launch.security.ts:352) pass 2 args, so the defaulted 3rd param cannot break them. tests/security/boundary-roster.security.ts rosters *_LAYER/*_LAYERS constants only, never *_CODES - no roster entry due for this task (proof run in step 3).\n\nRED test edits: EXPECTED_CODES hand-list gains EVIDENCE_UNREADABLE, EVIDENCE_MALFORMED, BINDING_MISMATCH in stage order (read -> parse -> compare) inside the evidence cluster after EVIDENCE_AMBIGUOUS and before EVENT_TYPE_UNEXPECTED; three new constructor pins assert the whole object (code+layer+outcome+storeCode+ok) via toEqual, never toContain over our own roster (mem gotcha-tocontain-over-own-code-roster-is-not-a-code-assertion: toContain admits every wrong-code substitution).\n\nRED evidence, both legs, exit 1 each:\n- vitest: Test Files 1 failed (1) / Tests 3 failed | 14 passed (17). Named failures: \"publishes exactly the reviewed reason codes in declaration order\", \"holds one entry per reviewed reason code and no duplicate\", \"preserves the store's own code on evidence the store could not hand over\" (expected storeCode \"STORE_CORRUPT\", received null).\n- tsc: TS2554 at :190 \"Expected 2 arguments, but got 3\" (providerRunUnknown has no storeCode param), TS2345 at :201 and :212 rejecting EVIDENCE_MALFORMED and BINDING_MISMATCH as ProviderRunCode. Those two pins are runtime-green until the roster lands, so the typecheck leg is their RED - recorded here so no one reads them as free.\nNo other failure appeared. No production file touched in this step.",
+      "startedAt": "2026-08-18T08:06:37.683Z",
+      "completedAt": "2026-08-18T08:08:44.541Z"
     },
     {
       "stepId": "step-2",
       "description": "GREEN: extend apps/daemon/src/telemetry/provider-run-refusals.ts. Append `PROVIDER_RUN_EVIDENCE_UNREADABLE`, `PROVIDER_RUN_EVIDENCE_MALFORMED`, `PROVIDER_RUN_BINDING_MISMATCH` to the frozen roster in the reviewed order the RED test pinned (append at the evidence-family cluster near :62 rather than the tail if the file's grouping comments say the roster is grouped by family -- follow the file's own ordering discipline; whatever order lands, the test lists it by hand). Widen providerRunUnknown with an optional `storeCode: DurableStoreErrorCode | null = null` final parameter so the reader can preserve the upstream store code on EVIDENCE_UNREADABLE without a second constructor. Add roster doc-comment lines in the file's existing voice explaining the three distinctions -- the file already documents WHY codes are deliberately distinct (the REPLAY_DIVERGED comment at :45-51 is the model): UNREADABLE = the store/page could not be read (store is the authority, storeCode carried verbatim); MALFORMED = bytes read fine but the indexed evidence does not parse (this module is the authority, storeCode null); BINDING_MISMATCH = everything parses but receipt/decision/activation bindings disagree (comparison authority, storeCode null). Do NOT alias any DurableStoreErrorCode into the provider vocabulary and do not touch any other file -- the reader that USES these codes is task-00e4827d's, not this task's. File stays well under 250 (104 + ~10 lines).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-refusals.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.ts"
+      ],
+      "note": "GREEN. Production edits, one file only (apps/daemon/src/telemetry/provider-run-refusals.ts, 104 -> 128 lines, far under the 250 target):\n\n1. PROVIDER_RUN_LEDGER_CODES 17 -> 20 members. Placed inside the evidence cluster in the file's own stage order (read -> parse -> compare), matching the order the RED test hand-pinned: ... RECORD_UNREADABLE, EVIDENCE_ABSENT, EVIDENCE_AMBIGUOUS, EVIDENCE_UNREADABLE, EVIDENCE_MALFORMED, BINDING_MISMATCH, EVENT_TYPE_UNEXPECTED, AGGREGATE_MISMATCH, ... Not appended at the tail: the roster docblock says it is \"ordered by the stage that raises it\", and BINDING_MISMATCH sits next to the other comparison codes. Every pre-existing member kept, order unchanged, still Object.freeze'd.\n2. Roster docblock gains a distinctness paragraph in the REPLAY_DIVERGED block's voice: UNREADABLE = store/page unreadable (store is the authority, storeCode verbatim), MALFORMED = bytes fine but indexed evidence does not parse (this module is the authority, storeCode null), BINDING_MISMATCH = parses whole but receipt/decision/activation bindings disagree (comparison is ours, storeCode null), plus the operator cost of collapsing any pair.\n3. providerRunUnknown widened with `storeCode: DurableStoreErrorCode | null = null` as its final parameter and now forwards it to providerRunRefusal. Defaulted, so all 18 existing 2-arg call sites (codec, ledger, security suite) compile untouched; its doc says why one UNKNOWN door beats two.\n\nNo DurableStoreErrorCode member aliased into the provider vocabulary; storeCode stays a separate field, never folded into `code`. No reader logic added - that is task-00e4827dd9374ec79625351d560c82c8. No other file touched.\n\nEvidence: vitest focused `npx vitest run --root . --config package.json src/telemetry/provider-run-refusals.test.ts` -> EXIT 0, \"Test Files 1 passed (1) / Tests 17 passed (17)\" (was 3 failed | 14 passed). `npx tsc --project tsconfig.json` -> EXIT 0, clearing the step-1 TS2554 and both TS2345s.",
+      "startedAt": "2026-08-18T08:08:46.757Z",
+      "completedAt": "2026-08-18T08:09:28.487Z"
     },
     {
       "stepId": "step-3",
       "description": "Drills, commit, gate. DRILL 1 (roster is load-bearing): delete one new member from the production roster; the hand-listed roster assertion must go RED naming that member -- a count-only failure means the assertion does not enumerate and must be strengthened. DRILL 2 (storeCode is not flattened): change the EVIDENCE_UNREADABLE constructor path to fold the store code into `code` or drop it to null; the constructor pin asserting the verbatim DurableStoreErrorCode must go RED. Restore each by re-editing; `git diff --numstat` 0/0 per drilled file; one at a time. COMMIT the two owned paths by explicit pathspec after `git status --porcelain`; verify `git show --stat`. GATE per DoD 4, separately with own exit codes: `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test`, each with a nonzero `Test Files N passed` line. NOTE: this vocabulary sits in a *_CODES/*_LAYER-scanning world -- if the security roster's scan picks up new layer constants it would have reddened pnpm test:security, but this task adds CODES to an existing rostered family, not a new LAYER constant, so no roster entry is due; state that check explicitly in the completion note (run `pnpm test:security` once foreground to prove it stayed green). Name task-00e4827d as consumer.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-refusals.ts",
         "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.ts",
+        "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
+      ],
+      "note": "DRILLS, COMMIT, GATE. HEAD recorded before drilling: 1a04b8b, unmoved through every drill (checked after each) so no peer hook committed inside a drill window.\n\nDRILL 1 (roster is load-bearing): deleted \"PROVIDER_RUN_BINDING_MISMATCH\" from the production roster. RED, and the failure NAMES it, not merely a count: \"publishes exactly the reviewed reason codes in declaration order\" printed `- \"PROVIDER_RUN_BINDING_MISMATCH\",`; \"holds one entry per reviewed reason code and no duplicate\" also fell. 2 failed | 15 passed. Restored, git hash-object back to 4f3ec608 exactly.\n\nDRILL 2 (storeCode never flattened), run as two variants, one at a time:\n2a DROP - providerRunUnknown stopped forwarding storeCode. RED on the named pin \"preserves the store's own code on evidence the store could not hand over\": `- \"storeCode\": \"STORE_CORRUPT\"` / `+ \"storeCode\": null`. 1 failed | 16 passed.\n2b FLATTEN - returned (storeCode ?? code) as the code with storeCode null, i.e. the exact defect the shape's doc forbids. RED on the same pin, both halves: `- \"code\": \"PROVIDER_RUN_EVIDENCE_UNREADABLE\"` / `+ \"code\": \"STORE_CORRUPT\"` and storeCode null. 1 failed | 16 passed.\nRestored; both owned files hash-identical (4f3ec608 / dd2b0ece); re-run green 17/17.\n\nCOMMIT 59bd0f1, explicit pathspec, exactly the two owned paths (git show --stat: provider-run-refusals.test.ts +45, provider-run-refusals.ts +28/-2, 2 files). `git diff HEAD -- apps/daemon/src/telemetry/` empty, so the committed bytes ARE the gated bytes. No foreign path staged; peers' modified packages/scheduler and tests/integration files left untouched.\n\nGATES, foreground, own exit codes, run fresh on the committed bytes AFTER the baseline probe below:\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\n- `pnpm --filter @moe/daemon test` EXIT 0, \"Test Files 131 passed (131) / Tests 2833 passed (2833)\" - a real nonzero executed count, not a vacuous filter.\n\nSECURITY ROSTER CHECK, stated explicitly as the plan required: this task adds three members to an EXISTING rostered *_CODES family and adds NO new *_LAYER/*_LAYERS constant, so no boundary-roster entry is due. tests/security/boundary-roster.security.ts rosters LAYER constants only (verified by reading its table). `pnpm test:security` is RED at exit 1 - 2 files failed, 4 tests, all four the roster-vs-scan pair complaining the scan sees 96 constants against a 93-entry roster, naming exactly three FOREIGN constants: ACTIVE_GRAPH_PROJECTION_LAYER@apps/daemon/src/planning/active-graph-projection.ts, GRAPH_BODY_RECORD_LAYER@apps/daemon/src/planning/graph-body-record.ts, IMPORT_SHADOW_READ_LAYER@apps/daemon/src/projections/import-shadow-contracts.ts (owners: task-dd4ffa0c d60a48f, task-80fce1d1 9b9e44e/6336047). None is mine. PATH-ATTRIBUTED BASELINE measured, not asserted: I reverted BOTH owned files to their merge-base bytes (git show 1a04b8b:<path>, git diff 1a04b8b --numstat empty) and re-ran pnpm test:security - IDENTICAL red, exit 1, same 2 files / 4 tests / same three extra constants. So failures(HEAD) minus failures(merge-base) intersected with my owned paths is EMPTY; the red pre-dates my diff and is disclosed here verbatim, not hidden. Owned files then restored from HEAD and re-hashed (4f3ec608 / dd2b0ece), working tree clean for apps/daemon/src/telemetry.\n\nADVERSARIAL SELF-REVIEW. No IO, no concurrency, no shared mutable state: two frozen arrays plus pure constructors returning frozen objects. Explicit `undefined` for the new param takes the default and yields null. No `Parameters<typeof providerRunUnknown>` anywhere in the repo, so the defaulted-parameter gotcha cannot bite. THEORETICAL GAP DISCLOSED, deliberately not closed here: nothing stops a caller passing a storeCode alongside EVIDENCE_MALFORMED or BINDING_MISMATCH; enforcing that needs a code-to-authority map, which is reader policy owned by task-00e4827dd9374ec79625351d560c82c8, and inventing it here would collide with that task's design. The constructor pins fix outcome+layer+storeCode per code now so the consumer's own tests can assert the misuse.\n\nCONSUMER: task-00e4827dd9374ec79625351d560c82c8 composes this vocabulary in the provider-run reader.",
+      "startedAt": "2026-08-18T08:09:33.525Z",
+      "completedAt": "2026-08-18T08:13:40.474Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -54,16 +73,25 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:19.328Z",
-  "updatedAt": "2026-08-18T04:28:46.910Z",
+  "updatedAt": "2026-08-18T08:22:19.908Z",
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-0b2f9c35",
+    "qa-12cda609"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-18T04:27:23.174Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3,
+    "doneAt": "2026-08-18T08:22:19.908Z",
+    "wallClockMs": 14096734
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T04:28:44.789Z",
   "planningNotes": {
@@ -77,7 +105,24 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-18T08:06:23.420Z",
+    "escalatedAt": "2026-08-18T08:06:23.420Z"
   },
-  "planApprovedAt": "2026-08-18T04:28:46.910Z"
+  "planApprovedAt": "2026-08-18T04:28:46.910Z",
+  "workStartedAt": "2026-08-18T08:06:37.683Z",
+  "reviewStartedAt": "2026-08-18T08:14:15.895Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  131 passed (131)\n      Tests  2833 passed (2833)\n   Start at  11:12:58\n   Duration  14.00s (transform 47.58s, setup 0ms, import 122.51s, tests 86.33s, environment 11ms)\n\nTYPECHECK_EXIT=0 DAEMON_TEST_EXIT=0 HEAD=59bd0f1",
+    "reportedAt": "2026-08-18T08:14:15.895Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/telemetry/provider-run-refusals.test.ts",
+    "apps/daemon/src/telemetry/provider-run-refusals.ts"
+  ],
+  "completedAt": "2026-08-18T08:22:19.908Z",
+  "reviewCompletedAt": "2026-08-18T08:22:19.908Z",
+  "reviewSummary": "APPROVED. HEAD 8931ced, commit 59bd0f1, 2 owned files, +71/-2. Prod 128 / test 226 lines (<250). Owned paths clean; committed blobs == gated bytes (4f3ec60/dd2b0ec).\n\nDoD1: roster 17->20, CODES hunk is PURE INSERTION (the commit's only 2 deletions are the old providerRunUnknown docline + 3-arg forward). New members at idx 11-13; provider-run-codec.ts:33-38 reads CODES[0,1,2,6,7,8], all before the insertion, so no silent remap. LAYERS untouched (4 at merge-base).\n\nDoD2: providerRunUnknown widened with storeCode: DurableStoreErrorCode|null = null, forwarded verbatim. UNREADABLE -> UNKNOWN/PROVIDER_RUN_READER/\"STORE_CORRUPT\"; MALFORMED + BINDING_MISMATCH -> UNKNOWN/PROVIDER_RUN_READER/null.\n\nDoD3: test hand-lists all 20 (:30-51), toEqual exact order, count derived from the hand-written literal not production, Set-size duplicate guard, isFrozen both arrays, runner disjointness with non-empty positive control (:120-123), store disjointness via Extract.\n\nDoD4: drills re-run by ME, HEAD unmoved, every restore byte-identical by git hash-object.\n- delete EVIDENCE_MALFORMED -> RED, failure NAMES it (enumerating, not count-only)\n- drop the storeCode forward -> RED on the UNREADABLE pin (STORE_CORRUPT vs null)\n- flatten (storeCode ?? code) into code -> RED naming both fields\n- my extra: leak \"STORE_CORRUPT\" into the roster -> typecheck RED at test:138, so the Extract disjointness guard is load-bearing\n\nGates I re-ran: typecheck exit 0; pnpm --filter @moe/daemon test exit 0, Test Files 131 passed (131) / Tests 2833 passed (2833). Focused probe executed 17 tests.\n\ntest:security exit 1 is FOREIGN, path intersection empty: failures name ACTIVE_GRAPH_PROJECTION_LAYER, GRAPH_BODY_RECORD_LAYER, IMPORT_SHADOW_READ_LAYER in planning/projections; roster scans *_LAYER only and this diff adds none.\n\nConsumer: task-00e4827dd9374ec79625351d560c82c8."
 }

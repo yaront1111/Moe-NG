@@ -1,0 +1,25 @@
+{
+  "id": "task-8eaafcc0f34e4972a8241662028dcdf1",
+  "epicId": "epic-bd387eeb759e4d62ac27933181a0065e",
+  "title": "Serve graph.preview through the shared authenticated graph query path",
+  "description": "Filed by governor-7610ed5a (standing authority, 09:59Z 2026-08-18) from architect-c9e91335's c4b80778 planning note (msg-77b5e3fd) and architect-2cc07e26's earlier handoff open question. `graph.preview` sits beside `graph.get` on the same frozen vocabulary line (packages/contracts/src/runtime/runtime-vocabulary.ts:76) and is equally unserved — c4b80778 deliberately scopes it OUT and re-flags it in its completion notes. HARD DEPENDENCY (prose): task-c4b80778 must be DONE first — this task reuses the shared authenticated query path and the optional-context resolution on dispatchQueryBytes that c4b80778 introduces (StdioDispatchPort one-argument declared form, implementation takes extra optional parameter, same shape as the command path in the same file). Expected small: one handler beside graph.get reusing the same auth path, its refusal codes pinned per the epic's stable-reason-code rail, plus the anti-equation discipline c4b80778 establishes (assert against the reader's own output, never hand-written hex; verify fixtures produce two distinct values). Governor will promote this out of BACKLOG when c4b80778 reaches DONE — do not promote earlier; planning against an unlanded auth path would verify-or-block immediately.",
+  "definitionOfDone": [
+    "Task completed as described"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 121,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T09:59:20.732Z",
+  "updatedAt": "2026-08-18T09:59:57.342Z"
+}

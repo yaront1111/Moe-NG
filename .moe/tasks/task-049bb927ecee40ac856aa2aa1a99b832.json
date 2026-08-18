@@ -146,26 +146,36 @@
     {
       "stepId": "step-10",
       "description": "GATE. tests/integration is typechecked by NOTHING in this repo: the root `typecheck` script is `pnpm --recursive typecheck` over workspace packages, and `test:integration` runs only `pnpm typecheck:packaging` (tools/packaging) before vitest. A type error in these three files is invisible to every existing gate. Compensate explicitly and RECORD the command, since no script would show it ran: `npx tsc --noEmit` over the three new files with the same flag set `typecheck:packaging` uses (strict, module nodenext, moduleResolution nodenext, verbatimModuleSyntax), EXIT=0 required.\nThen run the suite FROM POWERSHELL — `pnpm test:integration` shells through MSYS tar and fails on drive-letter paths under Git Bash for reasons unrelated to this diff. Capture exit codes separately; no pipes (a piped run reports the pipe tail's code) and no `&&` chaining (a red leg then hides the count line). READ THE OUTPUT: the focused leg `vitest run tests/integration/portability` must print a `Test Files N passed` count line with a NONZERO count — a path filter matching nothing exits 0 with no count line at all.\nRun the suite TWICE in a row in one command: a teardown that has only ever run once has not been tested, and this suite creates temp trees, real SQLite files and inventories on every case.\nThen attribute any red by the path-attributed baseline: repo-wide failures at the merge-base, again at HEAD, and confirm the delta intersected with this task's three owned paths is EMPTY. Report foreign red verbatim with exact failing paths; never hide it and never fabricate green. Expect peer churn in this directory — task-efe5465f owns three other files here.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/portability/projection-shadow-matrix.test.ts",
         "tests/integration/portability/shadow-corpus-fixtures.ts",
         "tests/integration/portability/shadow-corpus-harness.ts"
       ],
-      "startedAt": "2026-08-18T04:34:43.044Z"
+      "note": "STEP 10 — GATE GREEN. Every leg run from PowerShell, exit codes captured separately, no pipes into the gate and no `&&` chaining.\n\nCOMPENSATING TYPECHECK, and it genuinely is compensating: `tests/integration` is typechecked by NOTHING. Root `typecheck` is `pnpm --recursive typecheck` (workspace packages only) and `test:integration` runs `pnpm typecheck:packaging`, which names three `tools/packaging/*.ts` files explicitly. A type error in my three files would be invisible to every existing gate, so I ran the same flag set `typecheck:packaging` uses, file-scoped:\n`npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames <my three files>` -> **SCOPED_TSC_EXIT=0**.\nRecorded verbatim because no script would ever show it ran. (Step 1 also found a peer-added `tests/integration/portability/tsconfig.json` that no script references; I used it throughout development as a second check. Its project run exits 1 solely on a third-party `@modelcontextprotocol/sdk` `.d.ts`, because `tsconfig.base.json` does not set `skipLibCheck` — zero repo files fail, and that red exists with or without my diff.)\n\nSUITE RUN TWICE IN A ROW, because a teardown that has only ever run once has not been tested and this suite creates temp trees, real SQLite files and inventories on every case. My suite: **24 passed (24)** on both runs, exit 0 both times. Focused directory leg printed a real `Test Files N passed` count line each time — a path filter matching nothing exits 0 with NO count line at all, so the count is the evidence rather than the exit code.\n\nFULL GATE: `pnpm test:integration` -> **EXIT 0**, `Test Files 8 passed (8) | Tests 287 passed (287)`, plus the `node --test` release leg at `tests 66 / fail 0`. No leg printed \"No projects matched the filters\".\n\nPATH-ATTRIBUTED BASELINE: my three owned paths are all NEW files, so they cannot fail at the merge-base and the (2)-minus-(1) delta intersected with them is empty by construction. Confirmed positively too — the full integration gate is exit 0 at HEAD, so the failing-path set at HEAD is itself empty.\n\n=== ONE FOREIGN FLAKE, MEASURED RATHER THAN WAVED THROUGH ===\nThe FIRST combined directory run failed one test in a PEER's file: `transport-host-matrix.test.ts > preserves ONE command-decision identity across both transports, in both orders` (task-efe5465f, in flight). It did not reproduce. I chased it rather than re-running until green and calling it noise:\n- peer's file ALONE: 2/2 clean (13 tests)\n- peer + provider WITHOUT my file: 3/3 clean (45 tests)\n- full directory WITH my file: 1 failure in 6 runs — the first — then 4 consecutive clean runs at 69/69\n**I am not claiming my file is uninvolved.** Six samples cannot separate \"peer's own intermittency\" from \"cross-file interference under parallel execution\", and the failing assertion is about identity across two transports in both orders, which is exactly the shape that goes intermittent when siblings run concurrently (that file spends ~8.8s in real child processes). What I can say precisely: it is a peer's test, in a peer's in-flight file, it reproduces neither reliably with my file nor at all without it, and my own suite is 24/24 stable alone and combined across every run tonight. Disclosed verbatim with its exact test name so the owner can reproduce; not hidden, and not fabricated green.\n\nExpect continued peer churn in this directory — task-efe5465f owns `transport-host-matrix.test.ts`, `portability-harness.ts` and `portability-cases.ts`, none of which I touched.",
+      "startedAt": "2026-08-18T04:34:43.044Z",
+      "completedAt": "2026-08-18T04:39:34.469Z"
     },
     {
       "stepId": "step-11",
       "description": "ADVERSARIAL SELF-REVIEW, then complete. Load the `adversarial-self-review` skill and read the diff as an attacker:\n- Does any line construct a `ShadowProjection`, call `projectLegacyImport` for the CURRENT side, or reach BoardProjection / WorkClaimLedger? Grep for all three. DoD item 1 and task rail 1 both forbid it, and it is the single easiest way for this matrix to become self-confirming.\n- Is every SURFACE UNDER TEST reached by bare specifier (@moe/daemon, @moe/import, @moe/store)? The only permitted relative reach is `tools/import/*`, which cannot have a bare specifier because tools/ is not a workspace package — name that exception explicitly in the notes.\n- Did any refusal arm assert only `ok === false` without pinning the layer?\n- Did any arm leave a temp tree, a SQLite handle, or a modified corpus behind? The AFTER inventory should have caught a modified corpus — confirm the inventory positive control actually fails when it should.\n- Are all expected codes and dispositions imported from their owning package roots rather than spelled locally?\nCOMPLETION MUST RECORD, per the acceptance rail: the certified capability is the daemon shadow adapter `compareImportShadow` / `readImportShadowProjection`, shipped by task-80fce1d1d625453098bd526d61c5ddb8 and verified on disk in step 1; the durable current-side rows come from the production writer `commitLegacyImport` shipped by task-6d319381967a4ca5b746c2538f537e72, which CLOSES the vacuous-green hazard the reopen note carried forward — state whether it was present at execution time, since the plan assumed it. Also record the generated case count and the corpus manifest digest.\nStage and commit ONLY the three owned paths by explicit pathspec; never `git add -A`, and confirm the step-9 drill edits under apps/daemon are fully restored and absent from the diff.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/integration/portability/projection-shadow-matrix.test.ts",
         "tests/integration/portability/shadow-corpus-fixtures.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/integration/portability/projection-shadow-matrix.test.ts",
+        "tests/integration/portability/shadow-corpus-fixtures.ts",
+        "tests/integration/portability/shadow-corpus-harness.ts"
+      ],
+      "note": "STEP 11 — ADVERSARIAL REVIEW RUN AS GREPS, not as assertions of intent.\n\nQ1 — DOES ANYTHING BUILD THE CURRENT SIDE? **FORBIDDEN_HITS=0.** No occurrence of `projectLegacyImport`, `BoardProjection` or `WorkClaimLedger` anywhere in the three files, in code or comment. No `ShadowProjection` literal is ever assembled. `compareImportShadow` reads the current side itself; the suite supplies legacy facts and reads the verdict. DoD 1 and task rail 1 hold by measurement, and step 9's tautology drill is what proves the comparison is not self-confirming (it reddened the CHANGED and ABSENT-CURRENT cases exactly as required).\n\nQ2 — BARE SPECIFIERS. Exactly ONE relative reach across all three files: `import { commitLegacyImport } from \"../../../tools/import/durable-import-store.js\"`. That is the permitted exception and it is forced: `tools/` is NOT a workspace package (pnpm globs `apps/*`, `adapters/*`, `packages/*`), so no bare specifier for it can exist. Every SURFACE UNDER TEST — `@moe/daemon`, `@moe/import`, `@moe/store` — is reached by bare specifier, proven in step 1 by a compiled probe with a positive control.\n\nQ3 — REFUSAL ARMS. 8 code assertions and 9 layer assertions; every one of the 8 refusal arms pins BOTH, verified line by line (304/305, 318/319, 338/339, 358/359, 382/383, 404/405, 458/459, 480/481). No arm asserts `ok === false` alone. The 9th layer assertion is in the shared `refused()` helper, which also pins `advisoryOnly`/`authority` so those cannot be forgotten per-arm.\n\nQ4 — VOCABULARIES. Every expected code and every disposition is imported from its owning root; dispositions are LOOKED UP in `SHADOW_MISMATCH_DISPOSITIONS` rather than restated. Two literal disposition strings survive and both are deliberate, not oversights: `expect(first.disposition).toBe(\"UNKNOWN\")` sits BESIDE the production-map lookup on the same value — pinning the contract's asymmetry decision itself, so the pair fails if the map is edited to agree with a changed expectation — and `toContain` over `[\"NEEDS_RECONCILIATION\",\"UNKNOWN\"]` asserts the CLOSED set, which is the assertion that would catch a third arm being added.\n\nQ5 — DRILL RESIDUE. `git status --porcelain -- apps/daemon/src/projections/` is EMPTY. Both drilled production files are byte-identical to baseline, and the tautology mutation that a sweep captured into HEAD is repaired: `git show HEAD:...import-shadow-reader.ts | grep -c \"compareShadowProjections(legacy, current.projection)\"` -> **1**, and `git merge-base --is-ancestor b208bd0 HEAD` confirms **the repair is still an ancestor of HEAD** rather than having been reverted by a later sweep.\n\nQ6 — LEAKS. No probe, temp tree or scratch file survives; `git status --untracked-files=all | grep -i probe` is empty. The inventory positive control was re-confirmed: it DOES fail when a corpus file is touched (whole inventory differs, that file's digest and size differ, every other entry identical).\n\n=== COMMIT: A FIFTH FOREIGN WHOLE-TREE CAPTURE ===\nNothing to stage. All three owned paths were already at HEAD, added by the 32-file sweep **`ceb0370`** — the same commit that captured my live drill. Verified rather than assumed: each file's HEAD blob sha256-MATCHES my gated working-tree bytes. So again no commit bears this task's id, which the hook rail says is never a rejection reason.\nBASE-REF DIFF FOR QA, `git diff --numstat 219076d..HEAD -- <three owned paths>`: **667 / 196 / 208 lines added, zero deleted.**\nMY ONE OUT-OF-SCOPE COMMIT, `b208bd0`, does not appear in that range's diff for `import-shadow-reader.ts` (net zero — it restored the file to its pre-drill bytes, which is exactly the point). Disclosed in full in the step-9 note and in chat msg-a3430ad9.\n\n=== ACCEPTANCE RECORD (required by the acceptance rail) ===\n- CERTIFIED CAPABILITY: the daemon shadow adapter `compareImportShadow` (import-shadow-reader.ts:215) and `readImportShadowProjection` (:143), published on the `@moe/daemon` root at index.ts:50. SHIPPED BY **task-80fce1d1d625453098bd526d61c5ddb8**. Verified on disk in step 1 by grep AND by compiled bare-specifier probe with a positive control, not by reading a DoD.\n- DURABLE CURRENT-SIDE WRITER: `commitLegacyImport` (tools/import/durable-import-store.ts:116), SHIPPED BY **task-6d319381967a4ca5b746c2538f537e72**. **PRESENT AT EXECUTION TIME** — the reopen note called it \"in flight\" and the plan assumed it; it had landed. This CLOSES the vacuous-green hazard, and closure is confirmed operationally rather than by presence alone: `result.current.entities.length > 0`, so a zero-mismatch verdict means agreement, not two empty sides.\n- GENERATED CASE COUNT: **7** (one per DoD-2 row; asserted positive, row-set-complete and name-distinct before any case runs).\n- CORPUS MANIFEST DIGEST: **6f2aaa7890aa226ffa091278d2c6c07a69ea00c50e9fda4c953f72f55668abb5**, over 4 claims and 3 links — the importer's own derivation, never recomputed locally.",
+      "startedAt": "2026-08-18T04:39:37.602Z",
+      "completedAt": "2026-08-18T04:41:05.802Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -177,17 +187,20 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:35.974Z",
-  "updatedAt": "2026-08-18T04:34:43.044Z",
+  "updatedAt": "2026-08-18T04:50:49.893Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:02:30.952Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 9
+    "executedStepCount": 11,
+    "doneAt": "2026-08-18T04:50:49.893Z",
+    "wallClockMs": 31698941
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
     "architect-c9e91335",
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-12cda609"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -216,7 +229,9 @@
     "step-6",
     "step-7",
     "step-8",
-    "step-9"
+    "step-9",
+    "step-10",
+    "step-11"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T04:16:45.053Z",
@@ -241,5 +256,20 @@
     "escalatedAt": "2026-08-18T04:16:50.035Z"
   },
   "planApprovedAt": "2026-08-18T04:16:47.133Z",
-  "workStartedAt": "2026-08-18T04:17:09.381Z"
+  "workStartedAt": "2026-08-18T04:17:09.381Z",
+  "reviewStartedAt": "2026-08-18T04:42:21.311Z",
+  "verification": {
+    "command": "pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "Test Files  8 passed (8)\n     Tests  287 passed (287)\n   Duration  17.88s\n(node --test leg) tests 66 / fail 0\nTEST_INTEGRATION_EXIT=0\n\nRun fresh at HEAD 9788cef. My suite alone: 24 passed (24), run twice in a row so teardown is exercised more than once. Compensating file-scoped typecheck (tests/integration is covered by NO script): npx tsc --noEmit with the typecheck:packaging flag set over the three new files -> SCOPED_TSC_EXIT=0.",
+    "reportedAt": "2026-08-18T04:42:21.311Z"
+  },
+  "filesModified": [
+    "tests/integration/portability/shadow-corpus-fixtures.ts",
+    "tests/integration/portability/shadow-corpus-harness.ts",
+    "tests/integration/portability/projection-shadow-matrix.test.ts"
+  ],
+  "completedAt": "2026-08-18T04:50:49.893Z",
+  "reviewCompletedAt": "2026-08-18T04:50:49.893Z",
+  "reviewSummary": "Re-ran every gate myself from PowerShell.\n\nGATES\n- vitest run projection-shadow-matrix.test.ts -> Test Files 1 passed (1), Tests 24 passed (24), exit 0. Ran 4x.\n- Compensating scoped tsc (tests/integration is typechecked by NO script): npx tsc --noEmit --strict --module nodenext ... over the 3 owned files -> exit 0.\n- pnpm test:integration -> EXIT 1. FOREIGN RED attributed: transport-host-matrix.test.ts (peer task-efe5465f, UNCOMMITTED). Fails ALONE with my files absent: \"'moe-mcp-stdio.CMD' is not recognized\". Delta n owned = EMPTY.\n\nMY DRILLS (production; restored byte-identical sha 4d1192c2; HEAD unmoved c03bb1b)\n- Tautology: reader:230 -> compareShadowProjections(legacy, legacy) => 4 failed|20 passed (FIELD_DIFFERS, ENTITY_ABSENT_ON_CURRENT, ENTITY_ABSENT_ON_LEGACY, byte-identical-output). Not self-comparing.\n- NEW (mine): reader:112 forwardRefusal -> local refuseImportShadow => 1 failed, \"forwards the IMPORTER's code...\" on code.startsWith(\"IMPORT_EVENT_\").\n- Control the suite lacked: injected a real store.commit into the untouched-bytes test => red \"expected 5 to be 4\" on eventCount. expectStoreUntouched is wired. Restored (sha 68c80ff).\n\nDoD 1 ok (0 code uses of projectLegacyImport/ShadowProjection/BoardProjection/WorkClaimLedger). 2 ok (7 rows, count asserted positive, every arm pins exact kind+disposition or code+layer, control = 0 mismatches, current.entities.length>0 kills vacuous green). 3 ok. 4 ok (digest+size+mtime per entry; store facts on 7 refusal arms). 5 ok (24 tests on Windows; join/tmpdir/sep only).\n\nDeviation FORCED: FIELD_UNMAPPED unreachable - compareFields reports it only for a key outside SHADOW_ENTITY_FIELDS and both sides come from production mappers emitting exactly the declared keys.\n\nb208bd0 justified: diff 6336047..b208bd0 EMPTY for that file - pure restore of a tautology defect sweep ceb0370 captured.\n\nNon-blocking: MatrixCase.expectation is dead data; KNOWN_FIELDS local because production exports none."
 }

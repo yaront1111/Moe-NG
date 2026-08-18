@@ -17,31 +17,99 @@
     "Verify every cross-package manifest/lock/bare-import edge before naming it; preserve upstream runner/ledger refusal code and layer rather than restamping.",
     "Use real SqliteEventStore, TDD exact codes/layers, bounded index reads, target <=250 lines per production source, and explicit owned-path commits."
   ],
-  "implementationPlan": [],
-  "status": "BLOCKED",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "BASELINE AND PROVE EVERY LANDED EDGE BEFORE EDITING. Record HEAD, merge-base, and `git status --short` for the three owned paths; require them clean. Re-measure `foundation-attempt-service.ts` at 248 physical lines and confirm the six prerequisite surfaces on disk: `createFoundationLauncherAuthority`, `launchActivationProviderRun`, `commitActivationProviderRun`, and `readCurrentProviderRun`, plus the exported provider-run identity/command constants. Verify `apps/daemon/package.json` declares `@moe/runner` and `@moe/store`, `pnpm-lock.yaml` has both daemon importer links, and a temporary source inside `apps/daemon` can typecheck bare imports of `createTelemetryBoundClaudeLauncher`, `discoverInstalledClaudeRuntime`, and `SqliteEventStore`; run a bogus-symbol TS2305 negative control and delete the probe/config in the same PowerShell `try/finally`. Capture each baseline leg separately: daemon typecheck; the five focused production suites for Foundation service, Windows, telemetry adapter, provider commit, and provider reader (currently 5 files / 147 tests); and full daemon test. Record every count line and foreign failure path rather than treating exit 0 or a zero-test filter as evidence.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD RED — PORTABLE COMPOSITION, IDENTITY, AND CALLER-AUTHORITY FENCE in `foundation-attempt-service.test.ts`, over a real file-backed `SqliteEventStore`. Extend the existing forced-`platform:\"linux\"` dispatch: Foundation must keep the raw launcher refusal `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED` at `LAUNCHER`, while `readCurrentProviderRun(store,{projectId,attemptRef:\"attempt-1\"})` accepts exactly one honest blind provider record. Pin the durable `ProviderRunRef` exactly to `{provider:\"claude\",runRef:deriveDispatchAggregateId(activationAggregateId),effectIntentId:\"intent-1\",attemptRef:\"attempt-1\",epoch:3}`, the returned session to the lease `ownerSessionRef` (deliberately different from the activation principal), launch `REFUSED`, terminal `REFUSED`, infrastructure `LAUNCH_REFUSED`, upstream `TELEMETRY_LAUNCH_REFUSED@TELEMETRY_LAUNCH`, null daemon clock observations, one provider event, and one `provider-run.telemetry.commit` decision whose project and principal are the durable project and lease session. Use transparent partial wrappers that call the REAL telemetry adapter and commit function, capture exact input/result identities, and never fabricate a launcher result, handoff, authority, exit, or clock; assert one adapter call, one commit call, and that the commit receives the adapter's exact bound result object. Add a hand-pinned, nonempty generated request-smuggling sweep for `providerRun`, `runRef`, exit/reconciliation/terminal/infrastructure, observation/safe-boundary, launcher, and dependency fields; every arm must refuse `FOUNDATION_ATTEMPT_REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT` before either wrapper and leave raw events/decisions unchanged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "TDD RED — REPLAY, CONFLICT, AND PRE-COMMIT FAILURE in the same real-SQLite service suite. After the first production dispatch, snapshot the provider record/digest/canonical bytes, provider event count, provider decision, whole-store event horizon, raw event count, and raw decision count. Exact replay of the same request must return the original Foundation record, keep every snapshot byte/count unchanged, and leave the transparent adapter/commit totals at one. A materially changed `cwd` or other identity-covered command byte under the same dispatch aggregate must refuse `FOUNDATION_ATTEMPT_REPLAY_MISMATCH@DAEMON_FOUNDATION_ATTEMPT` before adapter or provider commit, preserving the original provider bytes/digest. Reuse the existing real-store aborting wrapper at provider commit ordinal 4: assert `PROVIDER_RUN_STORE_UNAVAILABLE@PROVIDER_RUN_LEDGER` (and the exact storeCode shape production returns), zero provider event/decision residue, no false reader authority, and no second physical attempt. Querying the accepted record under a foreign project must preserve `PROVIDER_RUN_BINDING_MISMATCH@PROVIDER_RUN_READER` and change no counts. Do not duplicate the landed 64-case reader matrix: explicitly retain its real-SQLite ABSENT, RECORD_UNREADABLE, EVIDENCE_UNREADABLE, cross-page AMBIGUOUS, foreign binding, bounded-scan, positive generated-count, and zero-write assertions as prerequisite coverage run in the final focused gate.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "TDD RED — ONE REAL OBSERVED PHYSICAL CONTROL in `foundation-attempt-windows.test.ts`. Replace the stale premise that no production quote can be minted: call public zero-input `discoverInstalledClaudeRuntime()` and, on Windows, fail explicitly unless it returns the PROVEN installed observation/root (do not dynamically skip a missing current prerequisite). Build the Foundation runtime request from that exact observation plus an attempt-owned scratch pin root, and drive the shipped broker through the harmless installed-Claude `--version` argv using the real service and real SQLite. Through `readCurrentProviderRun`, assert an accepted frozen record with the exact durable ref/session/digest, `record.launch.kind === \"OBSERVED\"`, `record.launch.exit.kind === \"EXITED\"`, and exit code 0; do not mislabel version output as a completed provider result. Pin one delegated telemetry-adapter call, one provider event/decision, and the activation transition/pin evidence proving the control reached the physical boundary. Replay the same bytes and then conflict one identity-covered byte: replay appends/launches zero and returns original bytes, while conflict is the exact prelaunch Foundation replay mismatch. Keep existing hostile self-assembled quote/reservation cases with their exact code and layer. Close every store and process handle before Windows temp cleanup.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "GREEN — REPLACE THE RAW FOUNDATION LAUNCH BLOCK, DO NOT ADD A PARALLEL PATH. In `foundation-attempt-service.ts`, after the RESERVED decision wins and before observation settlement, construct `createFoundationLauncherAuthority` from the verified activation aggregate, `bound.correlationId`, `activation.decision.key`, its durable project, and the real store. Derive only server-owned provider facts: `providerCommandId = `${bound.target}:provider-run``, and `ProviderRunRef = {provider:\"claude\",runRef:bound.target,effectIntentId:record.effectIntent.intentId,attemptRef:record.attempt.attemptId,epoch:record.lease.epoch}`. Invoke `launchActivationProviderRun(authority,{providerRun,request:launchRequestBody(...),options:narrowLaunchOptions(...)})` exactly once and keep its exact `ClaudeBoundLaunchResult`; never pass it through `snapshotFoundationValue` or reconstruct its result/handoff. Immediately call `commitActivationProviderRun` once with that same object, key `{commandId:providerCommandId,principalId:record.lease.ownerSessionRef,projectId:activation.decision.key.projectId}`, correlationId `providerCommandId`, decidedAt `activation.decision.decidedAt`, canonical `identity.bytes`, and `{observedStart:null,observedEnd:null}` (there is no daemon boot/monotonic observation to invent), with no usage priors. Preserve any adapter/ledger refusal's exact code/layer through the existing UNPROVEN settle; after a successful provider commit, reuse `launched.result` unchanged for `readDurableFoundationObservation`. Keep the reservation replay/conflict short-circuit before authority/adapter creation; do not production-call the strict reader merely to ignore it — task-ded026d6587442eabc28ff2609d231aa is the named consumer and will call `readCurrentProviderRun(store,{projectId,attemptRef})`. Remove/compact stale raw-launch containment prose and blank lines so this focused production file remains <=250 physical lines; do not edit the DONE adapter, ledger, reader, schemas, wire kinds, or add a fourth helper file.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL REVIEW AND MUTATION DRILLS, each applied to the production service alone, with the exact edited range recorded, the mutation confirmed present, one named intended assertion red, and byte/hash restoration before the next (never `git checkout`, reset, or broad restore in the shared tree). Drill: (1) use envelope `principalId` instead of durable `lease.ownerSessionRef` — the integrated accepted reader test must red specifically on `PROVIDER_RUN_BINDING_MISMATCH@PROVIDER_RUN_READER`; (2) bypass provider commit or return to the raw launcher — the provider accepted/event-count test must red rather than merely return a different refusal; (3) move the replay short-circuit below the adapter or invoke the adapter twice — the replay one-call/unchanged-count assertion must red; (4) settle Foundation from the handoff telemetry refusal instead of the untouched raw `.result` — the Linux test must red on loss of `CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED@LAUNCHER`. Review the final diff as an attacker: no caller-selected run/ref/exit/reconciliation/clock/session authority, no handoff reconstruction, owner-session principal and two digest domains are not confused, request bytes are `identity.bytes`, all precommit refusals have zero residue, postcommit evidence is preserved rather than rolled back, exact replay cannot launch twice, the cross-page reader matrix executes, every generated sweep is positive, and only the three owned paths differ.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "CONCENTRATED VERIFICATION, PATH-ATTRIBUTED REGRESSION, AND EXPLICIT COMMIT. Run every leg separately with its own exit code and read its output: focused Foundation service + Windows + `activation-telemetry-launch.test.ts` + `activation-run-commit.test.ts` + `provider-run-reader.test.ts` (require `Test Files 5 passed` and a test count greater than the 147-test baseline); focused `runtime-entrypoint.test.ts` plus `daemon-store-dependencies.test.ts` for plain-Node provider construction (nonzero counts); daemon typecheck; full `pnpm --filter @moe/daemon test` (the task evidence command, nonzero count and exit 0); then repository `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, and `pnpm verify:store`, separately. For repo-wide legs, record merge-base failures before the diff and HEAD failures after it; the new failing-path set intersected with these three owned paths must be empty, and disclose foreign red verbatim without calling it green. Re-run the guarded bare-specifier positive/negative probe and confirm it deleted itself. Confirm `foundation-attempt-service.ts` <=250 lines, no debug/probe/generated evidence remains, and staged entries are only the three owned paths. Unstage any foreign path without modifying it; stage explicit paths, commit only via `git commit -- <three exact paths>`, and verify `git show --stat` contains nothing else. Completion must quote all nonzero count lines, each drill's named red, the original provider record/count preservation, and the downstream consumer id/callsite.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promotion (standing authority): the block's own gate is satisfied — \"re-plan only after all six are DONE\" and c534626b, 7e3ede6c, 9d489aee, 7f7fee66, 232793a0, and now edda1fd3 (QA-approved 09:27Z) are all DONE. Per the block reason this task now owns the Foundation service callsite / final physical replay proof in <=3 files. BINDING for the planner: comment-132336517 on this task — writer MUST set key.principalId to the attempt's ownerSessionRef or the edda1fd3 reader refuses every record with PROVIDER_RUN_BINDING_MISMATCH; plus the cross-page duplicate seeding, decoded-providerRunRef re-derivation, and effectDisposition-first discriminant traps.",
   "createdBy": "WORKER",
   "parentTaskId": "task-ded026d6587442eabc28ff2609d231aa",
   "priority": "CRITICAL",
   "order": 79.1,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-132336517ad043ef9cfa4857b30090a1",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR PIN (from architect-c9e91335's edda1fd3 planning resolution, msg-b94f6fcd, 08:34Z 2026-08-18) — BINDING ON THIS TASK'S PLAN: when this task wires commitActivationProviderRun (currently zero production callers, definition-only at activation-run-commit.ts:229), the writer MUST set key.principalId to the attempt's ownerSessionRef. The edda1fd3 reader enforces principal==ownerSessionRef and will refuse every record with PROVIDER_RUN_BINDING_MISMATCH otherwise — correct fail-closed behavior that will masquerade as a reader defect to whoever hits it first. A mutation drill in edda1fd3's plan proves the check is load-bearing. Also inherit these traps: (1) duplicate-detection tests must seed duplicates ACROSS a page boundary — a first-match reader passes single-page seeds with the defect intact; (2) re-derive the aggregate id from the DECODED providerRunRef, never from the event's own stored fields (self-comparison; provider-run-contracts.ts header warns readers must compare rather than trust hash uniqueness); (3) CommandDecisionRecord is a union and NoBusinessEffectDecision carries NULL versions — discriminate on effectDisposition BEFORE any previousVersion === 0 check, since null === 0 is silently false.",
+      "timestamp": "2026-08-18T08:39:16.573Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T22:48:12.501Z",
-  "updatedAt": "2026-08-17T17:36:53.156Z",
+  "updatedAt": "2026-08-18T10:24:27.254Z",
   "metrics": {
-    "firstClaimAt": "2026-08-17T17:18:59.824Z"
+    "firstClaimAt": "2026-08-17T17:18:59.824Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 3
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
-  "blockedReason": "Fresh measurement at HEAD 8557296 disproves the task's one-slice premise. Foundation dispatch's only real physical seam uses createFoundationClaudeLauncher/createClaudeLauncher(authority) and needs the exact ClaudeLaunchResult for durable observation. launchActivationProviderRun instead calls raw launchClaudeWithTelemetry, which hardwires plain launchClaude and discards that raw result. Calling it after Foundation launch double-launches; replacing Foundation launch drops grant/registration authority and settlement evidence. The strict reader is separately substantial and ProviderRunRecord has no project/session, so it must join a decision-verified durable activation-by-attempt binding; request bytes alone cannot prove the authenticated owner. Filed bounded prerequisites task-c534626b79b14aaa940923d78830200d (same-launch runner authority), task-7e3ede6c76324017a1d53601940391f0 (activation binding reader), task-9d489aee991549a7ad0e414d69c381c8 (decision-kind single source), task-7f7fee6687944c7ab2116e05aab0bad8 (reader codes), task-edda1fd35ffc4b6f85789d5f5a80fbfe (strict current reader), and task-232793a07bfd4552b47ef0de7a15e096 (daemon authority adapter). Re-plan this task only after all six are DONE; then it owns the Foundation service callsite/final physical replay proof in <=3 files. task-a9fd is downstream, not a dependency. Fresh public-root probe also retracted the stale Windows-test premise: discoverInstalledClaudeRuntime exists and returned PROVEN, so no runtime-quote prerequisite is needed.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T17:36:07.087Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured the real Foundation launch, runner telemetry, provider ledger, event index, session binding, and public runtime-discovery surfaces. Proved the raw telemetry wrapper cannot preserve durable Foundation authority or return the required raw result. Filed six bounded prerequisite tasks: c534626b, 7e3ede6c, 9d489aee, 7f7fee66, edda1fd3, 232793a0. Reported this task BLOCKED and recorded a Serena handoff.",
@@ -52,5 +120,24 @@
       "releasedBy": "architect-f956ffe1",
       "reason": "Explicit architect handoff after filing measured prerequisites and blocking."
     }
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T10:24:25.182Z",
+  "planningNotes": {
+    "approachesConsidered": "1) Keep `createFoundationClaudeLauncher` and append telemetry afterward: rejected because that either launches twice or fabricates a handoff from a raw result. 2) Replace it with raw `launchClaudeWithTelemetry`: rejected because it bypasses the durable grant/process-registration authority. 3) Rebuild/spread `{result,handoff}` in the daemon: rejected because only the runner witnessed that they came from one capture; the adapter deliberately returns the pair by identity. 4) Use the authenticated envelope principal for the provider decision: rejected because the landed current reader requires the attempt lease's `ownerSessionRef`, deliberately distinct in real fixtures. 5) Infer clock observations from launcher ISO timestamps or use wall time: rejected; provider wall truth stays in the handoff and no boot/monotonic observation exists. 6) Persist `FoundationAttemptRecorded`/`PROCESS_OBSERVED` as exit truth: rejected by task rail; neither is physical terminal evidence. 7) Call `readCurrentProviderRun` inside the service as a second availability gate: rejected; commit already returns the durable result, tests certify the reader, and downstream task-ded026 is its real production consumer. 8) Extend the DONE reader/adapter/ledger tests or add a helper module: rejected; prerequisites already own those surfaces and the final slice is intentionally three files. 9) Treat reader failure after a successful provider commit as zero-residue: rejected as a false atomicity claim; postcommit evidence must survive, while zero residue is asserted only before commit.",
+    "codebaseInsights": "Measured on moving shared-tree HEADs f96995d then d496b5e. All six prerequisites are on disk. `foundation-attempt-service.ts` is 248 lines; it currently wins RESERVED/replay fencing before an 8-line raw `createFoundationClaudeLauncher` block and then passes that raw result to `readDurableFoundationObservation`. `launchActivationProviderRun` is 143 lines, requires a separate authority, invokes public `createTelemetryBoundClaudeLauncher` once, and returns the exact `ClaudeBoundLaunchResult`. `commitActivationProviderRun` is 249 lines and commits the handoff-derived record; `readCurrentProviderRun` is 249 lines and joins the provider decision to the activation by project+attempt, verifying effect, lease epoch, and `decision.key.principalId === ownerSessionRef`. The reader suite already executes 64 real-SQLite cases including accepted, ABSENT, canonical unreadable, store unreadable, foreign binding, and a duplicate deliberately beyond the first indexed page. Provider commit and adapter suites add 16 and 34 production-surface cases. Combined current focused baseline was 5 files / 147 tests; service+Windows+reader was independently 3 files / 97 tests; daemon typecheck was exit 0 at a clean snapshot. `apps/daemon` declares both runner/store workspace dependencies and the lock importer links them. Public `discoverInstalledClaudeRuntime()` returned PROVEN on this Windows host for Claude 2.1.234, and a harmless installed `--version --model ... --effort high` invocation exited 0. Full daemon red observed during planning was foreign bridge/registry WIP outside all three owned paths; the worker must take a fresh merge-base baseline because HEAD is moving.",
+    "risks": "The highest-risk defect is a second physical launch on replay or while trying to recover a raw result; the transparent adapter counter, provider counts, and landed adapter one-call proof must all agree. A provider decision keyed to the envelope principal will commit successfully but the strict reader will correctly refuse it as a foreign session. `identity.bytes`, reservation bytes, decision request SHA, event request SHA, and effect SHA are distinct domains; do not substitute one because lengths/digests look plausible. Blind/refused launches are valid durable UNKNOWN evidence and must be committed; they are not accepted physical exits. Conversely, `--version` proves an observed EXITED process but not a completed provider result. An unexpected adapter throw may become only the existing `FOUNDATION_ATTEMPT_LAUNCH_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT`; never let it escape as a crash. The provider-commit abort occurs after activation and Foundation reservation, so zero residue is scoped to provider rows/decisions and physical invocation, not a rollback of already-authoritative activation/reservation facts. Current reader availability failures after a commit cannot erase the committed provider record. Windows handles/store must close before cleanup. Service has only two lines of target headroom, so replace and compact; do not grow DONE 249-line producers. Shared-tree baselines are volatile: no broad restore/stage/commit and no attribution of foreign registry/context work to this task.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-attempt-service.ts",
+      "apps/daemon/src/work/foundation-attempt-service.test.ts",
+      "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+      "apps/daemon/src/activation/activation-telemetry-launch.ts",
+      "apps/daemon/src/activation/activation-run-commit.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 6300000
+  },
+  "planApprovedAt": "2026-08-18T10:24:27.254Z"
 }

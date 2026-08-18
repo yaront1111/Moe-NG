@@ -18,32 +18,54 @@
     {
       "stepId": "step-1",
       "description": "Verify, then RED. The private literal is confirmed at apps/daemon/src/telemetry/provider-run-ledger.ts:56 `const COMMAND_KIND = \"provider-run.telemetry.commit\"`, used at :215; provider-run-contracts.ts already owns the sibling frozen identities (PROVIDER_RUN_RECORD_VERSION :57, PROVIDER_RUN_EVENT_TYPE :60), so the new export sits beside them in the same `as const` style. SIZE CAUTION: the ledger file is 248 lines -- two from the 250 target -- so the edit must be net-neutral or negative (the removed const line pays for the import line; do not add anything else there). RED first, in the existing provider-run-ledger.test.ts: extend the accepted-commit and replay controls to assert the exact command kind ON THE STORED ARTIFACTS -- the durable event's decision trace, the command decision record, and the receipt-backed trace -- imported from provider-run-contracts.ts, NOT retyped in the test; a test literal would be the second owner the DoD forbids. The assertions must read the kind from durable bytes, because an assertion against the writer's input echoes whatever the writer sent.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
+      ],
+      "note": "VERIFIED, THEN RED. Measured at HEAD c03bb1b.\n\nPREMISES CONFIRMED, all four, and the strongest one is the grep. `git grep -n \"provider-run.telemetry.commit\"` across apps/daemon, packages, adapters and tests returns EXACTLY ONE line repo-wide:\n    apps/daemon/src/telemetry/provider-run-ledger.ts:56:const COMMAND_KIND = \"provider-run.telemetry.commit\";\nSo there is no second production owner and no test literal today — promotion cannot silently fork an identity, and the \"no second owner\" clause of DoD 1 starts from a clean base. Sole use is :215 inside `store.commitExpectedVersionDecision({ commandKind: COMMAND_KIND, ... })`. Sibling identities confirmed in contracts: `PROVIDER_RUN_RECORD_VERSION` :57 and `PROVIDER_RUN_EVENT_TYPE` :60, both `... as const`, so the new export has an established style to match. Line counts: contracts 204, ledger 248 (two under the 250 target, so the step-2 edit must be net-neutral), test 552. Owned paths clean, no peer contention.\n\nWHICH DURABLE ARTIFACTS ACTUALLY CARRY THE KIND — measured in the store contracts rather than assumed, and one of the three named in the plan does NOT:\n - `StoredEvent.decisionTrace.commandKind` (store-contracts.ts:156-163) — the durable event's decision trace. Present.\n - `CommandDecisionRecordBase.commandKind` (:88), returned by `store.getCommandDecision(key)`. Present.\n - `CommandReceipt` (:138-149) has NO `commandKind` field at all — it carries aggregateId, commandId, committedAt, currentVersion, effectIdentityVersion, effectSha256, eventIds, outboxMessageIds, previousVersion, requestSha256. So \"the receipt-backed trace\" cannot mean a kind read off the receipt; there is none to read. I implemented it the only way that is both honest and receipt-backed: use `getCommandReceipt(commandId).eventIds` to NAME the committed event, then read THAT event's `decisionTrace.commandKind`. The receipt selects the artifact; the artifact carries the kind.\n\nTHE ECHO TRAP, closed deliberately. planningNotes names it as risk 1 and it is the whole reason this test can be worth anything: an assertion against `input()` or against the returned `ProviderRunCommitResult` reads back the writer's own argument and stays green no matter what was actually stored. Every assertion I added reads from the STORE — `store.readEvents(...)`, `store.getCommandDecision(...)`, `store.getCommandReceipt(...)` — and the comment in the test says so, so a later editor cannot quietly \"simplify\" it into an echo.\n\nNO TEST LITERAL, WHICH REQUIRED RESISTING AN OBVIOUS ASSERTION. My first draft ended with `expect(PROVIDER_RUN_COMMAND_KIND).toBe(\"provider-run.telemetry.commit\")` to pin the wire value. I removed it: DoD 1 forbids a second literal owning the identity in production OR TEST, and that line would have been exactly that. The consequence is worth stating plainly for QA — because both operands of the remaining assertions now come from the same constant, those assertions cannot detect a change to the VALUE, only a break in the BINDING. That is the correct division: single ownership is the DoD's requirement, and the step-3 drill is what makes the operands diverge and proves the binding is real. `grep -c \"provider-run.telemetry.commit\"` in the test file is 0.\n\nRED, ON BOTH LEGS, FOR EXACTLY ONE REASON:\n - typecheck: EXIT=1, a single diagnostic — `src/telemetry/provider-run-ledger.test.ts(31,3): error TS2305: Module '\"./provider-run-contracts.js\"' has no exported member 'PROVIDER_RUN_COMMAND_KIND'.`\n - test: EXIT=1, `Test Files 1 failed | 130 passed (131)`, `Tests 2 failed | 2828 passed (2830)`. The two failures are precisely the two tests I added, at :218 and :322. Nothing else in the daemon suite moved.\nDaemon baseline for the final gate to reproduce: 131 test files, 2830 tests.\n\nProduction is still untouched; the constant lands in step 2.",
+      "startedAt": "2026-08-18T04:46:29.069Z",
+      "completedAt": "2026-08-18T04:48:45.171Z"
     },
     {
       "stepId": "step-2",
       "description": "GREEN: promote the constant. Add `export const PROVIDER_RUN_COMMAND_KIND = \"provider-run.telemetry.commit\" as const;` to provider-run-contracts.ts beside its sibling identities; in provider-run-ledger.ts delete the private const at :56 and import the exported one, leaving :215's usage and EVERYTHING else -- target aggregate derivation (AGGREGATE_NAMESPACE at contracts :163), expected version, request digest, singleton event id, result bytes -- byte-for-byte unchanged; the DoD pins them unchanged and the rail forbids schema or command-byte changes. Grep afterward that exactly ONE production definition of the string exists: `git grep -n \"provider-run.telemetry.commit\" apps/daemon/src/ | grep -v '\\.test\\.'` must show the contracts export and the ledger import site only. Do NOT register the kind in RuntimeCommandKind or HTTP (rail: this is constant promotion, not a wire kind -- the frozen runtime vocabulary has a full-coverage ratchet and touching it is a different, larger task).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-contracts.ts",
         "apps/daemon/src/telemetry/provider-run-ledger.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-contracts.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
+      ],
+      "note": "GREEN. typecheck EXIT=0 with zero diagnostics; test EXIT=0, `Test Files 131 passed (131)` / `Tests 2830 passed (2830)` — the same total as the step-1 RED baseline, with the 2 failures now passing.\n\nTHE PROMOTION, three lines of real change:\n - contracts: `export const PROVIDER_RUN_COMMAND_KIND = \"provider-run.telemetry.commit\" as const;` placed beside `PROVIDER_RUN_RECORD_VERSION` and `PROVIDER_RUN_EVENT_TYPE`, matching their `as const` style, with a comment explaining why single ownership matters (the store's replay identity hashes this kind with the key and target aggregate, so a reader holding its own copy could drift while both suites stayed green).\n - ledger: private `const COMMAND_KIND` at :56 DELETED, `PROVIDER_RUN_COMMAND_KIND` added to the EXISTING contracts import block at :45, call site now reads `commandKind: PROVIDER_RUN_COMMAND_KIND`.\n\nLINE BUDGET HELD EXACTLY AS PLANNED: the ledger is still **248** lines — the deleted const paid for the import line, net zero, two under the 250 target. Contracts 204 -> 213, far under. Nothing else was added to the ledger.\n\nDoD 1 SATISFIED BY MEASUREMENT: `git grep -n \"provider-run.telemetry.commit\"` across apps/daemon, packages, adapters and tests now returns EXACTLY ONE line, `provider-run-contracts.ts:69`. One owner, production or test. The test file contains zero occurrences of the string (it imports the constant), so no second owner was introduced by the tests either.\n\nIDENTITY FIELDS UNCHANGED, per DoD 2 and rail 1: aggregate derivation, expected version, request digest, singleton event id and result bytes were not touched — the diff in the ledger is one import line, one deleted const line, and one identifier at the call site. The VALUE reaching `commandKind:` is byte-identical; only the name that carries it changed, since the local const no longer exists. Not registered in RuntimeCommandKind or HTTP (rail 2).\n\nA REAL FINDING THAT CHANGED THE TEST, and it matters for the sibling reader task. The plan asked for the kind to be asserted on \"the receipt-backed trace\". I wrote that arm against `store.getCommandReceipt(KEY.commandId)` and it FAILED with `AssertionError: Target cannot be null or undefined` — the receipt came back null. That is not a bug in my test setup; it is how the store works, and I traced it rather than working around it:\n - `CommandReceipt` (store-contracts.ts:138-149) carries NO `commandKind` field at all.\n - Receipts are stored under `identities.receiptCommandId`, and `receiptCommandId = internalReceiptCommandId(decisionId)` = `` `${INTERNAL_IDENTIFIER_PREFIX}decision-effect:${decisionId}` `` (store-digests.ts:104-106) — an INTERNAL derived id, never the caller's `commandId`.\n - Neither `internalReceiptCommandId` nor `identifyCommandDecisionId` is exported from the store package root (`git grep` over packages/store/src/index.ts is empty).\nSo a consumer holding only a `CommandDecisionKey` CANNOT address the receipt, and a test that rebuilt that string would be reimplementing store authority inside the test — which the global rail forbids and which would silently rot if the prefix ever changed.\nI rewired the third arm onto the public equivalent: `getCommandDecision(KEY).businessEventIds` names the event the decision sealed, and that named event's `decisionTrace.commandKind` is read back. Deliberately routed through the effect record rather than `events[0]`, so it is a third INDEPENDENT binding rather than a restatement of the first assertion. The reason is written into the test comment so nobody \"restores\" the receipt call later.\nFLAGGING FOR THE CONSUMER: task-00e4827d's reader child has a DoD clause reading \"`getCommandDecision` and `getCommandReceipt` must prove EFFECTS_COMMITTED 0->1, exact target, singleton event, result bytes/effect digest and zero outbox\". Its `getCommandReceipt` half is not reachable the way that phrasing implies — `outboxMessageIds` and the 0->1 version pair live on the receipt, which cannot be fetched with the caller's command id. That task will need either a store change or those proofs taken from the decision record (`businessEventIds`, `expectedVersion`/`observedVersion`, `outboxMessageIds`, `effectSha256`, `resultBytes` are all on `CommandDecisionRecordBase`). Better found now than at that task's gate.\n\nDrill, commit and gate are step 3.",
+      "startedAt": "2026-08-18T04:48:50.034Z",
+      "completedAt": "2026-08-18T04:51:48.029Z"
     },
     {
       "stepId": "step-3",
       "description": "Drill, commit, gate. DRILL per DoD 3: change the writer's imported kind usage to a different literal (e.g. suffix \"/2\"); the named binding assertion from step 1 must go RED on the stored-artifact kind comparison -- if only a replay assertion fails, the binding test is not reading the durable kind and must be strengthened. Restore by re-editing; `git diff --numstat` 0/0 on the drilled file. COMMIT the three owned paths by explicit pathspec after `git status --porcelain`; verify `git show --stat`. GATE per DoD 4, separately with own exit codes: `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test`, each with a nonzero `Test Files N passed` line. Completion note: name the provider-run reader child of task-00e4827d as consumer, and confirm the ledger file's final line count stayed <=250.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/telemetry/provider-run-contracts.ts",
         "apps/daemon/src/telemetry/provider-run-ledger.ts",
         "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/telemetry/provider-run-contracts.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
+      ],
+      "note": "DRILL, COMMIT, GATE — all three verified fresh this session; nothing was trusted from the prior session that died after committing.\n\nSTATE RE-MEASURED FIRST. The commit for this task was already at HEAD (e655aa1) with step-3 still IN_PROGRESS, so a prior session died between `git commit` and `complete_step`. Re-verified from disk rather than believing it: owned paths `git status --porcelain` EMPTY (committed bytes == working bytes), contracts:69 carries `export const PROVIDER_RUN_COMMAND_KIND = \"provider-run.telemetry.commit\" as const;`, ledger imports it at :46 and uses it at :215, and `git grep -n \"provider-run.telemetry.commit\"` over the whole repo returns EXACTLY ONE source line — contracts:69. Every other hit is .moe board/chat JSON, not code. DoD 1 holds: one owner, no test literal. Ledger 248 lines, contracts 213, test 609.\n\nTHE DRILL, RED ON THE RIGHT ASSERTION. Recorded HEAD e655aa1 and sha256 8103e024…a5c5 of the ledger BEFORE touching it (shared worktree: a peer hook can commit inside a drill window). Mutated only the writer's call site — line 215 `commandKind: PROVIDER_RUN_COMMAND_KIND` -> `commandKind: `${PROVIDER_RUN_COMMAND_KIND}/2`` — leaving the constant itself intact, so the test's two operands genuinely diverge. Focused run `vitest run --root . --config package.json src/telemetry/provider-run-ledger.test.ts`: EXIT=1, `Test Files 1 failed (1)`, `Tests 2 failed | 18 passed (20)`.\n\nThe failures are the two named bindings and nothing else:\n - `binds the exported command kind onto every durable artifact of the commit` — provider-run-ledger.test.ts:218, `expected 'provider-run.telemetry.commit/2' to be 'provider-run.telemetry.commit'`, reading `store.readEvents(result.aggregateId)[0].decisionTrace.commandKind`. This is the DURABLE-bytes comparison the plan demanded, not a replay-only failure and not an echo of the writer's input — the assertion decoded what the store kept.\n - `leaves the durable command kind untouched when an identical commit replays` — :330, same message, same durable read.\nThe 18 surviving tests in the file (aggregate derivation, digest ownership, event-id determinism, every refusal-code test) prove the mutation is narrow: it kills the identity binding specifically, not the file.\n\nRESTORE PROVEN BYTE-IDENTICAL, not merely \"looks right\": sha256 back to 8103e024…a5c5 (exact pre-drill match, so line endings survived the sed too), `git diff --numstat` on the file EMPTY, `git status --porcelain` on all three owned paths EMPTY, HEAD still e655aa1 — the drill window was not committed by a peer.\n\nCOMMIT. e655aa1 `refactor(task-9d489aee991549a7ad0e414d69c381c8): Freeze provider-run decision identity`, explicit pathspec, exactly the three owned paths: provider-run-contracts.ts (+9), provider-run-ledger.ts (+2/-2), provider-run-ledger.test.ts (+57). No foreign path, no `-A`.\n\nGATES, SEPARATELY, EACH WITH ITS OWN EXIT CODE (never chained — a chained first leg hides the count line):\n - `pnpm --filter @moe/daemon typecheck` -> EXIT=0, zero diagnostics.\n - `pnpm --filter @moe/daemon test` -> EXIT=0, `Test Files 131 passed (131)`, `Tests 2830 passed (2830)`. Nonzero executed counts, and identical to the step-1/step-2 baseline of 131/2830 — the promotion moved no other test.\nBoth exits captured via `${PIPESTATUS[0]}`, not tail's.\n\nCONSUMER, per DoD 4: the provider-run reader child of task-00e4827dd9374ec79625351d560c82c8 — it needs the exported kind for its binding check instead of duplicating the string. Standing flag from step 2 for that task: `getCommandReceipt` is NOT addressable with a caller `commandId` (receipts key on the internal derived `decision-effect:` id, unexported), and `CommandReceipt` carries no `commandKind`; its proofs must come off `getCommandDecision`.\n\nFINAL LINE COUNT: ledger 248 lines, under the 250 target as required.",
+      "startedAt": "2026-08-18T04:51:54.198Z",
+      "completedAt": "2026-08-18T08:05:59.754Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -56,16 +78,26 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:03.360Z",
-  "updatedAt": "2026-08-18T04:27:18.956Z",
+  "updatedAt": "2026-08-18T08:13:00.325Z",
   "contextFetchedBy": [
-    "architect-f956ffe1"
+    "architect-f956ffe1",
+    "worker-a83aecdf",
+    "worker-b8af1a87",
+    "qa-a8258c2e"
   ],
   "metrics": {
     "firstClaimAt": "2026-08-18T04:26:19.800Z",
     "plannedStepCount": 3,
-    "plannedDistinctFileCount": 3
+    "plannedDistinctFileCount": 3,
+    "executedStepCount": 3,
+    "doneAt": "2026-08-18T08:13:00.325Z",
+    "wallClockMs": 13600525
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T04:27:16.889Z",
   "planningNotes": {
@@ -78,7 +110,25 @@
     ]
   },
   "budget": {
-    "wallClockMs": 2700000
+    "wallClockMs": 2700000,
+    "warnedAt": "2026-08-18T08:03:37.012Z",
+    "escalatedAt": "2026-08-18T08:03:37.012Z"
   },
-  "planApprovedAt": "2026-08-18T04:27:18.956Z"
+  "planApprovedAt": "2026-08-18T04:27:18.956Z",
+  "workStartedAt": "2026-08-18T04:46:29.069Z",
+  "reviewStartedAt": "2026-08-18T08:06:18.502Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run --root . --config package.json src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  131 passed (131)\n      Tests  2830 passed (2830)\n   Start at  11:05:13\n   Duration  14.85s (transform 46.51s, setup 0ms, import 117.79s, tests 89.40s, environment 13ms)\n\nTEST_EXIT=0",
+    "reportedAt": "2026-08-18T08:06:18.502Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/telemetry/provider-run-ledger.test.ts",
+    "apps/daemon/src/telemetry/provider-run-contracts.ts",
+    "apps/daemon/src/telemetry/provider-run-ledger.ts"
+  ],
+  "completedAt": "2026-08-18T08:13:00.325Z",
+  "reviewCompletedAt": "2026-08-18T08:13:00.325Z",
+  "reviewSummary": "APPROVED. Commit e655aa1, 3 owned files, +68/-2.\n\nDoD1: git grep of the literal repo-wide = EXACTLY ONE source line, contracts.ts:69 `as const`. Ledger imports it; test file has ZERO occurrences. Other hits are .moe JSON.\n\nDoD2: ledger diff is 2 lines (import + identifier at :215). Aggregate derivation, expected version, request digest, singleton event id, result bytes byte-untouched. No RuntimeCommandKind/HTTP. contracts 213, ledger 248 lines.\n\nDoD3: THREE drills, not the one required, since arm1 short-circuits the rest. All restored byte-identical (ledger sha256 8103e024..a5c5, test 59248295..d389, status clean, HEAD 1a04b8b unmoved):\n- writer kind -> `${K}/2`: Tests 2 failed | 18 passed (20), red at :218 (readEvents()[0].decisionTrace.commandKind) and :330 (replay);\n- arm1 neutralized: red MOVES to :221 (getCommandDecision(KEY).commandKind);\n- arms1+2 neutralized: red MOVES to :235 (event named by decision.businessEventIds[0]).\nAll three durable bindings independently real. Receipt arm uses businessEventIds not getCommandReceipt: CommandReceipt (store-contracts.ts:138-149) has NO commandKind, so any receipt arm is receipt->eventIds->event trace; both name the same event. Not a narrowing.\n\nDoD4: pnpm --filter @moe/daemon test EXIT=0, Test Files 131 passed (131) / Tests 2833 passed (2833) — nonzero count line; verification said 2830, +3 are a peer's uncommitted tests. Consumer named in commit msg and step-3 note.\n\nFOREIGN RED DISCLOSED: daemon typecheck EXIT=1, 3 diagnostics ALL in provider-run-refusals.test.ts lines 190/201/212 — 181 lines at HEAD, 226 in worktree, uncommitted +45, with provider-run-refusals.ts also dirty. Failing lines exist only in a peer's uncommitted bytes; failing-path set intersected with owned paths = EMPTY.\n\nCorrection posted to chat: the receipt IS addressable via the stored event's commandId (command-decision-store.test.ts:60) — task-00e4827d's reader child must not inherit \"receipt unaddressable\"."
 }
