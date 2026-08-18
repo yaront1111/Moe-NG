@@ -26,6 +26,33 @@ import { DatabaseSync } from "node:sqlite";
 const IS_WINDOWS = process.platform === "win32";
 const RPC_TIMEOUT_MS = 20_000;
 
+/** Every child this harness spawns, so residue is a MEASURED number, not a hope. */
+const spawnedChildren: ChildProcessWithoutNullStreams[] = [];
+
+/** How many spawned children are still running. Zero is the only clean teardown. */
+export function liveChildren(): number {
+  return spawnedChildren.filter((c) => c.exitCode === null && c.signalCode === null).length;
+}
+
+/**
+ * Splits a stdio buffer into whole JSON-RPC frames, tolerating CRLF.
+ *
+ * PLATFORM-NEUTRAL BY CONSTRUCTION, and it is the SAME function `stdioClient`
+ * feeds, not a description of it. A splitter that assumes bare LF does not fail on
+ * a CRLF frame - it HANGS waiting for one that already arrived, which surfaces as
+ * a flaky timeout rather than as a framing bug.
+ */
+export function splitFrames(buffer: string): { frames: string[]; rest: string } {
+  const frames: string[] = [];
+  let rest = buffer;
+  for (let cut = rest.indexOf("\n"); cut !== -1; cut = rest.indexOf("\n")) {
+    const line = rest.slice(0, cut).replace(/\r$/u, "");
+    rest = rest.slice(cut + 1);
+    if (line.trim() !== "") frames.push(line);
+  }
+  return { frames, rest };
+}
+
 export interface JsonRpcMessage {
   readonly error?: { readonly code: number; readonly data?: unknown; readonly message: string };
   readonly id?: number;
@@ -56,8 +83,21 @@ export function createWorkspace(projectId: string): PortabilityWorkspace {
   });
 }
 
-export function removeWorkspace(workspace: PortabilityWorkspace): void {
-  rmSync(workspace.directory, { force: true, maxRetries: 5, recursive: true });
+/**
+ * THROWS rather than swallowing, and that is the orphan detector: on Windows a
+ * live child still holding the store file blocks the removal, so a teardown that
+ * leaked a process fails here instead of leaving residue for the next run.
+ *
+ * Process death and FILE-HANDLE release are separate events on Windows, so this
+ * waits for every spawned child to be gone and then lets `rmSync` retry across
+ * the handle-release window. Without the wait the detector fires on the lag
+ * rather than on a real leak - measured intermittently before the wait existed.
+ */
+export async function removeWorkspace(workspace: PortabilityWorkspace): Promise<void> {
+  for (let attempt = 0; attempt < 40 && liveChildren() > 0; attempt += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+  }
+  rmSync(workspace.directory, { maxRetries: 40, recursive: true, retryDelay: 250 });
 }
 
 /**
@@ -125,6 +165,7 @@ export function spawnInstalledBin(
     shell: IS_WINDOWS,
     stdio: ["pipe", "pipe", "pipe"],
   }) as ChildProcessWithoutNullStreams;
+  spawnedChildren.push(child);
   let stderr = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk: string) => {
@@ -133,8 +174,30 @@ export function spawnInstalledBin(
   return { child, stderr: (): string => stderr };
 }
 
+const exited = (child: ChildProcessWithoutNullStreams, ms: number): Promise<boolean> =>
+  new Promise<boolean>((resolve) => {
+    if (child.exitCode !== null) {
+      resolve(true);
+      return;
+    }
+    const timer = setTimeout(() => resolve(false), ms);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve(true);
+    });
+  });
+
+/**
+ * GRACEFUL FIRST, then the tree. Closing stdin lets the MCP stdio server shut down
+ * and release its SQLite handle; only then is `taskkill /T /F` needed, and only
+ * while the `cmd.exe` shim is still alive to name the tree. Killing the shim first
+ * re-parents the node process beyond any PID we hold — measured: exactly one
+ * `mcp-main.ts` survived four suite runs that way.
+ */
 export async function killTree(child: ChildProcessWithoutNullStreams): Promise<void> {
-  if (child.pid === undefined || child.exitCode !== null) return;
+  if (child.pid === undefined) return;
+  if (child.exitCode === null && child.stdin.writable) child.stdin.end();
+  if (await exited(child, 2_000)) return;
   try {
     if (IS_WINDOWS) {
       execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
@@ -142,13 +205,7 @@ export async function killTree(child: ChildProcessWithoutNullStreams): Promise<v
   } catch {
     child.kill("SIGKILL");
   }
-  await new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, 3_000);
-    child.once("exit", () => {
-      clearTimeout(timer);
-      resolve();
-    });
-  });
+  await exited(child, 3_000);
 }
 
 /** True when nothing answers on the loopback port, i.e. the listener really went. */
@@ -184,14 +241,14 @@ export function stdioClient(name: string, environment: Record<string, string>): 
   let nextId = 0;
   spawned.child.stdout.setEncoding("utf8");
   spawned.child.stdout.on("data", (chunk: string) => {
-    buffer += chunk;
-    for (let cut = buffer.indexOf("\n"); cut !== -1; cut = buffer.indexOf("\n")) {
-      const line = buffer.slice(0, cut).replace(/\r$/u, "");
-      buffer = buffer.slice(cut + 1);
-      if (line.trim() === "") continue;
+    // THE live client feeds `splitFrames`; the CRLF property is therefore asserted
+    // against the function that actually frames these bytes, not a copy of it.
+    const split = splitFrames(buffer + chunk);
+    buffer = split.rest;
+    for (const frame of split.frames) {
       let message: JsonRpcMessage;
       try {
-        message = JSON.parse(line) as JsonRpcMessage;
+        message = JSON.parse(frame) as JsonRpcMessage;
       } catch {
         continue;
       }
@@ -203,6 +260,21 @@ export function stdioClient(name: string, environment: Record<string, string>): 
     }
   });
 
+  /**
+   * A child that DIES rejects its pending calls immediately, naming its exit code
+   * and stderr. Waiting out the timeout instead turns a missing shim into a 20s
+   * hang that reads as flakiness rather than as the resolution failure it is —
+   * measured while drilling the installed bin away.
+   */
+  const failures: ((error: Error) => void)[] = [];
+  spawned.child.once("exit", (code) => {
+    const reason = new Error(
+      `${name} exited ${String(code)} before answering: ${spawned.stderr().slice(0, 400)}`,
+    );
+    for (const fail of failures.splice(0)) fail(reason);
+    pending.clear();
+  });
+
   const rpc = (method: string, params: unknown): Promise<JsonRpcMessage> => {
     nextId += 1;
     const id = nextId;
@@ -211,10 +283,15 @@ export function stdioClient(name: string, environment: Record<string, string>): 
         pending.delete(id);
         reject(new Error(`stdio rpc timed out: ${method}`));
       }, RPC_TIMEOUT_MS);
-      pending.set(id, (message) => {
+      const settle = (outcome: (value: JsonRpcMessage) => void) => (message: JsonRpcMessage) => {
         clearTimeout(timer);
-        resolve(message);
+        outcome(message);
+      };
+      failures.push((error) => {
+        clearTimeout(timer);
+        reject(error);
       });
+      pending.set(id, settle(resolve));
       spawned.child.stdin.write(`${JSON.stringify({ id, jsonrpc: "2.0", method, params })}\n`);
     });
   };

@@ -29,8 +29,9 @@ import {
 } from "./portability-cases.js";
 import type { Answerer, TransportSubject } from "./portability-cases.js";
 import {
-  createWorkspace, environmentFor, httpDriver, portIsFree, rawPost, readStoreCounts,
-  killTree, removeWorkspace, runNodeChild, stdioClient, stdioDriver, truncateHttpBody,
+  createWorkspace, environmentFor, httpDriver, killTree, liveChildren, portIsFree, rawPost,
+  readStoreCounts, removeWorkspace, runNodeChild, splitFrames, stdioClient, stdioDriver,
+  truncateHttpBody,
 } from "./portability-harness.js";
 import type {
   Driver, JsonRpcMessage, PortabilityWorkspace, Reply, StoreCounts,
@@ -55,6 +56,8 @@ interface RunRecord {
   readonly counts: Record<string, StoreCounts>;
   readonly digests: Record<string, string>;
   readonly httpPort: number;
+  /** The store path every child was actually handed, kept for the Windows case. */
+  readonly storePath: string;
 }
 
 /**
@@ -258,13 +261,15 @@ async function runTransports(): Promise<RunRecord> {
         stage: served ? TRUNCATED_NO_WRITE : "TRUNCATED_BUT_DIRTY" });
 
       await snapshot("final");
-      return { answers, counts, digests, httpPort: http.port };
+      return { answers, counts, digests, httpPort: http.port, storePath: workspace.storePath };
     } finally {
-      await stdio.stop();
-      await http.stop();
+      // BOTH settle even if the first rejects. Sequential awaits here would leak the
+      // HTTP listener whenever stdio teardown threw, and the leak would surface as
+      // an unrelated port-still-bound failure in a LATER test.
+      await Promise.allSettled([stdio.stop(), http.stop()]);
     }
   } finally {
-    removeWorkspace(workspace);
+    await removeWorkspace(workspace);
   }
 }
 
@@ -311,9 +316,12 @@ describe("portability: daemon transport and JetBrains host matrix", () => {
   }, 900_000);
 
   afterAll(async () => {
-    // No listening port survives teardown, on either run.
+    // No listening port and no orphan child survives teardown, on either run. The
+    // temp directories are already gone: removeWorkspace THROWS rather than
+    // swallowing, and on Windows a live child holding the store blocks removal.
     expect(await portIsFree(runA.httpPort)).toBe(true);
     expect(await portIsFree(runB.httpPort)).toBe(true);
+    expect(liveChildren()).toBe(0);
   });
 
   it("generates a positive subject-by-case matrix covering every declared subject", () => {
@@ -420,6 +428,28 @@ describe("portability: daemon transport and JetBrains host matrix", () => {
       expect(observed?.answerer).toBe("NO_ANSWER");
       expect(observed?.stage, `${subject} truncation`).toBe(TRUNCATED_NO_WRITE);
     }
+  });
+
+  it("covers the Windows cases explicitly rather than assuming them", () => {
+    // A path containing a SPACE reached both executables through the environment,
+    // and on Windows through the quoted `cmd.exe` shim.
+    expect(runA.storePath).toContain(" ");
+    expect(runB.storePath).toContain(" ");
+    // CRLF-tolerant framing, asserted against the SAME splitter the live stdio
+    // client feeds rather than a copy of it, and run on whatever platform this is.
+    // The line endings are written as ESCAPES and never as raw newlines in this
+    // source: a raw newline is whatever git or the editor last normalised it to, so
+    // the CRLF arm would silently become a second LF arm and stop testing CRLF at
+    // all while staying green. Measured: both arms were bare LF before this.
+    const body = '{"jsonrpc":"2.0","id":1}';
+    expect(splitFrames(`${body}\n${body}\n`)).toEqual({ frames: [body, body], rest: "" });
+    expect(splitFrames(`${body}\r\n${body}\r\n`)).toEqual({ frames: [body, body], rest: "" });
+    // Mixed framing inside one buffer, which is what a chunk boundary can produce.
+    expect(splitFrames(`${body}\r\n${body}\n`)).toEqual({ frames: [body, body], rest: "" });
+    // A frame still in flight is held, never emitted half-formed - including one
+    // cut between the CR and its LF, where a naive splitter emits a trailing CR.
+    expect(splitFrames(`${body}\n{"partial`)).toEqual({ frames: [body], rest: '{"partial' });
+    expect(splitFrames(`${body}\r`)).toEqual({ frames: [], rest: `${body}\r` });
   });
 
   it("leaves event and decision counts untouched across every refusal arm", () => {
