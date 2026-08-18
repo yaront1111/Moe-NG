@@ -15,8 +15,47 @@
     "Public-surface slice only: do not edit provider-slot-release.ts, lease-resource.ts, daemon composition, package manifests, lockfile, RuntimeCommandKind or schemas.",
     "Use the existing public transition and exact root roster; explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify the split landed and locate the owned file. Read-only. task-9f51def1 was WORKING at planning time: it splits packages/scheduler/src/index.ts (430 lines at its measurement) into a focused root-reachable execution-surface module that index.ts forwards, keeping the runtime namespace byte-identical at its reviewed 94-name set. THIS TASK'S OWNED FILE IS THE FILE THAT TASK CREATES -- its name is not knowable until it lands, so discover it at your committed HEAD: `git log --oneline -3 -- packages/scheduler/src/` and read index.ts's forwarding line. If 9f51def1 has NOT landed (no execution-surface module exists, index.ts still monolithic), re-block on it by id -- publishing from a 430-line file is exactly what the split exists to prevent. Then verify the subject: `releaseProviderSlot` and `ProviderSlotReleaseCommand` are QA-approved pure authority re-exported by packages/scheduler/src/authority/lease-resource.ts, and the @moe/scheduler ROOT has zero releaseProviderSlot export -- confirm both with `git grep -n \"releaseProviderSlot\" packages/scheduler/src/index.ts packages/scheduler/src/authority/lease-resource.ts` plus the new surface module. Also confirm the DoD-3 premise that needs NO edit: apps/daemon/package.json already declares @moe/scheduler and pnpm-lock.yaml carries the importer (measured earlier this session) -- rail 2 forbids manifest/lockfile edits, so DoD 3 is satisfied by VERIFICATION plus the probe, not by an edit; if the edge were somehow absent, that would be a re-block, not a manifest change.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED first, in packages/scheduler/src/index-surface.test.ts -- which rail 1 of THIS task owns (the split task was forbidden to touch it; this task extends it). The existing suite pins exact namespace equality, an explicit count, and freeze checks over the reviewed 94-name roster. Extend the hand-written roster with `releaseProviderSlot` in reviewed order, bump the explicit count 94 -> 95, and add the defined-function-binding pin (typeof === \"function\" and the binding resolves against the owning module) the DoD requires. Write the roster entry as a hand-written literal in the existing style -- the suite's value is that it is NOT derived from the namespace, so a leaked or missing export fails against the hand-written expectation. Run it and confirm it is RED for exactly one reason: releaseProviderSlot missing from the root. A second failure means the split moved something unexpectedly -- stop and report rather than absorbing it.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN: add the one export to the focused execution-surface module discovered in step 1 (NOT to index.ts directly -- index.ts forwards the surface module, and adding it at the root would recreate the pre-split pattern). Export the existing `releaseProviderSlot` value and `ProviderSlotReleaseCommand` type from their owning module via the surface, by name, no export-star. Touch nothing in provider-slot-release.ts or lease-resource.ts (rail 2). Confirm the file stays <=250 physical lines -- it was created with headroom for exactly this addition. Then the DoD-3 probe: a temporary compiled probe inside apps/daemon imports releaseProviderSlot and its type from the bare `@moe/scheduler` specifier, CALLS it (a minimal well-formed command against an in-memory fixture state, asserting the transition's result shape -- the DoD says imports AND calls, because an import-only probe cannot distinguish a value export from a type-only leak), typechecks exit 0, and is deleted in the same guarded command.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Mutation drill per DoD 4: remove the production root export (the surface-module line added in step 3); the NAMED root-roster assertion in index-surface.test.ts must go RED on releaseProviderSlot specifically -- not merely a count mismatch, and not a helper assertion; if only the count fails, strengthen the roster assertion to name missing members before proceeding. Restore the line byte-identically, confirm the suite returns green, and verify restoration with `git diff --numstat -- packages/scheduler/src/` showing only the intended net addition. One drill; this is a two-file task and the drill's entire job is proving the roster polices the ROOT surface rather than an intermediate re-export.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial review, commit, gate. REVIEW: is the export added by NAME through the surface module with no export-star? Did any other name enter or leave the namespace (the equality check should prove it, but diff the roster edit to be sure)? Is ProviderSlotReleaseCommand exported as a TYPE (type-only export is invisible to a runtime count test -- the roster pins the VALUE, the probe pins the type)? Were provider-slot-release.ts, lease-resource.ts, index.ts's forwarding structure, any manifest or the lockfile touched (all forbidden)? Is the probe deleted? COMMIT exactly the two owned paths by explicit pathspec -- the surface module and index-surface.test.ts -- after `git status --porcelain` and unstaging any foreign entry; verify `git show --stat`. GATE per DoD 5, run SEPARATELY with exit codes captured individually, never chained with `;` or piped: `pnpm --filter @moe/scheduler typecheck` then `pnpm --filter @moe/scheduler test` -- each leg is evidence only with its own nonzero `Test Files N passed` count line. Completion note: name the daemon release-state composition task and task-e62e3828 as consumers, per the description.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/index-surface.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -36,5 +75,28 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:12:02.766Z",
-  "updatedAt": "2026-08-18T03:12:43.932Z"
+  "updatedAt": "2026-08-18T04:24:22.571Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:23:03.441Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 1
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:24:20.483Z",
+  "planningNotes": {
+    "approachesConsidered": "Small two-file publication slice; the only planning decisions were sequencing and where the export lands. (1) Dep task-9f51def1 was WORKING at planning time -- planned with a step-1 verify-or-block rather than blocking outright, because its DoD pins the output shape precisely (a root-reachable execution-surface module forwarded by index.ts, namespace byte-identical, both files <=250 lines) and this task's steps depend only on that shape plus the file's NAME, discoverable at HEAD. This matches the board's verify-or-block convention: the gate covers genuine uncertainty (the split could land differently or be rejected), not certainty performed as a check. (2) The export goes through the NEW surface module, not index.ts -- adding it at the root would recreate the oversized-barrel pattern the split just removed, and the split's whole consumer story ('a later two-file task able to add releaseProviderSlot without editing an oversized source') names this task. (3) DoD 3 vs rail 2 apparent contradiction resolved by measurement: the daemon manifest ALREADY declares @moe/scheduler with a lock importer (verified earlier this session when planning a3e8a02d), so DoD 3 is verification-plus-probe, no manifest edit -- and if the edge were absent the correct move is re-block, because rail 2 forbids touching manifests from this task. (4) The probe CALLS releaseProviderSlot rather than only importing it, per the DoD's own wording -- an import-only probe cannot distinguish a real value export from a type-only leak, the known type-only-export-invisible-to-count-test failure.",
+    "codebaseInsights": "Measured at current HEAD plus the dep task's own recorded measurements. SUBJECT: releaseProviderSlot and ProviderSlotReleaseCommand are QA-approved pure authority, re-exported by packages/scheduler/src/authority/lease-resource.ts (per this task's description); @moe/scheduler root has ZERO releaseProviderSlot export today, so a daemon consumer would need a deep import into a package-private module -- the exact gap this task closes. SPLIT (task-9f51def1, WORKING): index.ts measured 430 physical lines at HEAD c1ab42b, beyond the split-before-400 cap; its deliverable is a focused execution-surface module holding the authority/resource/budget/fairness export group, index.ts forwarding it, namespace unchanged at the reviewed 94-name set -- so THIS task bumps 94 -> 95 and adds its export to that new module, whose filename must be discovered at HEAD in step 1. OWNERSHIP SPLIT BETWEEN THE TWO TASKS, deliberate: 9f51def1 owns index.ts + the new surface module and may NOT touch index-surface.test.ts; THIS task owns the surface module + index-surface.test.ts and may NOT touch index.ts, provider-slot-release.ts, lease-resource.ts, manifests, or the lockfile. The index-surface suite pins exact namespace equality, an explicit count, and freeze checks over a hand-written roster -- the same set-equality discipline used in apps/daemon's surface suite, and the reason a leaked or missing export cannot pass silently. Daemon edge: apps/daemon/package.json already declares @moe/scheduler with the pnpm-lock importer (verified this session), so the DoD-3 probe needs no manifest work.",
+    "risks": "Main risk is a file-name race: the owned surface module does not exist until 9f51def1 lands, and its name is that task's choice -- step 1 discovers it rather than guessing, and re-blocks if the split has not landed or was QA-rejected. Second, the two tasks share the surface module file in a shared worktree; if 9f51def1's worker is still mid-QA-fix when this task starts, coordinate rather than colliding -- check `git log -1 -- packages/scheduler/src/<surface>.ts` and the task board before editing. Third, the type-only trap: ProviderSlotReleaseCommand is a type and invisible to runtime roster counts, which is why the probe must CALL the value and the roster must pin the function binding -- a worker who exports the type but fat-fingers the value export would otherwise pass the count. Fourth, the roster must stay hand-written; deriving the expected set from the namespace at runtime would make the equality check a tautology. Fifth, the drill must redden the NAMED member, not just the count -- a count-only failure means the roster assertion enumerates nothing and needs strengthening. Sixth, rail 2's edit bans are wide (no index.ts, no authority modules, no manifests/lockfile): the entire production diff should be a handful of lines in ONE file plus test-roster lines; anything larger is scope creep to reject in self-review. Finally, run the two gate legs separately with their own exit codes -- a `;` chain reports only the last leg and a filtered run with no count line ran nothing.",
+    "keyFiles": [
+      "packages/scheduler/src/index.ts",
+      "packages/scheduler/src/index-surface.test.ts",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "apps/daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-18T04:24:22.571Z"
 }

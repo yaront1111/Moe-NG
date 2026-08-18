@@ -3,21 +3,16 @@
  * NOTHING semantic: no assertions, no case table, no expected codes.
  *
  * Every subject is reached through an INSTALLED executable under
- * `node_modules/.bin` or through a bare public specifier in a real child Node
- * process. Spawning `apps/daemon/src/mcp-main.ts` directly would prove the module
- * runs and say nothing about the bin the gate task shipped.
+ * `node_modules/.bin`, or a bare public specifier in a real child Node process.
  *
- * WINDOWS IS FIRST-CLASS HERE. The `.CMD` shim is the one with Windows paths (the
- * sh shim carries a WSL-stamped NODE_PATH), the shim path is quoted because it is
- * handed to `cmd.exe`, and stdio frames are split on LF with a trailing CR
- * stripped — a splitter that assumes bare LF hangs on a frame that already
- * arrived, which reads as a flaky timeout rather than as a failure.
- *
- * Killing the shim is NOT killing the server: `shell: true` spawns `cmd.exe`,
- * which spawns node, and killing the parent leaves the node process holding the
- * port. Measured live on 2026-08-18: an orphan `mcp-http-main.ts` survived
- * `child.kill()` and kept its ephemeral port bound. `taskkill /T /F` is what
- * actually reaps the tree.
+ * THREE WINDOWS FACTS, each measured live rather than assumed:
+ *  - the `.CMD` shim is the one carrying Windows paths (the sh shim carries a
+ *    WSL-stamped NODE_PATH), and it is quoted because `cmd.exe` splits on spaces;
+ *  - stdio frames are split on LF with a trailing CR stripped — a splitter that
+ *    assumes bare LF hangs on a frame that already arrived, and reads as a flake;
+ *  - `child.kill()` reaps `cmd.exe` and LEAVES the node process holding the port.
+ *    Reproduced: an orphan `mcp-http-main.ts` survived kill with its ephemeral
+ *    port still bound. `taskkill /T /F` is what actually reaps the tree.
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -29,6 +24,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 const IS_WINDOWS = process.platform === "win32";
+const RPC_TIMEOUT_MS = 20_000;
 
 export interface JsonRpcMessage {
   readonly error?: { readonly code: number; readonly data?: unknown; readonly message: string };
@@ -51,7 +47,7 @@ export interface PortabilityWorkspace {
 /**
  * The temp directory name carries a SPACE deliberately: the store path travels to
  * both executables through the environment and, on Windows, through a `cmd.exe`
- * shim. A path that only ever lacks spaces never exercises that.
+ * shim. A path that never contains a space never exercises that.
  */
 export function createWorkspace(projectId: string): PortabilityWorkspace {
   const directory = mkdtempSync(join(tmpdir(), "moe portability-"));
@@ -82,10 +78,6 @@ export function readStoreCounts(storePath: string): StoreCounts {
   }
 }
 
-function binaryPath(name: string): string {
-  return join(process.cwd(), "node_modules", ".bin", IS_WINDOWS ? `${name}.CMD` : name);
-}
-
 export function environmentFor(
   workspace: PortabilityWorkspace,
   extra: Readonly<Record<string, string>> = {},
@@ -112,7 +104,7 @@ export function spawnInstalledBin(
   name: string,
   environment: Readonly<Record<string, string>>,
 ): SpawnedBin {
-  const executable = binaryPath(name);
+  const executable = join(process.cwd(), "node_modules", ".bin", IS_WINDOWS ? `${name}.CMD` : name);
   const child = spawn(IS_WINDOWS ? `"${executable}"` : executable, [], {
     env: { ...environment },
     shell: IS_WINDOWS,
@@ -129,10 +121,9 @@ export function spawnInstalledBin(
 export async function killTree(child: ChildProcessWithoutNullStreams): Promise<void> {
   if (child.pid === undefined || child.exitCode !== null) return;
   try {
-    if (IS_WINDOWS) execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
-      stdio: "ignore",
-    });
-    else child.kill("SIGKILL");
+    if (IS_WINDOWS) {
+      execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+    } else child.kill("SIGKILL");
   } catch {
     child.kill("SIGKILL");
   }
@@ -165,11 +156,11 @@ export interface StdioClient {
   readonly initialize: () => Promise<void>;
   readonly rpc: (method: string, params: unknown) => Promise<JsonRpcMessage>;
   readonly stderr: () => string;
-  /** Writes bytes verbatim. Used for frames that are not valid JSON-RPC at all. */
+  /** True when the child really exited within the bound. */
+  readonly waitForExit: (ms: number) => Promise<boolean>;
+  /** Writes bytes verbatim, with NO frame terminator: used to truncate a frame. */
   readonly writeRaw: (text: string) => void;
 }
-
-const RPC_TIMEOUT_MS = 20_000;
 
 export function stdioClient(name: string, environment: Record<string, string>): StdioClient {
   const spawned = spawnInstalledBin(name, environment);
@@ -180,7 +171,6 @@ export function stdioClient(name: string, environment: Record<string, string>): 
   spawned.child.stdout.on("data", (chunk: string) => {
     buffer += chunk;
     for (let cut = buffer.indexOf("\n"); cut !== -1; cut = buffer.indexOf("\n")) {
-      // CRLF tolerance: the trailing CR is stripped rather than assumed absent.
       const line = buffer.slice(0, cut).replace(/\r$/u, "");
       buffer = buffer.slice(cut + 1);
       if (line.trim() === "") continue;
@@ -228,31 +218,29 @@ export function stdioClient(name: string, environment: Record<string, string>): 
     },
     rpc,
     stderr: spawned.stderr,
+    waitForExit: (ms: number): Promise<boolean> =>
+      new Promise<boolean>((resolve) => {
+        if (spawned.child.exitCode !== null) {
+          resolve(true);
+          return;
+        }
+        const timer = setTimeout(() => resolve(false), ms);
+        spawned.child.once("exit", () => {
+          clearTimeout(timer);
+          resolve(true);
+        });
+      }),
     writeRaw: (text: string): void => {
-      spawned.child.stdin.write(`${text}\n`);
+      spawned.child.stdin.write(text);
     },
   };
-}
-
-export interface HttpResponse {
-  readonly body: string;
-  readonly status: number;
 }
 
 export interface HttpClient {
   readonly child: ChildProcessWithoutNullStreams;
   readonly initialize: () => Promise<void>;
-  readonly origin: string;
   readonly port: number;
-  readonly post: (body: string, headers?: Readonly<Record<string, string>>) => Promise<HttpResponse>;
-  readonly request: (
-    method: string,
-    headers: Readonly<Record<string, string>>,
-    body: string | null,
-    query?: string,
-  ) => Promise<HttpResponse>;
-  readonly rpc: (method: string, params: unknown) => Promise<JsonRpcMessage>;
-  readonly sessionId: () => string | null;
+  readonly post: (body: string) => Promise<{ body: string; status: number }>;
 }
 
 /** Reads the bound origin from the child's own first stdout line; never guesses a port. */
@@ -280,16 +268,16 @@ export async function httpClient(
   let sessionId: string | null = null;
   let nextId = 0;
 
-  const request = async (
-    method: string,
-    headers: Readonly<Record<string, string>>,
-    body: string | null,
-    query = "",
-  ): Promise<HttpResponse> => {
-    const response = await fetch(`${origin}/mcp${query}`, {
-      ...(body === null ? {} : { body }),
-      headers: { ...headers },
-      method,
+  const post = async (body: string): Promise<{ body: string; status: number }> => {
+    const response = await fetch(`${origin}/mcp`, {
+      body,
+      headers: {
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${credential}`,
+        "content-type": "application/json",
+        ...(sessionId === null ? {} : { "mcp-session-id": sessionId }),
+      },
+      method: "POST",
       signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
     });
     const bound = response.headers.get("mcp-session-id");
@@ -297,40 +285,109 @@ export async function httpClient(
     return { body: await response.text(), status: response.status };
   };
 
-  const post = (body: string, extra: Readonly<Record<string, string>> = {}): Promise<HttpResponse> =>
-    request(
-      "POST",
-      {
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${credential}`,
-        "content-type": "application/json",
-        ...(sessionId === null ? {} : { "mcp-session-id": sessionId }),
-        ...extra,
-      },
-      body,
-    );
-
-  const rpc = async (method: string, params: unknown): Promise<JsonRpcMessage> => {
-    nextId += 1;
-    const answer = await post(JSON.stringify({ id: nextId, jsonrpc: "2.0", method, params }));
-    return JSON.parse(answer.body) as JsonRpcMessage;
-  };
-
   return {
     child: spawned.child,
     initialize: async (): Promise<void> => {
-      await rpc("initialize", {
-        capabilities: {},
-        clientInfo: { name: "portability-matrix", version: "0" },
-        protocolVersion: "2025-06-18",
-      });
+      nextId += 1;
+      await post(
+        JSON.stringify({
+          id: nextId,
+          jsonrpc: "2.0",
+          method: "initialize",
+          params: {
+            capabilities: {},
+            clientInfo: { name: "portability-matrix", version: "0" },
+            protocolVersion: "2025-06-18",
+          },
+        }),
+      );
     },
-    origin,
     port: Number(new URL(origin).port),
     post,
-    request,
-    rpc,
-    sessionId: (): string | null => sessionId,
+  };
+}
+
+/**
+ * Declares a body far larger than what is sent, then drops the connection. The
+ * listener must neither answer nor wedge: the caller then proves a fresh request
+ * is still served normally.
+ */
+export function truncateHttpBody(port: number, credential: string): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const socket = connect({ host: "127.0.0.1", port }, () => {
+      socket.write(
+        `POST /mcp HTTP/1.1\r\nHost: 127.0.0.1\r\nAuthorization: Bearer ${credential}\r\n` +
+          'Content-Type: application/json\r\nContent-Length: 5000\r\n\r\n{"jsonrpc":"2.0"',
+      );
+      setTimeout(() => {
+        socket.destroy();
+        resolve();
+      }, 250);
+    });
+    socket.once("error", () => resolve());
+  });
+}
+
+/** Raw POST outside the client's session, for refusals the screen answers first. */
+export async function rawPost(
+  port: number,
+  bearer: string,
+  body: string,
+): Promise<{ body: string; status: number }> {
+  const response = await fetch(`http://127.0.0.1:${String(port)}/mcp`, {
+    body,
+    headers: {
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${bearer}`,
+      "content-type": "application/json",
+    },
+    method: "POST",
+    signal: AbortSignal.timeout(RPC_TIMEOUT_MS),
+  });
+  return { body: await response.text(), status: response.status };
+}
+
+export type Reply = { readonly message: JsonRpcMessage; readonly status: number | null };
+
+/** One transport, driven the same way regardless of how its bytes are framed. */
+export interface Driver {
+  readonly call: (name: string, args: Readonly<Record<string, unknown>>) => Promise<Reply>;
+  readonly raw: (method: string, params: unknown) => Promise<Reply>;
+  readonly stop: () => Promise<void>;
+}
+
+export async function stdioDriver(workspace: PortabilityWorkspace, credential: string): Promise<Driver> {
+  const env = environmentFor(workspace, { MOE_SESSION_CREDENTIAL: credential });
+  const client = stdioClient("moe-mcp-stdio", env);
+  await client.initialize();
+  const raw = async (method: string, params: unknown): Promise<Reply> =>
+    ({ message: await client.rpc(method, params), status: null });
+  return {
+    call: (name, args) => raw("tools/call", { arguments: args, name }),
+    raw,
+    stop: () => killTree(client.child),
+  };
+}
+
+export async function httpDriver(
+  workspace: PortabilityWorkspace,
+  credential: string,
+): Promise<Driver & { readonly port: number }> {
+  const client = await httpClient(environmentFor(workspace), credential);
+  await client.initialize();
+  let nextId = 100;
+  const raw = async (method: string, params: unknown): Promise<Reply> => {
+    nextId += 1;
+    const answer = await client.post(JSON.stringify({ id: nextId, jsonrpc: "2.0", method, params }));
+    return { message: JSON.parse(answer.body) as JsonRpcMessage, status: answer.status };
+  };
+  return {
+    call: (name, args) => raw("tools/call", { arguments: args, name }),
+    port: client.port,
+    raw,
+    stop: async (): Promise<void> => {
+      await killTree(client.child);
+    },
   };
 }
 
@@ -360,7 +417,7 @@ export function runNodeChild(cwd: string, source: string): Promise<string> {
     const timer = setTimeout(() => {
       child.kill("SIGKILL");
       reject(new Error("node child timed out"));
-    }, 60_000);
+    }, 90_000);
     child.once("exit", (code) => {
       clearTimeout(timer);
       if (code === 0) resolve(out);

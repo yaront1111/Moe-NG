@@ -475,7 +475,15 @@ describe("launchActivationProviderRun hostile run identity", () => {
   it("generates a labelled matrix of distinct hostile identities", () => {
     const cases = hostile();
     // A sweep that silently produced nothing would pass every assertion below
-    // it, so the generated count is pinned exactly and the labels must be unique.
+    // it, so the roster is pinned BY NAME and not merely by count: a count alone
+    // certifies whatever roster it was written against and stays green when a
+    // promised CATEGORY disappears from it.
+    expect(cases.map((entry) => entry.label)).toEqual([
+      "epoch-missing", "epoch-fractional", "epoch-negative", "epoch-text",
+      "provider-foreign", "run-ref-space", "run-ref-overlong", "run-ref-empty",
+      "attempt-ref-nonstring", "accessor-invalid", "proxy-throwing", "proxy-revoked",
+      "not-an-object", "null",
+    ]);
     expect(cases.length).toBe(14);
     expect(new Set(cases.map((entry) => entry.label)).size).toBe(cases.length);
   });
@@ -540,6 +548,106 @@ describe("launchActivationProviderRun hostile run identity", () => {
     expect(handoffOf(answer).terminal).toBe("UNKNOWN");
     expect(rawOf(answer).kind).toBe("EXIT_BEFORE_LAUNCH");
   });
+});
+
+/**
+ * THE EXTRA-OWN-PROPERTY CATEGORY, pinned against what production actually does
+ * rather than against what its reason-code message reads like. MEASURED, not
+ * assumed: `snapshotRunRef` validates exactly five NAMED keys and rebuilds
+ * `deepFreeze({provider,runRef,effectIntentId,attemptRef,epoch})`, so an
+ * unexpected own property is PROJECTED AWAY and the run is ADMITTED. A case
+ * asserting `TELEMETRY_RUN_REF_MALFORMED` here would be asserting a guard this
+ * repository does not have, and the daemon cannot add one without reimplementing
+ * withheld runner authority. The hazards the category really names are ADOPTION
+ * (a smuggled key reaching the durable handoff, or overriding a handoff fact)
+ * and PREMATURE READING (a caller accessor running because something spread the
+ * identity on its way to the guard). Both are pinned below, on the accepted arm,
+ * through the production adapter.
+ */
+const RUN_REF_KEYS = ["attemptRef", "effectIntentId", "epoch", "provider", "runRef"] as const;
+
+interface SmuggledIdentity {
+  readonly label: string;
+  readonly ref: unknown;
+  readonly smuggledKeys: readonly string[];
+}
+
+const smuggledIdentities = (): readonly SmuggledIdentity[] => [
+  {
+    label: "extra-scalar",
+    ref: { ...PROVIDER_RUN, unexpected: true },
+    smuggledKeys: ["unexpected"],
+  },
+  {
+    // A HOSTILE extra property: reading it at all is already the failure, so a
+    // spread anywhere on the route throws instead of quietly copying a value.
+    label: "extra-throwing-accessor",
+    ref: {
+      ...PROVIDER_RUN,
+      get unexpected(): never {
+        throw new Error("an extra own property must never be read");
+      },
+    },
+    smuggledKeys: ["unexpected"],
+  },
+  {
+    label: "extra-handoff-shadow",
+    ref: { ...PROVIDER_RUN, terminal: "OBSERVED", launch: { kind: "OBSERVED" },
+      handoffVersion: 99 },
+    smuggledKeys: ["terminal", "launch", "handoffVersion"],
+  },
+];
+
+describe("launchActivationProviderRun smuggled run-identity properties", () => {
+  it("generates the labelled extra-own-property roster, by name and not by count", () => {
+    const cases = smuggledIdentities();
+    // A count alone certifies only the roster it was written against: it stays
+    // green when a promised CATEGORY goes missing. The names are pinned too.
+    expect(cases.map((entry) => entry.label))
+      .toEqual(["extra-scalar", "extra-throwing-accessor", "extra-handoff-shadow"]);
+    expect(cases.length).toBe(3);
+    expect(new Set(cases.map((entry) => entry.label)).size).toBe(cases.length);
+  });
+
+  it.each(smuggledIdentities())(
+    "projects $label away instead of adopting it into the durable handoff",
+    async ({ ref, smuggledKeys }) => {
+      const witness = authorityWitness();
+      const answer = await launchActivationProviderRun(witness.authority, {
+        providerRun: ref as never,
+        request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
+        options: OPTIONS,
+      });
+      // ADMITTED, not refused: the five-key whitelist is satisfied, so this arm
+      // is where an adopted extra key would actually do its damage.
+      expect(answer.ok).toBe(true);
+      if (!answer.ok) {
+        throw new Error(`expected the bound arm, received ${answer.code}/${answer.layer}`);
+      }
+      const identity = answer.handoff.providerRunRef as unknown as Readonly<
+        Record<string, unknown>>;
+      // EXACT record: the five keys, the caller's values, nothing else beside them.
+      expect(Object.keys(identity).sort()).toEqual([...RUN_REF_KEYS]);
+      for (const key of smuggledKeys) {
+        expect(Object.prototype.hasOwnProperty.call(identity, key)).toBe(false);
+      }
+      expect(identity).toEqual(PROVIDER_RUN);
+      // The shadowing case names HANDOFF fields; the handoff's own facts win, so
+      // a caller cannot mint an observation by naming one on the run identity.
+      expect(answer.handoff.terminal).toBe("UNKNOWN");
+      expect(answer.handoff.launch.kind).toBe("EXIT_BEFORE_LAUNCH");
+      expect(answer.handoff.handoffVersion).toBe(CLAUDE_TELEMETRY_HANDOFF_VERSION);
+      expect(answer.handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_NOT_ATTEMPTED");
+      expect(answer.handoff.telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      expect(rawOf(answer).kind).toBe("EXIT_BEFORE_LAUNCH");
+      // Not merely dropped LATER: the runner received the caller's own object,
+      // unread. A daemon-side spread or projection produces a copy that fails
+      // this identity, and would run a hostile extra accessor ahead of the guard.
+      const forwarded = runner.runArguments[0] as Readonly<Record<string, unknown>>;
+      expect(forwarded.providerRunRef).toBe(ref);
+      expect(witness.calls).toEqual([]);
+      expect(runner.events).toEqual(["factory", "run:start", "run:end"]);
+    });
 });
 
 describe("launchActivationProviderRun", () => {

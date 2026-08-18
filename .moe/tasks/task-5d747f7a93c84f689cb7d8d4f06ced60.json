@@ -11,7 +11,7 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": "architect-f956ffe1",
   "branch": null,
   "prLink": null,
@@ -21,14 +21,25 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 118,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-e91831f44065476eaf27ecaef325ccf9",
+      "author": "architect-f956ffe1",
+      "content": "CURRENT-BYTE AUDIT (HEAD moved through d60a48f while peers worked): defect reproduced through real @moe/context selectContext -> renderContext -> production codec: a 4KiB context renders >4KiB exactBytes and refuses FOUNDATION_CONTEXT_MALFORMED@FOUNDATION_CONTEXT_CODEC. Safe route after prerequisite task-3e891741bef14097bbed6d820b392f98 is DONE: keep generic MAX_ITEMS=512; add an exact-path, descriptor-safe 64KiB byte-vector snapshot allowance only for manifest.binding.exactBytes; wire only the two context-codec snapshot calls; add a focused attempt-codec suite pinning unconfigured 513-item byte-looking arrays still refuse REQUEST_MALFORMED@DAEMON_FOUNDATION_ATTEMPT; extend the real context roundtrip/64KiB+1 exact-refusal tests. Conditional ownership is four paths: foundation-attempt-codec.ts, foundation-context-manifest-codec.ts, new foundation-attempt-codec.test.ts, foundation-context-manifest-codec.test.ts. task-22fa35a59f204777b4db56f7516ef57b is the named consumer and has been warned it must wait on this task.",
+      "timestamp": "2026-08-18T04:23:38.551Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T04:02:42.351Z",
-  "updatedAt": "2026-08-18T04:13:24.740Z",
+  "updatedAt": "2026-08-18T04:23:47.098Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T04:13:20.163Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
-  ]
+  ],
+  "blockedReason": "BLOCKED ON ACTIVE PRODUCER OWNERSHIP, not technical design. task-3e891741bef14097bbed6d820b392f98 is reopened WORKING after QA rejection and owns foundation-context-manifest-codec.ts plus its focused test; the safe path-scoped byte-vector fix must edit both, so submitting/starting 5d now would collide with an in-flight owner. The conditional four-file plan and current-byte reproduction are recorded in comment-e91831f44065476eaf27ecaef325ccf9. Once 3e is DONE, re-plan 5d with the exact-path 64KiB byte-array allowance while preserving generic MAX_ITEMS=512. Consumer task-22fa35a59f204777b4db56f7516ef57b has been notified to wait.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T04:23:47.098Z"
 }

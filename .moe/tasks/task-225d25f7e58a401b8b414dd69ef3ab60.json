@@ -16,8 +16,57 @@
     "Use a narrow public-store read port; no raw DatabaseSync, new schema, scan-all-events, caller graph/config/digest authority, or fallback to FoundationAttemptRecorded.",
     "Preserve codec/ledger/store code and layer, TDD exact refusal/mutation/count evidence, and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify both upstream surfaces at committed HEAD; both are in flight, so this is a verify-or-block gate, not a formality. (1) CODEC (task-3e891741, REVIEW): apps/daemon/src/work/foundation-context-manifest-codec.ts with the five distinct codes at layer FOUNDATION_CONTEXT_CODEC, encodeFoundationContextManifestRecord (:202), decodeFoundationContextManifestRecord (:239). (2) LEDGER (task-22fa35a5, just planned this session, may be WORKING or REVIEW when you start): apps/daemon/src/work/foundation-context-manifest-ledger.ts must exist with its derived-aggregate scheme, exported context command kind, and frozen FOUNDATION_CONTEXT_LEDGER vocabulary -- THIS READER MUST DERIVE THE AGGREGATE THE SAME WAY THE LEDGER WRITES IT, so import the ledger's exported derivation/constants rather than re-deriving locally; two independent derivations that agree today drift tomorrow. If the ledger file does not exist yet at your committed HEAD, re-block on task-22fa35a5 by id -- this reader has nothing durable to read without it. (3) STORE READ SURFACES, measured: `getCommandDecision(key)` and `getCommandReceipt(commandId)` (sqlite-event-store.ts:282-287); CommandReceipt carries {aggregateId, commandId, committedAt, currentVersion, effectIdentityVersion, effectSha256, eventIds, outboxMessageIds, previousVersion, requestSha256} (store-contracts.ts:138-149) -- so DoD 2's proof set maps directly: EFFECTS_COMMITTED 0->1 is previousVersion 0 / currentVersion 1, singleton event is eventIds.length === 1, zero outbox is outboxMessageIds.length === 0, exact target is aggregateId equality, and result bytes / effect digest come from the decision record and effectSha256.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Create apps/daemon/src/work/foundation-context-manifest-reader.test.ts over a REAL SqliteEventStore. Seed the accepted state ONLY through the ledger module's own writer (production writer seeding -- a hand-inserted event tests a shape the ledger never writes). Failing tests: (1) ACCEPTED READ: reader derives the aggregate from server project/session/attempt identity, finds exactly one context event, decodes AND re-encodes through the codec, verifies decision+receipt (previousVersion 0, currentVersion 1, singleton eventIds, empty outboxMessageIds, aggregateId match, requestSha256 match, effectSha256 match against recomputation, EFFECTS_COMMITTED disposition), compares every outer binding field (node, attempt, graph revision/hash/epoch, configurationDigest, inputManifestDigest) against a caller-supplied EXPECTED binding from the server-derived selection authority, and returns the deeply frozen durable record/bytes. Assert the returned bytes are the DURABLE bytes. (2) REFUSAL ARMS, one distinct code each at the correct layer: zero events (ABSENT), two events (AMBIGUOUS -- seed the second through the raw store deliberately as corrupt-state seeding), malformed bytes (codec MALFORMED at FOUNDATION_CONTEXT_CODEC, retained), noncanonical (codec NONCANONICAL retained), wrong event type, missing decision, missing receipt, store throw (UNREADABLE with upstream store code retained), and a READABLE record whose binding disagrees with the expected authority -- STALE for a same-identity older graph epoch/revision, FOREIGN/BINDING_MISMATCH for a different node/session -- never silently selected, and the two disagreement kinds get DISTINCT codes. (3) INVARIANCE: every arm asserts raw event and decision counts unchanged by the read, and a reopened store re-reads identically. Assert code AND layer literals everywhere; assert the arm count is nonzero before the sweep.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN. Create apps/daemon/src/work/foundation-context-manifest-reader.ts plus its exact one-line LF `.js` bridge. Read-only by construction: a narrow structural read port exposing exactly the reads it needs (readEvents for the derived aggregate, getCommandDecision, getCommandReceipt) -- never SqliteEventStore in the signature, never raw DatabaseSync, never a scan-all-events (the rail forbids it; the derived aggregate id makes the read targeted). Verification ORDER matters and must be deliberate: existence (exactly one event) -> codec decode -> codec RE-ENCODE and byte-compare (recompute, never trust the stored digest -- DoD 5's named mutation) -> decision/receipt proofs -> outer-binding comparison against the expected authority. Every refusal carries this module's FOUNDATION_CONTEXT_READER layer EXCEPT pass-throughs, which retain the codec or store code and layer verbatim. No fallback to FoundationAttemptRecorded (rail); no caller graph/config/digest authority -- the expected binding is an input the CALLER derived from the selection authority, and this reader compares, it never selects. Export the frozen reader code list. Keep <=250 physical lines; if the receipt-proof block pushes past target, split proofs into a sibling module rather than trimming an arm.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.ts",
+        "apps/daemon/src/work/foundation-context-manifest-reader.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.ts",
+        "apps/daemon/src/work/foundation-context-manifest-reader.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Mutation drills, the two DoD 5 names plus the derivation-drift guard. Drill 1 (digest recomputation is real): make the reader trust the stored recordDigest instead of re-encoding and comparing; the named noncanonical/digest test must go RED -- if green, the fixture's corruption preserved the digest and must be strengthened to corrupt bytes while keeping the stored digest field intact. Drill 2 (every outer binding is compared): skip ONE binding field (graphEpoch) from the comparison; the STALE arm must go RED naming that field's assertion. Drill 3 (shared derivation): change the reader to derive the aggregate id locally with a subtly different scheme; the accepted-read test must go RED on ABSENT -- proving the reader really imports the ledger's derivation rather than coincidentally agreeing. Record command, failing test NAME, exact assertion each. Restore by re-editing, never `git checkout`; `git diff --numstat` 0/0 per drilled file; one drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial review, commit, gate. ATTACKER PASS: can the reader return bytes that did not pass EVERY check -- is there an early return path after decode but before the receipt proofs? Are STALE and FOREIGN genuinely distinct codes with distinct causes, or can one shadow the other? Does any pass-through restamp a codec or store code? Is the port read-only by type -- could a write method be added to the structural port without a compile error elsewhere? Does the expected-binding input let a caller smuggle authority (it must be comparison data only -- the reader refuses on mismatch, it never adopts the caller's values)? Reopen semantics: does a second reader instance over the same store file return byte-identical results? COMMIT only the three owned paths by explicit pathspec; verify `git show --stat`. GATE, foreground, `&&`-chained: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`, nonzero `Test Files N passed` line required per leg. Completion note: name task-203a5ca7 and task-af9454f4 as consumers per DoD 6, and record which upstream states (codec REVIEW/DONE, ledger WORKING/REVIEW/DONE) the work proceeded against.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-reader.ts",
+        "apps/daemon/src/work/foundation-context-manifest-reader.js",
+        "apps/daemon/src/work/foundation-context-manifest-reader.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -30,5 +79,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:47:04.539Z",
-  "updatedAt": "2026-08-17T17:48:03.432Z"
+  "updatedAt": "2026-08-18T04:21:48.409Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:20:17.105Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:21:46.323Z",
+  "planningNotes": {
+    "approachesConsidered": "This is the verification twin of task-22fa35a5's ledger (planned by me this session); the two plans are deliberately coupled at one seam: THE AGGREGATE DERIVATION IS IMPORTED FROM THE LEDGER MODULE, never re-derived. Two independent derivations that agree today drift tomorrow and produce the worst failure shape -- a reader that answers ABSENT forever against real records; drill 3 exists to prove the import is load-bearing. REJECTED: (a) planning the reader before the ledger exists on disk -- the step-1 gate re-blocks on task-22fa35a5 by id if the file is absent, because a reader with nothing durable to read can only be tested against hand-seeded shapes; (b) scan-all-events discovery of the context record -- rail forbids it, and the derived aggregate makes the read targeted; (c) letting the expected-binding input carry authority -- it is comparison data from the server-derived selection authority; the reader refuses on mismatch and never adopts caller values, which is what keeps 'caller graph/config/digest authority' unrepresentable; (d) collapsing STALE and FOREIGN into one mismatch code -- the DoD requires the distinction because they route differently downstream (a stale epoch means re-render; a foreign binding means the wrong attempt's record was found), and collapsing them makes a later guard change invisible; (e) trusting the stored recordDigest -- DoD 5 names the mutation, and recomputation through the codec's re-encode is the only defense against a record corrupted after sealing. Verification order (existence -> decode -> re-encode -> receipt proofs -> binding comparison) is fixed in the plan because a reordering that compares bindings before proving the receipt would let a well-formed forged record pass three of five gates.",
+    "codebaseInsights": "Measured at current HEAD. STORE READ SURFACES: getCommandDecision(key) and getCommandReceipt(commandId) at packages/store/src/sqlite-event-store.ts:282-287. CommandReceipt = {aggregateId, commandId, committedAt, currentVersion, effectIdentityVersion, effectSha256, eventIds, outboxMessageIds, previousVersion, requestSha256} (store-contracts.ts:138-149), so DoD 2's proof set maps mechanically: EFFECTS_COMMITTED 0->1 = previousVersion 0 && currentVersion 1; singleton event = eventIds.length 1; zero outbox = outboxMessageIds.length 0; exact target = aggregateId equality; effect digest = effectSha256. EFFECTS_COMMITTED / NO_BUSINESS_EFFECT dispositions at store-contracts.ts:114-123. CODEC (task-3e891741, REVIEW): five distinct codes at FOUNDATION_CONTEXT_CODEC; encode :202, decode :239; deriveFoundationContextRecordDigest :142. LEDGER (task-22fa35a5, planned this session, not yet landed at planning time): will export the derived-aggregate scheme, context command kind, and FOUNDATION_CONTEXT_LEDGER vocabulary -- the reader imports these; my ledger plan's step 3 explicitly exports them for exactly this consumer. PORT PRECEDENT: import-shadow-contracts.ts:44 declares its read seam structurally with a comment on why -- follow it. SEEDING: accepted state must be written by the ledger module's own writer; the AMBIGUOUS arm's second event is legitimate corrupt-state seeding through the raw store, the one place raw seeding is correct because no production writer can produce that state. CONSUMERS: task-203a5ca7 (persist-before-launch parent) and task-af9454f4 (release evidence) per DoD 6.",
+    "risks": "The load-bearing risk is derivation drift: a reader deriving the aggregate independently can agree with the ledger today and silently diverge later, after which it answers ABSENT against every real record while its whole suite stays green -- importing the ledger's exported derivation and drill 3 are the defense. Second, verification-order collapse: comparing bindings before proving the decision/receipt would let a forged-but-well-formed record pass most gates; the order is pinned in the plan. Third, the stored-digest trap: a record corrupted after sealing still carries its original digest field, so only re-encode-and-compare catches it -- drill 1, and the fixture must corrupt bytes while PRESERVING the stored digest or the drill proves nothing. Fourth, STALE vs FOREIGN: both are readable disagreements, and the cheap implementation returns one code for both; the DoD forbids it because downstream routing differs. Fifth, pass-through discipline: codec and store codes must survive verbatim with their own layers; the reader's layer covers only what the reader alone can know. Sixth, the expected-binding input is the one caller-supplied value -- it must be comparison-only, and the review step asks explicitly whether it can smuggle authority. Seventh, upstream flux: both deps are in flight (codec REVIEW, ledger just planned) -- the step-1 gate re-blocks by id if the ledger file is absent, and the completion note records which states the work proceeded against so QA grades against the right baseline. Finally, close every store handle on every path; a held SQLite handle kills the vitest worker.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+      "apps/daemon/src/work/foundation-context-manifest-ledger.ts",
+      "packages/store/src/sqlite-event-store.ts",
+      "packages/store/src/store-contracts.ts",
+      "apps/daemon/src/projections/import-shadow-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-18T04:21:48.409Z"
 }

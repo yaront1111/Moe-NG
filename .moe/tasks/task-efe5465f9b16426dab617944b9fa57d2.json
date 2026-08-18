@@ -49,21 +49,27 @@
     {
       "stepId": "step-3",
       "description": "THE CASE TABLE: create tests/integration/portability/portability-cases.ts (helper file 2 of 2). It declares the generated subject-by-case matrix as DATA — subject (STDIO | HTTP | JETBRAINS), case id, input shape, and the exact expected code, stage and layer — and contains no spawning and no assertions.\nDoD item 1 requires the generated subject-by-case count to be POSITIVE, so export the count and have the suite assert `CASES.length > 0` and that every declared subject appears at least once BEFORE running anything. A generated matrix that silently produces zero cases passes while testing nothing — this repo has been bitten by exactly that, which is why the epic rail names it.\nThe expected codes are IMPORTED from their owning packages, never retyped as string literals here: `DISTRIBUTION_MISMATCH` from @moe/contracts' distribution contract, MCP dispatch codes from @moe/mcp's public root, daemon refusals from the @moe/daemon root. A locally spelled code is a second vocabulary that drifts, and the drift shows up as a green test asserting a code production no longer emits.\nCover, per transport: one ACCEPTED control, malformed envelope, auth/capability refusal, unsupported method or protocol version, truncation/disconnect mid-frame, and replay-conflict. For JETBRAINS: distribution discovery match, DISTRIBUTION_MISMATCH, daemon probe failure, start, endpoint open, control-room open, reconnect, uninstall, and post-uninstall call.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
       "newFiles": [
         "tests/integration/portability/portability-cases.ts"
       ],
-      "startedAt": "2026-08-18T04:15:47.729Z"
+      "modifiedFiles": [
+        "tests/integration/portability/portability-cases.ts"
+      ],
+      "note": "CASE TABLE LANDED: tests/integration/portability/portability-cases.ts (374 lines, tsc exit 0). Pure data - no spawning, no assertions.\n\nGENERATED, NOT HAND-LISTED. CASES = TRANSPORT_SUBJECTS(2) x TRANSPORT_ARMS(9) + JETBRAINS_ARMS(10) = 28 generated subject-by-case rows. The suite asserts CASES.length > 0 and that every declared subject appears at least once BEFORE anything runs, because a generator that silently produces zero cases passes while testing nothing.\n\nNO CODE IS A BARE LITERAL. Every code/stage/layer goes through `pin(name, ownerVocabulary, where)`, which THROWS AT MODULE LOAD when the owning package stops publishing it - so a production rename reddens the whole suite instead of leaving a green test asserting a code nothing emits. Sources, all imported: HTTP_BOUNDARY_ERROR_CODES, HTTP_REFUSAL_STAGES, PREREQUISITE_REFUSAL_CODES, SERVICE_REFUSED_BY from @moe/daemon; DISTRIBUTION_REFUSAL_REASONS + distributionRefusal() CALLED to build the expected refusal from @moe/contracts; toolLabelForKind + STDIO_TOOL_INDEX from @moe/mcp; IdempotencyConflictError from @moe/store.\n\n`pin` is deliberately stronger than reading the name out of the vocabulary by index: an index lookup is a TAUTOLOGY - rename the code and both operands move together and the test stays green. Naming the code AND requiring the owner to still publish it catches the rename.\n\nARMS ARE MEASURED, NOT ASSUMED. Every expectation was reproduced live against both installed executables before it was written down:\n- accepted-control EFFECTS_COMMITTED; malformed-envelope + unknown-tool-label INPUT_INVALID; wrong-credential AUTHENTICATION_FAILED; capability-scope-denied CAPABILITY_DENIED at stage AUTHORIZE (via a real scoped session minted through session.open); unsupported-method -32601; replay-conflict BOOTSTRAP_COMMAND_ID_REUSED at layer DAEMON_PREREQUISITE.\n\nTWO CORRECTIONS TO THE PLAN'S ASSUMPTIONS, both measured:\n1. Step-6 assumed \"an auth failure sent with a deliberately malformed payload must still be answered by AUTH\". FALSE for stdio: `decodeAndDispatch` decodes BEFORE it calls port.authenticate, so wrong-credential + malformed envelope answers INPUT_INVALID. HTTP screens the bearer before it reads a byte of body, so the same input answers AUTHENTICATION_FAILED. The arm therefore carries expectedCodeBySubject, and that per-transport DIFFERENCE is the finding rather than a defect to paper over.\n2. Step-6 asked for \"the store's own idempotency code and DURABLE_STORE layer\". IDEMPOTENCY_CONFLICT is UNREACHABLE through either transport: bootstrap's replayOf short-circuits on the stored decision before the store's request-bytes guard is consulted. Measured - same commandId + same kind + different payload answers REPLAYED with the ORIGINAL effectId (refuses to overwrite, which is the property the DoD wants), and same commandId + DIFFERENT kind answers BOOTSTRAP_COMMAND_ID_REUSED / DAEMON_PREREQUISITE / stage DISPATCH / 422. The table imports IDEMPOTENCY_CONFLICT from the class that raises it so the matrix can assert it is NOT what answered - which layer answered is itself the assertion.",
+      "startedAt": "2026-08-18T04:15:47.729Z",
+      "completedAt": "2026-08-18T04:19:39.566Z"
     },
     {
       "stepId": "step-4",
       "description": "ACCEPTED CONTROLS FIRST, in tests/integration/portability/transport-host-matrix.test.ts — the single matrix test task rail 5 permits.\nSeed the temp store with a real session through the production path (operator credential -> `session.open` with scoped capabilities), then drive ONE authenticated command successfully through EACH installed executable:\n- stdio: spawn `moe-mcp-stdio` with MOE_STORE_PATH / MOE_PROJECT_ID / MOE_DAEMON_CREDENTIAL / MOE_SESSION_CREDENTIAL, speak MCP over stdio, call the tool for the chosen runtime kind. Build the tool label with @moe/mcp's public `toolLabelForKind` / `STDIO_TOOL_INDEX` rather than hand-spelling it — a hand-spelled label that drifts from the generator fails as \"tool not found\" and reads like a transport bug.\n- HTTP: spawn `moe-mcp-http`, read its bound ephemeral port, issue the semantically equivalent Streamable HTTP call.\nBoth must ACCEPT. This pair is the control that keeps every refusal case below honest: without it, a suite where nothing can ever succeed would still report every refusal correctly.\nNo direct registry or handler import anywhere in this file, and no source-relative reach into apps/daemon for the subjects under test — DoD item 1 is explicit, and the existing tests/integration/control-room suite's deep relative imports are NOT the pattern to copy here.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [],
       "newFiles": [
         "tests/integration/portability/transport-host-matrix.test.ts"
-      ]
+      ],
+      "startedAt": "2026-08-18T04:20:04.028Z"
     },
     {
       "stepId": "step-5",
@@ -152,12 +158,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-18T04:15:47.729Z",
+  "updatedAt": "2026-08-18T04:20:04.028Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:10:20.845Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 2
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -184,7 +190,8 @@
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:39:38.835Z",

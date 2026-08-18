@@ -16,9 +16,58 @@
     "Use a separate aggregate and narrow store port; no existing Foundation aggregate changes, raw DatabaseSync, new schema, commitWithApply, provider call, or caller identity fields.",
     "Preserve codec/store code and refusing layer, TDD exact counts/mutation, and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": "architect-2cc07e26",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify the codec dependency and pin the store semantics this module's whole contract hangs on. Read-only. (1) DEP: task-3e891741's codec is committed and in REVIEW -- apps/daemon/src/work/foundation-context-manifest-codec.ts exports FOUNDATION_CONTEXT_RECORD_VERSION = \"foundation-context-manifest.v1\" (:41), layer FOUNDATION_CONTEXT_CODEC (:44), the FIVE deliberately distinct codes (MALFORMED, VERSION_UNSUPPORTED, MANIFEST_DIGEST_MISMATCH, RECORD_DIGEST_MISMATCH, NONCANONICAL, :46-53), FoundationContextManifestRecord (:74), encodeFoundationContextManifestRecord (:202) and decodeFoundationContextManifestRecord (:239). QA may still reject it -- if its surface has MOVED when you start, re-block on task-3e891741 by id; if it is merely still in REVIEW with these bytes, proceed against the committed surface and say so. (2) STORE SEMANTICS, measured, which the DoD encodes precisely: `commitExpectedVersionDecision` takes {commandKind, committedResultBytes, correlationId, decidedAt, events, expectedVersion, key, requestBytes, targetAggregateId} (store-contracts.ts:74-84). The replay identity is `requestSha256` -- computed over requestBytes ONLY, so PROPOSED EVENT BYTES ARE EXCLUDED from replay identity: a redelivery with the same key/requestBytes but different event bytes comes back disposition REPLAYED, not a conflict (decision-ledger-replay.ts:33). That is exactly why DoD 2 demands the REPLAYED branch RE-READ the exactly-one durable event and return the ORIGINAL canonical bytes -- returning the caller's candidate would be an echo of unfenced input. A replay whose requestSha256 DIFFERS under the same key throws IdempotencyConflictError (decision-ledger-replay.ts:29); a wrong expectedVersion yields resultCode EXPECTED_VERSION_CONFLICT (decision-ledger-canonical.ts:206). There is NO store code named REPLAY_DIVERGED -- that name is THIS module's own, mapped from IdempotencyConflictError in its frozen FOUNDATION_CONTEXT_LEDGER vocabulary.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Create apps/daemon/src/work/foundation-context-manifest-ledger.test.ts over a REAL SqliteEventStore on a temp file. Failing tests, in the DoD's own order: (1) ACCEPTED CONTROL: a codec-valid candidate commits exactly one versioned context-manifest event on a SEPARATE derived aggregate (never the Foundation RESERVED/RECORDED aggregate -- assert the aggregate id shape is the module's own derivation from project/session/attempt identity) at expectedVersion 0, disposition COMMITTED, returning the codec-admitted record; assert raw event count +1 and decision count +1, nothing else moved. (2) REPLAY: the same key/requestBytes again returns the ORIGINAL canonical bytes and record even when the caller hands DIFFERENT candidate event bytes -- this is the echo trap made into a test: assert the returned bytes equal the FIRST commit's durable bytes and differ from the second call's candidate. (3) IDEMPOTENT: same key, same record -- one durable event total, REPLAYED disposition, counts unchanged. (4) DIVERGED: same key, different requestBytes -- the module returns its own stable REPLAY_DIVERGED code at its FOUNDATION_CONTEXT_LEDGER layer (mapped from IdempotencyConflictError), zero new business events. (5) VERSION CONFLICT: a different key at version 1 returns EXPECTED_VERSION_CONFLICT preserved verbatim from the store, zero new business events. (6) CODEC PASS-THROUGH: a candidate failing the codec refuses with the codec's OWN code at FOUNDATION_CONTEXT_CODEC, unrestamped, and NOTHING is written -- assert counts unchanged. (7) READER REFUSALS: durable state holding zero, multiple, or wrong-type events under the derived aggregate, and unreadable bytes, each map to a DISTINCT stable FOUNDATION_CONTEXT_LEDGER/READER code. Every refusal asserts code AND layer literals.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN. Create apps/daemon/src/work/foundation-context-manifest-ledger.ts plus its exact one-line LF `.js` bridge. Shape: a narrow writer taking server-derived project/session/attempt identity plus the codec-valid candidate; it derives bounded aggregate/event/command identities itself (caller identity FIELDS are unrepresentable in the input type -- the rail forbids caller identity, so the function signature must not admit one); encodes through the PUBLIC codec (encodeFoundationContextManifestRecord) and refuses on its result unchanged; then makes exactly ONE commitExpectedVersionDecision at expectedVersion 0 with one versioned event, no outbox, no schema change, no apply callback, through a NARROW structural store port (the two store methods it needs, declared structurally -- never DatabaseSync, following the import-shadow-contracts precedent for structural port declaration). On COMMITTED: return the codec-admitted record. On REPLAYED: re-read the aggregate, require EXACTLY ONE event of the right type (zero/multiple/wrong-type are the distinct reader codes), decode through the codec, and return the durable bytes -- never the candidate. Map IdempotencyConflictError to REPLAY_DIVERGED; pass EXPECTED_VERSION_CONFLICT through verbatim; wrap store THROWS distinctly from returned no-business-effect. Export the frozen FOUNDATION_CONTEXT_LEDGER code list and layer constants so tests assert named members. Keep the file <=250 physical lines -- the code list, port, derivation and the commit/replay/read paths are all small; if the reader half pushes past target, split it into a sibling module rather than trimming a refusal branch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.ts",
+        "apps/daemon/src/work/foundation-context-manifest-ledger.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.ts",
+        "apps/daemon/src/work/foundation-context-manifest-ledger.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Mutation drills, two, both named by the DoD. Drill 1 (THE ECHO TRAP, DoD 5's explicit mutation): make the REPLAYED branch return the caller's candidate bytes instead of re-reading the durable event; the step-2 case (2) test must go RED on its bytes-equal-the-FIRST-commit assertion. If it stays green, the test seeded identical bytes on both calls and cannot distinguish echo from readback -- fix the fixture so the second candidate genuinely differs, then re-run. Drill 2 (restamping): make the codec pass-through wrap the codec's refusal in a ledger code; the step-2 case (6) test must go RED on its layer assertion (FOUNDATION_CONTEXT_CODEC, not FOUNDATION_CONTEXT_LEDGER) -- two layers can answer here and the test must pin WHICH. Record command, failing test NAME, exact assertion for each. Restore by re-editing, never `git checkout` (shared worktree), confirm `git diff --numstat` 0/0 per drilled file, one drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial review, commit, gate. ATTACKER PASS: can caller identity reach any derived id -- is it truly unrepresentable in the input type, or merely unused? Can the REPLAYED path return anything not decoded from durable bytes? Does any refusal collapse two of the reader's distinct causes (zero vs multiple vs wrong-type vs unreadable) into one code? Is the store port narrow and structural, or did SqliteEventStore leak into the signature? Does anything touch the Foundation RESERVED/RECORDED aggregate or task-740's release protocol (forbidden -- separate aggregate only)? Is there any outbox, apply callback, or provider call? Does the module hold a store handle beyond the call (a held SQLite handle kills the vitest worker)? COMMIT only the three owned paths by explicit pathspec after `git status --porcelain` and unstaging foreign entries; verify `git show --stat`. GATE, foreground, `&&`-chained: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` -- read the OUTPUT, a filtered leg is evidence only with a nonzero `Test Files N passed` line (`@moe/daemon` is apps/daemon; root `pnpm test` does not cover apps/**). Completion note: name the strict-reader child (task-225d25f7) and task-203a5ca7 as consumers per DoD 6, and state whether task-3e891741 cleared QA by then or the plan proceeded against its committed REVIEW bytes.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-context-manifest-ledger.ts",
+        "apps/daemon/src/work/foundation-context-manifest-ledger.js",
+        "apps/daemon/src/work/foundation-context-manifest-ledger.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -27,11 +76,40 @@
   "parentTaskId": "task-203a5ca7aada4375a98a95df8773e249",
   "priority": "CRITICAL",
   "order": 80.04,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-8c000ac8f8c741ae8760be9b7d2b1bb6",
+      "author": "architect-f956ffe1",
+      "content": "Current-byte blocker for task-22fa35a59f204777b4db56f7516ef57b: shared snapshot MAX_ITEMS=512 still makes a real 4KiB render (4156 exactBytes) refuse FOUNDATION_CONTEXT_MALFORMED@FOUNDATION_CONTEXT_CODEC. I am planning prerequisite task-5d747f7a93c84f689cb7d8d4f06ced60 to add an explicit finite 64KiB byte-array path while preserving the generic 512-item bound, with real roundtrip/oversize tests. 22fa's rails cannot absorb the helper fix; please hard-depend/block its plan on 5d rather than testing only ~70-byte fixtures or narrowing the ledger DoD.",
+      "timestamp": "2026-08-18T04:19:35.695Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:46:46.959Z",
-  "updatedAt": "2026-08-18T04:18:03.599Z",
+  "updatedAt": "2026-08-18T04:20:13.356Z",
   "metrics": {
-    "firstClaimAt": "2026-08-18T04:18:03.599Z"
-  }
+    "firstClaimAt": "2026-08-18T04:18:03.599Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:20:11.233Z",
+  "planningNotes": {
+    "approachesConsidered": "The task is tightly specified; the plan's contribution is pinning the store semantics that make its strangest-looking DoD clauses correct rather than paranoid. (1) DoD 2's \"REPLAYED re-reads the exactly-one durable event ... because the store replay identity excludes proposed event bytes\" is a measured fact, not caution: requestSha256 covers requestBytes only, so a same-key redelivery with DIFFERENT event bytes returns disposition REPLAYED (decision-ledger-replay.ts:33) -- the only defense against echoing unfenced candidate bytes is re-reading the durable event, and the echo-trap mutation drill exists to prove the re-read is real. (2) DoD 3's \"exact REPLAY_DIVERGED\" is NOT a store code -- grep confirms no such string in packages/store; the store throws IdempotencyConflictError on a same-key different-request replay (decision-ledger-replay.ts:29), and REPLAY_DIVERGED is this module's own frozen vocabulary member mapped from that error. A worker who greps the store for REPLAY_DIVERGED, finds nothing, and blocks would be wrong -- the plan says so explicitly. REJECTED: (a) committing into the Foundation RESERVED/RECORDED aggregate -- the description forbids it by name because it would shift task-740's release protocol; separate derived aggregate only; (b) commitWithApply or an outbox -- rails forbid both, and the record needs no projection fold; (c) blocking on task-3e891741 (REVIEW) -- its codec bytes are committed and this board's precedent is verify-or-block at step 1 against committed REVIEW bytes, with a re-block only if the surface MOVED; (d) exposing SqliteEventStore in the module signature -- the narrow structural port follows the import-shadow-contracts precedent and keeps the module testable without the concrete store type.",
+    "codebaseInsights": "Measured at current HEAD. CODEC (task-3e891741, committed, REVIEW): apps/daemon/src/work/foundation-context-manifest-codec.ts -- FOUNDATION_CONTEXT_RECORD_VERSION \"foundation-context-manifest.v1\" (:41), layer FOUNDATION_CONTEXT_CODEC (:44), five deliberately distinct codes MALFORMED/VERSION_UNSUPPORTED/MANIFEST_DIGEST_MISMATCH/RECORD_DIGEST_MISMATCH/NONCANONICAL (:46-53, the file's header comment explains they answer five different questions), FoundationContextManifestRecord (:74), FoundationContextRefusal carrying the codec layer (:88-90), encodeFoundationContextManifestRecord (:202), decodeFoundationContextManifestRecord (:239), deriveFoundationContextRecordDigest (:142). STORE: commitExpectedVersionDecision input {commandKind, committedResultBytes, correlationId, decidedAt, events, expectedVersion, key, requestBytes, targetAggregateId} (store-contracts.ts:74-84); disposition COMMITTED|REPLAYED (:59); EXPECTED_VERSION_CONFLICT is a resultCode the canonical path emits (decision-ledger-canonical.ts:206) and reads back (decision-read-decode.ts:305); replay reconciliation loads by key and throws IdempotencyConflictError when historical.requestSha256 differs (decision-ledger-replay.ts:28-29), else returns REPLAYED (:33). EventDraft.domainSchemaVersion is optional with a generic default -- the context-manifest event should set it explicitly to the record version, following the import-apply precedent for why an omitted field persists a schema the bytes do not speak. PORT PRECEDENT: apps/daemon/src/projections/import-shadow-contracts.ts:44 declares its store seam structurally rather than as SqliteEventStore, with a comment explaining why -- copy that shape. The bootstrap commitAccepted path (bootstrap-ledger.ts:203) is the nearest existing commitExpectedVersionDecision caller to crib envelope discipline from.",
+    "risks": "The load-bearing risk is the echo: the store's replay identity excluding event bytes means a REPLAYED response is the one place where returning what the caller handed you is both easy and wrong -- the durable re-read plus the drill-1 fixture (second candidate genuinely different) are the whole defense, and a fixture that seeds identical bytes twice cannot detect the echo at all, which is why the drill instructs fixing the fixture if it stays green. Second, restamping: the codec's five codes and the store's EXPECTED_VERSION_CONFLICT must survive verbatim -- the module adds its own codes ONLY for what it alone can know (REPLAY_DIVERGED mapping, zero/multiple/wrong-type/unreadable reader states, store-threw vs no-business-effect), and drill 2 pins the layer distinction. Third, REPLAY_DIVERGED does not exist in the store -- a worker grepping for it there and concluding the DoD is unimplementable would block wrongly; it is this module's vocabulary. Fourth, identity derivation: caller identity fields must be UNREPRESENTABLE in the input type, not merely ignored -- a field that exists but is unused passes every test until someone uses it. Fifth, the separate-aggregate rule protects task-740's release protocol; committing into the Foundation RESERVED/RECORDED aggregate would silently change its version arithmetic. Sixth, wrong-type/multiple-event reader states need SEEDING through the raw store in tests to exist at all -- that is legitimate test seeding of a corrupt state, but the accepted control must seed through this module's own writer only. Finally, close every store handle on every path; a held SQLite handle kills the vitest worker.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-context-manifest-codec.ts",
+      "packages/store/src/store-contracts.ts",
+      "packages/store/src/decision-ledger-replay.ts",
+      "packages/store/src/decision-ledger-canonical.ts",
+      "apps/daemon/src/projections/import-shadow-contracts.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-18T04:20:13.356Z"
 }

@@ -92,7 +92,7 @@
       "completedAt": "2026-08-18T04:17:27.191Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -105,12 +105,14 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:04:03.531Z",
-  "updatedAt": "2026-08-18T04:18:24.080Z",
+  "updatedAt": "2026-08-18T04:30:44.918Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:06:31.506Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-08-18T04:30:44.918Z",
+    "wallClockMs": 5053412
   },
   "stepsCompleted": [
     "step-1",
@@ -137,11 +139,13 @@
   },
   "budget": {
     "wallClockMs": 4500000,
-    "warnedAt": "2026-08-18T04:07:19.821Z"
+    "warnedAt": "2026-08-18T04:07:19.821Z",
+    "escalatedAt": "2026-08-18T04:26:18.355Z"
   },
   "planApprovedAt": "2026-08-18T03:08:33.968Z",
   "contextFetchedBy": [
-    "worker-b8af1a87"
+    "worker-b8af1a87",
+    "qa-12cda609"
   ],
   "workStartedAt": "2026-08-18T03:58:38.597Z",
   "reviewStartedAt": "2026-08-18T04:18:24.080Z",
@@ -158,5 +162,8 @@
     "tools/import/durable-import-store.ts",
     "tools/import/durable-import-store.js",
     "package.json"
-  ]
+  ],
+  "completedAt": "2026-08-18T04:30:44.918Z",
+  "reviewCompletedAt": "2026-08-18T04:30:44.918Z",
+  "reviewSummary": "APPROVED at HEAD 3c4c470 (unmoved before/after). Commit 219076d: 5 files, explicit pathspec, owned paths only; fbbabda is the hook's whole-tree commit (known hazard, not a reject reason). Tree byte-identical to HEAD.\n\nGATES RE-RUN BY QA, exit per leg, unchained: pnpm typecheck:import 0; npx tsc -p tests/integration/import/tsconfig.json 0; npx vitest run tests/integration/import 0, count line \"Test Files 1 passed (1)\" / \"Tests 9 passed (9)\".\n\nQA'S OWN DRILLS (3), decisive, restored by byte copy, sha256 676efa7d after each:\n1. NOT in the worker's list: strip domainSchemaVersion in the port -> RED \"expected 'moe-domain-schema/0' to be 'moe-import-event-facts/1'\". Decisive: store EventDraft makes it OPTIONAL with a different default.\n2. Append one event -> RED on named test \"adds no event of its own...\" 3 vs 2 (+3 more).\n3. Let applyImport answer before the recorded refusal -> RED \"expected 'IMPORT_COMMIT_FAILED' to be 'COMMAND_ID_CONFLICT'\": the code is copied off the real error, DoD 4's no-restamp clause is gated.\n\nDoD: (1) new non-test composer durable-import-store.ts:118 over a real SqliteEventStore; import-shadow.ts byte-unchanged (numstat 39a1b2c^..HEAD empty), still DISCARDING_STORE. (2) \"const commitInput: CommitInput = input\" - no spread/copy/re-encode. (3) drilled above; worker's plain round-trip drill survived green as an honest disclosed equivalent mutant. (4) identical re-import REPLAYS, same digest + different records CONFLICTS (COMMAND_ID_CONFLICT/STORE, not APPLY); raw event+decision counts and payload bytes prove the original survived. (5) read-back via public decodeImportEventFacts, nonzero claims and equality with report.claims; closed store -> IMPORT_COMMIT_FAILED/APPLY exact code+layer. (6) files 140 and 158 lines.\n\nRAILS: packages/import gains no @moe/store import; no derived fact, dual write or activation. Not-rejected: EXPECTED_VERSION_CONFLICT unexercised, existsSync TOCTOU disclosed."
 }

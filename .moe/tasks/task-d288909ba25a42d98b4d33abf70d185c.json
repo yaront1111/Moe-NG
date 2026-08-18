@@ -99,7 +99,7 @@
       "completedAt": "2026-08-18T04:05:51.095Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -119,16 +119,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:36.183Z",
-  "updatedAt": "2026-08-18T04:07:33.618Z",
+  "updatedAt": "2026-08-18T04:28:00.173Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:03:37.681Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-08-18T04:28:00.173Z",
+    "wallClockMs": 30262492
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-a83aecdf"
+    "worker-a83aecdf",
+    "qa-a8258c2e"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -189,5 +192,8 @@
     "tests/integration/portability/shadow-matrix-cases.ts",
     "tests/integration/portability/shadow-matrix-arms.ts",
     "tests/integration/portability/tsconfig.json"
-  ]
+  ],
+  "completedAt": "2026-08-18T04:28:00.173Z",
+  "reviewCompletedAt": "2026-08-18T04:28:00.173Z",
+  "reviewSummary": "VERIFIED at HEAD d60a48f. Delivery commit 873cde6; disk sha256 == HEAD blob for all 4 owned files (317/338/251/11 lines, all <400).\n\nGATES. (1) npx vitest run tests/integration/portability/provider-shadow-matrix.test.ts -> EXIT 0, \"Test Files 1 passed (1) / Tests 32 passed (32)\". (2) owned-files-only tsc (temp config, deleted same command) -> exit 0. (3) npx tsc -p tests/integration/portability/tsconfig.json -> exit 1: every error in UNTRACKED peer transport-host-matrix.test.ts plus a node_modules MCP-SDK HeadersInit error; ZERO in owned files. (4) pnpm test:integration (PowerShell) -> exit 1, \"Test Files 1 failed | 7 passed (8) / Tests 3 failed | 267 passed (270)\"; all 3 failures in that same untracked peer file. Path-attributed: peer absent at merge-base AND at HEAD, created 07:21 vs delivery 07:07 -> intersection with owned paths EMPTY.\n\nTHREE INDEPENDENT PRODUCTION DRILLS, each restored byte-identical (sha256 + git clean). (a) codex-capabilities.ts:200 VERSION_RECORD->SCHEMA_VERSION_RECORD reddened \"names the exact proof method\". (b) apps/daemon/src/work/foundation-attempt-store.ts:142 RECORD_ABSENT->RECORD_AMBIGUOUS reddened \"claude/durable-read-record-absent ... at the daemon layer\" - proves the real @moe/daemon durable reader runs. (c) added a member to CODEX_CAPABILITIES -> coverage test reddened NAMING [ 'QA_DRILL_UNCOVERED_CAPABILITY' ].\n\nDoD 1-5 met. Withheld claims not vacuous: I enumerated @moe/runner at runtime - launchClaude IS exported (asserted as positive control), probeClaudeRuntime/renderClaudeContext/assessCapabilities/recordClaudeStream genuinely absent (claude-surface.ts:17 calls recordClaudeStream deliberately withheld), so UNKNOWN rows are honest. No deep imports, no child_process, bare roots only.\n\nDISCLOSED, NOT THIS TASK'S: root __probe_http.mjs (spawns moe-mcp-http) was swept into whole-tree hook commit 39a1b2c bearing this task's id; belongs to the transport/host task and should be removed by its owner."
 }

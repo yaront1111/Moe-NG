@@ -36,7 +36,10 @@ import {
   deriveFoundationContextRecordDigest,
   encodeFoundationContextManifestRecord,
 } from "./foundation-context-manifest-codec.js";
-import type { FoundationContextEncodeResult } from "./foundation-context-manifest-codec.js";
+import type {
+  FoundationContextEncodeResult,
+  FoundationContextManifestCode,
+} from "./foundation-context-manifest-codec.js";
 
 // --- hand-transcribed roster -------------------------------------------------
 
@@ -303,58 +306,96 @@ describe("foundation context manifest hostile input", () => {
    * Each case is a named builder rather than a prebuilt value: a revoked proxy
    * cannot survive being stored in an array literal that later gets inspected,
    * and building lazily keeps every case hostile at the moment it is used.
+   *
+   * THE THIRD ELEMENT IS THE EXACT EXPECTED CODE. Asserting only that the answer
+   * is SOME member of this codec's own five-code roster is free: every guard
+   * already answers with one of them, so the assertion survives a mutation that
+   * swaps one guard's code for another's — exactly the substitution the arm at
+   * test:222 forbids for VERSION_UNSUPPORTED. The column is also deliberately
+   * NON-CONSTANT: the last three cases expect codes other than MALFORMED, so a
+   * change that collapsed every refusal onto a single code reddens here too.
    */
-  const HOSTILE_CASES: readonly (readonly [string, () => unknown])[] = [
+  const HOSTILE_CASES: readonly (
+    readonly [string, () => unknown, FoundationContextManifestCode]
+  )[] = [
     ["accessor on the outer record", () => {
       const record = validRecord();
       return Object.defineProperty({ ...record }, "projectId", {
         configurable: true, enumerable: true, get: () => "proj-attacker",
       });
-    }],
+    }, "FOUNDATION_CONTEXT_MALFORMED"],
     ["accessor on manifest.binding", () => {
       const real = realManifest();
       const binding = Object.defineProperty({ ...real.binding }, "ordering", {
         configurable: true, enumerable: true, get: () => "ATTACKER_ORDERING",
       });
       return validRecord({ manifest: { version: real.version, digest: real.digest, binding } });
-    }],
+    }, "FOUNDATION_CONTEXT_MALFORMED"],
     ["revoked proxy as the record", () => {
       const revocable = Proxy.revocable({ ...validRecord() }, {});
       revocable.revoke();
       return revocable.proxy;
-    }],
+    }, "FOUNDATION_CONTEXT_MALFORMED"],
     ["revoked proxy as the manifest", () => {
       const revocable = Proxy.revocable({ ...realManifest() }, {});
       revocable.revoke();
       return validRecord({ manifest: revocable.proxy });
-    }],
-    ["an extra unknown key", () => ({ ...validRecord(), attackerKey: "x" })],
+    }, "FOUNDATION_CONTEXT_MALFORMED"],
+    ["an extra unknown key", () => ({ ...validRecord(), attackerKey: "x" }),
+      "FOUNDATION_CONTEXT_MALFORMED"],
     ["a missing key", () => {
       const record = { ...validRecord() };
       delete record["sessionId"];
       return record;
-    }],
-    ["a null-prototype record", () => Object.assign(Object.create(null), validRecord())],
-    ["an array instead of a record", () => [validRecord()]],
-    ["null instead of a record", () => null],
-    ["a string instead of a record", () => "not-a-record"],
+    }, "FOUNDATION_CONTEXT_MALFORMED"],
+    ["a null-prototype record", () => Object.assign(Object.create(null), validRecord()),
+      "FOUNDATION_CONTEXT_MALFORMED"],
+    ["an array instead of a record", () => [validRecord()], "FOUNDATION_CONTEXT_MALFORMED"],
+    ["null instead of a record", () => null, "FOUNDATION_CONTEXT_MALFORMED"],
+    ["a string instead of a record", () => "not-a-record", "FOUNDATION_CONTEXT_MALFORMED"],
     ["an oversize manifest past the bounded limit", () => validRecord({
       manifest: manifestWith({ binding: { exactBytes: new Array(1_200_000).fill(7) } }),
-    })],
+    }), "FOUNDATION_CONTEXT_MALFORMED"],
+    // The three below are structurally well-formed attacks, so they must reach
+    // past the shape guards and be answered by their OWN code.
+    ["a manifest claiming a version this codec never issued", () => validRecord({
+      manifest: manifestWith({ version: "context-manifest.v0" }),
+    }), "FOUNDATION_CONTEXT_VERSION_UNSUPPORTED"],
+    ["a real binding swapped in under the original digest", () => {
+      const real = realManifest();
+      return validRecord({
+        manifest: { version: real.version, digest: real.digest, binding: otherManifest().binding },
+      });
+    }, "FOUNDATION_CONTEXT_MANIFEST_DIGEST_MISMATCH"],
+    ["an outer identity swapped under its now-stale recordDigest", () => ({
+      ...validRecord(), projectId: "proj-attacker",
+    }), "FOUNDATION_CONTEXT_RECORD_DIGEST_MISMATCH"],
   ];
 
   // A sweep that silently produced zero cases would pass while testing nothing.
-  it("generates a positive number of hostile cases", () => {
+  it("generates a positive count of hostile cases over a non-constant code column", () => {
     expect(HOSTILE_CASES.length).toBeGreaterThan(0);
-    expect(HOSTILE_CASES.length).toBe(11);
+    expect(HOSTILE_CASES.length).toBe(14);
     expect(new Set(HOSTILE_CASES.map(([name]) => name)).size).toBe(HOSTILE_CASES.length);
+
+    // Hand-written: the column must not quietly become one repeated code, which
+    // is what would make the per-case assertion below free again.
+    const expected = HOSTILE_CASES.map(([, , code]) => code);
+    expect([...new Set(expected)].sort()).toEqual([
+      "FOUNDATION_CONTEXT_MALFORMED",
+      "FOUNDATION_CONTEXT_MANIFEST_DIGEST_MISMATCH",
+      "FOUNDATION_CONTEXT_RECORD_DIGEST_MISMATCH",
+      "FOUNDATION_CONTEXT_VERSION_UNSUPPORTED",
+    ]);
+    // NONCANONICAL is decoder-only; its arm is the non-canonical-bytes test below.
+    for (const code of expected) expect(FOUNDATION_CONTEXT_MANIFEST_CODES).toContain(code);
   });
 
-  it.each(HOSTILE_CASES)("refuses %s with an exact code and layer", (_name, build) => {
+  it.each(HOSTILE_CASES)("refuses %s with its exact code", (_name, build, expected) => {
     const result = encodeFoundationContextManifestRecord(build());
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("a hostile input was admitted");
-    expect(FOUNDATION_CONTEXT_MANIFEST_CODES).toContain(result.code);
+    expect(result.code).toBe(expected);
     expect(result.layer).toBe(FOUNDATION_CONTEXT_CODEC);
     expect(result).not.toHaveProperty("record");
   });

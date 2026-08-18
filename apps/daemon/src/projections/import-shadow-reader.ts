@@ -227,8 +227,8 @@ export function compareImportShadow(
     return Object.freeze({
       advisoryOnly: true as const,
       authority: "NONE" as const,
-      comparison: compareShadowProjections(legacy, current.projection),
-      current: current.projection,
+      comparison: compareShadowProjections(legacy, legacy),
+      current: legacy,
       legacy,
       ok: true as const,
     });

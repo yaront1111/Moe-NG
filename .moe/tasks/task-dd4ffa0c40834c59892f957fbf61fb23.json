@@ -128,8 +128,8 @@
       "completedAt": "2026-08-18T04:10:39.965Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -148,14 +148,16 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:45:45.041Z",
-  "updatedAt": "2026-08-18T04:17:06.140Z",
+  "updatedAt": "2026-08-18T04:24:34.472Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:11:17.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
     "executedStepCount": 14,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-08-18T04:24:34.472Z",
+    "wallClockMs": 108797321
   },
   "contextFetchedBy": [
     "worker-f144c751",
@@ -225,7 +227,7 @@
     "apps/daemon/src/planning/graph-body-record.js",
     "apps/daemon/src/planning/active-graph-projection.ts"
   ],
-  "reviewCompletedAt": "2026-08-18T04:04:07.843Z",
+  "reviewCompletedAt": "2026-08-18T04:24:34.472Z",
   "rejectionDetails": {
     "failedDodItems": [
       "No active revision returns an exact stable UNKNOWN/not-found code and layer; corrupt, non-canonical, stale, or multiple-active histories fail closed under distinct stable code/layer mappings and yield no snapshot authority.",
@@ -306,5 +308,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-08-18T04:24:34.472Z",
+  "reviewSummary": "APPROVED at HEAD d60a48f. Both prior defects re-MEASURED fixed, not read.\n\nDEFECT 1 (DoD 2) FIXED: enumerateAggregateIds pages store.readEventsAfter, keeping every aggregateId with the graph-revision:<projectId>: prefix. Create-less history now answers GRAPH_REVISION_REPLAY_MISSING_CREATE / sourceLayer=CORE_GRAPH_REVISION_REPLAY, distinct from empty (ACTIVE_GRAPH_ABSENT/null). Pagination audited: nextCursor strictly advances, zero-select returns hasMore=false, oversized record throws not truncates - no loop, no silent stop. Prefix cannot leak across projects: store is project-bound (assertCachedProjectBinding).\n\nDEFECT 2 (DoD 4) FIXED: sweep carries expected code AND sourceLayer per case; asserts length>0, ===3, distinct names, none may be ACTIVE_GRAPH_ABSENT.\n\nMY 3 DRILLS, all killed on the intended assertion:\nA create-event-only enumeration -> 2 RED on CODE (\"missing create code: expected ACTIVE_GRAPH_ABSENT to be GRAPH_REVISION_REPLAY_MISSING_CREATE\").\nB collectActive swallows replay refusal -> 3 RED on CODE (GREEN under the old vacuous sweep).\nC refuse(code,null) -> 3 RED on sourceLayer (\"expected null to be CORE_GRAPH_REVISION_REPLAY\") - live, not decorative.\n\nGATES re-run by me, foreground: daemon typecheck exit 0 (prior TS6133 gone); daemon test Test Files 130 passed (130) | Tests 2801 passed (2801) exit 0; planning slice 4 files/61 tests exit 0; pnpm typecheck exit 0. Files 219 and 191 lines. graph-body-record.* byte-identical to previously-verified bytes. Consumers named, on disk, all BLOCKED (c4b80778/eacea969/32c1ba45).\n\nDISCLOSED not counted: test:security 96-vs-93; unrostered = this task's 2 layer constants + peer IMPORT_SHADOW_READ_LAYER. Already red at 94-vs-93; bumping the roster mid-peer-flight entangles counts. Needs follow-up roster task.\n\nQA REPAIR: foreign whole-tree commit fbbabda captured my drill A mid-run. Restored reviewed bytes in d60a48f (explicit pathspec, 1 file/1 line, no amend/reset). All six owned paths: HEAD == reviewed bytes."
 }

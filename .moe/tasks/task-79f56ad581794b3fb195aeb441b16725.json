@@ -18,8 +18,50 @@
     "The release decision is all-or-none: a slot refusal leaves no release row, and DRAINING never upgrades attempt or slot to RELEASED.",
     "This task does not accept or manufacture safeBoundaryObserved, terminal refs/flags, receiptRef or handoff; those remain tasks ded026d6, 6d400781 and af9454f4."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify the defect and every dependency surface at committed HEAD. Read-only. (1) THE DEFECT, live (architect confirmed): apps/daemon/src/work/attempt-release-disposition.ts:102 copies `attemptState: durable.attempt.state` (the activation slice's RUNNING) and :115-116 copy `providerSlotRef/State: durable.providerSlot.{slotRef,state}` (ACTIVE) into the release row even when the kernel returned RELEASED -- the row claims a release while recording pre-release state. (2) DEPS: task-740924b7 (release disposition recording) DONE; task-4731ba34 (the pure releaseProviderSlot transition) DONE -- `releaseProviderSlot(predecessor: unknown, command: unknown): AuthorityOutcome<ProviderSlotReservation>` at packages/scheduler/src/authority/provider-slot-release.ts:90, refusing malformed on either input; task-2db11099 (root publication) planned this session, may be unlanded -- THE RAIL REQUIRES consuming releaseProviderSlot from bare `@moe/scheduler` ONLY, so if the root export has not landed at your HEAD, re-block on task-2db11099 by id; a deep import into authority/ is forbidden, not a workaround. Prove the edge with a compiled probe importing releaseProviderSlot from bare @moe/scheduler, typecheck exit 0, delete in the same command. (3) EXISTING SHAPE: attempt-release-disposition.ts is 173 lines exporting recordAttemptRelease (:135); attempt-release-store.ts is 186 lines exporting the record version, AttemptReleaseRecorded event type, work.attempt_release command kind, and the DAEMON_ATTEMPT_RELEASE / SCHEDULER_LEASE_DRAIN layer constants (:31-43) -- this task ADDS a provider-slot-release layer constant beside them; note both files have ~70 lines of headroom before the 250 target, so no split is expected.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Extend apps/daemon/src/work/attempt-release-disposition.test.ts (existing suite -- no parallel file). Seed activation ONLY through the production activation path per DoD 5. Failing tests: (1) RELEASED COMPOSITION: when releaseWork returns RELEASED, the composition derives the slot-release command exclusively from the durable activation slot and attempt (no caller slot state or command representable), calls the public releaseProviderSlot, and the SINGLE AttemptReleaseRecorded body -- read back from CANONICAL DURABLE BYTES, never the input or result echo -- records attemptState === \"RELEASED\", leaseState === \"RELEASED\", providerSlotState === \"RELEASED\" and the exact successor slot ref the transition returned. (2) DRAINING: the row records the kernel's DRAINING attempt/lease outcome, RETAINS the non-released slot state, and nothing claims safe release -- assert providerSlotState is the durable pre-release value and that no slot transition was invoked (call-count on the transition seam). (3) SLOT REFUSAL IS ALL-OR-NONE: a malformed, mismatched, or RESERVED-state slot makes releaseProviderSlot refuse; assert the scheduler's own code preserved under a DISTINCT provider-slot-release layer (never restamped as SCHEDULER_LEASE_DRAIN), and assert ZERO release rows and ZERO decisions committed -- raw event and decision counts unchanged. (4) REPLAY: same identity returns the original durable row, counts unchanged; conflicting bytes or a later divergent slot fact refuse BEFORE a second write. Every refusal asserts code AND layer literals.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/attempt-release-disposition.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN. Edit apps/daemon/src/work/attempt-release-disposition.ts and attempt-release-store.ts. In the composition: when the kernel outcome is RELEASED, derive the ProviderSlotReleaseCommand from the decision-verified durable activation slot/attempt (fields the module already holds -- no new caller inputs; the input type must not grow a slot-command field), invoke releaseProviderSlot from bare @moe/scheduler, and on success persist the returned successor's exact slotRef/state in the same single AttemptReleaseRecorded body with attemptState/leaseState from the TRANSACTION OUTCOME -- replacing the :102 and :115-116 activation-slice copies. On DRAINING: skip the slot transition entirely, record the kernel's outcome, retain the durable slot state. On slot refusal: return the scheduler's code under the new distinct layer constant (add e.g. SCHEDULER_PROVIDER_SLOT_RELEASE to the store module's frozen layer set beside SCHEDULER_LEASE_DRAIN) and commit NOTHING -- the ordering must be transition-then-single-commit, so a refusal leaves zero rows without needing a compensating delete. Do not touch activation-ledger state, scheduler reducers, schemas, or RuntimeCommandKind (rails). Keep both files <=250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/attempt-release-disposition.ts",
+        "apps/daemon/src/work/attempt-release-store.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Mutation drills, the two DoD 6 names. Drill 1 (the defect cannot return): reintroduce the copy -- `attemptState: durable.attempt.state` -- in the RELEASED branch; the step-2 case (1) test must go RED on its attemptState === \"RELEASED\" assertion against durable bytes. If it stays green, the test is reading the result echo rather than the canonical row; fix the readback first. Drill 2 (the successor is real): hardcode providerSlotState: \"RELEASED\" without calling the transition (skip releaseProviderSlot); a named assertion must go RED -- the natural pin is the successor slotRef equality plus the transition call-count, because a hardcoded state string satisfies a state-only assertion. Record command, failing test NAME, exact assertion each. Restore by re-editing, never `git checkout`; `git diff --numstat` 0/0 per drilled file; one drill at a time.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/attempt-release-disposition.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Adversarial review, commit, gate. REVIEW: can any caller input reach the slot command (the input type must make it unrepresentable, not merely unused)? Is the refusal layer distinct from SCHEDULER_LEASE_DRAIN in both the constant AND every return path -- grep for accidental reuse? Does DRAINING invoke the transition anywhere? Is the commit single -- could a partial write survive a crash between transition and commit (the ordering transition-then-commit means a crash loses only an uncommitted successor, acceptable; a commit-then-transition ordering would persist a lie -- confirm the order)? Does the row read back from canonical bytes in EVERY assertion? Were forbidden surfaces touched (activation ledger, reducers, schemas, RuntimeCommandKind, the current-reader task's files)? Does this task manufacture safeBoundaryObserved/terminal/receipt/handoff evidence (forbidden -- those are tasks ded026d6, 6d400781, af9454f4)? COMMIT exactly the three owned paths by explicit pathspec; verify `git show --stat`. GATE per DoD 7, separately, own exit codes, never `;`-chained or piped: `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test`, each with its nonzero `Test Files N passed` line. Completion note: name task-e62e3828 as consumer and state which state task-2db11099 was in when the bare-specifier edge was verified.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/attempt-release-disposition.ts",
+        "apps/daemon/src/work/attempt-release-store.ts",
+        "apps/daemon/src/work/attempt-release-disposition.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,5 +74,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:12:35.367Z",
-  "updatedAt": "2026-08-18T03:12:35.367Z"
+  "updatedAt": "2026-08-18T04:26:13.592Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:24:26.716Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:26:11.482Z",
+  "planningNotes": {
+    "approachesConsidered": "A corrective task with the defect measured on live bytes, so the plan's decisions are narrow. (1) ORDERING: transition-then-single-commit, not commit-then-transition -- the all-or-none rail means a slot refusal must leave zero rows, and doing the pure transition first makes that free (a refusal simply never reaches the commit), whereas committing first would need a compensating delete, which the store's append-only discipline forbids. A crash between transition and commit loses only an in-memory successor -- safe, the release is simply retried -- while the reverse ordering could persist attemptState RELEASED with a slot that never released, the exact lie this task exists to remove. (2) LAYER: a NEW distinct constant (SCHEDULER_PROVIDER_SLOT_RELEASE or similar) beside SCHEDULER_LEASE_DRAIN in the store module's frozen set -- DoD 3 forbids restamping a slot refusal as a lease-drain refusal, and the two kernels genuinely differ; reusing the existing layer is the one-code-many-guards failure the reason-code rail exists to stop. (3) DEP HANDLING: task-2db11099 (root publication) was planned-not-landed at planning time; the rail says consume from bare @moe/scheduler ONLY, so step 1 re-blocks if the root export is absent rather than deep-importing authority/provider-slot-release.ts -- a deep import would work today and violate the undeclared-surface discipline the whole board runs on. (4) REJECTED: widening the module input with a caller slot command (DoD 1 makes caller slot state/command unacceptable -- unrepresentable beats validated); persisting a second event for the slot successor (DoD 2 requires the ONE AttemptReleaseRecorded body to carry all three states); touching the activation ledger to 'fix' attempt.state at the source (rail forbids, and the activation slice is CORRECT for its own time -- the bug is copying it into a later-time row).",
+    "codebaseInsights": "Measured at current HEAD. THE DEFECT: apps/daemon/src/work/attempt-release-disposition.ts:102 `attemptRef: durable.attempt.attemptId, attemptState: durable.attempt.state` and :115-116 `providerSlotRef: durable.providerSlot.slotRef, providerSlotState: durable.providerSlot.state` -- activation-slice values copied into the release row unconditionally; the file's own header (:14) documents the kernel vocabulary RELEASED/DRAINING/NO_OP, and :107-108 already branch handoff/intentRefs on outcome, so the branching pattern to extend exists in-file. recordAttemptRelease is the entry at :135; commitRelease at :169 shows the single-commit discipline with the `${grantId}:RELEASED` key. SIZES: disposition 173 lines, store 186 -- comfortable headroom under 250, no split expected. STORE MODULE: attempt-release-store.ts exports ATTEMPT_RELEASE_RECORD_VERSION moe-attempt-release-record/1 (:31), ATTEMPT_RELEASE_EVENT_TYPE AttemptReleaseRecorded (:32), ATTEMPT_RELEASE_COMMAND_KIND work.attempt_release (:33), and the frozen layer constants DAEMON_ATTEMPT_RELEASE (:37) and SCHEDULER_LEASE_DRAIN (:42) with the AttemptReleaseLayer union (:43) -- the new provider-slot-release layer joins this set, which is why the store file is an owned path. TRANSITION: releaseProviderSlot(predecessor: unknown, command: unknown): AuthorityOutcome<ProviderSlotReservation> at packages/scheduler/src/authority/provider-slot-release.ts:90-98, refusing malformed on unparseable slot or command -- it takes UNKNOWN inputs and validates internally, so the daemon passes durable-derived plain data and the transition's own refusals carry the scheduler codes DoD 3 preserves. DEPS: 740924b7 DONE, 4731ba34 DONE, 2db11099 planned-unlanded (root export pending). CONSUMER: task-e62e3828 (safe-release evidence, held by architect-f956ffe1).",
+    "risks": "The central risk is the echo readback: both DoD 5 and drill 1 exist because a test that asserts on recordAttemptRelease's RETURN VALUE would go green the moment the return is fixed while the durable row still carries RUNNING -- every state assertion must decode the canonical durable bytes. Second, the hardcode trap: providerSlotState: \"RELEASED\" as a literal satisfies any state-only assertion, so drill 2's pin must be the successor slotRef equality plus a transition call-count -- state strings alone cannot prove the transition ran. Third, layer discipline: the slot refusal must surface the scheduler's own code under the NEW layer; two adjacent failure modes (lease-drain refusal, slot-release refusal) sharing a layer would make one guard's test satisfiable by the other -- the one-code-many-guards trap. Fourth, DRAINING must not invoke the transition at all: invoking-and-ignoring would consume the slot transition's idempotence budget and could advance slot state during a drain; the call-count assertion in case (2) pins absence, not just non-persistence. Fifth, the dep race: 2db11099's root export may land mid-task -- verify at YOUR committed HEAD, and if absent re-block rather than deep-importing; the compiled probe is the proof either way. Sixth, unrepresentable beats unused: the module input must not grow an optional slot-command field 'for tests' -- fixtures drive the composition through durable seeding only. Finally, the shared-worktree rules stand: restore drills by re-editing, commit the three owned paths by pathspec, and close every store handle -- a held SQLite handle kills the vitest worker.",
+    "keyFiles": [
+      "apps/daemon/src/work/attempt-release-disposition.ts",
+      "apps/daemon/src/work/attempt-release-store.ts",
+      "packages/scheduler/src/authority/provider-slot-release.ts",
+      "packages/scheduler/src/authority/lease-resource.ts",
+      "packages/scheduler/src/index.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 4500000
+  },
+  "planApprovedAt": "2026-08-18T04:26:13.592Z"
 }

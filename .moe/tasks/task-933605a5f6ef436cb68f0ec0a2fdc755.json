@@ -18,7 +18,7 @@
     "Preserve exact upstream codes/layers, TDD mutation/nonzero evidence, and explicit owned-path commit; task-203 is the consumer."
   ],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,5 +31,23 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:47:26.251Z",
-  "updatedAt": "2026-08-17T17:48:13.961Z"
+  "updatedAt": "2026-08-18T04:22:56.524Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:21:52.734Z"
+  },
+  "blockedReason": "Blocked at planning: ALL FOUR hard dependencies are unlanded, and this task is the terminal composition over their surfaces -- its steps cannot be written against shapes that do not exist yet. Measured 2026-08-18:\n\n- task-a3e8a02d (attempt input/launch authority): BLOCKED at 1/8. THE DECISIVE ONE: this task's rail says rendered bytes may only be inserted through \"an explicit server-owned Claude argv/provider-input recipe supplied by the approved a3e launch authority\", and if a3e lands only opaque argv with no typed insertion recipe, this task must block -- never reinterpret argv. Whether that recipe exists is decided inside a3e8a02d's remaining steps. Planning an insertion seam before its producer decides the seam's shape is guessing the argv slot, which the description forbids by name.\n- task-c320c34a (context selection): BLOCKED by me this session -- five mandatory DoD-1 items lack durable readers (approved plan, criteria, node closure, budgets, input-tree family); see its blockedReason.\n- task-22fa35a5 (ledger) and task-225d25f7 (strict reader): plans submitted by me this session, not landed; their exported derivation/vocabulary shapes are what this composition imports.\n\nNothing is missing that a new prerequisite would fix -- every gap has an owner on the board. Pure sequencing.\n\nUNBLOCK TEST, greps not statuses: (1) a3e8a02d's landed surface exports a TYPED context-insertion recipe -- if only opaque argv landed, re-block per the rail and file the recipe prerequisite then; (2) foundation-context-selection.ts, foundation-context-manifest-ledger.ts and foundation-context-manifest-reader.ts all exist at committed HEAD with exported vocabularies; (3) then plan the composition: import all four surfaces, render exactly once, commit-then-re-read before any launchable value, byte-identity argv assertion per the DoD.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-08-18T04:22:38.924Z",
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured all four hard deps: a3e8a02d BLOCKED 1/8 (owns the decisive typed-insertion-recipe question), c320c34a BLOCKED on its reader matrix, 22fa35a5 and 225d25f7 planned this session but unlanded. Recorded the unblock test as greps in the blockedReason.",
+      "whatRemains": "Replan only after all four surfaces exist at committed HEAD. First check on resume: does a3e8a02d's landed surface export a TYPED context-insertion recipe? If only opaque argv landed, re-block per this task's own rail and file the recipe prerequisite at that point -- not before, because a3e may still land the recipe itself.",
+      "pitfalls": "The description's sharpest sentence: current flat caller-shaped argv is NOT a lawful insertion seam. Do not let a replanner satisfy the byte-identity DoD by picking an argv index and splicing -- 'no positional guess, append/spread into opaque argv, shell normalization, reference hash, file ref, base64 substitution, or local CLI flag spelling'. Also: render exactly ONCE; a replay must return the original durable bytes without a second render, so the compose order is commit-then-re-read-then-return, never render-on-read.",
+      "openQuestions": "None beyond the rail's own conditional -- the recipe question belongs to a3e8a02d and pre-empting it here would be designing the producer's contract from the consumer.",
+      "releasedAt": "2026-08-18T04:22:56.522Z",
+      "releasedBy": "architect-2cc07e26",
+      "reason": "Releasing assignment only; BLOCKED state and sequencing reason stand. Continuing the sweep."
+    }
+  ]
 }

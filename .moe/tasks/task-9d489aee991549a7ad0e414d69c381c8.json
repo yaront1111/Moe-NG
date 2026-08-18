@@ -14,8 +14,36 @@
     "This is a constant-promotion and production-binding slice, not a new wire kind; do not register it in RuntimeCommandKind or HTTP.",
     "Preserve all existing ledger/store refusal mappings and exact layers; use TDD and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify, then RED. The private literal is confirmed at apps/daemon/src/telemetry/provider-run-ledger.ts:56 `const COMMAND_KIND = \"provider-run.telemetry.commit\"`, used at :215; provider-run-contracts.ts already owns the sibling frozen identities (PROVIDER_RUN_RECORD_VERSION :57, PROVIDER_RUN_EVENT_TYPE :60), so the new export sits beside them in the same `as const` style. SIZE CAUTION: the ledger file is 248 lines -- two from the 250 target -- so the edit must be net-neutral or negative (the removed const line pays for the import line; do not add anything else there). RED first, in the existing provider-run-ledger.test.ts: extend the accepted-commit and replay controls to assert the exact command kind ON THE STORED ARTIFACTS -- the durable event's decision trace, the command decision record, and the receipt-backed trace -- imported from provider-run-contracts.ts, NOT retyped in the test; a test literal would be the second owner the DoD forbids. The assertions must read the kind from durable bytes, because an assertion against the writer's input echoes whatever the writer sent.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "GREEN: promote the constant. Add `export const PROVIDER_RUN_COMMAND_KIND = \"provider-run.telemetry.commit\" as const;` to provider-run-contracts.ts beside its sibling identities; in provider-run-ledger.ts delete the private const at :56 and import the exported one, leaving :215's usage and EVERYTHING else -- target aggregate derivation (AGGREGATE_NAMESPACE at contracts :163), expected version, request digest, singleton event id, result bytes -- byte-for-byte unchanged; the DoD pins them unchanged and the rail forbids schema or command-byte changes. Grep afterward that exactly ONE production definition of the string exists: `git grep -n \"provider-run.telemetry.commit\" apps/daemon/src/ | grep -v '\\.test\\.'` must show the contracts export and the ledger import site only. Do NOT register the kind in RuntimeCommandKind or HTTP (rail: this is constant promotion, not a wire kind -- the frozen runtime vocabulary has a full-coverage ratchet and touching it is a different, larger task).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-contracts.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Drill, commit, gate. DRILL per DoD 3: change the writer's imported kind usage to a different literal (e.g. suffix \"/2\"); the named binding assertion from step 1 must go RED on the stored-artifact kind comparison -- if only a replay assertion fails, the binding test is not reading the durable kind and must be strengthened. Restore by re-editing; `git diff --numstat` 0/0 on the drilled file. COMMIT the three owned paths by explicit pathspec after `git status --porcelain`; verify `git show --stat`. GATE per DoD 4, separately with own exit codes: `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test`, each with a nonzero `Test Files N passed` line. Completion note: name the provider-run reader child of task-00e4827d as consumer, and confirm the ledger file's final line count stayed <=250.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-contracts.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.ts",
+        "apps/daemon/src/telemetry/provider-run-ledger.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +56,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:03.360Z",
-  "updatedAt": "2026-08-18T03:01:47.922Z",
+  "updatedAt": "2026-08-18T04:27:18.956Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
-  ]
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:26:19.800Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 3
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:27:16.889Z",
+  "planningNotes": {
+    "approachesConsidered": "Trivial constant-promotion slice; per the planning skill's skip table it gets a compact plan (verify+RED, GREEN, drill+gate) rather than the 8-phase skeleton. The only decisions: (a) export name PROVIDER_RUN_COMMAND_KIND matching the sibling PROVIDER_RUN_* naming in contracts; (b) net-neutral edit discipline in the ledger because it sits at 248/250 lines; (c) the test imports the constant rather than retyping it -- a retyped test literal would be a second owner of the identity, exactly what the DoD's 'no second production or test literal' clause forbids, and it would keep passing if the production value drifted. REJECTED: registering the kind in RuntimeCommandKind (rail forbids; frozen vocabulary with full-coverage ratchet); moving the aggregate-derivation namespace or any other identity while in the file (scope creep in a two-line task).",
+    "codebaseInsights": "Measured at current HEAD: private literal at provider-run-ledger.ts:56, sole use :215; ledger header comment (:149-151) documents that the store's replay identity hashes key, commandKind and targetAggregateId with constant commandKind/expectedVersion -- which is WHY the reader task (00e4827d's child) needs the exported kind for its binding check rather than duplicating the string. provider-run-contracts.ts (204 lines) owns PROVIDER_RUN_RECORD_VERSION (:57), PROVIDER_RUN_EVENT_TYPE (:60) and AGGREGATE_NAMESPACE (:163); the new export joins that family. Ledger file is 248 lines -- delete-const-add-import keeps it neutral. Only one production occurrence of the string exists today (grep verified), so promotion cannot silently fork an identity.",
+    "risks": "Small but two real traps: (1) the echo assertion -- a test asserting the kind on the writer's INPUT or on the returned result object passes regardless of what was stored; the binding assertions must decode the durable event/decision/receipt, and the drill's red must land on exactly that assertion; (2) the 248-line ledger file -- any extra addition there crosses the target; keep the edit to remove-one-line-add-one-line. Also preserve every existing refusal mapping untouched; this task changes identity OWNERSHIP, not behavior, and QA should see a diff of ~4 lines production plus test assertions.",
+    "keyFiles": [
+      "apps/daemon/src/telemetry/provider-run-contracts.ts",
+      "apps/daemon/src/telemetry/provider-run-ledger.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-18T04:27:18.956Z"
 }

@@ -14,8 +14,34 @@
     "Do not alias store codes into the provider vocabulary, restamp runner refusals, or collapse ABSENT/AMBIGUOUS/MALFORMED/UNREADABLE/BINDING_MISMATCH.",
     "Use TDD exact code/layer/outcome/storeCode, positive production roster counts, and explicit owned-path commit."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Verify, then RED. Measured state: apps/daemon/src/telemetry/provider-run-refusals.ts (104 lines) holds the frozen 17-member PROVIDER_RUN_LEDGER_CODES (:52-70, including the existing EVIDENCE_ABSENT :62, EVIDENCE_AMBIGUOUS, RECORD_UNREADABLE), the 3-member layer set with PROVIDER_RUN_READER (:29), the ProviderRunRefusal shape whose `storeCode` doc says it carries the store's own code verbatim when a store call refused and is NEVER flattened into `code` (:81-88), and two constructors -- providerRunRefusal (:89, takes storeCode) and providerRunUnknown (:99, does NOT take storeCode). Note the DoD-2 consequence: EVIDENCE_UNREADABLE reader answers must be UNKNOWN AND carry the upstream DurableStoreErrorCode, which providerRunUnknown cannot express today -- so the task adds either an optional storeCode parameter there or a third focused constructor; prefer the optional parameter (defaulted null) because it keeps one UNKNOWN constructor and cannot break the existing call sites. RED in provider-run-refusals.test.ts: extend the hand-written roster assertion with the three new members in reviewed order (roster is HAND-LISTED, count asserted, order asserted, freeze and disjointness asserted -- never derived from the production array, per DoD 3), and add per-constructor pins: EVIDENCE_UNREADABLE -> outcome UNKNOWN, layer PROVIDER_RUN_READER, storeCode carrying a real DurableStoreErrorCode verbatim; EVIDENCE_MALFORMED and BINDING_MISMATCH -> outcome UNKNOWN, layer PROVIDER_RUN_READER, storeCode null. Run RED and confirm the only failures are the three missing members and constructor pins.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "GREEN: extend apps/daemon/src/telemetry/provider-run-refusals.ts. Append `PROVIDER_RUN_EVIDENCE_UNREADABLE`, `PROVIDER_RUN_EVIDENCE_MALFORMED`, `PROVIDER_RUN_BINDING_MISMATCH` to the frozen roster in the reviewed order the RED test pinned (append at the evidence-family cluster near :62 rather than the tail if the file's grouping comments say the roster is grouped by family -- follow the file's own ordering discipline; whatever order lands, the test lists it by hand). Widen providerRunUnknown with an optional `storeCode: DurableStoreErrorCode | null = null` final parameter so the reader can preserve the upstream store code on EVIDENCE_UNREADABLE without a second constructor. Add roster doc-comment lines in the file's existing voice explaining the three distinctions -- the file already documents WHY codes are deliberately distinct (the REPLAY_DIVERGED comment at :45-51 is the model): UNREADABLE = the store/page could not be read (store is the authority, storeCode carried verbatim); MALFORMED = bytes read fine but the indexed evidence does not parse (this module is the authority, storeCode null); BINDING_MISMATCH = everything parses but receipt/decision/activation bindings disagree (comparison authority, storeCode null). Do NOT alias any DurableStoreErrorCode into the provider vocabulary and do not touch any other file -- the reader that USES these codes is task-00e4827d's, not this task's. File stays well under 250 (104 + ~10 lines).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Drills, commit, gate. DRILL 1 (roster is load-bearing): delete one new member from the production roster; the hand-listed roster assertion must go RED naming that member -- a count-only failure means the assertion does not enumerate and must be strengthened. DRILL 2 (storeCode is not flattened): change the EVIDENCE_UNREADABLE constructor path to fold the store code into `code` or drop it to null; the constructor pin asserting the verbatim DurableStoreErrorCode must go RED. Restore each by re-editing; `git diff --numstat` 0/0 per drilled file; one at a time. COMMIT the two owned paths by explicit pathspec after `git status --porcelain`; verify `git show --stat`. GATE per DoD 4, separately with own exit codes: `pnpm --filter @moe/daemon typecheck` then `pnpm --filter @moe/daemon test`, each with a nonzero `Test Files N passed` line. NOTE: this vocabulary sits in a *_CODES/*_LAYER-scanning world -- if the security roster's scan picks up new layer constants it would have reddened pnpm test:security, but this task adds CODES to an existing rostered family, not a new LAYER constant, so no roster entry is due; state that check explicitly in the completion note (run `pnpm test:security` once foreground to prove it stayed green). Name task-00e4827d as consumer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/telemetry/provider-run-refusals.ts",
+        "apps/daemon/src/telemetry/provider-run-refusals.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -28,8 +54,30 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:35:19.328Z",
-  "updatedAt": "2026-08-18T03:01:48.317Z",
+  "updatedAt": "2026-08-18T04:28:46.910Z",
   "contextFetchedBy": [
     "architect-f956ffe1"
-  ]
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:27:23.174Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:28:44.789Z",
+  "planningNotes": {
+    "approachesConsidered": "Compact vocabulary-extension slice; three decisions. (1) providerRunUnknown widening vs a third constructor: chose the optional defaulted storeCode parameter -- one UNKNOWN constructor stays the single door for reader refusals, existing call sites compile unchanged (defaulted param), and the alternative (a providerRunStoreUnknown sibling) would give the family two UNKNOWN doors and invite the flattening the shape's own doc forbids. Note the Parameters<>-of-defaulted-param gotcha exists on this board but does not bite here -- nothing takes Parameters of this constructor. (2) Roster placement: follow the file's own family grouping (evidence cluster) rather than blind append; the test hand-lists whatever order lands, so grouping is a readability choice, not a correctness one -- but the DoD says 'reviewed order', so the RED test pins it first and production matches the pin. (3) The distinction doc-comments are part of the deliverable, not decoration: this file's existing style (the REPLAY_DIVERGED block) documents WHY each code is deliberately distinct, and the three new codes answer three different questions (could-not-read / read-but-unparseable / parsed-but-disagrees) whose collapse is exactly what the rail forbids. REJECTED: aliasing DurableStoreErrorCode members into the roster (rail forbids; storeCode field exists precisely so the store's vocabulary never leaks into this one); building any reader logic here (task-00e4827d's child owns the reader -- this task ships only the closed vocabulary it will consume).",
+    "codebaseInsights": "Measured at current HEAD. apps/daemon/src/telemetry/provider-run-refusals.ts is 104 lines: PROVIDER_RUN_LEDGER_LAYERS 3 members including PROVIDER_RUN_READER (:25-29); PROVIDER_RUN_LEDGER_CODES 17 frozen members (:52-70) with EVIDENCE_ABSENT and EVIDENCE_AMBIGUOUS already present -- the task adds exactly three; ProviderRunRefusal (:81-88) carries outcome UNKNOWN|REFUSED plus storeCode with the never-flattened doc; providerRunRefusal (:89) accepts storeCode, providerRunUnknown (:99) does not -- the DoD-2 gap this plan closes with the defaulted param. The file's header comments document deliberate-distinctness rationale per code (REPLAY_DIVERGED block :45-51 is the model to copy for the three new entries). Test file is 181 lines with the hand-listed roster discipline already in place. The security boundary roster scans for new *_LAYER constants -- this task adds none, so no roster entry is due; the foreground pnpm test:security run in step 3 proves it rather than asserting it.",
+    "risks": "Three small traps. (1) The flattening trap: the whole point of storeCode is that the store's code arrives VERBATIM beside the provider code, never inside it -- drill 2 pins the EVIDENCE_UNREADABLE path because that is the one place a lazy implementation would stringify the store code into the provider code. (2) The enumeration trap: a roster assertion that only checks count lets a renamed member slide; drill 1 requires the failure to NAME the deleted member, and the test must keep hand-listing rather than spreading the production array (deriving expectations from the subject is the tautology the DoD explicitly forbids). (3) The three-way collapse: UNREADABLE/MALFORMED/BINDING_MISMATCH answer could-not-read / unparseable / disagrees -- a reader could be written tomorrow that maps two of them to one branch, so the constructor pins fix outcome+layer+storeCode per code NOW, making the later reader's misuse assertable by task-00e4827d's own tests. Also: file has huge headroom (104 lines) and both owned files are quiet, so no split or collision risk; the consumer reader is explicitly out of scope.",
+    "keyFiles": [
+      "apps/daemon/src/telemetry/provider-run-refusals.ts",
+      "apps/daemon/src/telemetry/provider-run-refusals.test.ts",
+      "packages/store/src/store-contracts.ts"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 2700000
+  },
+  "planApprovedAt": "2026-08-18T04:28:46.910Z"
 }

@@ -22,17 +22,7 @@ import {
   PREREQUISITE_REFUSAL_CODES,
   SERVICE_REFUSED_BY,
 } from "@moe/daemon";
-import {
-  DISTRIBUTION_COMPONENT_KINDS,
-  DISTRIBUTION_MANIFEST_VERSION,
-  DISTRIBUTION_REFUSAL_REASONS,
-  DISTRIBUTION_SIGNATURE_ALGORITHM,
-  RUNTIME_COMMAND_ENVELOPE_VERSION,
-  RUNTIME_ERROR_REGISTRY_VERSION,
-  RUNTIME_QUERY_ENVELOPE_VERSION,
-  distributionRefusal,
-} from "@moe/contracts";
-import type { DistributionApiRange, DistributionRefusal } from "@moe/contracts";
+import { DISTRIBUTION_REFUSAL_REASONS, distributionRefusal } from "@moe/contracts";
 import { STDIO_TOOL_INDEX, toolLabelForKind } from "@moe/mcp";
 import { IdempotencyConflictError } from "@moe/store";
 
@@ -89,14 +79,6 @@ export const LAYERS = Object.freeze({
   durableStore: pin("DURABLE_STORE", SERVICE_REFUSED_BY, "@moe/store via @moe/daemon"),
 });
 
-/** MCP JSON-RPC transport codes. -32601 is the SDK's own "method not found". */
-export const MCP_CODES = Object.freeze({
-  forbidden: -32_002,
-  invalidParams: -32_602,
-  methodNotFound: -32_601,
-  unauthenticated: -32_001,
-});
-
 /**
  * Which layer answered. This IS the assertion, not decoration.
  *
@@ -105,121 +87,68 @@ export const MCP_CODES = Object.freeze({
  * HTTP_SESSION_SCREEN  the HTTP bearer screen, which runs before a body is read
  * DAEMON_SEAM     handleCommandRequest, i.e. registry payload authority
  * MCP_SDK         the SDK's own JSON-RPC method table
+ * NO_ANSWER       the transport answered with silence and wrote nothing
  */
 export type Answerer =
   | "ADAPTER_AUTH"
   | "ADAPTER_DECODE"
   | "DAEMON_SEAM"
   | "HTTP_SESSION_SCREEN"
-  | "MCP_SDK";
+  | "MCP_SDK"
+  | "NO_ANSWER";
+
+/** The only `stage` a truncated frame may record: silence AND an untouched store. */
+export const TRUNCATED_NO_WRITE = "TRUNCATED_NO_WRITE" as const;
 
 export interface TransportArm {
   readonly armId: string;
-  /** null when the transport answers with silence rather than a frame. */
-  readonly expectedCode: string | null;
   /**
-   * The refusal is expected here. stdio and HTTP legitimately DIFFER: the stdio
-   * adapter decodes the envelope it built before it authenticates, while the HTTP
-   * adapter screens the bearer before it reads the body at all. Both are measured.
+   * Where the refusal is expected. stdio and HTTP legitimately DIFFER: stdio
+   * decodes the envelope it built before it authenticates, HTTP screens the
+   * bearer before it reads a byte of body. Both measured, neither assumed.
    */
   readonly expectedAnswerer: Readonly<Record<TransportSubject, Answerer>>;
+  /** null when the transport answers with silence rather than a coded frame. */
+  readonly expectedCode: string | null;
+  /** Set only where the two transports answer with different codes. */
   readonly expectedCodeBySubject?: Readonly<Record<TransportSubject, string | null>>;
-  /** Refusal and read-only arms must leave decision and event counts untouched. */
-  readonly mutatesStore: boolean;
 }
 
-const ADAPTER_OR_SCREEN: Readonly<Record<TransportSubject, Answerer>> = Object.freeze({
-  HTTP: "HTTP_SESSION_SCREEN",
-  STDIO: "ADAPTER_DECODE",
-});
+const at = (
+  stdio: Answerer,
+  http: Answerer,
+): Readonly<Record<TransportSubject, Answerer>> => Object.freeze({ HTTP: http, STDIO: stdio });
 
-const AUTH_OR_SCREEN: Readonly<Record<TransportSubject, Answerer>> = Object.freeze({
-  HTTP: "HTTP_SESSION_SCREEN",
-  STDIO: "ADAPTER_AUTH",
-});
-
-const BOTH_ADAPTER_DECODE: Readonly<Record<TransportSubject, Answerer>> = Object.freeze({
-  HTTP: "ADAPTER_DECODE",
-  STDIO: "ADAPTER_DECODE",
-});
-
-const BOTH_DAEMON_SEAM: Readonly<Record<TransportSubject, Answerer>> = Object.freeze({
-  HTTP: "DAEMON_SEAM",
-  STDIO: "DAEMON_SEAM",
-});
-
-const BOTH_SDK: Readonly<Record<TransportSubject, Answerer>> = Object.freeze({
-  HTTP: "MCP_SDK",
-  STDIO: "MCP_SDK",
-});
+const arm = (
+  armId: string,
+  expectedAnswerer: Readonly<Record<TransportSubject, Answerer>>,
+  expectedCode: string | null,
+  expectedCodeBySubject?: Readonly<Record<TransportSubject, string | null>>,
+): TransportArm =>
+  Object.freeze({
+    armId,
+    expectedAnswerer,
+    expectedCode,
+    ...(expectedCodeBySubject === undefined ? {} : { expectedCodeBySubject }),
+  });
 
 /**
- * The refusal arms, one row per behaviour. `accepted-control` is first on
- * purpose: without a case that can succeed, a suite in which nothing can ever
- * succeed would still report every refusal below correctly.
+ * One row per behaviour. `accepted-control` is FIRST on purpose: without a case
+ * that can succeed, a suite in which nothing can ever succeed would still report
+ * every refusal below correctly.
  */
 export const TRANSPORT_ARMS: readonly TransportArm[] = Object.freeze([
-  {
-    armId: "accepted-control",
-    expectedAnswerer: BOTH_DAEMON_SEAM,
-    expectedCode: "EFFECTS_COMMITTED",
-    mutatesStore: true,
-  },
-  {
-    armId: "malformed-envelope",
-    expectedAnswerer: BOTH_ADAPTER_DECODE,
-    expectedCode: CODES.inputInvalid,
-    mutatesStore: false,
-  },
-  {
-    armId: "unknown-tool-label",
-    expectedAnswerer: BOTH_ADAPTER_DECODE,
-    expectedCode: CODES.inputInvalid,
-    mutatesStore: false,
-  },
-  {
-    armId: "wrong-credential",
-    expectedAnswerer: AUTH_OR_SCREEN,
-    expectedCode: CODES.authenticationFailed,
-    mutatesStore: false,
-  },
-  {
-    // Invalid at TWO layers at once. The answer differs by transport and that
-    // difference is the finding: stdio decodes before it authenticates, HTTP
-    // screens the bearer before it reads a byte of body.
-    armId: "wrong-credential-and-malformed",
-    expectedAnswerer: ADAPTER_OR_SCREEN,
-    expectedCode: null,
-    expectedCodeBySubject: Object.freeze({
-      HTTP: CODES.authenticationFailed,
-      STDIO: CODES.inputInvalid,
-    }),
-    mutatesStore: false,
-  },
-  {
-    armId: "capability-scope-denied",
-    expectedAnswerer: BOTH_DAEMON_SEAM,
-    expectedCode: CODES.capabilityDenied,
-    mutatesStore: false,
-  },
-  {
-    armId: "unsupported-method",
-    expectedAnswerer: BOTH_SDK,
-    expectedCode: null,
-    mutatesStore: false,
-  },
-  {
-    armId: "truncation-disconnect",
-    expectedAnswerer: BOTH_ADAPTER_DECODE,
-    expectedCode: null,
-    mutatesStore: false,
-  },
-  {
-    armId: "replay-conflict",
-    expectedAnswerer: BOTH_DAEMON_SEAM,
-    expectedCode: CODES.commandIdReused,
-    mutatesStore: false,
-  },
+  arm("accepted-control", at("DAEMON_SEAM", "DAEMON_SEAM"), "EFFECTS_COMMITTED"),
+  arm("malformed-envelope", at("ADAPTER_DECODE", "ADAPTER_DECODE"), CODES.inputInvalid),
+  arm("unknown-tool-label", at("ADAPTER_DECODE", "ADAPTER_DECODE"), CODES.inputInvalid),
+  arm("wrong-credential", at("ADAPTER_AUTH", "HTTP_SESSION_SCREEN"), CODES.authenticationFailed),
+  // Invalid at TWO layers at once, and the per-transport difference IS the finding.
+  arm("wrong-credential-and-malformed", at("ADAPTER_DECODE", "HTTP_SESSION_SCREEN"), null,
+    Object.freeze({ HTTP: CODES.authenticationFailed, STDIO: CODES.inputInvalid })),
+  arm("capability-scope-denied", at("DAEMON_SEAM", "DAEMON_SEAM"), CODES.capabilityDenied),
+  arm("unsupported-method", at("MCP_SDK", "MCP_SDK"), null),
+  arm("truncation-disconnect", at("NO_ANSWER", "NO_ANSWER"), null),
+  arm("replay-conflict", at("DAEMON_SEAM", "DAEMON_SEAM"), CODES.commandIdReused),
 ]);
 
 export interface MatrixCase {
@@ -265,7 +194,6 @@ export const CASES: readonly MatrixCase[] = generateCases();
  * frozen vocabulary reaches the suite. Pinning still catches a production rename.
  */
 export const JETBRAINS_EXPECTED = Object.freeze({
-  "control-room-open": { code: "CONTROL_ROOM_BROWSER_FALLBACK", layer: null, outcome: "OK" },
   "control-room-assets-missing": {
     code: "CONTROL_ROOM_ASSETS_MISSING",
     layer: "CONTROL_ROOM_OPEN_PORT",
@@ -303,19 +231,11 @@ export function toolEntryExists(label: string): boolean {
   return STDIO_TOOL_INDEX.get(label) !== undefined;
 }
 
-export interface CommandArguments {
-  readonly commandId: string;
-  readonly correlationId: string;
-  readonly expectedVersion: number;
-  readonly payload: Readonly<Record<string, unknown>>;
-  readonly targetAggregateId: string;
-}
-
 export function registerArguments(
   commandId: string,
   projectId: string,
   owner = "operator-local",
-): CommandArguments {
+): Readonly<Record<string, unknown>> {
   return Object.freeze({
     commandId,
     correlationId: `corr-${commandId}`,
@@ -325,50 +245,80 @@ export function registerArguments(
   });
 }
 
-/**
- * The api range a JetBrains distribution must match. Built from the contract's
- * own pinned versions so a bumped envelope version moves both the fixture and the
- * expectation together, which is what makes the MISMATCH arm a real mismatch.
- */
-export const MATCHING_API_RANGE: DistributionApiRange = Object.freeze({
-  commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+export function jetBrainsProbeSource(): string {
+  return `
+import { createServer } from "node:http";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createJetBrainsHost } from "@moe/jetbrains-adapter/host";
+import { DISTRIBUTION_MANIFEST_VERSION, DISTRIBUTION_SIGNATURE_ALGORITHM,
+  RUNTIME_COMMAND_ENVELOPE_VERSION, RUNTIME_ERROR_REGISTRY_VERSION,
+  RUNTIME_QUERY_ENVELOPE_VERSION } from "@moe/contracts";
+
+const range = { commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
   errorRegistryVersion: RUNTIME_ERROR_REGISTRY_VERSION,
-  queryEnvelopeVersion: RUNTIME_QUERY_ENVELOPE_VERSION,
-});
+  queryEnvelopeVersion: RUNTIME_QUERY_ENVELOPE_VERSION };
+const manifest = (kind) => ({ aggregateDigest: "0".repeat(64), apiCompatibilityRange: range,
+  assets: [], buildToolVersions: {}, builtInSkills: [], componentId: "component-" + kind,
+  componentKind: kind, contractSchemaHash: "0".repeat(64), instructionTemplates: [],
+  manifestVersion: DISTRIBUTION_MANIFEST_VERSION,
+  signatureAlgorithm: DISTRIBUTION_SIGNATURE_ALGORITHM, signingKeyId: "portability-matrix-key",
+  source: { objectFormat: "sha256", sourceSha: "0".repeat(64) } });
 
-export const MISMATCHED_API_RANGE: DistributionApiRange = Object.freeze({
-  ...MATCHING_API_RANGE,
-  commandEnvelopeVersion: `${RUNTIME_COMMAND_ENVELOPE_VERSION}-not-this-build`,
-});
+// The child owns its own listener and its own free-port probe, and closes both.
+const listener = createServer((_r, response) => { response.statusCode = 401; response.end(); });
+await new Promise((done) => listener.listen(0, "127.0.0.1", done));
+const livePort = listener.address().port;
+const scratch = createServer();
+await new Promise((done) => scratch.listen(0, "127.0.0.1", done));
+const deadPort = scratch.address().port;
+await new Promise((done) => scratch.close(done));
 
-/** A shape-complete manifest: every key the gate requires, and nothing invented. */
-export function manifestFor(
-  componentKind: string,
-  apiCompatibilityRange: DistributionApiRange,
-): Readonly<Record<string, unknown>> {
-  return Object.freeze({
-    aggregateDigest: "0".repeat(64),
-    apiCompatibilityRange,
-    assets: [],
-    buildToolVersions: {},
-    builtInSkills: [],
-    componentId: `component-${componentKind.toLowerCase()}`,
-    componentKind,
-    contractSchemaHash: "0".repeat(64),
-    instructionTemplates: [],
-    manifestVersion: DISTRIBUTION_MANIFEST_VERSION,
-    signatureAlgorithm: DISTRIBUTION_SIGNATURE_ALGORITHM,
-    signingKeyId: "portability-matrix-key",
-    source: { objectFormat: "sha256", sourceSha: "0".repeat(64) },
-  });
-}
+const directory = mkdtempSync(join(tmpdir(), "jetbrains probe-"));
+const installRoot = join(directory, "install");
+mkdirSync(installRoot);
+const assetPath = join(directory, "control room.html");
+writeFileSync(assetPath, "<html></html>");
+writeFileSync(join(installRoot, "CONTROL_ROOM.json"), JSON.stringify(manifest("CONTROL_ROOM")));
+writeFileSync(join(installRoot, "DAEMON.json"), JSON.stringify(manifest("DAEMON")));
 
-/** The two kinds a JetBrains session cannot run without, drawn from the frozen set. */
-export const REQUIRED_DISTRIBUTION_KINDS: readonly string[] = Object.freeze(
-  DISTRIBUTION_COMPONENT_KINDS.filter((kind) => kind === "CONTROL_ROOM" || kind === "DAEMON"),
-);
+const openedTargets = [];
+const base = { apiCompatibilityRange: range, controlRoomAssetPath: assetPath,
+  controlRoomOpenTimeoutMs: 4000, daemonArgs: [],
+  daemonCommand: join(process.cwd(), "node_modules", ".bin",
+    process.platform === "win32" ? "moe-daemon.CMD" : "moe-daemon"),
+  endpoint: "http://127.0.0.1:" + livePort, installRoot,
+  opener: async (target) => { openedTargets.push(target); },
+  probeTimeoutMs: 3000, startConfirmIntervalMs: 100, startConfirmTimeoutMs: 1200 };
 
-/** The exact refusal the gate must produce, built by calling production itself. */
-export function expectedDistributionRefusal(): DistributionRefusal {
-  return distributionRefusal("API_RANGE_MISMATCH", "DISTRIBUTION_STARTUP");
+const report = {};
+const live = createJetBrainsHost(base);
+report.hostKeys = Object.keys(live).sort();
+report.reconnect = await live.reconnect();
+report.endpointLive = live.endpoint();
+report.openedAfterReconnect = openedTargets.length;
+live.uninstall();
+report.endpointAfterUninstall = live.endpoint();
+// A resurrected session would answer from its cached endpoint without firing the
+// opener again, so the SECOND opener call is what proves the drop was real.
+report.postUninstall = await live.start();
+report.openedAfterPostUninstall = openedTargets.length;
+report.postUninstallEndpoint = live.endpoint();
+
+const dead = createJetBrainsHost({ ...base, endpoint: "http://127.0.0.1:" + deadPort });
+report.startDead = await dead.start();
+report.endpointAfterStartRefused = dead.endpoint();
+const mismatched = createJetBrainsHost({ ...base,
+  apiCompatibilityRange: { ...range, commandEnvelopeVersion: range.commandEnvelopeVersion + "-x" } });
+report.mismatch = await mismatched.start();
+const noAssets = createJetBrainsHost({ ...base, controlRoomAssetPath: join(directory, "gone.html") });
+report.assetsMissing = await noAssets.reconnect();
+const emptyRoot = createJetBrainsHost({ ...base, installRoot: join(directory, "absent") });
+report.emptyRoot = await emptyRoot.reconnect();
+
+await new Promise((done) => listener.close(done));
+rmSync(directory, { force: true, recursive: true });
+process.stdout.write(JSON.stringify(report));
+`;
 }

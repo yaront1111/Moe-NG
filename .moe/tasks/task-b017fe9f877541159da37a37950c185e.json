@@ -9,8 +9,33 @@
     "The daemon's nextAction guidance after the second call does not claim the reason was recorded when it was not"
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "AUTHORIZE, then confirm the root cause. Read-only. NOTE ON PLAN SHAPE: every step carries empty affectedFiles because the daemon validates those paths against the moe-next root and this defect lives in D:/projexts/moes -- real paths are in prose. RAIL-2 GATE: this is a cross-repository edit (epic rail 2 pins development to moe-next). Two per-task human exceptions were granted this board for exactly this repo (task-495ad5e8, task-14ea45a5); obtain the same explicit grant for THIS task in chat, record the message id, and report_blocked if refused. THE ROOT CAUSE, measured by the architect and to re-confirm on current bytes: packages/moe-daemon/src/tools/reportBlocked.ts:13 `BLOCKABLE_STATUSES = new Set(['PLANNING','WORKING','REVIEW'])`; :91 `const flipped = BLOCKABLE_STATUSES.has(task.status)` -- BLOCKED is not in the set, so for an already-BLOCKED task `flipped` is false and the ENTIRE updateTask at :92-101 (including `blockedReason: params.reason`) is skipped, while :104 still updates the worker, :134's notification still fires, and :170-172 still return `success: true, taskStatus: 'BLOCKED'`. That is byte-for-byte the measured symptom: truthful-looking success, stale stored reason. Note the load-bearing subtlety for the fix: :98 `blockedFromStatus: task.status` is the RESTORE TARGET -- on a repeat report the task's status is already BLOCKED, so a naive re-run of the same updateTask would overwrite blockedFromStatus with 'BLOCKED' and break the unblock path's restore. The fix must preserve the original blockedFromStatus and blockedAt.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "RED. Extend packages/moe-daemon/src/tools/reportBlocked.test.ts (366 lines, existing suite) with the DoD-2 regression: drive report_blocked TWICE on one task over the real state store with two different reasons, and assert -- RED BEFORE THE FIX -- that (1) the stored blockedReason equals the SECOND reason, (2) blockedFromStatus still equals the ORIGINAL pre-block status (not 'BLOCKED'), (3) blockedAt is unchanged from the first call (the block began once; a reason correction is not a new block), (4) the second call's response carries an explicit truthful shape: alreadyBlocked: true plus reasonUpdated: true, so a caller can distinguish first-block from correction, and (5) blockedResourceId updates only when the second call supplies one, else retains the first call's value. Add one more arm: a second call with the IDENTICAL reason returns alreadyBlocked: true, reasonUpdated: false, and writes nothing (assert the store's update event count did not move) -- an idempotent repeat should not churn the activity log. Run the suite and confirm exactly these new assertions are red.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-3",
+      "description": "GREEN. Edit packages/moe-daemon/src/tools/reportBlocked.ts. THE CHOSEN FIX SHAPE (the description leaves it to the architect; both DoD options satisfied by taking the stronger one PLUS honesty): on an already-BLOCKED task, durably UPDATE blockedReason (and blockedResourceId when supplied) while PRESERVING blockedFromStatus, blockedAt and assignedWorkerId, and return `success: true, alreadyBlocked: true, reasonUpdated: true` -- the overwrite is what the caller reasonably believed was happening, and the indicator makes the repeat visible; a refusal-shaped `success: false` was rejected because the fleet's measured interim behavior shows callers treat report_blocked corrections as fire-and-forget, and failing them would strand corrections nobody retries. Implementation: branch on `task.status === 'BLOCKED'` before the flipped guard; in that branch call state.updateTask with ONLY {blockedReason, ...(resourceId supplied ? {blockedResourceId} : {})} under a distinct event type (e.g. 'TASK_BLOCK_REASON_UPDATED') so the activity log distinguishes correction from block; skip the worker re-update and the full notification fan-out on an identical-reason repeat (the idempotent arm); keep the existing behavior for PLANNING/WORKING/REVIEW byte-identical. Update the response construction so first-block returns alreadyBlocked: false and the nextAction text after a correction says the reason WAS updated -- DoD 3's guidance-truthfulness clause. Also update the tool `description` string if it promises anything the new shape contradicts.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-4",
+      "description": "Drill, gate, commit, propagate. DRILL: revert the branch so the repeat silently no-ops again (restore the original single-guard shape in a scratch patch); the step-2 regression must go RED on its stored-second-reason assertion -- proving the test pins the store, not the response. Restore exact bytes; verify with `git -C D:/projexts/moes diff --numstat` 0/0 for the drilled file. GATE: run the moe-daemon package's own test command for this file (discover it from packages/moe-daemon/package.json scripts; run foreground, capture the exit code, require a printed nonzero test count including reportBlocked.test.ts by name). COMMIT in D:/projexts/moes: only reportBlocked.ts and reportBlocked.test.ts by explicit pathspec; `git -C D:/projexts/moes status --porcelain` first, `git show --stat` after. PROPAGATION -- the lesson from the mention-substitution task applies verbatim: the RUNNING daemon is the installed JetBrains plugin copy (`~/AppData/Roaming/JetBrains/PyCharm2026.1/plugins/moe-jetbrains/daemon/index.js`), not the repo source. Record whether the daemon build/install step was run and whether the installed bundle changed (hash before/after); if the plugin was NOT rebuilt, state plainly in the completion note that the fix is committed but not yet live for the fleet, and name the rebuild as the remaining operational step -- committed-but-not-running is the green no-op this board has already been burned by. Also run `pnpm typecheck && pnpm test` from D:/projexts/moe-next and confirm `git status --porcelain` there shows nothing owned by this task, keeping the cross-repo exception demonstrably contained.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -23,5 +48,28 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:49:58.881Z",
-  "updatedAt": "2026-08-18T03:49:58.881Z"
+  "updatedAt": "2026-08-18T04:30:51.003Z",
+  "metrics": {
+    "firstClaimAt": "2026-08-18T04:28:50.954Z",
+    "plannedStepCount": 4,
+    "plannedDistinctFileCount": 0
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-08-18T04:30:48.896Z",
+  "planningNotes": {
+    "approachesConsidered": "The description offers two fix shapes and delegates the choice: (A) overwrite blockedReason on repeat, or (B) truthful no-op indicator. CHOSE A-PLUS-HONESTY: durably update the reason AND return alreadyBlocked/reasonUpdated flags. Rationale: the measured harm is a stale recipe steering the unblocker into an under-fix (the 93->94-vs-93->96 case), and the caller's mental model -- confirmed by the measured report -- is that the correction landed; making the repeat FAIL (success:false ALREADY_BLOCKED) would strand corrections because fleet callers demonstrably fire-and-forget these, and the interim add_comment workaround already exists for anyone who wants explicit control. The indicator preserves DoD 1's truthfulness requirement in both directions: first block (alreadyBlocked:false) vs correction (true), changed (reasonUpdated:true) vs identical repeat (false). THE SUBTLETY THAT MAKES A NAIVE FIX WRONG: the original updateTask writes blockedFromStatus: task.status -- correct on first block, catastrophic on repeat, because the task's status is now BLOCKED and the unblock path would restore to BLOCKED, wedging the task permanently. The correction branch therefore updates ONLY the reason (and resourceId when supplied), preserving blockedFromStatus/blockedAt/assignedWorkerId; the RED test asserts all three preserved fields. Also chose a distinct activity event (TASK_BLOCK_REASON_UPDATED) so log consumers can tell corrections from blocks, and idempotent-repeat suppression so a retried identical call does not spam #governors. Cross-repo: third per-task rail-2 exception this board; the gate-then-block pattern from tasks 495ad5e8/14ea45a5 is reused verbatim.",
+    "codebaseInsights": "Measured on current bytes in D:/projexts/moes. packages/moe-daemon/src/tools/reportBlocked.ts (187 lines): BLOCKABLE_STATUSES = {PLANNING, WORKING, REVIEW} (:13); flipped = BLOCKABLE_STATUSES.has(task.status) (:91); the guarded updateTask (:92-101) carries status/assignedWorkerId/blockedReason/blockedResourceId/blockedFromStatus/blockedAt -- ALL skipped when already BLOCKED; worker update (:104) and notification fan-out (:134, cross-posts task channel + general + #governors) run unconditionally; response (:170-174) returns success: true with taskStatus: flipped ? 'BLOCKED' : task.status -- for an already-BLOCKED task that expression coincidentally prints 'BLOCKED', which is why the response looks perfectly truthful while nothing was stored. The comment block at :82-90 explains why assignedWorkerId is passed explicitly (updateTask clears assignment on status change when omitted) -- the correction branch avoids the whole hazard by not changing status at all. Test suite reportBlocked.test.ts is 366 lines with real-state-store fixtures to extend. RUNTIME PROPAGATION: the fleet runs the installed JetBrains plugin daemon (MOE_DAEMON_PATH=...plugins/moe-jetbrains/daemon/index.js per live process command lines, measured 2026-08-17), byte-distinct from repo source until the plugin is rebuilt -- see memory gotcha-running-wrapper-is-the-installed-plugin-not-the-repo; the same applies to the daemon bundle, so the completion note must state whether the fix is LIVE or merely committed.",
+    "risks": "The one way to make this bug worse is the blockedFromStatus clobber: re-running the original updateTask body on a BLOCKED task writes blockedFromStatus='BLOCKED', and the unblock path then restores the task to BLOCKED forever -- a permanent wedge replacing a stale string. The correction branch's minimal-field update and the RED test's preserved-fields assertions exist for exactly this. Second, response truthfulness: taskStatus already coincidentally reads 'BLOCKED' on the no-op path today, which is what made the bug invisible -- the new flags must come from what was actually WRITTEN, not from the task's status. Third, notification spam: the current code fires the full three-channel fan-out on every call; keeping that for reason CORRECTIONS is defensible (governors should see corrections) but it must be suppressed for identical-reason repeats or a retrying caller floods #governors -- the idempotent arm pins this. Fourth, this daemon is live under the running fleet while being edited: the repo copy is not the executing copy, so editing is safe, but the completion claim must distinguish committed from deployed, and the rebuild decision belongs to the human. Fifth, moe-daemon's test runner is unknown to me at planning time -- the worker discovers it from package.json rather than assuming vitest; a wrong runner assumption would produce the no-count-line vacuous pass this board's gates rail forbids.",
+    "keyFiles": [
+      "D:/projexts/moes/packages/moe-daemon/src/tools/reportBlocked.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/tools/reportBlocked.test.ts",
+      "D:/projexts/moes/packages/moe-daemon/src/state/taskStore.ts",
+      "D:/projexts/moes/packages/moe-daemon/package.json"
+    ]
+  },
+  "budget": {
+    "wallClockMs": 3600000
+  },
+  "planApprovedAt": "2026-08-18T04:30:51.003Z"
 }
