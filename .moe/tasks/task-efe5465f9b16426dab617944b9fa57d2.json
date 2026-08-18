@@ -21,8 +21,9 @@
     {
       "stepId": "step-1",
       "description": "VERIFY-OR-BLOCK GATE. This is an ACCEPTANCE task, so the global rail binds hardest here: name the production capability certified and the task that shipped it, and verify it ON DISK by probe rather than by reading the gate's DoD. All four were verified during planning at HEAD 61766074 and MUST be re-confirmed before any test is written; if one regressed, block rather than narrowing the matrix.\nCAPABILITY -> SHIPPING TASK (all task-f33028b5374044bfa84deb5ed979277b, QA-approved DONE at 03:13Z):\n(a) `ls node_modules/.bin | grep moe` -> moe-daemon, moe-mcp-http, moe-mcp-stdio, each with .CMD and .ps1 siblings on Windows. The stdio shim is the subject DoD item 1 names; without it this matrix has nothing to drive.\n(b) `node -e \"console.log(require('./apps/daemon/package.json').bin)\"` -> exactly three keys including `moe-mcp-stdio: ./src/mcp-main.ts`.\n(c) `node -e \"console.log(require('./adapters/jetbrains/package.json').exports)\"` -> `{\".\": \"./src/index.ts\", \"./host\": \"./src/host/jetbrains-host.js\"}`.\n(d) `node -e \"console.log(Object.keys(require('./package.json').dependencies))\"` -> includes @moe/import, @moe/jetbrains-adapter, @moe/store. These root edges are what let a repo-root test resolve the bare specifiers.\nALSO CONFIRM THE SUBJECT SURFACES: `grep -n '^export' adapters/jetbrains/src/host/jetbrains-host.ts` -> `JetBrainsHost` is exactly `{endpoint, reconnect, start, uninstall}` (no command method, which is why DoD item 3's MCP-translation arm is UNKNOWN by construction rather than by omission); `grep -rn DISTRIBUTION_MISMATCH packages/contracts/src/distribution/distribution-contract.ts` -> :36 and :112, so that code is @moe/contracts' and must be asserted verbatim, never re-declared locally.\n`tests/integration/portability/` does not exist yet; this task creates it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-08-18T03:51:54.967Z"
     },
     {
       "stepId": "step-2",
@@ -113,7 +114,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-0b2f9c35",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -122,10 +123,17 @@
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
   "order": 12.4,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-45d62f245c4b4c35b4f4d9be387824ce",
+      "author": "worker-0b2f9c35",
+      "content": "STEP-1 VERIFY-OR-BLOCK, full measurement at HEAD 0be0763bc083bc903c6ceb329c93740ba4e7917f.\n\n## GREEN — all four gate capabilities from task-f33028b5 re-confirmed by probe\n\n(a) `ls node_modules/.bin | grep -i moe` -> moe-daemon, moe-mcp-http, moe-mcp-stdio, each with .CMD and .ps1 siblings. Stronger than existence: `node_modules/.bin/moe-mcp-stdio </dev/null` RUNS and emits the production refusal `MOE_SESSION_CREDENTIAL is unset or empty; refusing to start`. The .CMD shim carries proper Windows paths (the sh shim carries a WSL-stamped NODE_PATH `/mnt/d/...`, harmless here but worth knowing).\n(b) apps/daemon bin = exactly `{\"moe-daemon\":\"./src/daemon-main.ts\",\"moe-mcp-http\":\"./src/mcp-http/mcp-http-main.ts\",\"moe-mcp-stdio\":\"./src/mcp-main.ts\"}`.\n(c) adapters/jetbrains exports = `{\".\":\"./src/index.ts\",\"./host\":\"./src/host/jetbrains-host.js\"}`, and `require.resolve('@moe/jetbrains-adapter/host')` FROM REPO ROOT -> `D:\\projexts\\moe-next\\adapters\\jetbrains\\src\\host\\jetbrains-host.js`.\n(d) root dependencies = @moe/daemon, @moe/import, @moe/jetbrains-adapter, @moe/runner, @moe/store.\n\nSubject surfaces also confirmed: `JetBrainsHost` (jetbrains-host.ts:51) is EXACTLY `{endpoint, reconnect, start, uninstall}` — no command method, so DoD-3's UNKNOWN is structural. `DISTRIBUTION_MISMATCH` at packages/contracts/src/distribution/distribution-contract.ts:36 and :112.\n\n## RED — a fifth prerequisite the plan names, never measured at planning time\n\nPlan step-3 requires expected codes IMPORTED from `@moe/contracts` (DISTRIBUTION_MISMATCH) and `@moe/mcp` (dispatch codes); step-4 requires `toolLabelForKind` / `STDIO_TOOL_INDEX` from `@moe/mcp`. Neither package is a root dependency, so neither resolves from `tests/integration/portability/`.\n\nRUNTIME (vitest probe from tests/integration/portability, probe deleted in the same command):\n```\n\"@moe/contracts\":              \"ERR ERR_MODULE_NOT_FOUND\"\n\"@moe/mcp\":                    \"ERR ERR_MODULE_NOT_FOUND\"\n\"@moe/ide-adapter-contract\":   \"ERR ERR_MODULE_NOT_FOUND\"\n\"@moe/daemon\":                 \"OK keys=136\"\n\"@moe/store\":                  \"OK keys=52\"\n\"@moe/jetbrains-adapter/host\": \"OK keys=1\"\n```\n\nCOMPILE, using the plan's own step-10 flag set:\n```\nnpx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 \\\n  --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess \\\n  --verbatimModuleSyntax --forceConsistentCasingInFileNames <probe>.ts\nerror TS2307: Cannot find module '@moe/contracts' or its corresponding type declarations.\nerror TS2307: Cannot find module '@moe/mcp' or its corresponding type declarations.\nTSC_EXIT=1\n```\n\nNO ROOT-REACHABLE SUBSTITUTE. Probed `@moe/daemon` (all 136 exports) and `@moe/store` for `createRuntimeError`, `RUNTIME_ERROR_REGISTRY`, `RUNTIME_ERROR_CODES`, `RUNTIME_COMMAND_KINDS`, `RUNTIME_QUERY_KINDS`, `RUNTIME_COMMAND_ENVELOPE_VERSION`, `decodeRuntimeCommandEnvelopeBytes` — every one `undefined`. The daemon root publishes its own tables (HTTP_BOUNDARY_ERROR_CODES, HTTP_REFUSAL_STAGES, LISTENER_REFUSAL_CODES, DAEMON_ENTRY_REFUSAL_CODES, WORK_ERROR_CODES, WORK_LAYERS...) but not the runtime-error vocabulary the stdio/HTTP transports actually emit. packages/mcp and packages/contracts each publish only `{\".\": \"./src/index.ts\"}` — no deep-import escape, and this repo has no tsconfig `paths`.\n\nThe dependency-edge global rail allows exactly two outcomes here: name the manifest edit plus workspace install as step 1 with BOTH package.json and pnpm-lock.yaml declared owned, or block. Task rail 5 caps my owned paths at three files under tests/integration/portability, so the manifest route is not mine to take.\n\n## Correction to a load-bearing planning premise\n\nplanningNotes risks #1 and approach #2 rest on \"vitest resolves workspace packages through its own aliasing, so an in-process import succeeds even with no exports map\". That is FALSE at this HEAD — vitest v4.1.10 used real Node resolution, which is precisely why `@moe/contracts` and `@moe/mcp` fail. The child-process discipline for the JetBrains half is still correct, but for a different reason: vitest rewrites a `./x.js` specifier back to `x.ts` and Node does not (this is the reason the sibling adapters/jetbrains/src/jetbrains-runtime-entrypoint.test.ts gives). Drills 1 and 2 stay justified; the stated mechanism should be corrected so the next reviewer does not grade against a false model.\n\n## Narrowest fix, and what is already unblocked\n\nAdd `@moe/contracts` and `@moe/mcp` to root `dependencies` (workspace:*), run the workspace install, and declare `package.json` + `pnpm-lock.yaml` as owned paths of this task (or of a one-step prerequisite). That is the whole gap.\n\nWorth knowing before re-planning: the JetBrains half needs NO new edge. `@moe/jetbrains-adapter` root already exports `admitDistribution` (probed: `typeof === \"function\"`, alongside `JETBRAINS_REQUIRED_COMPONENT_KINDS` and `createJetBrainsSession`), and that function returns the real `{code:\"DISTRIBUTION_MISMATCH\", ok:false, reason, refusedBy}` produced by @moe/contracts' own `distributionRefusal`. So DoD item 3 can pin the exact code from a production surface through an edge that exists today. Only the stdio-versus-HTTP half is stranded.\n\nTwo further facts for whoever re-plans:\n- Tool labels need not come from `STDIO_TOOL_INDEX` at all: `createStdioMcpServer` serves `tools/list` from the generated entries, so the shipped executable will name its own labels over the wire. `toolLabelForKind` is `kind.replaceAll(\".\", \"_\")` over RUNTIME_COMMAND_KINDS/RUNTIME_QUERY_KINDS. The refusal CODES are the part with no wire-side source — reading a code off the wire and asserting it equals itself is a tautology, which is why the import edge is load-bearing rather than cosmetic.\n- The stdio server holds the session credential in CLOSURE and overwrites `sessionCredential`/`requestDigest`/`commandKind`/`schemaVersion` last (stdio-tool-schemas.ts ADAPTER_SUPPLIED_COMMAND_FIELDS), so plan step-6's \"absent credential / wrong credential\" arms cannot be driven per-call — they must be driven by starting the child with a different MOE_SESSION_CREDENTIAL. Capability-scope refusal is the only per-call auth arm.\n\n## Shared-directory notice (no action taken)\n\nA parallel task is actively writing in `tests/integration/portability/`: during this session `shadow-matrix-cases.ts`, then `shadow-matrix-arms.ts`, then `provider-shadow-matrix.test.ts` and a `tsconfig.json` appeared. All foreign, all untracked, none touched. That peer `tsconfig.json` has `\"include\": [\"./**/*.ts\"]`, so it would sweep this task's files in too if it survives — a re-plan should decide whether to rely on it or keep the standalone tsc leg.\n\nNo files were created or modified by this session. Every probe was deleted in the same command that ran it; `git status --porcelain tests/integration/portability/` shows only the peer's untracked directory.",
+      "timestamp": "2026-08-18T03:57:40.222Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:06:17.977Z",
-  "updatedAt": "2026-08-18T03:39:40.907Z",
+  "updatedAt": "2026-08-18T03:57:40.222Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:10:20.845Z",
     "plannedStepCount": 11,
@@ -133,7 +141,8 @@
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "architect-c9e91335"
+    "architect-c9e91335",
+    "worker-0b2f9c35"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -172,7 +181,10 @@
     ]
   },
   "budget": {
-    "wallClockMs": 9900000
+    "wallClockMs": 9900000,
+    "warnedAt": "2026-08-18T03:51:33.254Z",
+    "escalatedAt": "2026-08-18T03:51:33.254Z"
   },
-  "planApprovedAt": "2026-08-18T03:39:40.907Z"
+  "planApprovedAt": "2026-08-18T03:39:40.907Z",
+  "workStartedAt": "2026-08-18T03:51:54.967Z"
 }

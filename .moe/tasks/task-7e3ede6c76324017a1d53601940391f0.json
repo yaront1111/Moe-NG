@@ -131,7 +131,7 @@
       "completedAt": "2026-08-18T03:39:39.317Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -144,16 +144,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-17T17:34:50.008Z",
-  "updatedAt": "2026-08-18T03:41:21.583Z",
+  "updatedAt": "2026-08-18T03:55:51.453Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:11:12.882Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-08-18T03:55:51.453Z",
+    "wallClockMs": 27878571
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-3d941382"
+    "worker-3d941382",
+    "qa-12cda609"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -214,5 +217,8 @@
     "apps/daemon/src/activation/activation-attempt-reader.test.ts",
     "apps/daemon/src/activation/activation-attempt-reader.ts",
     "apps/daemon/src/activation/activation-attempt-reader.js"
-  ]
+  ],
+  "completedAt": "2026-08-18T03:55:51.453Z",
+  "reviewCompletedAt": "2026-08-18T03:55:51.453Z",
+  "reviewSummary": "APPROVED. Base-ref diff cf272f6..HEAD over owned paths: 3 files, PURE ADDITIONS, 0 deletions - reader.ts +249 (sha256 1b822a10a8f6.., 0 CR), test.ts +1327 (70 tests), .js bridge +1 (od: no BOM/CR, one trailing LF). Commit eb8f338 touches exactly those 3. activation-ledger-reader.ts still 371 lines, contracts 249, no manifest/lock/schema edit, no new *_LAYER, reader absent from index.ts.\n\nGATES RE-RUN BY ME, foreground, own exit code: focused owned vitest EXIT 0 \"Test Files 1 passed / Tests 70 passed\" (non-vacuous count). pnpm typecheck (repo) EXIT 0. daemon test / pnpm test / test:security EXIT 1 - ZERO mentions of activation-attempt-reader in any red; path-attributed intersection with owned paths EMPTY. Attribution proved: the daemon red MOVED under me - peer activation-telemetry-launch.test.ts (uncommitted, TS2554 \"Expected 1 arguments, but got 2\") CLEARED between my two runs with no change from me; only survivor is untracked foundation-context-manifest-codec.test.ts, which git rev-parse reports \"exists on disk, but not in HEAD\". Neither peer file imports the reader.\n\nFIVE INDEPENDENT DRILLS, all restored byte-identical (sha equal, HEAD unmoved). RED on the exact named test: (1) drop the activationDigest clause; (2) pages > MAX_SCAN_PAGES -> 100_000; (3) ambiguity guard -> keep first match; (4) settled !== horizon -> tautology. GREEN: candidates >= -> >, an HONEST equivalent mutant (6400 == 64*100, page ceiling fires one iteration later, identical SCAN_INCOMPLETE / served()==6400 / zero authority) disclosed at reader.ts:70 - not a defect.\n\nNot refusal-only: positiveSnapshot asserts events/decisions/horizon/db-bytes > 0 before the no-write comparison, the ABSENT case proves the same store answers BOUND, 52 hostile cases over 6 UNKNOWN codes, seed positions 99/100/101 asserted, real Worker+Atomics race. All 5 DoD items met; consumer task-00e4827dd9374ec79625351d560c82c8 recorded."
 }

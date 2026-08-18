@@ -47,6 +47,7 @@ import {
   CLAUDE_LAUNCH_SELECTION_FLAGS,
   buildProviderRunRecord,
   type ClaudeLaunchSelection,
+  type ClaudeLauncherAuthority,
   type ClaudeTelemetryHandoff,
   type ClaudeTelemetryLaunchResult,
   type ProviderUsageResult,
@@ -146,20 +147,37 @@ function request(overrides: Readonly<Record<string, unknown>> = {}): Record<stri
   };
 }
 
+/**
+ * The launch authority is MANDATORY, so every launch below supplies one. Neither
+ * capability is reachable on these arms — one refuses before any provider bytes
+ * exist, one launches no process at all and one is refused on its run identity —
+ * so both throw rather than grant, and a launch that unexpectedly reached the
+ * authority fails loudly instead of quietly proceeding on a witness's consent.
+ */
+const AUTHORITY: ClaudeLauncherAuthority = Object.freeze({
+  consumeGrantDurably(): unknown {
+    throw new Error("these arms grant no durable claim");
+  },
+  commitProcessRegistration(): unknown {
+    throw new Error("these arms register no process");
+  },
+});
+
 /** The launcher REFUSED before any provider bytes existed. */
 const refusedLaunch = async (): Promise<ClaudeTelemetryLaunchResult> =>
-  launchActivationProviderRun({ providerRun: PROVIDER_RUN, request: request(), options: OPTIONS });
+  launchActivationProviderRun(AUTHORITY,
+    { providerRun: PROVIDER_RUN, request: request(), options: OPTIONS });
 
 /** This delivery launched no process of its own. */
 const notAttemptedLaunch = async (): Promise<ClaudeTelemetryLaunchResult> =>
-  launchActivationProviderRun({
+  launchActivationProviderRun(AUTHORITY, {
     providerRun: PROVIDER_RUN,
     request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
     options: OPTIONS,
   });
 
 const malformedRefLaunch = async (): Promise<ClaudeTelemetryLaunchResult> =>
-  launchActivationProviderRun({
+  launchActivationProviderRun(AUTHORITY, {
     // A space is outside the bounded-ref alphabet /^[!-~]{1,200}$/u.
     providerRun: { ...PROVIDER_RUN, runRef: "run ref with a space" },
     request: request(),

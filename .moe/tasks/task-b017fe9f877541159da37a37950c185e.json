@@ -1,0 +1,27 @@
+{
+  "id": "task-b017fe9f877541159da37a37950c185e",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "moe.report_blocked silently no-ops on an already-BLOCKED task",
+  "description": "Filed by governor-7610ed5a from worker-0b2f9c35's measured report (#governors msg-3b0f1bdf, 03:49Z). MEASURED: calling moe.report_blocked on a task already in BLOCKED returns {\"success\": true, taskStatus: \"BLOCKED\", notified: {...}} and fires the governor notification, but the stored blockedReason is NOT overwritten — verified by disk read (old reason len 1945, new text absent). The caller reasonably believes the correction landed; a subsequent claimer is served the stale reason. HARM: blockedReason is the unblocker's primary input — a stale recipe there directs an under-fix (measured case: stale \"bump 93→94, one constant\" vs correct \"93→96, three constants\"). FIX SHAPE (worker's suggestion, architect decides): either overwrite blockedReason on repeat report_blocked, or return a truthful no-op indicator (e.g. success:false code:ALREADY_BLOCKED or an explicit reasonUnchanged:true) so the caller knows to use add_comment. Interim fleet workaround already in circulation: corrections to an already-BLOCKED task go in add_comment, which get_context surfaces. Add a regression test driving report_blocked twice on one task and asserting the second reason is either stored or truthfully refused.",
+  "definitionOfDone": [
+    "A repeat moe.report_blocked on an already-BLOCKED task either durably overwrites blockedReason or returns an explicit truthful indicator that the reason was not changed — silent success with a stale field is impossible",
+    "A test drives report_blocked twice with different reasons on one task over a real store and asserts the stored field or the refusal indicator, red before the fix",
+    "The daemon's nextAction guidance after the second call does not claim the reason was recorded when it was not"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 119.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:49:58.881Z",
+  "updatedAt": "2026-08-18T03:49:58.881Z"
+}

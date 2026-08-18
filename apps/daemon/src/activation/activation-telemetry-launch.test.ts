@@ -31,13 +31,88 @@ import {
   CLAUDE_RESULT_TELEMETRY_VERSION,
   CLAUDE_TELEMETRY_HANDOFF_VERSION,
   PROVIDER_TELEMETRY_LAYERS,
+  type ClaudeBoundLaunchResult,
   type ClaudeLaunchSelection,
+  type ClaudeLauncherAuthority,
   type ClaudeTelemetryHandoff,
-  type ClaudeTelemetryLaunchResult,
 } from "@moe/runner";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { launchActivationProviderRun } from "./activation-telemetry-launch.js";
+
+/**
+ * TRANSPARENT instrumentation, and every word of that matters. This wrapper
+ * never invents a launcher result, a handoff, an authority grant or a runner
+ * port: it calls the REAL `createTelemetryBoundClaudeLauncher`, calls the REAL
+ * function that factory returns, and returns that function's own answer by
+ * reference. All it adds is a record of WHAT was called, IN WHICH ORDER, WITH
+ * WHICH object references, and WHICH answer came back — the facts a fabricated
+ * double would make unfalsifiable. A test that stubbed the factory could not
+ * tell a production composition from a mock of one.
+ */
+const runner = vi.hoisted(() => {
+  const events: string[] = [];
+  const factoryArguments: unknown[] = [];
+  const runArguments: unknown[] = [];
+  const answers: unknown[] = [];
+  return {
+    events, factoryArguments, runArguments, answers,
+    reset(): void {
+      events.length = 0;
+      factoryArguments.length = 0;
+      runArguments.length = 0;
+      answers.length = 0;
+    },
+  };
+});
+
+vi.mock("@moe/runner", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@moe/runner")>();
+  return {
+    ...actual,
+    createTelemetryBoundClaudeLauncher: (authority: ClaudeLauncherAuthority) => {
+      runner.events.push("factory");
+      runner.factoryArguments.push(authority);
+      const bound = actual.createTelemetryBoundClaudeLauncher(authority);
+      return async (input: Parameters<typeof bound>[0]): Promise<ClaudeBoundLaunchResult> => {
+        runner.events.push("run:start");
+        runner.runArguments.push(input);
+        const answer = await bound(input);
+        runner.events.push("run:end");
+        runner.answers.push(answer);
+        return answer;
+      };
+    },
+  };
+});
+
+/**
+ * A witness, NOT a grant. Both capabilities record the reach and then throw, so
+ * a case asserting "the authority was never called" fails loudly rather than
+ * quietly succeeding, and no arm below can be answered by an authority this test
+ * pretended to satisfy. `composeDurableLauncher` READS both properties when the
+ * factory binds; reading is not calling, which is why plain methods are used and
+ * not throwing getters.
+ */
+function authorityWitness(): { readonly authority: ClaudeLauncherAuthority;
+  readonly calls: readonly string[] } {
+  const calls: string[] = [];
+  const authority: ClaudeLauncherAuthority = Object.freeze({
+    consumeGrantDurably(): unknown {
+      calls.push("consumeGrantDurably");
+      throw new Error("the authority witness grants nothing");
+    },
+    commitProcessRegistration(): unknown {
+      calls.push("commitProcessRegistration");
+      throw new Error("the authority witness registers nothing");
+    },
+  });
+  return { authority, calls };
+}
+
+beforeEach(() => {
+  runner.reset();
+});
 
 /** The five run-identity facts, exactly as the ledger's aggregate id keys them. */
 const PROVIDER_RUN = Object.freeze({
@@ -134,17 +209,343 @@ const DUPLICATE_DELIVERY = Object.freeze({
 /** win32 is pinned so the platform gate answers the same on every runner. */
 const OPTIONS = Object.freeze({ platform: "win32" });
 
-function handoffOf(result: ClaudeTelemetryLaunchResult): ClaudeTelemetryHandoff {
+function handoffOf(result: ClaudeBoundLaunchResult): ClaudeTelemetryHandoff {
   if (!result.ok) throw new Error(`expected the handoff arm, received ${result.code}/${result.layer}`);
   return result.handoff;
+}
+
+/** The raw launcher result the bound runner returns BESIDE the handoff. */
+function rawOf(result: ClaudeBoundLaunchResult): Readonly<Record<string, unknown>> {
+  if (!result.ok) throw new Error(`expected the bound arm, received ${result.code}/${result.layer}`);
+  return result.result as unknown as Readonly<Record<string, unknown>>;
 }
 
 const blind = (code: string): Readonly<Record<string, unknown>> =>
   ({ known: false, code, layer: "TELEMETRY_LAUNCH" });
 
+/**
+ * A run ref whose `runRef` is an ACCESSOR rather than a data property. It is a
+ * plain object, so `types.isProxy` says no and `snapshotRunRef` reads the five
+ * fields for real — which makes the read COUNT a measurement of how many times
+ * the identity was traversed. Exactly one read means the runner alone read it;
+ * two means something projected or spread it on the way there.
+ */
+function countingRunRef(): { readonly ref: Readonly<Record<string, unknown>>; reads(): number } {
+  let reads = 0;
+  const ref = Object.freeze({
+    provider: "claude" as const,
+    get runRef(): string {
+      reads += 1;
+      return "run:activation:counted";
+    },
+    effectIntentId: "intent:1",
+    attemptRef: "attempt:1",
+    epoch: 3,
+  });
+  return { ref, reads: () => reads };
+}
+
+describe("launchActivationProviderRun authority edge", () => {
+  it("takes the authority as a separate argument and binds the real factory exactly once",
+    async () => {
+      const witness = authorityWitness();
+      const input = { providerRun: PROVIDER_RUN, request: request(), options: OPTIONS };
+      // Arity is the compiled proof that authority is MANDATORY: a defaulted or
+      // optional authority would report 1 and leave the unauthoritative route
+      // reachable from every existing call site.
+      expect(launchActivationProviderRun.length).toBe(2);
+      const answer = await launchActivationProviderRun(witness.authority, input);
+      expect(runner.factoryArguments.length).toBe(1);
+      // The SAME object, not a copy, not a rebuilt authority: a daemon-side
+      // projection of the authority would satisfy toEqual and fail this.
+      expect(runner.factoryArguments[0]).toBe(witness.authority);
+      expect(runner.answers.length).toBe(1);
+      // The runner's own answer, returned untouched. A rewrap or a spread in the
+      // adapter produces an equal object and reddens exactly here.
+      expect(answer).toBe(runner.answers[0]);
+    });
+
+  it("invokes the bound runner exactly once, after the factory, forwarding unread references",
+    async () => {
+      const witness = authorityWitness();
+      const requestRecord = request();
+      await launchActivationProviderRun(witness.authority,
+        { providerRun: PROVIDER_RUN, request: requestRecord, options: OPTIONS });
+      // One physical composition, one invocation, in that order. A second
+      // invocation appends a second run:start/run:end pair and reddens here.
+      expect(runner.events).toEqual(["factory", "run:start", "run:end"]);
+      expect(runner.runArguments.length).toBe(1);
+      const forwarded = runner.runArguments[0] as Readonly<Record<string, unknown>>;
+      expect(Object.keys(forwarded).sort()).toEqual(["options", "providerRunRef", "request"]);
+      // BY REFERENCE. `snapshotRunRef` refuses a hostile ref before reading any
+      // property; a daemon that spread or projected these would run the caller's
+      // accessors ahead of that guard and would fail these three identities.
+      expect(forwarded.providerRunRef).toBe(PROVIDER_RUN);
+      expect(forwarded.request).toBe(requestRecord);
+      expect(forwarded.options).toBe(OPTIONS);
+    });
+
+  it("omits options entirely rather than forwarding an undefined slot", async () => {
+    const witness = authorityWitness();
+    await launchActivationProviderRun(witness.authority,
+      { providerRun: PROVIDER_RUN, request: request() });
+    const forwarded = runner.runArguments[0] as Readonly<Record<string, unknown>>;
+    expect(Object.keys(forwarded).sort()).toEqual(["providerRunRef", "request"]);
+    expect("options" in forwarded).toBe(false);
+  });
+
+  it("keeps the caller's input surface closed: no deps, launcher, exit or handoff is nameable",
+    () => {
+      const witness = authorityWitness();
+      const base = { providerRun: PROVIDER_RUN, request: request() };
+      // @ts-expect-error the authority is mandatory; the one-argument form is gone.
+      void (() => launchActivationProviderRun(base));
+      void (() => launchActivationProviderRun(witness.authority, {
+        ...base,
+        // @ts-expect-error `deps` would hand the caller the launcher's own ports.
+        options: { platform: "win32", deps: {} },
+      }));
+      // @ts-expect-error a caller-supplied launcher would replace the authority route.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, launcher: () => null }));
+      // @ts-expect-error an exit is a launcher fact; a caller cannot declare one.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, exit: { code: 0 } }));
+      // @ts-expect-error an observation is minted by the runner, never supplied.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, observation: {} }));
+      // @ts-expect-error registration is durable authority state, not caller input.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, registration: {} }));
+      // @ts-expect-error reconciliation belongs inside the request the launcher reads.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, reconciliation: {} }));
+      // @ts-expect-error the handoff is the ANSWER; a caller cannot pass one in.
+      void (() => launchActivationProviderRun(witness.authority, { ...base, handoff: {} }));
+      // The only two option keys that exist, proven positively so the fixtures
+      // above cannot pass by the whole options slot being unrepresentable.
+      const controller = new AbortController();
+      void (() => launchActivationProviderRun(witness.authority,
+        { ...base, options: { platform: "win32", signal: controller.signal } }));
+      expect(witness.calls).toEqual([]);
+    });
+});
+
+describe("launchActivationProviderRun real bound results", () => {
+  it("returns the raw EXIT_BEFORE_LAUNCH result beside its own blind handoff, read once",
+    async () => {
+      const witness = authorityWitness();
+      const identity = countingRunRef();
+      const answer = await launchActivationProviderRun(witness.authority, {
+        providerRun: identity.ref as never,
+        request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
+        options: OPTIONS,
+      });
+      // The bound arm carries BOTH, out of ONE launch.
+      expect(answer.ok).toBe(true);
+      if (!answer.ok) throw new Error(`expected the bound arm, received ${answer.code}`);
+      expect(Object.keys(answer).sort()).toEqual(["handoff", "ok", "result"]);
+      expect(Object.isFrozen(answer)).toBe(true);
+      const raw = rawOf(answer);
+      // The LAUNCHER's own truth, which the handoff alone cannot express: this
+      // arm proves no process started, and says so with code and layer null.
+      expect(raw.kind).toBe("EXIT_BEFORE_LAUNCH");
+      expect(raw.launched).toBe(false);
+      expect(raw.truthClass).toBe("PROVEN");
+      expect(raw.code).toBeNull();
+      expect(raw.layer).toBeNull();
+      // SAME capture: the handoff is derived from that exact result, not from a
+      // second launch, so the two agree field for field.
+      expect(answer.handoff.launch.kind).toBe(raw.kind);
+      expect(answer.handoff.launch.truthClass).toBe(raw.truthClass);
+      expect(answer.handoff.launch.reasonCode).toBeNull();
+      expect(answer.handoff.launch.reasonLayer).toBeNull();
+      expect(answer.handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_NOT_ATTEMPTED");
+      expect(answer.handoff.telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      expect(answer.handoff.terminal).toBe("UNKNOWN");
+      // Read ONCE, by the runner. A daemon-side spread reads it a second time.
+      expect(identity.reads()).toBe(1);
+      expect(runner.events).toEqual(["factory", "run:start", "run:end"]);
+      // PROVEN here means "proven that nothing launched", so the authority that
+      // grants and registers a real process was never reached.
+      expect(witness.calls).toEqual([]);
+    });
+
+  it("preserves the launcher's own refusal code beside the telemetry layer's, unmerged",
+    async () => {
+      const witness = authorityWitness();
+      const answer = await launchActivationProviderRun(witness.authority,
+        { providerRun: PROVIDER_RUN, request: request(), options: OPTIONS });
+      const raw = rawOf(answer);
+      // The LAUNCHER refused, at its own layer, with its own code.
+      expect(raw.kind).toBe("REFUSED");
+      expect(raw.code).toBe("CLAUDE_LAUNCH_MODEL_MISMATCH");
+      expect(raw.layer).toBe("TELEMETRY_CONFIGURATION");
+      expect(raw.truthClass).toBe("UNKNOWN");
+      const handoff = handoffOf(answer);
+      // The TELEMETRY layer refused separately, and neither restamped the other.
+      expect(handoff.telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_REFUSED");
+      expect(handoff.telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      expect(handoff.launch.reasonCode).toBe(raw.code);
+      expect(handoff.launch.reasonLayer).toBe(raw.layer);
+      expect(handoff.telemetryRefusal?.code).not.toBe(handoff.launch.reasonCode);
+      expect(handoff.telemetryRefusal?.layer).not.toBe(handoff.launch.reasonLayer);
+      // An unmeasured quantity is UNKNOWN carrying its code, never a zero.
+      expect(handoff.tokens.inputTokens).toEqual(
+        { known: false, code: "TELEMETRY_LAUNCH_REFUSED", layer: "TELEMETRY_LAUNCH" });
+      expect(handoff.tokens.inputTokens).not.toHaveProperty("value");
+      expect(witness.calls).toEqual([]);
+    });
+
+  it("forwards a runtime-cast deps object instead of stripping it, and the LAUNCHER refuses it",
+    async () => {
+      const witness = authorityWitness();
+      const dependencyCalls: string[] = [];
+      const smuggledDeps = {
+        prepareRuntime: (): unknown => {
+          dependencyCalls.push("prepareRuntime");
+          return null;
+        },
+        resolveDuplicate: (): unknown => {
+          dependencyCalls.push("resolveDuplicate");
+          return null;
+        },
+      };
+      const answer = await launchActivationProviderRun(witness.authority, {
+        providerRun: PROVIDER_RUN,
+        request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
+        // Only a runtime cast can name `deps`; the typed surface cannot.
+        options: { platform: "win32", deps: smuggledDeps } as never,
+      });
+      // FORWARDED, so the layer that owns dependency policy is the layer that
+      // answers. A daemon that silently deleted `deps` would produce a healthy
+      // NOT_ATTEMPTED handoff here and hide the smuggling attempt entirely.
+      const forwarded = runner.runArguments[0] as Readonly<Record<string, unknown>>;
+      expect((forwarded.options as Readonly<Record<string, unknown>>).deps).toBe(smuggledDeps);
+      const raw = rawOf(answer);
+      expect(raw.kind).toBe("REFUSED");
+      expect(raw.code).toBe("CLAUDE_LAUNCH_REQUEST_MALFORMED");
+      expect(raw.layer).toBe("LAUNCHER");
+      // The launcher's static message names WHICH refusal answered, separating
+      // this from the identically-coded malformed-request path.
+      expect(raw.message).toBe("the durable launcher composes its own shipped dependencies");
+      expect(handoffOf(answer).telemetryRefusal?.code).toBe("TELEMETRY_LAUNCH_REFUSED");
+      expect(handoffOf(answer).telemetryRefusal?.layer).toBe("TELEMETRY_LAUNCH");
+      // Neither the smuggled ports nor the real authority was ever honoured.
+      expect(dependencyCalls).toEqual([]);
+      expect(witness.calls).toEqual([]);
+    });
+});
+
+describe("launchActivationProviderRun hostile run identity", () => {
+  const hostile = (): readonly { readonly label: string; readonly ref: unknown }[] => {
+    const revoked = Proxy.revocable({ ...PROVIDER_RUN }, {});
+    revoked.revoke();
+    return [
+      {
+        label: "epoch-missing",
+        ref: { provider: "claude", runRef: "r", effectIntentId: "i", attemptRef: "a" },
+      },
+      { label: "epoch-fractional", ref: { ...PROVIDER_RUN, epoch: 1.5 } },
+      { label: "epoch-negative", ref: { ...PROVIDER_RUN, epoch: -1 } },
+      { label: "epoch-text", ref: { ...PROVIDER_RUN, epoch: "3" } },
+      { label: "provider-foreign", ref: { ...PROVIDER_RUN, provider: "codex" } },
+      { label: "run-ref-space", ref: { ...PROVIDER_RUN, runRef: "run ref with a space" } },
+      { label: "run-ref-overlong", ref: { ...PROVIDER_RUN, runRef: "r".repeat(201) } },
+      { label: "run-ref-empty", ref: { ...PROVIDER_RUN, runRef: "" } },
+      { label: "attempt-ref-nonstring", ref: { ...PROVIDER_RUN, attemptRef: 7 } },
+      {
+        label: "accessor-invalid",
+        ref: {
+          provider: "claude", effectIntentId: "i", attemptRef: "a", epoch: 3,
+          get runRef(): unknown {
+            return null;
+          },
+        },
+      },
+      {
+        label: "proxy-throwing",
+        ref: new Proxy({ ...PROVIDER_RUN }, {
+          get(): never {
+            throw new Error("the trap must never run");
+          },
+        }),
+      },
+      { label: "proxy-revoked", ref: revoked.proxy },
+      { label: "not-an-object", ref: "run:activation:1" },
+      { label: "null", ref: null },
+    ];
+  };
+
+  it("generates a labelled matrix of distinct hostile identities", () => {
+    const cases = hostile();
+    // A sweep that silently produced nothing would pass every assertion below
+    // it, so the generated count is pinned exactly and the labels must be unique.
+    expect(cases.length).toBe(14);
+    expect(new Set(cases.map((entry) => entry.label)).size).toBe(cases.length);
+  });
+
+  it.each(hostile())(
+    "refuses $label at TELEMETRY_INPUT before the authority, the request or any process",
+    async ({ ref }) => {
+      const witness = authorityWitness();
+      const requestReads: string[] = [];
+      // The request's own getters are the tripwire: had anything read the
+      // request before the identity was judged, the refusing layer would move.
+      const hostileRequest = {
+        get argv(): unknown {
+          requestReads.push("argv");
+          return [];
+        },
+        get claim(): unknown {
+          requestReads.push("claim");
+          return CLAIM;
+        },
+      };
+      const answer = await launchActivationProviderRun(witness.authority,
+        { providerRun: ref as never, request: hostileRequest, options: OPTIONS });
+      expect(answer.ok).toBe(false);
+      if (answer.ok) throw new Error("a malformed run ref must not produce a bound result");
+      expect(answer.code).toBe("TELEMETRY_RUN_REF_MALFORMED");
+      expect(answer.layer).toBe("TELEMETRY_INPUT");
+      expect(PROVIDER_TELEMETRY_LAYERS).toContain(answer.layer);
+      // No result, no handoff, no authority, no request read: refused first.
+      expect(answer).not.toHaveProperty("result");
+      expect(answer).not.toHaveProperty("handoff");
+      expect(witness.calls).toEqual([]);
+      expect(requestReads).toEqual([]);
+      // The factory still bound once; only the RUN was refused before launching.
+      expect(runner.events).toEqual(["factory", "run:start", "run:end"]);
+    });
+
+  it("leaves smuggled result and handoff getters on the input unread", async () => {
+    const witness = authorityWitness();
+    const smuggled: string[] = [];
+    const input = {
+      providerRun: PROVIDER_RUN,
+      request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
+      options: OPTIONS,
+      get authority(): unknown {
+        smuggled.push("authority");
+        return witness.authority;
+      },
+      get result(): unknown {
+        smuggled.push("result");
+        return { kind: "OBSERVED" };
+      },
+      get handoff(): unknown {
+        smuggled.push("handoff");
+        return { terminal: "COMPLETED" };
+      },
+    };
+    const answer = await launchActivationProviderRun(witness.authority, input as never);
+    // Only the three real keys are read off the caller's input; a smuggled
+    // observation never becomes one.
+    expect(smuggled).toEqual([]);
+    expect(handoffOf(answer).terminal).toBe("UNKNOWN");
+    expect(rawOf(answer).kind).toBe("EXIT_BEFORE_LAUNCH");
+  });
+});
+
 describe("launchActivationProviderRun", () => {
   it("refuses a malformed run ref at TELEMETRY_INPUT and launches nothing", async () => {
-    const result = await launchActivationProviderRun({
+    const witness = authorityWitness();
+    const result = await launchActivationProviderRun(witness.authority, {
       // A space is outside the bounded-ref alphabet /^[!-~]{1,200}$/u.
       providerRun: { ...PROVIDER_RUN, runRef: "run ref with a space" },
       request: request(),
@@ -158,7 +559,7 @@ describe("launchActivationProviderRun", () => {
   });
 
   it("reports a REFUSED launch as a blind handoff, never as an observation", async () => {
-    const handoff = handoffOf(await launchActivationProviderRun({
+    const handoff = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
       providerRun: PROVIDER_RUN, request: request(), options: OPTIONS,
     }));
     // The trap this case exists for: the arm is ok:true.
@@ -177,12 +578,13 @@ describe("launchActivationProviderRun", () => {
   });
 
   it("reports a delivery that launched nothing as NOT_ATTEMPTED, distinct from REFUSED", async () => {
-    const notAttempted = handoffOf(await launchActivationProviderRun({
-      providerRun: PROVIDER_RUN,
-      request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
-      options: OPTIONS,
-    }));
-    const refused = handoffOf(await launchActivationProviderRun({
+    const notAttempted = handoffOf(await launchActivationProviderRun(
+      authorityWitness().authority, {
+        providerRun: PROVIDER_RUN,
+        request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
+        options: OPTIONS,
+      }));
+    const refused = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
       providerRun: PROVIDER_RUN, request: request(), options: OPTIONS,
     }));
     expect(notAttempted.telemetryRefusal).toEqual({
@@ -206,7 +608,7 @@ describe("launchActivationProviderRun", () => {
   });
 
   it("returns the runner's own handoff, not a daemon-composed lookalike", async () => {
-    const handoff = handoffOf(await launchActivationProviderRun({
+    const handoff = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
       providerRun: PROVIDER_RUN,
       request: request({ duplicateDelivery: DUPLICATE_DELIVERY }),
       options: OPTIONS,
@@ -236,7 +638,7 @@ describe("launchActivationProviderRun", () => {
     ] as const;
     expect(cases.length).toBe(2);
     for (const scenario of cases) {
-      const handoff = handoffOf(await launchActivationProviderRun({
+      const handoff = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
         providerRun: PROVIDER_RUN, request: scenario.request, options: OPTIONS,
       }));
       const fact = blind(scenario.code);
@@ -266,7 +668,7 @@ describe("launchActivationProviderRun", () => {
       // by the observation discipline rather than by an earlier structural
       // guard. Planting the same names at the TOP level is covered separately
       // below, where the exact-record read refuses the whole request instead.
-      const handoff = handoffOf(await launchActivationProviderRun({
+      const handoff = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
         providerRun: PROVIDER_RUN,
         request: request({
           duplicateDelivery: DUPLICATE_DELIVERY,
@@ -307,7 +709,7 @@ describe("launchActivationProviderRun", () => {
 
   it("refuses a request that carries handoff-shaped observation fields at the top level",
     async () => {
-      const handoff = handoffOf(await launchActivationProviderRun({
+      const handoff = handoffOf(await launchActivationProviderRun(authorityWitness().authority, {
         providerRun: PROVIDER_RUN,
         request: request({
           duplicateDelivery: DUPLICATE_DELIVERY,

@@ -1,0 +1,27 @@
+{
+  "id": "task-9d5dfec6bdab4b9a996fef41b7170b94",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "wait_for_task offers work that claim_next_task refuses to a block-holding worker",
+  "description": "Filed by governor-7610ed5a from worker-0b2f9c35's measured report (#governors msg-3b0f1bdf, 03:49Z). MEASURED, twice in one session: a worker holding a BLOCKED task calls wait_for_task → hasNext:true naming a claimable CRITICAL task; then claim_next_task → hasNext:false with \"alreadyAssigned: <blocked task> ... status BLOCKED\". wait_for_task does not apply the claim-eligibility filter (caller already holds an assignment), so the prescribed wrapper loop (wait → claim on hasNext) spins indefinitely, and the two tools' nextAction hints contradict (claim says \"end session and idle\", report_blocked says \"call wait_for_task\"). FLEET HARM: claimable CRITICAL work sits in WORKING while the daemon repeatedly offers it to a worker it will refuse — a stall dressed as a busy queue; with several block-holding workers this generalizes. FIX SHAPE (architect decides): either wait_for_task applies the same eligibility predicate claim_next_task enforces (don't wake a worker for work it cannot take), or claim_next_task for a worker holding a BLOCKED task releases-and-claims / returns an actionable nextAction (e.g. \"release your blocked assignment first\" with the tool call), and the two nextAction hints are made consistent. Regression test: worker holds a BLOCKED task, a claimable task exists — assert wait_for_task and claim_next_task agree (both offer with a workable path, or both decline with the same reason).",
+  "definitionOfDone": [
+    "A worker holding a BLOCKED task is never woken by wait_for_task for work that claim_next_task will refuse it — the two tools apply one eligibility predicate",
+    "The nextAction guidance across report_blocked, wait_for_task and claim_next_task forms a workable loop for a block-holding worker (no wait→claim→refuse spin, no contradictory end-session/keep-waiting pair)",
+    "A test with a real store covers the block-holding-worker scenario and is red before the fix"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 120.9,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:50:14.657Z",
+  "updatedAt": "2026-08-18T03:50:14.657Z"
+}

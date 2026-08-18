@@ -1,0 +1,39 @@
+{
+  "id": "task-c5be7926b57c470bb979587844ff3973",
+  "epicId": "epic-bf111658f9694b558bdc5596bbf0f924",
+  "title": "Cover IMPORT_SHADOW_READ_LAYER on the security roster (entry + BEFORE/AFTER/RACE arms)",
+  "description": "Filed by governor-7610ed5a (standing authority) from worker-0b2f9c35's measured unblock spec on task-3b1cbdf9 (blockedReason at 03:41Z) — do not re-derive.\n\nTHE GAP: commit 6336047 (task-80fce1d1, daemon shadow projection adapter) declares `IMPORT_SHADOW_READ_LAYER` in apps/daemon/src/projections/import-shadow-contracts.ts but adds no roster entry and no axis coverage. `pnpm test:security` is RED: boundary-roster.security.ts AND durable-store-boundaries.security.ts fail \"scan minus roster is empty\" naming exactly `IMPORT_SHADOW_READ_LAYER@apps/daemon/src/projections/import-shadow-contracts.ts`, and \"scans exactly the roster's cardinality\" expects 93, receives 94.\n\nTHE FIX, per the recorded spec: add the roster entry for IMPORT_SHADOW_READ_LAYER; bump EXPECTED_ROSTER_SIZE 93→94 and EXPECTED_DISTRIBUTION[\"apps/daemon\"] 35→36; land one BEFORE, one AFTER, one RACE arm exercising the import-shadow reader's refusal surface (hostile store bytes / truncated payload / mid-read commit), following the codecCases template shape in the axis case tables. Board precedent: AGENT_STAFFING_LAYER→task-a46d4f99, PROVIDER_EFFECT_SETTLEMENT_LAYER→task-7c16fcbc.\n\nCONTEXT: task-3b1cbdf9 (security completeness ratchet) is fully implemented and committed at 6176607 but blocked solely on this gate; when this task lands, its gate goes green. The reader under test is task-80fce1d1's deliverable (in REVIEW at filing time) — verify it is DONE before planning arms against its surface. `pnpm test:security` runs in NO other gate, so grade with a foreground run and printed count lines.",
+  "definitionOfDone": [
+    "IMPORT_SHADOW_READ_LAYER has a hand-written roster entry with file path and axis, and both cardinality pins (EXPECTED_ROSTER_SIZE 94, EXPECTED_DISTRIBUTION apps/daemon 36) match a live scan",
+    "The axis case tables carry exactly one BEFORE, one AFTER, and one RACE arm for the import-shadow read boundary, each asserting the exact refusal code AND layer against the production reader",
+    "A mutation drill on one new arm reddens a NAMED test on its own assertion, restored byte-identically afterward",
+    "pnpm test:security exits 0 in a foreground run with a printed nonzero Test Files/Tests count line at the task's final HEAD"
+  ],
+  "taskRails": [
+    "Own only tests/security/** files needed for the roster entry and the three arms; do not modify apps/daemon/src/projections/** — the reader is task-80fce1d1's deliverable",
+    "Do not weaken the roster to subset/>= matching and do not rename constants to evade the scan regex",
+    "If task-80fce1d1 is not DONE when planning starts, verify the reader surface from its committed bytes and re-block on it by id if the surface moved"
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 118.9,
+  "comments": [
+    {
+      "id": "comment-3e0e8251ad3b46e1b818c3e04c3fc0ec",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR SCOPE EXPANSION (03:45Z, standing authority, per worker-f144c751's measured ask in msg-052394b6): this task now covers THREE constants, not one — the cardinality assertion can only go green when all three land, so one task, not three. (1) IMPORT_SHADOW_READ_LAYER (apps/daemon/src/projections/import-shadow-contracts.ts) — durable-store axis, as originally filed. (2) GRAPH_BODY_RECORD_LAYER (apps/daemon/src/planning/, task-dd4ffa0c's deliverable) — INTEGRITY axis (it is a content-identity gate). (3) ACTIVE_GRAPH_PROJECTION_LAYER (same package) — SCHEDULER-ACTIVATION axis. Each gets a roster entry + one BEFORE/AFTER/RACE arm trio against its production surface. Update the cardinality pins to the LIVE scan at planning time — the count has moved 93→94→95+ across hours; do not trust this comment's arithmetic either, re-scan. DoD and rails otherwise as written, extended per-constant. Producers to verify DONE (or grade from committed bytes): task-80fce1d1 (shadow reader, REVIEW), task-dd4ffa0c (graph projection, REVIEW). Precedent shape: a46d4f99, 7c16fcbc.",
+      "timestamp": "2026-08-18T03:45:11.748Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-08-18T03:42:43.880Z",
+  "updatedAt": "2026-08-18T03:45:11.748Z"
+}

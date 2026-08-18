@@ -119,7 +119,7 @@
     {
       "stepId": "step-7",
       "description": "Adversarial review, consumer edge, commit, gate. ATTACKER PASS: can a caller-supplied snapshot or raw content reach the durable body without passing through encodeGraphContent's success value? Can two ACTIVE revisions ever yield a snapshot instead of refusing? Can the projection return content whose re-derived hash was never checked? Does any read path append? Is any store handle left open (a held SQLite handle kills the vitest worker)? Does any refusal collapse two distinct causes into one code? Is snapshotIdentity ever equated with graphContentHash anywhere, including in a test helper? CONSUMER EDGE per the global composition rail: name the consumer tasks in the completion note -- task-c4b807784 (authenticated current-graph query) reads this projection, and task-eacea969/task-32c1ba45 consume it for transitions; all are BLOCKED, so record the ids and state plainly that no live call site exists yet. COMMIT by explicit pathspec, only the six owned paths, after `git status --porcelain` and unstaging any foreign entry; verify with `git show --stat`; if a foreign whole-tree completion already captured these bytes, do NOT amend or reset -- record the merge-base diff for QA. GATE, foreground, `&&`-chained: `pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck`. Read the OUTPUT -- a filtered leg is evidence only with a nonzero `Test Files N passed` line; `@moe/daemon` is apps/daemon and root `pnpm test` does not cover apps/**. Confirm both new test files appear by name and the hostile sweep printed a nonzero count.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-body-record.ts",
         "apps/daemon/src/planning/graph-body-record.js",
@@ -128,11 +128,21 @@
         "apps/daemon/src/planning/active-graph-projection.js",
         "apps/daemon/src/planning/active-graph-projection.test.ts"
       ],
-      "startedAt": "2026-08-18T03:39:18.686Z"
+      "modifiedFiles": [
+        "apps/daemon/src/planning/graph-body-record.ts",
+        "apps/daemon/src/planning/graph-body-record.js",
+        "apps/daemon/src/planning/graph-body-record.test.ts",
+        "apps/daemon/src/planning/active-graph-projection.ts",
+        "apps/daemon/src/planning/active-graph-projection.js",
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ],
+      "note": "STEP 7 — ATTACKER PASS RUN AS PROBES (not as reading), GATE GREEN, CONSUMERS VERIFIED. One thing went wrong at commit time and it is disclosed in full below.\n\nATTACKER PASS, each question answered by a command rather than by re-reading my own code:\n- Can raw content reach the durable body without codec output? NO. `putGraphBody` admits only a value whose `bytes` decode back to their OWN declared hash — a round trip, not a shape check. Drilled: the hand-serialised forgery is refused `GRAPH_BODY_NOT_ENCODED` and appends nothing.\n- Any local hashing/canonicalisation? NO. `grep -nE \"sha256|createHash|canonical|JSON.stringify\"` over both production sources returns only DOC COMMENTS — zero call sites. Identity comes solely from the codec.\n- Can two ACTIVE revisions yield a snapshot? NO. `length > 1` refuses `ACTIVE_GRAPH_SPLIT_BRAIN` before any body read; there is no epoch/recency tiebreak anywhere in the file.\n- Can content be returned whose hash was never re-checked? NO. The accepted path returns fields from `decoded.value`, never from the raw row, and a decoded hash unequal to the requested key refuses `GRAPH_BODY_IDENTITY_MISMATCH`.\n- Does any read path append? NO. `grep \"\\.commit(\"` -> **zero hits in the projection**, one hit in the body record and it is inside `putGraphBody`. Also asserted behaviourally on both the accepted and refused read paths.\n- Any store handle left open? NO handles are opened OR closed in production at all — `grep` for `open*`/`close(` returns nothing; the caller owns the handle. Tests close in a `finally` nested inside the temp directory's `finally`.\n- Is `snapshotIdentity` ever equated with `graphContentHash`? NO. Every non-test occurrence is a declaration or an assignment from `decoded.value.snapshotIdentity`/`body.snapshotIdentity`. The accepted control asserts they DIFFER.\n- Do two causes collapse into one code? NO. Five distinct causes, five codes, plus `sourceLayer`/`sourceCode` preserving the underlying verdict; both vocabularies are frozen and asserted exhaustively.\n\nGATE — GREEN, run foreground and `&&`-chained exactly as planned, at HEAD 9b9e44e:\n`pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck` -> **GATE_EXIT=0**, with `Test Files 129 passed (129) | Tests 2726 passed (2726)`. The count line is present and nonzero, so no leg was a vacuous filter pass. Counts rose from the 123 files / 2580 tests measured mid-task — nothing stopped being collected. `pnpm typecheck` completed every workspace project (`apps/daemon typecheck: Done`, etc.).\nBOTH NEW SUITES CONFIRMED BY NAME with `--reporter=verbose`: `Test Files 2 passed (2) | Tests 20 passed (20)`, all nine body-record cases and all eleven projection cases listed individually, including \"refuses every hostile ordering, over a sweep proven to be nonempty\".\n\n=== A FOREIGN WHOLE-TREE COMMIT CAPTURED MY BYTES. NOT REPAIRED, AS THE RAIL REQUIRES. ===\nI staged exactly my six paths (`git diff --cached --name-only` -> 6, `NO_FOREIGN_STAGED`) and ran a pathspec-scoped `git commit`. It failed `COMMIT_EXIT=1` with \"no changes added to commit\" — because **9b9e44e `feat(task-80fce1d1...): Portability: expose the daemon shadow projection adapter`, a 30-FILE whole-tree commit, had already swallowed all six of my files** along with `.moe/` board state.\nVerified rather than assumed: all six paths appear in `git show --name-only 9b9e44e`, and the COMMITTED bytes are byte-identical to the bytes I gated — `git show HEAD:<path> | sha256sum` MATCHES the working-tree hash for all six.\nPer epic rail 3 and the global hook rail I did NOT amend, did NOT reset, and did NOT create an empty commit to claim the work. There is therefore **no commit bearing this task's id**, which the rail states is never a rejection reason.\nBASE-REF DIFF FOR QA — `git diff --numstat 01820a8..HEAD -- <my six paths>` (01820a8 was HEAD when I claimed):\n```\n1    0  active-graph-projection.js        213  0  active-graph-projection.ts\n519  0  active-graph-projection.test.ts   191  0  graph-body-record.ts\n1    0  graph-body-record.js              284  0  graph-body-record.test.ts\n```\nAll additions, no deletions — this task removed nothing and touched no foreign line. `git status --porcelain -- apps/daemon/src/planning/` is EMPTY: nothing of mine is left uncommitted.\n\nCONSUMER EDGE, ids VERIFIED on disk rather than copied from the plan (the plan wrote \"task-c4b807784\", nine hex chars, which matches nothing):\n- task-c4b807784f434b05b34ea62207ea34f8 — BLOCKED — Graph Beta: authenticated current-graph query (reads this projection)\n- task-eacea969d636420b8f5c47304039e056 — BLOCKED — Graph Beta: atomic active-graph transition service\n- task-32c1ba453469448d87bf0925b3590657 — BLOCKED — Graph Beta: durable supersession preparation generation\nAll three are BLOCKED, so I state plainly: **no live production call site exists yet.** This satisfies the composition rail by route (a), naming the consumer tasks, which is the only route available since this task",
+      "startedAt": "2026-08-18T03:39:18.686Z",
+      "completedAt": "2026-08-18T03:42:18.074Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-f144c751",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-12cda609",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -151,16 +161,17 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:45:45.041Z",
-  "updatedAt": "2026-08-18T03:39:18.686Z",
+  "updatedAt": "2026-08-18T03:56:26.392Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:11:17.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-12cda609"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -175,7 +186,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:06:24.734Z",
@@ -199,5 +211,20 @@
     "escalatedAt": "2026-08-18T03:21:25.303Z"
   },
   "planApprovedAt": "2026-08-18T03:06:26.815Z",
-  "workStartedAt": "2026-08-18T03:21:34.494Z"
+  "workStartedAt": "2026-08-18T03:21:34.494Z",
+  "reviewStartedAt": "2026-08-18T03:43:29.332Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon typecheck && pnpm --filter @moe/daemon test && pnpm typecheck",
+    "exitCode": 0,
+    "outputTail": "$ tsc --project tsconfig.json\n$ vitest run --root . --config package.json src\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n Test Files  129 passed (129)\n      Tests  2726 passed (2726)\n   Duration  17.13s\nGATE_EXIT=0\napps/control-room typecheck: Done\npackages/runner typecheck: Done\napps/daemon typecheck: Done\n\nRun fresh at HEAD 9b9e44e. Nonzero count line present, so no leg was a vacuous filter pass; counts rose from the 123 files / 2580 tests measured mid-task. Both new suites confirmed by name with --reporter=verbose: Test Files 2 passed (2) | Tests 20 passed (20).",
+    "reportedAt": "2026-08-18T03:43:29.332Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/planning/graph-body-record.test.ts",
+    "apps/daemon/src/planning/graph-body-record.ts",
+    "apps/daemon/src/planning/graph-body-record.js",
+    "apps/daemon/src/planning/active-graph-projection.test.ts",
+    "apps/daemon/src/planning/active-graph-projection.ts",
+    "apps/daemon/src/planning/active-graph-projection.js"
+  ]
 }

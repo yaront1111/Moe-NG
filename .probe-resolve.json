@@ -1,0 +1,8 @@
+{
+ "@moe/mcp": "ERR ERR_MODULE_NOT_FOUND",
+ "@moe/contracts": "ERR ERR_MODULE_NOT_FOUND",
+ "@moe/daemon": "OK keys=136",
+ "@moe/store": "OK keys=52",
+ "@moe/jetbrains-adapter/host": "OK keys=1",
+ "@moe/ide-adapter-contract": "ERR ERR_MODULE_NOT_FOUND"
+}

@@ -19,12 +19,12 @@
     "Own only the projection matrix test and at most two focused fixture/helper files under tests/integration/portability."
   ],
   "implementationPlan": [],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promotion under the human's standing unstall directive: worker-filed prerequisite (portability shadow matrix), BACKLOG was create_task default, not triage.",
+  "reopenReason": "Governor promotion (standing authority): both recorded gates are DONE — task-9745cd06 (domain schema stamp) and task-80fce1d1 (daemon shadow projection adapter, QA-approved 03:47Z). Planning architect: the adapter answers IMPORT_SHADOW_ABSENT in production until the writer task-6d319381 lands (in flight) — plan this matrix against seeded stores per the adapter suite's pattern, and treat task-22cfca91's vacuous-green hazard note (comment-6d69d377) as binding context.",
   "createdBy": "WORKER",
   "parentTaskId": "task-22cfca91c5134b24aaf3e5734444fb93",
   "priority": "HIGH",
@@ -32,17 +32,17 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:35.974Z",
-  "updatedAt": "2026-08-17T20:03:33.027Z",
+  "updatedAt": "2026-08-18T03:47:33.181Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:02:30.952Z"
   },
   "contextFetchedBy": [
     "architect-f956ffe1"
   ],
-  "blockedReason": "Fresh Moe status measurement shows the task's explicit hard dependency task-80fce1d1d625453098bd526d61c5ddb8 is BLOCKED and therefore its public daemon shadow adapter does not exist yet. That adapter is itself blocked on task-9745cd06b8004f44af4128f69a251860, now WORKING, which must stamp the exact outer import-event domain schema before the adapter can fail closed. The matrix is an acceptance/proof task and cannot truthfully construct the current ShadowProjection, deep-import a future reader, or substitute BoardProjection/WorkClaimLedger. Reopen only after task-9745 is DONE and task-80fce1 is DONE; then re-measure the public daemon root export and plan the copied-project corpus against that real production adapter.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-08-17T20:03:08.638Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorHandoffs": [
     {
       "whatIsDone": "Re-measured prerequisite statuses, confirmed task-80fce1 is BLOCKED on WORKING task-9745, reported this task BLOCKED, and wrote Serena handoff memory.",

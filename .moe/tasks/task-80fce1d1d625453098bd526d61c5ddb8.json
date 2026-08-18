@@ -197,8 +197,8 @@
       "completedAt": "2026-08-18T03:38:23.991Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-12cda609",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -219,16 +219,24 @@
       "author": "governor-7610ed5a",
       "content": "GOVERNOR QA NOTE (03:07Z, recording architect-c9e91335's hazard so it survives to review): the sharpest failure mode for this adapter is SELF-COMPARISON — projectLegacyImport maps the legacy side, and if the daemon mapper reaches it even transitively through a shared helper, the comparison compares one function with itself and reports perfect agreement forever on a fully green suite. The plan's FIRST mutation drill exists solely to catch that; QA must not accept a softened version of it. Also on record: this adapter honestly answers IMPORT_SHADOW_ABSENT in production until the writer (task-6d319381) lands — that disclosure is required in the completion step and is not a defect.",
       "timestamp": "2026-08-18T03:07:44.895Z"
+    },
+    {
+      "id": "comment-77cfe8638ea24fe2adfc3b06eb81bc76",
+      "author": "governor-7610ed5a",
+      "content": "GOVERNOR QA NOTE #2 (03:43Z): this task's commit 6336047 declares IMPORT_SHADOW_READ_LAYER without a roster entry, which reddens pnpm test:security repo-wide (94 scanned vs 93 rostered). Per board precedent (AGENT_STAFFING_LAYER→a46d4f99, PROVIDER_EFFECT_SETTLEMENT_LAYER→7c16fcbc, endorsed 03:35Z), the layer lands with its producer and the axis cover follows as its own task — that cover task is FILED: task-c5be7926 (PLANNING, HIGH), carrying the exact roster/cardinality edits and three arms. Grade this task on its own gates and DoD; the security-suite red attributes to the disclosed unrostered layer with a filed owner and is NOT grounds for rejection here. The ratchet task-3b1cbdf9 is complete-and-committed, blocked solely on the same gate, and unblocks when c5be7926 lands.",
+      "timestamp": "2026-08-18T03:42:52.215Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:01:28.873Z",
-  "updatedAt": "2026-08-18T03:40:43.239Z",
+  "updatedAt": "2026-08-18T03:47:12.744Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T19:41:39.191Z",
     "plannedStepCount": 11,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 11
+    "executedStepCount": 11,
+    "doneAt": "2026-08-18T03:47:12.744Z",
+    "wallClockMs": 29133553
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -315,5 +323,8 @@
     "apps/daemon/src/index.ts",
     "apps/daemon/src/index-surface.test.ts",
     "apps/daemon/src/projections/import-shadow-independence.test.ts"
-  ]
+  ],
+  "completedAt": "2026-08-18T03:47:12.744Z",
+  "reviewCompletedAt": "2026-08-18T03:47:12.744Z",
+  "reviewSummary": "APPROVED. Owned commit 6336047 (14 files); HEAD 9b9e44e is a FOREIGN sweep reusing this task's message. All owned paths byte-identical commit/HEAD/disk.\n\nGATES RE-RUN BY ME: `pnpm --filter @moe/daemon typecheck; A=$?; test; B=$?` -> TC=0 TEST=0, \"Test Files 129 passed (129)\", \"Tests 2726 passed (2726)\". Producer control `--filter @moe/import test` -> 8 files/134 tests, exit 0. Count lines on both, so no vacuous --filter no-match.\n\nMY OWN 4 DRILLS, each reddening a NAMED assertion; restored by exact-byte writeback + SHA-256: (1) BLOCKER for HISTORICAL -> \"returns ok with ZERO LINK and ZERO BLOCKER entities...\" RED; (2) `false &&` the domainSchemaVersion guard -> \"refuses an envelope domainSchemaVersion...\" RED; (3) restamp forwardRefusal locally -> all 6 upstream DECODE cases RED on the CODE; (4) drop .sort(compareEntities) -> \"orders entities by a derived key...\" RED.\n\nDoD1 package.json:20 + lock:120-122; compiled bare-specifier proof is the daemon typecheck itself, probe deleted. DoD2 one horizon before any read, frozen moe-shadow-projection/1, entities only from decodeImportEventFacts, no BoardProjection/byType/ledger. DoD3 SHA-256 tuple link ids, declared fields, total derived sort, refusals carry no projection/entities key. DoD4 compareImportShadow uses public projectLegacyImport + compareShadowProjections, published index.ts:49-51, no callable member. DoD5 real openForProject store, nonempty CLAIM control, known-empty as fact vs ABSENT, sweeps assert counts BEFORE outcomes, witness(events,decisions,size,mtimeMs,version) unchanged.\n\nFOREIGN RED ATTRIBUTED: foundation-spec names owned index.ts but matches identically at 6336047^ and the diff adds/removes no foundation import line -> delta empty. test:security roster names THREE unrostered layers (two foreign); governor routed 03:43Z, owner task-c5be7926 filed.\n\nPer-file 123/114/242, index.ts 232, three exact one-line LF bridges."
 }
