@@ -99,6 +99,15 @@ import {
   decodeProjectConfigurationManifestBytes, encodeProjectConfigurationManifest,
 } from "../../packages/core/src/index.js";
 import {
+  ACCEPTANCE_CONTRACT_LAYERS,
+  type AcceptanceContract,
+} from "../../packages/core/src/planning/acceptance-contract.js";
+import {
+  createAcceptanceContract,
+  decodeAcceptanceContractBytes,
+  encodeAcceptanceContract,
+} from "../../packages/core/src/planning/acceptance-contract-codec.js";
+import {
   SESSION_AUTH_LAYERS, authenticateSession,
 } from "../../packages/core/src/identity/authenticate-session.js";
 import type {
@@ -150,6 +159,9 @@ export interface RefusalCase extends CaseBase {
 
 export interface RaceCase extends CaseBase {
   readonly arm: "RACE";
+  /** Optional exact tuples for race legs whose production refusals are deterministic. */
+  readonly expectLeft?: RefusalExpectation;
+  readonly expectRight?: RefusalExpectation;
   run(): Promise<RaceOutcome<unknown, unknown>>;
 }
 
@@ -188,6 +200,15 @@ const racing = (
   constant: string, name: string,
   left: () => Promise<unknown>, right: () => Promise<unknown>,
 ): RaceCase => ({ arm: "RACE", constant, name, run: () => probeRacing(RACE_BOUND, left, right) });
+
+const racingExactly = (
+  constant: string, name: string,
+  expectLeft: RefusalExpectation, expectRight: RefusalExpectation,
+  left: () => Promise<unknown>, right: () => Promise<unknown>,
+): RaceCase => ({
+  arm: "RACE", constant, expectLeft, expectRight, name,
+  run: () => probeRacing(RACE_BOUND, left, right),
+});
 
 /**
  * Projects a production refusal that spells its layer `refusedBy` onto the helper's shape.
@@ -298,6 +319,120 @@ const codecCases: readonly HostileCase[] = [
     async () => decodeProjectConfigurationManifestBytes(
       utf8.encode(`{"projectId":"${CONFIG_PROJECT}","projectId":"other"}`),
     ),
+  ),
+];
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE_CONTRACT_LAYERS — @moe/core's canonical criteria-body codec.
+// ---------------------------------------------------------------------------
+
+const ACCEPTANCE = ACCEPTANCE_CONTRACT_LAYERS;
+
+function acceptanceDraft(tag: string): Record<string, unknown> {
+  return {
+    applicability: {
+      graphContentHash: "a".repeat(64), graphRevisionRef: "graph-revision-security",
+      nodeIds: ["node-security"], nodeKind: "LEAF",
+    },
+    authorRef: "principal-security", contractId: "acceptance-security",
+    obligations: [{
+      criterionId: "criterion-security",
+      evidenceRequirements: [{
+        evidenceRef: "artifact-security", kind: "ARTIFACT",
+        requirementId: "requirement-security",
+      }],
+      statement: `Criterion ${tag} remains satisfied.`,
+      verificationRecipeRefs: ["recipe-security"],
+    }],
+  };
+}
+
+/** Mints both the digest and bytes through production; no test helper can bless either. */
+function sealedAcceptance(tag: string): {
+  readonly bytes: Uint8Array;
+  readonly contract: AcceptanceContract;
+} {
+  const created = createAcceptanceContract(acceptanceDraft(tag));
+  if (!created.ok) {
+    throw new Error(`AcceptanceContract create refused: ${created.code}@${created.layer}`);
+  }
+  const encoded = encodeAcceptanceContract(created.contract);
+  if (!encoded.ok) {
+    throw new Error(`AcceptanceContract encode refused: ${encoded.code}@${encoded.layer}`);
+  }
+  return { bytes: encoded.bytes, contract: created.contract };
+}
+
+function forgedAcceptanceContract(): AcceptanceContract {
+  const donor = sealedAcceptance("donor").contract;
+  const carrier = sealedAcceptance("carrier").contract;
+  return { ...carrier, criteriaDigest: donor.criteriaDigest };
+}
+
+/** Same valid contract and digest, but a spelling production never emits. */
+function reorderedAcceptanceBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedAcceptance("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** Duplicate a digest key in production-minted bytes; JSON.parse alone would hide this. */
+function duplicateAcceptanceKeyBytes(): Uint8Array {
+  const source = decoder.decode(sealedAcceptance("canonical").bytes);
+  const duplicated = source.replace(
+    '"criteriaDigest":',
+    `"criteriaDigest":"${"0".repeat(64)}","criteriaDigest":`,
+  );
+  if (duplicated === source) throw new Error("sealed AcceptanceContract carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const acceptanceContractCases: readonly HostileCase[] = [
+  before(
+    "ACCEPTANCE_CONTRACT_LAYERS", "canonical criteria bytes truncated mid-envelope",
+    {
+      code: "ACCEPTANCE_CONTRACT_BYTES_INVALID",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CODEC"),
+    },
+    async () => decodeAcceptanceContractBytes(
+      sealedAcceptance("before").bytes.slice(0, 40),
+    ),
+  ),
+  forged(
+    "ACCEPTANCE_CONTRACT_LAYERS", "one criteria digest carried onto changed content",
+    {
+      code: "ACCEPTANCE_CONTRACT_DIGEST_MISMATCH",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_DIGEST"),
+    },
+    async () => {
+      const donor = sealedAcceptance("donor");
+      const carrier = sealedAcceptance("carrier");
+      const forgedContract = forgedAcceptanceContract();
+      return {
+        ok: donor.contract.criteriaDigest !== carrier.contract.criteriaDigest
+          && forgedContract.criteriaDigest === donor.contract.criteriaDigest
+          && forgedContract.obligations[0]?.statement === carrier.contract.obligations[0]?.statement,
+      };
+    },
+    // Admission accepts both contracts independently; the server-derived digest comparison
+    // is therefore the first guard that can answer for the combined record.
+    async () => encodeAcceptanceContract(forgedAcceptanceContract()),
+  ),
+  racingExactly(
+    "ACCEPTANCE_CONTRACT_LAYERS", "a re-spelled body races a duplicated digest key",
+    {
+      code: "ACCEPTANCE_CONTRACT_NONCANONICAL",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CANONICALIZATION"),
+    },
+    {
+      code: "ACCEPTANCE_CONTRACT_DUPLICATE_KEY",
+      layer: layerOf(ACCEPTANCE, "ACCEPTANCE_CONTRACT_CODEC"),
+    },
+    async () => decodeAcceptanceContractBytes(reorderedAcceptanceBytes()),
+    async () => decodeAcceptanceContractBytes(duplicateAcceptanceKeyBytes()),
   ),
 ];
 
@@ -1425,7 +1560,8 @@ const graphContentCases: readonly HostileCase[] = [
 ];
 
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
-  ...codecCases, ...contractCases, ...selectionCases, ...approvalCases, ...sessionCases,
+  ...codecCases, ...acceptanceContractCases, ...contractCases,
+  ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
   ...graphContentCases,
