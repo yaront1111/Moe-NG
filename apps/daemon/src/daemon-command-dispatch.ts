@@ -1,3 +1,5 @@
+import { DurableStoreError, IdempotencyConflictError } from "@moe/store";
+
 import type { ActivationIngressOutcome } from "./activation/activation-ingress-contracts.js";
 import type { ServiceOutcome } from "./bootstrap/bootstrap-ledger.js";
 import type { SessionOutcome } from "./identity/session-ledger.js";
@@ -61,4 +63,26 @@ export function refusal(
     outcome: "REFUSED",
     refusal: Object.freeze({ code, detail, httpStatus, layer }),
   } as const);
+}
+
+/**
+ * One translation of a FAILED commit, shared by the synchronous and the asynchronous
+ * decision port: a thrown refusal and a REJECTED handler promise are the same fault and
+ * may not answer differently. An error neither port understands is re-thrown rather than
+ * flattened — an unrecognised fault is not a refusal.
+ */
+export function refusalFor(error: unknown): DecisionPortResult {
+  if (error instanceof DomainRefusal) {
+    return refusal(error.code, error.httpStatus, error.detail, error.layer);
+  }
+  if (error instanceof IdempotencyConflictError) {
+    return refusal(
+      error.code, 409,
+      "same command identity with different request bytes", "DURABLE_STORE",
+    );
+  }
+  if (error instanceof DurableStoreError) {
+    return refusal(error.code, 503, error.message, "DURABLE_STORE");
+  }
+  throw error;
 }

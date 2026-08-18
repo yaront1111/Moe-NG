@@ -81,6 +81,33 @@ describe("createMcpDispatchPort", () => {
     });
   });
 
+  it("refuses an async-only kind here, because this port has no asynchronous answer", () => {
+    // MEASURED BOUNDARY, asserted rather than assumed: `StdioDispatchPort`'s
+    // `dispatchCommandBytes(bytes): Uint8Array` is declared in @moe/mcp and returned
+    // straight out of a synchronous stdio call site, so this transport cannot carry a
+    // command whose service answers with a promise. It refuses with the seam's own
+    // stable code instead of hanging or inventing a decision. The HTTP listener, whose
+    // request handler is already async, serves the same kind through the async entry.
+    const payload = {
+      activationRequestBytesBase64: "AAAA", binding: {}, graphSnapshot: {},
+      inputManifest: {}, launchTemplate: {},
+    };
+    const answer = decode(port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-mcp-foundation", commandKind: "foundation.dispatch",
+      correlationId: "corr-mcp-foundation", expectedVersion: 0, payload,
+      requestDigest: createHash("sha256")
+        .update(encoder.encode(JSON.stringify(payload))).digest("hex"),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL, targetAggregateId: PROJECT,
+    }))));
+
+    expect(answer).toMatchObject({
+      ok: false, outcome: "PORT_REFUSED",
+      refusal: { code: "COMMAND_ASYNC_ENTRY_REQUIRED", layer: "DAEMON_COMMAND_SEAM" },
+      stage: "DISPATCH",
+    });
+  });
+
   it("serves events.read as the SAME wire frame the HTTP listener serves, bigint and all", () => {
     // The committed ProjectRegistered above must come back as a serialisable PAGE.
     // The store's globalPosition is a bigint; the raw store page cannot cross

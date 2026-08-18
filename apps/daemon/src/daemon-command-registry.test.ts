@@ -10,7 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
-import { handleCommandRequest } from "./http/http-adapter.js";
+import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { readSessionLedger } from "./identity/session-read-model.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
@@ -25,6 +25,8 @@ import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js"
  */
 interface Row {
   readonly agent: readonly string[];
+  /** Served only on the asynchronous entry: its service returns a promise. */
+  readonly asyncOnly?: true;
   readonly capability: string;
   readonly code: string;
   readonly kind: RuntimeCommandKind;
@@ -52,6 +54,15 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
+  // An empty payload carries no base64 blob, so the seam materializes no bytes and the
+  // attempt codec's OWN refusal answers — the transport mints no code of its own.
+  { agent: [WORK], asyncOnly: true, capability: WORK,
+    code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", kind: "foundation.dispatch",
+    layer: "DAEMON_FOUNDATION_ATTEMPT",
+    payloadKeys: [
+      "activationRequestBytesBase64", "binding", "graphSnapshot", "inputManifest",
+      "launchTemplate",
+    ] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
@@ -118,7 +129,7 @@ const ROWS: readonly Row[] = [
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
-  "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
+  "foundation.dispatch", "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -180,6 +191,25 @@ function send(
   });
 }
 
+/** The same request, on the asynchronous entry: an async-only kind has no answer on the
+ *  synchronous one, and every other kind is served identically by both. */
+async function sendAsync(
+  commandId: string,
+  commandKind: RuntimeCommandKind,
+  payload: Readonly<Record<string, unknown>>,
+  credential: string = CREDENTIAL,
+): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
+  return await handleAsyncCommandRequest(deps, {
+    body: new TextEncoder().encode(JSON.stringify({
+      commandId, commandKind, correlationId: "corr-registry", expectedVersion: 0, payload,
+      requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential, targetAggregateId: "agg-registry",
+    })),
+    credential,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+}
+
 function openSession(
   commandId: string, sessionId: string, secret: string, capabilities: readonly string[],
 ): string {
@@ -194,18 +224,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-four characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-five characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(24);
-    expect(deps.registry.size).toBe(24);
+    expect(ROWS).toHaveLength(25);
+    expect(deps.registry.size).toBe(25);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(24);
+    expect(REGISTRATION_ORDER).toHaveLength(25);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -230,8 +260,11 @@ describe("registered command table", () => {
     });
   });
 
-  it.each(ROWS)("$kind reaches its own family handler and refuses with its code", (row) => {
-    expect(send(`cmd-empty-${row.kind}`, row.kind, {})).toMatchObject({
+  it.each(ROWS)("$kind reaches its own family handler and refuses with its code", async (row) => {
+    const answered = row.asyncOnly === true
+      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {})
+      : send(`cmd-empty-${row.kind}`, row.kind, {});
+    expect(answered).toMatchObject({
       httpStatus: 422,
       ok: false,
       outcome: "PORT_REFUSED",
@@ -376,9 +409,12 @@ describe("authorization ordering under a real session", () => {
       expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(4);
     });
 
-    it.each(ROWS)("$kind answers the non-operator session from its own layer", (row) => {
+    it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
       const gated = OPERATOR_ONLY.includes(row.kind);
-      expect(send(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential)).toMatchObject({
+      const answered = row.asyncOnly === true
+        ? await sendAsync(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential)
+        : send(`cmd-gate-sweep-${row.kind}`, row.kind, {}, sessionCredential);
+      expect(answered).toMatchObject({
         httpStatus: gated ? 403 : 422,
         outcome: "PORT_REFUSED",
         refusal: gated
@@ -489,7 +525,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(24);
+    expect(ports.registry.size).toBe(25);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });

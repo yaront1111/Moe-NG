@@ -51,6 +51,14 @@ const ROWS: readonly VocabularyRow[] = [
   // who records why an approach failed, so this is never operator-gated.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "journal.append",
     payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
+  // Its service is asynchronous, so it is wired by the registry's own branch and belongs
+  // to no family map. The base64 field is named in the allow-list or the whole request is
+  // refused: a payload key that is not listed is never trimmed.
+  { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "foundation.dispatch",
+    payloadKeys: [
+      "activationRequestBytesBase64", "binding", "graphSnapshot", "inputManifest",
+      "launchTemplate",
+    ] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -106,11 +114,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the twenty-four wired kinds in their registration order", () => {
+  it("carries exactly the twenty-five wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(24);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(24);
+    expect(ROWS).toHaveLength(25);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(25);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 

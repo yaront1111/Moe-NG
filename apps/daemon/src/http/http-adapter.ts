@@ -1,32 +1,26 @@
-import {
-  EMPTY_NEXT_ALLOWED_COMMANDS,
-  RUNTIME_ERROR_REGISTRY_VERSION,
-  createRuntimeError,
-  decodeRuntimeCommandEnvelopeBytes,
-  lookupRuntimeError,
-} from "@moe/contracts";
-import type {
-  JsonObject,
-  RuntimeCommandEnvelope,
-  RuntimeError,
-  RuntimeErrorDetails,
-} from "@moe/contracts";
+import type { RuntimeCommandEnvelope } from "@moe/contracts";
 
 import {
-  MAX_COMMAND_PAYLOAD_FIELDS,
-  WIRE_PROTOCOL_VERSION,
-} from "./http-contract.js";
+  ASYNC_ENTRY_REQUIRED_CODE,
+  ASYNC_PORT_UNAVAILABLE_CODE,
+  ASYNC_SEAM_REFUSAL_STATUS,
+  DAEMON_COMMAND_SEAM,
+} from "./http-async-contract.js";
+import { prepareCommand } from "./http-command-ingress.js";
 import type {
   AuthenticatedPrincipal,
-  Authenticator,
   CommandAdapterDeps,
   CommandRegistryEntry,
+  DecisionKey,
+  DecisionPortResult,
   HttpCommandRequest,
   HttpCommandResult,
   HttpPortRefused,
-  HttpRefusalStage,
-  HttpRefused,
 } from "./http-contract.js";
+
+/** On their original path: this module owned the gate before the ingress order moved. */
+export { authenticateHttpRequest } from "./http-command-ingress.js";
+export type { HttpAccessResult } from "./http-command-ingress.js";
 
 /**
  * The control-room command seam.
@@ -43,120 +37,27 @@ import type {
  * Authorization answers before the payload is shape-checked, and nothing consults storage
  * for the target before authorization passes, so no refusal can reveal whether the target
  * exists. Both refusals are constant values with no request-derived content.
+ *
+ * ONE SHARED CORE, TWO ENTRIES — the decision, recorded so it is not re-opened.
+ * Some services are genuinely asynchronous: `createFoundationAttemptService(...).dispatch`
+ * awaits a launch port that MUST answer with a native Promise (`contained(..., true)` in
+ * `work/foundation-attempt-service.ts` discards any non-Promise answer as `null`), so no
+ * async-to-sync adapter can exist — one would have to invent a decision before the launch
+ * resolved, which is the fabricated authority this daemon exists to refuse.
+ *
+ * So `prepareCommand` below owns the ingress ORDER and both entries call it:
+ *   - `handleCommandRequest` keeps its exact signature and stays SYNCHRONOUS. No promise,
+ *     no microtask and no added try/catch is on its path, which is what makes "every
+ *     pre-existing kind behaves identically" provable rather than argued.
+ *   - `handleAsyncCommandRequest` awaits an async commit and serves BOTH kinds of entry,
+ *     awaiting a synchronous handler unchanged.
+ * Neither entry re-checks anything `prepareCommand` already decided; two entries that each
+ * re-implemented the guard order could drift, and a drift there would move authentication
+ * relative to payload decoding.
  */
 
-const EMPTY_DETAILS: RuntimeErrorDetails = Object.freeze(
-  Object.create(null) as Record<string, boolean | number | string>,
-);
-
-const AUTHENTICATION_FAILED = createRuntimeError({ code: "AUTHENTICATION_FAILED" });
-const CAPABILITY_DENIED = createRuntimeError({ code: "CAPABILITY_DENIED" });
-const INPUT_INVALID = createRuntimeError({ code: "INPUT_INVALID" });
-const PAYLOAD_FIELDS_EXCEEDED = createRuntimeError({
-  code: "INPUT_LIMIT_EXCEEDED",
-  details: { limitName: "COMMAND_PAYLOAD_FIELDS" },
-});
-
-/**
- * `DISTRIBUTION_MISMATCH` declares a `PROJECT` lifecycle source, and `createRuntimeError`
- * fails closed to `UNKNOWN_ERROR` unless one is supplied. The seam refuses before it has
- * read any project state — that is the point of checking compatibility this early — so
- * claiming a source would invent daemon truth. Retryability, recovery and transport are
- * projected VERBATIM from the registry row because those are facts about the code;
- * `truthClass` is `OBSERVED` because the seam itself compared the two pinned versions.
- * This mirrors the same decision `client-compat.ts` made on the control-room side.
- */
-const MISMATCH_ROW = lookupRuntimeError("DISTRIBUTION_MISMATCH");
-
-const DISTRIBUTION_MISMATCH: RuntimeError = Object.freeze({
-  code: "DISTRIBUTION_MISMATCH",
-  correlationId: null,
-  details: EMPTY_DETAILS,
-  nextAllowedCommands: EMPTY_NEXT_ALLOWED_COMMANDS,
-  recoveryCategory: MISMATCH_ROW.recoveryCategory,
-  recoveryCommands: MISMATCH_ROW.recoveryCommands,
-  registryVersion: RUNTIME_ERROR_REGISTRY_VERSION,
-  retryability: MISMATCH_ROW.retryability,
-  transport: MISMATCH_ROW.transport,
-  truthClass: "OBSERVED",
-});
-
-function refuse(stage: HttpRefusalStage, error: RuntimeError): HttpRefused {
-  return Object.freeze({
-    error,
-    httpStatus: error.transport.httpStatus,
-    ok: false as const,
-    outcome: "REFUSED" as const,
-    stage,
-  });
-}
-
-export type HttpAccessResult = HttpPortRefused | HttpRefused | {
-  readonly ok: true;
-  readonly principal: AuthenticatedPrincipal;
-};
-
-/** Shared authenticate -> compatibility gate for commands and authenticated reads. */
-export function authenticateHttpRequest(
-  authenticator: Authenticator,
-  credential: string | null,
-  protocolVersion: unknown,
-): HttpAccessResult {
-  const authenticated = authenticator.authenticate(credential);
-  if (authenticated.verdict === "REFUSED") {
-    return Object.freeze({
-      httpStatus: authenticated.refusal.httpStatus,
-      ok: false as const,
-      outcome: "PORT_REFUSED" as const,
-      refusal: authenticated.refusal,
-      stage: "AUTHENTICATE" as const,
-    });
-  }
-  if (authenticated.verdict !== "AUTHENTICATED") {
-    return refuse("AUTHENTICATE", AUTHENTICATION_FAILED);
-  }
-  if (protocolVersion !== WIRE_PROTOCOL_VERSION) {
-    return refuse("COMPATIBILITY", DISTRIBUTION_MISMATCH);
-  }
-  return Object.freeze({ ok: true, principal: authenticated.principal });
-}
-
-/**
- * Field count first, then the allow-list. A payload one field over the bound is a bound
- * refusal even when every one of its keys is listed, so the two rules cannot mask each
- * other and the reason code always names the rule that actually fired.
- */
-function checkPayload(payload: JsonObject, allowed: readonly string[]): RuntimeError | null {
-  const keys = Object.keys(payload);
-  if (keys.length > MAX_COMMAND_PAYLOAD_FIELDS) return PAYLOAD_FIELDS_EXCEEDED;
-  const permitted = new Set(allowed);
-  for (const key of keys) {
-    if (!permitted.has(key)) return INPUT_INVALID;
-  }
-  return null;
-}
-
-/**
- * The durable decision owns replay. The seam hands it a commit thunk and never calls the
- * handler itself, so a replay that returns the stored decision provably runs no second
- * effect — the seam has no other path to the handler.
- */
-function dispatch(
-  deps: CommandAdapterDeps,
-  entry: CommandRegistryEntry,
-  envelope: RuntimeCommandEnvelope,
-  principal: AuthenticatedPrincipal,
-): HttpCommandResult {
-  const result = deps.decisions.decide(
-    {
-      commandId: envelope.commandId,
-      principalId: principal.principalId,
-      projectId: principal.projectId,
-    },
-    envelope.requestDigest,
-    () => entry.handler({ envelope, principal }),
-  );
-
+/** One projection of a decided command, so both entries answer in the same shape. */
+function answer(result: DecisionPortResult): HttpCommandResult {
   if (result.outcome === "REFUSED") {
     return Object.freeze({
       httpStatus: result.refusal.httpStatus,
@@ -174,6 +75,51 @@ function dispatch(
   });
 }
 
+/** The seam's own refusal, named as such: a wiring fact, never a port's answer. */
+function seamRefusal(code: string, detail: string): HttpPortRefused {
+  return Object.freeze({
+    httpStatus: ASYNC_SEAM_REFUSAL_STATUS,
+    ok: false as const,
+    outcome: "PORT_REFUSED" as const,
+    refusal: Object.freeze({
+      code,
+      detail,
+      httpStatus: ASYNC_SEAM_REFUSAL_STATUS,
+      layer: DAEMON_COMMAND_SEAM,
+    }),
+    stage: "DISPATCH" as const,
+  });
+}
+
+function decisionKey(
+  envelope: RuntimeCommandEnvelope,
+  principal: AuthenticatedPrincipal,
+): DecisionKey {
+  return {
+    commandId: envelope.commandId,
+    principalId: principal.principalId,
+    projectId: principal.projectId,
+  };
+}
+
+/**
+ * The durable decision owns replay. The seam hands it a commit thunk and never calls the
+ * handler itself, so a replay that returns the stored decision provably runs no second
+ * effect — the seam has no other path to the handler.
+ */
+function dispatch(
+  deps: CommandAdapterDeps,
+  entry: CommandRegistryEntry,
+  envelope: RuntimeCommandEnvelope,
+  principal: AuthenticatedPrincipal,
+): HttpCommandResult {
+  return answer(deps.decisions.decide(
+    decisionKey(envelope, principal),
+    envelope.requestDigest,
+    () => entry.handler({ envelope, principal }),
+  ));
+}
+
 /**
  * Handles one command request. Knows no command: everything specific arrives through the
  * injected registry, so a command seam that does not exist yet is added by registering an
@@ -183,25 +129,52 @@ export function handleCommandRequest(
   deps: CommandAdapterDeps,
   request: HttpCommandRequest,
 ): HttpCommandResult {
-  const access = authenticateHttpRequest(
-    deps.authenticator,
-    request.credential,
-    request.protocolVersion,
-  );
-  if (!access.ok) return access;
+  const prepared = prepareCommand(deps, request);
+  if (!prepared.ok) return prepared;
 
-  const decoded = decodeRuntimeCommandEnvelopeBytes(request.body);
-  if (!decoded.ok) return refuse("DECODE", decoded.error);
-
-  const entry = deps.registry.get(decoded.envelope.commandKind);
-  if (entry === undefined) return refuse("REGISTRY", INPUT_INVALID);
-
-  if (!access.principal.capabilities.includes(entry.requiredCapability)) {
-    return refuse("AUTHORIZE", CAPABILITY_DENIED);
+  // An async entry has no synchronous answer to give, so this refuses rather than
+  // handing back a promise typed as a decision.
+  if (prepared.entry.asyncHandler !== undefined) {
+    return seamRefusal(
+      ASYNC_ENTRY_REQUIRED_CODE,
+      "this command kind is served only on the asynchronous entry",
+    );
   }
 
-  const shapeError = checkPayload(decoded.envelope.payload, entry.payloadKeys);
-  if (shapeError !== null) return refuse("PAYLOAD_SHAPE", shapeError);
+  return dispatch(deps, prepared.entry, prepared.envelope, prepared.principal);
+}
 
-  return dispatch(deps, entry, decoded.envelope, access.principal);
+/**
+ * The asynchronous entry. Serves BOTH entry shapes: a synchronous handler runs through
+ * the unchanged synchronous decision port, so routing a transport here changes nothing
+ * for the kinds registered before async existed.
+ *
+ * A rejecting handler is the async path's own hazard: the synchronous port's try/catch
+ * cannot see a rejection, so the async port owns it and maps it to the same refusal
+ * shape. A crash is not a refusal.
+ */
+export async function handleAsyncCommandRequest(
+  deps: CommandAdapterDeps,
+  request: HttpCommandRequest,
+): Promise<HttpCommandResult> {
+  const prepared = prepareCommand(deps, request);
+  if (!prepared.ok) return prepared;
+
+  const { entry, envelope, principal } = prepared;
+  const asyncHandler = entry.asyncHandler;
+  if (asyncHandler === undefined) return dispatch(deps, entry, envelope, principal);
+
+  const decisions = deps.decisions;
+  if (decisions.decideAsync === undefined) {
+    return seamRefusal(
+      ASYNC_PORT_UNAVAILABLE_CODE,
+      "this decision port cannot commit an asynchronous command",
+    );
+  }
+
+  return answer(await decisions.decideAsync(
+    decisionKey(envelope, principal),
+    envelope.requestDigest,
+    async () => await asyncHandler({ envelope, principal }),
+  ));
 }

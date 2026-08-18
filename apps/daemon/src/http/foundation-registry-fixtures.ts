@@ -1,0 +1,263 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { buildProviderRuntimeObservation } from "@moe/runner";
+import type { ProviderRuntimeObservation } from "@moe/runner";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
+import { SqliteEventStore } from "@moe/store";
+
+import {
+  ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
+} from "../activation/activation-ingress-contracts.js";
+import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
+import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import type { CommandAdapterDeps, HttpCommandRequest } from "./http-contract.js";
+import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import { PRINCIPAL_ID, PROJECT_ID, seedReadyProject } from "../recovery/restore-test-harness.js";
+import { deriveDispatchAggregateId } from "../work/foundation-attempt-contracts.js";
+
+/**
+ * INPUTS ONLY for the foundation command-seam suites. Every fixture builds a store, a
+ * request or a payload; no boundary, codec or service rule is re-implemented here, so
+ * the assertions in the test files always run against production code.
+ *
+ * The activation blob below is the ingress's OWN request shape, carried verbatim: a
+ * coherent activation cannot be hand-forged (the grant id is derived from the whole
+ * successor intent), so the only way to reach the durable path is to hand production
+ * the bytes it would have accepted anyway.
+ */
+
+const encoder = new TextEncoder();
+const roots: string[] = [];
+
+export const CREDENTIAL = "foundation-operator-credential";
+export const DECIDED_AT = "2026-08-15T00:00:00.000Z";
+export const NODE_KEY = "dev-done";
+export const SESSION_ID = "session-1";
+
+const DIGEST = "a".repeat(64);
+const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64);
+const HEAD = "0".repeat(40);
+
+const LEASE_RECORD = {
+  authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",
+  leaseToken: "token-1", monotonicObservation: 500, ownerSessionRef: SESSION_ID,
+  serverWallDeadline: 1_000, state: "ACTIVE", version: 7,
+} as const;
+const LEASE_PROOF = {
+  authorityHashRef: DIGEST, epoch: 3, expectedVersion: 7, leaseToken: "token-1",
+  ownerSessionRef: SESSION_ID,
+} as const;
+const RESOURCE_ROW = {
+  capacityUnits: 1, effectIntentRef: "intent-ref-1", epoch: 1, external: false, fenceable: true,
+  resourceId: "res-1", state: "ACTIVE",
+} as const;
+const BUDGET_VIEW = {
+  accountId: "acct-1",
+  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
+  state: "OPEN", version: 2,
+} as const;
+const ADMISSION = {
+  admissionRef: "adm-1",
+  amounts: [
+    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
+    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
+    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
+    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
+    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
+  ],
+  expectedVersion: 2,
+} as const;
+const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
+const EFFECT_INTENT = {
+  aggregateId: "agg-1", desiredState: "ACTIVE", expectedGraphEpoch: 4, idempotencyKey: "idem-1",
+  inputBinding: DIGEST, intentId: "intent-1", leaseBinding: LEASE_RECORD,
+  predecessorCursor: "cursor-1", protocolVersion: "moe-effect-intent/1",
+  runtimeObservationDigest: DIGEST, state: "PENDING", version: 0,
+} as const;
+const CLAIM = {
+  claimId: "claim-1", claimedAt: DECIDED_AT, intentId: "intent-1", lockIdentity: "lock-1",
+  wrapperIdentity: "wrapper-1",
+} as const;
+const ACTIVATION_SECTION = {
+  attempt: {
+    aggregateId: "agg-1", attemptId: "attempt-1", intentId: "intent-1",
+    state: "LAUNCH_REQUESTED", version: 0,
+  },
+  claim: CLAIM, dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: LEASE_PROOF,
+  lockIdentity: "lock-1", observedGraphEpoch: 4, observedRuntimeDigest: DIGEST, tombstone: null,
+  wrapperIdentity: "wrapper-1",
+} as const;
+
+export const ACTIVATION_AGGREGATE = deriveActivationAggregateId(
+  EFFECT_INTENT.aggregateId, EFFECT_INTENT.idempotencyKey);
+export const DISPATCH_AGGREGATE = deriveDispatchAggregateId(ACTIVATION_AGGREGATE);
+
+/** The activation command the daemon's own ingress admits, as raw bytes. */
+export function activationBytes(commandId = "cmd-activation-1"): Uint8Array {
+  return encoder.encode(JSON.stringify({
+    commandId, correlationId: "corr-foundation", decidedAt: DECIDED_AT, expectedVersion: 0,
+    kind: EFFECT_ACTIVATE_COMMAND_KIND,
+    payload: structuredClone({
+      activation: ACTIVATION_SECTION,
+      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
+      effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
+      lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
+      liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
+      slot: { dimension: "default", requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1" },
+    }),
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+  }));
+}
+
+const SINGLE_NODE_GRAPH = Object.freeze({
+  completionNodeKey: NODE_KEY, edges: [], nodes: [{ executionBearing: true, nodeKey: NODE_KEY }],
+});
+
+/** Two execution-bearing nodes the scheduler still admits: the refusal must be the
+ *  foundation service's own, never a graph fault. */
+export const MULTI_NODE_GRAPH = Object.freeze({
+  completionNodeKey: NODE_KEY,
+  edges: [{ consumerNodeKey: NODE_KEY, edgeKey: "dev-e1", kind: "HARD", producerNodeKey: "dev-a" }],
+  nodes: [{ executionBearing: true, nodeKey: "dev-a" }, { executionBearing: true, nodeKey: NODE_KEY }],
+});
+
+/** A digest-bound quote from the runner's own observation builder, never hand-written. */
+function runtimeQuote(): ProviderRuntimeObservation {
+  const built = buildProviderRuntimeObservation({
+    adapterCapabilitySchemaDigest: DIGEST_B, clock: { observedAt: () => DECIDED_AT },
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
+    reportedVersion: "claude/2.0.0",
+    resolvedRuntimeClosure: [
+      { kind: "EXECUTABLE", path: "C:\\installed\\claude.exe", sha256: DIGEST_A },
+    ] as never,
+  });
+  if (!built.ok) throw new Error(`runtime quote fixture refused: ${built.code}`);
+  return built.observation;
+}
+
+const LAUNCH_TEMPLATE = Object.freeze({
+  argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
+  bootstrapCredentialDigest: DIGEST_B, cwd: "C:/work", environment: {},
+  launchSelection: {
+    concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
+    modelSnapshotEvidence: "claude-opus-5/build-2026-05-14",
+    modelSnapshotKind: "DATED_SNAPSHOT", orchestrationDigest: "3e".repeat(32),
+    policyDigest: "2d".repeat(32), profileRevisionId: "profile-revision-19",
+    provider: "claude", reasoningEffort: "high", selectedModelId: "claude-opus-5",
+  },
+  limits: { stderrBytes: 1_024, stdoutBytes: 1_024, tailBytes: 256, timeoutMs: 1_000 },
+  runtime: {
+    installedRoot: "C:\\installed", pinRoot: "C:\\pins", quotedObservation: runtimeQuote(),
+  },
+});
+
+const INPUT_MANIFEST = Object.freeze({
+  baseIdentity: HEAD,
+  entries: [
+    { byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A },
+  ],
+});
+
+export interface PayloadOverrides {
+  readonly binding?: unknown;
+  readonly bytesBase64?: unknown;
+  readonly graphSnapshot?: unknown;
+  readonly omitBytes?: boolean;
+}
+
+/** The transport payload: the activation blob travels as base64 inside the JsonObject. */
+export function dispatchPayload(
+  overrides: PayloadOverrides = {},
+): Readonly<Record<string, JsonValue>> {
+  const payload: Record<string, unknown> = {
+    binding: overrides.binding
+      ?? { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
+    graphSnapshot: overrides.graphSnapshot ?? structuredClone(SINGLE_NODE_GRAPH),
+    inputManifest: structuredClone(INPUT_MANIFEST),
+    launchTemplate: structuredClone(LAUNCH_TEMPLATE),
+  };
+  if (overrides.omitBytes !== true) {
+    payload["activationRequestBytesBase64"] = overrides.bytesBase64 === undefined
+      ? Buffer.from(activationBytes()).toString("base64")
+      : overrides.bytesBase64;
+  }
+  return payload as Readonly<Record<string, JsonValue>>;
+}
+
+export interface EnvelopeOverrides {
+  readonly commandId?: string;
+  readonly commandKind?: string;
+  readonly payload?: Readonly<Record<string, JsonValue>>;
+}
+
+export function commandRequest(overrides: EnvelopeOverrides & {
+  readonly credential?: string | null;
+} = {}): HttpCommandRequest {
+  const credential = overrides.credential === undefined ? CREDENTIAL : overrides.credential;
+  return {
+    body: encoder.encode(JSON.stringify({
+      commandId: overrides.commandId ?? "cmd-foundation-1",
+      commandKind: overrides.commandKind ?? "foundation.dispatch",
+      correlationId: "corr-foundation", expectedVersion: 0,
+      payload: overrides.payload ?? dispatchPayload(),
+      requestDigest: DIGEST, schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: credential, targetAggregateId: ACTIVATION_AGGREGATE,
+    })),
+    credential,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  };
+}
+
+export interface SeamHarness {
+  readonly close: () => void;
+  readonly deps: CommandAdapterDeps;
+  readonly storePath: string;
+}
+
+/**
+ * A REAL store behind the REAL registry: the project is seeded through production
+ * bootstrap commands and the ports come from `createStoreDependencies`, so nothing
+ * below the seam is a double.
+ */
+export function seamHarness(label: string): SeamHarness {
+  const root = mkdtempSync(join(tmpdir(), `moe-foundation-seam-${label}-`));
+  roots.push(root);
+  const storePath = join(root, "project.db");
+  // GENESIS FIRST, on a store with no history at all. `ensureGenesisRecoveryBinding`
+  // refuses to install onto a store that already carries recovery history, and a
+  // test-installed binding leaves the store under a recovery embargo that refuses every
+  // activation with RECOVERY_RECONCILIATION_REQUIRED — both measured, not assumed.
+  const provider = createStoreDependencies({
+    clock: () => DECIDED_AT,
+    credential: CREDENTIAL,
+    principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID,
+    storePath,
+  });
+  const seed = SqliteEventStore.openForProject(storePath, PROJECT_ID);
+  try {
+    seedReadyProject(seed);
+  } finally {
+    seed.close();
+  }
+  return Object.freeze({
+    close: () => {
+      provider.close();
+    },
+    deps: provider.provide(),
+    storePath,
+  });
+}
+
+/** Every scratch root this module handed out, removed together. */
+export function cleanupSeamHarnesses(): void {
+  while (roots.length > 0) {
+    const root = roots.pop();
+    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+  }
+}

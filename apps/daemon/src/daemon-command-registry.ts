@@ -1,4 +1,4 @@
-import { DurableStoreError, IdempotencyConflictError, type SqliteEventStore } from "@moe/store";
+import type { SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
 import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
@@ -8,6 +8,8 @@ import { BOOTSTRAP_SCHEMA_VERSION, type BootstrapCommandKind }
   from "./bootstrap/bootstrap-contracts.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
+import { createFoundationDispatchHandler, foundationSyncHandler }
+  from "./daemon-foundation-command.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
@@ -26,13 +28,14 @@ import { createRecoveryCompletionAuthority }
 import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
+import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { WORK_CLAIM_SCHEMA_VERSION, type WorkClaimCommandKind }
   from "./work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult }
   from "./http/http-contract.js";
-import { DomainRefusal, decisionOf, encoder, refusal } from "./daemon-command-dispatch.js";
+import { DomainRefusal, decisionOf, encoder, refusalFor } from "./daemon-command-dispatch.js";
 import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
   REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
@@ -110,7 +113,17 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
+  const dispatchFoundationAttempt = createFoundationDispatchHandler({ store });
+
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
+    // Answered first and returned whole: this kind's service is asynchronous, so it
+    // carries an async handler and none of the synchronous wiring below applies to it.
+    if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) {
+      return Object.freeze({
+        asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler, kind,
+        payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
+      });
+    }
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
     const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
@@ -205,19 +218,16 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       try {
         return Object.freeze({ decision: commit(), outcome: "DECIDED" } as const);
       } catch (error) {
-        if (error instanceof DomainRefusal) {
-          return refusal(error.code, error.httpStatus, error.detail, error.layer);
-        }
-        if (error instanceof IdempotencyConflictError) {
-          return refusal(
-            error.code, 409,
-            "same command identity with different request bytes", "DURABLE_STORE",
-          );
-        }
-        if (error instanceof DurableStoreError) {
-          return refusal(error.code, 503, error.message, "DURABLE_STORE");
-        }
-        throw error;
+        return refusalFor(error);
+      }
+    },
+    /** The async half. `await` inside the try is what makes a rejected handler promise a
+     *  refusal instead of an unhandled rejection: a crash is not a refusal. */
+    async decideAsync(_key, _requestDigest, commit): Promise<DecisionPortResult> {
+      try {
+        return Object.freeze({ decision: await commit(), outcome: "DECIDED" } as const);
+      } catch (error) {
+        return refusalFor(error);
       }
     },
   };

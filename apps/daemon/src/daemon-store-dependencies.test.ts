@@ -374,7 +374,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // The kind SET, not its size: a bare count lands every registration as an
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
-        "approval.decide", "effect.activate", "escalation.decide", "goal.close",
+        "approval.decide", "effect.activate", "escalation.decide", "foundation.dispatch",
+        "goal.close",
         "goal.create", "integration.accept_output", "journal.append",
         "plan.propose", "policy.install",
         "policy.validate", "project.activate", "project.bind_repository", "project.register",

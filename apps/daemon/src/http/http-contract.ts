@@ -13,6 +13,8 @@ import type {
   RuntimeErrorCode,
 } from "@moe/contracts";
 
+import type { AsyncCommandDecisionPort, AsyncCommandHandler } from "./http-async-contract.js";
+
 /**
  * The vocabulary of the control-room HTTP seam. Data and types only: no boundary logic
  * lives here, and nothing here knows any specific command.
@@ -151,7 +153,7 @@ export type DecisionPortResult =
  * NOT run `commit` a second time, which is what makes replay observable by state rather
  * than only by response: a double write and a correct replay produce identical responses.
  */
-export interface CommandDecisionPort {
+export interface CommandDecisionPort extends Partial<AsyncCommandDecisionPort> {
   decide(
     key: DecisionKey,
     requestDigest: string,
@@ -172,6 +174,10 @@ export type CommandHandler = (input: CommandHandlerInput) => DurableDecision;
  * cannot smuggle a field past a handler that reads it later.
  */
 export interface CommandRegistryEntry {
+  /** Present when the kind's service is genuinely asynchronous. `handler` stays REQUIRED,
+   *  so every pre-existing entry keeps its exact type; an entry carrying this one is
+   *  served by the async entry alone and refused by the sync entry. */
+  readonly asyncHandler?: AsyncCommandHandler;
   readonly handler: CommandHandler;
   readonly kind: RuntimeCommandKind;
   readonly payloadKeys: readonly string[];

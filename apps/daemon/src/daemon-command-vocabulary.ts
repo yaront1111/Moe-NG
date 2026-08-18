@@ -4,11 +4,13 @@ import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
   from "./journal/journal-contracts.js";
+import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
 import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS }
   from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
   from "./recovery/recovery-completion-digest.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
+import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
 
 /**
@@ -55,13 +57,17 @@ export const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Objec
 export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
-  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
+  | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof JOURNAL_APPEND_COMMAND_KIND
+  | typeof RECOVERY_COMPLETION_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
   if (kind === EFFECT_ACTIVATE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Dispatching the attempt an agent already holds is work authority: the human gate on
+  // this path is the launcher's own boundary admission, not a wider capability.
+  if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   // Resuming an interrupted attempt is work authority, not admin: the human-only
   // gate on this path is the runner's boundary admission, not a wider capability.
   if (kind === CONTINUATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
@@ -91,6 +97,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
     [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
     [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
+    [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
