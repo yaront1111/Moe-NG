@@ -449,37 +449,95 @@ describe("current active graph projection", () => {
     });
   });
 
-  it("refuses every hostile ordering, over a sweep proven to be nonempty", () => {
+  it("refuses every hostile ordering with its OWN code and refusing layer", () => {
     const legal = drive([
-      createOf("graph-revision-1", PRIMARY.graphContentHash), submit, approveAndActivateOf(PRIMARY.graphContentHash),
+      createOf("graph-revision-1", PRIMARY.graphContentHash), submit,
+      approveAndActivateOf(PRIMARY.graphContentHash),
     ]).events;
 
-    // Each case is ONE deliberate drift from the generated legal history.
-    const cases: readonly (readonly [string, readonly GraphRevisionEvent[]])[] = [
-      ["missing create", legal.slice(1)],
-      ["reversed", [...legal].reverse()],
+    /**
+     * Each case is ONE deliberate drift from the generated legal history, and
+     * each carries the EXACT code and refusing layer it must produce.
+     *
+     * The previous version of this sweep asserted only `ok === false` plus a
+     * layer that `refuse()` hardcodes on every path — a vacuous pair that let a
+     * real defect (a create-less history answering ACTIVE_GRAPH_ABSENT, the same
+     * answer a clean empty project gives) sit inside a green suite. Carrying the
+     * expected code per case is what makes the sweep testable at all.
+     */
+    const cases: readonly (readonly [
+      string, readonly GraphRevisionEvent[], string, string | null,
+    ])[] = [
+      ["missing create", legal.slice(1),
+        "GRAPH_REVISION_REPLAY_MISSING_CREATE", "CORE_GRAPH_REVISION_REPLAY"],
+      ["reversed", [...legal].reverse(),
+        "GRAPH_REVISION_REPLAY_MISSING_CREATE", "CORE_GRAPH_REVISION_REPLAY"],
       ["activation before submission", [legal[0], legal[2], legal[1]]
-        .filter((event): event is GraphRevisionEvent => event !== undefined)],
+        .filter((event): event is GraphRevisionEvent => event !== undefined),
+      "GRAPH_REVISION_REPLAY_VERSION_BREAK", "CORE_GRAPH_REVISION_REPLAY"],
     ];
 
     // A sweep that silently generated zero cases would pass while testing nothing.
     expect(cases.length).toBeGreaterThan(0);
     expect(cases.length).toBe(3);
+    expect(new Set(cases.map(([name]) => name)).size).toBe(cases.length);
+    // Every case must name a code the projection can actually answer with, and
+    // none may be the absent code — that is the collapse this sweep now forbids.
+    for (const [, , code] of cases) expect(code).not.toBe("ACTIVE_GRAPH_ABSENT");
 
-    for (const [name, history] of cases) {
-      withStore(`hostile-${cases.findIndex(([label]) => label === name)}`, (store) => {
+    for (const [name, history, code, sourceLayer] of cases) {
+      withStore(`hostile-${code}-${history.length}`, (store) => {
         commitEvents(store, "graph-revision-1", history);
         putGraphBody(store, PROJECT_ID, PRIMARY);
 
         const read = readCurrentActiveGraph(store, PROJECT_ID);
         expect(read.ok, `${name} was accepted`).toBe(false);
         if (read.ok) throw new Error(`${name} produced a snapshot`);
-        // Either core refused the history, or the projection found nothing ACTIVE.
-        // Both are legitimate; silently returning a graph is not.
+        expect(read.code, `${name} code`).toBe(code);
+        // WHICH layer refused, kept distinct from which layer reported. The
+        // `layer` field alone is hardcoded by refuse() and proves nothing.
+        expect(read.sourceLayer, `${name} sourceLayer`).toBe(sourceLayer);
         expect(read.layer).toBe(ACTIVE_GRAPH_PROJECTION_LAYER);
-        expect(typeof read.code).toBe("string");
       });
     }
+  });
+
+  it("distinguishes a create-less history from an empty project", () => {
+    withStore("no-create", (store) => {
+      const driven = drive([
+        createOf("graph-revision-1", PRIMARY.graphContentHash), submit,
+        approveAndActivateOf(PRIMARY.graphContentHash),
+      ]);
+      // The submitted+activated events WITHOUT the create that opened them: a
+      // genuinely corrupt durable history, not an absent one.
+      const withoutCreate = driven.events.filter(
+        (event) => event.kind !== "GraphRevisionCreated",
+      );
+      expect(withoutCreate.length).toBeGreaterThan(0);
+      expect(withoutCreate.length).toBe(driven.events.length - 1);
+      commitEvents(store, "graph-revision-1", withoutCreate);
+      putGraphBody(store, PROJECT_ID, PRIMARY);
+
+      const read = readCurrentActiveGraph(store, PROJECT_ID);
+      expect(read.ok).toBe(false);
+      if (read.ok) throw new Error("a create-less history produced a snapshot");
+      // The core replay owns this rule and has a dedicated code for it. Answering
+      // ACTIVE_GRAPH_ABSENT here would make a corrupt history indistinguishable
+      // from a clean empty project, which is the defect QA measured.
+      expect(read.code).toBe("GRAPH_REVISION_REPLAY_MISSING_CREATE");
+      expect(read.sourceLayer).toBe("CORE_GRAPH_REVISION_REPLAY");
+      expect(read.code).not.toBe("ACTIVE_GRAPH_ABSENT");
+    });
+  });
+
+  it("answers ABSENT for a genuinely empty project, distinctly", () => {
+    withStore("empty", (store) => {
+      const read = readCurrentActiveGraph(store, PROJECT_ID);
+      expect(read.ok).toBe(false);
+      if (read.ok) throw new Error("an empty project produced a snapshot");
+      expect(read.code).toBe("ACTIVE_GRAPH_ABSENT");
+      expect(read.sourceLayer).toBeNull();
+    });
   });
 
   it("is idempotent under byte-identical redelivery of the whole history", () => {

@@ -31,17 +31,24 @@
     {
       "stepId": "step-2",
       "description": "RED. Create tools/import/import-commit.test.ts (or the location's existing test convention if tools/ tests live elsewhere -- check for one first; if tools/ has NO test convention, put the suite at tests/integration and note why). Tests against a REAL SqliteEventStore on a temp file, driving the REAL `applyImport` with a small fixture manifest and records -- never a hand-built ImportCommitInput, because the DoD's byte-identity claim is about what applyImport DRAFTED. Failing tests: (1) HAPPY PATH: after applyImport succeeds through the adapter, read the `legacy-import:<manifestDigest>` aggregate back and assert a nonzero event count, each row's `domainSchemaVersion` === IMPORT_EVENT_FACTS_VERSION (the literal, imported from the package), and each stored payload byte-identical to the drafted payload; decode the rows through public `decodeImportEventFacts` and assert a NONZERO decoded claim count -- a zero-claim decode passes vacuously and DoD 5 names this. (2) DUPLICATE MANIFEST: a second applyImport over the same manifest digest must CONFLICT, not append -- assert the refusal carries the STORE'S own conflict code and layer, NOT restamped as IMPORT_COMMIT_FAILED, and assert raw event and decision counts prove the original aggregate survived unchanged. Note the subtlety: applyImport catches THROWN commit failures as IMPORT_COMMIT_FAILED/APPLY, so the adapter must let a version-conflict answer flow through as a RETURN or a typed refusal rather than throwing it -- decide the mechanism from the store's actual conflict behaviour (measure whether SqliteEventStore.commit throws or returns on expectedVersion mismatch) and pin WHICH layer answers in the test. (3) STORE FAILURE: a genuinely broken store (closed handle) surfaces as IMPORT_COMMIT_FAILED / APPLY from applyImport itself -- assert exact code and layer.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-18T04:04:21.238Z"
+      "modifiedFiles": [
+        "tests/integration/import/legacy-import-commit.test.ts",
+        "tests/integration/import/tsconfig.json"
+      ],
+      "note": "RED. Suite at tests/integration/import/legacy-import-commit.test.ts (+ a directory tsconfig.json), NOT tools/: `find tools -name \"*.test.ts\"` is empty and root vitest.config.ts includes only adapters/**, packages/**, tests/** — a suite under tools/ would be executed by nothing. Not tests/integration/portability/ either, which is task-d288909b's owned directory.\n\n`npx vitest run tests/integration/import` -> EXIT=1, \"Cannot find module '../../../tools/import/import-commit.js'\", Test Files 1 failed (1). Fails because the module does not exist yet, which is the intended RED.\n\nNINE TESTS, and what each pins.\n1. \"commits the drafted events with the drafted envelope version and byte-identical payloads\" — drafts captured from PRODUCTION applyImport through a capturing port (never a hand-built ImportCommitInput), then compared against the durable rows element by element: eventId, eventType, domainSchemaVersion === IMPORT_EVENT_FACTS_VERSION (imported literal), and payload bytes spread-compared. Drill-1 target.\n2. \"commits rows that decode back to a nonzero claim count through decodeImportEventFacts\" — decodes every row through the PUBLIC decoder, asserts a nonzero claim count AND that the decoded legacyIds equal the report's claims' legacyIds, so the assertion is bound to content and not just to a count.\n3. \"adds no event of its own: the durable ids are exactly the drafted ids\" — durable ids equal drafted ids in order, and the RAW event count equals the draft count. Drill-2 target.\n4. \"replays a byte-identical re-import instead of appending, leaving the rows untouched\".\n5. \"refuses a second import of the same manifest digest with the store's own COMMAND_ID_CONFLICT\" — asserts code COMMAND_ID_CONFLICT and layer DURABLE_COMMIT_LAYER, and explicitly `.not.toBe(\"APPLY\")`; raw event AND decision counts plus payload bytes prove the original survived.\n6. \"surfaces a broken store as IMPORT_COMMIT_FAILED / APPLY from applyImport itself\" — closed handle, exact code and exact layer.\n7-9. CLI: commits a real snapshot into an EXISTING store (buildSourceManifest -> decodeLegacySources -> applyImport over a real temp tree); refuses an absent store path with IMPORT_SOURCE_UNREADABLE/INPUT and asserts `existsSync(path) === false` so nothing was created implicitly; refuses argv naming no store with IMPORT_ROOT_INVALID/INPUT.\n\nMECHANISM SETTLED, from source rather than guessed (event-ledger-transaction.ts:119-152). store.commit THROWS on both conflicts, so the adapter catches DurableStoreError, records the store's own `code` verbatim with layer \"STORE\", and rethrows; the composer answers from that record, so the conflict is never restamped. A non-conflict throw is recorded as nothing and reaches applyImport's catch as IMPORT_COMMIT_FAILED/APPLY. Test 5 vs test 6 is that discriminator, pinned by exact code AND exact layer on both sides.\n\nALSO MEASURED, and it changes what test 4 can claim: a byte-identical re-import does NOT conflict. commandId is canonicalDigest({manifest,version}) and commandBytes/committedAt/events are deterministic, so requestSha256 matches and the store answers disposition REPLAYED, writing nothing. Test 4 pins that as REPLAYED; the genuine conflict (test 5) is the same manifest digest with DIFFERENT records, which is what makes commandId collide against a different requestSha256.\n\nStore handles are closed in afterEach (a held SQLite handle kills the vitest worker) and every temp root is removed.",
+      "startedAt": "2026-08-18T04:04:21.238Z",
+      "completedAt": "2026-08-18T04:07:19.764Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN. Create tools/import/import-commit.ts: the durable `ImportStorePort` implementation plus a minimal CLI entry. The port maps ImportCommitInput -> the store's CommitInput field-for-field: same aggregateId, same commandBytes, same commandId, same committedAt, same expectedVersion, and each ImportEventDraft passed through with its REQUIRED domainSchemaVersion preserved -- no spread-with-defaults that could let the store's generic version leak in, no re-encoding of any payload (pass the Uint8Array through untouched), no derived fact, no added event. THE WHOLE ADAPTER IS THE ABSENCE OF TRANSFORMATION, and the DoD's mutation drills exist to prove that absence. Handle the conflict path per the step-2 measurement: surface the store's own conflict code/layer distinctly from a thrown infrastructure failure. The CLI entry composes buildSourceManifest -> decodeLegacySources -> applyImport with THIS port over a real store path given by flag, prints one JSON report, and refuses to run against a store path that does not exist (fail closed; never create a store implicitly). Add the file to the root `typecheck:import` script alongside import-shadow.ts and shadow-input.ts -- that script enumerates files explicitly, so a new file NOT added is silently untypechecked, the exact class the integration-tests-typechecked-by-nothing gotcha records. Keep the production file <=250 physical lines.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "package.json"
-      ]
+      ],
+      "startedAt": "2026-08-18T04:07:22.102Z"
     },
     {
       "stepId": "step-4",
@@ -71,15 +78,16 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-18T03:04:03.531Z",
-  "updatedAt": "2026-08-18T04:04:21.238Z",
+  "updatedAt": "2026-08-18T04:07:22.102Z",
   "metrics": {
     "firstClaimAt": "2026-08-18T03:06:31.506Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 1
+    "executedStepCount": 2
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:08:31.891Z",
@@ -98,7 +106,8 @@
     ]
   },
   "budget": {
-    "wallClockMs": 4500000
+    "wallClockMs": 4500000,
+    "warnedAt": "2026-08-18T04:07:19.821Z"
   },
   "planApprovedAt": "2026-08-18T03:08:33.968Z",
   "contextFetchedBy": [

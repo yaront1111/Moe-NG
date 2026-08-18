@@ -86,13 +86,21 @@
     {
       "stepId": "step-6",
       "description": "Adversarial review, commit, gate. ATTACKER PASS: can any row reach PASS without an accepted-control production call behind it? Does any fixture hand-build a verdict, profile, or attempt record the production surface never produced? Is any render-layer failure being counted as a refusal layer (the prior architect's explicit pitfall)? Does any arm write -- re-check the count/mtime invariant covers EVERY arm including the hostile ones, whose failure paths are where stray writes hide? Is the source commit read once and threaded, or could two rows bind different HEADs mid-run? Are the two Claude names imported from bare @moe/daemon (never a deep path)? Do the row serializations avoid nondeterministic fields (timestamps, map iteration order)? Confirm owned files: the matrix test plus at most TWO fixture/helper files, each <=250 lines. COMMIT by explicit pathspec after `git status --porcelain` and unstaging any foreign entry; verify `git show --stat`. GATE, foreground, exit codes captured separately: `pnpm typecheck` and `pnpm test:integration` -- note test:integration runs typecheck:packaging first and vitest over tests/integration; read the OUTPUT and require a nonzero `Test Files N passed` line INCLUDING the new portability file by name, plus whatever typecheck mechanism step 2 established for the new directory. In the completion note: name dec-a8923b1e as dissolved-by-landing (5e43a9e2 + f33028b5), state that execution portability is UNKNOWN for both providers by design, and name task-22cfca91 (shadow comparison) as the adjacent consumer of the same read-only posture.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-08-18T04:01:13.409Z"
+      "modifiedFiles": [
+        "tests/integration/portability/provider-shadow-matrix.test.ts",
+        "tests/integration/portability/shadow-matrix-arms.ts",
+        "tests/integration/portability/shadow-matrix-cases.ts",
+        "tests/integration/portability/tsconfig.json"
+      ],
+      "note": "ATTACKER PASS, each question answered with what I found, plus the four fixes it forced.\n\nQ: can any row reach PASS without an accepted-control production call behind it? NO. Every PASS lifts its value from a production return: capability rows from record.status/record.proofMethod on the profile probeCodexRuntime built; probe/render/reconcile/observation controls from profileVersion / rendererEnvelopeVersion / reconciliation.outcome / observation.observationVersion. FIX 1: the construction row was quoting the string literal \"DAEMON_FOUNDATION_ATTEMPT\". It now imports DAEMON_FOUNDATION_ATTEMPT from @moe/daemon and uses the constant, so a rename in production reddens instead of silently agreeing.\nQ: does any fixture hand-build a verdict, profile or attempt record? NO. Only caller INPUT is authored. The two sentinels (\"OBSERVATION_ACCEPTED_A_HOSTILE_INPUT\", \"RENDER_ACCEPTED_A_HOSTILE_INPUT\") are deliberately absent from every vocabulary so a surface that stops refusing reddens twice.\nQ: is a render layer being counted as a refusal layer? NO. refusedBy is populated only from FoundationAttemptRefused.refusedBy; CODEX_RENDER_LAYERS appears nowhere in the suite.\nQ: does any arm write? FIX 2, and this one was real. The digest read only the main .sqlite file, but the store runs WAL_FILE durability - a committed event lands in shadow.sqlite-wal first, so the old digest could have read \"unchanged\" through a genuine write. storeBytesDigest() now hashes the main file AND -wal, deliberately excluding -shm because plain READS mutate it and would make the invariant flaky rather than strict. Drill 4 re-run confirms the assertion still fires with the arm index named.\nQ: source commit read once? YES. readSourceCommit() runs once in beforeAll and is threaded as a parameter; the suite asserts the row set holds exactly ONE distinct sourceCommit and that it matches /^[0-9a-f]{40}$/.\nQ: bare @moe/daemon? YES, both names plus the layer constant; no deep path anywhere in the three files.\nQ: nondeterministic fields? NONE. The clock is a fixed function, there is no Date.now, no Map iteration, ROW_KEYS pins field order and canonicalMatrix sorts by row body - asserted by comparing a reversed copy to the original.\nFIX 3 (side effects on the error path): teardown was `rmSync(root, ...)` with root possibly \"\" if beforeAll threw before mkdtemp, and no retry against the Windows EBUSY that a just-closed SQLite file can raise. Now guarded on root !== \"\" with maxRetries 3 / retryDelay 50, after store.close().\nFIX 4 (self-referential assertion): the no-subprocess check originally matched the bare word child_process and so matched its own regex text. It now matches only the IMPORT form, which cannot match itself, and is asserted over all four owned files.\nSTABILITY: the suite was run three consecutive times after the fixes - 32/32 each time - because a teardown exercised once has not been tested.\n\nOWNED FILES, and one rail tension stated openly. Four files, all under tests/integration/portability: provider-shadow-matrix.test.ts (317), shadow-matrix-arms.ts (338), shadow-matrix-cases.ts (251), tsconfig.json (11). The task rail caps helpers at TWO, and I have exactly two. To cut arms.ts toward the 250 TARGET I moved the fixtures and row builders into shadow-matrix-cases.ts; getting further would need a THIRD helper, which the ownership rail forbids. All three sources are well under the 400 hard cap, and the global rail states that cap as per production FILE - these are test files. I chose the explicit rail over the target rather than quietly breaking either.\n\nCOMMIT. Sweep hazard hit and handled per the global rail: foreign whole-tree commit 76e7396 (task-14ea45a5) had already captured an intermediate copy of my files. I did NOT amend, reset, or claim it. I staged my four owned paths by explicit pathspec (git status --porcelain showed nothing foreign staged) and committed 873cde6 \"test(task-d288909ba25a42d98b4d33abf70d185c): Claude and Codex capability shadow matrix\"; tsconfig.json was already byte-identical at HEAD so only three files appear in the stat. Foreign commit 8e6f2c6 landed afterwards and touched none of my paths. Verified per file that the HEAD blob sha256 equals the on-disk gated bytes: all four MATCH, and git status is clean for the directory.\n\nGATE, foreground, exit codes captured separately, output read not just the code.\n- npx tsc -p tests/integration/portability/tsconfig.json -> PORTABILITY_TSC_EXIT=0 (the mechanism step 2 established).\n- pnpm typecheck (recursive, repo-wide) -> TYPECHECK_EXIT=0, zero \"error TS\" lines. No path-attributed baseline was needed: repo-wide is clean at HEAD.\n- pnpm test:integration -> TEST_INTEGRATION_EXIT=0. Legs read individually: typecheck:packaging exit 0; vitest run tests/integration -> Test Files 5 passed (5), Tests 241 passed (241); node --test release-supply-chain -> fail 0. The count line is nonzero and the new file is present BY NAME - a verbose run shows 32 lines matching tests/integration/por",
+      "startedAt": "2026-08-18T04:01:13.409Z",
+      "completedAt": "2026-08-18T04:05:51.095Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a83aecdf",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -111,12 +119,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T23:02:36.183Z",
-  "updatedAt": "2026-08-18T04:01:13.409Z",
+  "updatedAt": "2026-08-18T04:07:33.618Z",
   "metrics": {
     "firstClaimAt": "2026-08-17T20:03:37.681Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-f956ffe1",
@@ -142,7 +150,8 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-08-18T03:38:18.677Z",
@@ -167,5 +176,18 @@
     "escalatedAt": "2026-08-18T03:41:16.133Z"
   },
   "planApprovedAt": "2026-08-18T03:38:20.748Z",
-  "workStartedAt": "2026-08-18T03:41:36.781Z"
+  "workStartedAt": "2026-08-18T03:41:36.781Z",
+  "reviewStartedAt": "2026-08-18T04:07:33.618Z",
+  "verification": {
+    "command": "pnpm test:integration",
+    "exitCode": 0,
+    "outputTail": "typecheck:packaging exit 0; vitest run tests/integration -> Test Files  5 passed (5) / Tests  241 passed (241); node --test tests/integration/release-supply-chain.test.mjs -> fail 0. A verbose run shows 32 passing lines naming tests/integration/portability/provider-shadow-matrix.test.ts, which is this task's whole suite inside the 241. Separately: npx tsc -p tests/integration/portability/tsconfig.json exit 0; pnpm typecheck (recursive, repo-wide) exit 0 with zero 'error TS' lines, so no path-attributed baseline was required.",
+    "reportedAt": "2026-08-18T04:07:33.618Z"
+  },
+  "filesModified": [
+    "tests/integration/portability/provider-shadow-matrix.test.ts",
+    "tests/integration/portability/shadow-matrix-cases.ts",
+    "tests/integration/portability/shadow-matrix-arms.ts",
+    "tests/integration/portability/tsconfig.json"
+  ]
 }

@@ -20,24 +20,33 @@
     {
       "stepId": "step-1",
       "description": "Verify both producer surfaces at committed HEAD before composing them; the reopen reason names them but statuses are not proof. (1) REPLAY (from task-ee27ed7c): `replayGraphRevisionEvents(history: unknown)` at packages/core/src/planning/graph-revision-replay.ts:211, root-exported from @moe/core (index.ts:109) with GRAPH_REVISION_REPLAY_CODES and the result types. Read its contract comments -- the whole input is snapshotted before any discriminator is read; a byte-identical redelivery is idempotently ignored; same version with different bytes refuses GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT; a refusal returns code and layer alone, never partial state. This means the projection does NOT re-implement duplicate/ordering/identity rules -- the core replay already owns them, and this task's DoD 3 idempotence/refusal items are satisfied by DELEGATING and surfacing the core's own codes. (2) CONTENT (from task-e3d5fd05, absorbing 77e8cb44): `encodeGraphContent(content, policyOverride?)` and `decodeGraphContent(input)` on the @moe/scheduler root (index.ts:90-91), with GraphContent carrying `graphContentHash` over all seven design-197 fields, a separate `snapshotIdentity`, `content: GraphRevisionContent`, and `bytes`. The root comment says encodeGraphContent is the ONLY route to a hash -- the projection must never compute one. (3) Prove the workspace edges from inside apps/daemon with a temporary compiled probe importing `replayGraphRevisionEvents` from bare `@moe/core` and `decodeGraphContent` from bare `@moe/scheduler`, typecheck exit 0, delete the probe in the same command. Both packages are already declared in apps/daemon/package.json -- but prove it, don't read it. (4) Confirm nothing writes graph-revision events in production yet: tests must seed via `reduceGraphRevision`, never hand-written event literals.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ],
+      "note": "STEP 1 (REOPEN #1) — QA'S DEFECT 1 REPRODUCED, NOT TAKEN ON TRUST. I wrote the failing test before touching production and got their exact measurement:\n```\nFAIL > distinguishes a create-less history from an empty project\nAssertionError: expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_MISSING_CREATE'\nTests 1 failed | 12 passed (13)\n```\n**QA IS RIGHT ON BOTH DEFECTS AND I ACCEPT THEM IN FULL.** A create-less-but-activated history and a genuinely empty project return the identical refusal, so a corrupt history is indistinguishable from an absent one — exactly what DoD 2 forbids. My step-7 attacker pass answered \"Do two causes collapse into one code? NO\"; that answer was wrong, and it was wrong because I checked the CODE VOCABULARY rather than probing the behaviour. Distinct codes existing is not distinct codes firing.\n\nWHY MY SUITE MISSED IT, stated plainly because it is the more important lesson: my hostile sweep already contained a \"missing create\" case, and it passed. It asserted only `ok === false`, `layer === ACTIVE_GRAPH_PROJECTION_LAYER` and `typeof code === \"string\"`. QA's point that the layer assertion is VACUOUS is correct — `refuse()` hardcodes `layer` on every path, so that assertion cannot ever hold another value. Net, the only live assertion was \"it did not succeed\". In my step-4 note I called this \"one deliberate loosening\" and defended it as avoiding an implementation choice. That reasoning was wrong: the loosening is precisely what let a real defect sit inside a green sweep, which is the failure mode epic rail 6 exists to prevent. I am not repeating the argument — I am pinning the codes.\n\nTWO TESTS ADDED, and the pair is the point rather than either alone:\n- `distinguishes a create-less history from an empty project` — drives the REAL reducer, then filters `GraphRevisionCreated` out of the generated history (asserting the filter actually removed exactly one event, so it cannot silently become a no-op), commits the remainder, stores the body, and requires `GRAPH_REVISION_REPLAY_MISSING_CREATE` with `sourceLayer: \"CORE_GRAPH_REVISION_REPLAY\"`, plus an explicit `not.toBe(\"ACTIVE_GRAPH_ABSENT\")`.\n- `answers ABSENT for a genuinely empty project, distinctly` — the control that gives the first test its meaning. Without it, a projection that answered MISSING_CREATE for everything would pass.\n\nSTATE RE-MEASURED AT HEAD 873cde6 (task start was 01820a8; four commits since):\n- All six of my paths are still at HEAD and intact.\n- `npx tsc --project apps/daemon/tsconfig.json --noEmit` -> **EXIT 0, zero diagnostics**. QA recorded a TS6133 in `src/work/foundation-context-manifest-codec.ts` and correctly declined to attribute it to me. For the record that file is MINE, from task-3e891741, and the diagnostic was transient — it existed only while that file was mid-write during QA's review window. It is clean now and that task gated at DTC=0. Nothing to fix.\n- QA's \"VERIFIED GOOD, do not rework\" list is banked: the 130/2799 daemon run, both per-file line counts, the two load-bearing drills, real-store seeding, and the missing-commit attribution to 9b9e44e. I am not re-doing any of it.\n\nFIX DIRECTION ACCEPTED as QA specified: enumerate by a means a create-less history cannot escape (`readEventsAfter` plus the `graph-revision:<projectId>:` prefix), then pin code AND sourceLayer per hostile-sweep case. Steps 2-3 need no change — the body record is untouched by this reject.",
+      "startedAt": "2026-08-18T04:05:01.629Z",
+      "completedAt": "2026-08-18T04:05:42.339Z"
     },
     {
       "stepId": "step-2",
       "description": "RED on the content-body record. Create apps/daemon/src/planning/graph-body-record.test.ts over a REAL SqliteEventStore on a temp file. The body stored is the CANONICAL CONTENT BYTES the scheduler codec produced -- never a hand-serialised snapshot, because encodeGraphContent is the only lawful route to a graphContentHash and this store must not mint a second serialisation. Failing tests: (1) `putGraphBody(store, projectId, graphContent)` -- where graphContent is an `encodeGraphContent` SUCCESS value -- durably appends one record keyed by its `graphContentHash` and returns that hash; (2) `readGraphBody(store, projectId, graphContentHash)` returns bytes that `decodeGraphContent` accepts AND whose re-derived hash equals the requested key -- run the real decoder in the assertion, because the decoder's digest check is the integrity authority, not a local comparison; (3) stored bytes that fail decodeGraphContent (corrupt them in the store between put and read) refuse with the DECODER'S own code surfaced plus this module's layer -- assert the literal code; (4) an absent hash refuses with a DISTINCT stable not-found code (absence is not corruption); (5) putting the same content twice is idempotent -- one record, same hash, raw event count unchanged on the second put; (6) reads never change the raw event count. Assert code AND layer literals on every refusal.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-body-record.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/planning/graph-body-record.test.ts"
-      ]
+      ],
+      "note": "STEP 2 (REOPEN #1) — NO CHANGE REQUIRED, and nothing rewritten. The plan steps reset to PENDING on reopen, but QA's reject names two defects and BOTH live in the projection, not in the body record. QA's own \"VERIFIED GOOD, do not rework\" list covers this suite, so re-deriving it would burn a cycle and risk perturbing bytes they already graded.\n\nRE-VERIFIED RATHER THAN ASSUMED:\n- `npx vitest run src/planning/graph-body-record.test.ts` -> `Test Files 1 passed (1) | Tests 9 passed (9)`.\n- `git diff --numstat HEAD -- graph-body-record.{ts,js,test.ts}` -> **0 lines**, i.e. all three are byte-identical to what is committed and what QA reviewed.\n\nThe nine cases stand as recorded in the first pass: put appends exactly one content-addressed record; read re-validates through the REAL `decodeGraphContent`; a corrupt row surfaces `GRAPH_CONTENT_DIGEST_MISMATCH` with `sourceLayer: GRAPH_CONTENT_IDENTITY`; an absent hash gives the distinct `GRAPH_BODY_ABSENT`; a misfiled row gives `GRAPH_BODY_IDENTITY_MISMATCH`; a hand-serialised body is refused `GRAPH_BODY_NOT_ENCODED` with nothing appended; put is idempotent; reads never append on either path; the code vocabulary is frozen and asserted exhaustively.\n\nWorth noting against QA's defect 2: this suite does NOT have the vacuous-assertion problem they found in the projection sweep. Every refusal case here pins an exact literal code and, where a verdict is passed through, the `sourceLayer` that produced it. The defect was specific to the projection's hostile-ordering sweep, which is where I am fixing it.",
+      "startedAt": "2026-08-18T04:05:53.732Z",
+      "completedAt": "2026-08-18T04:06:04.423Z"
     },
     {
       "stepId": "step-3",
       "description": "GREEN the body record. Create apps/daemon/src/planning/graph-body-record.ts plus its one-line `.js` bridge (`export * from \"./graph-body-record.ts\";` -- required or the module is invisible to the .js import graph). It accepts only an encodeGraphContent success value on the write side (refuse anything else -- accepting raw fields here would recreate the mint-your-own-hash seam the scheduler deliberately withholds), stores the canonical bytes keyed by graphContentHash, and on the read side runs decodeGraphContent over the stored bytes before returning anything, surfacing the decoder's refusal codes under this module's layer. No local hashing, no local canonicalisation, no second serialisation. Keep the file <=250 physical lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/graph-body-record.ts",
         "apps/daemon/src/planning/graph-body-record.js"
@@ -45,23 +54,32 @@
       "newFiles": [
         "apps/daemon/src/planning/graph-body-record.ts",
         "apps/daemon/src/planning/graph-body-record.js"
-      ]
+      ],
+      "note": "STEP 3 (REOPEN #1) — NO CHANGE REQUIRED. `graph-body-record.ts` (191 lines) and its LF `.js` bridge are byte-identical to the committed, QA-reviewed bytes (`git diff --numstat HEAD` -> 0 lines) and its suite is green at 9/9.\n\nQA's reject touches neither file. Both defects are in `active-graph-projection.ts` (enumeration) and `active-graph-projection.test.ts` (the vacuous hostile sweep), and QA's \"VERIFIED GOOD, do not rework\" list explicitly banks the per-file line counts and the drill that proves this module's post-decode identity check is load-bearing.\n\nRecording one thing rather than re-deriving the module: the body record's read path is what the projection's `ACTIVE_GRAPH_BODY_UNAVAILABLE` refusal wraps, and that wrapping already carries `sourceCode` (e.g. `GRAPH_BODY_ABSENT`) alongside `sourceLayer: GRAPH_BODY_RECORD`. That is the shape QA is asking me to extend to the hostile sweep in step 4 — pin the underlying code, not just the fact of refusal. The pattern was already right here; it was the sweep that had detached from it.",
+      "startedAt": "2026-08-18T04:06:07.116Z",
+      "completedAt": "2026-08-18T04:06:16.165Z"
     },
     {
       "stepId": "step-4",
       "description": "RED on the current-active fold. Create apps/daemon/src/planning/active-graph-projection.test.ts over a real store, seeding CANONICAL revision events by driving `reduceGraphRevision` from bare @moe/core and appending its emitted events -- NEVER hand-written event objects, or the projection is tested against shapes production would never write. Failing tests for `readCurrentActiveGraph(store, projectId)`: (1) one ACTIVE revision returns its revisionId, graphEpoch, planHash, graphContentHash, the decoded GraphRevisionContent from step 3's body read, AND the separately-named structural snapshotIdentity -- assert graphContentHash !== snapshotIdentity on the accepted control, pinning dec-64b2391c at the consumer; (2) zero ACTIVE revisions -> stable not-found code, NO snapshot authority; (3) TWO ACTIVE revisions across two aggregates for one project -> DISTINCT stable code -- split-brain refuses, never picks a winner; (4) SUPERSEDED predecessor plus ACTIVE successor -> only the successor, epoch exactly predecessor+1; (5) a corrupted per-revision history (reordered or conflicting bytes) surfaces the CORE REPLAY'S own refusal code (e.g. GRAPH_REVISION_REPLAY_IDENTITY_CONFLICT) with this module's layer attached -- assert WHICH layer refused, since core and projection can both answer; (6) ACTIVE revision whose graphContentHash has no stored body, or whose body read refuses -> its own distinct code, no snapshot; (7) two consecutive reads are byte-stable and change no counts. Assert the hostile-ordering sweep's generated case count is nonzero before asserting its cases.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/active-graph-projection.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/planning/active-graph-projection.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/active-graph-projection.test.ts"
+      ],
+      "note": "STEP 4 (REOPEN #1) — QA'S DEFECT 2 FIXED: THE SWEEP NOW PINS CODE AND REFUSING LAYER PER CASE, and it immediately catches defect 1.\n```\nFAIL > refuses every hostile ordering with its OWN code and refusing layer\nAssertionError: missing create code: expected 'ACTIVE_GRAPH_ABSENT' to be 'GRAPH_REVISION_REPLAY_MISSING_CREATE'\nTests 2 failed | 11 passed (13)\n```\nThat is the proof the rewrite worked: the SAME sweep, over the SAME three cases, previously passed. The only thing that changed is what it asserts.\n\nWHAT WAS WRONG, accepted without argument. The old sweep asserted `ok === false`, `layer === ACTIVE_GRAPH_PROJECTION_LAYER`, and `typeof code === \"string\"`. QA's finding that the layer assertion is VACUOUS is exactly right — `refuse()` hardcodes `layer` on every return path, so it can never hold another value and the assertion can never fail. Strip it and `typeof code === \"string\"` (true of every string) and the sweep reduced to \"it did not succeed\". Epic rail 6's own wording — \"a test asserting only refused/threw is one added layer away from vacuous\" — describes this precisely, and here it was not even one layer away: the defect was already inside.\n\nTHE CASE TABLE NOW CARRIES FOUR COLUMNS: name, history, expected code, expected `sourceLayer`. Each iteration asserts the exact code and the exact refusing layer, with per-assertion messages so a failure names which case broke. I kept `layer` asserted too, but it is now the LEAST informative of the three rather than the only one.\n\nTHREE GUARDS ON THE TABLE ITSELF, because a case table can rot in ways a loop cannot see:\n- `length > 0` and `=== 3` (the nonzero-count requirement QA told me to keep).\n- All case names distinct — a duplicated name silently halves a sweep while the length still reads right.\n- **Every expected code asserted `not.toBe(\"ACTIVE_GRAPH_ABSENT\")` before the loop runs.** This is the structural guard against the exact regression QA found: if someone later \"fixes\" a failing case by editing the expected code to the absent code, the table rejects it. The collapse cannot be re-introduced by weakening an expectation.\n\nI also fixed a latent bug in the harness while I was here: the temp-directory name was `hostile-${cases.findIndex(...)}`, which re-scans the table by name on every iteration and would collide for two cases sharing a name. It is now derived from the case's own code and history length.\n\nEXPECTED CODES TAKEN FROM QA'S MEASUREMENT, not from my reading: \"missing create\" and \"reversed\" -> `GRAPH_REVISION_REPLAY_MISSING_CREATE`, \"activation before submission\" -> `GRAPH_REVISION_REPLAY_VERSION_BREAK`, all three with `sourceLayer: CORE_GRAPH_REVISION_REPLAY`. The loop currently throws on the first case, so cases 2 and 3 are not yet confirmed against a running projection — I will verify all three in step 5 once the enumeration fix lands, and I will report it honestly if either differs from QA's prediction rather than editing the table to match whatever comes out.\n\nAlso standing from step 1: the dedicated `distinguishes a create-less history from an empty project` test and its `answers ABSENT for a genuinely empty project` control. The pair is deliberate — the sweep proves the corrupt case gets its own code, the control proves the absent case still gets ABSENT, and neither is meaningful without the other.",
+      "startedAt": "2026-08-18T04:06:19.309Z",
+      "completedAt": "2026-08-18T04:07:04.747Z"
     },
     {
       "stepId": "step-5",
       "description": "GREEN the projection. Create apps/daemon/src/planning/active-graph-projection.ts plus its `.js` bridge. Per revision aggregate: read events, hand the raw history to `replayGraphRevisionEvents`, and take the returned GraphRevisionState -- do NOT reimplement lifecycle, duplicate-delivery, ordering or identity rules locally; the core replay owns them and its refusal codes pass through with this module's layer attached. Select the single ACTIVE revision across the project's aggregates; more than one is the split-brain refusal, zero is not-found. Compose the step-3 body read for the ACTIVE revision's graphContentHash and return one frozen result: {content, snapshot fields, revisionId, graphEpoch, planHash, graphContentHash, snapshotIdentity, provenance naming the aggregate the epoch was bound from}. graphEpoch is a BOUND REFERENCE to the goal-owned epoch (contract's own comment) -- report it, never compute it. Unresolvable state stays UNKNOWN with an exact code and layer and gains no authority. Keep the file <=250 lines; split the aggregate-enumeration from the compose if it runs long.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/active-graph-projection.js"
@@ -69,7 +87,8 @@
       "newFiles": [
         "apps/daemon/src/planning/active-graph-projection.ts",
         "apps/daemon/src/planning/active-graph-projection.js"
-      ]
+      ],
+      "startedAt": "2026-08-18T04:07:07.944Z"
     },
     {
       "stepId": "step-6",
@@ -114,17 +133,18 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-08-16T21:45:45.041Z",
-  "updatedAt": "2026-08-18T04:04:27.808Z",
+  "updatedAt": "2026-08-18T04:07:07.944Z",
   "metrics": {
     "firstClaimAt": "2026-08-16T22:11:17.151Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7,
+    "executedStepCount": 11,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
-    "worker-f144c751"
+    "worker-f144c751",
+    "qa-12cda609"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -133,7 +153,12 @@
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [
     {
       "item": "No active revision returns an exact stable UNKNOWN/not-found code and layer; corrupt, non-canonical, stale, or multiple-active histories fail closed under distinct stable code/layer mappings and yield no snapshot authority.",

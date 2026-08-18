@@ -33,10 +33,7 @@ import type { GraphBodyRefusal } from "./graph-body-record.js";
 /** Names the layer that answered the caller. */
 export const ACTIVE_GRAPH_PROJECTION_LAYER = "ACTIVE_GRAPH_PROJECTION" as const;
 
-/** The event kind that opens every revision aggregate, used to enumerate them. */
-const REVISION_CREATED_EVENT = "GraphRevisionCreated";
-
-/** How many created-revision events one enumeration page carries. */
+/** How many stored events one enumeration page carries. */
 const ENUMERATION_PAGE = 200;
 
 /**
@@ -112,17 +109,26 @@ export function graphRevisionAggregateId(projectId: string, revisionId: string):
 }
 
 /**
- * Discover every revision aggregate in this project-bound store by its opening
- * event. Enumerating by event type rather than by a guessed id keeps discovery
- * bound to what was actually written.
+ * Discover every revision aggregate by its AGGREGATE ID PREFIX, over all stored
+ * events, not by any single event kind.
+ *
+ * Keying discovery on `GraphRevisionCreated` was a real defect: an aggregate
+ * whose create event is absent — a genuinely corrupt durable history — was never
+ * enumerated, so it never reached the replay, and the projection answered
+ * `ACTIVE_GRAPH_ABSENT`: the SAME answer a clean empty project gives. A corrupt
+ * history and an absent one became indistinguishable, which is exactly what this
+ * projection exists to prevent. Enumerating by prefix means a history cannot
+ * escape by lacking any particular event; the replay then answers with its own
+ * `GRAPH_REVISION_REPLAY_MISSING_CREATE`.
  */
-function enumerateAggregateIds(store: SqliteEventStore): readonly string[] {
+function enumerateAggregateIds(store: SqliteEventStore, projectId: string): readonly string[] {
+  const prefix = graphRevisionAggregateId(projectId, "");
   const aggregateIds = new Set<string>();
   let cursor = 0n;
   for (;;) {
-    const page = store.readEventsByTypeAfter(REVISION_CREATED_EVENT, cursor, ENUMERATION_PAGE);
+    const page = store.readEventsAfter(cursor, ENUMERATION_PAGE);
     for (const event of page.items) {
-      aggregateIds.add(event.aggregateId);
+      if (event.aggregateId.startsWith(prefix)) aggregateIds.add(event.aggregateId);
     }
     if (!page.hasMore || page.nextCursor === null) {
       return [...aggregateIds];
@@ -178,7 +184,7 @@ export function readCurrentActiveGraph(
   store: SqliteEventStore,
   projectId: string,
 ): ActiveGraphResult {
-  const collected = collectActive(store, enumerateAggregateIds(store));
+  const collected = collectActive(store, enumerateAggregateIds(store, projectId));
   if ("refusal" in collected) {
     return collected.refusal;
   }
