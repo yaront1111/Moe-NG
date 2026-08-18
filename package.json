@@ -1,10 +1,10 @@
 {
   "name": "moe-next",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Greenfield local-first multi-agent orchestration control plane",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "packageManager": "pnpm@11.0.8",
   "engines": {
     "node": ">=24.16.0 <25",
