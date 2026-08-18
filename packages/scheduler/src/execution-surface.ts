@@ -17,9 +17,17 @@ export {
   adapterConfirm,
   adapterFail,
   grantSuccessorCapacity,
+  releaseProviderSlot,
   reserveAll,
   reserveProviderSlot,
 } from "./authority/lease-resource.js";
+/**
+ * The design-427 release command shape travels WITH `releaseProviderSlot` above, because a
+ * consumer that can name the transition but not the record it takes cannot call it from the
+ * bare specifier alone. Published through the same slot-family re-export block, so the whole
+ * RESERVED -> ACTIVE -> RELEASED path is reachable from one import.
+ */
+export type { ProviderSlotReleaseCommand } from "./authority/lease-resource.js";
 export {
   fenceAuthority,
   parseClock,

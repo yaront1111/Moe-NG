@@ -19,7 +19,8 @@ import type {
 } from "@moe/scheduler";
 import type {
   AcquisitionFailure, AcquisitionSet, AcquisitionState, DeclaredResource,
-  ProviderSlotActivateCommand, ProviderSlotReservation, ReserveAllRequest, ReserveAllResult,
+  ProviderSlotActivateCommand, ProviderSlotReleaseCommand, ProviderSlotReservation,
+  ReserveAllRequest, ReserveAllResult,
   ResourceRow, ResourceWaitRequest, SlotState,
 } from "@moe/scheduler";
 import type {
@@ -136,6 +137,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
   ["partitionFrontier", "function"], ["previewGraphSnapshot", "function"],
+  ["releaseProviderSlot", "function"],
   ["releaseWork", "function"],
   ["reserveAll", "function"], ["reserveForAdmission", "function"],
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
@@ -151,7 +153,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(94);
+  expect(EXPECTED_EXPORTS.length).toBe(95);
 });
 
 /**
@@ -379,6 +381,106 @@ it("refuses drifted or replayed activation with the exact root refusal codes", (
   const replay = scheduler.activateProviderSlot(first.value, good);
   expect(authorityCodes(replay)).toEqual(["AUTHORITY_STALE_LEASE"]);
   expect(replay).not.toHaveProperty("value");
+});
+
+/**
+ * The design-427 provider-slot release, reached through the bare package root. Same rule as
+ * the release-authority block further down: the function is the only runtime key, so
+ * `ProviderSlotReleaseCommand` is proven by ANNOTATION on a value that came through
+ * `@moe/scheduler` -- a type published nowhere becomes a tsc error rather than a silently
+ * green test. `SLOT_STATES` has always declared RELEASED, but this is the ONLY transition
+ * that reaches it, so before this export no root consumer could produce a terminal slot.
+ */
+const SLOT_RELEASE: ProviderSlotReleaseCommand = {
+  dimension: "default", slotRef: "slot:1", requestId: "req:1", attemptRef: "attempt:1",
+};
+
+/** An ACTIVE slot composed entirely from published root exports -- no deep import. */
+function activeSlot(): ProviderSlotReservation {
+  const rows = reservedRows(scheduler.reserveAll(RESERVE_REQUEST));
+  const confirmed = acquisitionSet(scheduler.adapterConfirm(rows, "res:remote", 1));
+  const reserved = scheduler.reserveProviderSlot(confirmed.rows, "default", "slot:1", "req:1");
+  if (!reserved.ok) throw new Error(authorityCodes(reserved).join(","));
+  const activated = scheduler.activateProviderSlot(reserved.value, {
+    dimension: "default", slotRef: "slot:1", requestId: "req:1", attemptRef: "attempt:1",
+  });
+  if (!activated.ok) throw new Error(authorityCodes(activated).join(","));
+  return activated.value;
+}
+
+/**
+ * Three refusal arms below share `AUTHORITY_STALE_LEASE`, so the code alone cannot say WHICH
+ * guard answered. The message does, and the guard order (shape -> identity -> attempt -> state)
+ * is what stops a malformed record being reported as a state problem.
+ */
+function refusalMessages(outcome: AuthorityOutcome<ProviderSlotReservation>): readonly string[] {
+  expect(outcome.ok).toBe(false);
+  if (outcome.ok) return [];
+  const rejection: AuthorityRejection = outcome;
+  return rejection.issues.map((issue: AuthorityIssue): string => issue.message);
+}
+
+it("publishes releaseProviderSlot as a defined function binding on the package root", () => {
+  // The roster's ExportKind check passes for ANY function, including an anonymous wrapper;
+  // the name and arity pin that the root resolves to the owning module's own declaration.
+  const released: unknown = surface["releaseProviderSlot"];
+  expect(typeof released).toBe("function");
+  expect((released as { readonly name: string }).name).toBe("releaseProviderSlot");
+  expect((released as { readonly length: number }).length).toBe(2);
+});
+
+it("composes the only ACTIVE -> RELEASED provider-slot transition through the root", () => {
+  const slot = activeSlot();
+  const outcome: AuthorityOutcome<ProviderSlotReservation> =
+    scheduler.releaseProviderSlot(slot, SLOT_RELEASE);
+  expect(outcome.ok).toBe(true);
+  if (!outcome.ok) throw new Error(authorityCodes(outcome).join(","));
+  const next: SlotState = outcome.value.state;
+  expect(next).toBe("RELEASED");
+  expect(scheduler.SLOT_STATES).toContain(next);
+  // The binding is retained, so a settled slot still names the attempt it was released against.
+  expect(outcome.value.attemptRef).toBe("attempt:1");
+  // Pure: a fresh frozen successor, and the caller's own record is neither mutated nor returned.
+  expect(Object.isFrozen(outcome.value)).toBe(true);
+  expect(outcome.value).not.toBe(slot);
+  expect(slot.state).toBe("ACTIVE");
+});
+
+it("replays a settled provider-slot release as a NO_OP acceptance, not a refusal", () => {
+  const first = scheduler.releaseProviderSlot(activeSlot(), SLOT_RELEASE);
+  expect(first.ok).toBe(true);
+  if (!first.ok) throw new Error(authorityCodes(first).join(","));
+  const replay = scheduler.releaseProviderSlot(first.value, SLOT_RELEASE);
+  expect(replay.ok).toBe(true);
+  if (!replay.ok) return;
+  // Idempotent, not a second transition: the state is unchanged and still terminal.
+  expect(replay.value.state).toBe("RELEASED");
+});
+
+it("refuses a drifted, cross-attempt or malformed slot release with exact root codes", () => {
+  const slot = activeSlot();
+  const drifted = scheduler.releaseProviderSlot(slot, { ...SLOT_RELEASE, slotRef: "slot:2" });
+  expect(authorityCodes(drifted)).toEqual(["AUTHORITY_STALE_LEASE"]);
+  expect(refusalMessages(drifted)[0]).toContain("does not match the reserved provider slot");
+  // Releasing against an attempt the slot never carried would leak authority across attempts.
+  const foreign = scheduler.releaseProviderSlot(slot, { ...SLOT_RELEASE, attemptRef: "attempt:2" });
+  expect(authorityCodes(foreign)).toEqual(["AUTHORITY_STALE_LEASE"]);
+  expect(refusalMessages(foreign)[0]).toContain("a different attempt");
+  // Shape is checked FIRST, so an empty ref is malformed rather than an attempt mismatch.
+  const malformed = scheduler.releaseProviderSlot(slot, { ...SLOT_RELEASE, attemptRef: "" });
+  expect(authorityCodes(malformed)).toEqual(["AUTHORITY_MALFORMED_INPUT"]);
+  expect(malformed).not.toHaveProperty("value");
+});
+
+it("refuses to release a slot whose state carries no release disposition", () => {
+  // No production path yields a RESERVED slot that already names an attempt -- reserve leaves
+  // attemptRef null and only activate sets it -- so the state guard is unreachable from an
+  // honest fixture and would be UNGUARDED if only honest fixtures were used. This record is
+  // planted deliberately to reach it, drifting exactly one field past the attempt check.
+  const planted = { ...activeSlot(), state: "RESERVED" as const };
+  const refused = scheduler.releaseProviderSlot(planted, SLOT_RELEASE);
+  expect(authorityCodes(refused)).toEqual(["AUTHORITY_STALE_LEASE"]);
+  expect(refusalMessages(refused)[0]).toContain("in state RESERVED cannot be released");
 });
 
 it("quarantines an unknown adapter failure and clears it with a proof", () => {
