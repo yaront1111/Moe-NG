@@ -365,8 +365,13 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         commandId: "cmd-child-register", disposition: "DECIDED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
       },
+      // THE EXACT KEY SET, and `graph` is why it is exact. A port constructed by
+      // `createStoreDependencies` but absent from the shipped default object is
+      // unreachable from the real daemon while every direct-injection test stays
+      // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "documentDossiers", "provide", "reconciliation", "restore", "subscriptions",
+        "affordances", "documentDossiers", "graph", "provide", "reconciliation", "restore",
+        "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",

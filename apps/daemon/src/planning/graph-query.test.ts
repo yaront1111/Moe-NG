@@ -26,30 +26,18 @@
  */
 
 import { mkdtempSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { reduceGraphRevision } from "@moe/core";
-import type {
-  GraphRevisionCommand,
-  GraphRevisionEvent,
-  GraphRevisionState,
-} from "@moe/core";
-import { encodeGraphContent } from "@moe/scheduler";
-import type {
-  GraphContent,
-  GraphEdge,
-  GraphNode,
-  GraphRevisionContent,
-  GraphSnapshot,
-} from "@moe/scheduler";
-import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
+import type { GraphRevisionEvent } from "@moe/core";
+import { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
-
-import { request as httpRequest } from "node:http";
 
 import { startControlRoomListener } from "../http/http-listener.js";
 import type { ControlRoomListener } from "../http/http-listener.js";
+import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
+import type { AuthenticatedPrincipal } from "../http/http-contract.js";
 import { createSessionAuthenticator } from "../identity/session-authenticator.js";
 import {
   CREDENTIAL as REPLAY_CREDENTIAL,
@@ -57,281 +45,40 @@ import {
   PROJECT_ID as REPLAY_PROJECT_ID,
   openDefaultSession,
 } from "../identity/session-test-fixtures.js";
-import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
-import type { CommandAdapterDeps } from "../http/http-contract.js";
-import { decisionPort, recordingHandler, registryOf } from "../http/http-test-fixtures.js";
-import { streamPort } from "../http/event-stream-fixtures.js";
-import type { HttpDispatchPort } from "@moe/mcp";
-import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
-import type {
-  AuthenticatedPrincipal,
-  Authenticator,
-} from "../http/http-contract.js";
 import {
   graphRevisionAggregateId,
   readCurrentActiveGraph,
 } from "./active-graph-projection.js";
 import type { ActiveGraphResult } from "./active-graph-projection.js";
-import { putGraphBody } from "./graph-body-record.js";
-import {
-  answerGraphQuery,
-} from "./graph-query.js";
+import { answerGraphQuery } from "./graph-query.js";
 import type { GraphQueryCode, GraphQueryPort, GraphQueryResult } from "./graph-query.js";
-
-const PROJECT_ID = "proj-graph-query-0001";
-const PRINCIPAL_ID = "principal-planner-1";
-const PLANNING_CAPABILITY = "planning.write";
-const GOOD_CREDENTIAL = "credential-good";
-const ENCODER = new TextEncoder();
-
-// --- content fixtures --------------------------------------------------------
-
-function baseSnapshot(): GraphSnapshot {
-  const nodes: readonly GraphNode[] = [
-    { nodeKey: "dev-a", executionBearing: true },
-    { nodeKey: "dev-b", executionBearing: true },
-    { nodeKey: "dev-c", executionBearing: true },
-  ];
-  const edges: readonly GraphEdge[] = [
-    { edgeKey: "dev-e1", producerNodeKey: "dev-a", consumerNodeKey: "dev-c", kind: "HARD" },
-    { edgeKey: "dev-e2", producerNodeKey: "dev-b", consumerNodeKey: "dev-c", kind: "HARD" },
-    { edgeKey: "dev-e3", producerNodeKey: "dev-a", consumerNodeKey: "dev-b", kind: "ADVISORY" },
-  ];
-  return { nodes, edges, completionNodeKey: "dev-c" };
-}
-
-function encoded(author: string): GraphContent {
-  const content = {
-    author,
-    completionNode: "dev-c",
-    decompositionBudget: 24,
-    parentRevision: "rev-000000000000",
-    policyRevision: "pol-000000000001",
-    repositoryBaseTree: "4".repeat(40),
-    snapshot: baseSnapshot(),
-  } as unknown as GraphRevisionContent;
-  const result = encodeGraphContent(content);
-  if (!result.ok) throw new Error(`fixture failed to encode: ${JSON.stringify(result.issues)}`);
-  return result.value;
-}
-
-const PRIMARY = encoded("human:architect-primary");
-const SECONDARY = encoded("human:architect-successor");
-
-// --- reducer command fixtures (input only; the reducer owns every rule) -------
-
-function seededHash(seed: string): string {
-  return seed.repeat(64).slice(0, 64);
-}
-
-const PLAN_HASH = seededHash("11");
-
-function bindingOf(graphHash: string) {
-  return {
-    budgetHash: seededHash("55"),
-    expectedGoalVersion: 3,
-    graphHash,
-    policyHash: seededHash("66"),
-    qualityHash: seededHash("33"),
-  } as const;
-}
-
-type Step = (current: GraphRevisionState | undefined) => GraphRevisionCommand;
-
-function versionOf(current: GraphRevisionState | undefined): number {
-  return current === undefined ? 0 : current.version;
-}
-
-function createOf(revisionId: string, graphContentHash: string): Step {
-  return () => ({
-    commandId: `cmd-create-${revisionId}`, expectedVersion: 0, goalRef: "goal-1",
-    graphContentHash, kind: "graph_revision.create", planHash: PLAN_HASH, revisionId,
-  }) as GraphRevisionCommand;
-}
-
-const submit: Step = (current) => ({
-  commandId: "cmd-submit", expectedVersion: versionOf(current),
-  kind: "graph_revision.submit",
-  witness: { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" },
-}) as GraphRevisionCommand;
-
-function approveAndActivateOf(graphHash: string): Step {
-  const binding = bindingOf(graphHash);
-  return (current) => ({
-    activation: {
-      ...binding, activationRef: "activation-1", graphEpoch: 1, truthClass: "HUMAN_APPROVED",
-    },
-    approval: { ...binding, approvalRef: "approval-1", truthClass: "HUMAN_APPROVED" },
-    commandId: "cmd-approve", expectedVersion: versionOf(current), kind: "graph.approve",
-  }) as unknown as GraphRevisionCommand;
-}
-
-// --- store harness -----------------------------------------------------------
-
-function installBinding(
-  store: SqliteEventStore,
-  incarnationRef = "81".repeat(32),
-  keyEpochRef = "82".repeat(32),
-): void {
-  const installed = store.installRecoveryBinding({
-    bindingCodecVersion: RECOVERY_BINDING_CODEC_VERSION,
-    incarnationRef,
-    installedAt: "2026-08-18T00:00:00.000Z",
-    keyEpochRef,
-    payload: ENCODER.encode("graph-query-recovery-binding"),
-    slot: "ACTIVE",
-  });
-  if (!installed.ok) throw new Error(`recovery binding setup failed: ${installed.code}`);
-}
-
-function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
-  const directory = mkdtempSync(join(tmpdir(), `moe-graph-query-${name}-`));
-  try {
-    const store = SqliteEventStore.openForProject(join(directory, "store.sqlite"), PROJECT_ID);
-    try {
-      installBinding(store);
-      return run(store);
-    } finally {
-      store.close();
-    }
-  } finally {
-    rmSync(directory, { force: true, maxRetries: 5, recursive: true });
-  }
-}
-
-/** Drives the REAL reducer and returns the events it actually emitted. */
-function drive(steps: readonly Step[]): { events: GraphRevisionEvent[]; state: GraphRevisionState } {
-  let current: GraphRevisionState | undefined;
-  const events: GraphRevisionEvent[] = [];
-  for (const step of steps) {
-    const result = reduceGraphRevision(current, step(current));
-    if (!result.ok) throw new Error(`fixture command rejected: ${result.error.code}`);
-    current = result.state;
-    events.push(...result.events);
-  }
-  if (current === undefined) throw new Error("path produced no state");
-  return { events, state: current };
-}
-
-function commitEvents(
-  store: SqliteEventStore,
-  revisionId: string,
-  events: readonly GraphRevisionEvent[],
-): void {
-  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
-  store.commit({
-    aggregateId,
-    commandBytes: ENCODER.encode(`seed-${revisionId}`),
-    commandId: `seed-${revisionId}`,
-    committedAt: "2026-08-18T00:00:00.000Z",
-    events: events.map((event, index) => ({
-      eventId: `seed-${revisionId}-${index}`,
-      eventType: event.kind,
-      payload: ENCODER.encode(JSON.stringify(event)),
-    })),
-    expectedVersion: store.getAggregateVersion(aggregateId),
-  });
-}
-
-/** Seed a revision AND the body its content hash names — the normal, whole path. */
-function seedActive(
-  store: SqliteEventStore,
-  revisionId = "graph-revision-1",
-  content: GraphContent = PRIMARY,
-): void {
-  const driven = drive([
-    createOf(revisionId, content.graphContentHash), submit,
-    approveAndActivateOf(content.graphContentHash),
-  ]);
-  commitEvents(store, revisionId, driven.events);
-  putGraphBody(store, PROJECT_ID, content);
-}
-
-/** The revision events WITHOUT the body their content hash names. */
-function seedActiveWithoutBody(store: SqliteEventStore, revisionId = "graph-revision-1"): void {
-  const driven = drive([
-    createOf(revisionId, PRIMARY.graphContentHash), submit,
-    approveAndActivateOf(PRIMARY.graphContentHash),
-  ]);
-  commitEvents(store, revisionId, driven.events);
-}
-
-// --- authentication harness --------------------------------------------------
-
-function principalFor(
-  projectId: string,
-  capabilities: readonly string[] = [PLANNING_CAPABILITY],
-): AuthenticatedPrincipal {
-  return { capabilities, principalId: PRINCIPAL_ID, projectId };
-}
-
-/** The real durable-ledger authenticator; only its operator configuration varies. */
-function authenticatorFor(
-  store: SqliteEventStore,
-  principal: AuthenticatedPrincipal | null,
-): Authenticator {
-  const configured = principal ?? principalFor(PROJECT_ID);
-  return createSessionAuthenticator(store, {
-    clock: () => Date.parse("2026-08-18T00:00:00.000Z"),
-    operatorCapabilities: configured.capabilities,
-    operatorCredential: principal === null ? "credential-disabled" : GOOD_CREDENTIAL,
-    operatorPrincipalId: configured.principalId,
-    projectId: configured.projectId,
-  });
-}
-
-interface CountingPort extends GraphQueryPort {
-  readonly reads: () => number;
-}
-
-/**
- * Counts reader invocations so "refused BEFORE the reader ran" is MEASURED. A
- * handler that read first and refused afterwards would leak the existence and
- * shape of another project's graph while still returning a refusal, and no
- * assertion on the returned value can see the difference.
- */
-function countingPort(store: SqliteEventStore, boundProjectId = PROJECT_ID): CountingPort {
-  let reads = 0;
-  return {
-    boundProjectId,
-    readCurrentActiveGraph: (projectId: string): ActiveGraphResult => {
-      reads += 1;
-      return readCurrentActiveGraph(store, projectId);
-    },
-    reads: () => reads,
-  };
-}
-
-interface QueryOptions {
-  readonly body?: unknown;
-  readonly capabilities?: readonly string[];
-  readonly credential?: string | null;
-  readonly port?: GraphQueryPort;
-  readonly principalProject?: string;
-  readonly protocolVersion?: unknown;
-}
-
-function ask(store: SqliteEventStore, options: QueryOptions = {}): GraphQueryResult {
-  const principal = principalFor(
-    options.principalProject ?? PROJECT_ID,
-    options.capabilities ?? [PLANNING_CAPABILITY],
-  );
-  return answerGraphQuery({
-    authenticator: authenticatorFor(store, principal),
-    body: options.body ?? {},
-    credential: options.credential === undefined ? GOOD_CREDENTIAL : options.credential,
-    port: options.port ?? countingPort(store),
-    protocolVersion: options.protocolVersion ?? WIRE_PROTOCOL_VERSION,
-  });
-}
-
-function eventCount(store: SqliteEventStore): number {
-  return store.readEventsAfter(0n, 1_000).items.length;
-}
-
-function decisionCount(store: SqliteEventStore): number {
-  return store.readCommandDecisionsAfter(0n, 1_000).items.length;
-}
+import {
+  CSRF,
+  DECODER,
+  ENCODER,
+  GOOD_CREDENTIAL,
+  PRIMARY,
+  PROJECT_ID,
+  SECONDARY,
+  approveAndActivateOf,
+  ask,
+  authenticatorFor,
+  commitEvents,
+  countingPort,
+  createOf,
+  decisionCount,
+  depsFor,
+  drive,
+  eventCount,
+  installBinding,
+  overMcp,
+  overMcpBytes,
+  principalFor,
+  seedActive,
+  seedActiveWithoutBody,
+  submit,
+  withStore,
+} from "./graph-query-test-fixtures.js";
 
 // --- 1. the accepted control -------------------------------------------------
 
@@ -398,6 +145,7 @@ describe("graph.get accepted answer", () => {
       const port = countingPort(store);
       const refusal = refusalOf(ask(store, { capabilities: [], port }));
       expect(refusal.layer).toBe("GRAPH_QUERY");
+      expect(refusal.code).toBe("GRAPH_QUERY_CAPABILITY_DENIED");
       // The reader must not have run: authority is refused before any read.
       expect(port.reads()).toBe(0);
     });
@@ -408,6 +156,8 @@ describe("graph.get accepted answer", () => {
 
 interface Refused {
   readonly code?: unknown;
+  /** The runtime error a SEAM refusal carries; the stage alone does not name a reason. */
+  readonly error?: Readonly<{ readonly code?: unknown }>;
   readonly httpStatus?: unknown;
   readonly layer?: unknown;
   readonly outcome?: unknown;
@@ -432,8 +182,14 @@ describe("graph.get authentication and project authority", () => {
       seedActive(store);
       const port = countingPort(store);
       const refusal = refusalOf(ask(store, { credential: null, port }));
+      // THE CODE, not just the stage. Two different rules refuse at
+      // AUTHENTICATE — an unusable credential and a port that answered REFUSED —
+      // and a stage-only assertion cannot tell them apart, so it would stay
+      // green if the seam started answering with the wrong one.
       expect(refusal.stage).toBe("AUTHENTICATE");
       expect(refusal.outcome).toBe("REFUSED");
+      expect(refusal.error?.code).toBe("AUTHENTICATION_FAILED");
+      expect(refusal.httpStatus).toBe(401);
       expect(port.reads()).toBe(0);
     });
   });
@@ -487,6 +243,11 @@ describe("graph.get authentication and project authority", () => {
       const refusal = refusalOf(ask(store, { port, protocolVersion: "0.0.0-not-ours" }));
       expect(refusal.stage).toBe("COMPATIBILITY");
       expect(refusal.stage).not.toBe("AUTHENTICATE");
+      // The compatibility gate's OWN code. Without it this arm would pass on any
+      // refusal that happened to be tagged COMPATIBILITY.
+      expect(refusal.outcome).toBe("REFUSED");
+      expect(refusal.error?.code).toBe("DISTRIBUTION_MISMATCH");
+      expect(refusal.error?.code).not.toBe("AUTHENTICATION_FAILED");
       expect(port.reads()).toBe(0);
     });
   });
@@ -532,6 +293,10 @@ describe("graph.get authentication and project authority", () => {
       const port = countingPort(store);
       const refusal = refusalOf(ask(store, { port, principalProject: "proj-another-daemon" }));
       expect(refusal.code).toBe("GRAPH_QUERY_PROJECT_MISMATCH");
+      // WHICH layer refused, not only that something did: the reader has its own
+      // project-shaped refusals, and an assertion blind to the layer would stay
+      // green if this check moved below the read.
+      expect(refusal.layer).toBe("GRAPH_QUERY");
       expect(port.reads()).toBe(0);
     });
   });
@@ -603,61 +368,6 @@ describe("graph.get hostile body sweep", () => {
 });
 
 // --- 4. the same guard sequence, reached through BOTH transports -------------
-
-const CSRF = "csrf-token-for-graph-query";
-const DECODER = new TextDecoder();
-
-function depsFor(
-  store: SqliteEventStore,
-  principal: AuthenticatedPrincipal | null,
-): CommandAdapterDeps {
-  return {
-    authenticator: authenticatorFor(store, principal),
-    decisions: decisionPort(),
-    registry: registryOf("goal.create", recordingHandler().handler, ["title"]),
-  };
-}
-
-/** Drives the REAL MCP dispatch port and returns the RAW answered bytes. */
-function overMcpBytes(
-  store: SqliteEventStore,
-  port: GraphQueryPort | undefined,
-  options: { readonly credential?: string | null; readonly payload?: unknown } = {},
-  principal: AuthenticatedPrincipal | null = principalFor(PROJECT_ID),
-): Uint8Array {
-  const dispatch = createMcpDispatchPort({
-    deps: depsFor(store, principal),
-    ...(port === undefined ? {} : { graph: port }),
-    subscriptions: streamPort(),
-  });
-  const envelope = ENCODER.encode(JSON.stringify({
-    payload: options.payload ?? {}, queryKind: "graph.get",
-  }));
-  const credential = options.credential === undefined ? GOOD_CREDENTIAL : options.credential;
-  // HELD AS THE HTTP BRIDGE HOLDS IT. `createMcpDispatchPort` is declared to
-  // return `StdioDispatchPort`, whose `dispatchQueryBytes(bytes)` takes no
-  // context — the stdio server calls it that way and falls back to the process
-  // credential. The HTTP MCP bridge holds the same value as an
-  // `HttpDispatchPort` and passes a context (http-tool-bridge.ts:156), which is
-  // the production path a per-request bearer travels. Driving it through the
-  // one-argument type would have tested the fallback and never the context.
-  const bridge = dispatch as unknown as HttpDispatchPort;
-  const answered = credential === null
-    ? (bridge.dispatchQueryBytes as (bytes: Uint8Array) => Uint8Array)(envelope)
-    : bridge.dispatchQueryBytes(envelope, { credential });
-  if (answered instanceof Promise) throw new Error("the query dispatch answered asynchronously");
-  return answered;
-}
-
-function overMcp(
-  store: SqliteEventStore,
-  port: GraphQueryPort | undefined,
-  options: { readonly credential?: string | null; readonly payload?: unknown } = {},
-  principal: AuthenticatedPrincipal | null = principalFor(PROJECT_ID),
-): Record<string, unknown> {
-  return JSON.parse(DECODER.decode(overMcpBytes(store, port, options, principal))) as
-    Record<string, unknown>;
-}
 
 interface HttpReply {
   readonly body: Record<string, unknown>;
@@ -742,6 +452,11 @@ describe("graph.get over the MCP dispatch port", () => {
       const answer = overMcp(store, port, { credential: null });
       expect(answer["ok"]).toBe(false);
       expect(answer["stage"]).toBe("AUTHENTICATE");
+      expect(answer["outcome"]).toBe("REFUSED");
+      // The exact reason, carried across the JSON boundary. A stage-only
+      // assertion here would survive the transport dropping `error` entirely.
+      expect((answer["error"] as Record<string, unknown> | undefined)?.["code"])
+        .toBe("AUTHENTICATION_FAILED");
       expect(port.reads()).toBe(0);
     });
   });
@@ -765,6 +480,9 @@ describe("graph.get over the MCP dispatch port", () => {
       const answer = overMcp(store, port, {}, principalFor(PROJECT_ID, []));
       expect(answer["ok"]).toBe(false);
       expect(answer["code"]).toBe("GRAPH_QUERY_CAPABILITY_DENIED");
+      // The refusing layer travels too: the reader can also refuse a read, and
+      // only the layer says whether authority was denied before it ran.
+      expect(answer["layer"]).toBe("GRAPH_QUERY");
       expect(port.reads()).toBe(0);
     });
   });
@@ -774,8 +492,15 @@ describe("graph.get over the MCP dispatch port", () => {
       seedActive(store);
       const answer = overMcp(store, undefined);
       expect(answer["ok"]).toBe(false);
+      // THE DISPATCH PORT refused, not the handler. The MCP seam answers an
+      // uncomposed port with its own pre-existing `queryRefusal()` shape rather
+      // than minting a second one, so the frame carries a runtime error and
+      // never the handler's `GRAPH_QUERY_UNAVAILABLE` — asserting only "not ok"
+      // could not tell which of the two layers answered.
       expect((answer["error"] as Record<string, unknown> | undefined)?.["code"])
         .toBe("INPUT_INVALID");
+      expect(answer["code"]).toBeUndefined();
+      expect(answer["layer"]).toBeUndefined();
     });
   });
 });
@@ -804,6 +529,8 @@ describe("graph.get over the HTTP listener", () => {
           const unauthenticated = await overHttp(listener, { credential: null });
           expect(unauthenticated.status).toBe(401);
           expect(unauthenticated.body["stage"]).toBe("AUTHENTICATE");
+          expect((unauthenticated.body["error"] as Record<string, unknown> | undefined)?.["code"])
+            .toBe("AUTHENTICATION_FAILED");
 
           const spoofed = await overHttp(listener, {
             body: JSON.stringify({ projectId: "proj-somebody-else" }),
@@ -815,6 +542,12 @@ describe("graph.get over the HTTP listener", () => {
           const undecodable = await overHttp(listener, { body: "{not json" });
           expect(undecodable.status).toBe(400);
           expect(undecodable.body["code"]).toBe("LISTENER_GRAPH_REQUEST_INVALID");
+          // THE LISTENER refused, not the handler: undecodable bytes are this
+          // transport's own decode fault, and naming the layer is what keeps it
+          // distinct from `GRAPH_QUERY_REQUEST_INVALID`, which the handler
+          // returns for a body it could decode but may not admit.
+          expect(undecodable.body["layer"]).toBe("CONTROL_ROOM_LISTENER");
+          expect(undecodable.body["code"]).not.toBe("GRAPH_QUERY_REQUEST_INVALID");
 
           // Only the accepted request reached the reader.
           expect(port.reads()).toBe(1);

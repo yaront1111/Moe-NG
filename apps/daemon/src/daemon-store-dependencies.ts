@@ -212,6 +212,18 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");
     return port();
   },
+  /**
+   * FORWARDED, not merely constructed. `createStoreDependencies` returning a
+   * `graph` factory is invisible to the shipped daemon: `daemon-main` loads THIS
+   * frozen object, and a port missing here answers `GRAPH_QUERY_UNAVAILABLE` on
+   * a real authenticated `POST /graph/get` while every direct-injection test
+   * stays green. Every optional factory this root builds must appear here.
+   */
+  graph: () => {
+    const port = fromEnv().graph;
+    if (port === undefined) throw new Error("unreachable: the graph reader is always wired");
+    return port();
+  },
   provide: () => fromEnv().provide(),
   reconciliation: () => {
     const port = fromEnv().reconciliation;
