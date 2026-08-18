@@ -109,6 +109,40 @@ export const OBSERVATION = Object.freeze({
   truthClass: "DAEMON_VERIFIED",
 });
 
+/**
+ * The operator-configured Claude profile every fixture probe carries.
+ *
+ * `providerMinimumProfileRef` MUST stay `"provider-profile-1"`: it is the same ref
+ * `ACTIVATION_WITNESS` names, and `provider.probe` refuses when the envelope's ref and the
+ * body's disagree. The limit values are arbitrary shape-valid numbers — no runner ceiling is
+ * copied here, because a copied ceiling drifts silently away from the one that governs.
+ */
+export const CLAUDE_PROFILE = Object.freeze({
+  capabilitySchemaDigest: hex64("ca9ab111"),
+  concurrencyCeiling: 4,
+  limits: Object.freeze({
+    stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096, timeoutMs: 900_000,
+  }),
+  modelSnapshotEvidence: "claude --version reported a dated snapshot",
+  modelSnapshotKind: "DATED_SNAPSHOT",
+  profileRevisionId: "profile-revision-1",
+  provider: "claude",
+  providerMinimumProfileRef: "provider-profile-1",
+  reasoningEffort: "high",
+  selectedModelId: "claude-opus-5",
+  selection: Object.freeze({
+    modelRef: "model-ref-1", profileRef: "profile-ref-1", providerRef: "provider-ref-1",
+    reasoningEffortRef: "reasoning-effort-ref-1", runtimeRef: "runtime-ref-1",
+    snapshotRef: "snapshot-ref-1", structuredOutputSchemaRef: "structured-output-schema-ref-1",
+  }),
+});
+
+export const PROVIDER_OBSERVATION = Object.freeze({
+  profile: CLAUDE_PROFILE,
+  providerMinimumProfileRef: "provider-profile-1",
+  truthClass: "DAEMON_VERIFIED",
+});
+
 export const ACTIVATION_WITNESS = Object.freeze({
   artifactPathRef: "artifact-1",
   backupPathRef: "backup-1",
@@ -326,12 +360,7 @@ export function bootstrapSequence(): readonly Envelope[] {
   return [
     envelope("project.register", 0, { owner: "owner-1" }),
     envelope("project.bind_repository", 1, { observation: OBSERVATION }),
-    envelope("provider.probe", 0, {
-      observation: {
-        providerMinimumProfileRef: "provider-profile-1",
-        truthClass: "DAEMON_VERIFIED",
-      },
-    }),
+    envelope("provider.probe", 0, { observation: PROVIDER_OBSERVATION }),
     envelope("policy.install", 0, { slice: POLICY_SLICE }),
     envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),

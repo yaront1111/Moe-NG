@@ -6,6 +6,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
+import { PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -187,11 +188,7 @@ describe("code node steps", () => {
   });
 
   it("offers only agent-authored review submission for an approved, unaccepted node", () => {
-    commitBootstrap("provider.probe", {
-      observation: {
-        providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
-      },
-    });
+    commitBootstrap("provider.probe", { observation: PROVIDER_OBSERVATION });
     // Reach approval.decide durably via the fixture-canonical chain remainder.
     // (bind + policy + activate + goal + plan + approve, exact payloads from
     // bootstrap-test-fixtures shapes.)

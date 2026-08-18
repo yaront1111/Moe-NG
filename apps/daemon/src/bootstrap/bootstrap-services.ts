@@ -26,6 +26,12 @@ import type {
   ServiceOutcome,
 } from "./bootstrap-ledger.js";
 import { installPolicy, validatePolicy } from "./bootstrap-policy-services.js";
+import { admitProviderProfile } from "../provider-profile/provider-profile-codec.js";
+import {
+  PROFILE_REGISTRATION,
+  conflictsWithPriorProfile,
+  providerProbePayload,
+} from "../provider-profile/provider-profile-registration.js";
 
 /**
  * Project-scoped bootstrap services and the pipeline every command in this task runs through.
@@ -110,9 +116,16 @@ const activateProject: CommandHandler = (context): ServiceOutcome => {
 };
 
 /**
- * Provider probe has no core reducer — it is a caller-supplied observation whose adequacy is
- * judged later, by the activation witness. The daemon therefore owns only its shape and its
- * version agreement, and both refusals are marked as daemon-layer.
+ * Provider probe has no core reducer, but it is not therefore unowned: it is the ONLY seam
+ * through which an operator-configured provider profile becomes durable authority. Nothing
+ * else — no dispatch request, no runtime observation — may supply a model, an effort, a
+ * concurrency ceiling or a limit.
+ *
+ * Three layers can refuse here and each names itself. The envelope shape stays with the
+ * existing `DAEMON_INGRESS` guard, so a hostile `truthClass` still answers first and the new
+ * codes cannot absorb it. The profile body is judged by the codec, which returns its own code
+ * and layer. Agreement between the envelope's ref and the body's, and immutability of a
+ * `profileRevisionId` already on record, are registration facts and refuse as such.
  */
 const recordProbe: CommandHandler = (context): ServiceOutcome => {
   const { ledger, request, store } = context;
@@ -120,18 +133,31 @@ const recordProbe: CommandHandler = (context): ServiceOutcome => {
   const observation = payloadObject(request.payload, "observation");
   const profileRef = observation === null ? null : payloadRef(observation, "providerMinimumProfileRef");
   const truthClass = observation === null ? null : payloadRef(observation, "truthClass");
-  if (profileRef === null || truthClass === null || !TRUTH_CLASSES.has(truthClass)) {
+  if (observation === null || profileRef === null || truthClass === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  if (!TRUTH_CLASSES.has(truthClass)) {
+    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  const admission = admitProviderProfile(observation.profile);
+  if (!admission.ok) return refuse(request.kind, admission.issue.code, admission.issue.layer);
+  const { revision } = admission;
+  if (profileRef !== revision.providerMinimumProfileRef) {
+    return refuse(request.kind, "PROVIDER_PROFILE_REF_MISMATCH", PROFILE_REGISTRATION);
   }
   if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
     return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
+  if (conflictsWithPriorProfile(stateOf(ledger, aggregateId), revision)) {
+    return refuse(request.kind, "PROVIDER_PROFILE_IMMUTABILITY_CONFLICT", PROFILE_REGISTRATION);
+  }
+  const persisted = providerProbePayload(profileRef, truthClass, revision);
   return commitAccepted(store, request, {
     aggregateId,
-    eventPayload: { providerMinimumProfileRef: profileRef, truthClass },
+    eventPayload: persisted,
     eventType: "ProviderProbed",
     expectedVersion: versionOf(ledger, aggregateId),
-    result: { observation, version: versionOf(ledger, aggregateId) + 1 } as unknown as JsonValue,
+    result: persisted,
   });
 };
 

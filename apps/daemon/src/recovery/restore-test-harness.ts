@@ -7,7 +7,12 @@ import { SqliteEventStore, createBackupGeneration } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { ACTIVATION_WITNESS, OBSERVATION, envelope } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  ACTIVATION_WITNESS,
+  OBSERVATION,
+  PROVIDER_OBSERVATION,
+  envelope,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { ensureGenesisRecoveryBinding } from "../identity/genesis-recovery-binding.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
@@ -99,9 +104,7 @@ function send(
 export function seedReadyProject(store: SqliteEventStore): void {
   send(store, "project.register", 0, { owner: "owner-1" });
   send(store, "project.bind_repository", 1, { observation: OBSERVATION });
-  send(store, "provider.probe", 0, {
-    observation: { providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED" },
-  });
+  send(store, "provider.probe", 0, { observation: PROVIDER_OBSERVATION });
   send(store, "project.activate", 2, { witness: ACTIVATION_WITNESS });
 }
 

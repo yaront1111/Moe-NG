@@ -30,12 +30,23 @@ export {
  * durably recorded.
  */
 
-/** The layer that answered. Three layers can refuse, so evidence must name which one did. */
+/**
+ * The layer that answered. Several layers can refuse, so evidence must name which one did.
+ *
+ * A slice that owns a refusal vocabulary of its own contributes its layer here rather than
+ * hiding it inside a message, exactly as `@moe/core`'s approval-authority layers do. The
+ * provider-profile pair is spelled literally because the codec keeps its layer constants
+ * module-private: exporting them would declare a production boundary the security roster then
+ * demands a hostile trio for, and the compile-time check that keeps the two in agreement is
+ * `recordProbe` passing the codec's closed layer TYPE straight into `refuse`.
+ */
 export const SERVICE_REFUSED_BY = Object.freeze([
   "DAEMON_INGRESS",
   "DAEMON_PREREQUISITE",
   "CORE_REDUCER",
   "DURABLE_STORE",
+  "PROVIDER_PROFILE_CODEC",
+  "PROVIDER_PROFILE_REGISTRATION",
   ...APPROVAL_AUTHORITY_LAYERS,
 ] as const);
 
