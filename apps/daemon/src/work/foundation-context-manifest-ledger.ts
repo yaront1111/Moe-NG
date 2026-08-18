@@ -31,11 +31,9 @@
  * below names the only two store methods this module may reach.
  */
 
-import { createHash } from "node:crypto";
-
 import { DurableStoreError } from "@moe/store";
 import type {
-  CommandDecisionKey, CommandDecisionResponse, CommitExpectedVersionDecisionInput,
+  CommandDecisionResponse, CommitExpectedVersionDecisionInput,
   DurableStoreErrorCode, StoredEvent,
 } from "@moe/store";
 
@@ -46,15 +44,31 @@ import type {
   FoundationContextManifestRecord, FoundationContextRefusal,
 } from "./foundation-context-manifest-codec.js";
 import {
+  FOUNDATION_CONTEXT_COMMAND_KIND, deriveFoundationContextAggregateId,
+  deriveFoundationContextCorrelationId, deriveFoundationContextDecisionKey,
+  deriveFoundationContextEventId, deriveFoundationContextRequestBytes,
+} from "./foundation-context-manifest-identity.js";
+import {
   FOUNDATION_CONTEXT_EVENT_TYPE, FOUNDATION_CONTEXT_READER, FOUNDATION_CONTEXT_READER_CODES,
   readFoundationContextManifestEvent,
 } from "./foundation-context-manifest-reader.js";
 import type { FoundationContextReaderRefusal } from "./foundation-context-manifest-reader.js";
 
 export { FOUNDATION_CONTEXT_EVENT_TYPE, FOUNDATION_CONTEXT_READER };
+/**
+ * The identity surface is re-exported, not redefined: one authority derives
+ * these, and the strict reader imports it WITHOUT importing this writer.
+ */
+export {
+  FOUNDATION_CONTEXT_COMMAND_KIND, deriveFoundationContextAggregateId,
+  deriveFoundationContextCorrelationId, deriveFoundationContextDecisionKey,
+  deriveFoundationContextEventId, deriveFoundationContextRequestBytes,
+};
+export type {
+  FoundationContextSelectionIdentity, FoundationContextSlotIdentity,
+} from "./foundation-context-manifest-identity.js";
 /** The writer's layer; the durable read answers under the reader's own. */
 export const FOUNDATION_CONTEXT_LEDGER = "FOUNDATION_CONTEXT_LEDGER" as const;
-export const FOUNDATION_CONTEXT_COMMAND_KIND = "foundation.context-manifest.seal" as const;
 
 /**
  * `REPLAY_DIVERGED` is this module's own name for the store's
@@ -76,7 +90,6 @@ export const FOUNDATION_CONTEXT_LEDGER_CODES = Object.freeze([
 export type FoundationContextLedgerCode = (typeof FOUNDATION_CONTEXT_LEDGER_CODES)[number];
 type WriterCode = (typeof WRITER_CODES)[number];
 type Sealed = FoundationContextManifestRecord;
-type Parts = readonly (string | number)[];
 
 /**
  * The store seam, declared STRUCTURALLY rather than as `SqliteEventStore`, so
@@ -124,54 +137,6 @@ const EXPECTED_VERSION = 0;
 const UNAVAILABLE = "FOUNDATION_CONTEXT_LEDGER_STORE_UNAVAILABLE" as const;
 const DIVERGED = "FOUNDATION_CONTEXT_LEDGER_REPLAY_DIVERGED" as const;
 const STALE = "FOUNDATION_CONTEXT_LEDGER_EXPECTED_VERSION_CONFLICT" as const;
-const AGGREGATE_NAMESPACE = "moe-foundation-context/1:";
-const COMMAND_NAMESPACE = "moe-foundation-context-command/1:";
-const CORRELATION_NAMESPACE = "moe-foundation-context-correlation/1:";
-const EVENT_NAMESPACE = "moe-foundation-context-event/1:";
-const PRINCIPAL_NAMESPACE = "moe-foundation-context-principal/1:";
-const REQUEST_NAMESPACE = "moe-foundation-context-request/1:";
-const encoder = new TextEncoder();
-
-/** Length-prefixed: `"ab" + "c"` and `"a" + "bc"` must not hash alike. */
-function frame(parts: Parts): string {
-  return parts.map((part) => `${String(part).length}:${String(part)}`).join("|");
-}
-
-/** Namespaced, hashed, and therefore bounded whatever the field lengths are. */
-function identifier(namespace: string, parts: Parts): string {
-  const digest = createHash("sha256").update(`${namespace}${frame(parts)}`, "utf8").digest("hex");
-  return `${namespace}sha256:${digest}`;
-}
-
-function aggregateParts(record: Sealed): Parts {
-  return [FOUNDATION_CONTEXT_RECORD_VERSION, record.projectId, record.sessionId, record.attemptRef];
-}
-function commandParts(record: Sealed): Parts {
-  return [...aggregateParts(record), record.nodeKey, record.graphRevisionRef, record.graphEpoch];
-}
-function requestParts(record: Sealed): Parts {
-  return [...commandParts(record), record.configurationDigest, record.inputManifestDigest,
-    record.graphContentHash];
-}
-
-export function deriveFoundationContextAggregateId(record: Sealed): string {
-  return identifier(AGGREGATE_NAMESPACE, aggregateParts(record));
-}
-
-export function deriveFoundationContextDecisionKey(record: Sealed): CommandDecisionKey {
-  return Object.freeze({
-    commandId: identifier(COMMAND_NAMESPACE, commandParts(record)),
-    principalId: identifier(PRINCIPAL_NAMESPACE, [record.projectId, record.sessionId]),
-    // The store scopes every decision by project; this is the record's OWN
-    // project, already bound by its digest, so it cannot name a foreign one.
-    projectId: record.projectId,
-  });
-}
-
-export function deriveFoundationContextRequestBytes(record: Sealed): Uint8Array {
-  return encoder.encode(`${REQUEST_NAMESPACE}${frame(requestParts(record))}`);
-}
-
 function refuse(
   code: WriterCode, storeCode: DurableStoreErrorCode | null,
 ): FoundationContextLedgerRefusal {
@@ -217,13 +182,13 @@ export function commitFoundationContextManifest(
     response = store.commitExpectedVersionDecision({
       commandKind: FOUNDATION_CONTEXT_COMMAND_KIND,
       committedResultBytes: bytes,
-      correlationId: identifier(CORRELATION_NAMESPACE, [record.recordDigest]),
+      correlationId: deriveFoundationContextCorrelationId(record.recordDigest),
       decidedAt: input.decidedAt,
       events: [{
         // Stamped explicitly: an omitted version persists the store's generic
         // default, a schema these bytes do not speak.
         domainSchemaVersion: FOUNDATION_CONTEXT_RECORD_VERSION,
-        eventId: identifier(EVENT_NAMESPACE, commandParts(record)),
+        eventId: deriveFoundationContextEventId(record),
         eventType: FOUNDATION_CONTEXT_EVENT_TYPE,
         payload: bytes,
       }],
