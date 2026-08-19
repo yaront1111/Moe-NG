@@ -98,10 +98,12 @@ export interface FoundationCaptureDirent {
 }
 
 /**
- * `identity` is the filesystem's own object identity (`dev:ino`, populated on
- * win32 too under bigint stats). It is what ties a containment verdict taken by
- * PATH to the bytes read from a HANDLE: if the two disagree, the path was
- * swapped between the two observations and no answer is available.
+ * `identity` is the filesystem's own object identity (`dev:ino:ctimeNs`,
+ * populated on win32 too under bigint stats — `ctimeNs` is included because
+ * Linux recycles a freed inode number immediately, so `dev:ino` alone cannot
+ * distinguish a file recreated in place). It is what ties a containment verdict
+ * taken by PATH to the bytes read from a HANDLE: if the two disagree, the path
+ * was swapped between the two observations and no answer is available.
  */
 export interface FoundationCaptureStat {
   readonly kind: ResultEntryKind;

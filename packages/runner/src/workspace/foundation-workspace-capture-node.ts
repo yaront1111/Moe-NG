@@ -54,7 +54,12 @@ function statOf(stats: BigIntStats): FoundationCaptureStat {
   return {
     kind: kindOf(stats),
     byteLength: Number(stats.size),
-    identity: `${stats.dev.toString()}:${stats.ino.toString()}`,
+    // `dev:ino` alone is NOT an identity on Linux: ext4 recycles a freed inode
+    // number immediately, so unlink-then-recreate between the lstat and the
+    // open yields the SAME dev:ino for a different object. `ctimeNs` pins the
+    // inode's change time — a recreated file always carries a fresh one — and
+    // stays constant across the bracket for an untouched file.
+    identity: `${stats.dev.toString()}:${stats.ino.toString()}:${stats.ctimeNs.toString()}`,
   };
 }
 
