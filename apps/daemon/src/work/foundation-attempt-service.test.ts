@@ -29,6 +29,23 @@ const providerBoundaryProbe = vi.hoisted(() => ({
   /** One sequence for every boundary crossing, so ORDER is asserted as order
    *  rather than as two counters that could both be right and still be inverted. */
   order: [] as string[],
+  /**
+   * A SCRIPTED PROVIDER, null everywhere except the durable-readback arms.
+   *
+   * The physical launch is the one boundary a non-Windows case cannot cross:
+   * `@moe/runner` withholds runtime discovery, which is exactly why every
+   * capture assertion in this file reads `toHaveLength(0)`. A script is handed
+   * `runReal` and is expected to CALL it — the runner's own telemetry handoff is
+   * what the provider-run ledger composes its record from, and a hand-written
+   * one would be this suite inventing a contract it does not own. The script
+   * only writes the bytes a provider process would have written and raises the
+   * launch observation to the PROVEN class the real runtime discovery cannot
+   * reach here. Everything else — lifecycle, ledger, producer, scanner, sealer,
+   * store — stays the shipped code.
+   */
+  scripted: null as null | ((
+    input: ActivationTelemetryLaunchInput, runReal: () => Promise<unknown>,
+  ) => Promise<unknown>),
 }));
 
 vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
@@ -41,9 +58,11 @@ vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) =
       ...args: Parameters<typeof actual.launchActivationProviderRun>
     ) => {
       providerBoundaryProbe.order.push("launch");
-      const result = await actual.launchActivationProviderRun(...args);
+      const { scripted } = providerBoundaryProbe;
+      const runReal = async (): Promise<unknown> => actual.launchActivationProviderRun(...args);
+      const result = scripted === null ? await runReal() : await scripted(args[1], runReal);
       providerBoundaryProbe.launches.push({ input: args[1], result });
-      return result;
+      return result as Awaited<ReturnType<typeof actual.launchActivationProviderRun>>;
     },
   };
 });
@@ -93,6 +112,7 @@ import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import { FOUNDATION_DISPATCH_BYTES_KEY } from "../daemon-foundation-command.js";
 import { createFoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
+import { createFoundationCaptureProducer } from "./foundation-capture-producer.js";
 import type { FoundationCaptureLifecycle, PrepareCaptureInput, PrepareCaptureResult } from "./foundation-capture-lifecycle.js";
 import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foundation-capture-context-ledger.js";
 import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
@@ -135,6 +155,9 @@ afterEach(() => {
   providerBoundaryProbe.commits.length = 0;
   providerBoundaryProbe.launches.length = 0;
   providerBoundaryProbe.order.length = 0;
+  // Cleared here rather than in the arms that set it: a leaked script would
+  // silently replace the real launcher for every later case in the file.
+  providerBoundaryProbe.scripted = null;
   cleanupRestoreHarnesses();
 });
 afterAll(() => {
@@ -1993,5 +2016,260 @@ describe("foundation attempt dispatch — the module holds no cross-dispatch sta
     expect(declarations.filter((line) => /^(let|var)\s/.test(line))).toEqual([]);
     expect(declarations.filter(
       (line) => /^const\s.*=\s*new\s+(Map|Set|WeakMap|WeakSet)\b/.test(line))).toEqual([]);
+  });
+});
+
+/**
+ * DURABLE READBACK of a REAL producer answer.
+ *
+ * THE ONE BOUNDARY THAT IS NOT CROSSED HERE, stated first so nothing below is
+ * trusted past its reach: the physical launch. Reaching `capture()` through
+ * `dispatch()` needs a PROVEN launch observation, and `@moe/runner` withholds
+ * `observeInstalledClaudeRuntime` / `probeClaudeRuntime` /
+ * `capabilitySchemaDigestOf`, so no consumer here can mint a runtime quote
+ * production accepts. Measured, not assumed — driving the production registry
+ * end to end refuses `CLAUDE_RUNTIME_PATH_NOT_FILE` inside the real launcher.
+ * Faking past it would mean hand-writing the runner's telemetry handoff, i.e.
+ * this suite inventing a contract it does not own.
+ *
+ * WHAT IS THEREFORE REAL HERE, which is everything else on the path: the store,
+ * the repository, the workspace lifecycle, the durable capture-context ledger,
+ * the PRODUCER ITSELF, the runner's scanner and result sealer, and the durable
+ * attempt row. `recordProvenFoundationAttempt` is handed exactly the arguments
+ * `capture()` passes it.
+ *
+ * AND THE ASSERTIONS READ ROWS. `readFoundationAttemptRecord` re-decodes the
+ * durable event and re-encodes it to prove the bytes round-trip, so a producer
+ * that answered correctly while the store persisted something else cannot pass.
+ */
+describe("foundation attempt capture — a real producer answer reaches the durable row", () => {
+  /** A store carrying BOTH a durable PROCESS_OBSERVED activation and a real
+   *  prepared workspace, with its own worktree parent so arms cannot collide. */
+  async function groundedCapture(label: string, authored: string | null): Promise<{
+    readonly answer: unknown; readonly ground: ReturnType<typeof durableObservedFixture>;
+    readonly input: Record<string, unknown>; readonly worktreeRoot: string;
+  }> {
+    const ground = durableObservedFixture(label);
+    const parent = realpathSync(mkdtempSync(join(tmpdir(), "moe-dispatch-readback-")));
+    scratchRoots.push(parent);
+    const lifecycle = createFoundationCaptureLifecycle({
+      captureFs: createNodeFoundationCaptureFs(),
+      catalogSource: (): unknown => ({
+        ...CATALOG, entries: [{ ...CATALOG.entries[0], worktreeParent: parent }],
+      }),
+      clock: () => DECIDED_AT, materializer: createNodeWorktreeMaterializer(process.env),
+      store: ground.store,
+    });
+    const prepared = await lifecycle.prepareCapture({
+      attemptAggregateId: ACTIVATION_AGGREGATE, attemptId: ground.record.attempt.attemptId,
+      nodeKey: NODE_KEY, projectId: PROJECT_ID, proposedBaseIdentity: HEAD, proposedCwd: null,
+      proposedEntries: INPUT_MANIFEST.entries, requestDigest: DIGEST_A,
+      reservationDigest: DIGEST_B, sessionId: SESSION_ID,
+    });
+    if (!prepared.ok) throw new Error(`prepare refused: ${prepared.code}@${prepared.layer}`);
+    if (prepared.proof === null) throw new Error("prepare returned no prelaunch proof");
+    // What the attempt did. A brand-new path lies outside every declared scope
+    // and is a different fact — refused, not captured — so authoring means
+    // rewriting a DECLARED file, exactly as a real attempt editing source does.
+    if (authored !== null) {
+      writeFileSync(join(prepared.assignment.realWorktreePath, REPOSITORY.paths[0]),
+        Buffer.from(authored, "utf8"));
+    }
+    // THE SEALED INPUT THE SERVICE ITSELF PASSES at this seam: the AUTHORITY's
+    // hydrated manifest, which is what `capture()` hands the store. The caller's
+    // `buildInputManifest` proposal is deliberately NOT used here — a request may
+    // propose a subset, and sealing a result against a subset refuses every
+    // in-scope path the caller did not name.
+    const sealed = { manifest: prepared.inputManifest, ok: true as const };
+    if (!sealed.ok) throw new Error('input manifest fixture refused');
+    // The REAL producer over the REAL durable record, driven by the same six
+    // identifiers plus the same lexical proof the service passes.
+    const answer = createFoundationCaptureProducer({ store: ground.store })({
+      attemptId: ground.record.attempt.attemptId, baseIdentity: HEAD,
+      captureRef: prepared.captureRef, nodeKey: NODE_KEY,
+      observation: ground.value["observation"], proof: prepared.proof, sessionId: SESSION_ID,
+    });
+    reserveDispatch(ground.store, ground.bound, ground.record);
+    return { answer, ground, input: sealed.manifest as unknown as Record<string, unknown>,
+      worktreeRoot: prepared.assignment.realWorktreePath };
+  }
+
+  function storedRow(store: SqliteEventStore): Record<string, unknown> {
+    const read = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    if (!read.ok) throw new Error(`the attempt row must be readable: ${JSON.stringify(read)}`);
+    return read.record as unknown as Record<string, unknown>;
+  }
+
+  it("seals a real authored delta into the durable attempt row", async () => {
+    const { answer, ground, input } = await groundedCapture(
+      "readback-authored", "alpha authored by the attempt\n");
+
+    // The producer ANSWERED rather than refused — asserted first, because a
+    // refusal record would satisfy several of the shapes below by accident.
+    expect((answer as Record<string, unknown>)["ok"]).not.toBe(false);
+    expect((answer as Record<string, unknown>)["authoredPaths"])
+      .toContain(REPOSITORY.paths[0]);
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      { answer, observation: ground.value["observation"],
+        registration: ground.value["registration"] });
+
+    if (!outcome.ok) throw new Error(`settlement refused: ${JSON.stringify(outcome)}`);
+    const durable = storedRow(ground.store);
+    // The shape ONLY the PROVEN branch can produce. Before this task the
+    // production callback answered `null`, which lands here as UNKNOWN with a
+    // null manifest — so both halves get their own assertion.
+    expect(durable["truthClass"]).toBe("PROVEN");
+    expect(durable["reasonCode"]).toBeNull();
+    expect(durable["resultManifest"]).not.toBeNull();
+    const manifest = nested(durable, "resultManifest");
+    expect(manifest["authoredPaths"]).toStrictEqual([REPOSITORY.paths[0]]);
+    // THE BYTES THE ATTEMPT WROTE, digested by the runner's own scanner. A
+    // manifest that echoed the input entry would carry the BASE digest, which
+    // is exactly what a producer trusting caller data would have produced.
+    const authoredEntries = manifest["authoredEntries"] as readonly Record<string, unknown>[];
+    const authoredEntry = authoredEntries.find((entry) => entry["path"] === REPOSITORY.paths[0]);
+    expect(authoredEntry?.["byteLength"])
+      .toBe(Buffer.from("alpha authored by the attempt\n", "utf8").byteLength);
+    expect(authoredEntry?.["sha256"]).toBe(createHash("sha256")
+      .update(Buffer.from("alpha authored by the attempt\n", "utf8")).digest("hex"));
+    // The untouched declared SIBLING survives as inherited rather than being
+    // silently dropped. Before the seam was corrected to seal against the
+    // authority's manifest, this exact path came back
+    // RUNNER_WORKSPACE_PATH_UNDECLARED and no result sealed at all.
+    const inherited = manifest["inheritedEntries"] as readonly Record<string, unknown>[];
+    expect(inherited.map((entry) => entry["path"])).toStrictEqual([REPOSITORY.paths[1]]);
+    expect(manifest["baseIdentity"]).toBe(HEAD);
+  });
+
+  it("answers a re-delivery from the durable row, with no rescan and no second decision", async () => {
+    const { answer, ground, input, worktreeRoot } = await groundedCapture(
+      "readback-replay", "the bytes the attempt authored\n");
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      { answer, observation: ground.value["observation"],
+        registration: ground.value["registration"] });
+    if (!outcome.ok) throw new Error(`settlement refused: ${JSON.stringify(outcome)}`);
+    const sealedDigest = nested(storedRow(ground.store), "resultManifest")["sha256"];
+    const eventsBefore = eventTypes(ground.store, DISPATCH_AGGREGATE);
+    expect(eventsBefore.length).toBeGreaterThan(0);
+
+    // PHYSICAL PROOF OF NO RESCAN: the tree is changed underneath the settled
+    // attempt. Anything that re-scanned would see these bytes; "it answered
+    // quickly" would not have proved a thing.
+    writeFileSync(join(worktreeRoot, REPOSITORY.paths[0]),
+      Buffer.from("bytes written AFTER the attempt settled\n", "utf8"));
+    const replayed = readFoundationAttemptRecord(ground.store, ACTIVATION_AGGREGATE);
+
+    if (!replayed.ok) throw new Error("the durable row must still be readable");
+    expect(nested(replayed.record as unknown as Record<string, unknown>,
+      "resultManifest")["sha256"]).toBe(sealedDigest);
+    // And no second decision: a re-delivery reads, it does not re-settle.
+    expect(eventTypes(ground.store, DISPATCH_AGGREGATE)).toEqual(eventsBefore);
+  });
+
+  it("refuses the SAME answer when sealed against the caller's proposed manifest", async () => {
+    const { answer, ground } = await groundedCapture("readback-proposal", "authored bytes\n");
+    // The caller's proposal: `buildInputManifest` over the entries the REQUEST
+    // named — lawfully a subset, since `entriesAgree` is an `.every()` over the
+    // proposed list and admits a partial or empty one.
+    const proposed = buildInputManifest({
+      baseIdentity: HEAD, entries: INPUT_MANIFEST.entries as never,
+    });
+    if (!proposed.ok) throw new Error(`proposal fixture refused: ${proposed.code}`);
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record,
+      proposed.manifest as unknown as Record<string, unknown>,
+      { answer, observation: ground.value["observation"],
+        registration: ground.value["registration"] });
+
+    // THIS IS WHY `capture()` PASSES THE AUTHORITY'S MANIFEST. The identical
+    // producer answer that seals cleanly above is rejected here, because a
+    // declared path the caller did not name is "neither authored nor
+    // inherited". Sealing against the proposal would let a caller decide which
+    // in-scope paths are attributable — a proposal selecting, which the epic
+    // forbids — and would leave the attempt UNKNOWN on every honest capture.
+    expectRefusal(outcome, "RUNNER_WORKSPACE_PATH_UNDECLARED", RUNNER_WORKSPACE_LAYER);
+  });
+
+  it("seals an all-INHERITED manifest for a clean run rather than refusing", async () => {
+    const { answer, ground, input } = await groundedCapture("readback-clean", null);
+
+    expect((answer as Record<string, unknown>)["ok"]).not.toBe(false);
+    expect((answer as Record<string, unknown>)["authoredPaths"]).toStrictEqual([]);
+
+    const outcome = recordProvenFoundationAttempt(
+      ground.store, ground.bound, ground.record, input,
+      { answer, observation: ground.value["observation"],
+        registration: ground.value["registration"] });
+
+    if (!outcome.ok) throw new Error(`settlement refused: ${JSON.stringify(outcome)}`);
+    const durable = storedRow(ground.store);
+    expect(durable["truthClass"]).toBe("PROVEN");
+    const manifest = nested(durable, "resultManifest");
+    expect(manifest["authoredPaths"]).toStrictEqual([]);
+    expect(manifest["authoredEntries"]).toStrictEqual([]);
+    // A clean attempt seals EVERY declared path as inherited rather than
+    // refusing. Asserted as the exact path list, so an empty manifest — which
+    // an "authored nothing" answer could also produce — cannot satisfy it.
+    const inherited = manifest["inheritedEntries"] as readonly Record<string, unknown>[];
+    expect(inherited.map((entry) => entry["path"]))
+      .toStrictEqual([REPOSITORY.paths[0], REPOSITORY.paths[1]]);
+  });
+});
+
+/**
+ * THE COMPOSITION EDGE, in the module that owns it.
+ *
+ * The behavioural arms above prove the producer's answer reaches the durable
+ * row. What they cannot reach is `daemon-foundation-command.ts` composing it,
+ * because that only becomes observable past the physical launch. This reads the
+ * module's own source instead — a SHAPE guard, and graded as one.
+ *
+ * LIMIT, so this is not trusted past its reach: it proves the null stub is gone
+ * and the real producer is composed by name. It cannot prove the composed value
+ * is reached at runtime; only a case that crosses the launch boundary can.
+ */
+describe("foundation dispatch handler — the null capture stub is gone", () => {
+  it("composes the production producer and declares no null-answering capture", () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..",
+      "daemon-foundation-command.ts"), "utf8");
+
+    // POSITIVE CONTROL FIRST: an unreadable or renamed file would satisfy every
+    // absence assertion below without inspecting anything.
+    expect(source).toContain("createFoundationDispatchHandler");
+    expect(source).toContain("createFoundationAttemptService");
+
+    expect(source).toContain("createFoundationCaptureProducer({ store: options.store })");
+    // The exact stub this task replaced, and any respelling of the same idea.
+    expect(source).not.toContain("(): null => null");
+    expect(source.split("\n").filter((line) => /captureResult\s*=\s*\(\s*\)\s*=>/.test(line)))
+      .toEqual([]);
+  });
+
+  /**
+   * THE SEAM ITSELF, and this arm exists because a drill caught its absence:
+   * reverting `capture()` to seal against `input` left every behavioural arm
+   * above GREEN, since those arms hand `recordProvenFoundationAttempt` a
+   * manifest directly and so never exercise the service's choice of which one to
+   * pass. The behavioural pair (authority seals / proposal refuses
+   * RUNNER_WORKSPACE_PATH_UNDECLARED) proves the choice MATTERS; only this
+   * proves production makes it. It is a SHAPE guard and is graded as one — the
+   * choice becomes observable at runtime only past the physical launch.
+   */
+  it("seals the durable result against the authority's manifest, not the request's", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "foundation-attempt-service.ts"), "utf8");
+
+    // POSITIVE CONTROL FIRST: a renamed file or a renamed callee would satisfy
+    // the negative below by finding nothing at all.
+    const settlement = source.slice(source.indexOf("recordProvenFoundationAttempt("));
+    expect(settlement.length).toBeGreaterThan(0);
+    expect(settlement).toContain("{ answer, observation, registration }");
+
+    expect(settlement.slice(0, settlement.indexOf("{ answer,")))
+      .toContain("prepared.inputManifest");
   });
 });

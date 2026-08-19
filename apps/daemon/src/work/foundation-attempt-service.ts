@@ -131,10 +131,26 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     const answer = await contained(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
       captureRef: prepared.captureRef, nodeKey: bound.nodeKey, observation,
-      sessionId: bound.sessionId,
+      // THE PROOF TRAVELS LEXICALLY TOO, and it has to: it is not a field of the
+      // durable record, re-deriving one after a launch refuses a tree the attempt
+      // legitimately changed, and `sealPrelaunchProof` is withheld from
+      // `@moe/runner` so no consumer may mint one. Like `captureRef` it comes from
+      // the preparation THIS dispatch made, never from anything a caller sent.
+      proof: prepared.proof, sessionId: bound.sessionId,
     }));
+    // THE AUTHORITY'S SEALED INPUT, not the caller's proposal. `input` here is
+    // `buildInputManifest` over the entries the REQUEST proposed, and a request
+    // may lawfully propose a subset — `entriesAgree` checks each proposed entry
+    // against the hydrated bytes and admits a partial (even empty) list. Sealing
+    // the result against that subset makes the proposal decide which paths are
+    // attributable: every honestly captured in-scope path the caller did not
+    // name comes back RUNNER_WORKSPACE_PATH_UNDECLARED. Measured, not feared —
+    // that is exactly how the first real producer answer refused. The workspace
+    // the answer describes was hydrated from the AUTHORITATIVE declared scope,
+    // so that is the input it must be sealed against.
     const settled = noteRelease(bound, record, recordProvenFoundationAttempt(
-      store, bound, record, input, { answer, observation, registration }));
+      store, bound, record, prepared.inputManifest as unknown as Record<string, unknown>,
+      { answer, observation, registration }));
     // ONLY a proven durable result may release its tree. An unproven or uncertain
     // settlement retains the bytes: they are the only evidence of what ran.
     if (settled.ok) {

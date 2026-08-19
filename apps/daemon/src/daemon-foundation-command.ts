@@ -11,6 +11,7 @@ import { FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES } from "./work/foundation-attempt-
 import { refuseLocal } from "./work/foundation-attempt-contracts.js";
 import { createFoundationAttemptService } from "./work/foundation-attempt-service.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { createFoundationCaptureProducer } from "./work/foundation-capture-producer.js";
 
 /**
  * `foundation.dispatch` as a command entry: the one place the durable attempt service is
@@ -59,13 +60,11 @@ export const foundationSyncHandler: CommandHandler = () => {
 };
 
 /**
- * NO PRODUCTION CAPTURE PRODUCER EXISTS YET — `FoundationAttemptDeps.captureResult` has
- * no producer anywhere outside tests, and task-31ea82e750 owns building one. Answering
- * nothing is the honest report: the store builds no result manifest from it and the
- * attempt's truth stays UNKNOWN. A fabricated answer here would forge exactly the
- * workspace evidence this epic exists to prove.
+ * THE PRODUCTION CAPTURE PRODUCER, composed per handler over the same store the
+ * lifecycle sealed its context into. It reads that durable context by the
+ * `captureRef` this dispatch's own preparation derived and answers from the
+ * runner's scan of the assigned tree — never from anything the caller sent.
  */
-const captureResult = (): null => null;
 
 /**
  * THE FIFTH BLOCKER, measured here rather than assumed: `decodeRuntimeCommandEnvelopeBytes`
@@ -95,7 +94,8 @@ export function createFoundationDispatchHandler(
   options: FoundationCommandOptions,
 ): AsyncCommandHandler {
   const service = createFoundationAttemptService({
-    captureResult, lifecycle: options.lifecycle, store: options.store,
+    captureResult: createFoundationCaptureProducer({ store: options.store }),
+    lifecycle: options.lifecycle, store: options.store,
   });
 
   return async ({ envelope }): Promise<DurableDecision> => {
