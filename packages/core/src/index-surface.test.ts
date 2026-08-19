@@ -69,6 +69,9 @@ type ExportKind = "array" | "function" | "record" | "string";
  * (2 frozen vocabularies, 1 layer tag, 1 function) published by task-ee27ed7c.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
+  ["ACCEPTANCE_CONTRACT_CODES", "array"], ["ACCEPTANCE_CONTRACT_DIGEST_DOMAIN", "string"],
+  ["ACCEPTANCE_CONTRACT_LAYERS", "array"], ["ACCEPTANCE_CONTRACT_VERSION", "string"],
+  ["ACCEPTANCE_CRITERION_CONTENT_DOMAIN", "string"],
   ["APPROVAL_ACTOR_KINDS", "array"],
   ["APPROVAL_AUTHORITY_CODES", "array"], ["APPROVAL_AUTHORITY_LAYERS", "array"],
   ["APPROVAL_COMMAND_KINDS", "array"], ["APPROVAL_POLICY_KINDS", "array"],
@@ -86,6 +89,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PLANNING_EXPANSION_ERROR_CODES", "array"], ["PLANNING_EXPANSION_LAYERS", "array"],
   ["PLANNING_EXPANSION_TARGETS", "array"], ["PLANNING_RUN_COMMAND_KINDS", "array"],
   ["PLANNING_RUN_TRANSITIONS", "record"],
+  ["PLAN_EXECUTION_CONTENT_DOMAIN", "string"], ["PLAN_REVISION_CODES", "array"],
+  ["PLAN_REVISION_DIGEST_DOMAIN", "string"], ["PLAN_REVISION_LAYERS", "array"],
+  ["PLAN_REVISION_VERSION", "string"],
   ["POLICY_AUTO_APPROVAL_TIERS", "array"], ["POLICY_OBLIGATION_KINDS", "array"],
   ["POLICY_OUTCOMES", "array"], ["POLICY_OUTCOME_DOMINANCE", "array"],
   ["POLICY_REASON_CODES", "array"], ["POLICY_RISK_TIERS", "array"],
@@ -100,10 +106,16 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
   ["approveExpansionManually", "function"], ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
-  ["createCredential", "function"], ["createPrincipal", "function"],
+  ["createAcceptanceContract", "function"], ["createCredential", "function"],
+  ["createPlanRevision", "function"], ["createPrincipal", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
+  ["decodeAcceptanceContractBytes", "function"], ["decodePlanRevisionBytes", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
+  ["deriveAcceptanceContractDigest", "function"],
+  ["deriveAcceptanceCriterionContent", "function"],
+  ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
+  ["encodeAcceptanceContract", "function"], ["encodePlanRevision", "function"],
   ["encodeProjectConfigurationManifest", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["grantHumanAuthority", "function"],
@@ -123,7 +135,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(85);
+  expect(EXPECTED_EXPORTS.length).toBe(105);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -533,7 +545,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 85,
+    namedExportCount: 105,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",

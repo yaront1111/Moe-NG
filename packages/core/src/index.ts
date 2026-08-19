@@ -105,6 +105,40 @@ export type {
 } from "./planning/planning-contract.js";
 
 export {
+  ACCEPTANCE_CONTRACT_CODES, ACCEPTANCE_CONTRACT_LAYERS, ACCEPTANCE_CONTRACT_VERSION,
+} from "./planning/acceptance-contract.js";
+export type {
+  AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
+  AcceptanceContractDraft, AcceptanceContractLayer, AcceptanceContractRefusal,
+  AcceptanceCriterionObligation, AcceptanceEvidenceRequirement,
+} from "./planning/acceptance-contract.js";
+export {
+  ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, ACCEPTANCE_CRITERION_CONTENT_DOMAIN,
+  createAcceptanceContract, decodeAcceptanceContractBytes, deriveAcceptanceContractDigest,
+  deriveAcceptanceCriterionContent, encodeAcceptanceContract,
+} from "./planning/acceptance-contract-codec.js";
+export type {
+  AcceptanceContractCreateResult, AcceptanceContractDecodeResult,
+  AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent,
+  AcceptanceCriterionContentResult,
+} from "./planning/acceptance-contract-codec.js";
+export {
+  PLAN_REVISION_CODES, PLAN_REVISION_LAYERS, PLAN_REVISION_VERSION,
+} from "./planning/plan-revision-contract.js";
+export type {
+  PlanRevision, PlanRevisionCode, PlanRevisionDraft, PlanRevisionGraphBinding,
+  PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
+} from "./planning/plan-revision-contract.js";
+export {
+  PLAN_EXECUTION_CONTENT_DOMAIN, PLAN_REVISION_DIGEST_DOMAIN, createPlanRevision,
+  decodePlanRevisionBytes, derivePlanExecutionContent, derivePlanRevisionDigest,
+  encodePlanRevision,
+} from "./planning/plan-revision-codec.js";
+export type {
+  PlanExecutionContentResult, PlanRevisionCreateResult, PlanRevisionDecodeResult,
+  PlanRevisionDigestResult, PlanRevisionEncodeResult,
+} from "./planning/plan-revision-codec.js";
+export {
   GRAPH_REVISION_COMMAND_KINDS,
   GRAPH_REVISION_TRANSITIONS,
   reduceGraphRevision,
