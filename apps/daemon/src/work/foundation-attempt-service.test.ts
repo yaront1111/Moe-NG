@@ -2,7 +2,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   CLAUDE_LAUNCHER_VERSION, buildInputManifest, buildProviderRuntimeObservation,
@@ -373,6 +374,83 @@ function dispatchRequest(overrides: RequestOverrides = {}): Record<string, unkno
     graphSnapshot: overrides.graphSnapshot ?? structuredClone(SINGLE_NODE_GRAPH),
     inputManifest: structuredClone(INPUT_MANIFEST),
     launchTemplate: overrides.launchTemplate ?? structuredClone(LAUNCH_TEMPLATE),
+  };
+}
+
+/**
+ * A SECOND durable identity, distinct in EVERY field the captureRef and the
+ * worktree derive from: the intent's idempotency key (so the activation
+ * aggregate differs), the attemptId, and the session that owns the lease. Two
+ * dispatches that share any one of them are collapsed by the reservation into a
+ * duplicate delivery, and a deduplicated pair cannot tell "isolated" apart from
+ * "crossed onto one" — both produce a single ref.
+ */
+const SECOND_SESSION_ID = "session-2";
+const SECOND_ATTEMPT_ID = "attempt-2";
+const SECOND_LEASE_RECORD = {
+  ...LEASE_RECORD, leaseId: "lease-2", leaseToken: "token-2", ownerSessionRef: SECOND_SESSION_ID,
+} as const;
+const SECOND_LEASE_PROOF = {
+  ...LEASE_PROOF, leaseToken: "token-2", ownerSessionRef: SECOND_SESSION_ID,
+} as const;
+/** `leaseBinding` travels INSIDE the intent, so it has to be the second lease
+ *  too: an intent still binding the first lease refuses at the runner's lease
+ *  mirror (LEASE_MIRROR_STALE) long before any workspace is prepared. */
+const SECOND_INTENT = {
+  ...EFFECT_INTENT, idempotencyKey: "idem-2", intentId: "intent-2",
+  leaseBinding: SECOND_LEASE_RECORD,
+} as const;
+const SECOND_AGGREGATE = deriveActivationAggregateId(
+  SECOND_INTENT.aggregateId, SECOND_INTENT.idempotencyKey);
+const SECOND_DERIVED_WORKTREE = (() => {
+  const derived = deriveWorktreeTarget({
+    attemptId: SECOND_ATTEMPT_ID, baseIdentity: HEAD, projectId: PROJECT_ID,
+    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: REPOSITORY.parent,
+  });
+  if (!derived.ok) throw new Error(`second worktree fixture refused: ${derived.code}`);
+  return derived.target.worktreePath;
+})();
+
+function secondActivationBytes(): Uint8Array {
+  return encoder.encode(JSON.stringify({
+    commandId: "cmd-dispatch-2", correlationId: "corr-dispatch-2", decidedAt: DECIDED_AT,
+    expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
+    payload: structuredClone({
+      activation: {
+        ...ACTIVATION_SECTION,
+        attempt: {
+          ...ACTIVATION_SECTION.attempt,
+          attemptId: SECOND_ATTEMPT_ID, intentId: SECOND_INTENT.intentId,
+        },
+        claim: {
+          ...CLAIM, claimId: "claim-2", intentId: SECOND_INTENT.intentId,
+          lockIdentity: "lock-2", wrapperIdentity: "wrapper-2",
+        },
+        leaseProof: SECOND_LEASE_PROOF, lockIdentity: "lock-2", wrapperIdentity: "wrapper-2",
+      },
+      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
+      effect: { command: { kind: "claim" }, intent: SECOND_INTENT },
+      lease: { proof: SECOND_LEASE_PROOF, record: SECOND_LEASE_RECORD },
+      liveClaims: [{ dimension: "default", slotRef: "held-1", state: "RESERVED" }],
+      slot: { dimension: "default", requestId: "req-2", rows: [RESOURCE_ROW], slotRef: "slot-2" },
+    }),
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+  }));
+}
+
+/** The second identity's request. Its `cwd` proposal names the worktree THIS
+ *  attempt derives; proposing the first attempt's tree would refuse as a
+ *  mismatch and never reach the comparison the isolation case is about. */
+function secondDispatchRequest(): Record<string, unknown> {
+  return {
+    activationRequestBytes: secondActivationBytes(),
+    binding: {
+      attemptAggregateId: SECOND_AGGREGATE, nodeKey: NODE_KEY, sessionId: SECOND_SESSION_ID,
+    },
+    graphSnapshot: structuredClone(SINGLE_NODE_GRAPH),
+    inputManifest: structuredClone(INPUT_MANIFEST),
+    launchTemplate: { ...structuredClone(LAUNCH_TEMPLATE), cwd: SECOND_DERIVED_WORKTREE },
   };
 }
 
@@ -1806,5 +1884,114 @@ describe("foundation attempt dispatch — the workspace is prepared before launc
     // The duplicate delivery loses at the reservation, so exactly one arm can
     // have reached the launcher.
     expect([left.ok, right.ok]).toContain(false);
+  });
+
+  /**
+   * THE SEPARATOR for the case above, and DoD 4's non-crossing clause at the
+   * DISPATCH layer the DoD names. Both arms above carry ONE identity, so the
+   * reservation collapses the second into a duplicate and `refs.size === 1` is
+   * guaranteed by construction — it is a dedup control, and it reads the same
+   * whether or not two refs could cross. This case removes the dedup: two
+   * identities distinct in aggregate, attemptId and session, asserted to keep
+   * distinct refs, distinct worktrees, distinct launch roots and durable
+   * contexts that carry only their own facts. Task rail 3's forbidden shape —
+   * one module-global captureRef reused across dispatches — survives every
+   * other case in this file and reds here.
+   */
+  it("keeps two DISTINCT parallel dispatches on refs and worktrees that cannot cross", async () => {
+    const store = readyStore("prepare-parallel-distinct");
+    const run = harness(store);
+
+    await Promise.all([
+      run.service.dispatch(dispatchRequest()), run.service.dispatch(secondDispatchRequest()),
+    ]);
+
+    // COUNTED FIRST. Two refs cannot be shown to differ if only one attempt ever
+    // prepared, and a run where either arm refused never reaches the comparison.
+    const accepted = run.prepared.filter((answer) => answer.ok);
+    expect(accepted).toHaveLength(2);
+
+    // Each ref is pinned to ITS OWN derivation rather than merely asserted
+    // unequal: two wrong-but-different refs would satisfy inequality alone.
+    const expectedFirst = deriveFoundationCaptureRef({
+      attemptAggregateId: ACTIVATION_AGGREGATE, attemptId: "attempt-1", nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SESSION_ID,
+    });
+    const expectedSecond = deriveFoundationCaptureRef({
+      attemptAggregateId: SECOND_AGGREGATE, attemptId: SECOND_ATTEMPT_ID, nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SECOND_SESSION_ID,
+    });
+    // The fixture's own control: the two identities must be distinguishable
+    // BEFORE the service is asked to keep them apart.
+    expect(expectedFirst).not.toBe(expectedSecond);
+    const refs = accepted.map((answer) => (answer as { readonly captureRef: string }).captureRef);
+    expect(new Set(refs)).toEqual(new Set([expectedFirst, expectedSecond]));
+
+    const roots = accepted.map((answer) => (
+      answer as { readonly assignment: { readonly realWorktreePath: string } }
+    ).assignment.realWorktreePath);
+    expect(new Set(roots).size).toBe(2);
+    // THE LAUNCH ROOTS ARE THE TWO ASSIGNMENTS. A service that prepared two
+    // trees and then launched both attempts in one of them crosses here.
+    const launched = providerBoundaryProbe.launches.map(
+      (entry) => (entry.input.request as Record<string, unknown>)["cwd"]);
+    expect(launched).toHaveLength(2);
+    expect(new Set(launched)).toEqual(new Set(roots));
+
+    // The DURABLE side, read back by ref: each context carries its own identity
+    // triple and neither names the other's tree.
+    const first = readFoundationCaptureContext(store, expectedFirst);
+    const second = readFoundationCaptureContext(store, expectedSecond);
+    expect([first.ok, second.ok]).toEqual([true, true]);
+    if (!first.ok || !second.ok) return;
+    expect(first.record).toMatchObject({
+      attemptAggregateId: ACTIVATION_AGGREGATE, attemptId: "attempt-1", sessionId: SESSION_ID,
+    });
+    expect(second.record).toMatchObject({
+      attemptAggregateId: SECOND_AGGREGATE, attemptId: SECOND_ATTEMPT_ID,
+      sessionId: SECOND_SESSION_ID,
+    });
+    expect(first.record.assignment.realWorktreePath)
+      .not.toBe(second.record.assignment.realWorktreePath);
+  });
+});
+
+/**
+ * TASK RAIL 3 — "no module-global mutable context or map; each dispatch carries
+ * one immutable durable captureRef in lexical state" — asserted STRUCTURALLY,
+ * because half of it has no runtime observable in this repo.
+ *
+ * The worktree half is behavioural and is covered above: a module-global
+ * assignment shared across dispatches reddens "keeps two DISTINCT parallel
+ * dispatches...". The captureRef half is not. The ref the service carries is
+ * read at exactly ONE place — the `captureResult` call, which runs only after a
+ * PROVEN launch observation — and no honest case in this repository can produce
+ * one: `@moe/runner` withholds `observeInstalledClaudeRuntime`,
+ * `probeClaudeRuntime` and `capabilitySchemaDigestOf`, so no consumer can mint a
+ * quote production accepts. That is why every capture assertion in this file
+ * reads `toHaveLength(0)`, and why a module-global `let stickyRef` handing the
+ * first dispatch's ref to every later one survives the entire daemon gate.
+ *
+ * What CAN be seen without faking that boundary is the SHAPE the rail forbids,
+ * in the module's own source. LIMIT, stated so this is not trusted past its
+ * reach: it inspects column-0 declarations only. A mutable container nested
+ * inside a top-level `const` object literal, or state closed over in an imported
+ * module, is invisible to it. It is a shape guard, not a behaviour guard.
+ */
+describe("foundation attempt dispatch — the module holds no cross-dispatch state", () => {
+  it("declares no mutable top-level binding and no top-level mutable container", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "foundation-attempt-service.ts"), "utf8");
+    const declarations = source.split("\n").filter((line) => /^[A-Za-z]/.test(line));
+
+    // POSITIVE CONTROL, first: an unreadable file or a scan that matched nothing
+    // would satisfy every emptiness assertion below without inspecting anything.
+    expect(declarations.length).toBeGreaterThan(10);
+    expect(declarations.some((line) => line.startsWith("export function"))).toBe(true);
+
+    // Reported BY LINE rather than by count, so a regression names the shape.
+    expect(declarations.filter((line) => /^(let|var)\s/.test(line))).toEqual([]);
+    expect(declarations.filter(
+      (line) => /^const\s.*=\s*new\s+(Map|Set|WeakMap|WeakSet)\b/.test(line))).toEqual([]);
   });
 });

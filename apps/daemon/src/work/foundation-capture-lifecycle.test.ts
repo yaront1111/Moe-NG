@@ -24,9 +24,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   createNodeFoundationCaptureFs, createNodeGitObserver, createNodeScopePaths,
@@ -675,5 +678,36 @@ describe("the lifecycle module's published surface", () => {
     });
 
     expect(() => source()).toThrow();
+  });
+});
+
+/**
+ * DoD 6's "swapping captureRefs reddens a named test", made ORDER-INDEPENDENT.
+ *
+ * The behavioural kill above ("keeps immutable captureRefs and distinct
+ * worktrees per attempt") reddens when run alone, but a module-global sticky
+ * ref is absorbed by "ACCEPTS proposals that agree with the hydrated authority"
+ * first in a whole-file run, so the gate as actually run reddens a DIFFERENT
+ * test than the one the DoD names. Measured, not assumed. This guard reads the
+ * shape instead of the behaviour, so no earlier case can absorb it.
+ *
+ * LIMIT: column-0 declarations only. Mutable state nested inside a top-level
+ * `const` object literal, or held in an imported module, is invisible to it.
+ */
+describe("the lifecycle module holds no cross-attempt state", () => {
+  it("declares no mutable top-level binding and no top-level mutable container", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "foundation-capture-lifecycle.ts"), "utf8");
+    const declarations = source.split("\n").filter((line) => /^[A-Za-z]/.test(line));
+
+    // POSITIVE CONTROL, first: an unreadable file or a scan that matched nothing
+    // would satisfy every emptiness assertion below without inspecting anything.
+    expect(declarations.length).toBeGreaterThan(10);
+    expect(declarations.some((line) => line.startsWith("export function"))).toBe(true);
+
+    // Reported BY LINE rather than by count, so a regression names the shape.
+    expect(declarations.filter((line) => /^(let|var)\s/.test(line))).toEqual([]);
+    expect(declarations.filter(
+      (line) => /^const\s.*=\s*new\s+(Map|Set|WeakMap|WeakSet)\b/.test(line))).toEqual([]);
   });
 });
