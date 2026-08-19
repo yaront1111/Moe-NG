@@ -108,7 +108,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // without the arms would redden the three-armed assertion instead of hiding anything.
     // 15 -> 16 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, governor entry), whose
     // three arms land with this bump for the same reason.
-    expect(ROSTER_INTEGRITY).toHaveLength(16);
+    // 16 -> 17 for FOUNDATION_REPOSITORY_SCOPE_LAYERS (producer task-4af0e3dc), the
+    // daemon-startup repository/scope catalog, whose three arms land with this bump.
+    expect(ROSTER_INTEGRITY).toHaveLength(17);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -145,6 +147,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
       "APPROVAL_AUTHORITY_LAYERS",
       "DISTRIBUTION_REFUSAL_LAYERS",
       "DOCUMENT_WORK_PROPOSAL_LAYERS",
+      // Added with the FOUNDATION_REPOSITORY_SCOPE_LAYERS arms (producer task-4af0e3dc):
+      // the catalog is digest-sealed over its own admitted fields, so it owes a forgery.
+      "FOUNDATION_REPOSITORY_SCOPE_LAYERS",
       // Added by task-66004424 with the GRAPH_CONTENT_LAYERS arms. This literal is TIGHTENED,
       // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
       // and omitting it would let the new `forged` arm redden a passing assertion.

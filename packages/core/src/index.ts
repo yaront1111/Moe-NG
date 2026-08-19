@@ -1,6 +1,13 @@
 export {
   PROJECT_COMMAND_KINDS, PROJECT_TRANSITIONS, reduceProject,
 } from "./project/project-reducer.js";
+/**
+ * The durable ProjectState reader. `stateOf` on the daemon ledger hands back a
+ * raw `JsonValue`, so a host-side authority that resolves against project state
+ * must re-validate those bytes through the production validator rather than
+ * cast them: corrupt ledger bytes are a refusal, never a fallback.
+ */
+export { snapshotProjectState } from "./project/project-validation.js";
 export type {
   ProjectAcceptedResult, ProjectActivateCommand, ProjectActivationWitness,
   ProjectBindRepositoryCommand, ProjectCommand, ProjectCommandKind, ProjectEvent,

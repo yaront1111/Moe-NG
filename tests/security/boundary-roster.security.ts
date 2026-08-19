@@ -103,8 +103,8 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 16, durable-store 15,
- * runtime-provider 24, scheduler-activation 28 — sums to 98. These tags, NOT the subset
+ * Axis totals for the sibling slices: transport 15, integrity 17, durable-store 15,
+ * runtime-provider 24, scheduler-activation 28 — sums to 99. These tags, NOT the subset
  * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
@@ -117,7 +117,9 @@ interface ScannedBoundary {
  * scheduler-activation, task-c5be7926 — see the per-entry note below. 96→97 on
  * 2026-08-18: ACCEPTANCE_CONTRACT_LAYERS integrity, task-2ce5411e. 97→98 on
  * 2026-08-18: PLAN_REVISION_LAYERS integrity, producer task-9fe1a0e0 — governor entry,
- * landed with its three arms after the ratchet caught the unrostered constant.)
+ * landed with its three arms after the ratchet caught the unrostered constant. 98→99 on
+ * 2026-08-19: FOUNDATION_REPOSITORY_SCOPE_LAYERS integrity, producer task-4af0e3dc,
+ * landed with its three arms in the same change.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -180,6 +182,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "PROVIDER_RUN_LEDGER_LAYERS", file: "apps/daemon/src/telemetry/provider-run-refusals.ts", axis: "runtime-provider" },
   { constant: "RUNNER_WORKSPACE_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "runtime-provider" },
   { constant: "SCHEDULER_GRAPH_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "scheduler-activation" },
+  // The daemon-startup repository/scope catalog: a versioned, digest-sealed codec whose
+  // subject is the seal over its own admitted fields, so it is integrity rather than
+  // durable-store despite reading durable project state (producer task-4af0e3dc).
+  { constant: "FOUNDATION_REPOSITORY_SCOPE_LAYERS", file: "apps/daemon/src/work/foundation-repository-scope-contracts.ts", axis: "integrity" },
   { constant: "WORK_LAYERS", file: "apps/daemon/src/work/work-kernel.ts", axis: "scheduler-activation" },
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
@@ -288,7 +294,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
  * row on its own only moves the red into `completeness.security.ts`.
  */
-const EXPECTED_ROSTER_SIZE = 98;
+const EXPECTED_ROSTER_SIZE = 99;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -296,7 +302,7 @@ const EXPECTED_ROSTER_SIZE = 98;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 38,
+  "apps/daemon": 39,
   "packages/benchmark": 1,
   "packages/runner": 21,
   "packages/core": 12,

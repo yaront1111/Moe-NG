@@ -78,6 +78,15 @@ import {
 } from "../../apps/daemon/src/recovery/restore-test-harness.js";
 import { runRestoreQuiesce } from "../../apps/daemon/src/recovery/restore-controller.js";
 import {
+  decodeFoundationRepositoryScopeCatalog, resolveFoundationRepositoryScope,
+} from "../../apps/daemon/src/work/foundation-repository-scope-authority.js";
+import {
+  FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION, FOUNDATION_REPOSITORY_SCOPE_LAYERS,
+} from "../../apps/daemon/src/work/foundation-repository-scope-contracts.js";
+import type {
+  FoundationRepositoryScopeCatalog,
+} from "../../apps/daemon/src/work/foundation-repository-scope-contracts.js";
+import {
   DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS,
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_REFUSAL_LAYERS,
   decodeDocumentWorkProposalBytes, parseProjectConfigurationManifest,
@@ -1683,10 +1692,139 @@ const graphContentCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// FOUNDATION_REPOSITORY_SCOPE_LAYERS - the daemon-startup repository/scope catalog.
+// ---------------------------------------------------------------------------
+
+/**
+ * TWO LAYERS SIT IN SERIES on this boundary, so every arm below names which one
+ * answered. The codec refuses operator configuration under
+ * DAEMON_REPOSITORY_SCOPE_CATALOG; resolution refuses a catalog whose seal no
+ * longer covers its entries under DAEMON_REPOSITORY_SCOPE_RESOLUTION. A
+ * code-only assertion here would stay green the moment one layer started
+ * answering for the other's condition.
+ */
+const REPOSITORY_SCOPE = FOUNDATION_REPOSITORY_SCOPE_LAYERS;
+
+const repositoryScopeEntry = (
+  overrides: Readonly<Record<string, unknown>> = {},
+): Record<string, unknown> => ({
+  declaredPaths: ["apps/daemon/src"],
+  projectId: "project-security",
+  repositoryRef: "repo-security",
+  scopeRef: "scope-security",
+  sourceRepositoryRoot: "D:\\projexts\\moe-security",
+  worktreeParent: "D:\\projexts\\moe-security-worktrees",
+  ...overrides,
+});
+
+const repositoryScopeInput = (
+  entries: readonly Record<string, unknown>[],
+): Record<string, unknown> => ({
+  catalogVersion: FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION, entries,
+});
+
+/** Sealed BY PRODUCTION; no test helper can mint one of these digests. */
+function sealedRepositoryScopeCatalog(scopeRef: string): FoundationRepositoryScopeCatalog {
+  const result = decodeFoundationRepositoryScopeCatalog(
+    repositoryScopeInput([repositoryScopeEntry({ scopeRef })]),
+  );
+  if (!result.ok) {
+    throw new Error(`repository-scope catalog refused: ${result.code}@${result.layer}`);
+  }
+  return result.catalog;
+}
+
+/**
+ * A GENUINE production digest carried onto a DIFFERENT admitted field set. The
+ * carrier decodes cleanly and every field in it was admitted by the codec; the
+ * only thing wrong is that the seal it presents belongs to the donor.
+ */
+function forgedRepositoryScopeCatalog(): FoundationRepositoryScopeCatalog {
+  const donor = sealedRepositoryScopeCatalog("scope-donor");
+  const carrier = sealedRepositoryScopeCatalog("scope-carrier");
+  return { ...carrier, digest: donor.digest };
+}
+
+/** The store is never read on this arm: the seal is checked before any ledger page. */
+function repositoryScopeStore(): SqliteEventStore {
+  const store = SqliteEventStore.openEphemeralForProjectTest("project-security");
+  openedStores.push(store);
+  return store;
+}
+
+const repositoryScopeRequest = (scopeRef: string): Record<string, unknown> => ({
+  baseRevisionHash: hex64("repository-scope-base"), projectId: "project-security",
+  repositoryRef: "repo-security", scopeRef,
+});
+
+/** An accessor that answers a canonical root once and a swapped root afterwards. */
+function accessorRepositoryScopeEntry(): Record<string, unknown> {
+  const entry = repositoryScopeEntry();
+  let reads = 0;
+  Object.defineProperty(entry, "sourceRepositoryRoot", {
+    configurable: true, enumerable: true,
+    get: () => (reads += 1) === 1 ? "D:\\projexts\\moe-security" : "D:\\projexts\\swapped",
+  });
+  return entry;
+}
+
+const repositoryScopeCases: readonly HostileCase[] = [
+  before(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "a UNC host root is admitted by no normalization",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_HOST_ROOT_INVALID",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    async () => decodeFoundationRepositoryScopeCatalog(repositoryScopeInput([
+      repositoryScopeEntry({ sourceRepositoryRoot: "\\\\server\\share\\moe" }),
+    ])),
+  ),
+  forged(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "one sealed digest carried onto another entry set",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_CATALOG_DIGEST_MISMATCH",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_RESOLUTION"),
+    },
+    async () => {
+      const donor = sealedRepositoryScopeCatalog("scope-donor");
+      const carrier = sealedRepositoryScopeCatalog("scope-carrier");
+      const forgery = forgedRepositoryScopeCatalog();
+      return {
+        ok: donor.digest !== carrier.digest && forgery.digest === donor.digest
+          && forgery.entries[0]?.scopeRef === carrier.entries[0]?.scopeRef,
+      };
+    },
+    // The codec admitted every field of the carrier independently, so the
+    // recomputed seal is the first guard that can answer for the pair.
+    async () => resolveFoundationRepositoryScope(
+      repositoryScopeStore(), forgedRepositoryScopeCatalog(),
+      repositoryScopeRequest("scope-carrier"),
+    ),
+  ),
+  racingExactly(
+    "FOUNDATION_REPOSITORY_SCOPE_LAYERS", "a case-folded path pair races an accessor entry",
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_PATH_CASE_COLLISION",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    {
+      code: "FOUNDATION_REPOSITORY_SCOPE_CATALOG_ACCESSOR",
+      layer: layerOf(REPOSITORY_SCOPE, "DAEMON_REPOSITORY_SCOPE_CATALOG"),
+    },
+    async () => decodeFoundationRepositoryScopeCatalog(repositoryScopeInput([
+      repositoryScopeEntry({ declaredPaths: ["apps/Daemon/src", "apps/daemon/src"] }),
+    ])),
+    async () => decodeFoundationRepositoryScopeCatalog(
+      repositoryScopeInput([accessorRepositoryScopeEntry()]),
+    ),
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
   ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
-  ...graphContentCases,
+  ...graphContentCases, ...repositoryScopeCases,
 ]);
