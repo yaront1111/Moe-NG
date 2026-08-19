@@ -22,7 +22,6 @@
  * `adapters/*`, `packages/*`).
  */
 
-import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -36,6 +35,7 @@ import {
   CORPUS, IMPORT_SHADOW_READ_LAYER, MATRIX_CASES, MATRIX_CASE_COUNT, REQUIRED_ROWS,
   SHADOW_MISMATCH_DISPOSITIONS, SUSPENDED_LEGACY_ID,
 } from "./shadow-corpus-fixtures.js";
+import { PORTABILITY_SOURCE_COMMIT } from "./portability-source-commit.js";
 import { ingestCorpus, inventoryOf, storeFactsOf, withCorpus } from "./shadow-corpus-harness.js";
 import type { StoreFacts } from "./shadow-corpus-harness.js";
 
@@ -489,9 +489,7 @@ describe("projection shadow matrix — determinism and provenance", () => {
    * halves ran against different trees is comparing two systems, so this is
    * recorded on every case result and asserted identical across all of them.
    */
-  const SOURCE_COMMIT = execFileSync("git", ["rev-parse", "HEAD"], {
-    cwd: join(import.meta.dirname, "..", "..", ".."), encoding: "utf8",
-  }).trim();
+  const SOURCE_COMMIT = PORTABILITY_SOURCE_COMMIT;
 
   interface CaseRecord {
     readonly manifestDigest: string;

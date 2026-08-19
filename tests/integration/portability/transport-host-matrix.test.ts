@@ -17,10 +17,10 @@
  * that closed four-key surface, so the UNKNOWN is measured rather than untested.
  */
 
-import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { PORTABILITY_SOURCE_COMMIT } from "./portability-source-commit.js";
 import {
   CASES, CODES, CONFLICT_TOOL_LABEL, CONTROL_TOOL_LABEL, JETBRAINS_ARMS, JETBRAINS_EXPECTED,
   JETBRAINS_HOST_KEYS, JETBRAINS_MCP_TRANSLATION, LAYERS, SESSION_TOOL_LABEL, STAGES, SUBJECTS,
@@ -38,7 +38,7 @@ import type {
 } from "./portability-harness.js";
 
 /** Captured ONCE. Every recorded digest on both halves binds to this checkout. */
-const SOURCE_COMMIT = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const SOURCE_COMMIT = PORTABILITY_SOURCE_COMMIT;
 const SCOPED_SECRET = "portability-scoped-session-secret";
 const PROJECT_ID = "proj-portability";
 const IDE_OWNER = "@moe/ide-adapter-contract";

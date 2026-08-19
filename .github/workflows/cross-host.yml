@@ -385,3 +385,161 @@ jobs:
             cross-host-aggregate
             vitest-contract.log
           if-no-files-found: error
+
+  # Portability evidence for task-22cfca91c5134b24aaf3e5734444fb93.
+  #
+  # WHY A SEPARATE JOB. `gate` already runs `pnpm typecheck` and `pnpm test` on
+  # ubuntu and macos, and the root vitest include is
+  # ["adapters/**/*.test.ts", "packages/**/*.test.ts", "tests/**/*.test.ts"],
+  # so the portability matrices DO execute there. What `gate` cannot give is
+  # ATTRIBUTION: one aggregate `Test Files N passed` line cannot say that
+  # projection-, provider- and transport- each ran a case, and `gate` runs
+  # neither `pnpm typecheck:packaging` (test:integration's first leg), nor the
+  # release supply-chain node:test leg, nor `tsc -p tests/migration/tsconfig.json`
+  # (test:migration's first leg). This job runs the task's two named gates whole,
+  # per host, and proves each matrix executed by NAME rather than in aggregate.
+  #
+  # Touches no existing job. Its red cannot move `gate`, `host-evidence` or
+  # `cross-host-aggregate`, and exact-sha-evidence-gate.mjs does not consult it.
+  portability-evidence:
+    name: portability-evidence (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    env:
+      # The ONE commit every matrix row, fixture hash and handshake in this run
+      # binds to. `github.sha` is the commit on a push run but the ephemeral
+      # MERGE commit on a pull_request run, and a merge sha exists nowhere in
+      # history -- so the head sha is selected explicitly. The resolver refuses
+      # rather than falling back to `git rev-parse HEAD` if this is ever unset.
+      MOE_PORTABILITY_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record host facts
+        run: |
+          echo "runner.os=${{ runner.os }}"
+          echo "bound source commit=${MOE_PORTABILITY_SOURCE_COMMIT}"
+          uname -a
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Exit code alone is not evidence: `pnpm --filter <pkg>` on an absent
+      # package, and a vitest run whose include matched nothing, both exit 0.
+      # Every leg below therefore asserts a POSITIVE count line as well, and
+      # captures ${PIPESTATUS[0]} because a piped run reports tee's exit.
+      - name: Integration gate
+        run: |
+          set -o pipefail
+          set +e
+          pnpm test:integration 2>&1 | tee portability-integration.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::pnpm test:integration exited ${status}"
+            exit 1
+          fi
+          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' portability-integration.log; then
+            echo "::error title=portability-evidence::integration vitest leg ran no test file"
+            exit 1
+          fi
+          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' portability-integration.log; then
+            echo "::error title=portability-evidence::integration vitest leg ran no case"
+            exit 1
+          fi
+          if ! grep -Eq 'pass [1-9][0-9]*' portability-integration.log; then
+            echo "::error title=portability-evidence::release supply-chain node:test reported no pass count"
+            exit 1
+          fi
+          if grep -Eq 'fail [1-9][0-9]*' portability-integration.log; then
+            echo "::error title=portability-evidence::release supply-chain node:test reported failures"
+            exit 1
+          fi
+
+      - name: Migration gate
+        run: |
+          set -o pipefail
+          set +e
+          pnpm test:migration 2>&1 | tee portability-migration.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::pnpm test:migration exited ${status}"
+            exit 1
+          fi
+          if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' portability-migration.log; then
+            echo "::error title=portability-evidence::migration lane ran no test file"
+            exit 1
+          fi
+          if ! grep -Eq '^ *Tests +[1-9][0-9]* passed' portability-migration.log; then
+            echo "::error title=portability-evidence::migration lane ran no case"
+            exit 1
+          fi
+
+      # Per-matrix attribution. An aggregate count cannot show that EACH matrix
+      # executed, and a matrix that silently produced zero rows would pass every
+      # check above. This step refuses unless every named matrix reports a
+      # positive executed-case count on this host.
+      - name: Per-matrix executed counts
+        run: |
+          set -o pipefail
+          set +e
+          npx vitest run tests/integration/portability \
+            --reporter=json --outputFile=portability-matrix.json 2>&1 | tee portability-matrix.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::portability matrices exited ${status}"
+            exit 1
+          fi
+          node -e '
+            const fs = require("node:fs");
+            const report = JSON.parse(fs.readFileSync("portability-matrix.json", "utf8"));
+            const required = [
+              "projection-shadow-matrix.test.ts",
+              "provider-shadow-matrix.test.ts",
+              "transport-host-matrix.test.ts",
+              "portability-source-commit.test.ts",
+            ];
+            const counts = new Map();
+            for (const file of report.testResults) {
+              const name = file.name.split(/[\\/]/).pop();
+              const passed = file.assertionResults.filter((a) => a.status === "passed").length;
+              counts.set(name, (counts.get(name) ?? 0) + passed);
+            }
+            const missing = required.filter((name) => (counts.get(name) ?? 0) === 0);
+            for (const name of required) {
+              console.log(`${name}: ${counts.get(name) ?? 0} passed`);
+            }
+            if (missing.length > 0) {
+              console.log(`::error title=portability-evidence::matrices executed no case: ${missing.join(", ")}`);
+              process.exit(1);
+            }
+            if (report.numFailedTests !== 0) {
+              console.log(`::error title=portability-evidence::${report.numFailedTests} portability cases failed`);
+              process.exit(1);
+            }
+          '
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: portability-evidence-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            portability-integration.log
+            portability-migration.log
+            portability-matrix.json
+            portability-matrix.log
+          if-no-files-found: error

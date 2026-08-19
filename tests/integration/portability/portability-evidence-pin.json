@@ -1,0 +1,16 @@
+{
+  "$comment": [
+    "The ONE commit every portability matrix, fixture hash and distribution handshake binds to.",
+    "Read only through portability-source-commit.ts; nothing may call `git rev-parse HEAD` at run time.",
+    "PROVENANCE OF THIS VALUE: it is not self-referential and cannot be. A pin naming the commit that",
+    "carries it is a fixed point no commit can have, so the receipt lands in a FOLLOW-UP commit that",
+    "names the evidence-binding commit before it. `sourceCommit` therefore always names an EXISTING",
+    "commit, and `externalRun` stays null until an external push run at that exact commit is accepted",
+    "by tests/fault/cross-host/exact-sha-evidence-gate.mjs. A null externalRun means UNKNOWN external",
+    "evidence -- never a pass. CI overrides `sourceCommit` via MOE_PORTABILITY_SOURCE_COMMIT bound to",
+    "the PUSH run's github.sha; the resolver REFUSES when the two disagree rather than picking one."
+  ],
+  "sourceCommit": "a1f71a43c71cd03367a90baf52d99d814042dbe7",
+  "externalRun": null,
+  "aggregateDigest": null
+}
