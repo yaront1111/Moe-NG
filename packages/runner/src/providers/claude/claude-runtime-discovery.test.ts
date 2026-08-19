@@ -148,7 +148,16 @@ it("refuses a host on which no claude runtime resolves, with CLAUDE_RUNTIME_PATH
 });
 
 it("refuses more than one resolved candidate rather than picking one, with CLAUDE_RUNTIME_PATH_DUPLICATE at RUNTIME", async () => {
-  hostSearchPath([standInDirectory("first"), standInDirectory("second")]);
+  // `standInDirectory` copies a real Windows binary, so off-Windows it is the
+  // fixture that fails rather than the capability: discovery refuses
+  // PLATFORM_UNSUPPORTED before it ever looks at a search entry, and a copy of
+  // `where.exe` cannot exist there to be looked at. Same ternary as every other
+  // host-configuring case in this file.
+  hostSearchPath(
+    ON_WINDOWS
+      ? [standInDirectory("first"), standInDirectory("second")]
+      : [temporaryDirectory("first"), temporaryDirectory("second")],
+  );
   const refusal = refusalOf(await discoverInstalledClaudeRuntime());
   expect({ code: refusal.code, layer: refusal.layer, truthClass: refusal.truthClass }).toEqual(
     ON_WINDOWS
