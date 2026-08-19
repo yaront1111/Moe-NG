@@ -47,15 +47,31 @@ export type UnknownCause = "SURFACE_ABSENT" | "SURFACE_NOT_COMPOSED"
 export const GRAPH_OWNER = "task-779d6804d4a44440ad4d48a832a351d6 (ARCHIVED — never built)";
 
 /**
- * The honest answer for every daemon-backed scenario, and it is not the graph task.
- * A real transport landed (task-318379ea, DONE: apps/daemon http-listener +
- * packages/control-room-client client-transport), and apps/control-room/src/main.tsx
- * now mounts that live path by DEFAULT. What does not exist anywhere is a browser lane that
- * STARTS a daemon, seeds a scenario fixture and serves the bundle against it.
- * task-3f503779 used to hold that and was archived for duplicating this task, so this
- * cause currently has NO owner on the board.
+ * The daemon-backed browser lane EXISTS now, and this names who owns it.
+ *
+ * It used to read "UNOWNED": a real transport had landed (task-318379ea) and
+ * main.tsx already mounted the live path by DEFAULT, but no browser lane STARTED a
+ * daemon, seeded it and served the bundle against it. task-3767f2cd built exactly
+ * that — see DAEMON_LANE_RECORD in `daemon-lane-ledger.ts` for what the one
+ * journey does and does not prove. It is recorded THERE, not here, because it
+ * covers none of the twenty scenarios in this matrix.
+ *
+ * OWNING THE LANE IS NOT COVERING THE SCENARIOS. Every row below whose cause is
+ * NO_DAEMON_BACKED_BROWSER_LANE needs MORE than a lane: a seeded rejection, a
+ * kill/restart harness, a relay-stall fixture, or a surface that renders no ids at
+ * all today. None of them is discharged by the lane existing, so none flips to
+ * COVERED here — and each says v0.2 explicitly rather than implying an imminent one.
  */
-export const DAEMON_LANE_OWNER = "UNOWNED — no board task owns a daemon-backed browser lane";
+export const DAEMON_LANE_OWNER =
+  "task-3767f2cd8ac94e4b9e9e82a3dc29af11 (OWNED — tests/e2e/control-room/daemon-board.spec.ts)";
+
+/**
+ * The two SURFACE_NOT_COMPOSED rows are NOT this task's, and pointing them at the
+ * lane owner would be a false claim: a component nothing mounts stays unreachable
+ * in a browser no matter which lane serves it.
+ */
+export const UNCOMPOSED_OWNER =
+  "UNOWNED — no board task composes these surfaces into a served entry point";
 
 export interface CoveredScenario {
   readonly id: string;
@@ -86,10 +102,22 @@ const absent = (
   cause: "SURFACE_ABSENT", id, journey, missingInput, owner: GRAPH_OWNER, status: "UNKNOWN",
 });
 
+/**
+ * The v0.1 scope freeze in one sentence, APPENDED to every daemon-backed row
+ * rather than written into each by hand. Composed here so a row cannot be added
+ * without it: a per-row copy is a per-row chance to forget, and "the ledger says
+ * nothing about when" is how an UNKNOWN quietly becomes permanent.
+ */
+const V0_2_DEFERRAL = " DEFERRED TO v0.2: the daemon-backed lane exists (see "
+  + "DAEMON_LANE_RECORD in daemon-lane-ledger.ts) but this scenario needs its own "
+  + "seeded setup on top of it, and the v0.1 scope freeze admits exactly one "
+  + "daemon-backed journey.";
+
 const noLane = (
   id: string, journey: JourneyId, missingInput: string,
 ): UnknownScenario => Object.freeze({
-  cause: "NO_DAEMON_BACKED_BROWSER_LANE", id, journey, missingInput,
+  cause: "NO_DAEMON_BACKED_BROWSER_LANE", id, journey,
+  missingInput: `${missingInput}${V0_2_DEFERRAL}`,
   owner: DAEMON_LANE_OWNER, status: "UNKNOWN",
 });
 
@@ -97,7 +125,7 @@ const uncomposed = (
   id: string, journey: JourneyId, missingInput: string,
 ): UnknownScenario => Object.freeze({
   cause: "SURFACE_NOT_COMPOSED", id, journey, missingInput,
-  owner: DAEMON_LANE_OWNER, status: "UNKNOWN",
+  owner: UNCOMPOSED_OWNER, status: "UNKNOWN",
 });
 
 export const SCENARIO_MATRIX: readonly ScenarioRecord[] = Object.freeze([
