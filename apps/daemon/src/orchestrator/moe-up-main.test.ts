@@ -295,12 +295,18 @@ describe("moe up entrypoint wiring", () => {
     expect(existsSync(join(REPO_ROOT, target as string))).toBe(true);
   });
 
-  it("wires the moe-up bin beside the daemon's existing three, at a real file", () => {
+  it("wires the moe-up bin beside the daemon's other entries, at a real file", () => {
     const bin = readJson("apps", "daemon", "package.json")["bin"] as Record<string, string>;
+    // `moe` and `moe-wrapper` were added by task-3ac5c237 (the packaged Windows
+    // artifact): `moe start` composes THIS launcher, and `moe-wrapper` publishes
+    // the wrapper entry the launcher spawns.
     expect(Object.keys(bin).toSorted())
-      .toEqual(["moe-daemon", "moe-mcp-http", "moe-mcp-stdio", "moe-up"]);
+      .toEqual(["moe", "moe-daemon", "moe-mcp-http", "moe-mcp-stdio", "moe-up", "moe-wrapper"]);
     expect(bin["moe-up"]).toBe("./src/orchestrator/moe-up-main.ts");
     expect(existsSync(join(REPO_ROOT, "apps", "daemon", bin["moe-up"] as string))).toBe(true);
+    for (const entry of Object.values(bin)) {
+      expect(existsSync(join(REPO_ROOT, "apps", "daemon", entry))).toBe(true);
+    }
   });
 });
 

@@ -6,10 +6,12 @@
   "type": "module",
   "main": "./src/index.ts",
   "bin": {
+    "moe": "./src/cli/moe-cli-main.ts",
     "moe-daemon": "./src/daemon-main.ts",
     "moe-mcp-http": "./src/mcp-http/mcp-http-main.ts",
     "moe-mcp-stdio": "./src/mcp-main.ts",
-    "moe-up": "./src/orchestrator/moe-up-main.ts"
+    "moe-up": "./src/orchestrator/moe-up-main.ts",
+    "moe-wrapper": "./src/orchestrator/agent-wrapper-main.ts"
   },
   "exports": {
     ".": "./src/index.ts"
