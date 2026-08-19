@@ -66,7 +66,9 @@ afterEach(async () => {
   );
 });
 
-describe("Node Phase 0 capture port", () => {
+// 30s: every case runs real git subprocess work; the 5s default times out under
+// full-suite parallelism (passes 10/10 isolated). Same repair as 03fd290/9f52c54.
+describe("Node Phase 0 capture port", { timeout: 30_000 }, () => {
   it("captures exact Git identity and raw porcelain-v2 status bytes", async () => {
     const { port, sourceRepository } = await fixture();
     await writeFile(join(sourceRepository, "docs", "plans", "untracked.md"), "untracked\n");

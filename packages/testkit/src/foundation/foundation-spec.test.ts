@@ -29,9 +29,16 @@ import { J3J4_MODEL_KIND } from "./foundation-model-j3j4.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 const foundationDirectory = join(repositoryRoot, "packages", "testkit", "src", "foundation");
-/** Static, dynamic and CJS import forms all count as importing the held-out models. */
+/**
+ * Static, dynamic and CJS import forms all count as importing the held-out models.
+ * Anchored on the testkit package: the held-out models live ONLY under
+ * packages/testkit/src/foundation/, and a bare `foundation[\\/]` match false-positived
+ * on apps/daemon/src/foundation/ (the daemon's own production surface, task-4dd4424c),
+ * reddening this sweep for every unrelated task. Intra-testkit same-directory imports
+ * carry no path separator and were never matched by either spelling.
+ */
 const productionImportOfFoundation =
-  /(?:from|import|require)\s*\(?\s*["'][^"']*foundation[\\/][^"']*["']/u;
+  /(?:from|import|require)\s*\(?\s*["'][^"']*testkit[\\/][^"']*foundation[^"']*["']/u;
 const benchIdentifier = /BENCH[-_]/u;
 
 async function sourceFiles(directory: string): Promise<string[]> {
