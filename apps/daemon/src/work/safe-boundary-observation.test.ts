@@ -338,6 +338,56 @@ describe("recordSafeBoundaryObservation derives the boundary from the durable ru
     }
   });
 
+  it("records FALSE when the exit was seen but the terminal was never classified", () => {
+    const store = openStore("terminal-unknown");
+    try {
+      seedActivation(store, "terminal-unknown");
+      // Truth PROVEN and a real EXITED exit, so the two earlier clauses PASS and the only
+      // clause left to answer is the terminal one. A host can watch a process leave and still
+      // have no classified outcome for it, and that is not an observed safe boundary.
+      const base = observedRecord("terminal-unknown");
+      seedRun(store, "terminal-unknown", recordOf("terminal-unknown", {
+        infrastructure: base.infrastructure,
+        launch: base.launch,
+        terminal: "UNKNOWN",
+      }));
+
+      const written = recordSafeBoundaryObservation(store, inputFor("terminal-unknown"));
+
+      expect(written.ok).toBe(true);
+      if (!written.ok) throw new Error(written.code);
+      expect(written.observation.safeBoundaryObserved).toBe(false);
+      expect(written.observation.reasonCode).toBe("SAFE_BOUNDARY_TERMINAL_UNCLASSIFIED");
+    } finally {
+      store.close();
+    }
+  });
+
+  it("records FALSE when every earlier clause passes but no end was ever recorded", () => {
+    const store = openStore("end-unrecorded");
+    try {
+      seedActivation(store, "end-unrecorded");
+      // The last clause, isolated: PROVEN truth, an EXITED exit and a COMPLETED terminal all
+      // hold, and only `completedAt` is missing. Without an end instant there is no moment the
+      // boundary can be said to have been crossed at.
+      const base = observedRecord("end-unrecorded");
+      seedRun(store, "end-unrecorded", recordOf("end-unrecorded", {
+        infrastructure: base.infrastructure,
+        launch: { ...base.launch, completedAt: null },
+        terminal: base.terminal,
+      }));
+
+      const written = recordSafeBoundaryObservation(store, inputFor("end-unrecorded"));
+
+      expect(written.ok).toBe(true);
+      if (!written.ok) throw new Error(written.code);
+      expect(written.observation.safeBoundaryObserved).toBe(false);
+      expect(written.observation.reasonCode).toBe("SAFE_BOUNDARY_END_UNRECORDED");
+    } finally {
+      store.close();
+    }
+  });
+
   it("refuses with a typed UNKNOWN, and records nothing, when no run exists at all", () => {
     const store = openStore("absent");
     try {

@@ -129,7 +129,9 @@ interface Derived {
   readonly reasonCode: SafeBoundaryReasonCode | null; readonly safeBoundaryObserved: boolean;
 }
 
-/** The predicate, one clause at a time so a weakening reddens exactly one arm. */
+/** The predicate, one clause at a time so a weakening reddens exactly one arm — a COVERAGE
+ *  claim, true only while every arm has a test: flipping `failed()` to TRUE must redden FIVE
+ *  named tests (it reddened three until TERMINAL_UNCLASSIFIED and END_UNRECORDED were added). */
 function deriveBoundary(record: {
   readonly launch: { readonly completedAt: string | null;
     readonly exit: { readonly kind: string } | null; readonly truthClass: string };
@@ -171,10 +173,14 @@ export function recordSafeBoundaryObservation(
   }
 
   const derived = deriveBoundary(run.record);
-  // A DURABLE instant: the end the host recorded, else the start it observed. Never a clock
-  // read — that would make the observation's own timestamp its one unfalsifiable field.
-  const derivedAt = run.record.launch.completedAt
-    ?? `wall:${String(run.record.observedStart?.serverWallSeconds ?? "unrecorded")}`;
+  // A DURABLE instant, never a clock read: end recorded, else start observed, else the wall
+  // reading CONVERTED (arithmetic on evidence, not a sample). It must be CANONICAL — the store
+  // refuses a non-canonical `decidedAt`, so a merely descriptive fallback costs the observation.
+  const wall = run.record.observedStart?.serverWallSeconds;
+  const derivedAt = run.record.launch.completedAt ?? run.record.launch.startedAt
+    ?? (typeof wall === "number" && Number.isFinite(wall)
+      ? new Date(wall * 1_000).toISOString() : null);
+  if (derivedAt === null) return refuse("SAFE_BOUNDARY_RUN_UNREADABLE", "NO_DURABLE_INSTANT");
   const observationRef = digestOf(REF_DOMAIN, [
     input.projectId, input.attemptRef, JSON.stringify(run.record.providerRunRef), run.recordDigest,
   ]);
