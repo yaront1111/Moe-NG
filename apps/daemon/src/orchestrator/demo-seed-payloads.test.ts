@@ -1,12 +1,38 @@
-import { describe, expect, it } from "vitest";
+import { evaluatePolicy } from "@moe/core";
+import type { SqliteEventStore } from "@moe/store";
+import { afterEach, describe, expect, it } from "vitest";
 
+import {
+  envelope as bootstrapEnvelope,
+  send as bootstrapSend,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import {
   admitProviderProfile,
   encodeProviderProfileBytes,
 } from "../provider-profile/provider-profile-codec.js";
+import { readReviewLedger } from "../review/review-read-model.js";
+import {
+  AUTHOR,
+  PROJECT_ID as REVIEW_PROJECT_ID,
+  SUBJECT_REF,
+  closeStores,
+  envelope as reviewEnvelope,
+  openRestartableStore,
+  send as reviewSend,
+  submitPayload,
+} from "../review/review-test-fixtures.js";
+import {
+  REVIEWER_CALIBRATION_SLICE_REF,
+  readReviewerCalibration,
+} from "../review/reviewer-calibration-record.js";
+import {
+  VERIFIER_POLICY_SLICE_REF,
+  createVerifierAuthorityProvider,
+} from "../review/verifier-authority-provider.js";
+import type { NodeMission } from "./agent-wrapper.js";
 import { activationWitness, probeObservation, providerProfileRef } from "./demo-seed-payloads.js";
 import { buildDemoSeedPlan } from "./demo-seed-plan.js";
-import type { DemoSeedInput } from "./demo-seed-plan.js";
+import type { DemoSeedInput, SeedCommand } from "./demo-seed-plan.js";
 
 /**
  * The probe observation is graded by the DAEMON'S OWN admission function, never by a
@@ -97,5 +123,153 @@ describe("the provider.probe observation", () => {
     expect(second.revision.profileDigest).toBe(first.revision.profileDigest);
     expect(Buffer.from(encodeProviderProfileBytes(second.revision)).toString("hex"))
       .toBe(Buffer.from(encodeProviderProfileBytes(first.revision)).toString("hex"));
+  });
+});
+
+/**
+ * THE TWO POLICY SLICES, GRADED BY THE PRODUCTION READERS THAT REFUSED WITHOUT THEM.
+ *
+ * Measured before this change on a store the shipped seed had just filled 7/7:
+ * `readReviewerCalibration` -> REVIEWER_CALIBRATION_NOT_INSTALLED @ DAEMON_PREREQUISITE and
+ * `createVerifierAuthorityProvider(...)(node)` -> null, so `node-verifier.ts` reported
+ * VERIFICATION_AUTHORITY_UNAVAILABLE before any test ran and no node could reach COMMITTED.
+ *
+ * Every case below installs the slices THE SHIPPED PLAN BUILDS (payload, command id and
+ * expectedVersion all taken from `buildDemoSeedPlan`) through `runBootstrapCommand`, then asks
+ * the production readers. Nothing here re-decides admissibility with a second key list.
+ */
+
+const DURABLE_INPUT: DemoSeedInput = Object.freeze({ ...INPUT, projectId: REVIEW_PROJECT_ID });
+
+const BRIEF: NodeMission = Object.freeze({
+  instructions: NODE.instructions,
+  test: NODE.test,
+  title: NODE.title,
+  workspace: NODE.workspace,
+});
+
+const policyInstalls = (): readonly SeedCommand[] =>
+  buildDemoSeedPlan(DURABLE_INPUT).filter((command) => command.commandKind === "policy.install");
+
+const sliceRefOf = (command: SeedCommand): unknown =>
+  (command.payload["slice"] as Record<string, unknown>)["sliceRef"];
+
+/**
+ * Installs the planned slices, optionally omitting exactly one by its ref. The omission is by
+ * REF rather than by index so a case names the source it removes and cannot drift when the
+ * order changes.
+ */
+function installPlannedSlices(store: SqliteEventStore, omitRef?: string): void {
+  let installed = 0;
+  for (const command of policyInstalls()) {
+    if (sliceRefOf(command) === omitRef) continue;
+    // With a slice omitted the stream never reaches the planned version, so the survivor is
+    // installed at the version the aggregate actually holds. The PLAN's own expectedVersions are
+    // graded by the full-install cases, which pass `command.expectedVersion` unchanged.
+    const expectedVersion = omitRef === undefined ? command.expectedVersion : installed;
+    const outcome = bootstrapSend(store, {
+      ...bootstrapEnvelope("policy.install", expectedVersion, command.payload, command.commandId),
+      projectId: REVIEW_PROJECT_ID,
+    });
+    if (!outcome.ok) throw new Error(`install refused: ${JSON.stringify(outcome)}`);
+    installed += 1;
+  }
+  // A sweep that installs nothing would leave every negative case passing for the wrong reason.
+  if (installed === 0 && omitRef === undefined) throw new Error("the plan builds no policy.install");
+}
+
+/** One clean round through the real `review.submit` handler; its routing is ACCEPT. */
+function seedCleanRound(store: SqliteEventStore): void {
+  const version = readReviewLedger(store, REVIEW_PROJECT_ID, SUBJECT_REF).version;
+  const outcome = reviewSend(store, {
+    ...reviewEnvelope(
+      "review.submit", version, submitPayload(version + 1, []), `cmd-clean-${String(version)}`,
+    ),
+    principalId: AUTHOR,
+  });
+  if (!outcome.ok) throw new Error(`clean round setup failed: ${outcome.code}`);
+}
+
+describe("the demo seed's policy slices", () => {
+  afterEach(closeStores);
+
+  it("builds exactly the two slices the verifier's readers address, before goal.create", () => {
+    const plan = buildDemoSeedPlan(DURABLE_INPUT);
+    const kinds = plan.map((command) => command.commandKind);
+
+    expect(policyInstalls().map(sliceRefOf))
+      .toEqual([VERIFIER_POLICY_SLICE_REF, REVIEWER_CALIBRATION_SLICE_REF]);
+    expect(kinds.lastIndexOf("policy.install")).toBeLessThan(kinds.indexOf("goal.create"));
+    for (const command of policyInstalls()) {
+      expect(command.targetAggregateId).toBe(`${REVIEW_PROJECT_ID}-policy`);
+    }
+    expect(policyInstalls().map((command) => command.expectedVersion)).toEqual([0, 1]);
+  });
+
+  it("flips readReviewerCalibration from NOT_INSTALLED to an eligible durable record", () => {
+    const { store } = openRestartableStore();
+
+    const before = readReviewerCalibration(store, REVIEW_PROJECT_ID);
+    installPlannedSlices(store);
+    const after = readReviewerCalibration(store, REVIEW_PROJECT_ID);
+
+    expect(before).toEqual({
+      code: "REVIEWER_CALIBRATION_NOT_INSTALLED", layer: "DAEMON_PREREQUISITE", ok: false,
+    });
+    if (!after.ok) throw new Error(`calibration still refuses ${after.code} at ${after.layer}`);
+    // VALUES, not just ok: `qualifyReviewerForAcceptance` refuses REVIEWER_CALIBRATION_UNPROVEN
+    // on a STALE/UNKNOWN staleness, a failed sentinel or an empty corpus revision, so a wrong
+    // accepted record would pass an ok-only assertion and still block every acceptance.
+    expect(after.calibration).toEqual({
+      corpusRevision: `${REVIEW_PROJECT_ID}-demo-seed-declared-corpus-1`,
+      sentinelPassed: true,
+      staleness: "CURRENT",
+    });
+  });
+
+  it("flips the verifier authority provider from null to facts the core evaluates ALLOW", () => {
+    const { store } = openRestartableStore();
+    seedCleanRound(store);
+    const provider = createVerifierAuthorityProvider({ projectId: REVIEW_PROJECT_ID, store });
+
+    const before = provider(SUBJECT_REF, BRIEF);
+    installPlannedSlices(store);
+    const after = provider(SUBJECT_REF, BRIEF);
+
+    expect(before).toBeNull();
+    if (after === null) throw new Error("the installed slices still leave the authority null");
+    // `sliceRef` is the slice's ADDRESS: the stored 14 keys must read back as the core's exact
+    // 13 or `evaluatePolicy` refuses INPUT_INVALID when the receipt is decoded again.
+    expect(Object.keys(after.policy)).not.toContain("sliceRef");
+    const evaluated = evaluatePolicy(after.policy);
+    if (!evaluated.ok) throw new Error(`the seeded policy is inadmissible: ${evaluated.error.code}`);
+    expect(evaluated.record.decision).toBe("ALLOW");
+    expect(evaluated.record.reasonCodes).toEqual(["ALLOWED_BY_POLICY"]);
+    expect(evaluated.record.action).toBe("integration.accept_output");
+    expect(evaluated.record.actor).toBe("daemon:node-verifier");
+  });
+
+  it("keeps each slice load-bearing: dropping either one alone returns the authority to null", () => {
+    const withoutPolicy = openRestartableStore().store;
+    seedCleanRound(withoutPolicy);
+    installPlannedSlices(withoutPolicy, VERIFIER_POLICY_SLICE_REF);
+    const withoutCalibration = openRestartableStore().store;
+    seedCleanRound(withoutCalibration);
+    installPlannedSlices(withoutCalibration, REVIEWER_CALIBRATION_SLICE_REF);
+
+    // The calibration is installed in the first store, so its null cannot be the calibration gap.
+    expect(readReviewerCalibration(withoutPolicy, REVIEW_PROJECT_ID).ok).toBe(true);
+    expect(createVerifierAuthorityProvider({ projectId: REVIEW_PROJECT_ID, store: withoutPolicy })(
+      SUBJECT_REF, BRIEF,
+    )).toBeNull();
+    expect(readReviewerCalibration(withoutCalibration, REVIEW_PROJECT_ID))
+      .toEqual({ code: "REVIEWER_CALIBRATION_NOT_INSTALLED", layer: "DAEMON_PREREQUISITE", ok: false });
+    expect(createVerifierAuthorityProvider({
+      projectId: REVIEW_PROJECT_ID, store: withoutCalibration,
+    })(SUBJECT_REF, BRIEF)).toBeNull();
+  });
+
+  it("is byte-constant, so a second seed run replays instead of installing new bytes", () => {
+    expect(JSON.stringify(policyInstalls())).toBe(JSON.stringify(policyInstalls()));
   });
 });

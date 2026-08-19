@@ -72,6 +72,14 @@ export const DEMO_SEED_KINDS = Object.freeze([
   "project.bind_repository",
   "provider.probe",
   "project.activate",
+  // Twice, and before goal.create: the two slices the daemon-side verifier reads. Without them
+  // `createVerifierAuthorityProvider` returns null and `readReviewerCalibration` refuses
+  // REVIEWER_CALIBRATION_NOT_INSTALLED, so node-verifier.ts reports
+  // VERIFICATION_AUTHORITY_UNAVAILABLE before any test runs and no seeded node can reach
+  // COMMITTED. `policy.install` names no prerequisite and rides the project's `-policy` stream,
+  // so their position is free and their versions are their own.
+  "policy.install",
+  "policy.install",
   "goal.create",
   "plan.propose",
   "approval.decide",
@@ -85,6 +93,8 @@ import {
   planningChain,
   probeObservation,
   repositoryObservation,
+  reviewerCalibrationSlice,
+  verifierPolicySlice,
 } from "./demo-seed-payloads.js";
 
 /**
@@ -96,19 +106,27 @@ import {
  */
 function targetOf(input: DemoSeedInput, kind: string): string {
   if (kind === "provider.probe") return `${input.projectId}-provider`;
+  if (kind === "policy.install") return `${input.projectId}-policy`;
   if (kind === "goal.create") return input.goalId;
   if (kind === "plan.propose" || kind === "approval.decide") return input.runId;
   return input.projectId;
 }
 
+/**
+ * `idSuffix` exists because the plan sends `policy.install` TWICE and the durable decision key is
+ * (commandId, principalId, projectId): two installs under one id would make the second a REPLAY
+ * of the first, so the second slice would never be written and the seed would still report
+ * success. It is the caller's job to keep the suffix stable — a generated one would break replay.
+ */
 function frozenCommand(
   input: DemoSeedInput,
   commandKind: string,
   expectedVersion: number,
   payload: Record<string, unknown>,
+  idSuffix = "",
 ): SeedCommand {
   return Object.freeze({
-    commandId: `demo-seed-${commandKind}`,
+    commandId: `demo-seed-${commandKind}${idSuffix}`,
     commandKind,
     correlationId: input.correlationId,
     expectedVersion,
@@ -121,12 +139,17 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     kind: string,
     expectedVersion: number,
     payload: Record<string, unknown>,
-  ): SeedCommand => frozenCommand(input, kind, expectedVersion, payload);
+    idSuffix = "",
+  ): SeedCommand => frozenCommand(input, kind, expectedVersion, payload, idSuffix);
   return Object.freeze([
     build("project.register", 0, { owner: input.principalId }),
     build("project.bind_repository", 1, { observation: repositoryObservation(input) }),
     build("provider.probe", 0, { observation: probeObservation(input) }),
     build("project.activate", 2, { witness: activationWitness(input) }),
+    // The policy stream's own 0 -> 1 line; `installPolicy` refuses
+    // BOOTSTRAP_EXPECTED_VERSION_STALE on anything else.
+    build("policy.install", 0, { slice: verifierPolicySlice(input) }, "-verifier-policy"),
+    build("policy.install", 1, { slice: reviewerCalibrationSlice(input) }, "-reviewer-calibration"),
     build("goal.create", 0, {
       budgetAccountRef: `${input.projectId}-budget-account`,
       goalId: input.goalId,

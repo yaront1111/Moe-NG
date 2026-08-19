@@ -224,8 +224,12 @@ async function main(): Promise<void> {
     // an unfenced wrapper is the defect this binary exists to close: without a
     // fence, `createStaffingGate(undefined).admit` returns null and admits every
     // pass. One handle serves both the fence and the verifier below; the finally
-    // gate already owns closing it.
-    verifierStore = SqliteEventStore.open(config.storePath);
+    // gate already owns closing it. The handle is PROJECT-ASSERTED (the same
+    // pattern daemon-store-dependencies.ts uses): every durable staffing and
+    // verifier write goes through the decision/event ledger transactions, and
+    // those refuse PROJECT_SCOPE_REQUIRED on an unasserted handle — which would
+    // fail every ONCE pass at its staffing commit.
+    verifierStore = SqliteEventStore.openForProject(config.storePath, config.projectId);
 
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({

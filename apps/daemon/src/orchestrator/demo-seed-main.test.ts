@@ -17,6 +17,7 @@ import {
 } from "./demo-seed-main.js";
 import type { FetchLike } from "./demo-seed-main.js";
 import { MOE_SEED_ENV_MISSING } from "./demo-seed-env.js";
+import { DEMO_SEED_KINDS } from "./demo-seed-plan.js";
 
 /**
  * The client is exercised over a REAL loopback HTTP server, so the header set and
@@ -241,6 +242,8 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         "demo-seed-project.bind_repository",
         "demo-seed-provider.probe",
         "demo-seed-project.activate",
+        "demo-seed-policy.install-verifier-policy",
+        "demo-seed-policy.install-reviewer-calibration",
         "demo-seed-goal.create",
         "demo-seed-plan.propose",
         "demo-seed-approval.decide",
@@ -257,7 +260,7 @@ describe("runDemoSeed against a loopback daemon stub", () => {
       const { lines, outcome } = await runAgainst(stub);
       if (!outcome.ok) throw new Error(`${outcome.code}: ${outcome.line}`);
 
-      expect(outcome.commandIds.length).toBe(7);
+      expect(outcome.commandIds.length).toBe(DEMO_SEED_KINDS.length);
       expect(lines.some((line) => line.includes("replayed project.register"))).toBe(true);
       // It never polled the stream for an event the seam will not re-issue.
       expect(stub.requests.filter((recorded) => recorded.path === "/events/read")).toEqual([]);
@@ -319,7 +322,7 @@ describe("runDemoSeed against a loopback daemon stub", () => {
       // Every /command after the first is preceded by a read that carried the
       // PREVIOUS command's commit — the ordering clause, observed on the wire.
       const commands = stub.requests.filter((recorded) => recorded.path === "/command");
-      expect(commands.length).toBe(7);
+      expect(commands.length).toBe(DEMO_SEED_KINDS.length);
       let checked = 0;
       for (let index = 1; index < commands.length; index += 1) {
         const previousId = String(commands[index - 1]?.body["commandId"]);
@@ -330,9 +333,10 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         checked += 1;
         expect({ id: previousId, polled: sawCommit > 0 }).toEqual({ id: previousId, polled: true });
       }
-      expect(checked).toBe(6);
+      expect(checked).toBe(DEMO_SEED_KINDS.length - 1);
       // The delay forced real polling rather than a single lucky read.
-      expect(stub.requests.filter((r) => r.path === "/events/read").length).toBeGreaterThan(7);
+      expect(stub.requests.filter((r) => r.path === "/events/read").length)
+        .toBeGreaterThan(DEMO_SEED_KINDS.length);
     } finally {
       await stub.close();
     }

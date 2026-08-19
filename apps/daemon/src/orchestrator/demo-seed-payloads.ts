@@ -1,5 +1,8 @@
 import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner";
 
+import { REVIEWER_CALIBRATION_SLICE_REF } from "../review/reviewer-calibration-record.js";
+import { VERIFIER_POLICY_SLICE_REF } from "../review/verifier-authority-provider.js";
+import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-contracts.js";
 import type { DemoSeedInput } from "./demo-seed-plan.js";
 
 /**
@@ -20,6 +23,89 @@ function hex64(label: string): string {
   return (base + "0".repeat(64)).slice(0, 64);
 }
 
+
+/**
+ * The verifier's ACTION and the risk tier the demo claims for it. Both are pinned as literals
+ * because neither is exported: `verifier-authority-provider.ts` and `verifier-receipt-contracts.ts`
+ * hold their own private `"integration.accept_output"` and compare the EVALUATED record against
+ * it twice - once before the receipt is written and once when its bytes are decoded again. A
+ * mismatch here is not a type error, it is `null` authority, so the seed test grades this slice
+ * by calling the provider rather than by re-reading the string.
+ */
+const DEMO_ACCEPTANCE_ACTION = "integration.accept_output";
+const DEMO_ACCEPTANCE_TIER = "R0";
+
+/**
+ * A FIXED stamp, not a reading. This module has no clock by construction (two builds over one
+ * input must be byte-identical, or a second seed run is a new policy body instead of a replay),
+ * and `validateEvaluationInput` only requires a safe non-negative integer.
+ */
+const DEMO_POLICY_EVALUATED_AT_EPOCH_MS = 1_760_000_000_000;
+
+/**
+ * The reviewer calibration the demo DECLARES, at the well-known address its reader owns.
+ *
+ * Design 15.3 calls these "caller-supplied durable facts", and this seed is the caller - but
+ * `sentinelPassed: true` still asserts a sentinel corpus the demo never ran, exactly as
+ * `modelSnapshotKind: "UNKNOWN"` below refuses to assert a `claude --version` the demo never
+ * took. The difference is reachability: `qualifyReviewerForAcceptance` refuses
+ * REVIEWER_CALIBRATION_UNPROVEN on a failed sentinel, an UNKNOWN staleness or an empty corpus,
+ * so an honest-but-unproven record makes COMMITTED unreachable and the demo cannot run at all.
+ * The claim is therefore made SELF-DECLARING in the durable bytes: `corpusRevision` names the
+ * demo seed as the declarer, so anything reading this record back - including the verifier
+ * receipt that carries it - can see the calibration came from the bootstrap and not from a
+ * measured corpus. A real deployment installs its own slice at the same ref and overwrites it.
+ */
+export function reviewerCalibrationSlice(input: DemoSeedInput): Record<string, unknown> {
+  return {
+    corpusRevision: `${input.projectId}-demo-seed-declared-corpus-1`,
+    sentinelPassed: true,
+    sliceRef: REVIEWER_CALIBRATION_SLICE_REF,
+    staleness: "CURRENT",
+  };
+}
+
+/**
+ * The verifier's policy slice: a complete `PolicyEvaluationInput` plus its ADDRESS.
+ *
+ * `readVerifierPolicy` strips `sliceRef` and hands the remaining thirteen keys to the core's
+ * `evaluatePolicy`, then requires ALLOW for this action and this actor; anything else is `null`
+ * authority. ALLOW needs all four layers to agree, which is why each field below is load-bearing:
+ * one DAEMON_VERIFIED tier-bearing fact (without it the risk layer is RISK_TIER_UNCLASSIFIABLE
+ * and folds to HOLD_UNKNOWN), no required facts and no rules (nothing to hold or deny), and an
+ * auto-approval opt-in naming THIS action at a tier at least as high as the derived one (design
+ * 710: an R0/R1 action still needs an explicit opt-in, so manual stays the default).
+ *
+ * The install address is human-readable on purpose. `policy.install` stores any JsonObject, and
+ * `evaluatePolicy` refuses a `policyRevisionRef` that is not 64 hex - so a slice living at a
+ * non-hex ref can never be named as a policy revision by a caller who notices it installed.
+ */
+export function verifierPolicySlice(input: DemoSeedInput): Record<string, unknown> {
+  return {
+    action: DEMO_ACCEPTANCE_ACTION,
+    actor: NODE_VERIFIER_PRINCIPAL_ID,
+    callerRiskHint: null,
+    decisionDigest: hex64("dec1de"),
+    evaluatedAtEpochMs: DEMO_POLICY_EVALUATED_AT_EPOCH_MS,
+    evaluatorVersion: "demo-seed-policy-1",
+    facts: [{
+      factId: `${input.projectId}-demo-acceptance-risk`,
+      tier: DEMO_ACCEPTANCE_TIER,
+      truthClass: DEMO_VERIFIED,
+    }],
+    graphNodeRevisionRefs: [],
+    policyRevisionRef: hex64("acce97"),
+    requiredFactIds: [],
+    scope: [],
+    sliceChain: [{
+      autoApprovalOptIns: [{ action: DEMO_ACCEPTANCE_ACTION, tier: DEMO_ACCEPTANCE_TIER }],
+      rules: [],
+      sliceRef: hex64("511ce"),
+    }],
+    sliceRef: VERIFIER_POLICY_SLICE_REF,
+    waivers: [],
+  };
+}
 
 export function repositoryObservation(input: DemoSeedInput): Record<string, unknown> {
   return {
