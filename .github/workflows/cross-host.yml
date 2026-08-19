@@ -83,29 +83,40 @@ jobs:
   gate-windows:
     name: gate (windows-latest)
     runs-on: windows-latest
-    # windows-latest hands a job an 8.3-MANGLED temp directory,
-    # C:\Users\RUNNER~1\AppData\Local\Temp, because the runner account name is
-    # longer than eight characters. Node then disagrees with itself about what
-    # that path IS: `fs.realpathSync` (the JS implementation) leaves RUNNER~1
-    # alone, while `fs.promises.realpath` (the libuv one) expands it to
-    # runneradmin. A fixture root taken with the first and a production realpath
-    # taken with the second differ by exactly that segment, so the repo's path
-    # containment checks fire - measured on run 32232401182: 36 "escapes the
-    # fixture's native root", plus PHASE0_NODE_SOURCE_PATH_ESCAPE and
-    # CLAUDE_RUNTIME_PATH_ESCAPE, 13 files red.
-    #
-    # runner.temp is D:\a\_temp: every segment is short, so no 8.3 alias exists
-    # and both spellings collapse to one. This gives the lane the environment a
-    # normal Windows box already has (an account name under eight characters is
-    # never mangled, which is why the same suite is green locally), and it
-    # narrows NOTHING - the lane still runs all 299 files and all 7417 cases.
-    # The fixture fragility itself is real and is NOT repaired here: it belongs
-    # to the tasks that own those 13 files.
-    env:
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
+
+      # windows-latest hands a job an 8.3-MANGLED temp directory,
+      # C:\Users\RUNNER~1\AppData\Local\Temp, because the runner account name is
+      # longer than eight characters. Node then disagrees with itself about what
+      # that path IS: `fs.realpathSync` (the JS implementation) leaves RUNNER~1
+      # alone, while `fs.promises.realpath` (the libuv one) expands it to
+      # runneradmin. A fixture root taken with the first and a production
+      # realpath taken with the second differ by exactly that segment, so the
+      # repo's path containment checks fire - measured on run 32232401182: 36
+      # "escapes the fixture's native root", plus PHASE0_NODE_SOURCE_PATH_ESCAPE
+      # and CLAUDE_RUNTIME_PATH_ESCAPE, 13 files red.
+      #
+      # RUNNER_TEMP is D:\a\_temp: every segment is short, so no 8.3 alias
+      # exists and both spellings collapse to one. That is the environment a
+      # normal Windows box already has (an account name under eight characters
+      # is never mangled, which is why the same suite is green locally), and it
+      # narrows NOTHING - the lane still runs all 299 files and all 7417 cases.
+      # The fixture fragility itself is real and is NOT repaired here: it spans
+      # 13 files owned by other tasks, and its two directions need opposite
+      # repairs.
+      #
+      # Written through GITHUB_ENV rather than the job's `env:` block because a
+      # job-level env may not read the `runner` context - the first attempt did,
+      # and GitHub refused the whole WORKFLOW ("This run likely failed because of
+      # a workflow file issue", run 32233018489, zero jobs started, which took
+      # the ubuntu and macos legs down with it for that one sha). RUNNER_TEMP is
+      # a plain variable, so this shape needs no context at all.
+      - name: Pin the temp directory away from its 8.3 alias
+        run: |
+          "TEMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "TMP=$env:RUNNER_TEMP" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
 
       - uses: pnpm/action-setup@v4
         with:
