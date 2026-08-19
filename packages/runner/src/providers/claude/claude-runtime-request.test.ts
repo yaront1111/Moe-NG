@@ -489,7 +489,20 @@ it("leaves the runtime UNKNOWN when the host observation refuses", async () => {
  * re-observed, and one that differed in every field would mean the quote was
  * ignored. The quoted digest must match and the pinned binding must not.
  */
-it("pins the really installed runtime, or refuses with the host's own stable code", async () => {
+/**
+ * The 2026-08-16 02:10Z option-(a) ruling made these arms HARD-FAIL when no
+ * Claude CLI is installed, so a developer box could never quietly stop
+ * certifying the real runtime. A GitHub runner has no Claude CLI at all, so that
+ * same rule turned the Windows lane permanently red. Governor ruling 2026-08-19
+ * (request msg-0bf62be7 -> reply msg-44487079) amends it to exactly this
+ * narrowing: skip ONLY on a CI host that has no claude.exe. A developer box
+ * without one still hard-fails, which is the case the original ruling protects.
+ */
+const CI_WITHOUT_INSTALLED_CLAUDE =
+  WIN && process.env.CI === "true" && installedClaudeExecutable() === null;
+
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "pins the really installed runtime, or refuses with the host's own stable code", async () => {
   if (!WIN) {
     // Not skipped: a leg that generates zero cases passes while proving nothing.
     const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
@@ -535,7 +548,8 @@ it("pins the really installed runtime, or refuses with the host's own stable cod
  * the fresh observation have agreed, so an untouched pin root is evidence that
  * nothing a launcher could use was ever produced.
  */
-it("refuses byte, version, capability and platform drift before anything is pinned", async () => {
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "refuses byte, version, capability and platform drift before anything is pinned", async () => {
   if (!WIN) {
     const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
     const prepared = await prepareClaudeRuntimePin(

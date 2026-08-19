@@ -11,6 +11,7 @@
  * home directory) rather than any parameter, because that is the only lever a
  * caller has left. Refusing ambiguity is what makes that lever useless.
  */
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { arch, release, tmpdir } from "node:os";
@@ -228,7 +229,34 @@ function comparedFacts(observation: ProviderRuntimeObservation): Record<string, 
   };
 }
 
-it("reaches a PROVEN pin against the really installed runtime through discovery alone", async () => {
+/** The same host probe the sibling runtime suites use: a real .exe on the PATH. */
+function installedClaudeExecutable(): string | null {
+  if (!ON_WINDOWS) return null;
+  try {
+    const found = execFileSync("where.exe", ["claude.exe"], { encoding: "utf8" })
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.toLowerCase().endsWith(".exe"));
+    return found.length === 0 ? null : (found[0] as string);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The 2026-08-16 02:10Z option-(a) ruling made this arm HARD-FAIL when no Claude
+ * CLI is installed, so a developer box could never quietly stop certifying the
+ * real runtime. A GitHub runner has no Claude CLI at all, so that same rule
+ * turned the Windows lane permanently red. Governor ruling 2026-08-19 (request
+ * msg-0bf62be7 -> reply msg-44487079) amends it to exactly this narrowing: skip
+ * ONLY on a CI host that has no claude.exe. A developer box without one still
+ * hard-fails, which is the case the original ruling protects.
+ */
+const CI_WITHOUT_INSTALLED_CLAUDE =
+  ON_WINDOWS && process.env.CI === "true" && installedClaudeExecutable() === null;
+
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "reaches a PROVEN pin against the really installed runtime through discovery alone", async () => {
   const discovered = await discoverInstalledClaudeRuntime();
   if (!ON_WINDOWS) {
     expect(refusalOf(discovered).code).toBe("CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED");
