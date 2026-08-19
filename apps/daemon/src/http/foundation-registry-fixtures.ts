@@ -95,6 +95,11 @@ const REPOSITORY = (() => {
 
 const HEAD = REPOSITORY.head;
 
+/** The catalog an OUT-OF-PROCESS daemon must be pointed at to resolve the same workspace
+ *  authority these fixtures seed, via `MOE_FOUNDATION_WORKSPACE_CATALOG`. */
+export const FOUNDATION_SEAM_CATALOG_PATH = REPOSITORY.catalogPath;
+export const FOUNDATION_SEAM_REPOSITORY_HEAD = HEAD;
+
 /** The worktree this attempt derives. Computing it is not choosing it. */
 const DERIVED_WORKTREE = (() => {
   const derived = deriveWorktreeTarget({
@@ -333,7 +338,13 @@ export interface SeamHarness {
  * bootstrap commands and the ports come from `createStoreDependencies`, so nothing
  * below the seam is a double.
  */
-export function seamHarness(label: string): SeamHarness {
+export interface SeamHarnessOptions {
+  /** Omitted models a project whose ACTIVE graph revision was never written, which is the
+   *  only way to exercise the derivation's own refusal arm through the real seam. */
+  readonly seedGraph?: boolean;
+}
+
+export function seamHarness(label: string, options: SeamHarnessOptions = {}): SeamHarness {
   const root = mkdtempSync(join(tmpdir(), `moe-foundation-seam-${label}-`));
   roots.push(root);
   const storePath = join(root, "project.db");
@@ -354,6 +365,23 @@ export function seamHarness(label: string): SeamHarness {
     // command -> service wiring is driven by production code end to end.
     workspaceCatalogPath: REPOSITORY.catalogPath,
   });
+  seedFoundationStore(storePath, options);
+  return Object.freeze({
+    close: () => {
+      provider.close();
+    },
+    deps: provider.provide(),
+    storePath,
+  });
+}
+
+/**
+ * The durable world a Foundation dispatch needs, written through production seams into a
+ * store the caller owns — so a LIVE daemon started on the same file finds it already there.
+ */
+export function seedFoundationStore(
+  storePath: string, options: SeamHarnessOptions = {},
+): void {
   const seed = SqliteEventStore.openForProject(storePath, PROJECT_ID);
   try {
     // The four commands `seedReadyProject` drives, with the bound observation
@@ -373,17 +401,10 @@ export function seamHarness(label: string): SeamHarness {
       const outcome = sendBootstrap(seed, bootstrapEnvelope(kind, version, payload));
       if (!outcome.ok) throw new Error(`seam fixture ${kind} refused: ${outcome.code}`);
     }
-    seedActiveGraph(seed);
+    if (options.seedGraph !== false) seedActiveGraph(seed);
   } finally {
     seed.close();
   }
-  return Object.freeze({
-    close: () => {
-      provider.close();
-    },
-    deps: provider.provide(),
-    storePath,
-  });
 }
 
 /** Every scratch root this module handed out, removed together. */

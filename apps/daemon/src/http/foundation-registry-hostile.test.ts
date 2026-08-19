@@ -306,3 +306,32 @@ it("refuses an async entry on the sync entry WITHOUT calling its handler at all"
     harness.close();
   }
 }, 30_000);
+
+/**
+ * The derivation's OWN refusal arm, driven through the real seam. Without a seeded ACTIVE
+ * revision there is no graph to derive, and the point of the case is twofold: the refusal
+ * carries the PROJECTION's code and layer rather than a flattened dispatch code, and a
+ * returned refusal is not evidence that nothing was written — the store is read back.
+ */
+it("refuses a dispatch whose ACTIVE graph is absent, unrestamped, and writes nothing", async () => {
+  const harness = seamHarness("graph-absent", { seedGraph: false });
+  try {
+    const before = countsOf(harness.storePath);
+
+    const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
+      commandId: "cmd-graph-absent", payload: dispatchPayload(),
+    }));
+
+    expect(answer.ok).toBe(false);
+    if (answer.ok) return;
+    expect(answer.outcome).toBe("PORT_REFUSED");
+    if (answer.outcome !== "PORT_REFUSED") return;
+    expect(answer.refusal).toMatchObject({
+      code: "ACTIVE_GRAPH_ABSENT", layer: "ACTIVE_GRAPH_PROJECTION",
+    });
+    // Zero residue: no partial activation, dispatch or decision from a refused derivation.
+    expect(countsOf(harness.storePath)).toStrictEqual(before);
+  } finally {
+    harness.close();
+  }
+}, 30_000);

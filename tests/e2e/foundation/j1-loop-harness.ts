@@ -175,7 +175,9 @@ export interface DaemonHandle {
  * port would silently address another daemon on a developer's machine, so the banner is the
  * only accepted source and a miss fails with the captured output.
  */
-export async function startDaemon(scratch: J1Scratch): Promise<DaemonHandle> {
+export async function startDaemon(
+  scratch: J1Scratch, extraEnvironment: Record<string, string> = {},
+): Promise<DaemonHandle> {
   const child = spawn(process.execPath, [
     TRANSFORM_TYPES,
     join(REPOSITORY_ROOT, DAEMON_MAIN),
@@ -189,6 +191,7 @@ export async function startDaemon(scratch: J1Scratch): Promise<DaemonHandle> {
       ...storeEnvironment(scratch),
       MOE_APPROVAL_MODE: "SPEED",
       MOE_SPEED_MODE_DELAY_MS: "0",
+      ...extraEnvironment,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
