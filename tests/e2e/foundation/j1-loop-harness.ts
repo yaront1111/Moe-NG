@@ -195,6 +195,144 @@ export function runSeed(scratch: J1Scratch, origin: string): Promise<ProcessRun>
 }
 
 /**
+ * THE AGENT CREDENTIAL, resolved for the SPAWNED stack instead of inherited by it.
+ *
+ * A session on this host is spawned by a launcher that has been running since the day
+ * before; a process's environment block is fixed at creation, so a credential an operator
+ * exports today is invisible to it no matter how many times a task is retried. The USER and
+ * MACHINE scopes are not served from that block — .NET reads them from the registry at call
+ * time — so resolving them here is what a fresh shell would have inherited, done explicitly.
+ *
+ * THE VALUE IS NEVER LOGGED. `credentialProvenance` names the variable, its scope and the
+ * name it is delivered under; nothing in this module writes the value anywhere but the env
+ * object handed to a child.
+ */
+export type CredentialScope = "Machine" | "Process" | "User";
+/** The two names `claude --bare` actually reads. */
+export type DeliveredCredentialName = "ANTHROPIC_API_KEY" | "ANTHROPIC_AUTH_TOKEN";
+
+export interface AgentCredential {
+  readonly deliveredAs: DeliveredCredentialName;
+  readonly scope: CredentialScope;
+  readonly sourceName: string;
+  readonly value: string;
+}
+
+/**
+ * `CLAUDE_CODE_OAUTH_TOKEN` is READ FOR ITS VALUE AND DELIVERED UNDER ANOTHER NAME: measured
+ * on this host with a scrubbed-env discriminating pair, `claude -p --bare` ignores that name
+ * and authenticates on the same bytes presented as ANTHROPIC_AUTH_TOKEN. Resolving it without
+ * renaming it would find a credential and still spawn an unauthenticated child.
+ */
+const CREDENTIAL_SOURCES: ReadonlyMap<string, DeliveredCredentialName> = new Map([
+  ["ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN"],
+  ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN"],
+  ["ANTHROPIC_API_KEY", "ANTHROPIC_API_KEY"],
+]);
+
+/** One persistent-scope read. Anything but a value — absent, unreadable, no PowerShell — is null. */
+function persistentValue(name: string, scope: "Machine" | "User"): string | null {
+  if (!IS_WINDOWS) return null;
+  try {
+    const output = execFileSync("powershell", [
+      "-NoProfile", "-NonInteractive", "-Command",
+      `$v=[Environment]::GetEnvironmentVariable('${name}','${scope}');`
+      + " if ($null -ne $v) { [Console]::Out.Write($v) }",
+    ], { encoding: "utf8", windowsHide: true });
+    return output === "" ? null : output.trim();
+  } catch {
+    return null;
+  }
+}
+
+const credentialOf = (
+  sourceName: string, scope: CredentialScope, value: string,
+): AgentCredential => Object.freeze({
+  deliveredAs: CREDENTIAL_SOURCES.get(sourceName) as DeliveredCredentialName,
+  scope,
+  sourceName,
+  value,
+});
+
+/** Process env first — an operator-keyed shell must win — then the registry scopes. */
+export function resolveAgentCredential(
+  source: NodeJS.ProcessEnv = process.env,
+): AgentCredential | null {
+  for (const name of CREDENTIAL_SOURCES.keys()) {
+    const value = source[name];
+    if (value !== undefined && value !== "") return credentialOf(name, "Process", value);
+  }
+  for (const scope of ["User", "Machine"] as const) {
+    for (const name of CREDENTIAL_SOURCES.keys()) {
+      const value = persistentValue(name, scope);
+      if (value !== null && value !== "") return credentialOf(name, scope, value);
+    }
+  }
+  return null;
+}
+
+/** Everything about a resolved credential that may be printed: the value is not in it. */
+export function credentialProvenance(credential: AgentCredential): Record<string, string> {
+  return {
+    deliveredAs: credential.deliveredAs,
+    scope: credential.scope,
+    sourceName: credential.sourceName,
+  };
+}
+
+/**
+ * The live `claude -p --bare` probe, run WITH the resolved credential injected and BEFORE any
+ * journey starts. `--bare` reads no keychain, so this is the one call that can tell a missing
+ * credential apart from an orchestration fault: without it a spawn failure inside the wrapper
+ * would be reported as an agent process failure and read as a moe-next defect.
+ */
+export function probeBareAgent(command: string, credential: AgentCredential): Promise<ProcessRun> {
+  // ONE SPACE-FREE ARGUMENT. Production spawns this CLI through cmd.exe with `shell: true`,
+  // which concatenates argv unescaped (DEP0190), so a multi-word prompt arrives as separate
+  // positional arguments and the child answers an EMPTY prompt while still exiting 0.
+  const child = spawn(command, ["-p", "--bare", "ping"], {
+    cwd: REPOSITORY_ROOT,
+    env: { ...process.env, [credential.deliveredAs]: credential.value },
+    shell: IS_WINDOWS,
+    stdio: ["ignore", "pipe", "pipe"],
+  }) as PipedChild;
+  const sink = { text: "" };
+  const { pid } = child;
+  collect(child, sink);
+  return new Promise<ProcessRun>((resolve) => {
+    child.once("error", (error) => resolve({
+      code: null, output: `${sink.text}${String(error)}`, pid,
+    }));
+    child.once("close", (code) => resolve({ code, output: sink.text, pid }));
+  });
+}
+
+export interface RealAgentRun {
+  /** The command MOE_AGENT_COMMAND carries: the real CLI, never a shim. */
+  readonly agentCommand: string;
+  readonly credential: AgentCredential;
+  readonly timeoutMs: number;
+}
+
+/**
+ * The REAL wrapper staffing the exclusive node with the REAL `claude -p --bare` child.
+ *
+ * The credential reaches that child by production's own rule and not by a special case:
+ * `agentEnvironment()` forwards the ANTHROPIC_ prefix from the wrapper's environment, so
+ * injecting it here is exactly the inheritance a keyed operator shell would have provided.
+ */
+export function runRealAgentWrapper(scratch: J1Scratch, run: RealAgentRun): Promise<ProcessRun> {
+  return runToExit(process.execPath, [TRANSFORM_TYPES, join(REPOSITORY_ROOT, WRAPPER_MAIN)], {
+    ...storeEnvironment(scratch),
+    [run.credential.deliveredAs]: run.credential.value,
+    MOE_AGENT_COMMAND: run.agentCommand,
+    MOE_AGENT_TIMEOUT_MS: String(run.timeoutMs),
+    MOE_WRAPPER_MAX_AGENTS: "1",
+    MOE_WRAPPER_ONCE: "1",
+  });
+}
+
+/**
  * The `.cmd` shim MOE_AGENT_COMMAND points at, and the only channel the arm can travel on.
  *
  * `agentSpawnInvocation` quotes the COMMAND ITSELF for cmd.exe, so a multi-word
