@@ -37,6 +37,7 @@ import {
   probeBareAgent,
   runRealAgentWrapper,
 } from "./j1-loop-harness.js";
+import { pidReaped } from "./orphan-reap.js";
 
 /**
  * `MOE_AGENT_COMMAND` carries the real CLI name, so the wrapper builds its own
@@ -177,8 +178,8 @@ describe("Foundation self-host canary: the wrapper's --bare flags against the RE
       // stronger here than on any scripted arm.
       expect(pidIsAlive(process.pid)).toBe(true);
       for (const pid of [run.daemonPid, run.wrapper.pid]) {
-        expect({ alive: pid === undefined ? false : pidIsAlive(pid), pid })
-          .toEqual({ alive: false, pid });
+        const alive = pid === undefined ? false : !(await pidReaped(pid));
+        expect({ alive, pid }).toEqual({ alive: false, pid });
       }
     }, CANARY_TIMEOUT_MS);
 });

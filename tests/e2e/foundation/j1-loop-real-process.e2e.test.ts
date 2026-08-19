@@ -37,6 +37,7 @@ import {
   pidIsAlive,
   runWrapper,
 } from "./j1-loop-harness.js";
+import { pidReaped } from "./orphan-reap.js";
 
 const scratches: J1Scratch[] = [];
 
@@ -141,8 +142,8 @@ describe("J1 loop over real daemon, wrapper and agent processes", () => {
     expect(pidIsAlive(process.pid)).toBe(true);
     expect(run.agentPid).not.toBeNull();
     for (const pid of [run.daemonPid, run.wrapper.pid, run.agentPid]) {
-      expect({ alive: pid === null || pid === undefined ? false : pidIsAlive(pid), pid })
-        .toEqual({ alive: false, pid });
+      const alive = pid === null || pid === undefined ? false : !(await pidReaped(pid));
+      expect({ alive, pid }).toEqual({ alive: false, pid });
     }
   }, ARM_TIMEOUT_MS);
 

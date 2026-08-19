@@ -43,6 +43,7 @@ import {
   runWrapper,
   startDaemon,
 } from "./j1-loop-harness.js";
+import { pidReaped } from "./orphan-reap.js";
 import { seedConfigFor, replayCommand } from "./j3-crash-harness.js";
 import {
   deltaNode,
@@ -248,8 +249,8 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       await killTree(daemon.child);
       expect(pidIsAlive(process.pid)).toBe(true);
       for (const pid of [daemon.pid, wrapper.pid]) {
-        expect({ alive: pid === undefined ? false : pidIsAlive(pid), pid })
-          .toEqual({ alive: false, pid });
+        const alive = pid === undefined ? false : !(await pidReaped(pid));
+        expect({ alive, pid }).toEqual({ alive: false, pid });
       }
     },
     ARM_TIMEOUT_MS,

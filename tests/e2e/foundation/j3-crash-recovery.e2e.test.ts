@@ -71,6 +71,7 @@ import {
   spawnWrapper,
   startDaemon,
 } from "./j1-loop-harness.js";
+import { pidReaped } from "./orphan-reap.js";
 import {
   reap,
   replayCommand,
@@ -312,8 +313,8 @@ describe("J3 crash recovery over real processes", () => {
       await killTree(arm.restarted.child);
       expect(pidIsAlive(process.pid)).toBe(true);
       for (const pid of [arm.agentPid, arm.daemonPid, arm.wrapperPid, arm.restarted.pid]) {
-        expect({ alive: pid === undefined ? false : pidIsAlive(pid), pid })
-          .toEqual({ alive: false, pid });
+        const alive = pid === undefined ? false : !(await pidReaped(pid));
+        expect({ alive, pid }).toEqual({ alive: false, pid });
       }
     }, ARM_TIMEOUT_MS);
   }
