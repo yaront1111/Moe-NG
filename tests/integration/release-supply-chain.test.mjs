@@ -22,8 +22,33 @@ const temp = () => {
   return path;
 };
 
+/**
+ * A PER-SUITE EQUIVALENT of the hardened teardown, not an import: this file runs under
+ * `node --test` as `.mjs`, which cannot load the TypeScript helper the daemon tree shares.
+ * The reference implementation is `removeTemporaryRoots` in
+ * `tests/integration/release-archive-cleanup.test.ts`; the semantics are the same three —
+ * iterate a COPY, prune only after the removal SUCCEEDS, and report rather than abandon.
+ * The previous loop popped before removing, so one throw lost that dir and every dir behind it.
+ */
 afterEach(() => {
-  while (temporary.length > 0) rmSync(temporary.pop(), { force: true, recursive: true });
+  const failures = [];
+  for (const path of [...temporary]) {
+    let removed = false;
+    for (let attempt = 0; attempt < 2 && !removed; attempt += 1) {
+      try {
+        rmSync(path, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+        removed = true;
+      } catch (error) {
+        if (attempt === 1) failures.push(`${path}: ${String(error)}`);
+      }
+    }
+    if (!removed) continue;
+    const pruned = temporary.indexOf(path);
+    if (pruned >= 0) temporary.splice(pruned, 1);
+  }
+  if (failures.length > 0) {
+    throw new Error(`RELEASE_SUPPLY_CHAIN_TEARDOWN_LEAK: ${failures.join("; ")}`);
+  }
 });
 
 const loadSubject = () => import("../../scripts/release/release-subject.mjs");

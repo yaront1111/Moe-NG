@@ -65,7 +65,34 @@ export interface RestoreHarness {
   };
 }
 
-/** Recursive and forced: a win32 host holds a briefly-locked SQLite file. */
+/** Registers a fixture root so teardown removes it. Returns the root, so a caller can wrap
+ *  its `mkdtempSync` in place. An UNREGISTERED root is never removed by anything: that is
+ *  how ~17,000 `moe-release-*` directories reached this host's TEMP, on the GREEN path. */
+export function trackHarnessRoot(root: string): string {
+  roots.push(root);
+  return root;
+}
+
+/** The roots teardown still owes, read-only. Empty after a clean sweep. */
+export function pendingHarnessRoots(): readonly string[] {
+  return Object.freeze([...roots]);
+}
+
+/** The remover, injectable so a test can drive the failure arms with real directories. */
+type HarnessRemover = (path: string, options: {
+  readonly force: true; readonly maxRetries: number;
+  readonly recursive: true; readonly retryDelay: number;
+}) => void;
+
+/**
+ * Recursive and forced: a win32 host holds a briefly-locked SQLite file.
+ *
+ * STORES CLOSE FIRST and that order is load-bearing — a held SQLite handle IS the EPERM a
+ * retry cannot fix. Then each root is removed from a COPY of the list and pruned only once
+ * it is GONE: the previous loop popped first, so one throw lost that root AND abandoned
+ * every root behind it. Failures are collected and reported together at the end, because a
+ * teardown that leaks silently is how the leak survived long enough to reach five figures.
+ */
 export function cleanupRestoreHarnesses(): void {
   while (stores.length > 0) {
     try {
@@ -74,9 +101,41 @@ export function cleanupRestoreHarnesses(): void {
       /* a poisoned handle still has to be released */
     }
   }
-  while (roots.length > 0) {
-    const root = roots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+  sweepHarnessRoots();
+}
+
+/**
+ * The root sweep, separate from the hook entry point ON PURPOSE.
+ *
+ * `cleanupRestoreHarnesses` is passed DIRECTLY to `afterEach` by ~10 suites, and vitest
+ * reads a hook's ARITY: give that function a parameter and vitest decides it wants the
+ * legacy `done` callback, hands one in, and the first call to it dies with "done() callback
+ * is deprecated". Measured, not theorised — it reddened 31 of 35 cases in the disposition
+ * suite. So the injectable remover lives here, where nothing is a hook.
+ */
+export function sweepHarnessRoots(remove: HarnessRemover = rmSync): void {
+  const failures: { error: unknown; root: string }[] = [];
+  for (const root of [...roots]) {
+    let removed = false;
+    let failure: unknown = null;
+    for (let attempt = 0; attempt < 2 && !removed; attempt += 1) {
+      try {
+        remove(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+        removed = true;
+      } catch (error) {
+        failure = error;
+      }
+    }
+    if (!removed) {
+      failures.push({ error: failure, root });
+      continue;
+    }
+    const pruned = roots.indexOf(root);
+    if (pruned >= 0) roots.splice(pruned, 1);
+  }
+  if (failures.length > 0) {
+    throw new Error(`RESTORE_HARNESS_TEARDOWN_LEAK: ${
+      failures.map(({ error, root }) => `${root}: ${String(error)}`).join("; ")}`);
   }
 }
 

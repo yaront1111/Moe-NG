@@ -143,7 +143,7 @@ function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, ev
     renameSync(temporary, targetDir);
     return { ok: true, reused: false };
   } catch {
-    rmSync(temporary, { force: true, recursive: true });
+    rmSync(temporary, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
     if (existsSync(target) && Buffer.from(readFileSync(target)).equals(Buffer.from(request.bytes))) return { ok: true, reused: true };
     return releaseRefusal("EVIDENCE_WRITE_INTERRUPTED");
   }
@@ -239,7 +239,7 @@ function buildReceipt(/** @type {Record<string, unknown>} */ subject, /** @type 
 }
 function cleanRoots(/** @type {string[]} */ roots) { // Subordinate: a throw here escapes the caller's finally and REPLACES the real refusal or success (Windows EBUSY on a held handle), so report each failure and keep removing the remaining roots.
   for (const root of roots.splice(0)) {
-    try { rmSync(root, { force: true, recursive: true }); rmSync(`${root}.tar`, { force: true }); } catch (error) { console.error(`release temporary cleanup failed: ${root}: ${String(error)}`); }
+    try { rmSync(root, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 }); rmSync(`${root}.tar`, { force: true, maxRetries: 5, retryDelay: 100 }); } catch (error) { console.error(`release temporary cleanup failed: ${root}: ${String(error)}`); }
   }
 }
 /** Run the Windows evidence recorder. Success records UNKNOWN release authority, never publication. */ export async function runReleaseSupplyChain(/** @type {unknown} */ value, /** @type {Record<string, unknown>} */ injected = {}) {

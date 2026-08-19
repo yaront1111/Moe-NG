@@ -17,7 +17,7 @@ import {
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
-  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
+  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject, trackHarnessRoot,
 } from "../recovery/restore-test-harness.js";
 import {
   ATTEMPT_RELEASE_CODES, ATTEMPT_RELEASE_COMMAND_KIND, ATTEMPT_RELEASE_EVENT_TYPE,
@@ -135,7 +135,7 @@ interface Fixture {
 /** A committed activation, read BACK from the store rather than kept from the
  *  command result, so the record this suite calls "durable" really is. */
 function activated(label: string): Fixture {
-  const root = mkdtempSync(join(tmpdir(), `moe-release-${label}-`));
+  const root = trackHarnessRoot(mkdtempSync(join(tmpdir(), `moe-release-${label}-`)));
   const store = openHarnessStore(join(root, "project.db"));
   seedReadyProject(store);
   const outcome = runEffectActivateCommand(store, activationBytes());
@@ -634,7 +634,7 @@ function plantedSlot(label: string, providerSlot: unknown): Fixture {
   const source = activated(`${label}-source`);
   const encoded = encodeActivationLedgerRecord({ ...source.record, providerSlot });
   if (!encoded.ok) throw new Error(`the production codec refused the drift: ${encoded.code}`);
-  const root = mkdtempSync(join(tmpdir(), `moe-release-${label}-`));
+  const root = trackHarnessRoot(mkdtempSync(join(tmpdir(), `moe-release-${label}-`)));
   const store = openHarnessStore(join(root, "project.db"));
   seedReadyProject(store);
   const committed = store.commitExpectedVersionDecision({
