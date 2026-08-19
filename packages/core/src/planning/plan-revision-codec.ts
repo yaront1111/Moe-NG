@@ -13,12 +13,17 @@ import {
 } from "./plan-revision-contract.js";
 
 export const PLAN_REVISION_DIGEST_DOMAIN = "moe-plan-revision-digest/1" as const;
+/** Distinct from PLAN_REVISION_DIGEST_DOMAIN: a different projection needs a different domain. */
+export const PLAN_EXECUTION_CONTENT_DOMAIN = "@moe/core.plan-execution-content/1" as const;
 
 export type PlanRevisionCreateResult =
   | Readonly<{ ok: true; revision: PlanRevision }>
   | PlanRevisionRefusal;
 export type PlanRevisionDigestResult =
   | Readonly<{ ok: true; planHash: string }>
+  | PlanRevisionRefusal;
+export type PlanExecutionContentResult =
+  | Readonly<{ digest: string; ok: true }>
   | PlanRevisionRefusal;
 export type PlanRevisionEncodeResult =
   | Readonly<{ bytes: Uint8Array; ok: true }>
@@ -111,6 +116,38 @@ export function derivePlanRevisionDigest(revision: unknown): PlanRevisionDigestR
   const bounded = canonicalBytes(admitted.revision);
   return bounded.ok
     ? Object.freeze({ ok: true as const, planHash: digestOf(admitted.revision) }) : bounded;
+}
+
+/**
+ * Graph-independent execution content. The target-graph binding, approval state, authorship,
+ * lineage, revision id and planHash itself are all excluded, so a nodeAuthorityHash that already
+ * covers the same graphContentHash can embed this digest without closing a cycle.
+ */
+function executionContentSource(revision: PlanRevision): Readonly<Record<string, unknown>> {
+  return Object.freeze({
+    affectedCriterionIds: revision.affectedCriterionIds,
+    affectedNodeIds: revision.affectedNodeIds,
+    steps: revision.steps,
+    verificationRecipeRefs: revision.verificationRecipeRefs,
+    version: revision.version,
+  });
+}
+
+function executionDigestOf(revision: PlanRevision): string {
+  return createHash("sha256")
+    .update(PLAN_EXECUTION_CONTENT_DOMAIN, "utf8")
+    .update(Uint8Array.of(0))
+    .update(encoder.encode(canonicalText(executionContentSource(revision))))
+    .digest("hex");
+}
+
+/** Admits through the existing reader first, so refusal code and layer pass through verbatim. */
+export function derivePlanExecutionContent(revision: unknown): PlanExecutionContentResult {
+  const admitted = admitPlanRevision(revision);
+  if (!admitted.ok) return admitted;
+  const bounded = canonicalBytes(admitted.revision);
+  return bounded.ok
+    ? Object.freeze({ digest: executionDigestOf(admitted.revision), ok: true as const }) : bounded;
 }
 
 export function encodePlanRevision(revision: unknown): PlanRevisionEncodeResult {
