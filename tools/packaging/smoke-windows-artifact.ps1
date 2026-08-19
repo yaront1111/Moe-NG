@@ -127,11 +127,18 @@ Assert-That 'the refused re-init left the original credential untouched' `
 
 # The provider-credential guard must travel INTO the artifact: without it a
 # `claude --bare` child spawns, fails to authenticate, and looks like an
-# orchestration bug instead of a missing variable.
+# orchestration bug instead of a missing variable. ALL THREE accepted names
+# are cleared: leaving one set on the host would make this arm vacuous, since
+# any one of them now satisfies the gate.
 $noKey = Invoke-Moe -Extracted $extracted -MoeArgs @('start', 'demo') `
-  -WithEnv @{ ANTHROPIC_API_KEY = $null; MOE_AGENT_COMMAND = $null } -TimeoutSec 120
-Assert-That 'moe start refuses by NAME when ANTHROPIC_API_KEY is absent' `
-  ($noKey.Code -ne 0 -and $noKey.Output -match 'MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY') `
+  -WithEnv @{
+    ANTHROPIC_API_KEY = $null
+    ANTHROPIC_AUTH_TOKEN = $null
+    CLAUDE_CODE_OAUTH_TOKEN = $null
+    MOE_AGENT_COMMAND = $null
+  } -TimeoutSec 120
+Assert-That 'moe start refuses by NAME when every accepted credential is absent' `
+  ($noKey.Code -ne 0 -and $noKey.Output -match 'MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY') `
   "exit=$($noKey.Code) output=$($noKey.Output)"
 
 # A no-op agent command: not named `claude`, so the key guard correctly stands

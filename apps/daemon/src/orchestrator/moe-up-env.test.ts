@@ -5,7 +5,7 @@ import {
   describeLaunchVariables,
   resolveLaunchEnv,
 } from "./moe-up-env.js";
-import type { LaunchEnvResolution } from "./moe-up-env.js";
+import type { LaunchEnvResolution, LaunchVariable } from "./moe-up-env.js";
 
 const REPO_ROOT = "D:/repo";
 
@@ -29,6 +29,25 @@ function refused(
   if (result.ok) throw new Error("expected a refusal, got a launch config");
   return result;
 }
+
+/** Disclosure lines are joined with this before every value sweep. */
+const LINE_BREAK = String.fromCharCode(10);
+
+/** Obviously-fake fixture credentials: never a realistic sk-ant/oauth shape. */
+const OAUTH_TOKEN = "tok-fixture-oauth";
+const AUTH_TOKEN = "tok-fixture-auth";
+const API_KEY = "tok-fixture-api";
+
+/** The documented acceptance order: subscription first, api key last. */
+const ACCEPTED_VARIABLES =
+  "CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY";
+const REFUSAL_MESSAGE = `${MOE_UP_ENV_MISSING}: ${ACCEPTED_VARIABLES}`
+  + " (set one; run `claude setup-token` for a subscription token)";
+
+const entryOf = (
+  config: Extract<LaunchEnvResolution, { ok: true }>,
+  name: string,
+): LaunchVariable | undefined => config.variables.find((entry) => entry.name === name);
 
 const sourceOf = (
   config: Extract<LaunchEnvResolution, { ok: true }>,
@@ -95,9 +114,10 @@ describe("resolveLaunchEnv dev defaults", () => {
     expect(sourceOf(config, "MOE_DAEMON_CREDENTIAL")).toBe("MINTED");
   });
 
-  it("serves the child overlay as exactly the four variables it owns", () => {
+  it("serves the child overlay as the four variables it owns plus the credential it accepted", () => {
     const config = resolved({ ANTHROPIC_API_KEY: "sk-test" });
     expect(Object.keys(config.env).toSorted()).toEqual([
+      "ANTHROPIC_API_KEY",
       "MOE_AGENT_COMMAND", "MOE_DAEMON_CREDENTIAL", "MOE_PROJECT_ID", "MOE_STORE_PATH",
     ]);
     expect(config.env["MOE_DAEMON_CREDENTIAL"]).toBe(config.credential);
@@ -106,26 +126,32 @@ describe("resolveLaunchEnv dev defaults", () => {
 });
 
 describe("resolveLaunchEnv refusals", () => {
-  it("refuses by naming ANTHROPIC_API_KEY exactly when the agent command is claude", () => {
+  it("refuses by naming every accepted credential exactly when the agent command is claude", () => {
     const result = refused({});
     expect(result.refusals).toHaveLength(1);
-    expect(result.refusals[0]?.variable).toBe("ANTHROPIC_API_KEY");
     expect(result.refusals[0]?.code).toBe(MOE_UP_ENV_MISSING);
-    expect(result.refusals[0]?.message).toBe(`${MOE_UP_ENV_MISSING}: ANTHROPIC_API_KEY`);
+    expect(result.refusals[0]?.variable).toBe(ACCEPTED_VARIABLES);
+    // Hand-written here rather than rebuilt from the roster: an operator reads
+    // this one line and nothing else, so all three names plus the subscription
+    // hint ARE the contract, not an implementation detail of the message.
+    expect(result.refusals[0]?.message).toBe(REFUSAL_MESSAGE);
   });
 
-  it("treats an empty ANTHROPIC_API_KEY as absent rather than as an auth secret", () => {
-    expect(refused({ ANTHROPIC_API_KEY: "" }).refusals[0]?.variable).toBe("ANTHROPIC_API_KEY");
+  it("treats an empty value as absent for every accepted credential", () => {
+    const result = refused({
+      ANTHROPIC_API_KEY: "", ANTHROPIC_AUTH_TOKEN: "", CLAUDE_CODE_OAUTH_TOKEN: "",
+    });
+    expect(result.refusals[0]?.message).toBe(REFUSAL_MESSAGE);
   });
 
   it("still refuses when MOE_AGENT_COMMAND names claude by absolute path or launcher suffix", () => {
     for (const command of ["claude", "C:\\tools\\claude.cmd", "/usr/local/bin/claude", "CLAUDE.EXE"]) {
       const result = refused({ MOE_AGENT_COMMAND: command });
-      expect(result.refusals.map((entry) => entry.variable)).toEqual(["ANTHROPIC_API_KEY"]);
+      expect(result.refusals.map((entry) => entry.variable)).toEqual([ACCEPTED_VARIABLES]);
     }
   });
 
-  it("needs no api key once MOE_AGENT_COMMAND names a non-claude command", () => {
+  it("needs no credential at all once MOE_AGENT_COMMAND names a non-claude command", () => {
     const config = resolved({ MOE_AGENT_COMMAND: "node" });
     expect(config.agentCommand).toBe("node");
     expect(config.env["MOE_AGENT_COMMAND"]).toBe("node");
@@ -161,5 +187,84 @@ describe("resolveLaunchEnv determinism and disclosure", () => {
   it("discloses the non-secret values so the operator can see the dev store it opened", () => {
     const config = resolved({ ANTHROPIC_API_KEY: "sk-test" });
     expect(describeLaunchVariables(config.variables).join("\n")).toContain(config.storePath);
+  });
+});
+
+describe("resolveLaunchEnv credential acceptance", () => {
+  const acceptedAlone = [
+    ["CLAUDE_CODE_OAUTH_TOKEN", OAUTH_TOKEN],
+    ["ANTHROPIC_AUTH_TOKEN", AUTH_TOKEN],
+    ["ANTHROPIC_API_KEY", API_KEY],
+  ] as const;
+
+  for (const [name, value] of acceptedAlone) {
+    it(`accepts ${name} alone and reports it by name as a hidden preset`, () => {
+      const config = resolved({ [name]: value });
+      const entry = entryOf(config, name);
+      expect(entry?.source).toBe("PRESET");
+      expect(entry?.secret).toBe(true);
+      expect(describeLaunchVariables(config.variables).join(LINE_BREAK))
+        .toContain(`${name}=<preset, hidden>`);
+    });
+  }
+
+  it("delivers a subscription token to the children under the name the cli honors", () => {
+    // claude 2.1.235 IGNORES CLAUDE_CODE_OAUTH_TOKEN under --bare (measured
+    // twice, comments 0e000104 / c32ccd4d), so accepting it without mapping it
+    // would spawn children that cannot authenticate — a false acceptance is
+    // worse than the false refusal this task removes.
+    const config = resolved({ CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN });
+    expect(config.env["ANTHROPIC_AUTH_TOKEN"]).toBe(OAUTH_TOKEN);
+    const minted = entryOf(config, "ANTHROPIC_AUTH_TOKEN");
+    expect(minted?.source).toBe("MINTED");
+    expect(minted?.secret).toBe(true);
+    const lines = describeLaunchVariables(config.variables).join(LINE_BREAK);
+    expect(lines).toContain("ANTHROPIC_AUTH_TOKEN=<minted, hidden>");
+    expect(lines).not.toContain(OAUTH_TOKEN);
+  });
+
+  it("never shadows an operator-supplied ANTHROPIC_AUTH_TOKEN with the alias value", () => {
+    const config = resolved({
+      ANTHROPIC_AUTH_TOKEN: AUTH_TOKEN, CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN,
+    });
+    // The overlay WINS over the parent env where moe-up-main merges the two, so
+    // the operator's own token survives exactly while the launcher contributes
+    // nothing under that name. Absence here IS the no-overwrite guarantee.
+    expect(config.env["ANTHROPIC_AUTH_TOKEN"]).toBeUndefined();
+    expect(entryOf(config, "ANTHROPIC_AUTH_TOKEN")).toBeUndefined();
+  });
+
+  it("reports the first variable in the documented presence order when all three are set", () => {
+    const config = resolved({
+      ANTHROPIC_API_KEY: API_KEY,
+      ANTHROPIC_AUTH_TOKEN: AUTH_TOKEN,
+      CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN,
+    });
+    // PRESENCE order at the gate. This is NOT a claim about how claude itself
+    // resolves auth between several credentials it can see.
+    expect(entryOf(config, "CLAUDE_CODE_OAUTH_TOKEN")?.source).toBe("PRESET");
+    expect(entryOf(config, "ANTHROPIC_AUTH_TOKEN")).toBeUndefined();
+    expect(entryOf(config, "ANTHROPIC_API_KEY")).toBeUndefined();
+  });
+
+  it("prints no credential value on any disclosure or refusal line", () => {
+    const all = resolved({
+      ANTHROPIC_API_KEY: API_KEY,
+      ANTHROPIC_AUTH_TOKEN: AUTH_TOKEN,
+      CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN,
+    });
+    const mapped = resolved({ CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN });
+    const lines = [
+      ...describeLaunchVariables(all.variables),
+      ...describeLaunchVariables(mapped.variables),
+      ...refused({}).refusals.map((entry) => entry.message),
+    ];
+    // A sweep over zero lines passes without asserting anything, so the line
+    // count is pinned before the values are looked for.
+    expect(lines.length).toBeGreaterThan(8);
+    const joined = lines.join(LINE_BREAK);
+    for (const value of [API_KEY, AUTH_TOKEN, OAUTH_TOKEN]) {
+      expect(joined).not.toContain(value);
+    }
   });
 });

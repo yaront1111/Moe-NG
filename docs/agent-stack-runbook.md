@@ -10,7 +10,9 @@ claim. All entry points run with plain `node` (Node 24 strip-types) from
 
 ## One command (start here)
 
-From a clean checkout, with `ANTHROPIC_API_KEY` exported and nothing else:
+From a clean checkout, with one agent credential exported and nothing else
+(`claude setup-token` then `CLAUDE_CODE_OAUTH_TOKEN` is the individual-user
+default; see Agent credentials below):
 
 ```
 pnpm start
@@ -24,10 +26,38 @@ control-room command to point at it. It is a DEVELOPMENT launcher: it defaults
 printed). Any of the three you export yourself is used as-is. Do not use these
 dev defaults for anything you care about keeping.
 
-`ANTHROPIC_API_KEY` is the one variable the launcher refuses rather than invents
-— `MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY`, before either child is spawned, since
-`claude --bare` has no other way to authenticate. Setting `MOE_AGENT_COMMAND` to
-a non-claude command waives it.
+An agent credential is the one thing the launcher refuses rather than invents.
+The refusal lands before either child is spawned, since `claude --bare` reads
+no keychain and has no other way to authenticate:
+
+```
+MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY (set one; run `claude setup-token` for a subscription token)
+```
+
+Any ONE of those three satisfies it. Setting `MOE_AGENT_COMMAND` to a
+non-claude command waives it.
+
+## Agent credentials
+
+For an individual user on a Claude subscription, this is the default path:
+
+```
+claude setup-token
+$env:CLAUDE_CODE_OAUTH_TOKEN = "<token printed by setup-token>"
+```
+
+An API key (`$env:ANTHROPIC_API_KEY = "<your key>"`) is the alternative, and
+configured Bedrock/Vertex/Foundry credentials still work as before.
+
+One measured caveat, true of Claude Code **2.1.235** and re-checkable with one
+command: `claude -p --bare` does NOT read `CLAUDE_CODE_OAUTH_TOKEN` — supplying
+the token under that name refuses `Not logged in` byte-identically to supplying
+no credential at all, while the SAME value under `ANTHROPIC_AUTH_TOKEN` answers
+exit 0. So the launcher accepts the subscription variable and DELIVERS it to its
+children as `ANTHROPIC_AUTH_TOKEN`. Exporting `ANTHROPIC_AUTH_TOKEN` yourself is
+equivalent and skips the mapping entirely. Re-probe after a CLI upgrade; the day
+the alias starts working, the mapping becomes a harmless no-op rather than a
+requirement.
 
 The daemon binds an EPHEMERAL port on purpose, so read the printed origin rather
 than assuming `39123`. Ctrl-C in this console stops both children; either child
@@ -66,7 +96,9 @@ need a fixed port, a `--csrf-token`, or one component without the other.
 | `MOE_PROJECT_ID` | Project scope for every durable decision |
 | `MOE_DAEMON_CREDENTIAL` | Operator secret (all capabilities) |
 | `MOE_NODE_SPECS_DIR` | Optional: dir of code-node specs (see below) |
-| `ANTHROPIC_API_KEY` or configured Bedrock/Vertex/Foundry credentials | Required by the wrapper's `claude --bare` child; bare mode does not read OAuth/keychain auth |
+| `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token from `claude setup-token`; accepted, and delivered to children as `ANTHROPIC_AUTH_TOKEN` (2.1.235 does not read it under `--bare`) |
+| `ANTHROPIC_AUTH_TOKEN` | The name `claude --bare` actually authenticates with; export it directly to skip the mapping |
+| `ANTHROPIC_API_KEY` or configured Bedrock/Vertex/Foundry credentials | The API-key alternative. ONE of these three variables is required by the wrapper's `claude --bare` child; bare mode does not read OAuth/keychain auth |
 
 On Linux, Claude's subprocess credential scrub also requires `bubblewrap`
 (`bwrap`) on `PATH`. Treat either missing agent authentication or missing

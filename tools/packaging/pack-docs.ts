@@ -35,11 +35,23 @@ overwriting an existing config, so re-running it is safe.
 
 ## Running real agents
 
-\`moe start\` refuses with \`MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY\` unless that
-variable is set, because the spawned \`claude --bare\` children read no keychain
-and would otherwise fail after the stack is already up. Set it first:
+The spawned \`claude --bare\` children read no keychain, so \`moe start\` refuses
+before it spawns anything unless ONE agent credential is set. On a Claude
+subscription this is the default path:
 
-    $env:ANTHROPIC_API_KEY = "sk-..."
+    claude setup-token
+    $env:CLAUDE_CODE_OAUTH_TOKEN = "<token printed by setup-token>"
+
+An API key is the alternative:
+
+    $env:ANTHROPIC_API_KEY = "<your key>"
+
+With none set the refusal names all three accepted variables:
+\`MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN,
+ANTHROPIC_API_KEY\`. Measured on Claude Code 2.1.235, \`claude --bare\` does not
+read \`CLAUDE_CODE_OAUTH_TOKEN\` itself, so the launcher delivers that value to
+its children as \`ANTHROPIC_AUTH_TOKEN\`; exporting \`ANTHROPIC_AUTH_TOKEN\`
+yourself is equivalent.
 
 ## Control room
 

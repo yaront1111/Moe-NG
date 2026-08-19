@@ -123,7 +123,9 @@ describe("runMoeUp refuses before it spawns", () => {
     const harness = start({});
     expect(await harness.result).toBe(1);
     expect(harness.calls).toHaveLength(0);
-    expect(harness.lines.join("\n")).toContain("MOE_UP_ENV_MISSING: ANTHROPIC_API_KEY");
+    expect(harness.lines.join(String.fromCharCode(10))).toContain(
+      "MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY",
+    );
   });
 });
 

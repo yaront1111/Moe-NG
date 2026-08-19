@@ -7,9 +7,9 @@ import { basename, extname, join } from "node:path";
  *
  * This is a DEVELOPMENT composer: the three store variables the daemon and the
  * wrapper both require are defaulted or minted here rather than refused, so a
- * clean checkout plus `ANTHROPIC_API_KEY` is a running stack. The one variable
- * nothing downstream can invent — the provider credential the `claude --bare`
- * children authenticate with — is refused BY NAME instead.
+ * clean checkout plus any one accepted credential is a running stack. The one
+ * thing nothing downstream can invent — the provider credential the
+ * `claude --bare` children authenticate with — is refused BY NAME instead.
  */
 
 /** The refusal every missing-variable answer carries. */
@@ -65,6 +65,20 @@ const DEFAULT_AGENT_COMMAND = "claude";
 const CREDENTIAL_BYTES = 32;
 
 /**
+ * Every credential the claude children can authenticate with, in the order the
+ * launcher looks for them: subscription first, api key last. CLOSED — a name
+ * absent from this roster is not a credential as far as the gate is concerned.
+ */
+const CLAUDE_CREDENTIAL_VARIABLES = Object.freeze([
+  "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY",
+] as const);
+/** Accepted for the operator's convenience; NOT honored by the CLI itself. */
+const ALIAS_CREDENTIAL = "CLAUDE_CODE_OAUTH_TOKEN";
+/** The name `claude --bare` actually reads. The alias is delivered under it. */
+const DELIVERED_CREDENTIAL = "ANTHROPIC_AUTH_TOKEN";
+const CREDENTIAL_HINT = "(set one; run `claude setup-token` for a subscription token)";
+
+/**
  * Empty is absent, the same rule `readStoreDependencyEnv` applies: an exported
  * `MOE_PROJECT_ID=` must not open a store under the empty project.
  */
@@ -92,12 +106,57 @@ function isClaudeCommand(command: string): boolean {
     === DEFAULT_AGENT_COMMAND;
 }
 
-function refuse(variableName: string): LaunchRefusal {
+function refuseCredential(): LaunchRefusal {
+  // The CODE is stable and published; only the message widens, so no consumer
+  // matching on MOE_UP_ENV_MISSING breaks while the operator gains all three
+  // names and the subscription path in the one line they actually read.
+  const variableName = CLAUDE_CREDENTIAL_VARIABLES.join(", ");
   return Object.freeze({
     code: MOE_UP_ENV_MISSING,
-    message: `${MOE_UP_ENV_MISSING}: ${variableName}`,
+    message: `${MOE_UP_ENV_MISSING}: ${variableName} ${CREDENTIAL_HINT}`,
     variable: variableName,
   });
+}
+
+function secretEntry(
+  name: string, source: LaunchValueSource, value: string,
+): LaunchVariable {
+  return Object.freeze({ name, secret: true, source, value });
+}
+
+/**
+ * The credential entries the claude children need, or null when none is set.
+ *
+ * Any of the three accepted names satisfies the gate, but they are NOT
+ * interchangeable at the other end. Measured 2026-08-19 on claude 2.1.235,
+ * three arms over one token value with a no-credential control:
+ * `claude -p --bare` IGNORES CLAUDE_CODE_OAUTH_TOKEN and refuses "Not logged
+ * in" byte-identically to having no credential at all, while the SAME value
+ * under ANTHROPIC_AUTH_TOKEN answers exit 0. So the alias is accepted and then
+ * DELIVERED under the name the binary honors; accepting it without that mapping
+ * would trade an honest refusal for children that spawn and fail — the exact
+ * orchestration bug the refusal above exists to prevent. An operator who set
+ * ANTHROPIC_AUTH_TOKEN themselves is never overwritten. Re-probe when the CLI
+ * version moves: this mapping goes stale the day the alias starts working.
+ */
+function claudeCredentials(
+  env: LaunchEnvInputs["env"],
+): readonly LaunchVariable[] | null {
+  let accepted: LaunchVariable | null = null;
+  for (const candidate of CLAUDE_CREDENTIAL_VARIABLES) {
+    const value = present(env, candidate);
+    if (value !== null) {
+      accepted = secretEntry(candidate, "PRESET", value);
+      break;
+    }
+  }
+  if (accepted === null) return null;
+  if (accepted.name !== ALIAS_CREDENTIAL || present(env, DELIVERED_CREDENTIAL) !== null) {
+    return Object.freeze([accepted]);
+  }
+  return Object.freeze([
+    accepted, secretEntry(DELIVERED_CREDENTIAL, "MINTED", accepted.value),
+  ]);
 }
 
 export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
@@ -110,13 +169,13 @@ export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
     () => DEFAULT_AGENT_COMMAND, "DEFAULTED",
   );
 
-  // The only variable this launcher cannot invent: without it the wrapper's
-  // `claude --bare` children have no auth at all (bare mode reads no keychain),
-  // so they would spawn, fail, and look like an orchestration bug.
-  const refusals = isClaudeCommand(agentCommand.value) && present(env, "ANTHROPIC_API_KEY") === null
-    ? [refuse("ANTHROPIC_API_KEY")]
-    : [];
-  if (refusals.length > 0) return Object.freeze({ ok: false, refusals: Object.freeze(refusals) });
+  // The one thing this launcher cannot invent: without a credential the
+  // wrapper's `claude --bare` children have no auth at all (bare mode reads no
+  // keychain), so they would spawn, fail, and look like an orchestration bug.
+  const credentials = isClaudeCommand(agentCommand.value) ? claudeCredentials(env) : [];
+  if (credentials === null) {
+    return Object.freeze({ ok: false, refusals: Object.freeze([refuseCredential()]) });
+  }
 
   const variables: readonly LaunchVariable[] = Object.freeze([
     variable("MOE_STORE_PATH", present(env, "MOE_STORE_PATH"),
@@ -126,6 +185,7 @@ export function resolveLaunchEnv(inputs: LaunchEnvInputs): LaunchEnvResolution {
     variable("MOE_DAEMON_CREDENTIAL", present(env, "MOE_DAEMON_CREDENTIAL"),
       () => randomHex(CREDENTIAL_BYTES), "MINTED", true),
     agentCommand,
+    ...credentials,
   ]);
 
   const overlay: Record<string, string> = {};
