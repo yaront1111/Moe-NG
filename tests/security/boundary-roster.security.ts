@@ -231,6 +231,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "SCOPE_OBSERVER_LAYERS", file: "packages/runner/src/scope/scope-contract.ts", axis: "runtime-provider" },
   { constant: "SUPERVISOR_LAYERS", file: "packages/runner/src/supervisor/effect-kernel.ts", axis: "runtime-provider" },
   { constant: "PROVIDER_EFFECT_SETTLEMENT_LAYER", file: "packages/runner/src/supervisor/provider-settlement-contracts.ts", axis: "runtime-provider" },
+  { constant: "RUNNER_WORKTREE_LAYERS", file: "packages/runner/src/workspace/worktree-materializer-contract.ts", axis: "runtime-provider" },
   { constant: "MEASUREMENT_ISSUE_LAYERS", file: "packages/scheduler/src/budget/budget-measurement.ts", axis: "scheduler-activation" },
   { constant: "CONVERGENCE_BREAKER_LAYER", file: "packages/scheduler/src/convergence/breaker-contract.ts", axis: "scheduler-activation" },
   { constant: "EXPANSION_BINDING_LAYERS", file: "packages/scheduler/src/expansion/expansion-current-hold.ts", axis: "scheduler-activation" },
@@ -294,7 +295,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
  * row on its own only moves the red into `completeness.security.ts`.
  */
-const EXPECTED_ROSTER_SIZE = 99;
+const EXPECTED_ROSTER_SIZE = 100;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -304,7 +305,7 @@ const EXPECTED_ROSTER_SIZE = 99;
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 39,
   "packages/benchmark": 1,
-  "packages/runner": 21,
+  "packages/runner": 22,
   "packages/core": 12,
   "packages/scheduler": 8,
   "packages/store": 4,

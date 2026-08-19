@@ -28,9 +28,9 @@
  * owner rather than papered over. Its `runtime-provider-*-cases.ts` modules export SUITE
  * BUILDERS (`describe*(ledger, spec)`), and coverage is written into an in-memory `Ledger`
  * while the cases execute; with `pool: "forks"` and `isolate: true` that ledger cannot cross
- * a file boundary. `RUNTIME_PROVIDER_PARTITION` lists the 24 names with no arms, so reading
+ * a file boundary. `RUNTIME_PROVIDER_PARTITION` lists the 25 names with no arms, so reading
  * it would be precisely the static list this file forbids. The axis is NOT short of coverage
- * — its own slices assert `assertSweepsExactly` and `assertPositiveCounts` over all 24 × 3 —
+ * — its own slices assert `assertSweepsExactly` and `assertPositiveCounts` over all 25 × 3 —
  * so it is resolved from the axis's committed bytes: its LEDGER WRITE SITES. Deleting a case
  * deletes its write site, which is what keeps this real. Exporting a `{boundary, arm}` table
  * from that axis would let `runtimeProviderPairs` be deleted outright.

@@ -2,7 +2,7 @@
  * HOSTILE COVERAGE — the EVIDENCE, WORKSPACE, CONTAINMENT AND SUPERVISION group, and the
  * COMPLETENESS HOME for the whole runtime-provider axis.
  *
- * Nine of the roster's twenty-three entries live here; the other fourteen are in
+ * Ten of the roster's twenty-five entries live here; the other fifteen are in
  * `runtime-provider-platform.security.ts` and `runtime-provider-launch.security.ts`. This file is
  * the ONE place the union of the three partitions is checked against the roster's committed bytes,
  * in BOTH directions, so a boundary owned by nobody — or a name no roster entry carries — reddens
@@ -23,6 +23,7 @@
  */
 
 import { realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { describe, expect, it } from "vitest";
@@ -46,6 +47,12 @@ import {
   PROVIDER_EFFECT_SETTLEMENT_LAYER,
 } from "../../packages/runner/src/supervisor/provider-settlement-contracts.js";
 import { isContainedBy } from "../../packages/runner/src/workspace/workspace-contract.js";
+import {
+  RUNNER_WORKTREE_LAYERS, deriveWorktreeTarget,
+} from "../../packages/runner/src/workspace/worktree-materializer-contract.js";
+import {
+  createNodeWorktreeMaterializer,
+} from "../../packages/runner/src/workspace/worktree-materializer-node.js";
 import { buildResultManifest } from "../../packages/runner/src/workspace/workspace-manifest.js";
 import { probeAfter, probeBefore, probeRacing, withHostileRoot } from "./hostile-harness.js";
 import { describeSupervisionBoundaries } from "./runtime-provider-supervision-cases.js";
@@ -387,6 +394,81 @@ describe("RUNNER_WORKSPACE_LAYER", () => {
       expect((side as { value: { manifest?: unknown } }).value.manifest).toBeUndefined();
       refusedWithoutLayer(ledger, boundary, "RACE", (side as { value: unknown }).value, invalid);
     }
+  });
+});
+
+// ── RUNNER_WORKTREE_LAYERS ──────────────────────────────────────────
+// The physical workspace allocator. Its location is DERIVED from catalog-owned roots and
+// server-owned identities, so the entire hostile surface is "can a caller talk it into a path
+// it did not derive". The two layers are pinned apart: an identity or a root it can judge
+// without touching a disk is the CONTRACT's answer, one that needed a filesystem is the NODE
+// adapter's. No arm below reaches git — every refusal lands before a subprocess could spawn,
+// which is itself the property under test.
+describe("RUNNER_WORKTREE_LAYERS", () => {
+  const boundary = "RUNNER_WORKTREE_LAYERS";
+  const CONTRACT = layerOf(RUNNER_WORKTREE_LAYERS, "WORKTREE_CONTRACT");
+  const NODE = layerOf(RUNNER_WORKTREE_LAYERS, "WORKTREE_NODE");
+  const allocator = createNodeWorktreeMaterializer({});
+  const BASE = {
+    sourceRepositoryRoot: "/srv/source", worktreeParent: "/srv/parent",
+    projectId: "proj-1", attemptId: "attempt:1", baseIdentity: "0".repeat(40),
+  };
+  const ask = (over: Record<string, unknown> = {}): unknown =>
+    allocator.materialize(hostile({ ...BASE, ...over }));
+  const identityInvalid = { code: "RUNNER_WORKSPACE_WORKTREE_IDENTITY_INVALID", layer: CONTRACT };
+
+  it("BEFORE — a carried target path, branch, ref or shell never selects a location", async () => {
+    // Everything a caller might hope selects the tree, carried on every leg. The request type
+    // has no such field, so a derivation that started reading one would answer differently.
+    const carried = {
+      targetPath: POISON_PATH, worktreePath: POISON_PATH, branch: "attacker",
+      ref: "refs/heads/attacker", detach: false, shell: "/bin/sh", cleanupPath: "/",
+      env: { GIT_DIR: POISON_PATH },
+    };
+    const outcome = await probeBefore(
+      BOUND,
+      async () => ask({ ...carried, sourceRepositoryRoot: "relative/source" }),
+      async () => ask({ ...carried, projectId: "../escape" }),
+    );
+    ledger.refused(boundary, "BEFORE", outcome.probe, {
+      code: "RUNNER_WORKSPACE_WORKTREE_SOURCE_INVALID", layer: CONTRACT,
+    });
+    ledger.refused(boundary, "BEFORE", outcome.effect, identityInvalid);
+  });
+
+  it("AFTER — an unresolvable root and the whole escape family refuse at their own layers", async () => {
+    const outcome = await probeAfter(
+      BOUND,
+      async () => ask({ sourceRepositoryRoot: "/srv/absent-source-root" }),
+      // A real, existing source directory, so the PARENT is what fails to resolve and the
+      // adapter cannot answer with the source's code for the parent's fault.
+      async () => ask({ sourceRepositoryRoot: tmpdir(), worktreeParent: "/srv/absent-parent" }),
+    );
+    ledger.refused(boundary, "AFTER", outcome.effect, {
+      code: "RUNNER_WORKSPACE_WORKTREE_SOURCE_INVALID", layer: NODE,
+    });
+    ledger.refused(boundary, "AFTER", outcome.probe, {
+      code: "RUNNER_WORKSPACE_WORKTREE_PARENT_INVALID", layer: NODE,
+    });
+    // The containment family as an IDENTITY: none of it can reach a derived leaf.
+    expect(ESCAPE_FAMILY.length).toBeGreaterThan(4);
+    for (const [label, path] of ESCAPE_FAMILY) {
+      const refused = deriveWorktreeTarget(hostile({ ...BASE, attemptId: path }));
+      expect(`${label}:${String((refused as { ok: boolean }).ok)}`).toBe(`${label}:false`);
+      ledger.refused(boundary, "AFTER", refused, identityInvalid);
+    }
+  });
+
+  it("RACE — two hostile allocations contend and neither yields a worktree", async () => {
+    const outcome = await probeRacing(
+      BOUND,
+      async () => ask({ attemptId: POISON_PATH }),
+      async () => ask({ baseIdentity: "refs/heads/main" }),
+    );
+    ledger.refusedSide(boundary, outcome.left, identityInvalid);
+    ledger.refusedSide(boundary, outcome.right, {
+      code: "RUNNER_WORKSPACE_BASE_IDENTITY_INVALID", layer: CONTRACT,
+    });
   });
 });
 

@@ -195,6 +195,16 @@ import type {
 import type {
   ProviderRunObservation, ProviderSettlementCode, ProviderSettlementDisposition,
   ProviderSettlementOutcome, ProviderSettlementRefusal, ProviderSettlementRow,
+  RunnerWorktreeLayer, WorktreeFailure, WorktreeMaterializationRequest,
+  WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseDisposition,
+  WorktreeReleaseIntent,
+} from "@moe/runner";
+/** The Foundation capture seam's construction closure, named through the same root. */
+import type {
+  FoundationCaptureCode, FoundationCaptureDirent, FoundationCaptureFailure,
+  FoundationCaptureFsPort, FoundationCaptureInput, FoundationCaptureLayer,
+  FoundationCaptureLimits, FoundationCaptureResult, FoundationCaptureStat,
+  FoundationPrelaunchInput, FoundationPrelaunchResult,
 } from "@moe/runner";
 
 it("resolves the self-referencing package root specifier @moe/runner", () => {
@@ -203,7 +213,8 @@ it("resolves the self-referencing package root specifier @moe/runner", () => {
 
 type ExportKind = "array" | "function" | "number" | "object" | "regexp" | "string";
 /**
- * Hand-transcribed: 29 runner scope/artifact/workspace values, 40 supervisor values, 50
+ * Hand-transcribed: 38 runner scope/artifact/workspace values plus the 12 the
+ * Foundation workspace capture seam publishes, 40 supervisor values, 50
  * recovery / evidence / Claude observation values, the 8 values the verifier
  * process wrapper publishes, the 15 values the platform boundary seam publishes
  * (11 neutral-plus-Linux and 4 macOS),
@@ -222,26 +233,32 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["GRANT_STATES", "array"], ["MAX_ARTIFACT_ENUMERATION_ENTRIES", "number"],
   ["MAX_SCOPE_OBSERVATION_BYTES", "number"], ["MAX_SCOPE_PATHS", "number"],
   ["MAX_SUPERVISOR_COUNT", "number"], ["MAX_SUPERVISOR_TEXT_CHARS", "number"],
-  ["MAX_WORKSPACE_ENTRIES", "number"],
+  ["MAX_WORKSPACE_ENTRIES", "number"], ["MAX_WORKTREE_COMMAND_BYTES", "number"],
   ["MIRRORED_LEASE_KINDS", "array"], ["MIRRORED_LEASE_STATES", "array"],
   ["RUNNER_ARTIFACT_ERROR_CODES", "array"], ["RUNNER_SCOPE_ERROR_CODES", "array"],
-  ["RUNNER_WORKSPACE_ERROR_CODES", "array"], ["SCOPE_ATTRIBUTION_CLASSES", "array"],
+  ["RUNNER_WORKSPACE_ERROR_CODES", "array"], ["RUNNER_WORKTREE_LAYERS", "array"],
+  ["SCOPE_ATTRIBUTION_CLASSES", "array"],
   ["SCOPE_OBSERVATION_VERSION", "string"], ["SUPERVISOR_ACTIVATION_VERSION", "string"],
   ["SUPERVISOR_EFFECT_PROTOCOL_VERSION", "string"], ["SUPERVISOR_ERROR_CODES", "array"],
   ["SUPERVISOR_LAYERS", "array"], ["SUPERVISOR_RESULT_VERSION", "string"],
   ["ScopeObserverError", "function"], ["TERMINAL_EFFECT_STATES", "array"],
   ["WORKSPACE_INPUT_MANIFEST_VERSION", "string"], ["WORKSPACE_RESULT_MANIFEST_VERSION", "string"],
+  // workspace/worktree-materializer-*: the physical allocator seam.
+  ["WORKTREE_ASSIGNMENT_VERSION", "string"], ["WORKTREE_GIT_TIMEOUT_MS", "number"],
+  ["WORKTREE_RELEASE_DISPOSITIONS", "array"], ["WORKTREE_RELEASE_INTENTS", "array"],
   ["activateEffect", "function"], ["activationDigestInput", "function"],
   ["applyEffectCommand", "function"], ["applyEffectTombstone", "function"],
   ["buildInputManifest", "function"], ["buildResultManifest", "function"],
   ["canonicalPathRejection", "function"], ["consumeActivationGrant", "function"],
   ["createArtifactStore", "function"], ["createNodeArtifactFs", "function"],
   ["createNodeGitObserver", "function"], ["createNodeScopePaths", "function"],
+  ["createNodeWorktreeMaterializer", "function"], ["deriveWorktreeTarget", "function"],
   ["deriveGrantId", "function"], ["enumerateArtifactsAt", "function"],
   ["fenceMirroredLease", "function"],
   ["grantRefusal", "function"], ["hermeticGitEnvironment", "function"],
   ["initialGrantBinding", "function"], ["inputManifestDigestInput", "function"],
-  ["isTerminalEffectState", "function"], ["observeScope", "function"],
+  ["isTerminalEffectState", "function"], ["isWorktreeFailure", "function"],
+  ["observeScope", "function"],
   ["parseActivationGrant", "function"], ["parseAttemptSlice", "function"],
   ["parseCommandInput", "function"], ["parseDependencyWitness", "function"],
   ["parseEffectClaim", "function"], ["parseEffectIntent", "function"],
@@ -404,11 +421,24 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["PROVIDER_EFFECT_SETTLEMENT_LAYER", "string"], ["PROVIDER_EFFECT_SETTLEMENT_VERSION", "string"],
   ["PROVIDER_RUN_OBSERVATION_KEYS", "array"], ["PROVIDER_SETTLEMENT_ADMITTED_ROWS", "array"],
   ["PROVIDER_SETTLEMENT_CODES", "array"], ["settleEffectFromProviderObservation", "function"],
+  // workspace/: the Foundation CAPTURE seam. 12 values — the two entry points,
+  // the shipped Node filesystem port, the closed refusal vocabulary, the three
+  // boundaries that can decide a refusal, the scanner's own two budgets plus the
+  // caller-narrowable default, its schema version, and the narrower plus the two
+  // digest functions a verifier needs to recompute a prelaunch proof. The proof
+  // MINTER and the failure constructor stay internal — see the withheld-name
+  // control below — as do the pure decision rules and the raw enumerator.
+  ["DEFAULT_FOUNDATION_CAPTURE_LIMITS", "object"], ["FOUNDATION_CAPTURE_CODES", "array"],
+  ["FOUNDATION_CAPTURE_LAYER_NAMES", "array"], ["FOUNDATION_CAPTURE_VERSION", "string"],
+  ["MAX_FOUNDATION_CAPTURE_BYTES", "number"], ["MAX_FOUNDATION_CAPTURE_ENTRIES", "number"],
+  ["captureFoundationWorkspaceDelta", "function"], ["createNodeFoundationCaptureFs", "function"],
+  ["isFoundationCaptureFailure", "function"], ["prelaunchProofDigestInput", "function"],
+  ["prelaunchProofSealMatches", "function"], ["proveFoundationPrelaunchTree", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = runner;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(244);
+  expect(EXPECTED_EXPORTS.length).toBe(265);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -2621,4 +2651,107 @@ it("withholds the settlement seam's admission reader and message table from the 
     "PROVIDER_SETTLEMENT_ADMITTED_ROWS", "PROVIDER_RUN_OBSERVATION_KEYS",
   ];
   expect(published.filter((name) => name in surface)).toEqual(published);
+});
+
+/**
+ * Negative control for the WIDTH of the workspace allocator seam, on the same
+ * rule as the settlement one above: a consumer able to construct a refusal, or
+ * to run the state fence over a hand-built inspection, could hand this package
+ * a "verified" tree it never measured. The derivation's internal half stays
+ * internal too — `deriveWorktreeTarget` is the published form.
+ */
+it("withholds the worktree allocator's failure constructor and state fence", () => {
+  const withheld = [
+    "worktreeFailure", "worktreeStateRejection", "deriveWorktreeLeaf", "isContainedByPath",
+  ];
+  expect(withheld.length).toBe(4);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the identical membership check over names it does publish.
+  const published = [
+    "createNodeWorktreeMaterializer", "deriveWorktreeTarget", "isWorktreeFailure",
+    "RUNNER_WORKTREE_LAYERS", "WORKTREE_RELEASE_INTENTS", "WORKTREE_RELEASE_DISPOSITIONS",
+  ];
+  expect(published.filter((name) => name in surface)).toEqual(published);
+});
+
+/**
+ * The allocator's seam, named in compiled positions: a consumer that can call
+ * `createNodeWorktreeMaterializer` but cannot spell the request it must build,
+ * the assignment it gets back, or the refusal it must branch on cannot compose
+ * this seam at all.
+ */
+it("composes the worktree allocator seam through the root in compiled positions", () => {
+  const materializer: WorktreeMaterializer = runner.createNodeWorktreeMaterializer(process.env);
+  const request: WorktreeMaterializationRequest = {
+    sourceRepositoryRoot: "relative/not/absolute",
+    worktreeParent: "/srv/parent",
+    projectId: "proj-1",
+    attemptId: "attempt:1",
+    baseIdentity: "0".repeat(40),
+  };
+  const result: WorktreeMaterializationResult = materializer.materialize(request);
+  if (result.ok) throw new Error("expected a refusal for a relative source root");
+  const failure: WorktreeFailure = result;
+  const layer: RunnerWorktreeLayer = failure.layer;
+  expect([failure.code, layer, failure.ok]).toEqual([
+    "RUNNER_WORKSPACE_WORKTREE_SOURCE_INVALID", "WORKTREE_CONTRACT", false,
+  ]);
+  expect(runner.RUNNER_WORKSPACE_ERROR_CODES).toContain(failure.code);
+  expect(runner.RUNNER_WORKTREE_LAYERS).toContain(layer);
+  // The release vocabulary a caller has to spell to end an attempt cleanly.
+  const intent: WorktreeReleaseIntent = "ATTEMPT_TERMINAL";
+  const dispositions: readonly WorktreeReleaseDisposition[] = runner.WORKTREE_RELEASE_DISPOSITIONS;
+  expect([runner.WORKTREE_RELEASE_INTENTS.includes(intent), dispositions.length]).toEqual([true, 2]);
+});
+
+/**
+ * Negative control for the WIDTH of the Foundation capture seam, on the same
+ * rule as the settlement one above. `sealPrelaunchProof` MINTS the proof that
+ * an assigned tree was measured and found equal to its sealed input, and
+ * `captureFailure` mints a refusal — a consumer able to call either could hand
+ * this package a "the tree was proven" it never measured, or a reason no rule
+ * produced. The pure decision rules and the raw enumerator are internal for a
+ * different reason: the two entry points apply them in a fixed order, and a
+ * consumer that could run one alone would get a verdict with no bracket, no
+ * budget and no equality proof behind it.
+ */
+it("withholds the capture seam's proof minter, failure constructor and raw rules", () => {
+  const withheld = [
+    "sealPrelaunchProof", "captureFailure", "scanDeclaredTrees", "scannedTreeRejection",
+    "outOfScopeRejection", "gitStateRejection", "deriveCapture", "declarationRejection",
+    "limitsRejection", "isInside",
+  ];
+  expect(withheld.length).toBe(10);
+  expect(withheld.filter((name) => name in surface)).toEqual([]);
+  // Positive control: the identical membership check over names it does publish.
+  const published = [
+    "proveFoundationPrelaunchTree", "captureFoundationWorkspaceDelta",
+    "createNodeFoundationCaptureFs", "FOUNDATION_CAPTURE_CODES",
+    "FOUNDATION_CAPTURE_LAYER_NAMES", "prelaunchProofSealMatches",
+  ];
+  expect(published.filter((name) => name in surface)).toEqual(published);
+});
+
+/**
+ * The capture seam's TYPE closure, named through the same root. A daemon that
+ * can see the entry points but cannot spell their input or output shapes cannot
+ * compose them, so an under-published closure has to fail here rather than in
+ * the consumer's own repository.
+ */
+it("roots the capture seam's input and output types through the package root", () => {
+  const limits: FoundationCaptureLimits = runner.DEFAULT_FOUNDATION_CAPTURE_LIMITS;
+  const code: FoundationCaptureCode = "RUNNER_FOUNDATION_CAPTURE_OUT_OF_SCOPE_HOST_EFFECT_UNKNOWN";
+  const layer: FoundationCaptureLayer = "RUNNER_WORKSPACE_CAPTURE";
+  const kind: FoundationCaptureDirent = { name: "alpha.txt", kind: "REGULAR" };
+  const stat: FoundationCaptureStat = { kind: "REGULAR", byteLength: 0, identity: "0:0" };
+  const proveInput: (value: FoundationPrelaunchInput) => FoundationPrelaunchResult =
+    runner.proveFoundationPrelaunchTree;
+  const captureInput: (value: FoundationCaptureInput) => FoundationCaptureResult =
+    runner.captureFoundationWorkspaceDelta;
+  const fs: () => FoundationCaptureFsPort = runner.createNodeFoundationCaptureFs;
+  const narrow: (value: object) => value is FoundationCaptureFailure = runner.isFoundationCaptureFailure;
+  expect([limits.maxEntries > 0, runner.FOUNDATION_CAPTURE_CODES.includes(code)]).toEqual([true, true]);
+  expect(runner.FOUNDATION_CAPTURE_LAYER_NAMES).toContain(layer);
+  expect([kind.kind, stat.identity]).toEqual(["REGULAR", "0:0"]);
+  expect([proveInput, captureInput, fs, narrow].every((value) => typeof value === "function")).toBe(true);
 });

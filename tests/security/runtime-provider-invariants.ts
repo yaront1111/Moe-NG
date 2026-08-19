@@ -63,6 +63,7 @@ export const RUNTIME_PROVIDER_PARTITION = Object.freeze({
     "RECOVERY_INVENTORY_LAYERS",
     "RECOVERY_LAYERS",
     "RUNNER_WORKSPACE_LAYER",
+    "RUNNER_WORKTREE_LAYERS",
     "SCOPE_OBSERVER_LAYERS",
     "SUPERVISOR_LAYERS",
     "VERIFIER_PROCESS_LAYERS",
@@ -234,7 +235,7 @@ export function describeSliceInvariants(
  */
 export function describeRosterCompleteness(): void {
   describe("runtime-provider axis — roster completeness", () => {
-    it("partitions exactly the roster's 24 runtime-provider entries, in BOTH directions", () => {
+    it("partitions exactly the roster's 25 runtime-provider entries, in BOTH directions", () => {
       assertRosterPartition();
     });
   });
@@ -244,7 +245,7 @@ export function assertRosterPartition(): void {
   const roster = rosterRuntimeProvider();
   // A parse that silently matched nothing would make every set assertion below vacuous.
   expect(roster.length).toBeGreaterThan(0);
-  expect(roster).toHaveLength(24);
+  expect(roster).toHaveLength(25);
   const union: readonly string[] = [
     ...RUNTIME_PROVIDER_PARTITION.PLATFORM,
     ...RUNTIME_PROVIDER_PARTITION.LAUNCH,
