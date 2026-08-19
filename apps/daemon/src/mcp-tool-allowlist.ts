@@ -11,16 +11,17 @@ import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
  * refusal an agent had no way to anticipate.
  *
  * The QUERY half cannot be read the same way. `createMcpDispatchPort` decides queries in
- * three literal branches (`work.get_context`, `graph.get`, `events.read`) and exports no
- * roster, so this list is stated here and BOUND BEHAVIOURALLY by
+ * four literal branches (`work.get_context`, `graph.get`, `graph.preview`, `events.read`)
+ * and exports no roster, so this list is stated here and BOUND BEHAVIOURALLY by
  * `mcp-tool-allowlist.test.ts`: every kind named here must survive the production port, and
- * a kind not named here must hit the port's generic INPUT_INVALID refusal. Adding a fourth
+ * a kind not named here must hit the port's generic INPUT_INVALID refusal. Adding a fifth
  * served query means adding it here; the test is what keeps the claim honest.
  */
 
 export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
   "work.get_context",
   "graph.get",
+  "graph.preview",
   "events.read",
 ]);
 

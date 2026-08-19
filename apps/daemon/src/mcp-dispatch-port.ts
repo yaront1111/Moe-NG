@@ -5,6 +5,7 @@ import type { AffordancePort } from "./http/affordance-contract.js";
 import { readEventPage } from "./http/event-stream.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
 import { handleAsyncCommandRequest } from "./http/http-adapter.js";
+import { answerGraphPreviewQuery } from "./planning/graph-preview-query.js";
 import { answerGraphQuery } from "./planning/graph-query.js";
 import type { Authenticator, CommandAdapterDeps } from "./http/http-contract.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
@@ -108,6 +109,17 @@ export function createMcpDispatchPort(config: McpDispatchPortConfig): StdioDispa
           body: envelope["payload"],
           credential: context?.credential ?? config.fallbackCredential ?? null,
           port: config.graph,
+          protocolVersion: WIRE_PROTOCOL_VERSION,
+        }));
+      }
+      // Preview sits beside graph.get on the SAME gate and resolves its
+      // credential the same way — but it is zero-authority, so it needs no
+      // `config.graph`: a daemon composed without graph support still serves it.
+      if (envelope["queryKind"] === "graph.preview") {
+        return bytesOf(answerGraphPreviewQuery({
+          authenticator: authenticatorOf(config.deps),
+          body: envelope["payload"],
+          credential: context?.credential ?? config.fallbackCredential ?? null,
           protocolVersion: WIRE_PROTOCOL_VERSION,
         }));
       }

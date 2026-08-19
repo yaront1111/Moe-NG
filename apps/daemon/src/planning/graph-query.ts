@@ -41,7 +41,7 @@ import type { GraphSnapshot } from "@moe/scheduler";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { authenticateHttpRequest } from "../http/http-adapter.js";
 import type { HttpAccessResult } from "../http/http-adapter.js";
-import type { Authenticator } from "../http/http-contract.js";
+import type { AuthenticatedPrincipal, Authenticator } from "../http/http-contract.js";
 import type { ActiveGraphProvenance, ActiveGraphResult } from "./active-graph-projection.js";
 
 /** Names this module as the layer that answered. */
@@ -164,20 +164,40 @@ function readRequestedProject(body: unknown): string | null | typeof INVALID {
   return projectId;
 }
 
-export function answerGraphQuery(request: GraphQueryRequest): GraphQueryResult {
-  // Authenticate and compatibility FIRST, through the shared gate, before the
-  // body is looked at at all: parsing first would decode attacker-controlled
-  // bytes on behalf of a caller the daemon has not identified.
+/** Cleared by both graph entries before either looks at a body. */
+export type GraphQueryGateResult =
+  | { readonly ok: true; readonly principal: AuthenticatedPrincipal }
+  | GraphQueryRefusal
+  | Exclude<HttpAccessResult, { readonly ok: true }>;
+
+/**
+ * Authenticate, compatibility, then capability — FIRST, and shared, because
+ * parsing ahead of it would decode attacker-controlled bytes on behalf of a
+ * caller the daemon has not identified. Both graph queries clear exactly this
+ * much; only what follows differs, and keeping the order in one place is what
+ * stops the two entries drifting into two different security postures. Exported
+ * for the preview sibling only — the file split is a line-budget move, not a
+ * second security posture.
+ */
+export function gateGraphQuery(
+  authenticator: Authenticator, credential: string | null, protocolVersion: unknown,
+): GraphQueryGateResult {
   const access: HttpAccessResult = authenticateHttpRequest(
-    request.authenticator,
-    request.credential,
-    request.protocolVersion,
+    authenticator,
+    credential,
+    protocolVersion,
   );
   if (!access.ok) return access;
-  const { principal } = access;
-  if (!principal.capabilities.includes(CAPABILITIES.PLANNING)) {
+  if (!access.principal.capabilities.includes(CAPABILITIES.PLANNING)) {
     return refuse("GRAPH_QUERY_CAPABILITY_DENIED");
   }
+  return { ok: true, principal: access.principal };
+}
+
+export function answerGraphQuery(request: GraphQueryRequest): GraphQueryResult {
+  const gated = gateGraphQuery(request.authenticator, request.credential, request.protocolVersion);
+  if (!gated.ok) return gated;
+  const { principal } = gated;
   const { port } = request;
   if (port === undefined) return refuse("GRAPH_QUERY_UNAVAILABLE");
   // The principal must belong to the project this daemon serves. Without this,
