@@ -9,24 +9,29 @@
  * nothing in this file constructs a test double of anything the canary is
  * supposed to prove.
  *
- * The one production import below is deliberate and is on the input side: the
- * pinned runtime observation is built by the real adapter builder rather than
- * hand-rolled, so the fixture cannot drift from the shape production produces.
- * Re-implementing that shape in test code is the defect epic rail 6 names.
+ * The production import below is deliberate and is on the input side: the
+ * runtime observation is DISCOVERED by the real adapter rather than hand-rolled,
+ * so the fixture cannot drift from the shape production produces, and cannot
+ * name a runtime of its own choosing. Re-implementing that shape in test code is
+ * the defect epic rail 6 names.
  */
 
 import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import {
-  buildProviderRuntimeObservation,
-  type ProviderRuntimeObservation,
+import type {
+  ProviderRuntimeObservation,
 } from "../../../packages/runner/src/providers/claude/claude-observation.js";
+import {
+  discoverInstalledClaudeRuntime,
+  type DiscoverInstalledClaudeRuntimeResult,
+} from "../../../packages/runner/src/providers/claude/claude-runtime-discovery.js";
 
-import { createLogicalClock, type E2eRun } from "./e2e-harness.js";
+import { type E2eRun } from "./e2e-harness.js";
 
 const run = promisify(execFile);
 
@@ -43,6 +48,14 @@ export const SEEDED_LOW_RISK_TASK = Object.freeze({
   exclusive: true,
   causalBugCount: 1,
   expectedExecutionBearingNodes: 1,
+  /**
+   * The identity the SHIPPED seed actually installs, named here so the canary
+   * has ONE exclusive identity rather than two that merely look alike. The
+   * duplicate-authority sampling asserts against these, and a run that seeded a
+   * different node would otherwise sample a node no journey ever claimed.
+   */
+  projectId: "moe-e2e-j1",
+  nodeRef: "node-code-1",
 } as const);
 
 /** The seeded causal bug: one wrong comparison, one failing assertion. */
@@ -79,33 +92,161 @@ export async function createScratchProjectRepository(e2eRun: E2eRun): Promise<st
   return directory;
 }
 
-/** A fixed 64-hex literal. Real digests arrive from the probe in the journey half. */
-const PINNED_CLOSURE_SHA256 =
-  "1111111111111111111111111111111111111111111111111111111111111111";
-const PINNED_CAPABILITY_SCHEMA_DIGEST =
-  "2222222222222222222222222222222222222222222222222222222222222222";
+/**
+ * Codes this gate — and only this gate — may mint.
+ *
+ * Two authorities answer on the host-evidence path and they keep separate
+ * vocabularies. `discoverInstalledClaudeRuntime` refuses with the RUNTIME
+ * layer's own codes, and those travel out untouched under `runtimeCode`;
+ * the codes below are the CANARY refusing an observation the runtime already
+ * accepted. Restamping either as the other would erase which layer refused,
+ * which is exactly the fact a journey needs when a host is wrong.
+ */
+export const HOST_RUNTIME_EVIDENCE_ERROR_CODES = Object.freeze([
+  "CANARY_HOST_RUNTIME_CLOSURE_EMPTY",
+  "CANARY_HOST_RUNTIME_DIGEST_MISMATCH",
+  "CANARY_HOST_RUNTIME_DISCOVERY_REFUSED",
+  "CANARY_HOST_RUNTIME_PLATFORM_MISMATCH",
+  "CANARY_HOST_RUNTIME_UNPROVEN",
+  "CANARY_HOST_RUNTIME_VERSION_MISMATCH",
+] as const);
+
+export type HostRuntimeEvidenceErrorCode = (typeof HOST_RUNTIME_EVIDENCE_ERROR_CODES)[number];
+
+export interface HostRuntimeEvidence {
+  readonly ok: true;
+  readonly installedRoot: string;
+  readonly observation: ProviderRuntimeObservation;
+}
+
+export interface HostRuntimeEvidenceRefusal {
+  readonly ok: false;
+  readonly code: HostRuntimeEvidenceErrorCode;
+  /** The refusing authority's OWN code when discovery answered; null when this gate refused. */
+  readonly runtimeCode: string | null;
+  readonly message: string;
+}
+
+export type HostRuntimeEvidenceResult = HostRuntimeEvidence | HostRuntimeEvidenceRefusal;
 
 /**
- * The pinned Claude runtime observation the canary runs against.
- *
- * Built through the production `buildProviderRuntimeObservation`, so a change to
- * the observation contract surfaces here as a build refusal rather than as a
- * fixture that silently no longer matches production. A refusal is thrown with
- * its own reason code attached, never swallowed into a default observation.
+ * What THIS host says about the closure right now, read independently of the
+ * observation being checked. Independence is the whole point: comparing an
+ * observation against itself would pass on any host, including one where the
+ * binary was replaced between the probe and the run.
  */
-export function pinnedClaudeRuntimeObservation(): ProviderRuntimeObservation {
-  const result = buildProviderRuntimeObservation({
-    resolvedRuntimeClosure: [
-      { kind: "EXECUTABLE", path: "C:/pinned/claude/claude.exe", sha256: PINNED_CLOSURE_SHA256 },
-    ],
-    reportedVersion: "claude-code/2.0.0",
-    adapterCapabilitySchemaDigest: PINNED_CAPABILITY_SCHEMA_DIGEST,
-    pinningMethod: "CONTENT_ADDRESSED_COPY",
-    platformIdentity: { os: "win32", arch: "x64", osVersion: "10.0.26200" },
-    clock: createLogicalClock(),
-  });
-  if (result.ok !== true) {
-    throw new Error(`pinned Claude observation refused with ${result.code}: ${result.message}`);
+export interface HostRuntimeReadings {
+  /** sha256 of each closure path as read here; null when the path is unreadable. */
+  readonly digests: ReadonlyMap<string, string | null>;
+  /** First line of the resolved executable's own `--version`; null when unreadable. */
+  readonly version: string | null;
+}
+
+const EMPTY_READINGS: HostRuntimeReadings = Object.freeze({
+  digests: new Map<string, string | null>(),
+  version: null,
+});
+
+const refuse = (
+  code: HostRuntimeEvidenceErrorCode, message: string, runtimeCode: string | null = null,
+): HostRuntimeEvidenceRefusal => Object.freeze({ ok: false as const, code, message, runtimeCode });
+
+const codeOf = (value: unknown): string | null =>
+  typeof value === "object" && value !== null && "code" in value
+  && typeof (value as { code: unknown }).code === "string"
+    ? (value as { code: string }).code
+    : null;
+
+/**
+ * Accepts a discovery answer as HOST EVIDENCE, or refuses with the exact code.
+ *
+ * Pure and total, so every refusal arm is reachable from a hand-authored case
+ * rather than from a host nobody can produce on demand. It never re-derives what
+ * the runtime already decided — it asks the narrower question the runtime cannot:
+ * does this observation still describe the bytes and version this host has NOW.
+ */
+export function acceptHostRuntimeEvidence(
+  found: DiscoverInstalledClaudeRuntimeResult, readings: HostRuntimeReadings,
+): HostRuntimeEvidenceResult {
+  if (!("ok" in found && found.ok === true)) {
+    return refuse(
+      "CANARY_HOST_RUNTIME_DISCOVERY_REFUSED",
+      "installed runtime discovery refused, so there is no host observation to accept",
+      codeOf(found),
+    );
   }
-  return result.observation;
+  const { observation } = found;
+  if (observation.truthClass !== "PROVEN") {
+    return refuse("CANARY_HOST_RUNTIME_UNPROVEN", "the host observation is not PROVEN");
+  }
+  if (observation.platformIdentity.os !== "win32") {
+    return refuse("CANARY_HOST_RUNTIME_PLATFORM_MISMATCH", "the canary certifies win32 only");
+  }
+  if (observation.resolvedRuntimeClosure.length === 0) {
+    return refuse("CANARY_HOST_RUNTIME_CLOSURE_EMPTY", "the observed closure names no file");
+  }
+  for (const entry of observation.resolvedRuntimeClosure) {
+    const reading = readings.digests.get(entry.path) ?? null;
+    if (reading === null || reading.toLowerCase() !== entry.sha256.toLowerCase()) {
+      return refuse(
+        "CANARY_HOST_RUNTIME_DIGEST_MISMATCH",
+        "a closure entry does not match the bytes this host holds",
+      );
+    }
+  }
+  if (readings.version === null || readings.version !== observation.reportedVersion) {
+    return refuse(
+      "CANARY_HOST_RUNTIME_VERSION_MISMATCH",
+      "the observed version is not the version this host's executable reports",
+    );
+  }
+  return Object.freeze({
+    ok: true as const, installedRoot: found.installedRoot, observation,
+  });
+}
+
+const sha256OfFile = async (path: string): Promise<string | null> => {
+  try {
+    return createHash("sha256").update(await readFile(path)).digest("hex");
+  } catch {
+    return null;
+  }
+};
+
+const EXECUTABLE_KIND = "EXECUTABLE";
+
+/** The host's own answer, read through the executable the observation names. */
+async function readHostReadings(
+  observation: ProviderRuntimeObservation, installedRoot: string,
+): Promise<HostRuntimeReadings> {
+  const digests = new Map<string, string | null>();
+  for (const entry of observation.resolvedRuntimeClosure) {
+    digests.set(entry.path, await sha256OfFile(entry.path));
+  }
+  const executable = observation.resolvedRuntimeClosure.find(
+    (entry) => entry.kind === EXECUTABLE_KIND,
+  );
+  if (executable === undefined) return { digests, version: null };
+  try {
+    const probe = await run(executable.path, ["--version"], { cwd: installedRoot });
+    return { digests, version: probe.stdout.split("\n")[0]?.trim() ?? null };
+  } catch {
+    return { digests, version: null };
+  }
+}
+
+/**
+ * THE observation the canary runs against: this host's real installed Claude.
+ *
+ * No argument, because a caller able to name the runtime is a caller able to
+ * hand the canary a synthetic one — the previous fixture pinned a literal
+ * `C:/pinned/claude/claude.exe` with placeholder digests, and that is precisely
+ * what a self-host claim may not rest on. Production's own discovery answers
+ * WHICH runtime; this function only decides whether the answer is still true of
+ * the host, and returns a refusal rather than a fallback when it is not.
+ */
+export async function observeHostClaudeRuntime(): Promise<HostRuntimeEvidenceResult> {
+  const found = await discoverInstalledClaudeRuntime();
+  if (!("ok" in found && found.ok === true)) return acceptHostRuntimeEvidence(found, EMPTY_READINGS);
+  return acceptHostRuntimeEvidence(found, await readHostReadings(found.observation, found.installedRoot));
 }

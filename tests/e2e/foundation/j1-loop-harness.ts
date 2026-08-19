@@ -20,6 +20,8 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { SEEDED_LOW_RISK_TASK } from "./foundation-fixtures.js";
+
 /** Exactly what `stdio: ["ignore", "pipe", "pipe"]` produces: no stdin, both readers piped. */
 export type PipedChild = ChildProcessByStdio<null, Readable, Readable>;
 
@@ -37,8 +39,14 @@ const FAKE_AGENT = "tests/e2e/foundation/fake-agent.mjs";
 /** Fixed, not minted: a random credential would be a random source in a scanned module. */
 const OPERATOR_CREDENTIAL = "moe-e2e-j1-operator-credential";
 const CSRF_TOKEN = "moe-e2e-j1-csrf";
-const PROJECT_ID = "moe-e2e-j1";
-export const NODE_REF = "node-code-1";
+/**
+ * The exclusive identity comes FROM the fixture rather than being restated here.
+ * Two literals that happen to agree today are two literals: the canary asserts
+ * exclusivity against the fixture's identity, so a harness that seeded its own
+ * node would be sampling something no journey ever claimed.
+ */
+const PROJECT_ID = SEEDED_LOW_RISK_TASK.projectId;
+export const NODE_REF = SEEDED_LOW_RISK_TASK.nodeRef;
 
 export type AgentArm = "complete" | "forge-credential" | "skip-review";
 
