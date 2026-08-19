@@ -1,12 +1,19 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import {
   CLAUDE_LAUNCHER_VERSION, buildInputManifest, buildProviderRuntimeObservation,
-  buildResultManifest, observeScope,
+  buildResultManifest, createNodeFoundationCaptureFs, createNodeWorktreeMaterializer,
+  deriveWorktreeTarget, hermeticGitEnvironment, observeScope,
 } from "@moe/runner";
-import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
+import type {
+  GitObserver, ProviderRuntimeObservation, ScopeObservation, WorktreeMaterializationRequest,
+  WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
+  WorktreeReleaseResult,
+} from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +25,9 @@ const providerBoundaryProbe = vi.hoisted(() => ({
     readonly input: ActivationRunCommitInput; readonly result: unknown;
   }>,
   launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
+  /** One sequence for every boundary crossing, so ORDER is asserted as order
+   *  rather than as two counters that could both be right and still be inverted. */
+  order: [] as string[],
 }));
 
 vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
@@ -29,6 +39,7 @@ vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) =
     launchActivationProviderRun: async (
       ...args: Parameters<typeof actual.launchActivationProviderRun>
     ) => {
+      providerBoundaryProbe.order.push("launch");
       const result = await actual.launchActivationProviderRun(...args);
       providerBoundaryProbe.launches.push({ input: args[1], result });
       return result;
@@ -53,7 +64,11 @@ vi.mock("../activation/activation-run-commit.js", async (importOriginal) => {
 import { readAttemptRelease } from "./attempt-release-disposition.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
-  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
+  ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  send as sendBootstrap,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore,
 } from "../recovery/restore-test-harness.js";
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
@@ -68,11 +83,19 @@ import {
 } from "../telemetry/provider-run-contracts.js";
 import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import {
-  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_EVENT_TYPES, FOUNDATION_RESERVATION_VERSION,
+  DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_DISPATCH_COMMAND_KIND, FOUNDATION_DISPATCH_EVENT_TYPES,
+  FOUNDATION_RESERVATION_VERSION,
   RUNNER_WORKSPACE_LAYER, decodeFoundationAttemptRequest, decodeFoundationPayload,
   deriveDispatchAggregateId, encodeFoundationPayload, identifyFoundationDispatch, sameBytes,
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
+import { createDaemonCommandPorts } from "../daemon-command-registry.js";
+import { FOUNDATION_DISPATCH_BYTES_KEY } from "../daemon-foundation-command.js";
+import { createFoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
+import type { FoundationCaptureLifecycle, PrepareCaptureInput, PrepareCaptureResult } from "./foundation-capture-lifecycle.js";
+import { deriveFoundationCaptureRef, readFoundationCaptureContext } from "./foundation-capture-context-ledger.js";
+import { DAEMON_FOUNDATION_CAPTURE } from "./foundation-capture-context-contract.js";
+import { FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION } from "./foundation-repository-scope-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 import {
@@ -95,12 +118,22 @@ import {
  * fixture below is therefore the ingress's own, driven end to end.
  */
 
+/**
+ * Every dispatch that reaches the insertion point now materializes a REAL
+ * detached Git worktree before it may launch, and `git worktree add` on Windows
+ * costs seconds rather than milliseconds. The default 5s budget was written for
+ * a suite that touched no filesystem; raising it here keeps a slow real
+ * operation from reading as a hang.
+ */
+vi.setConfig({ testTimeout: 30_000 });
+
 const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
 
 afterEach(() => {
   providerBoundaryProbe.commits.length = 0;
   providerBoundaryProbe.launches.length = 0;
+  providerBoundaryProbe.order.length = 0;
   cleanupRestoreHarnesses();
 });
 afterAll(() => {
@@ -110,18 +143,68 @@ afterAll(() => {
   }
 });
 
+function runGit(root: string, args: readonly string[]): string {
+  return execFileSync("git", [...args], {
+    cwd: root, encoding: "utf8", env: hermeticGitEnvironment(process.env),
+    shell: false, windowsHide: true,
+  }).trim();
+}
+
+/**
+ * ONE real repository for the whole suite, with SHA-256 objects so its head is
+ * 64 hex: the durable observation validator demands that width, and the
+ * workspace lifecycle now resolves the launch root from the durable observation
+ * rather than from the caller. A 40-hex sha1 head could not be bound at all.
+ */
+const REPOSITORY = (() => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-dispatch-repo-")));
+  scratchRoots.push(root);
+  const parent = realpathSync(mkdtempSync(join(tmpdir(), "moe-dispatch-trees-")));
+  scratchRoots.push(parent);
+  const paths = ["scope/alpha.txt", "scope/beta.txt"] as const;
+  mkdirSync(join(root, "scope"));
+  writeFileSync(join(root, paths[0]), Buffer.from("alpha\n", "utf8"));
+  writeFileSync(join(root, paths[1]), Buffer.from("beta\n", "utf8"));
+  runGit(root, ["init", "--object-format=sha256", "--initial-branch=main", "--quiet"]);
+  runGit(root, ["config", "core.autocrlf", "false"]);
+  runGit(root, ["add", "--", ...paths]);
+  runGit(root, [
+    "-c", "user.name=Moe Foundation", "-c", "user.email=foundation@example.invalid",
+    "commit", "--quiet", "--no-gpg-sign", "-m", "foundation base",
+  ]);
+  return { head: runGit(root, ["rev-parse", "HEAD"]), parent, paths, root };
+})();
+
 /** Opened inside a case, never in a describe body: a held handle kills the worker. */
 function readyStore(label: string): SqliteEventStore {
   const root = mkdtempSync(join(tmpdir(), `moe-dispatch-${label}-`));
   scratchRoots.push(root);
   const store = openHarnessStore(join(root, "project.db"));
-  seedReadyProject(store);
+  // The SAME four bootstrap commands `seedReadyProject` drives, with ONE change:
+  // the bound observation carries the fixture repository's real head. It cannot
+  // be appended afterwards — the project reducer answers ILLEGAL_TRANSITION for a
+  // bind after activation — so the ready sequence is driven here instead.
+  for (const [kind, version, payload] of [
+    ["project.register", 0, { owner: "owner-1" }],
+    ["project.bind_repository", 1, {
+      observation: {
+        baseRevisionHash: REPOSITORY.head, repositoryRef: "repo-1", scopeRef: "scope-1",
+        truthClass: "DAEMON_VERIFIED",
+      },
+    }],
+    ["provider.probe", 0, { observation: PROVIDER_OBSERVATION }],
+    ["project.activate", 2, { witness: ACTIVATION_WITNESS }],
+  ] as readonly (readonly [string, number, Record<string, unknown>])[]) {
+    const outcome = sendBootstrap(
+      store, bootstrapEnvelope(kind, version, payload, `cmd-${kind}-${label}`));
+    if (!outcome.ok) throw new Error(`fixture ${kind} refused: ${outcome.code}`);
+  }
   return store;
 }
 
 const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
-const HEAD = "0".repeat(40);
+const HEAD = REPOSITORY.head;
 const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64), DIGEST_C = "4".repeat(64);
 const NODE_KEY = "dev-done";
 const SESSION_ID = "session-1";
@@ -227,9 +310,24 @@ function runtimeQuote(
   return built.observation;
 }
 
+/**
+ * The worktree the daemon WILL derive for this attempt. A caller can compute it
+ * — the derivation is published and pure — but computing it is not choosing it:
+ * the launch root comes from the materializer's assignment either way, and a
+ * proposal that disagrees refuses instead of winning.
+ */
+const DERIVED_WORKTREE = (() => {
+  const derived = deriveWorktreeTarget({
+    attemptId: "attempt-1", baseIdentity: HEAD, projectId: PROJECT_ID,
+    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: REPOSITORY.parent,
+  });
+  if (!derived.ok) throw new Error(`worktree fixture refused: ${derived.code}`);
+  return derived.target.worktreePath;
+})();
+
 const LAUNCH_TEMPLATE = Object.freeze({
   argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
-  bootstrapCredentialDigest: DIGEST_B, cwd: "C:/work", environment: {},
+  bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE, environment: {},
   launchSelection: {
     concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
     modelSnapshotEvidence: "claude-opus-5/build-2026-05-14",
@@ -242,9 +340,18 @@ const LAUNCH_TEMPLATE = Object.freeze({
     installedRoot: INSTALLED_ROOT, pinRoot: PIN_ROOT, quotedObservation: runtimeQuote(),
   },
 });
+/** A proposal that AGREES with the fixture repository's real bytes. It is still
+ *  only a proposal: the launch root and the sealed input come from the durable
+ *  authority, and this entry can do nothing but match or refuse. */
+const REAL_ENTRY = Object.freeze({
+  byteLength: readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0])).byteLength,
+  path: REPOSITORY.paths[0], producer: { kind: "BASE" },
+  sha256: createHash("sha256")
+    .update(readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0]))).digest("hex"),
+});
 const INPUT_MANIFEST = Object.freeze({
   baseIdentity: HEAD,
-  entries: [{ byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A }],
+  entries: [{ ...REAL_ENTRY }],
 });
 
 interface RequestOverrides {
@@ -317,25 +424,95 @@ function captureAnswer(): Record<string, unknown> {
 
 interface Harness {
   readonly captureCalls: Record<string, unknown>[];
+  readonly lifecycle: FoundationCaptureLifecycle;
+  /** Every crossing of a boundary, in the order it happened. */
+  readonly order: string[];
+  readonly prepared: PrepareCaptureResult[];
+  readonly releases: WorktreeReleaseRequest[];
   readonly service: { dispatch(input: unknown): Promise<FoundationAttemptOutcome> };
 }
 
 interface HarnessOptions {
+  /** Omitted models an operator who configured no workspace catalog at all. */
+  readonly catalog?: unknown;
   readonly platform?: string;
 }
 
-/** Post-launch workspace observation is the ONLY dependency. No runtime
- *  capability is composed here — the service mints its own through @moe/runner. */
+const CATALOG = Object.freeze({
+  catalogVersion: FOUNDATION_REPOSITORY_SCOPE_CATALOG_VERSION,
+  entries: [{
+    declaredPaths: [...REPOSITORY.paths], projectId: PROJECT_ID, repositoryRef: "repo-1",
+    scopeRef: "scope-1", sourceRepositoryRoot: REPOSITORY.root,
+    worktreeParent: REPOSITORY.parent,
+  }],
+});
+
+/**
+ * The launch boundary is recorded through the SAME order array the lifecycle
+ * writes to, so "prepare happened before launch" is one sequence rather than two
+ * counters that could both be satisfied in the wrong order.
+ */
+function recordingMaterializer(order: string[], releases: WorktreeReleaseRequest[]): WorktreeMaterializer {
+  const real = createNodeWorktreeMaterializer(process.env);
+  return Object.freeze({
+    materialize: (request: WorktreeMaterializationRequest): WorktreeMaterializationResult => {
+      order.push("materialize");
+      return real.materialize(request);
+    },
+    release: (request: WorktreeReleaseRequest): WorktreeReleaseResult => {
+      order.push("release");
+      releases.push(request);
+      return real.release(request);
+    },
+  });
+}
+
+/** The REAL lifecycle over the fixture repository, for the deps-fencing cases
+ *  that construct the service directly instead of through `harness`. */
+function lifecycleFor(store: SqliteEventStore): FoundationCaptureLifecycle {
+  return createFoundationCaptureLifecycle({
+    captureFs: createNodeFoundationCaptureFs(),
+    catalogSource: (): unknown => CATALOG,
+    clock: () => DECIDED_AT,
+    materializer: createNodeWorktreeMaterializer(process.env),
+    store,
+  });
+}
+
+/** Post-launch workspace observation and the prepare-before-launch lifecycle are
+ *  the ONLY dependencies. No runtime capability is composed here — the service
+ *  mints its own through @moe/runner, and the lifecycle below is the REAL one. */
 function harness(store: SqliteEventStore, options: HarnessOptions = {}): Harness {
   const captureCalls: Record<string, unknown>[] = [];
+  const order = providerBoundaryProbe.order;
+  const prepared: PrepareCaptureResult[] = [];
+  const releases: WorktreeReleaseRequest[] = [];
+  const real = createFoundationCaptureLifecycle({
+    captureFs: createNodeFoundationCaptureFs(),
+    catalogSource: (): unknown => ("catalog" in options ? options.catalog : CATALOG),
+    clock: () => DECIDED_AT,
+    materializer: recordingMaterializer(order, releases),
+    store,
+  });
+  const lifecycle: FoundationCaptureLifecycle = Object.freeze({
+    prepareCapture: async (input: PrepareCaptureInput): Promise<PrepareCaptureResult> => {
+      order.push("prepare");
+      const answer = await real.prepareCapture(input);
+      prepared.push(answer);
+      return answer;
+    },
+    releaseWorktree: (request: WorktreeReleaseRequest): WorktreeReleaseResult =>
+      real.releaseWorktree(request),
+  });
   const service = createFoundationAttemptService({
     captureResult: (input) => {
+      order.push("capture");
       captureCalls.push(input);
       return captureAnswer();
     },
-    launchOptions: { platform: options.platform ?? "linux" }, store,
+    launchOptions: { platform: options.platform ?? "linux" }, lifecycle, store,
   });
-  return { captureCalls, service };
+  return { captureCalls, lifecycle, order, prepared, releases, service };
 }
 
 function eventTypes(store: SqliteEventStore, aggregateId: string): readonly string[] {
@@ -646,7 +823,7 @@ describe("foundation attempt dispatch — authority gates", () => {
         return OBSERVED_RESULT;
       },
       launchOptions: { platform: "linux" },
-      store,
+      lifecycle: lifecycleFor(store), store,
     } as Parameters<typeof createFoundationAttemptService>[0]);
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -664,7 +841,7 @@ describe("foundation attempt dispatch — authority gates", () => {
     const store = readyStore("nested-launch-override");
     const service = createFoundationAttemptService({
       captureResult: captureAnswer,
-      launchOptions: { deps: {}, platform: "linux" }, store,
+      launchOptions: { deps: {}, platform: "linux" }, lifecycle: lifecycleFor(store), store,
     } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -801,7 +978,8 @@ describe("foundation attempt dispatch — duplicate delivery and recovery", () =
     // NO launch port: this is the production default launcher, composed over the
     // durable authority ports, refusing at its own platform gate.
     const service = createFoundationAttemptService({
-      captureResult: captureAnswer, launchOptions: { platform: "linux" }, store,
+      captureResult: captureAnswer, launchOptions: { platform: "linux" },
+      lifecycle: lifecycleFor(store), store,
     });
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -850,7 +1028,7 @@ describe("foundation attempt dispatch — the runtime closure is server-minted",
     };
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "linux" },
-      runtimePorts: counting, store,
+      lifecycle: lifecycleFor(store), runtimePorts: counting, store,
     } as unknown as Parameters<typeof createFoundationAttemptService>[0]);
 
     const outcome = await service.dispatch(dispatchRequest());
@@ -951,8 +1129,15 @@ function reserveDispatch(
 /** The sealed input manifest THIS daemon would hand the result builder, from the
  *  runner's own `buildInputManifest` — never hand-written. */
 function sealedInput(): Record<string, unknown> {
+  // The POSTLAUNCH record fixtures below never run through dispatch, and their
+  // result-tree entries are cross-checked against this manifest by the runner's
+  // own builder. They keep their own scope-shaped entry rather than borrowing
+  // the dispatch proposal, which now names the real fixture repository's bytes.
   const built = buildInputManifest({
-    baseIdentity: HEAD, entries: INPUT_MANIFEST.entries as never,
+    baseIdentity: HEAD,
+    entries: [{
+      byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A,
+    }] as never,
   });
   if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
   return built.manifest as unknown as Record<string, unknown>;
@@ -1351,12 +1536,13 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
 
   it("keeps the provider ledger's own refusal when the provider commit aborts", async () => {
     const real = readyStore("provider-commit-abort");
-    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch commits, in
-    // order: (1) the activation ledger record, (2) the durable attempt-resource
-    // set, (3) the Foundation reservation, (4) THIS provider-run commit. If a
-    // commit is added anywhere earlier, this case silently starts aborting a
-    // different one — count again rather than trusting the number.
-    const injected = abortingStore(real, 4);
+    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved. One
+    // dispatch commits, in order: (1) the activation ledger record, (2) the
+    // durable attempt-resource set, (3) the Foundation reservation, (4) the
+    // prelaunch CAPTURE CONTEXT, (5) THIS provider-run commit. Aborting 4 now
+    // hits the capture ledger and this case would stop testing the provider one,
+    // so the number is 5. Count again rather than trusting it.
+    const injected = abortingStore(real, 5);
     const run = harness(injected.store);
 
     const outcome = await run.service.dispatch(dispatchRequest());
@@ -1397,5 +1583,224 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
       code: "PROVIDER_RUN_BINDING_MISMATCH", layer: "PROVIDER_RUN_READER", ok: false,
     });
     expect(providerSnapshot(store)).toEqual(before);
+  });
+});
+
+/**
+ * PREPARE-BEFORE-LAUNCH, through the production service.
+ *
+ * The lifecycle here is the REAL one over a real temp repository; only its
+ * boundary crossings are recorded. `providerBoundaryProbe.order` is the single
+ * sequence both the lifecycle and the launch boundary write into, so "prepare
+ * came first" is asserted as an ORDER rather than as two counters that could
+ * both be satisfied by an inverted run.
+ */
+describe("foundation attempt dispatch — the workspace is prepared before launch", () => {
+  it("prepares exactly once, before the launch boundary, and launches in the assignment", async () => {
+    const run = harness(readyStore("prepare-order"));
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    // The runner refuses a non-Windows launch, which is downstream of both the
+    // preparation and the launch boundary this case is about.
+    expect(outcome.ok).toBe(false);
+    expect(run.order.indexOf("prepare")).toBe(0);
+    expect(run.order.indexOf("prepare")).toBeLessThan(run.order.indexOf("launch"));
+    expect(run.order.filter((entry) => entry === "prepare")).toHaveLength(1);
+    expect(run.order.filter((entry) => entry === "materialize")).toHaveLength(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+
+    const prepared = run.prepared[0];
+    if (prepared === undefined || !prepared.ok) throw new Error("preparation must have succeeded");
+    // THE LAUNCH ROOT IS THE ASSIGNMENT, not the template's proposal.
+    const launched = providerBoundaryProbe.launches[0];
+    expect((launched?.input.request as Record<string, unknown>)["cwd"])
+      .toBe(prepared.assignment.realWorktreePath);
+    expect(prepared.assignment.baseIdentity).toBe(HEAD);
+  });
+
+  /**
+   * THE SEPARATOR FOR "the assignment is the root". An accepted proposal that is
+   * BYTE-EQUAL to the assignment cannot discriminate: passing the template
+   * through unchanged would look identical. A proposal that names the SAME tree
+   * with a trailing separator is admitted by the path comparison and is still a
+   * different string, so the launch root proves whose value it is.
+   */
+  it("launches in the assignment even when the proposal spells the same tree differently", async () => {
+    const run = harness(readyStore("prepare-spelling"));
+
+    const outcome = await run.service.dispatch(dispatchRequest({
+      launchTemplate: { ...structuredClone(LAUNCH_TEMPLATE), cwd: `${DERIVED_WORKTREE}${sep}` },
+    }));
+
+    expect(outcome.ok).toBe(false);
+    const prepared = run.prepared[0];
+    if (prepared === undefined || !prepared.ok) throw new Error("preparation must have succeeded");
+    const launched = providerBoundaryProbe.launches[0];
+    expect((launched?.input.request as Record<string, unknown>)["cwd"])
+      .toBe(prepared.assignment.realWorktreePath);
+    expect((launched?.input.request as Record<string, unknown>)["cwd"])
+      .not.toBe(`${DERIVED_WORKTREE}${sep}`);
+  });
+
+  it("refuses a conflicting cwd proposal under the capture code, launching nothing", async () => {
+    const run = harness(readyStore("prepare-mismatch"));
+
+    const outcome = await run.service.dispatch(dispatchRequest({
+      launchTemplate: { ...structuredClone(LAUNCH_TEMPLATE), cwd: join(REPOSITORY.root, "elsewhere") },
+    }));
+
+    expectRefusal(outcome, "FOUNDATION_CAPTURE_WORKSPACE_MISMATCH", DAEMON_FOUNDATION_CAPTURE);
+    expect(providerBoundaryProbe.launches).toHaveLength(0);
+    expect(run.order).not.toContain("launch");
+    expect(run.captureCalls).toHaveLength(0);
+  });
+
+  it("records the unproven attempt under the deciding code and layer", async () => {
+    const store = readyStore("prepare-mismatch-record");
+    const run = harness(store);
+
+    await run.service.dispatch(dispatchRequest({
+      launchTemplate: { ...structuredClone(LAUNCH_TEMPLATE), cwd: join(REPOSITORY.root, "nope") },
+    }));
+
+    // The durable ADVISORY record, read back from the attempt aggregate the
+    // service settles onto, carries the deciding authority's own pair.
+    const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
+    expect(stored.ok && stored.record).toMatchObject({
+      reasonCode: "FOUNDATION_CAPTURE_WORKSPACE_MISMATCH",
+      reasonLayer: DAEMON_FOUNDATION_CAPTURE, resultManifest: null, truthClass: "SUSPECT",
+    });
+  });
+
+  it("refuses when NO workspace catalog is configured, and launches nothing", async () => {
+    const run = harness(readyStore("prepare-no-catalog"), { catalog: undefined });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expectRefusal(outcome, "FOUNDATION_CAPTURE_CATALOG_CONFIG_ABSENT", DAEMON_FOUNDATION_CAPTURE);
+    expect(providerBoundaryProbe.launches).toHaveLength(0);
+    expect(run.order).toEqual(["prepare"]);
+  });
+
+  it("threads ONE immutable captureRef, derived from the durable slot", async () => {
+    const store = readyStore("prepare-ref");
+    const run = harness(store);
+
+    await run.service.dispatch(dispatchRequest());
+
+    const prepared = run.prepared[0];
+    if (prepared === undefined || !prepared.ok) throw new Error("preparation must have succeeded");
+    expect(prepared.captureRef).toBe(deriveFoundationCaptureRef({
+      attemptAggregateId: ACTIVATION_AGGREGATE, attemptId: "attempt-1", nodeKey: NODE_KEY,
+      projectId: PROJECT_ID, sessionId: SESSION_ID,
+    }));
+    const read = readFoundationCaptureContext(store, prepared.captureRef);
+    expect(read.ok).toBe(true);
+    if (!read.ok) return;
+    expect(read.record.assignment.realWorktreePath).toBe(prepared.assignment.realWorktreePath);
+  });
+
+  it("RETAINS the worktree when settlement is unproven", async () => {
+    const run = harness(readyStore("prepare-retain"));
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    expect(outcome.ok).toBe(false);
+    // The lifecycle's own refusal arms release; a launch that could not be proven
+    // must NOT, because the tree is the only evidence of what the attempt saw.
+    expect(run.releases).toHaveLength(0);
+    expect(run.order).not.toContain("release");
+  });
+
+  it("REPLAY neither prepares nor launches a second time", async () => {
+    const store = readyStore("prepare-replay");
+    const run = harness(store);
+
+    const first = await run.service.dispatch(dispatchRequest());
+    expectRefusal(first, "CLAUDE_LAUNCH_PLATFORM_UNSUPPORTED", "LAUNCHER");
+    const preparesAfterFirst = run.order.filter((entry) => entry === "prepare").length;
+    const launchesAfterFirst = providerBoundaryProbe.launches.length;
+    expect(preparesAfterFirst).toBe(1);
+    expect(launchesAfterFirst).toBe(1);
+
+    // The replay is answered from the DURABLE record the first attempt settled.
+    const replayed = await run.service.dispatch(dispatchRequest());
+
+    expect(replayed.ok).toBe(true);
+    expect(run.order.filter((entry) => entry === "prepare")).toHaveLength(preparesAfterFirst);
+    expect(providerBoundaryProbe.launches).toHaveLength(launchesAfterFirst);
+    expect(run.order.filter((entry) => entry === "materialize")).toHaveLength(1);
+  });
+
+  /**
+   * THE COMPOSITION EDGE, driven rather than read. A registry that ignored its
+   * `foundationLifecycle` option and always built its own fail-closed default
+   * would look correct in every other test — the default refuses too. Only a
+   * SENTINEL refusal that no default can produce separates "the registry used
+   * what it was given" from "the registry used something that also refuses".
+   */
+  it("hands the SUPPLIED lifecycle to the service the registry builds", async () => {
+    const store = readyStore("registry-wiring");
+    const SENTINEL = "FOUNDATION_CAPTURE_SENTINEL_ONLY_THIS_PORT_ANSWERS";
+    let prepares = 0;
+    const ports = createDaemonCommandPorts({
+      clock: () => DECIDED_AT,
+      foundationLifecycle: {
+        prepareCapture: async () => {
+          prepares += 1;
+          return { code: SENTINEL, layer: DAEMON_FOUNDATION_CAPTURE, ok: false as const };
+        },
+        releaseWorktree: () => { throw new Error("release must not run on a refusal"); },
+      },
+      operatorPrincipalId: PRINCIPAL_ID, projectId: PROJECT_ID, store,
+    });
+    const handler = ports.registry.get(FOUNDATION_DISPATCH_COMMAND_KIND)?.asyncHandler;
+    if (handler === undefined) throw new Error("the dispatch entry must carry an async handler");
+
+    const request = dispatchRequest();
+    const input = {
+      envelope: {
+        commandId: "cmd-registry-wiring", commandKind: FOUNDATION_DISPATCH_COMMAND_KIND,
+        correlationId: "corr-registry-wiring", expectedVersion: 0,
+        payload: {
+          [FOUNDATION_DISPATCH_BYTES_KEY]:
+            Buffer.from(request["activationRequestBytes"] as Uint8Array).toString("base64"),
+          binding: request["binding"], graphSnapshot: request["graphSnapshot"],
+          inputManifest: request["inputManifest"], launchTemplate: request["launchTemplate"],
+        },
+        requestDigest: DIGEST, schemaVersion: "moe-runtime-command-envelope/1",
+        sessionCredential: "credential", targetAggregateId: ACTIVATION_AGGREGATE,
+      },
+      principal: { capabilities: [], principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    } as unknown as Parameters<typeof handler>[0];
+
+    await expect(handler(input)).rejects.toMatchObject({ code: SENTINEL });
+    expect(prepares).toBe(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(0);
+  });
+
+  it("keeps two concurrent deliveries on ONE captureRef and ONE worktree", async () => {
+    const run = harness(readyStore("prepare-concurrent"));
+
+    const [left, right] = await Promise.all([
+      run.service.dispatch(dispatchRequest()), run.service.dispatch(dispatchRequest()),
+    ]);
+
+    // COUNTED FIRST, and asserted as EXACT rather than as a ceiling: `<= 1`
+    // distinct ref is also satisfied by ZERO preparations, which is the shape a
+    // dispatch that never prepared would produce.
+    const accepted = run.prepared.filter((answer) => answer.ok);
+    expect(accepted.length).toBeGreaterThanOrEqual(1);
+    const refs = new Set(accepted.map(
+      (answer) => (answer as { readonly captureRef: string }).captureRef));
+    expect(refs.size).toBe(1);
+    const roots = new Set(accepted.map(
+      (answer) => (answer as { readonly assignment: { realWorktreePath: string } })
+        .assignment.realWorktreePath));
+    expect(roots.size).toBe(1);
+    // The duplicate delivery loses at the reservation, so exactly one arm can
+    // have reached the launcher.
+    expect([left.ok, right.ok]).toContain(false);
   });
 });

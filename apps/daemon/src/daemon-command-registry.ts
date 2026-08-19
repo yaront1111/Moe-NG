@@ -10,6 +10,8 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { createFoundationDispatchHandler, foundationSyncHandler }
   from "./daemon-foundation-command.js";
+import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { createFoundationVerificationHandler }
   from "./daemon-foundation-verification-command.js";
 import { FOUNDATION_VERIFICATION_COMMAND_KIND }
@@ -66,6 +68,11 @@ export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vo
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
+  /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
+   *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
+   *  one with no configured catalog, so Foundation preparation refuses and no
+   *  provider process starts. */
+  readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
   readonly projectId: string;
@@ -117,7 +124,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
-  const dispatchFoundationAttempt = createFoundationDispatchHandler({ store });
+  const dispatchFoundationAttempt = createFoundationDispatchHandler({
+    lifecycle: options.foundationLifecycle
+      ?? createFoundationCaptureLifecycle({ catalogSource: () => undefined, store }),
+    store,
+  });
   const verifyFoundationAttempt = createFoundationVerificationHandler({ projectId, store });
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {

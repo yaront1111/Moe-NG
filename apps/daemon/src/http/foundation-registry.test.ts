@@ -1,7 +1,7 @@
 import { request as httpRequest } from "node:http";
 
 import { SqliteEventStore } from "@moe/store";
-import { afterAll, expect, it } from "vitest";
+import { afterAll, expect, it, vi } from "vitest";
 
 import { PROJECT_ID } from "../recovery/restore-test-harness.js";
 import { readFoundationAttemptRecord } from "../work/foundation-attempt-service.js";
@@ -14,6 +14,14 @@ import { handleAsyncCommandRequest, handleCommandRequest } from "./http-adapter.
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { startControlRoomListener } from "./http-listener.js";
 import { streamPort } from "./event-stream-fixtures.js";
+
+/**
+ * The seam fixture now builds a REAL Git repository once per file, because the
+ * production composition prepares a workspace before it may launch. That cost
+ * lands on the FIRST case, and under full-fleet parallelism it exceeded the 5s
+ * default — a slow real operation reading as a hang is a false red.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * The async command seam, driven through the PRODUCTION envelope path over a REAL

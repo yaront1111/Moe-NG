@@ -18,6 +18,7 @@ import {
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
+import type { FoundationCaptureLifecycle, PreparedCapture } from "./foundation-capture-lifecycle.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
@@ -27,11 +28,20 @@ import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
 export type { FoundationAttemptOutcome, FoundationAttemptRecordAnswer } from "./foundation-attempt-store.js";
 
-/** Composition supplies only post-launch capture; callers cannot replace the runtime
- * observer, launcher, physical boundary, or clock. */
+/**
+ * Composition supplies post-launch capture and the prepare-before-launch
+ * workspace lifecycle; callers cannot replace the runtime observer, launcher,
+ * physical boundary, or clock.
+ *
+ * `lifecycle` is REQUIRED rather than optional on purpose: an omitted workspace
+ * authority would let a dispatch launch into whatever directory a caller named,
+ * and "the port was not wired" is a mistake a type can make unrepresentable
+ * instead of a runtime branch nobody exercises.
+ */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
+  readonly lifecycle: FoundationCaptureLifecycle;
   readonly store: SqliteEventStore;
 }
 
@@ -111,17 +121,28 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     return settled;
   }
 
-  /** Only a proven physical observation reaches result capture. */
+  /** Only a proven physical observation reaches result capture. The captureRef
+   *  travels here lexically, from the preparation this very dispatch made. */
   async function capture(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, observation: unknown, registration: unknown,
+    prepared: PreparedCapture,
   ): Promise<FoundationAttemptOutcome> {
     const answer = await contained(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
-      nodeKey: bound.nodeKey, observation, sessionId: bound.sessionId,
+      captureRef: prepared.captureRef, nodeKey: bound.nodeKey, observation,
+      sessionId: bound.sessionId,
     }));
-    return noteRelease(bound, record, recordProvenFoundationAttempt(
+    const settled = noteRelease(bound, record, recordProvenFoundationAttempt(
       store, bound, record, input, { answer, observation, registration }));
+    // ONLY a proven durable result may release its tree. An unproven or uncertain
+    // settlement retains the bytes: they are the only evidence of what ran.
+    if (settled.ok) {
+      deps.lifecycle.releaseWorktree({
+        assignment: prepared.assignment, callerIntent: "ATTEMPT_TERMINAL",
+      });
+    }
+    return settled;
   }
 
   /** Persist unproven advisory truth under the upstream code/layer. */
@@ -200,6 +221,22 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       return adopted.ok || adopted.code !== "FOUNDATION_ATTEMPT_RECORD_ABSENT" ? adopted
         : refuseLocal("FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS");
     }
+    const manifest = sealed.manifest as unknown as Record<string, unknown>;
+    // PREPARE-BEFORE-LAUNCH. After replay discrimination and before any physical
+    // boundary exists: the workspace this attempt will run in is resolved,
+    // materialized, hydrated and durably sealed, or the attempt refuses here.
+    const prepared = await deps.lifecycle.prepareCapture({
+      attemptAggregateId: bound.aggregateId, attemptId: record.attempt.attemptId,
+      nodeKey: bound.nodeKey, projectId: bound.projectId,
+      proposedBaseIdentity: request.inputManifest.baseIdentity,
+      proposedCwd: request.launchTemplate.cwd,
+      proposedEntries: request.inputManifest.entries,
+      requestDigest: identity.digest, reservationDigest: reservation.digest,
+      sessionId: bound.sessionId,
+    });
+    if (!prepared.ok) {
+      return unproven(bound, record, manifest, prepared as unknown as Record<string, unknown>);
+    }
     // The only physical boundary, composed beside its persistence configuration.
     const authority = createFoundationLauncherAuthority({
       aggregateId: bound.aggregateId, correlationId: bound.correlationId,
@@ -213,10 +250,13 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
         attemptRef: record.attempt.attemptId, effectIntentId: record.effectIntent.intentId,
         epoch: record.lease.epoch, provider: "claude", runRef: bound.target,
       },
-      request: launchRequestBody(record, bound, request.launchTemplate, runtime),
+      // THE ASSIGNMENT IS THE ROOT. `launchTemplate.cwd` reached the preparation
+      // as a proposal and could only have refused there; it never selects.
+      request: launchRequestBody(
+        record, bound,
+        { ...request.launchTemplate, cwd: prepared.assignment.realWorktreePath }, runtime),
       ...(options === undefined ? {} : { options }),
     }));
-    const manifest = sealed.manifest as unknown as Record<string, unknown>;
     if (launched === null) return unproven(bound, record, manifest, null);
     // Commit the exact bound pair for the durable lease owner; no daemon clock exists.
     const committed = commitActivationProviderRun(store, {
@@ -237,7 +277,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     if (observed === null) {
       return unproven(bound, record, manifest, launched.result as unknown as Record<string, unknown>);
     }
-    return await capture(bound, record, manifest, observed[0], observed[1]);
+    return await capture(bound, record, manifest, observed[0], observed[1], prepared);
   }
 
   return Object.freeze({ dispatch });

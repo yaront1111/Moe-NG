@@ -16,6 +16,9 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "./daemon-store-dependencies.js";
+import {
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
+} from "./work/foundation-capture-lifecycle.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -84,6 +87,57 @@ describe("readStoreDependencyEnv", () => {
     expect(config.principalId).toBe("operator-local");
     expect(config.nodeSpecsDir).toBeUndefined();
   });
+
+  it("reads the OPTIONAL Foundation workspace catalog path under the same rule", () => {
+    const base = {
+      MOE_DAEMON_CREDENTIAL: "secret", MOE_PROJECT_ID: "proj",
+      MOE_STORE_PATH: "D:/tmp/store.db",
+    };
+    const configured = readStoreDependencyEnv({
+      ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "D:/tmp/catalog.json",
+    });
+    const empty = readStoreDependencyEnv({ ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "" });
+
+    expect(configured.workspaceCatalogPath).toBe("D:/tmp/catalog.json");
+    expect(empty.workspaceCatalogPath).toBeUndefined();
+    expect(readStoreDependencyEnv(base).workspaceCatalogPath).toBeUndefined();
+    // The key is read from the SAME published constant the lifecycle reader uses;
+    // two hand-written copies would drift in exactly one direction.
+    expect(FOUNDATION_WORKSPACE_CATALOG_ENV_KEY).toBe("MOE_FOUNDATION_WORKSPACE_CATALOG");
+  });
+});
+
+describe("the Foundation workspace catalog never gates daemon boot", () => {
+  /** A provider is opened per case here rather than reusing the module-level one:
+   *  the subject IS the boot, so it has to happen inside the case. */
+  function bootWith(label: string, catalogPath: string | undefined) {
+    const directory = mkdtempSync(join(tmpdir(), `moe-store-deps-catalog-${label}-`));
+    const path = join(directory, "store.db");
+    const built = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: "operator-local",
+      projectId: `${PROJECT}-${label}`, storePath: path,
+      ...(catalogPath === undefined ? {} : { workspaceCatalogPath: catalogPath }),
+    });
+    return { built, directory };
+  }
+
+  it.each([
+    ["absent", undefined],
+    ["missing-file", join(tmpdir(), "moe-no-such-catalog-file.json")],
+  ] as readonly (readonly [string, string | undefined])[])(
+    "boots and serves every other command kind with a %s catalog", (label, catalogPath) => {
+      const { built, directory } = bootWith(label, catalogPath);
+      try {
+        const deps = built.provide();
+        // The registry is whole: an unconfigured workspace authority refuses
+        // Foundation PREPARATION at dispatch time, it does not remove a kind.
+        expect(deps.registry.get("foundation.dispatch")?.asyncHandler).toBeDefined();
+        expect([...deps.registry.keys()].length).toBeGreaterThan(0);
+      } finally {
+        built.close();
+        rmSync(directory, { force: true, recursive: true });
+      }
+    });
 });
 
 describe("createStoreDependencies", () => {

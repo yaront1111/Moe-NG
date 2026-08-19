@@ -9,6 +9,9 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { foundationSyncHandler } from "./daemon-foundation-command.js";
+import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
@@ -539,6 +542,30 @@ describe("createDaemonCommandPorts", () => {
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
+  });
+
+  /**
+   * The workspace lifecycle is an OPTION, and an absent one must not silently
+   * remove a command kind — an unconfigured workspace authority refuses
+   * PREPARATION at dispatch time, which is a different thing from a registry
+   * that never offered the kind. Both rosters are compared whole, in order.
+   */
+  it("keeps the roster and its order identical with and without a supplied lifecycle", () => {
+    const supplied = createDaemonCommandPorts({
+      clock: CLOCK,
+      foundationLifecycle: createFoundationCaptureLifecycle({
+        catalogSource: (): unknown => undefined, store: portStore,
+      }),
+      operatorPrincipalId: "operator-local", projectId: PROJECT, store: portStore,
+    });
+
+    expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
+    expect(supplied.registry.size).toBe(26);
+    for (const roster of [ports.registry, supplied.registry]) {
+      const entry = roster.get(FOUNDATION_DISPATCH_KIND);
+      expect(entry?.asyncHandler).toBeDefined();
+      expect(entry?.handler).toBe(foundationSyncHandler);
+    }
   });
 
   it("refuses an operator id that collides with the reserved verifier service", () => {

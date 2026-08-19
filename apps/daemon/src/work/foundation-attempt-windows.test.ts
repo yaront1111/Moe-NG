@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
 import {
   copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
+  writeFileSync,
 } from "node:fs";
 import { arch, release, tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
+import { execFileSync } from "node:child_process";
+
 import {
-  buildProviderRuntimeObservation, discoverInstalledClaudeRuntime, observeScope,
+  buildProviderRuntimeObservation, createNodeFoundationCaptureFs, createNodeWorktreeMaterializer,
+  deriveWorktreeTarget, discoverInstalledClaudeRuntime, hermeticGitEnvironment, observeScope,
 } from "@moe/runner";
 import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
@@ -39,8 +43,14 @@ import {
 } from "../activation/activation-ingress-contracts.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import {
-  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject,
+  ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  send as sendBootstrap,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore,
 } from "../recovery/restore-test-harness.js";
+import { createFoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
+import type { FoundationCaptureLifecycle } from "./foundation-capture-lifecycle.js";
 import {
   DAEMON_FOUNDATION_ATTEMPT, deriveDispatchAggregateId,
 } from "./foundation-attempt-contracts.js";
@@ -54,8 +64,8 @@ import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 const WINDOWS_ONLY = process.platform === "win32";
 const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
-const DIGEST = "a".repeat(64), DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64);
-const DECIDED_AT = "2026-08-15T00:00:00.000Z", HEAD = "0".repeat(40);
+const DIGEST = "a".repeat(64), DIGEST_B = "3".repeat(64);
+const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const NODE_KEY = "dev-done", SESSION_ID = "session-1";
 
 afterEach(() => {
@@ -96,10 +106,95 @@ function scratch(label: string): string {
 /** Every store this module opens, closed by afterAll before its root is removed. */
 const openedStores: SqliteEventStore[] = [];
 
+function runGit(root: string, args: readonly string[]): string {
+  return execFileSync("git", [...args], {
+    cwd: root, encoding: "utf8", env: hermeticGitEnvironment(process.env),
+    shell: false, windowsHide: true,
+  }).trim();
+}
+
+/**
+ * ONE real repository for this suite, with SHA-256 objects so its head is 64
+ * hex: the durable observation validator demands that width, and the workspace
+ * lifecycle resolves the launch root from the durable observation.
+ */
+const REPOSITORY = (() => {
+  const root = scratch("repo");
+  const parent = scratch("trees");
+  const paths = ["scope/alpha.txt", "scope/beta.txt"] as const;
+  mkdirSync(join(root, "scope"));
+  writeFileSync(join(root, paths[0]), Buffer.from("alpha\n", "utf8"));
+  writeFileSync(join(root, paths[1]), Buffer.from("beta\n", "utf8"));
+  runGit(root, ["init", "--object-format=sha256", "--initial-branch=main", "--quiet"]);
+  runGit(root, ["config", "core.autocrlf", "false"]);
+  runGit(root, ["add", "--", ...paths]);
+  runGit(root, [
+    "-c", "user.name=Moe Foundation", "-c", "user.email=foundation@example.invalid",
+    "commit", "--quiet", "--no-gpg-sign", "-m", "foundation base",
+  ]);
+  return { head: runGit(root, ["rev-parse", "HEAD"]), parent, paths, root };
+})();
+
+const HEAD = REPOSITORY.head;
+
+const REAL_ENTRY = Object.freeze({
+  byteLength: readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0])).byteLength,
+  path: REPOSITORY.paths[0], producer: { kind: "BASE" },
+  sha256: createHash("sha256")
+    .update(readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0]))).digest("hex"),
+});
+
+/** The worktree this attempt derives. A caller may compute it; computing it is
+ *  not choosing it — a disagreeing proposal refuses instead of winning. */
+const DERIVED_WORKTREE = (() => {
+  const derived = deriveWorktreeTarget({
+    attemptId: "attempt-1", baseIdentity: HEAD, projectId: PROJECT_ID,
+    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: REPOSITORY.parent,
+  });
+  if (!derived.ok) throw new Error(`worktree fixture refused: ${derived.code}`);
+  return derived.target.worktreePath;
+})();
+
+const CATALOG = Object.freeze({
+  catalogVersion: "moe-foundation-repository-scope-catalog/1",
+  entries: [{
+    declaredPaths: [...REPOSITORY.paths], projectId: PROJECT_ID, repositoryRef: "repo-1",
+    scopeRef: "scope-1", sourceRepositoryRoot: REPOSITORY.root,
+    worktreeParent: REPOSITORY.parent,
+  }],
+});
+
+/** The REAL lifecycle over the real repository. */
+function lifecycleFor(store: SqliteEventStore): FoundationCaptureLifecycle {
+  return createFoundationCaptureLifecycle({
+    captureFs: createNodeFoundationCaptureFs(),
+    catalogSource: (): unknown => CATALOG,
+    clock: () => DECIDED_AT,
+    materializer: createNodeWorktreeMaterializer(process.env),
+    store,
+  });
+}
+
 function readyStore(root: string): SqliteEventStore {
   const store = openHarnessStore(join(root, "project.db"));
   openedStores.push(store);
-  seedReadyProject(store);
+  // The four bootstrap commands `seedReadyProject` drives, with ONE change: the
+  // bound observation carries the fixture repository's real head. A bind cannot
+  // be appended after activation — the reducer answers ILLEGAL_TRANSITION.
+  for (const [kind, version, payload] of [
+    ["project.register", 0, { owner: "owner-1" }],
+    ["project.bind_repository", 1, {
+      observation: {
+        baseRevisionHash: HEAD, repositoryRef: "repo-1", scopeRef: "scope-1",
+        truthClass: "DAEMON_VERIFIED",
+      },
+    }],
+    ["provider.probe", 0, { observation: PROVIDER_OBSERVATION }],
+    ["project.activate", 2, { witness: ACTIVATION_WITNESS }],
+  ] as readonly (readonly [string, number, Record<string, unknown>])[]) {
+    const outcome = sendBootstrap(store, bootstrapEnvelope(kind, version, payload));
+    if (!outcome.ok) throw new Error(`fixture ${kind} refused: ${outcome.code}`);
+  }
   return store;
 }
 
@@ -164,7 +259,7 @@ const GRAPH = Object.freeze({
 });
 const INPUT_MANIFEST = Object.freeze({
   baseIdentity: HEAD,
-  entries: [{ byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A }],
+  entries: [{ ...REAL_ENTRY }],
 });
 const SELECTION = Object.freeze({
   concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
@@ -183,19 +278,21 @@ function fakeGit(): GitObserver {
 
 function captureAnswer(): Record<string, unknown> {
   const scope = observeScope({
-    baseIdentity: HEAD, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(),
+    baseIdentity: HEAD, declaredScopePaths: [...REPOSITORY.paths], gitObserver: fakeGit(),
     observedAt: "2026-08-15T00:00:02Z", observerVersion: "moe-runner-scope-observer/1",
     pathObserver: { exists: () => false, realpath: (path: string) => path },
     worktreeRoot: "fixture-root",
   });
   if (!scope.ok) throw new Error(`scope fixture refused: ${scope.code}`);
   const observation: ScopeObservation = scope.observation;
+  // The result tree INHERITS exactly the sealed input entry and authors nothing:
+  // this control proves the physical boundary, not authorship.
   return {
-    authoredPaths: ["pkg/src/authored.ts"], declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_B }],
-    resultTreeEntries: [
-      { byteLength: 10, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts", sha256: DIGEST_A },
-      { byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts", sha256: DIGEST_B },
-    ], scopeObservation: observation,
+    authoredPaths: [], declaredArtifactRefs: [],
+    resultTreeEntries: [{
+      byteLength: REAL_ENTRY.byteLength, kind: "REGULAR", origin: "INHERITED",
+      path: REAL_ENTRY.path, sha256: REAL_ENTRY.sha256,
+    }], scopeObservation: observation,
   };
 }
 
@@ -265,7 +362,7 @@ function windowsFixture(label: string, options: FixtureOptions): WindowsFixture 
   const pinRoot = join(root, "pins");
   const timeoutMs = options.timeoutMs;
   const launchTemplate = {
-    argv, bootstrapCredentialDigest: DIGEST_B, cwd: root, environment,
+    argv, bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE, environment,
     launchSelection: SELECTION,
     limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs },
     runtime: { installedRoot, pinRoot, quotedObservation: quote.observation },
@@ -330,7 +427,8 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const fixture = windowsFixture("unproven-runtime", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
       captureResult: () => { throw new Error("capture must not run"); },
-      launchOptions: { platform: "win32" }, store: fixture.store,
+      launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
+      store: fixture.store,
     });
 
     const outcome = await service.dispatch(fixture.request);
@@ -368,6 +466,7 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const fixture = windowsFixture("reservation-abort", { timeoutMs: 10_000 });
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
+      lifecycle: lifecycleFor(fixture.store),
       // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch commits, in
       // order: (1) the activation ledger record, (2) the durable attempt-resource
       // set bound by `activation-resource-binding.ts`, (3) THIS reservation.
@@ -412,7 +511,8 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
       "real-claude-quote", { executable: REAL_CLAUDE as string, timeoutMs: 120_000 });
     const service = createFoundationAttemptService({
       captureResult: () => { throw new Error("capture must not run"); },
-      launchOptions: { platform: "win32" }, store: fixture.store,
+      launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(fixture.store),
+      store: fixture.store,
     });
 
     const outcome = await service.dispatch(fixture.request);
@@ -484,7 +584,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       inputManifest: structuredClone(INPUT_MANIFEST),
       launchTemplate: {
         argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: root,
+        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
         environment: {
           COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
           PATH: process.env["Path"] ?? join(systemRoot, "System32"),
@@ -496,13 +596,18 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       },
     };
     const service = createFoundationAttemptService({
-      captureResult: captureAnswer, launchOptions: { platform: "win32" }, store,
+      captureResult: captureAnswer, launchOptions: { platform: "win32" },
+      lifecycle: lifecycleFor(store), store,
     });
 
     try {
     const outcome = await service.dispatch(request);
 
     expect(outcome.ok).toBe(true);
+    // SETTLEMENT RELEASED THE TREE. A proven durable result is the ONLY thing
+    // that may, and the physical evidence is that the derived worktree — which
+    // had to exist for the launch to run in it — is gone afterwards.
+    expect(existsSync(DERIVED_WORKTREE)).toBe(false);
     expect(observedBoundaryProbe.launches).toHaveLength(1);
     expect(observedBoundaryProbe.launches[0]?.input.providerRun).toEqual({
       attemptRef: "attempt-1", effectIntentId: "intent-1", epoch: 3,
@@ -562,6 +667,55 @@ describe("foundation attempt dispatch — the observed physical control", () => 
 
     } finally {
       // Handles first, temp root after: a held handle throws EPERM on cleanup.
+      store.close();
+    }
+  }, 300_000);
+
+  /**
+   * THE OTHER HALF OF THE FENCE, and it needs a real launch to reach: release is
+   * inside the capture path, so only an attempt that actually ran can prove that
+   * an UNPROVEN settlement keeps its tree. A capture answer that throws leaves
+   * the durable record unproven while the process itself really executed — the
+   * exact state where deleting the worktree would destroy the only evidence.
+   */
+  it.runIf(WINDOWS_ONLY)("RETAINS the worktree when the capture answer is unproven", async () => {
+    const { installedRoot, observation } = await discovered();
+    const root = scratch("unproven-retention");
+    const store = readyStore(root);
+    const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
+    const request = {
+      activationRequestBytes: activationBytes(observation.observationDigest),
+      binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
+      graphSnapshot: structuredClone(GRAPH),
+      inputManifest: structuredClone(INPUT_MANIFEST),
+      launchTemplate: {
+        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+        environment: {
+          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        },
+        launchSelection: SELECTION,
+        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+        runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
+      },
+    };
+    const service = createFoundationAttemptService({
+      captureResult: () => { throw new Error("the capture answer is unavailable"); },
+      launchOptions: { platform: "win32" }, lifecycle: lifecycleFor(store), store,
+    });
+
+    try {
+      const outcome = await service.dispatch(request);
+
+      // The process ran, so the tree existed; the settlement could not be proven,
+      // so the tree is STILL there. Both halves matter: a green assertion on
+      // retention alone would also pass if nothing had ever been materialized.
+      expect(observedBoundaryProbe.launches).toHaveLength(1);
+      expect(outcome.ok).toBe(false);
+      expect(existsSync(DERIVED_WORKTREE)).toBe(true);
+    } finally {
       store.close();
     }
   }, 300_000);

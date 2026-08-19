@@ -10,6 +10,10 @@ import {
 } from "@moe/store/subscriptions/subscription-writes.js";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import {
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, createFoundationCaptureLifecycle,
+  readFoundationCatalogConfig,
+} from "./work/foundation-capture-lifecycle.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
@@ -40,6 +44,9 @@ export interface StoreDependencyConfig {
   readonly principalId: string;
   readonly projectId: string;
   readonly storePath: string;
+  /** OPTIONAL. Absent is a valid state: Foundation preparation then refuses at
+   *  dispatch time and the daemon still boots and serves every other kind. */
+  readonly workspaceCatalogPath?: string | undefined;
 }
 
 export const STORE_DEPENDENCIES_ENV_MISSING = "STORE_DEPENDENCIES_ENV_MISSING" as const;
@@ -57,12 +64,14 @@ export function readStoreDependencyEnv(
   // MOE_PRINCIPAL_ID="" must not mint an empty operator principal.
   const principalId = env.MOE_PRINCIPAL_ID;
   const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
+  const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
     principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
+    workspaceCatalogPath: catalogPath === "" ? undefined : catalogPath,
   });
 }
 
@@ -113,7 +122,16 @@ export function createStoreDependencies(
   let subscriptionDatabase: DatabaseSync | null = null;
 
   const { decisions, registry } = createDaemonCommandPorts({
-    clock, operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    clock,
+    // Built ONCE, over this provider's own open store. The catalog path is read
+    // lazily inside it, so an absent or unreadable configuration refuses
+    // Foundation preparation at dispatch time instead of failing daemon boot.
+    foundationLifecycle: createFoundationCaptureLifecycle({
+      catalogSource: readFoundationCatalogConfig({
+        [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
+      }), store,
+    }),
+    operatorPrincipalId: config.principalId, projectId: config.projectId, store,
   });
 
   const authenticator = createSessionAuthenticator(store, {

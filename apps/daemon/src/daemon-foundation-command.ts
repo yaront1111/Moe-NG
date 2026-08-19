@@ -10,6 +10,7 @@ import type { CommandHandler, DurableDecision } from "./http/http-contract.js";
 import { FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES } from "./work/foundation-attempt-codec.js";
 import { refuseLocal } from "./work/foundation-attempt-contracts.js";
 import { createFoundationAttemptService } from "./work/foundation-attempt-service.js";
+import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 
 /**
  * `foundation.dispatch` as a command entry: the one place the durable attempt service is
@@ -36,6 +37,9 @@ export const FOUNDATION_DISPATCH_PAYLOAD_KEYS: readonly string[] = Object.freeze
 export const FOUNDATION_DISPATCH_RESULT_CODE = "FOUNDATION_ATTEMPT_RECORDED";
 
 export interface FoundationCommandOptions {
+  /** The prepare-before-launch workspace authority, built once at daemon start
+   *  and passed straight through: this module composes, it never decides. */
+  readonly lifecycle: FoundationCaptureLifecycle;
   readonly store: SqliteEventStore;
 }
 
@@ -90,7 +94,9 @@ const HOSTILE_PAYLOAD = Object.freeze({ hostile: true });
 export function createFoundationDispatchHandler(
   options: FoundationCommandOptions,
 ): AsyncCommandHandler {
-  const service = createFoundationAttemptService({ captureResult, store: options.store });
+  const service = createFoundationAttemptService({
+    captureResult, lifecycle: options.lifecycle, store: options.store,
+  });
 
   return async ({ envelope }): Promise<DurableDecision> => {
     const { payload } = envelope;

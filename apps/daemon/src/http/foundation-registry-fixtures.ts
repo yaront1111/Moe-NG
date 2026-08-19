@@ -1,8 +1,14 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildProviderRuntimeObservation } from "@moe/runner";
+import {
+  buildProviderRuntimeObservation, deriveWorktreeTarget, hermeticGitEnvironment,
+} from "@moe/runner";
 import type { ProviderRuntimeObservation } from "@moe/runner";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
@@ -15,7 +21,11 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import type { CommandAdapterDeps, HttpCommandRequest } from "./http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
-import { PRINCIPAL_ID, PROJECT_ID, seedReadyProject } from "../recovery/restore-test-harness.js";
+import {
+  ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  send as sendBootstrap,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { PRINCIPAL_ID, PROJECT_ID } from "../recovery/restore-test-harness.js";
 import { deriveDispatchAggregateId } from "../work/foundation-attempt-contracts.js";
 
 /**
@@ -39,7 +49,65 @@ export const SESSION_ID = "session-1";
 
 const DIGEST = "a".repeat(64);
 const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64);
-const HEAD = "0".repeat(40);
+
+function runGit(root: string, args: readonly string[]): string {
+  return execFileSync("git", [...args], {
+    cwd: root, encoding: "utf8", env: hermeticGitEnvironment(process.env),
+    shell: false, windowsHide: true,
+  }).trim();
+}
+
+/**
+ * A REAL repository behind the seam, because the production composition now
+ * prepares a workspace before it may launch. SHA-256 objects so the head is 64
+ * hex and can be bound as the durable observation the resolver reads.
+ */
+const REPOSITORY = (() => {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), "moe-seam-repo-")));
+  roots.push(root);
+  const parent = realpathSync(mkdtempSync(join(tmpdir(), "moe-seam-trees-")));
+  roots.push(parent);
+  const paths = ["scope/alpha.txt", "scope/beta.txt"] as const;
+  mkdirSync(join(root, "scope"));
+  writeFileSync(join(root, paths[0]), Buffer.from("alpha\n", "utf8"));
+  writeFileSync(join(root, paths[1]), Buffer.from("beta\n", "utf8"));
+  runGit(root, ["init", "--object-format=sha256", "--initial-branch=main", "--quiet"]);
+  runGit(root, ["config", "core.autocrlf", "false"]);
+  runGit(root, ["add", "--", ...paths]);
+  runGit(root, [
+    "-c", "user.name=Moe Foundation", "-c", "user.email=foundation@example.invalid",
+    "commit", "--quiet", "--no-gpg-sign", "-m", "foundation base",
+  ]);
+  const catalogPath = join(realpathSync(mkdtempSync(join(tmpdir(), "moe-seam-catalog-"))), "c.json");
+  roots.push(join(catalogPath, ".."));
+  writeFileSync(catalogPath, JSON.stringify({
+    catalogVersion: "moe-foundation-repository-scope-catalog/1",
+    entries: [{
+      declaredPaths: [...paths], projectId: PROJECT_ID, repositoryRef: "repo-1",
+      scopeRef: "scope-1", sourceRepositoryRoot: root, worktreeParent: parent,
+    }],
+  }), "utf8");
+  return { catalogPath, head: runGit(root, ["rev-parse", "HEAD"]), parent, paths, root };
+})();
+
+const HEAD = REPOSITORY.head;
+
+const REAL_ENTRY = Object.freeze({
+  byteLength: readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0])).byteLength,
+  path: REPOSITORY.paths[0], producer: { kind: "BASE" },
+  sha256: createHash("sha256")
+    .update(readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0]))).digest("hex"),
+});
+
+/** The worktree this attempt derives. Computing it is not choosing it. */
+const DERIVED_WORKTREE = (() => {
+  const derived = deriveWorktreeTarget({
+    attemptId: "attempt-1", baseIdentity: HEAD, projectId: PROJECT_ID,
+    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: REPOSITORY.parent,
+  });
+  if (!derived.ok) throw new Error(`worktree fixture refused: ${derived.code}`);
+  return derived.target.worktreePath;
+})();
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",
@@ -142,7 +210,7 @@ function runtimeQuote(): ProviderRuntimeObservation {
 
 const LAUNCH_TEMPLATE = Object.freeze({
   argv: ["--print", "hello", "--model", "claude-opus-5", "--effort", "high"],
-  bootstrapCredentialDigest: DIGEST_B, cwd: "C:/work", environment: {},
+  bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE, environment: {},
   launchSelection: {
     concurrencyCeiling: 4, configurationDigest: "1c".repeat(32),
     modelSnapshotEvidence: "claude-opus-5/build-2026-05-14",
@@ -158,9 +226,7 @@ const LAUNCH_TEMPLATE = Object.freeze({
 
 const INPUT_MANIFEST = Object.freeze({
   baseIdentity: HEAD,
-  entries: [
-    { byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A },
-  ],
+  entries: [{ ...REAL_ENTRY }],
 });
 
 export interface PayloadOverrides {
@@ -238,10 +304,32 @@ export function seamHarness(label: string): SeamHarness {
     principalId: PRINCIPAL_ID,
     projectId: PROJECT_ID,
     storePath,
+    // The production composition prepares a workspace before it may launch, so
+    // the seam gets a REAL catalog. Without it every dispatch would stop at
+    // preparation and these suites would no longer reach the launcher they exist
+    // to test — and this is also the only place the whole provider -> registry ->
+    // command -> service wiring is driven by production code end to end.
+    workspaceCatalogPath: REPOSITORY.catalogPath,
   });
   const seed = SqliteEventStore.openForProject(storePath, PROJECT_ID);
   try {
-    seedReadyProject(seed);
+    // The four commands `seedReadyProject` drives, with the bound observation
+    // carrying the fixture repository's real head; a bind cannot be appended
+    // after activation, so the sequence is driven here rather than patched.
+    for (const [kind, version, payload] of [
+      ["project.register", 0, { owner: "owner-1" }],
+      ["project.bind_repository", 1, {
+        observation: {
+          baseRevisionHash: HEAD, repositoryRef: "repo-1", scopeRef: "scope-1",
+          truthClass: "DAEMON_VERIFIED",
+        },
+      }],
+      ["provider.probe", 0, { observation: PROVIDER_OBSERVATION }],
+      ["project.activate", 2, { witness: ACTIVATION_WITNESS }],
+    ] as readonly (readonly [string, number, Record<string, unknown>])[]) {
+      const outcome = sendBootstrap(seed, bootstrapEnvelope(kind, version, payload));
+      if (!outcome.ok) throw new Error(`seam fixture ${kind} refused: ${outcome.code}`);
+    }
   } finally {
     seed.close();
   }
