@@ -10,17 +10,34 @@
  * then restarted on the SAME store file and every claim below is read from that store or
  * answered by the restarted daemon over its own HTTP surface.
  *
- * WHAT IS NOT CLAIMED, stated here so a green run cannot be read as more than it is. No
- * shipped client dispatches a `foundation.dispatch` command, so a real-process journey never
- * reserves a Foundation attempt and `readInFlightFoundationAttempts` has an EMPTY set to
- * sweep. This spec does NOT assert that a non-empty in-flight set was classified, because a
- * sweep over zero attempts would satisfy such an assertion while proving nothing.
+ * THE IN-FLIGHT RECONCILE CLAUSE, scoped per step-4 amend-1/amend-2. Client-originated
+ * `foundation.dispatch` is PARKED ingress composition (task-a9fd91c3, v0.2, under the human
+ * scope freeze), so no real-process journey here reserves a Foundation attempt and the swept
+ * set is empty by construction. Building that ingress inside the canary would smuggle parked
+ * scope in under test-owned authority. What this spec asserts instead is EXECUTION plus the
+ * REPORTED COUNT: that the shipped provider wires a reconciliation port at all, and that
+ * sweeping it over these real post-crash bytes runs and reports its classification count.
  *
- * Nor does it read READY as proof the sweep ran. `runBootReconciliation` answers `null` both
- * when the sweep succeeded and when no port is wired, so READY alone cannot tell a swept
- * daemon from one with the wiring deleted. What IS asserted is the pair `sweepShippedReconciliation`
- * takes from the SHIPPED provider over this arm's real post-crash store: that a reconciliation
- * port is wired at all, and that sweeping it over those bytes does not refuse.
+ * That is what cures the vacuity, and the vacuity was measured rather than argued: with the
+ * boot sweep patched off entirely, this suite stayed 4/4 GREEN. READY cannot witness the
+ * sweep, because `runBootReconciliation` answers `null` both when the sweep succeeded and
+ * when no port is wired — a daemon with the wiring deleted reaches READY identically.
+ *
+ * NONZERO RECONCILE IS CERTIFIED AT THE PRODUCTION TIER, not here. Cited so the gap is a
+ * pointer rather than a silence:
+ *  - `work/in-flight-attempts.test.ts:153` — returns exactly the reserved attempts whose
+ *    durable record is absent.
+ *  - `recovery/restart-reconciliation.test.ts:109,131` — produces exactly the runner's outcome
+ *    kinds over a NON-EMPTY seeded sweep, one durable record per attempt.
+ *  - `daemon-entry-reconciliation.test.ts:220,413` — classifies every in-flight attempt on the
+ *    REAL boot path, and wires the sweep from the PRODUCTION store dependency root.
+ *
+ * TWO FURTHER CLAUSES ARE UNREACHABLE IN-JOURNEY, stated as limits rather than faked:
+ *  - The SHUTDOWN receipt across a restart. `child.kill("SIGTERM")` delivers no signal on
+ *    Windows, so daemon-main's stop-path receipt cannot be provoked from a spawned child on
+ *    this platform. READY across the restart IS asserted below.
+ *  - Identity-fenced worktree release/quarantine on disk. No worktree is derived without the
+ *    parked dispatch ingress either, so it is pinned to the same v0.2 owner.
  */
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -259,8 +276,13 @@ describe("J3 crash recovery over real processes", () => {
       // the real post-crash store drops `result.ok`. Neither claims a non-empty set was
       // classified — the header says why that is unreachable from a real-process journey.
       const shipped = sweepShippedReconciliation(arm.scratch, config.principalId);
+      // eslint-disable-next-line no-console
+      console.log(`J3 ${target} SWEEP ${JSON.stringify(shipped)}`);
       expect(shipped.wired).toBe(true);
-      expect(shipped.result).toMatchObject({ ok: true });
+      // The COUNT is pinned, not merely read. 0 is the honest count while the dispatch ingress
+      // stays parked; a nonzero here means that ingress landed and the tier citation in the
+      // header is the thing to revisit — a red on this line is news, not noise.
+      expect(shipped.result).toMatchObject({ classified: 0, ok: true });
       const activate = seedCommand(config, "project.activate");
       const replayed = await replayCommand(config, activate);
       // eslint-disable-next-line no-console
