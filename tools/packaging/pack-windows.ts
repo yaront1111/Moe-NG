@@ -7,10 +7,11 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { MOE_CMD, MOE_PS1, closureDoc, installDoc } from "./pack-docs.js";
+import { collectImportFaults } from "./pack-imports.js";
 import { inspectStagedTree, inspectWorktree } from "./pack-inventory.js";
 import {
   collectClosure, collectDevDependencies, collectSourceBridges, findWorkspacePackages,
-  pruneTestArtifacts, resetDirectory, treeBytes, walkFiles,
+  pruneTestArtifacts, removeEmptyDirectories, resetDirectory, treeBytes, walkFiles,
 } from "./pack-staging.js";
 
 /**
@@ -192,11 +193,17 @@ export function packWindows(options: PackOptions): number {
 
   const closureCount = writeArtifactFiles(staging, repoRoot, staged, options, dirtyPaths);
   const pruned = pruneTestArtifacts(staging);
-  log(`pack: pruned ${String(pruned.length)} test and build artifacts`);
+  const emptied = removeEmptyDirectories(staging);
+  log(`pack: pruned ${String(pruned.length)} test and build artifacts`
+    + ` and ${String(emptied.length)} directories they emptied`);
 
   const files = walkFiles(staging);
+  const devDependencies = collectDevDependencies(repoRoot, findWorkspacePackages(repoRoot));
+  const imports = collectImportFaults(staging, files, devDependencies);
   const verdict = inspectStagedTree({
-    devDependencies: collectDevDependencies(repoRoot, findWorkspacePackages(repoRoot)),
+    danglingImports: imports.dangling,
+    devDependencies,
+    devDependencyImports: imports.devDependency,
     expectedBridges: expectedBridges(repoRoot, staged),
     paths: files,
   });

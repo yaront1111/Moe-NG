@@ -43,6 +43,30 @@ export function pruneTestArtifacts(root: string): readonly string[] {
   return removed;
 }
 
+/**
+ * `Compress-Archive` stores directory entries, so a `tests/` folder emptied by the
+ * prune still appears in the zip listing — the reviewer who opens the artifact
+ * reads that as shipped tests. Bottom-up, and it reports what it removed rather
+ * than swallowing the count.
+ */
+export function removeEmptyDirectories(root: string): readonly string[] {
+  const removed: string[] = [];
+  const visit = (directory: string, relativePath: string): boolean => {
+    let empty = true;
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const child = join(directory, entry.name);
+      const childPath = relativePath === "" ? entry.name : `${relativePath}/${entry.name}`;
+      if (!entry.isDirectory()) empty = false;
+      else if (visit(child, childPath)) removed.push(childPath);
+      else empty = false;
+    }
+    return empty;
+  };
+  if (visit(root, "")) return Object.freeze([]);
+  for (const path of removed) rmSync(join(root, path), { force: true, recursive: true });
+  return Object.freeze(removed.sort());
+}
+
 function manifestName(directory: string): string | null {
   const manifest = join(directory, "package.json");
   if (!existsSync(manifest)) return null;

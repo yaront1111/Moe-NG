@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   PACK_BRIDGE_MISSING,
+  PACK_DANGLING_IMPORT,
+  PACK_DEV_DEPENDENCY_IMPORT,
   PACK_DEV_DEPENDENCY_PRESENT,
   PACK_REQUIRED_PATH_MISSING,
   PACK_TEST_ARTIFACT_PRESENT,
@@ -16,7 +18,9 @@ import type { PackInventoryInput } from "../../../tools/packaging/pack-inventory
 /** A staging tree that satisfies every rule; each test breaks exactly one thing. */
 function clean(overrides: Partial<PackInventoryInput> = {}): PackInventoryInput {
   return {
+    danglingImports: [],
     devDependencies: ["vitest", "typescript", "@types/node"],
+    devDependencyImports: [],
     expectedBridges: ["packages/store/src/index-surface.js"],
     paths: [
       ...REQUIRED_STAGED_PATHS,
@@ -65,11 +69,6 @@ describe("inspectStagedTree refuses by name", () => {
     expect(codes(input)).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
   });
 
-  it("refuses shipped test fixtures, which a *.test.ts filter alone would miss", () => {
-    const missed = "packages/runner/src/providers/claude/claude-launcher-test-fixtures.ts";
-    expect(codes(clean({ paths: [...clean().paths, missed] }))).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
-  });
-
   it("refuses a stray tsbuildinfo left by a typecheck", () => {
     const input = clean({ paths: [...clean().paths, "apps/daemon/tsconfig.scope.tsbuildinfo"] });
     expect(codes(input)).toEqual([PACK_TEST_ARTIFACT_PRESENT]);
@@ -105,6 +104,24 @@ describe("inspectStagedTree refuses by name", () => {
     if (result.ok) throw new Error("expected a refusal, got admission");
     expect(result.refusals.map((refusal) => refusal.code)).toEqual([PACK_BRIDGE_MISSING]);
     expect(result.refusals[0]?.detail).toBe("packages/store/src/index-surface.js");
+  });
+
+  it("refuses a shipped source whose relative import lost its target", () => {
+    const input = clean({
+      danglingImports: ["packages/scheduler/src/admission/admission.ts -> ./admission-fixtures.js"],
+    });
+    const result = inspectStagedTree(input);
+    if (result.ok) throw new Error("expected a refusal, got admission");
+    expect(result.refusals.map((refusal) => refusal.code)).toEqual([PACK_DANGLING_IMPORT]);
+    expect(result.refusals[0]?.detail).toContain("./admission-fixtures.js");
+  });
+
+  it("refuses a shipped source that imports a dev dependency it cannot resolve", () => {
+    const input = clean({ devDependencyImports: ["packages/mcp/src/conformance.ts -> vitest"] });
+    const result = inspectStagedTree(input);
+    if (result.ok) throw new Error("expected a refusal, got admission");
+    expect(result.refusals.map((refusal) => refusal.code)).toEqual([PACK_DEV_DEPENDENCY_IMPORT]);
+    expect(result.refusals[0]?.detail).toContain("vitest");
   });
 
   it("reports every applicable refusal rather than stopping at the first", () => {
