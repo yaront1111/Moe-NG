@@ -31,11 +31,17 @@
  *    kinds over a NON-EMPTY seeded sweep, one durable record per attempt.
  *  - `daemon-entry-reconciliation.test.ts:220,413` — classifies every in-flight attempt on the
  *    REAL boot path, and wires the sweep from the PRODUCTION store dependency root.
+ *  - `work/foundation-capture-lifecycle.test.ts:552,584` — releases the proven assignment and
+ *    refuses a forged one with the vocabulary verbatim, and QUARANTINES a tree whose bytes it
+ *    cannot prove are its own. That is the identity-fenced release/quarantine arm.
  *
  * TWO FURTHER CLAUSES ARE UNREACHABLE IN-JOURNEY, stated as limits rather than faked:
  *  - The SHUTDOWN receipt across a restart. `child.kill("SIGTERM")` delivers no signal on
  *    Windows, so daemon-main's stop-path receipt cannot be provoked from a spawned child on
- *    this platform. READY across the restart IS asserted below.
+ *    this platform. READY across the restart IS asserted below. The receipt itself is certified
+ *    at `host/foundation-receipts.test.ts:70,190,200` — builds a shutdown receipt naming the
+ *    drain trigger, refuses one published before readiness, and refuses a SECOND shutdown by
+ *    refusal rather than silently. This limit is PERMANENT on Windows, not a v0.2 deferral.
  *  - Identity-fenced worktree release/quarantine on disk. No worktree is derived without the
  *    parked dispatch ingress either, so it is pinned to the same v0.2 owner.
  */
