@@ -33,6 +33,7 @@ import { readReviewLedger } from "@moe/daemon";
 import { claimOwners, durableLines, durableReadback } from "./foundation-readback.js";
 import { OPERATOR_PRINCIPAL, removeScratches, withStore } from "./j1-ledger-view.js";
 import {
+  type DaemonHandle,
   type J1Scratch,
   NODE_REF,
   createJ1Scratch,
@@ -58,8 +59,19 @@ const IMPLEMENTATION_ONLY_ROUTE = "REJECT_IMPLEMENTATION";
 const SUCCESSOR_PLAN_REF = "plan-j4-successor-1";
 
 const scratches: J1Scratch[] = [];
+/**
+ * Every daemon this file starts, reaped in teardown as well as in the body.
+ *
+ * The body's kill is what the orphan assertions need; this list is what a FAILING run needs.
+ * An assertion that throws mid-arm skips the in-body kill entirely, and on Windows a surviving
+ * daemon holds its store file open, so the scratch removal that follows fails with EBUSY and
+ * leaves both a live process and a temp tree behind. `killTree` is idempotent, so reaping
+ * twice on the green path costs nothing.
+ */
+const daemons: DaemonHandle[] = [];
 
-afterAll(() => {
+afterAll(async () => {
+  for (const daemon of daemons) await killTree(daemon.child);
   removeScratches(scratches);
 });
 
@@ -75,6 +87,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       const scratch = createJ1Scratch();
       scratches.push(scratch);
       const daemon = await startDaemon(scratch);
+      daemons.push(daemon);
       const seed = await runSeed(scratch, daemon.origin);
       if (seed.code !== 0) throw new Error(`seed failed (${String(seed.code)}): ${seed.output}`);
       const config = seedConfigFor(scratch, daemon.origin);
