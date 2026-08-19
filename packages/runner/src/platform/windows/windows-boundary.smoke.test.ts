@@ -12,6 +12,17 @@ import { type WindowsProcessIdentity } from "./windows-process-contract.js";
 const CASES = Object.freeze(["close", "cancel", "timeout"] as const);
 const REPORT_BOUND_MS = 15_000;
 const DEATH_BOUND_MS = 10_000;
+/**
+ * The timeout case's own budget, and it has to outlast the liveness PROOFS that
+ * run inside it: the case reports both identities and then spawns powershell
+ * three times to prove parent, grandchild and the PID-reuse guard, all before
+ * the boundary is allowed to fire. At the former 1_500ms that work lost the
+ * race under the full 299-file parallel run — the parent read GONE at the first
+ * query (repo gate, 2026-08-19) — while passing 10/10 in isolation. 12s is
+ * bounded, still proves the timeout path, and cannot be outrun by three process
+ * spawns.
+ */
+const TIMEOUT_TRIGGER_MS = 12_000;
 const WINDOWS_HOST = process.platform === "win32";
 
 interface ReportedPair {
@@ -109,7 +120,7 @@ function openCase(report: string, trigger: (typeof CASES)[number]): WindowsProce
   const provider = releaseBinary("detached_spawner");
   const opened = openWindowsProcessBoundary(
     { executable: provider, argv: [report], cwd: dirname(provider), environment: {} },
-    { timeoutMs: trigger === "timeout" ? 1_500 : 30_000 },
+    { timeoutMs: trigger === "timeout" ? TIMEOUT_TRIGGER_MS : 30_000 },
   );
   if (!("completed" in opened)) {
     throw new Error(`the real boundary refused at ${opened.layer}/${opened.code}`);
@@ -153,9 +164,12 @@ describe.skipIf(!WINDOWS_HOST)("the TypeScript facade drives real Job containmen
       await awaitGone(reported.grandchild);
     } finally {
       if (boundary !== null) await boundary.close();
-      rmSync(directory, { force: true, recursive: true });
+      // The provider tree just exited in this directory; Windows can still hold
+      // it, so the removal retries rather than failing the case in teardown.
+      rmSync(directory, { force: true, maxRetries: 10, recursive: true, retryDelay: 100 });
     }
-  }, 30_000);
+    // TIMEOUT_TRIGGER_MS plus both DEATH_BOUND_MS waits must fit inside this.
+  }, 60_000);
 });
 
 it("generates exactly the close, cancel and timeout cases", () => {

@@ -64,6 +64,83 @@ jobs:
       - name: Test
         run: pnpm test
 
+  # THE WINDOWS LANE v0.1 SHIPS ON (task-1162c002).
+  #
+  # A SEPARATE job, not a third leg of `gate`'s matrix. The ubuntu/macos legs are
+  # red for pre-existing portability reasons that v0.1 explicitly parks, so
+  # sharing a matrix would couple this lane's green to their red. Nothing in
+  # `gate`, `host-evidence` or `cross-host-aggregate` is touched by this job.
+  #
+  # SCOPE DECISION for v0.1: this lane runs exactly the two local gates,
+  # `pnpm typecheck` and `pnpm test`, and nothing else. test:integration stays
+  # OUT — it needs the packaging typecheck and is exercised by the artifact
+  # task's own gates, and the MSYS tar hazard that motivated it is Git-Bash-local
+  # rather than something a pwsh runner reproduces. Revisit at v0.2.
+  #
+  # NO `shell: bash` ANYWHERE HERE. windows-latest defaults to pwsh, which is the
+  # shell the local gates are measured under; forcing bash would resurrect the
+  # MSYS path-rewrite class this repo has already been burned by.
+  gate-windows:
+    name: gate (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.8
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.16.0
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Platform identity
+        run: |
+          node -p "JSON.stringify({platform: process.platform, arch: process.arch, node: process.version})"
+
+      # ENVIRONMENT PARITY, NOT AN EXTRA GATE. `dist/` is git-ignored, so a
+      # runner starts with no Windows Job native binaries, while a developer box
+      # has them — which is the only reason `pnpm test` is green locally. Two
+      # runner suites hard-require them: windows-boundary.test.ts asserts
+      # `resolveBrokerBinary()` resolves ("a missing binary must FAIL rather than
+      # degrade" is that module's stated design), and windows-boundary.smoke
+      # launches detached_spawner.exe. Skipping them instead would make the lane
+      # read green while testing less. The command is the one documented in
+      # windows-broker-path.ts, verbatim; the toolchain is pinned by
+      # native/rust-toolchain.toml and the lockfile by --locked.
+      - name: Build the Windows Job native binaries
+        run: cargo build --locked --release --manifest-path packages/runner/src/platform/windows/native/Cargo.toml --target-dir dist/windows-job-native -p moe-windows-job-broker
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # A gate must prove it EXECUTED: `vitest run` exits 0 when it matches no
+      # test file at all, so the count line is asserted rather than trusted. The
+      # preferences are pinned explicitly because a pwsh step defaults to
+      # ErrorActionPreference=Stop, under which a native command's redirected
+      # stderr (git's harmless CRLF warning, here) can abort the step before the
+      # test run is graded. $LASTEXITCODE after this pipeline is pnpm's — a
+      # cmdlet like Tee-Object does not touch it — which is the pwsh equivalent
+      # of the PIPESTATUS read the host-evidence job performs.
+      - name: Test
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $PSNativeCommandUseErrorActionPreference = $false
+          pnpm test 2>&1 | Tee-Object -FilePath vitest-windows.log
+          $status = $LASTEXITCODE
+          if ($status -ne 0) {
+            Write-Output "::error title=gate-windows::pnpm test exited $status"
+            exit 1
+          }
+          if (-not (Select-String -Path vitest-windows.log -Pattern '^\s*Test Files\s+[1-9][0-9]* passed' -Quiet)) {
+            Write-Output "::error title=gate-windows::no positive Test Files count: the lane ran no test file"
+            exit 1
+          }
+
   # Host-native effect evidence for task-01c5f96ec1e247dc846fd628c929974a.
   #
   # Independent of `gate` on purpose. `gate` runs the broad repo suite and may be
