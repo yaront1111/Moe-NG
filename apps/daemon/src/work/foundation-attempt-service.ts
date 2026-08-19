@@ -19,6 +19,7 @@ import {
 import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
 import type { FoundationCaptureLifecycle, PreparedCapture } from "./foundation-capture-lifecycle.js";
+import { recordTerminalEffect } from "./effect-terminal-ledger.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
@@ -148,6 +149,12 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     // that is exactly how the first real producer answer refused. The workspace
     // the answer describes was hydrated from the AUTHORITATIVE declared scope,
     // so that is the input it must be sealed against.
+    // THE DURABLE TERMINAL, derived by the runner from already-committed evidence — never from
+    // the advisory release below, which still pins `effectsTerminal: false`. Refusals are not
+    // consumed: no terminal proven must not stop an attempt that ran. Reader: task-6d400781.
+    recordTerminalEffect(store, {
+      attemptRef: record.attempt.attemptId, projectId: bound.projectId,
+    });
     const settled = noteRelease(bound, record, recordProvenFoundationAttempt(
       store, bound, record, prepared.inputManifest as unknown as Record<string, unknown>,
       { answer, observation, registration }));
