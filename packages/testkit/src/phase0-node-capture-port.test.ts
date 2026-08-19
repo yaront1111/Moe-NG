@@ -5,6 +5,7 @@ import {
   open,
   readdir,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -26,7 +27,15 @@ const execFileAsync = promisify(execFile);
 const temporaryRoots: string[] = [];
 
 async function temporaryDirectory(label: string): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), `moe-${label}-`));
+  // Canonicalised ONCE, at creation, so every path derived below inherits it.
+  // On macOS $TMPDIR lives under /var/folders and /var is a symlink to
+  // /private/var, so a lexical mkdtemp path has a symlinked ANCESTOR. The
+  // port's stable-root guard requires a root whose realpath is itself — that
+  // is exactly the redirection it exists to refuse — so an uncanonical fixture
+  // root reddened every case here with PHASE0_NODE_SOURCE_PATH_ESCAPE /
+  // PHASE0_NODE_TARGET_PATH_ESCAPE before its own subject was ever reached.
+  // The fixture is what was wrong; the guard is not relaxed.
+  const root = await realpath(await mkdtemp(join(tmpdir(), `moe-${label}-`)));
   temporaryRoots.push(root);
   return root;
 }
