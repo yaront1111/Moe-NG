@@ -2,9 +2,9 @@
  * The scenario ledger for the control-room journey gate.
  *
  * WHY THIS FILE EXISTS. Spec section 12 declares TWENTY Playwright-ready
- * scenarios. The browser lane in this repository can honestly drive FOUR of
- * them. A gate that quietly tested four and reported success would retire
- * sixteen obligations it never discharged, which project rail 4 Clause 2 calls
+ * scenarios. The browser lane in this repository can honestly drive THREE of
+ * them. A gate that quietly tested three and reported success would retire
+ * seventeen obligations it never discharged, which project rail 4 Clause 2 calls
  * worse than no proof. So the matrix is enumerated here in full, every entry
  * carries its status, and `journey-coverage.test.ts` asserts the arithmetic —
  * a case deleted, a status flipped, or a missing input blanked all go RED.
