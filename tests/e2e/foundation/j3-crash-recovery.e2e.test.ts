@@ -13,11 +13,20 @@
  * WHAT IS NOT CLAIMED, stated here so a green run cannot be read as more than it is. No
  * shipped client dispatches a `foundation.dispatch` command, so a real-process journey never
  * reserves a Foundation attempt and `readInFlightFoundationAttempts` has an EMPTY set to
- * sweep. This spec therefore asserts that the boot sweep RAN and that nothing UNKNOWN was
- * left standing; it does NOT assert that a non-empty in-flight set was classified, because a
+ * sweep. This spec does NOT assert that a non-empty in-flight set was classified, because a
  * sweep over zero attempts would satisfy such an assertion while proving nothing.
+ *
+ * Nor does it read READY as proof the sweep ran. `runBootReconciliation` answers `null` both
+ * when the sweep succeeded and when no port is wired, so READY alone cannot tell a swept
+ * daemon from one with the wiring deleted. What IS asserted is the pair `sweepShippedReconciliation`
+ * takes from the SHIPPED provider over this arm's real post-crash store: that a reconciliation
+ * port is wired at all, and that sweeping it over those bytes does not refuse.
  */
 import { afterAll, describe, expect, it } from "vitest";
+
+import { createStoreDependencies } from "../../../apps/daemon/src/daemon-store-dependencies.js";
+import type { BootReconciliationResult }
+  from "../../../apps/daemon/src/recovery/boot-reconciliation.js";
 
 import {
   KILL_TARGETS,
@@ -110,6 +119,38 @@ function decisionIds(scratch: J1Scratch): readonly string[] {
   });
 }
 
+/** Fixed, not read from a clock: nothing the sweep decides is covered by this value. */
+const SWEEP_DECIDED_AT = "2026-01-01T00:00:00.000Z";
+
+/**
+ * Sweeps the SHIPPED reconciliation port over this arm's REAL post-crash store.
+ *
+ * The port is not rebuilt here — `createStoreDependencies` is the same factory the daemon
+ * boots from, so a provider that stopped wiring reconciliation is visible to this guard.
+ *
+ * `wired` and `result` are carried side by side rather than folded into one boolean, because
+ * "the port was deleted from the provider" and "the sweep refused over these bytes" are
+ * different defects and a single flag would let the first pass for the second.
+ */
+function sweepShippedReconciliation(
+  scratch: J1Scratch, principalId: string,
+): { readonly result: BootReconciliationResult | null; readonly wired: boolean } {
+  const provider = createStoreDependencies({
+    clock: () => SWEEP_DECIDED_AT,
+    credential: scratch.credential,
+    principalId,
+    projectId: scratch.projectId,
+    storePath: scratch.storePath,
+  });
+  try {
+    const factory = provider.reconciliation;
+    if (typeof factory !== "function") return { result: null, wired: false };
+    return { result: factory.call(provider).sweep(), wired: true };
+  } finally {
+    provider.close();
+  }
+}
+
 function readyReceipt(banner: string): Record<string, unknown> {
   const line = banner.split("\n").find((candidate) => candidate.includes('"kind":"READY"'));
   if (line === undefined) throw new Error(`the daemon printed no READY receipt: ${banner}`);
@@ -193,9 +234,11 @@ describe("J3 crash recovery over real processes", () => {
       });
       expect(arm.restarted.pid).not.toBe(arm.daemonPid);
 
-      // BOOT RECONCILIATION RAN. It is invoked before the listener binds and stops the boot on
-      // any refusal, so a daemon that reached READY on this store completed the sweep. The
-      // classification COUNT is deliberately not asserted — see the file header.
+      // WHAT READY PROVES ABOUT THE BOOT SWEEP, and what it cannot. The sweep is invoked
+      // before the listener binds and stops the boot on any refusal, so READY proves the sweep
+      // did not REFUSE — but `runBootReconciliation` returns `null` for "no port wired" too, so
+      // a daemon with the wiring deleted reaches READY identically. The guards below close that
+      // gap; the classification COUNT stays unasserted — see the file header.
       expect(arm.restarted.origin).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
 
       // NOTHING DURABLE WAS LOST. Every decision the pre-kill journey committed is still
@@ -210,6 +253,14 @@ describe("J3 crash recovery over real processes", () => {
       // FRESH id, still carrying the pre-kill expected version, is REFUSED. Without the
       // control, a refusal could equally mean the surface was simply not answering.
       const config = seedConfigFor(arm.scratch, arm.restarted.origin);
+
+      // THE SWEEP IS WIRED, AND IT RUNS ON THESE BYTES. Two separate mutants: deleting
+      // `reconciliation` from the shipped provider drops `wired`, and a sweep that refuses over
+      // the real post-crash store drops `result.ok`. Neither claims a non-empty set was
+      // classified — the header says why that is unreachable from a real-process journey.
+      const shipped = sweepShippedReconciliation(arm.scratch, config.principalId);
+      expect(shipped.wired).toBe(true);
+      expect(shipped.result).toMatchObject({ ok: true });
       const activate = seedCommand(config, "project.activate");
       const replayed = await replayCommand(config, activate);
       // eslint-disable-next-line no-console
