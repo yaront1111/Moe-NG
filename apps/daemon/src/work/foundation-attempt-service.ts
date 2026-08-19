@@ -107,8 +107,11 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
 } {
   const { store } = deps;
 
-  /** No producer proves the boundary flags or handoff yet, so report them false/null.
-   *  The durable effect intent is the only honest release reference. */
+  /** No producer proves the TERMINALITY flags or handoff yet, so report them
+   *  false/null. `safeBoundaryObserved` is absent because it is no longer ours to
+   *  report: task-ded026d6's producer derives it from the durable provider-run
+   *  record, and a request carrying the key at all is now refused. The durable
+   *  effect intent is the only honest release reference. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     settled: FoundationAttemptOutcome,
@@ -117,7 +120,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       disposition: null, effectsTerminal: false, handoff: null,
       intentRefs: [record.effectIntent.intentId],
       reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
-      resourcesTerminal: false, safeBoundaryObserved: false,
+      resourcesTerminal: false,
     });
     return settled;
   }

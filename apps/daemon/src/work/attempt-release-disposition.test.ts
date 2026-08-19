@@ -3,22 +3,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DRAIN_REASONS } from "@moe/runner";
+import type { ProviderFactUnknown, ProviderRunRef } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { readFoundationActivationByAttempt } from "../activation/activation-attempt-reader.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "../activation/activation-ingress-contracts.js";
 import { encodeActivationLedgerRecord } from "../activation/activation-ledger-codec.js";
-import {
-  ACTIVATION_LEDGER_EVENT_TYPE, deriveActivationAggregateId,
-} from "../activation/activation-ledger-contracts.js";
+import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
+import { commitActivationLedgerRecord } from "../activation/activation-ledger-commit.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject, trackHarnessRoot,
 } from "../recovery/restore-test-harness.js";
+import { PROVIDER_RUN_RECORD_VERSION } from "../telemetry/provider-run-contracts.js";
+import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
+import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
 import {
   ATTEMPT_RELEASE_CODES, ATTEMPT_RELEASE_COMMAND_KIND, ATTEMPT_RELEASE_EVENT_TYPE,
   ATTEMPT_RELEASE_RECORD_VERSION, DAEMON_ATTEMPT_RELEASE, SCHEDULER_LEASE_DRAIN,
@@ -28,6 +32,7 @@ import {
 import type { AttemptReleaseOutcome, AttemptReleaseRequest } from "./attempt-release-disposition.js";
 import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
+import { SAFE_BOUNDARY_OBSERVATION_LAYER } from "./safe-boundary-observation.js";
 
 /**
  * The attempt-level release disposition, over a REAL SqliteEventStore, a REAL
@@ -55,6 +60,8 @@ const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const SESSION_ID = "session-1";
 const NODE_KEY = "dev-done";
+/** The attempt the activation below commits; the boundary producer reads by it. */
+const ATTEMPT_REF = "attempt-1";
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT", leaseId: "lease-1",
@@ -98,7 +105,7 @@ const CLAIM = {
 } as const;
 const ACTIVATION_SECTION = {
   attempt: {
-    aggregateId: "agg-1", attemptId: "attempt-1", intentId: "intent-1",
+    aggregateId: "agg-1", attemptId: ATTEMPT_REF, intentId: "intent-1",
     state: "LAUNCH_REQUESTED", version: 0,
   },
   claim: CLAIM, dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: LEASE_PROOF,
@@ -132,14 +139,90 @@ interface Fixture {
   readonly store: SqliteEventStore;
 }
 
+/**
+ * WHAT THE HOST SAW, or the absence of it. `safeBoundaryObserved` has a durable
+ * producer now (task-ded026d6), so the boundary a release records is DERIVED from
+ * a committed provider-run record instead of relayed from this suite.
+ *
+ * `OBSERVED` satisfies every clause of that producer's predicate. `UNOBSERVED`
+ * keeps a PROVEN, classified, completed run and denies ONLY the exit — the
+ * `{kind:"UNOBSERVED"}` arm whose entire meaning is that the host never saw the
+ * process cross its boundary. Denying the exit rather than the end keeps a real
+ * `completedAt` on the record, so the derivation answers `false` on its own merits
+ * rather than because no durable instant could be found.
+ */
+type BoundaryEvidence = "ABSENT" | "OBSERVED" | "UNOBSERVED";
+
+const blindFact: ProviderFactUnknown = Object.freeze({
+  known: false, code: "TELEMETRY_USAGE_ABSENT", layer: "TELEMETRY_RESULT",
+});
+
+function runRecord(ref: ProviderRunRef, evidence: "OBSERVED" | "UNOBSERVED"): ProviderRunRecord {
+  const observed = evidence === "OBSERVED";
+  return {
+    concurrency: { achieved: blindFact, declaredCeiling: blindFact, fact: "NO_CONCURRENCY_FACTS" },
+    declared: blindFact,
+    infrastructure: observed ? "NONE" : "EXIT_UNOBSERVED",
+    launch: {
+      activationDigest: null, completedAt: DECIDED_AT, effectDigest: null,
+      exit: observed ? { code: 0, kind: "EXITED" } : { kind: "UNOBSERVED" },
+      freshRuntimeDigest: null, kind: "OBSERVED", observationDigest: null,
+      pinnedClosureDigest: null, quotedRuntimeDigest: null, reasonCode: null, reasonLayer: null,
+      runtimeBindingDigest: null, startedAt: DECIDED_AT, truthClass: "PROVEN",
+    },
+    observedEnd: null,
+    observedModel: { modelId: blindFact, snapshotEvidence: blindFact, snapshotKind: "UNKNOWN" },
+    observedStart: { bootId: "boot-1", monotonicObservation: 12, serverWallSeconds: 1_700_000_000 },
+    providerRunRef: ref,
+    recordDigest: "",
+    recordVersion: PROVIDER_RUN_RECORD_VERSION,
+    sequence: { known: true, value: 3 },
+    steps: { coverage: "UNKNOWN", turns: blindFact },
+    stderrReceiptDigest: { known: true, value: "stderr-release" },
+    stdoutReceiptDigest: { known: true, value: "stdout-release" },
+    terminal: "COMPLETED",
+    tokens: {
+      cacheCreationInputTokens: blindFact, cacheReadInputTokens: blindFact, coverage: "UNKNOWN",
+      inputTokens: blindFact, outputTokens: blindFact,
+    },
+    upstreamRefusal: null, usage: [], usageRefusals: [],
+  };
+}
+
+/**
+ * The run committed through the PRODUCTION ledger writer, with its ref read out
+ * of the durable activation binding rather than hand-guessed: the run reader
+ * cross-checks `effectIntentId` and `epoch` against that binding, and the commit
+ * key's principal must be the lease's own owner session.
+ */
+function seedProviderRun(
+  store: SqliteEventStore, label: string, evidence: "OBSERVED" | "UNOBSERVED",
+): void {
+  const binding = readFoundationActivationByAttempt(store, PROJECT_ID, ATTEMPT_REF);
+  if (binding.status !== "BOUND") throw new Error(`attempt unbound: ${binding.status}/${binding.code}`);
+  const outcome = commitProviderRunRecord(store, {
+    correlationId: `corr-run-${label}`, decidedAt: DECIDED_AT,
+    key: {
+      commandId: `cmd-run-${label}`, principalId: binding.ownerSessionRef, projectId: PROJECT_ID,
+    },
+    record: runRecord({
+      attemptRef: binding.attemptId, effectIntentId: binding.effectIntentId, epoch: binding.epoch,
+      provider: "claude", runRef: `run-${label}`,
+    }, evidence),
+    requestBytes: encoder.encode(`provider-run-request-${label}`),
+  });
+  if (!outcome.ok) throw new Error(`provider run refused: ${outcome.code} at ${outcome.layer}`);
+}
+
 /** A committed activation, read BACK from the store rather than kept from the
  *  command result, so the record this suite calls "durable" really is. */
-function activated(label: string): Fixture {
+function activated(label: string, evidence: BoundaryEvidence = "OBSERVED"): Fixture {
   const root = trackHarnessRoot(mkdtempSync(join(tmpdir(), `moe-release-${label}-`)));
   const store = openHarnessStore(join(root, "project.db"));
   seedReadyProject(store);
   const outcome = runEffectActivateCommand(store, activationBytes());
   if (!outcome.ok) throw new Error(`activation refused: ${outcome.code}`);
+  if (evidence !== "ABSENT") seedProviderRun(store, label, evidence);
   const history = readFoundationActivationHistory(
     ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
   if (!history.ok) throw new Error(`activation unreadable: ${history.result.status}`);
@@ -162,16 +245,28 @@ const HANDOFF = Object.freeze({
   truthClass: "DAEMON_VERIFIED", worktreeDigest: DIGEST,
 });
 
-/** A settled boundary. The three flags have NO durable producer yet
- *  (task-ded026d6, task-6d400781), so the suite drives them as inputs; the
- *  daemon must never synthesize or upgrade one of its own accord. */
+/**
+ * A settled boundary. `effectsTerminal` and `resourcesTerminal` still have no
+ * durable producer (task-6d400781), so the suite drives them as inputs and the
+ * daemon must never synthesize or upgrade one of its own accord.
+ *
+ * `safeBoundaryObserved` IS NOT HERE, and its absence is the contract this row
+ * owns: it has a durable producer now, so it is DERIVED from the committed
+ * provider-run record and the request type has no key for it at all. A caller
+ * that supplies one is refused rather than obeyed — see the admission cases.
+ */
 const settledRequest = (
   overrides: Partial<AttemptReleaseRequest> = {},
 ): AttemptReleaseRequest => ({
   disposition: null, effectsTerminal: true, handoff: HANDOFF, intentRefs: ["intent:release"],
-  reason: "WORK_RELEASE_OR_PAUSE", resourcesTerminal: true, safeBoundaryObserved: true,
+  reason: "WORK_RELEASE_OR_PAUSE", resourcesTerminal: true,
   ...overrides,
 });
+
+/** A request carrying the retired key, built OUTSIDE the narrowed type because
+ *  the type is exactly what stops an honest caller from composing one. */
+const withBoundaryKey = (value: unknown): AttemptReleaseRequest =>
+  ({ ...settledRequest(), safeBoundaryObserved: value }) as AttemptReleaseRequest;
 
 function refusalOf(
   outcome: AttemptReleaseOutcome,
@@ -219,14 +314,16 @@ describe("attempt release disposition — frozen vocabulary", () => {
   it("publishes a closed code list with no duplicate member", () => {
     expect(ATTEMPT_RELEASE_CODES.length).toBeGreaterThan(0);
     expect(new Set(ATTEMPT_RELEASE_CODES).size).toBe(ATTEMPT_RELEASE_CODES.length);
-    // Seven, not twelve. The five disposition and drain-reason codes were retired
+    // Eight, not twelve. The five disposition and drain-reason codes were retired
     // with the daemon-side validator that raised them: `releaseWork` owns that
-    // judgement now and refuses in its own words, under its own layer.
+    // judgement now and refuses in its own words, under its own layer. The eighth
+    // is REQUEST_MALFORMED, and it is a DAEMON code because the exact-record
+    // admission is this module's own decision, taken before any kernel is reached.
     expect([...ATTEMPT_RELEASE_CODES].sort()).toEqual([
       "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE", "ATTEMPT_RELEASE_BINDING_MISMATCH",
       "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", "ATTEMPT_RELEASE_RECORD_ABSENT",
       "ATTEMPT_RELEASE_RECORD_AMBIGUOUS", "ATTEMPT_RELEASE_RECORD_DRIFT",
-      "ATTEMPT_RELEASE_RECORD_UNREADABLE",
+      "ATTEMPT_RELEASE_RECORD_UNREADABLE", "ATTEMPT_RELEASE_REQUEST_MALFORMED",
     ].sort());
     for (const retired of ["ATTEMPT_RELEASE_REASON_UNKNOWN", "ATTEMPT_RELEASE_REASON_NOT_UNIONED",
       "ATTEMPT_RELEASE_DISPOSITION_MALFORMED", "ATTEMPT_RELEASE_DISPOSITION_DOWNGRADED",
@@ -235,33 +332,38 @@ describe("attempt release disposition — frozen vocabulary", () => {
     }
   });
 
-  it("adds NO daemon code for the slot layer, which carries the SCHEDULER's own", () => {
-    // The roster stayed at seven. `releaseProviderSlot` refuses in the
-    // scheduler's words, and `AttemptReleaseRefused.code` is already
-    // `AttemptReleaseCode | AuthorityErrorCode`, so a daemon member for the slot
-    // arms would be a dead entry that no path raises and that still reads as
-    // coverage. Both scheduler codes are asserted ABSENT from the daemon list.
-    expect(ATTEMPT_RELEASE_CODES.length).toBe(7);
-    for (const carried of ["AUTHORITY_MALFORMED_INPUT", "AUTHORITY_STALE_LEASE"]) {
+  it("adds NO daemon code for the slot or BOUNDARY layers, which carry their own", () => {
+    // The roster gained exactly ONE member and no more. `releaseProviderSlot`
+    // refuses in the scheduler's words and the safe-boundary producer in its own,
+    // so a daemon member for either would be a dead entry that no path raises and
+    // that still reads as coverage. All four carried codes are asserted ABSENT.
+    expect(ATTEMPT_RELEASE_CODES.length).toBe(8);
+    for (const carried of ["AUTHORITY_MALFORMED_INPUT", "AUTHORITY_STALE_LEASE",
+      "SAFE_BOUNDARY_RUN_UNREADABLE", "SAFE_BOUNDARY_INPUT_MALFORMED"]) {
       expect([...ATTEMPT_RELEASE_CODES]).not.toContain(carried);
     }
   });
 
-  it("names all THREE refusing layers, disjoint from the sibling dispatch layer", () => {
+  it("names all FOUR refusing layers, disjoint from the sibling dispatch layer", () => {
     expect(DAEMON_ATTEMPT_RELEASE).toBe("DAEMON_ATTEMPT_RELEASE");
     expect(SCHEDULER_LEASE_DRAIN).toBe("SCHEDULER_LEASE_DRAIN");
     expect(SCHEDULER_PROVIDER_SLOT_RELEASE).toBe("SCHEDULER_PROVIDER_SLOT_RELEASE");
+    expect(SAFE_BOUNDARY_OBSERVATION_LAYER).toBe("DAEMON_SAFE_BOUNDARY_OBSERVATION");
     // Pairwise distinct, by hand. Two kernels refuse this path out of ONE
     // two-member code vocabulary, so the layer is the only thing that can tell a
     // slot that will not release from a lease that could not be fenced — and
-    // DoD 3's "never restamped as a lease-drain refusal" rests on it.
+    // DoD 3's "never restamped as a lease-drain refusal" rests on it. The safe
+    // boundary producer is the FOURTH, and it is a layer for the same reason:
+    // "the host never recorded a run" is not "this daemon composed a bad row".
     const layers = [
       DAEMON_ATTEMPT_RELEASE, SCHEDULER_LEASE_DRAIN, SCHEDULER_PROVIDER_SLOT_RELEASE,
+      SAFE_BOUNDARY_OBSERVATION_LAYER,
     ];
-    expect(new Set(layers).size).toBe(3);
+    expect(new Set(layers).size).toBe(4);
     expect(SCHEDULER_PROVIDER_SLOT_RELEASE).not.toBe(SCHEDULER_LEASE_DRAIN);
     expect(SCHEDULER_PROVIDER_SLOT_RELEASE).not.toBe(DAEMON_ATTEMPT_RELEASE);
     expect(DAEMON_ATTEMPT_RELEASE).not.toBe(SCHEDULER_LEASE_DRAIN);
+    expect(SAFE_BOUNDARY_OBSERVATION_LAYER).not.toBe(DAEMON_ATTEMPT_RELEASE);
     expect(DAEMON_ATTEMPT_RELEASE).not.toBe("DAEMON_FOUNDATION_ATTEMPT");
     expect([ATTEMPT_RELEASE_RECORD_VERSION, ATTEMPT_RELEASE_EVENT_TYPE,
       ATTEMPT_RELEASE_COMMAND_KIND]).toEqual(
@@ -330,11 +432,14 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
     expectNoDurableRow(fixture);
   });
 
-  it("refuses an OMITTED boundary flag rather than defaulting it either way", () => {
-    // The three flags have no durable producer. A daemon that defaulted a missing
-    // one to false would silently record DRAINING; one that defaulted it to true
-    // would manufacture the safe boundary this whole epic exists to prove.
-    const flags = ["effectsTerminal", "resourcesTerminal", "safeBoundaryObserved"] as const;
+  it("refuses an OMITTED terminality flag rather than defaulting it either way", () => {
+    // TWO flags, not three. `safeBoundaryObserved` left this sweep when it gained
+    // a durable producer: omitting it is now the ONLY way to call this function,
+    // so an "omitted" case for it would assert nothing. The other two still have
+    // no producer (task-6d400781) and keep the arm — a daemon that defaulted a
+    // missing one to false would silently record DRAINING, and one that defaulted
+    // it to true would manufacture a terminality nobody proved.
+    const flags = ["effectsTerminal", "resourcesTerminal"] as const;
     let driven = 0;
     for (const flag of flags) {
       const fixture = activated(`omitted-${flag}`);
@@ -346,8 +451,10 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
       expectNoDurableRow(fixture);
       driven += 1;
     }
-    // A sweep that generated nothing would pass every assertion above vacuously.
-    expect(driven).toBe(3);
+    // A sweep that generated nothing would pass every assertion above vacuously,
+    // and the cardinality is asserted because it CHANGED: three arms became two.
+    expect(driven).toBe(2);
+    expect(flags).not.toContain("safeBoundaryObserved");
   });
 
   it("refuses when the durable activation it must read is not there", () => {
@@ -377,6 +484,166 @@ describe("attempt release disposition — the kernel refuses, the daemon carries
       code: "ATTEMPT_RELEASE_BINDING_MISMATCH", refusedBy: DAEMON_ATTEMPT_RELEASE,
     });
     expectNoDurableRow(fixture);
+  });
+});
+
+/** The observations THIS release composed, paged out of the store by event type
+ *  rather than by an aggregate id the suite would have to re-derive. A carrier
+ *  that decided the boundary itself instead of composing the producer writes
+ *  none of these, and every assertion over them goes red. */
+function boundaryObservations(fixture: Fixture): Record<string, unknown>[] {
+  const rows: Record<string, unknown>[] = [];
+  for (let cursor = 0n; ; ) {
+    const page = fixture.store.readEventsByTypeAfter("SafeBoundaryObserved", cursor, 100);
+    for (const event of page.items) {
+      rows.push(JSON.parse(new TextDecoder().decode(event.payload)) as Record<string, unknown>);
+    }
+    if (!page.hasMore || page.nextCursor === null) return rows;
+    cursor = page.nextCursor;
+  }
+}
+
+describe("attempt release disposition — the safe boundary is DERIVED, never relayed", () => {
+  it("derives a TRUE boundary from the durable run and releases on it", () => {
+    const fixture = activated("derived-true");
+    // No boundary key is passed, and none CAN be: the request type has none.
+    const written = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(written.ok && written.outcome).toBe("RELEASED");
+    // The kernel saw a settled boundary — read back out of durable bytes.
+    const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+    expect([row["outcome"], row["attemptState"], row["providerSlotState"], row["releasePending"]])
+      .toEqual(["RELEASED", "RELEASED", "RELEASED", false]);
+    // And the value came from the PRODUCER, which recorded its own durable
+    // observation on the way past. A carrier that answered `true` on its own
+    // authority leaves this list empty.
+    const observations = boundaryObservations(fixture);
+    expect(observations.length).toBe(1);
+    expect([observations[0]?.["safeBoundaryObserved"], observations[0]?.["reasonCode"],
+      observations[0]?.["attemptRef"]]).toEqual([true, null, ATTEMPT_REF]);
+  });
+
+  it("derives a FALSE boundary from an UNOBSERVED exit and drains on it", () => {
+    // The run is PROVEN, classified COMPLETED and carries a real `completedAt`;
+    // ONLY the exit is `{kind:"UNOBSERVED"}`. Everything the kernel needs to
+    // release is present except the one fact that says the host watched the
+    // process leave, which is exactly the manufactured-safe-boundary defect.
+    const fixture = activated("derived-false", "UNOBSERVED");
+    const written = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(written.ok && written.outcome).toBe("DRAINING");
+    const row = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+    expect([row["outcome"], row["attemptState"], row["providerSlotState"], row["resumable"]])
+      .toEqual(["DRAINING", "DRAINING", "ACTIVE", false]);
+    const observations = boundaryObservations(fixture);
+    expect(observations.length).toBe(1);
+    // The REASON, not merely the false: a derivation that answered false for the
+    // wrong clause would still drain, and this is what tells the two apart.
+    expect([observations[0]?.["safeBoundaryObserved"], observations[0]?.["reasonCode"]])
+      .toEqual([false, "SAFE_BOUNDARY_EXIT_UNOBSERVED"]);
+  });
+
+  it("refuses under the PRODUCER's own code and layer when no run was recorded", () => {
+    const fixture = activated("boundary-absent", "ABSENT");
+    const outcome = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    // BOTH layers asserted. A daemon code here would mean the carrier had formed
+    // its own opinion about an absent run; a flattened message would lose which
+    // of the producer's five refusals answered, and they demand different repairs.
+    expect(refusalWithMessage(outcome)).toEqual({
+      code: "SAFE_BOUNDARY_RUN_UNREADABLE", message: "PROVIDER_RUN_EVIDENCE_ABSENT",
+      refusedBy: SAFE_BOUNDARY_OBSERVATION_LAYER,
+    });
+    // Refused BEFORE the kernel: no release row, no release decision, and the
+    // producer recorded nothing either — an unknown never becomes a false.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expect(boundaryObservations(fixture)).toEqual([]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("REFUSES a caller-supplied boundary flag of any shape, never ignoring one", () => {
+    // Silently dropping the key would be indistinguishable from honouring it at
+    // the call site, so the field is unrepresentable rather than merely unused.
+    const values: readonly unknown[] = [true, false, "OBSERVED", null, undefined];
+    let driven = 0;
+    for (const value of values) {
+      const fixture = activated(`spoof-${String(value)}`);
+      const outcome = recordAttemptRelease(
+        fixture.store, fixture.bound, fixture.record, withBoundaryKey(value));
+      expect(refusalOf(outcome), String(value)).toEqual({
+        code: "ATTEMPT_RELEASE_REQUEST_MALFORMED", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      });
+      // The admission runs before ANY store work, so not even an observation lands.
+      expect(boundaryObservations(fixture), String(value)).toEqual([]);
+      expectNoDurableRow(fixture);
+      driven += 1;
+    }
+    // A sweep that generated nothing would pass every assertion above vacuously.
+    expect(driven).toBe(5);
+  });
+
+  it("REFUSES a non-object request rather than crashing on the admission", () => {
+    // The admission is the first statement of the release path, so it reads a
+    // property off whatever it was handed. A raw read would throw on null — and a
+    // crash is not a fail-closed refusal, it is an unhandled exception wearing one.
+    const fixture = activated("malformed-request");
+    let driven = 0;
+    for (const shape of [null, undefined, "settled", 7]) {
+      const outcome = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
+        shape as unknown as AttemptReleaseRequest);
+      expect(refusalOf(outcome), String(shape)).toEqual({
+        code: "ATTEMPT_RELEASE_REQUEST_MALFORMED", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      });
+      driven += 1;
+    }
+    expect(driven).toBe(4);
+    expectNoDurableRow(fixture);
+  });
+
+  it("refuses a SECOND releaser's boundary rather than answering from its own", () => {
+    // Two callers, two command ids, ONE attempt. The observation aggregate is
+    // written at expectedVersion 0, so the second caller's commit collides. That
+    // has to surface as the producer's CONFLICT refusal: reading the first
+    // caller's observation instead would let a second session release on evidence
+    // committed under a decision key it never held.
+    const fixture = activated("second-releaser");
+    const first = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(first.ok && first.outcome).toBe("RELEASED");
+    const other: FoundationAttemptBound =
+      Object.freeze({ ...fixture.bound, commandId: "cmd-release-2" });
+    const second = recordAttemptRelease(
+      fixture.store, other, fixture.record, settledRequest());
+    expect(refusalWithMessage(second)).toEqual({
+      // The STORE's own word for it, carried two hops without being rewritten.
+      code: "SAFE_BOUNDARY_COMMIT_CONFLICT", message: "EXPECTED_VERSION_CONFLICT",
+      refusedBy: SAFE_BOUNDARY_OBSERVATION_LAYER,
+    });
+    // The first release stands, and no second row was appended over it.
+    expect(durableRowCount(fixture)).toBe(1);
+    expect(boundaryObservations(fixture).length).toBe(1);
+  });
+
+  it("refuses the caller's flag even when it AGREES with the durable observation", () => {
+    // The point of the refusal is that the field is unrepresentable, not that it
+    // is cross-checked: a carrier that only refused on MISMATCH would still be
+    // letting an agreeing caller's flag reach the kernel as authority.
+    for (const [evidence, agreeing] of
+      [["OBSERVED", true], ["UNOBSERVED", false]] as const) {
+      const fixture = activated(`agreeing-${evidence}`, evidence);
+      const control = recordAttemptRelease(
+        fixture.store, fixture.bound, fixture.record, withBoundaryKey(agreeing));
+      expect(refusalOf(control), evidence).toEqual({
+        code: "ATTEMPT_RELEASE_REQUEST_MALFORMED", refusedBy: DAEMON_ATTEMPT_RELEASE,
+      });
+      expectNoDurableRow(fixture);
+      // POSITIVE CONTROL, in the same store: the identical request WITHOUT the
+      // key succeeds and reaches the outcome the durable run implies. Without it
+      // the case above could be passing because the fixture was simply broken.
+      const honest = recordAttemptRelease(
+        fixture.store, fixture.bound, fixture.record, settledRequest());
+      expect(honest.ok && honest.outcome, evidence).toBe(agreeing ? "RELEASED" : "DRAINING");
+    }
   });
 });
 
@@ -562,9 +829,27 @@ describe("attempt release disposition — DRAINING is its own outcome", () => {
     return rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
   }
 
-  it("records DRAINING with resumable false for each unsettled boundary flag", () => {
-    const flags = ["effectsTerminal", "resourcesTerminal", "safeBoundaryObserved"];
-    const rows = flags.map((flag) => drained(flag));
+  /** The same DRAINING arm reached the ONLY way the boundary can reach it now:
+   *  through a durable run the host never saw exit. No caller literal is
+   *  involved, which is the whole contract change this row landed. */
+  function drainedByDerivation(): Record<string, unknown> {
+    const fixture = activated("draining-derived", "UNOBSERVED");
+    const written = recordAttemptRelease(
+      fixture.store, fixture.bound, fixture.record, settledRequest());
+    expect(written.ok && written.outcome).toBe("DRAINING");
+    expect(durableRowCount(fixture)).toBe(1);
+    return rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
+  }
+
+  it("records DRAINING with resumable false for each unsettled boundary fact", () => {
+    // TWO relayed flags plus ONE derived boundary. The arms are counted apart
+    // because they are reached by different mechanisms: a sweep that quietly
+    // lost the derived arm would still show three rows if it double-counted.
+    const flags = ["effectsTerminal", "resourcesTerminal"];
+    const relayed = flags.map((flag) => drained(flag));
+    const derived = [drainedByDerivation()];
+    expect([relayed.length, derived.length]).toEqual([2, 1]);
+    const rows = [...relayed, ...derived];
     // A sweep that generated nothing passes every assertion below vacuously.
     expect(rows.length).toBe(3);
     for (const row of rows) {
@@ -593,7 +878,7 @@ describe("attempt release disposition — DRAINING is its own outcome", () => {
     const fixture = activated("released-for-diff");
     recordAttemptRelease(fixture.store, fixture.bound, fixture.record, settledRequest());
     const released = rowOf(readAttemptRelease(fixture.store, fixture.bound.aggregateId));
-    const draining = drained("safeBoundaryObserved");
+    const draining = drainedByDerivation();
     const differing = Object.keys(released)
       .filter((key) => JSON.stringify(released[key]) !== JSON.stringify(draining[key]));
     expect(differing.sort()).toEqual([
@@ -630,33 +915,38 @@ describe("attempt release disposition — DRAINING is its own outcome", () => {
  * drifts nothing and releases cleanly, which is what proves a refusal here is
  * the slot guard's answer and not the planting's.
  */
-function plantedSlot(label: string, providerSlot: unknown): Fixture {
+function plantedSlot(
+  label: string, providerSlot: unknown, evidence: "OBSERVED" | "UNOBSERVED" = "OBSERVED",
+): Fixture {
   const source = activated(`${label}-source`);
-  const encoded = encodeActivationLedgerRecord({ ...source.record, providerSlot });
+  // The drift is deliberately UNTYPED at the seam: the case's whole purpose is a
+  // slot shape the contract forbids, and the production codec is what judges it.
+  const drifted =
+    { ...source.record, providerSlot } as unknown as ActivationLedgerRecord;
+  const encoded = encodeActivationLedgerRecord(drifted);
   if (!encoded.ok) throw new Error(`the production codec refused the drift: ${encoded.code}`);
   const root = trackHarnessRoot(mkdtempSync(join(tmpdir(), `moe-release-${label}-`)));
   const store = openHarnessStore(join(root, "project.db"));
   seedReadyProject(store);
-  const committed = store.commitExpectedVersionDecision({
-    commandKind: EFFECT_ACTIVATE_COMMAND_KIND, committedResultBytes: encoded.bytes,
+  // Planted through the PRODUCTION ledger writer rather than a hand-composed
+  // decision. It stamps the `activation.commit` command kind and copies the event
+  // id from the grant, both of which the strict by-attempt reader cross-checks —
+  // and that reader is what the safe-boundary producer binds through, so a plant
+  // the production writer would not have made can no longer be released at all.
+  const committed = commitActivationLedgerRecord(store, {
     correlationId: `corr-plant-${label}`, decidedAt: DECIDED_AT,
-    // The event id IS the grant id, which is what the strict reader cross-checks.
-    events: [{
-      eventId: source.record.grant.grantId, eventType: ACTIVATION_LEDGER_EVENT_TYPE,
-      payload: encoded.bytes,
-    }],
-    expectedVersion: 0,
     key: { commandId: `cmd-plant-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
-    requestBytes: encoded.bytes, targetAggregateId: ACTIVATION_AGGREGATE,
+    record: drifted, requestBytes: encoded.bytes,
   });
-  if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
-  }
+  if (!committed.ok) throw new Error(`planting refused: ${committed.code}`);
   const history = readFoundationActivationHistory(
     ACTIVATION_AGGREGATE, store.readEvents(ACTIVATION_AGGREGATE), PROJECT_ID);
   if (!history.ok) {
     throw new Error(`the planted activation is unreadable: ${history.result.status}`);
   }
+  // The plant lives in its OWN store, so the boundary evidence the derivation
+  // reads has to be committed here too — the source fixture's run is unreachable.
+  seedProviderRun(store, label, evidence);
   return { bound: source.bound, record: history.history.record, store };
 }
 
@@ -810,8 +1100,11 @@ describe("attempt release disposition — replay and cardinality", () => {
     // reached it: an unsettled boundary drains the lease and leaves the slot
     // alone, so the row records the RESERVED fact honestly.
     const fixture = plantedSlot("divergent-slot", { ...ACTIVATED_SLOT, state: "RESERVED" });
+    // The unsettled fact is a RELAYED one, deliberately. The durable run stays
+    // OBSERVED so the SECOND call can settle: the derived boundary is read from
+    // one committed run per attempt and cannot be upgraded between two calls.
     const first = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      settledRequest({ safeBoundaryObserved: false }));
+      settledRequest({ effectsTerminal: false }));
     expect(first.ok && first.outcome).toBe("DRAINING");
     expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([1, 1]);
     expect(rowOf(first)["providerSlotState"]).toBe("RESERVED");
@@ -862,10 +1155,12 @@ describe("attempt release disposition — replay and cardinality", () => {
 
   it("refuses a SECOND transition over a DRAINING row rather than appending one", () => {
     const fixture = activated("draining-then-settled");
-    // First release: the boundary was never observed, so the row records DRAINING
-    // and the durable lease reaches DRAINING rather than a terminal state.
+    // First release: effects were not terminal, so the row records DRAINING and
+    // the durable lease reaches DRAINING rather than a terminal state. The
+    // unsettled fact is a RELAYED one because the SECOND call must settle, and
+    // the derived boundary comes from a single committed run that cannot change.
     const first = recordAttemptRelease(fixture.store, fixture.bound, fixture.record,
-      settledRequest({ safeBoundaryObserved: false }));
+      settledRequest({ effectsTerminal: false }));
     expect(first.ok && first.outcome).toBe("DRAINING");
     // DRAINING is NOT terminal, so `releaseWork` composes a real RELEASED
     // transition on the replay — and the aggregate, written at expectedVersion 0,

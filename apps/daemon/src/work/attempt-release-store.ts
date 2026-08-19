@@ -27,6 +27,9 @@ import {
   decodeFoundationPayload, encodeFoundationPayload, sameBytes, sha256Hex,
 } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
+import type {
+  SafeBoundaryObservationLayer, SafeBoundaryRefusalCode, SafeBoundaryRefused,
+} from "./safe-boundary-observation.js";
 
 export const ATTEMPT_RELEASE_RECORD_VERSION = "moe-attempt-release-record/1" as const;
 export const ATTEMPT_RELEASE_EVENT_TYPE = "AttemptReleaseRecorded" as const;
@@ -50,7 +53,14 @@ export const SCHEDULER_LEASE_DRAIN = "SCHEDULER_LEASE_DRAIN" as const;
  *  opposite repairs. The layer is what disambiguates; the code and the kernel's
  *  own message ride along unchanged. */
 export const SCHEDULER_PROVIDER_SLOT_RELEASE = "SCHEDULER_PROVIDER_SLOT_RELEASE" as const;
+/** The FOURTH layer, and the one that is not a kernel. `safeBoundaryObserved`
+ *  is DERIVED from the durable provider-run record by task-ded026d6's producer,
+ *  so a release can now fail because the HOST never recorded a run — which is a
+ *  different fact, and a different repair, from a lease that would not fence or
+ *  a row this daemon composed badly. Its five refusal codes ride along verbatim
+ *  under its own name rather than being flattened into a daemon code. */
 export type AttemptReleaseLayer = typeof DAEMON_ATTEMPT_RELEASE
+  | SafeBoundaryObservationLayer
   | typeof SCHEDULER_LEASE_DRAIN | typeof SCHEDULER_PROVIDER_SLOT_RELEASE;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
@@ -62,7 +72,7 @@ export const ATTEMPT_RELEASE_CODES = Object.freeze([
   "ATTEMPT_RELEASE_BINDING_MISMATCH", "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE",
   "ATTEMPT_RELEASE_COMMIT_UNAVAILABLE", "ATTEMPT_RELEASE_RECORD_ABSENT",
   "ATTEMPT_RELEASE_RECORD_AMBIGUOUS", "ATTEMPT_RELEASE_RECORD_DRIFT",
-  "ATTEMPT_RELEASE_RECORD_UNREADABLE",
+  "ATTEMPT_RELEASE_RECORD_UNREADABLE", "ATTEMPT_RELEASE_REQUEST_MALFORMED",
 ] as const);
 export type AttemptReleaseCode = (typeof ATTEMPT_RELEASE_CODES)[number];
 
@@ -76,7 +86,7 @@ export type AttemptReleaseOutcomeName = (typeof ATTEMPT_RELEASE_OUTCOMES)[number
 
 export interface AttemptReleaseRefused {
   readonly advisoryOnly: true; readonly authority: "NONE";
-  readonly code: AttemptReleaseCode | AuthorityErrorCode;
+  readonly code: AttemptReleaseCode | AuthorityErrorCode | SafeBoundaryRefusalCode;
   /** The refusing layer's own words when it had any; never rewritten here. */
   readonly message: string | null;
   readonly ok: false; readonly refusedBy: AttemptReleaseLayer;
@@ -125,6 +135,16 @@ export function carryAuthorityRejection(rejection: AuthorityRejection): AttemptR
 /** `releaseProviderSlot`'s refusal: the lease drained, the SLOT would not go. */
 export function carrySlotRejection(rejection: AuthorityRejection): AttemptReleaseRefused {
   return carryRejection(rejection, SCHEDULER_PROVIDER_SLOT_RELEASE);
+}
+
+/** The safe-boundary producer's refusal, under ITS layer with ITS code, and its
+ *  `upstreamCode` kept as the message so the ORIGINAL refuser — the provider-run
+ *  reader, the codec or the store — survives two hops instead of one. */
+export function carryBoundaryRefusal(refusal: SafeBoundaryRefused): AttemptReleaseRefused {
+  return Object.freeze({
+    advisoryOnly: true as const, authority: "NONE" as const, code: refusal.code,
+    message: refusal.upstreamCode, ok: false as const, refusedBy: refusal.layer,
+  });
 }
 
 /** Re-states a durable answer under the outcome THIS call earned. The row is

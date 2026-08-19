@@ -46,6 +46,9 @@ import type { SqliteEventStore } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import {
+  carriesBoundaryClaim, deriveSafeBoundary, refuseBoundaryClaim,
+} from "./attempt-release-boundary.js";
+import {
   ATTEMPT_RELEASE_RECORD_VERSION, carryAuthorityRejection, carrySlotRejection, commitRelease,
   durableActivation, readAttemptRelease, refuse, sameActivation, withOutcome,
 } from "./attempt-release-store.js";
@@ -65,15 +68,22 @@ export type {
 } from "./attempt-release-store.js";
 
 /**
- * What THIS release carried, all of it PASS-THROUGH to the kernel.
+ * What THIS release carried. SIX keys, and the seventh the kernel wants is not
+ * one of them.
  *
- * `safeBoundaryObserved`, `effectsTerminal` and `resourcesTerminal` are typed
- * `unknown` on purpose: their durable producers are task-ded026d6 and
- * task-6d400781 and neither has landed, so the daemon relays whatever it was
- * given and never synthesizes, defaults or optimistically upgrades one. The
- * kernel demands a real boolean, so an omitted flag is refused rather than read
- * as false-and-drained or true-and-released. `handoff` is the same relay pending
- * task-af9454f4.
+ * `effectsTerminal` and `resourcesTerminal` are typed `unknown` on purpose: their
+ * durable producer is task-6d400781 and it has not landed, so the daemon relays
+ * whatever it was given and never synthesizes, defaults or optimistically
+ * upgrades one. The kernel demands a real boolean, so an omitted flag is refused
+ * rather than read as false-and-drained or true-and-released. `handoff` is the
+ * same relay pending task-af9454f4.
+ *
+ * `safeBoundaryObserved` IS NO LONGER A RELAY and has no key here at all. Its
+ * producer landed as task-ded026d6, so the value is DERIVED from the durable
+ * provider-run record the host committed — see `./attempt-release-boundary.js`,
+ * which also refuses a request that still carries the retired key rather than
+ * ignoring it. An agent may still say WHICH attempt is being released; it may no
+ * longer say that its own boundary was safe.
  */
 export interface AttemptReleaseRequest {
   readonly disposition: unknown;
@@ -82,16 +92,18 @@ export interface AttemptReleaseRequest {
   readonly intentRefs: unknown;
   readonly reason: string;
   readonly resourcesTerminal: unknown;
-  readonly safeBoundaryObserved: unknown;
 }
 
 /** Exactly the seven keys `releaseWork` accepts. Spreading the caller's record
- *  instead would let one extra key refuse the whole release as malformed. */
-const kernelRequest = (request: AttemptReleaseRequest): Record<string, unknown> => ({
+ *  instead would let one extra key refuse the whole release as malformed. The
+ *  seventh is passed SEPARATELY because it is server-derived: there is no field
+ *  on the request for this function to reach for. */
+const kernelRequest = (
+  request: AttemptReleaseRequest, safeBoundaryObserved: boolean,
+): Record<string, unknown> => ({
   disposition: request.disposition, effectsTerminal: request.effectsTerminal,
   handoff: request.handoff, intentRefs: request.intentRefs, reason: request.reason,
-  resourcesTerminal: request.resourcesTerminal,
-  safeBoundaryObserved: request.safeBoundaryObserved,
+  resourcesTerminal: request.resourcesTerminal, safeBoundaryObserved,
 });
 
 /** Every field comes off the durable lease itself, so there is no channel for a
@@ -165,6 +177,10 @@ export function recordAttemptRelease(
   store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
   request: AttemptReleaseRequest,
 ): AttemptReleaseOutcome {
+  // BEFORE ANY STORE READ. A caller that spoke about the boundary at all is
+  // refused here, so a spoofed flag cannot even cause an observation to be
+  // recorded on its way to being discarded.
+  if (carriesBoundaryClaim(request)) return refuseBoundaryClaim();
   const durable = durableActivation(store, bound);
   if ("ok" in durable) return durable;
   if (!sameActivation(durable, record)) return refuse("ATTEMPT_RELEASE_BINDING_MISMATCH");
@@ -181,7 +197,13 @@ export function recordAttemptRelease(
     return refuse(prior.ok
       ? "ATTEMPT_RELEASE_RECORD_DRIFT" : "ATTEMPT_RELEASE_ACTIVATION_UNREADABLE");
   }
-  const released = releaseWork(lease, proofOf(lease), kernelRequest(request));
+  // THE BOUNDARY IS DERIVED HERE, before the kernel is asked anything. A run the
+  // host never recorded refuses under the PRODUCER's layer rather than draining:
+  // an unknown boundary is not an unsafe one, and they demand opposite repairs.
+  const boundary = deriveSafeBoundary(store, bound, durable);
+  if (!boundary.ok) return boundary;
+  const released =
+    releaseWork(lease, proofOf(lease), kernelRequest(request, boundary.safeBoundaryObserved));
   if (!released.ok) return carryAuthorityRejection(released);
   const result = released.value;
   if (result.outcome === "NO_OP") {
