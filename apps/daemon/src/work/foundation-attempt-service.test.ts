@@ -139,7 +139,11 @@ afterEach(() => {
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    // 20x250ms: these roots now hold real Git repositories and worktrees, and a
+    // trailing handle under fleet load turns 5x100ms into a leaked directory.
+    if (root !== undefined) {
+      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
+    }
   }
 });
 

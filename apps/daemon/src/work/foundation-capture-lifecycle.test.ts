@@ -76,7 +76,12 @@ afterEach(() => { cleanupRestoreHarnesses(); });
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    // 20x250ms, matching the Windows suite's measured value: under full-fleet
+    // parallelism a trailing git/scanner handle holds a scratch root well past
+    // 5x100ms, and a failed removal leaks a temp directory on every run.
+    if (root !== undefined) {
+      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
+    }
   }
 });
 
