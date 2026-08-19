@@ -135,7 +135,12 @@ it("answers the same runtime whether or not a caller passes a steering argument"
       (path: string) => Promise<DiscoverInstalledClaudeRuntimeResult>
   )(steer);
   expect(answerOf(steered)).toEqual(answerOf(plain));
-});
+  // 30s: this is the only case here that searches the REAL host PATH, twice,
+  // and each pass spawns a subprocess and stats every entry. It exceeded the 5s
+  // default on a loaded Windows box (repo gate 2026-08-19) while the neighbours,
+  // which search a controlled stand-in directory, stayed fast. A ceiling on
+  // process work, not a wait - the file already pins its two heavy cases.
+}, 30_000);
 
 it("refuses a host on which no claude runtime resolves, with CLAUDE_RUNTIME_PATH_MISSING at RUNTIME", async () => {
   hostSearchPath([temporaryDirectory("no-runtime")]);
