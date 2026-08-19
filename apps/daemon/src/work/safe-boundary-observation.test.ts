@@ -47,9 +47,12 @@ import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
 import {
   SAFE_BOUNDARY_OBSERVATION_LAYER, readSafeBoundaryObservation, recordSafeBoundaryObservation,
 } from "./safe-boundary-observation.js";
-import type { SafeBoundaryObservationInput } from "./safe-boundary-observation.js";
+import type {
+  SafeBoundaryObservationInput, SafeBoundaryStore,
+} from "./safe-boundary-observation.js";
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-16T00:00:00.000Z";
 /** Wall SECONDS; the scheduler's overdue rule is `seconds > deadline`. */
@@ -223,6 +226,20 @@ const inputFor = (slug: string): SafeBoundaryObservationInput => ({
   requestBytes: encoder.encode(`safe-boundary-request-${slug}`),
 });
 
+/** The real store behind the reader port, so a case can rewrite ONE method and nothing else. */
+function delegate(store: SqliteEventStore): SafeBoundaryStore {
+  return {
+    commitExpectedVersionDecision: (input) => store.commitExpectedVersionDecision(input),
+    getCommandDecision: (key) => store.getCommandDecision(key),
+    getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
+    getHealth: () => store.getHealth(),
+    readEventHorizon: () => store.readEventHorizon(),
+    readEvents: (aggregateId) => store.readEvents(aggregateId),
+    readEventsByTypeAfter: (eventType, after, limit) =>
+      store.readEventsByTypeAfter(eventType, after, limit),
+  };
+}
+
 function countEvents(store: SqliteEventStore, aggregateId: string): number {
   return store.readEvents(aggregateId).length;
 }
@@ -392,6 +409,37 @@ describe("readSafeBoundaryObservation resolves only refs that name a real observ
     }
   });
 
+  it("refuses bytes that no longer match the record, even when they still decode", () => {
+    const store = openStore("tampered");
+    try {
+      seedActivation(store, "tampered");
+      seedRun(store, "tampered", observedRecord("tampered"));
+      const written = recordSafeBoundaryObservation(store, inputFor("tampered"));
+      if (!written.ok) throw new Error(written.code);
+
+      // Decodes fine and carries the same fields — only the BYTES differ, which is
+      // exactly the drift a decode-only reader would answer from.
+      const tampered: SafeBoundaryStore = {
+        ...delegate(store),
+        readEvents: (aggregateId) => store.readEvents(aggregateId).map((event) => ({
+          ...event,
+          payload: encoder.encode(` ${decoder.decode(event.payload)}`),
+        })),
+      };
+
+      const read = readSafeBoundaryObservation(tampered, {
+        observationRef: written.observation.observationRef, projectId: PROJECT_ID,
+      });
+
+      expect(read.ok).toBe(false);
+      if (read.ok) throw new Error("re-encoded bytes that differ must never be answered");
+      expect([read.code, read.layer])
+        .toEqual(["SAFE_BOUNDARY_OBSERVATION_UNREADABLE", SAFE_BOUNDARY_OBSERVATION_LAYER]);
+    } finally {
+      store.close();
+    }
+  });
+
   it("refuses a ref that names nothing rather than accepting it as an identifier", () => {
     const store = openStore("dangling");
     try {
@@ -429,6 +477,21 @@ describe("replay is byte-stable and appends nothing", () => {
       if (!second.ok) throw new Error(second.code);
       expect(second.observation.observationRef).toBe(first.observation.observationRef);
       expect(second.disposition).toBe("REPLAYED");
+      expect(countEvents(store, first.aggregateId)).toBe(before);
+
+      // A DIFFERENT caller over the SAME durable facts lands on the SAME aggregate, because
+      // the ref identifies the observation and not the request. It therefore CONFLICTS
+      // rather than committing a second truth — and a ref that varied with caller metadata
+      // would land on a fresh aggregate and commit happily, which is the drift this pins.
+      const other = recordSafeBoundaryObservation(store, {
+        ...inputFor("replay"), correlationId: "corr-boundary-replay-other",
+        key: { commandId: "cmd-boundary-other", principalId: SESSION, projectId: PROJECT_ID },
+      });
+
+      expect(other.ok).toBe(false);
+      if (other.ok) throw new Error("a second caller must not commit a second observation");
+      expect([other.code, other.layer])
+        .toEqual(["SAFE_BOUNDARY_COMMIT_CONFLICT", SAFE_BOUNDARY_OBSERVATION_LAYER]);
       expect(countEvents(store, first.aggregateId)).toBe(before);
     } finally {
       store.close();
