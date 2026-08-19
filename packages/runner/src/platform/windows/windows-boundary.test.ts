@@ -519,7 +519,19 @@ describe("the same reason ordinal cannot hide which broker layer refused", () =>
 describe("the broker binary is resolved deterministically", () => {
   it("finds the release broker built by the pinned toolchain", () => {
     const resolved = resolveBrokerBinary();
-    // On this host the broker IS built. A missing binary must FAIL rather than
+    if (process.platform !== "win32") {
+      // ABSENT BY CONSTRUCTION off Windows, and asserted rather than skipped:
+      // the broker is a Windows executable produced by a Windows-targeted
+      // cargo build, and `dist/` is git-ignored, so no non-Windows checkout can
+      // hold one. What must still hold there is the resolver's fail-closed
+      // stance -- its own typed refusal, with the exact code and layer, and
+      // never a throw or a path nothing built.
+      const failure = unknownOf(resolved);
+      expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_UNRESOLVED");
+      expect(failure.layer).toBe("WINDOWS_PROCESS_RESOLUTION");
+      return;
+    }
+    // On Windows the broker IS built. A missing binary must FAIL rather than
     // degrade, so this asserts the resolved path and not merely "no throw".
     expect(typeof resolved).toBe("string");
     expect(String(resolved).replace(/\\/gu, "/")).toContain(
