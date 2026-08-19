@@ -21,6 +21,7 @@ import {
   resolveAgentCredential,
 } from "./agent-credential.js";
 import {
+  LIVE_SAMPLE_INTERVAL_MS,
   OPERATOR_PRINCIPAL,
   VERIFIER_PRINCIPAL,
   authorityWatcher,
@@ -104,7 +105,7 @@ describe("Foundation self-host canary: the wrapper's --bare flags against the RE
       expect(probe.output.trim().length).toBeGreaterThan(0);
       expect(probe.output).not.toContain("Not logged in");
 
-      const authority = authorityWatcher();
+      const authority = authorityWatcher(LIVE_SAMPLE_INTERVAL_MS);
       const run = await runPass(scratches, (scratch) => runRealAgentWrapper(scratch, {
         agentCommand: CANARY_AGENT_COMMAND,
         credential,

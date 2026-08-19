@@ -39,7 +39,7 @@ const FAKE_AGENT = "tests/e2e/foundation/fake-agent.mjs";
 
 /** Fixed, not minted: a random credential would be a random source in a scanned module. */
 const OPERATOR_CREDENTIAL = "moe-e2e-j1-operator-credential";
-const CSRF_TOKEN = "moe-e2e-j1-csrf";
+export const CSRF_TOKEN = "moe-e2e-j1-csrf";
 /**
  * The exclusive identity comes FROM the fixture rather than being restated here.
  * Two literals that happen to agree today are two literals: the canary asserts
@@ -122,23 +122,43 @@ function collect(child: PipedChild, sink: { text: string }): void {
   child.stderr.on("data", (chunk: string) => { sink.text += chunk; });
 }
 
-function runToExit(
+/** A child still running, with its settled result available separately from its handle. */
+export interface RunningProcess {
+  readonly child: PipedChild;
+  readonly done: Promise<ProcessRun>;
+  output(): string;
+}
+
+/**
+ * Spawns a collecting child and hands back BOTH the handle and its settlement.
+ *
+ * J3 has to kill a process mid-attempt, so the handle must be reachable before the exit is;
+ * awaiting first and killing after would only ever exercise an already-finished process.
+ */
+function spawnCollecting(
   file: string, args: readonly string[], environment: Record<string, string>,
-): Promise<ProcessRun> {
+): RunningProcess {
   const child = spawn(file, [...args], {
     cwd: REPOSITORY_ROOT,
     env: { ...process.env, ...environment },
     stdio: ["ignore", "pipe", "pipe"],
-  });
+  }) as PipedChild;
   const sink = { text: "" };
   const { pid } = child;
   collect(child, sink);
-  return new Promise<ProcessRun>((resolve) => {
+  const done = new Promise<ProcessRun>((resolve) => {
     child.once("error", (error) => resolve({
       code: null, output: `${sink.text}${String(error)}`, pid,
     }));
     child.once("close", (code) => resolve({ code, output: sink.text, pid }));
   });
+  return { child, done, output: () => sink.text };
+}
+
+function runToExit(
+  file: string, args: readonly string[], environment: Record<string, string>,
+): Promise<ProcessRun> {
+  return spawnCollecting(file, args, environment).done;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); });
@@ -275,14 +295,31 @@ export function writeAgentShim(scratch: J1Scratch, arm: AgentArm): string {
   return path;
 }
 
-/** Runs the REAL wrapper for exactly one pass; it exits on its own in ONCE mode. */
-export function runWrapper(scratch: J1Scratch, arm: AgentArm): Promise<ProcessRun> {
-  return runToExit(process.execPath, [TRANSFORM_TYPES, join(REPOSITORY_ROOT, WRAPPER_MAIN)], {
+function wrapperEnvironment(scratch: J1Scratch, arm: AgentArm): Record<string, string> {
+  return {
     ...storeEnvironment(scratch),
     MOE_AGENT_COMMAND: writeAgentShim(scratch, arm),
     MOE_WRAPPER_MAX_AGENTS: "1",
     MOE_WRAPPER_ONCE: "1",
-  });
+  };
+}
+
+/** Runs the REAL wrapper for exactly one pass; it exits on its own in ONCE mode. */
+export function runWrapper(scratch: J1Scratch, arm: AgentArm): Promise<ProcessRun> {
+  return runToExit(
+    process.execPath,
+    [TRANSFORM_TYPES, join(REPOSITORY_ROOT, WRAPPER_MAIN)],
+    wrapperEnvironment(scratch, arm),
+  );
+}
+
+/** The same wrapper pass as a LIVE child, so a J3 arm can terminate it mid-attempt. */
+export function spawnWrapper(scratch: J1Scratch, arm: AgentArm): RunningProcess {
+  return spawnCollecting(
+    process.execPath,
+    [TRANSFORM_TYPES, join(REPOSITORY_ROOT, WRAPPER_MAIN)],
+    wrapperEnvironment(scratch, arm),
+  );
 }
 
 function exited(child: PipedChild, ms: number): Promise<boolean> {
@@ -299,14 +336,25 @@ function exited(child: PipedChild, ms: number): Promise<boolean> {
  */
 export async function killTree(child: PipedChild): Promise<void> {
   if (child.pid === undefined) return;
-  try {
-    if (IS_WINDOWS) execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], { stdio: "ignore" });
-    else child.kill("SIGKILL");
-  } catch {
-    // Already gone is success: taskkill exits nonzero on a pid that has exited.
-    child.kill("SIGKILL");
-  }
+  killPid(child.pid);
   await exited(child, 5_000);
+}
+
+/**
+ * Reaps a pid this process does not hold a handle for — the spawned AGENT, which is a
+ * grandchild that only ever announced itself by writing its pid down. A pid already gone is
+ * success: `taskkill` exits nonzero on it and `process.kill` throws ESRCH.
+ */
+export function killPid(pid: number): void {
+  try {
+    if (IS_WINDOWS) {
+      execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore" });
+    } else {
+      process.kill(pid, "SIGKILL");
+    }
+  } catch {
+    // Already reaped, or reaped by its own parent's teardown; either way it is gone.
+  }
 }
 
 /**

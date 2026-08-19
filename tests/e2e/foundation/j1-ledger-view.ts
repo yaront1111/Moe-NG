@@ -181,7 +181,23 @@ export interface AuthoritySample {
   readonly readable: boolean;
 }
 
-const SAMPLE_INTERVAL_MS = 750;
+/**
+ * Fast enough that the SCRIPTED arm's claim window cannot be stepped over.
+ *
+ * At 750ms this sampler measured zero holders on a ~3.5s arm when the suite ran under
+ * parallel load: the claim was opened and released between two samples, and the positive
+ * control — "this sampler observed a holder at least once" — went red for a run in which
+ * nothing was wrong. The cadence is a property of the OBSERVER, so it is the observer that
+ * had to change; loosening the assertion instead would have retired the control.
+ */
+const SAMPLE_INTERVAL_MS = 100;
+/**
+ * The LIVE-agent lane samples less often on purpose. Its journey runs for minutes rather than
+ * seconds, so the claim window is never at risk of being stepped over, and each sample opens
+ * and closes the store file — thousands of extra opens against a store a real agent is
+ * writing to would be the observer creating the contention it is there to observe.
+ */
+export const LIVE_SAMPLE_INTERVAL_MS = 750;
 
 function sampleAuthority(scratch: J1Scratch): AuthoritySample {
   try {
@@ -203,7 +219,7 @@ function sampleAuthority(scratch: J1Scratch): AuthoritySample {
 }
 
 /** A watcher plus the samples it took, so the test can assert the sampling itself happened. */
-export function authorityWatcher(): {
+export function authorityWatcher(intervalMs = SAMPLE_INTERVAL_MS): {
   readonly samples: AuthoritySample[];
   readonly watch: PassWatcher;
 } {
@@ -213,7 +229,7 @@ export function authorityWatcher(): {
     void running.then(() => { settled = true; }, () => { settled = true; });
     while (!settled) {
       samples.push(sampleAuthority(scratch));
-      await new Promise<void>((resolve) => { setTimeout(resolve, SAMPLE_INTERVAL_MS); });
+      await new Promise<void>((resolve) => { setTimeout(resolve, intervalMs); });
     }
   };
   return { samples, watch };
