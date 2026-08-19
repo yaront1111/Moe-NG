@@ -74,7 +74,6 @@ New-Item -ItemType Directory -Force $extracted | Out-Null
 Expand-Archive -Path $Zip -DestinationPath $extracted -Force
 Write-Host "smoke: extracted to $extracted"
 
-$nodeBefore = @(Get-Process node -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
 
 Assert-That 'the artifact exposes a moe.cmd entry point' `
   (Test-Path (Join-Path $extracted 'moe.cmd')) 'moe.cmd missing from the extracted tree'
@@ -175,10 +174,14 @@ $linked = Join-Path $extracted 'node_modules\@moe\contracts\package.json'
 Assert-That 'moe start materialized the workspace links the zip could not carry' `
   (Test-Path $linked) "not reachable: $linked"
 
-$nodeAfter = @(Get-Process node -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
-$orphans = @($nodeAfter | Where-Object { $nodeBefore -notcontains $_ })
-Assert-That 'the stack left no orphan node processes behind' `
-  ($orphans.Count -eq 0) "orphan pids: $($orphans -join ', ')"
+# Matched by COMMAND LINE, not by the global node process list. Six agents share
+# this machine and a peer's vitest worker starting mid-smoke is not an orphan of
+# this stack; a before/after diff over every node.exe reports it as one.
+$orphans = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction SilentlyContinue |
+  Where-Object { $_.CommandLine -and $_.CommandLine.Contains($extracted) } |
+  ForEach-Object { "$($_.ProcessId): $($_.CommandLine)" })
+Assert-That 'the stack left no node process holding the extracted artifact' `
+  ($orphans.Count -eq 0) "orphans: $($orphans -join ' | ')"
 
 Write-Host ''
 if ($script:Failures.Count -gt 0) {
