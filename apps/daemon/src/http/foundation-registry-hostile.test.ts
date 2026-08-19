@@ -145,6 +145,18 @@ const PAYLOAD_CASES = [
     payload: { ...dispatchPayload(), binding: "not-an-object" }, stage: "DISPATCH" },
   { code: "INPUT_INVALID", layer: null, name: "an unlisted key is smuggled in",
     payload: { ...dispatchPayload(), smuggled: 1 }, stage: "PAYLOAD_SHAPE" },
+  // THE NARROWED ALLOW-LIST this task lands: the graph snapshot and the input manifest are
+  // derived server-side, so a payload carrying either KEY is REFUSED at the seam rather than
+  // overwritten downstream. A silently-ignored spoof is indistinguishable from an honoured
+  // one at the call site, which is why this is an allow-list refusal and not a precedence rule.
+  { code: "INPUT_INVALID", layer: null, name: "a caller-supplied graphSnapshot is refused",
+    payload: { ...dispatchPayload(),
+      graphSnapshot: { completionNodeKey: "dev-c", edges: [], nodes: [] } },
+    stage: "PAYLOAD_SHAPE" },
+  { code: "INPUT_INVALID", layer: null, name: "a caller-supplied inputManifest is refused",
+    payload: { ...dispatchPayload(),
+      inputManifest: { baseIdentity: "0".repeat(64), entries: [] } },
+    stage: "PAYLOAD_SHAPE" },
   { code: "INPUT_INVALID", layer: null, name: "the unlisted key is __proto__",
     payload: { ...dispatchPayload(), ["__proto__"]: { polluted: true } },
     stage: "PAYLOAD_SHAPE" },

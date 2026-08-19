@@ -12,6 +12,7 @@ import { refuseLocal } from "./work/foundation-attempt-contracts.js";
 import { createFoundationAttemptService } from "./work/foundation-attempt-service.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { createFoundationCaptureProducer } from "./work/foundation-capture-producer.js";
+import { deriveFoundationDispatchFacts } from "./work/foundation-dispatch-derivation.js";
 
 /**
  * `foundation.dispatch` as a command entry: the one place the durable attempt service is
@@ -29,8 +30,18 @@ import { createFoundationCaptureProducer } from "./work/foundation-capture-produ
 /** Named in the seam's allow-list, so a smuggled key is refused rather than trimmed. */
 export const FOUNDATION_DISPATCH_BYTES_KEY = "activationRequestBytesBase64";
 
+/**
+ * NARROWED: `graphSnapshot` and `inputManifest` are DERIVED server-side and a payload
+ * carrying either key is refused at the seam rather than overwritten here — a silently
+ * ignored spoof is indistinguishable from an honoured one at the call site.
+ *
+ * `launchTemplate` is still caller-proposed, and bounded by the request codec's exact
+ * keys rather than trusted. task-9a1eb61d is the successor that replaces it with the
+ * server-side launch-template producer; until it lands, this is the one remaining
+ * caller-carried section of the request.
+ */
 export const FOUNDATION_DISPATCH_PAYLOAD_KEYS: readonly string[] = Object.freeze([
-  FOUNDATION_DISPATCH_BYTES_KEY, "binding", "graphSnapshot", "inputManifest", "launchTemplate",
+  FOUNDATION_DISPATCH_BYTES_KEY, "binding", "launchTemplate",
 ]);
 
 /** The result code a recorded attempt answers with. The attempt's own truth lives in the
@@ -38,6 +49,10 @@ export const FOUNDATION_DISPATCH_PAYLOAD_KEYS: readonly string[] = Object.freeze
 export const FOUNDATION_DISPATCH_RESULT_CODE = "FOUNDATION_ATTEMPT_RECORDED";
 
 export interface FoundationCommandOptions {
+  /** The SAME daemon-startup catalog the capture lifecycle reads, so the dispatch-time
+   *  derivation and the capture-time preparation resolve one workspace authority. Read
+   *  lazily inside the derivation: an absent catalog refuses this dispatch, never boot. */
+  readonly catalogSource: () => unknown;
   /** The prepare-before-launch workspace authority, built once at daemon start
    *  and passed straight through: this module composes, it never decides. */
   readonly lifecycle: FoundationCaptureLifecycle;
@@ -98,7 +113,7 @@ export function createFoundationDispatchHandler(
     lifecycle: options.lifecycle, store: options.store,
   });
 
-  return async ({ envelope }): Promise<DurableDecision> => {
+  return async ({ envelope, principal }): Promise<DurableDecision> => {
     const { payload } = envelope;
     const materialized = decodeBase64PayloadBytes(
       payload[FOUNDATION_DISPATCH_BYTES_KEY], FOUNDATION_ATTEMPT_MAX_REQUEST_BYTES);
@@ -109,12 +124,22 @@ export function createFoundationDispatchHandler(
       throw new DomainRefusal(refusal.code, refusal.refusedBy, refusal.code);
     }
 
+    // The graph and the workspace are read from the server's own durable world, keyed by
+    // the AUTHENTICATED principal's project — the payload carries neither, and the
+    // principal is produced by the authenticator before any payload field is read.
+    const derived = deriveFoundationDispatchFacts({
+      catalogSource: options.catalogSource, projectId: principal.projectId, store: options.store,
+    });
+    // Unrestamped: the projection's or the hydrator's own code and layer, so which
+    // authority refused stays legible at the seam.
+    if (!derived.ok) throw new DomainRefusal(derived.code, derived.refusedBy, derived.code);
+
     // The payload names WHICH attempt; every authority the service reads is server-side.
     const outcome = await service.dispatch({
       activationRequestBytes: materialized.bytes,
       binding: plainValue(payload["binding"]),
-      graphSnapshot: plainValue(payload["graphSnapshot"]),
-      inputManifest: plainValue(payload["inputManifest"]),
+      graphSnapshot: derived.graphSnapshot,
+      inputManifest: derived.inputManifest,
       launchTemplate: plainValue(payload["launchTemplate"]),
     });
 

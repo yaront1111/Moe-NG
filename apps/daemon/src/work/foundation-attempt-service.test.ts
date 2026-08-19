@@ -15,6 +15,8 @@ import type {
   WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
   WorktreeReleaseResult,
 } from "@moe/runner";
+import { reduceGraphRevision } from "@moe/core";
+import { encodeGraphContent } from "@moe/scheduler";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
@@ -83,6 +85,8 @@ vi.mock("../activation/activation-run-commit.js", async (importOriginal) => {
 
 import { readAttemptRelease } from "./attempt-release-disposition.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { graphRevisionAggregateId } from "../planning/active-graph-projection.js";
+import { putGraphBody } from "../planning/graph-body-record.js";
 import {
   ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
@@ -541,6 +545,59 @@ interface HarnessOptions {
   /** Omitted models an operator who configured no workspace catalog at all. */
   readonly catalog?: unknown;
   readonly platform?: string;
+}
+
+/**
+ * The durable ACTIVE graph revision the dispatch entry now DERIVES instead of receiving.
+ * Driven through the real revision reducer, committed as the events it emitted, and the
+ * body stored under the hash the revision names — the whole path, not a shaped literal.
+ */
+function seedActiveGraphRevision(store: SqliteEventStore): void {
+  const encodedGraph = encodeGraphContent({
+    author: "human:architect-primary", completionNode: NODE_KEY, decompositionBudget: 24,
+    parentRevision: "rev-000000000000", policyRevision: "pol-000000000001",
+    repositoryBaseTree: "4".repeat(40),
+    snapshot: { completionNodeKey: NODE_KEY, edges: [],
+      nodes: [{ executionBearing: true, nodeKey: NODE_KEY }] },
+  } as never);
+  if (!encodedGraph.ok) throw new Error("graph fixture failed to encode");
+  const seed = (value: string): string => value.repeat(64).slice(0, 64);
+  const binding = {
+    budgetHash: seed("55"), expectedGoalVersion: 3,
+    graphHash: encodedGraph.value.graphContentHash, policyHash: seed("66"),
+    qualityHash: seed("33"),
+  } as const;
+  const revisionId = "graph-revision-1";
+  let current: never | undefined;
+  const events: { kind: string }[] = [];
+  for (const command of [
+    { commandId: "cmd-create", expectedVersion: 0, goalRef: "goal-1",
+      graphContentHash: binding.graphHash, kind: "graph_revision.create",
+      planHash: seed("11"), revisionId },
+    { commandId: "cmd-submit", expectedVersion: 1, kind: "graph_revision.submit",
+      witness: { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" } },
+    { activation: { ...binding, activationRef: "activation-1", graphEpoch: 1,
+      truthClass: "HUMAN_APPROVED" },
+      approval: { ...binding, approvalRef: "approval-1", truthClass: "HUMAN_APPROVED" },
+      commandId: "cmd-approve", expectedVersion: 2, kind: "graph.approve" },
+  ] as never[]) {
+    const reduced = reduceGraphRevision(current, command);
+    if (!reduced.ok) throw new Error(`graph fixture rejected: ${reduced.error.code}`);
+    current = reduced.state as never;
+    events.push(...(reduced.events as readonly { kind: string }[]));
+  }
+  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
+  store.commit({
+    aggregateId, commandBytes: new TextEncoder().encode(`seed-${revisionId}`),
+    commandId: `seed-${revisionId}`, committedAt: DECIDED_AT,
+    events: events.map((event, index) => ({
+      eventId: `seed-${revisionId}-${index}`, eventType: event.kind,
+      payload: new TextEncoder().encode(JSON.stringify(event)),
+    })),
+    expectedVersion: store.getAggregateVersion(aggregateId),
+  });
+  const stored = putGraphBody(store, PROJECT_ID, encodedGraph.value);
+  if (!stored.ok) throw new Error(`graph body fixture refused: ${stored.code}`);
 }
 
 const CATALOG = Object.freeze({
@@ -1847,10 +1904,15 @@ describe("foundation attempt dispatch — the workspace is prepared before launc
    */
   it("hands the SUPPLIED lifecycle to the service the registry builds", async () => {
     const store = readyStore("registry-wiring");
+    // The dispatch entry derives the graph and the manifest before the service runs, so
+    // reaching the lifecycle at all now requires the durable facts to be present. Without
+    // them this case would refuse at ACTIVE_GRAPH_ABSENT and prove nothing about wiring.
+    seedActiveGraphRevision(store);
     const SENTINEL = "FOUNDATION_CAPTURE_SENTINEL_ONLY_THIS_PORT_ANSWERS";
     let prepares = 0;
     const ports = createDaemonCommandPorts({
       clock: () => DECIDED_AT,
+      foundationCatalogSource: (): unknown => CATALOG,
       foundationLifecycle: {
         prepareCapture: async () => {
           prepares += 1;
@@ -1871,8 +1933,7 @@ describe("foundation attempt dispatch — the workspace is prepared before launc
         payload: {
           [FOUNDATION_DISPATCH_BYTES_KEY]:
             Buffer.from(request["activationRequestBytes"] as Uint8Array).toString("base64"),
-          binding: request["binding"], graphSnapshot: request["graphSnapshot"],
-          inputManifest: request["inputManifest"], launchTemplate: request["launchTemplate"],
+          binding: request["binding"], launchTemplate: request["launchTemplate"],
         },
         requestDigest: DIGEST, schemaVersion: "moe-runtime-command-envelope/1",
         sessionCredential: "credential", targetAggregateId: ACTIVATION_AGGREGATE,

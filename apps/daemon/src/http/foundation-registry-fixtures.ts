@@ -1,7 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
-  mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync,
+  mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,6 +11,8 @@ import {
 import type { ProviderRuntimeObservation } from "@moe/runner";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
+import { reduceGraphRevision } from "@moe/core";
+import { encodeGraphContent } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
 
 import {
@@ -19,6 +20,8 @@ import {
 } from "../activation/activation-ingress-contracts.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
+import { graphRevisionAggregateId } from "../planning/active-graph-projection.js";
+import { putGraphBody } from "../planning/graph-body-record.js";
 import type { CommandAdapterDeps, HttpCommandRequest } from "./http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import {
@@ -91,13 +94,6 @@ const REPOSITORY = (() => {
 })();
 
 const HEAD = REPOSITORY.head;
-
-const REAL_ENTRY = Object.freeze({
-  byteLength: readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0])).byteLength,
-  path: REPOSITORY.paths[0], producer: { kind: "BASE" },
-  sha256: createHash("sha256")
-    .update(readFileSync(join(REPOSITORY.root, REPOSITORY.paths[0]))).digest("hex"),
-});
 
 /** The worktree this attempt derives. Computing it is not choosing it. */
 const DERIVED_WORKTREE = (() => {
@@ -181,16 +177,14 @@ export function activationBytes(commandId = "cmd-activation-1"): Uint8Array {
   }));
 }
 
-const SINGLE_NODE_GRAPH = Object.freeze({
+/**
+ * The graph the seam now DERIVES rather than receives. It is seeded as a durable ACTIVE
+ * revision by `seamHarness`, so the dispatch payload no longer carries it at all — the
+ * multi-node refusal keeps its home in the service's own suite, where the request is
+ * built directly and a second execution-bearing node can still be presented.
+ */
+const SEEDED_GRAPH = Object.freeze({
   completionNodeKey: NODE_KEY, edges: [], nodes: [{ executionBearing: true, nodeKey: NODE_KEY }],
-});
-
-/** Two execution-bearing nodes the scheduler still admits: the refusal must be the
- *  foundation service's own, never a graph fault. */
-export const MULTI_NODE_GRAPH = Object.freeze({
-  completionNodeKey: NODE_KEY,
-  edges: [{ consumerNodeKey: NODE_KEY, edgeKey: "dev-e1", kind: "HARD", producerNodeKey: "dev-a" }],
-  nodes: [{ executionBearing: true, nodeKey: "dev-a" }, { executionBearing: true, nodeKey: NODE_KEY }],
 });
 
 /** A digest-bound quote from the runner's own observation builder, never hand-written. */
@@ -224,15 +218,9 @@ const LAUNCH_TEMPLATE = Object.freeze({
   },
 });
 
-const INPUT_MANIFEST = Object.freeze({
-  baseIdentity: HEAD,
-  entries: [{ ...REAL_ENTRY }],
-});
-
 export interface PayloadOverrides {
   readonly binding?: unknown;
   readonly bytesBase64?: unknown;
-  readonly graphSnapshot?: unknown;
   readonly omitBytes?: boolean;
 }
 
@@ -243,8 +231,6 @@ export function dispatchPayload(
   const payload: Record<string, unknown> = {
     binding: overrides.binding
       ?? { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
-    graphSnapshot: overrides.graphSnapshot ?? structuredClone(SINGLE_NODE_GRAPH),
-    inputManifest: structuredClone(INPUT_MANIFEST),
     launchTemplate: structuredClone(LAUNCH_TEMPLATE),
   };
   if (overrides.omitBytes !== true) {
@@ -277,6 +263,63 @@ export function commandRequest(overrides: EnvelopeOverrides & {
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
   };
+}
+
+/**
+ * The durable ACTIVE graph revision the dispatch derivation reads. Driven through the
+ * REAL revision reducer and committed as the events it actually emitted — a hand-written
+ * event shape would let the derivation pass against a history production never writes.
+ */
+function seedActiveGraph(store: SqliteEventStore): void {
+  const encodedGraph = encodeGraphContent({
+    author: "human:architect-primary", completionNode: NODE_KEY, decompositionBudget: 24,
+    parentRevision: "rev-000000000000", policyRevision: "pol-000000000001",
+    repositoryBaseTree: "4".repeat(40), snapshot: SEEDED_GRAPH,
+  } as never);
+  if (!encodedGraph.ok) throw new Error("seam graph fixture failed to encode");
+  const graphHash = encodedGraph.value.graphContentHash;
+  const seededHash = (seed: string): string => seed.repeat(64).slice(0, 64);
+  const binding = {
+    budgetHash: seededHash("55"), expectedGoalVersion: 3, graphHash,
+    policyHash: seededHash("66"), qualityHash: seededHash("33"),
+  } as const;
+  const revisionId = "graph-revision-1";
+  const steps = [
+    {
+      commandId: "cmd-create", expectedVersion: 0, goalRef: "goal-1",
+      graphContentHash: graphHash, kind: "graph_revision.create",
+      planHash: seededHash("11"), revisionId,
+    },
+    {
+      commandId: "cmd-submit", expectedVersion: 1, kind: "graph_revision.submit",
+      witness: { submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED" },
+    },
+    {
+      activation: { ...binding, activationRef: "activation-1", graphEpoch: 1, truthClass: "HUMAN_APPROVED" },
+      approval: { ...binding, approvalRef: "approval-1", truthClass: "HUMAN_APPROVED" },
+      commandId: "cmd-approve", expectedVersion: 2, kind: "graph.approve",
+    },
+  ] as never[];
+  let current: never | undefined;
+  const events: { kind: string }[] = [];
+  for (const step of steps) {
+    const result = reduceGraphRevision(current, step);
+    if (!result.ok) throw new Error(`seam graph fixture rejected: ${result.error.code}`);
+    current = result.state as never;
+    events.push(...(result.events as readonly { kind: string }[]));
+  }
+  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
+  store.commit({
+    aggregateId, commandBytes: encoder.encode(`seed-${revisionId}`),
+    commandId: `seed-${revisionId}`, committedAt: DECIDED_AT,
+    events: events.map((event, index) => ({
+      eventId: `seed-${revisionId}-${index}`, eventType: event.kind,
+      payload: encoder.encode(JSON.stringify(event)),
+    })),
+    expectedVersion: store.getAggregateVersion(aggregateId),
+  });
+  const stored = putGraphBody(store, PROJECT_ID, encodedGraph.value);
+  if (!stored.ok) throw new Error(`seam graph body refused: ${stored.code}`);
 }
 
 export interface SeamHarness {
@@ -330,6 +373,7 @@ export function seamHarness(label: string): SeamHarness {
       const outcome = sendBootstrap(seed, bootstrapEnvelope(kind, version, payload));
       if (!outcome.ok) throw new Error(`seam fixture ${kind} refused: ${outcome.code}`);
     }
+    seedActiveGraph(seed);
   } finally {
     seed.close();
   }

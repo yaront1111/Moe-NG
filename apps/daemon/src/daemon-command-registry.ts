@@ -72,6 +72,9 @@ export interface DaemonCommandPortOptions {
    *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
    *  one with no configured catalog, so Foundation preparation refuses and no
    *  provider process starts. */
+  /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
+   *  dispatch-time derivation resolves the SAME repository scope authority. */
+  readonly foundationCatalogSource?: () => unknown;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
@@ -124,9 +127,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
+  const foundationCatalogSource = options.foundationCatalogSource ?? ((): unknown => undefined);
   const dispatchFoundationAttempt = createFoundationDispatchHandler({
+    catalogSource: foundationCatalogSource,
     lifecycle: options.foundationLifecycle
-      ?? createFoundationCaptureLifecycle({ catalogSource: () => undefined, store }),
+      ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
     store,
   });
   const verifyFoundationAttempt = createFoundationVerificationHandler({ projectId, store });

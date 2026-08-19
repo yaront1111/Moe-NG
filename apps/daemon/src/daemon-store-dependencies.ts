@@ -121,15 +121,19 @@ export function createStoreDependencies(
   }
   let subscriptionDatabase: DatabaseSync | null = null;
 
+  // One catalog source, read lazily, shared by the dispatch-time derivation and the
+  // capture-time lifecycle so both resolve the same repository scope authority.
+  const foundationCatalogSource = readFoundationCatalogConfig({
+    [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
+    foundationCatalogSource,
     // Built ONCE, over this provider's own open store. The catalog path is read
     // lazily inside it, so an absent or unreadable configuration refuses
     // Foundation preparation at dispatch time instead of failing daemon boot.
     foundationLifecycle: createFoundationCaptureLifecycle({
-      catalogSource: readFoundationCatalogConfig({
-        [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
-      }), store,
+      catalogSource: foundationCatalogSource, store,
     }),
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
   });
