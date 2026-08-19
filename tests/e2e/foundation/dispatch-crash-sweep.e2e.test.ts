@@ -204,7 +204,8 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
       const sweep = readInFlightFoundationAttempts(store, PROJECT_ID);
       expect(sweep.ok).toBe(true);
       if (!sweep.ok) return;
-      expect(sweep.attempts.length).toBeGreaterThan(0);
+      // EXACTLY one in-flight attempt: the dispatch reserved once and never recorded.
+      expect(sweep.attempts.length).toBe(1);
     } finally {
       store.close();
     }
@@ -215,7 +216,10 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
     expect(swept.wired).toBe(true);
     expect(swept.result).toMatchObject({ ok: true });
     if (swept.result === null || !swept.result.ok) return;
-    expect(swept.result.classified).toBeGreaterThan(0);
+    // EXACTLY one: the crash left one reserved attempt, so the sweep classifies one
+    // record. A `> 0` bound would also pass if a later change started classifying
+    // unrelated work, which is the drift this count exists to catch.
+    expect(swept.result.classified).toBe(1);
 
     // The daemon comes back on the SAME store after the sweep classified the crash.
     restarted = await startDaemon(scratch, {
