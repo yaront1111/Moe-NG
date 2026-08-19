@@ -49,7 +49,7 @@ export const CSRF_TOKEN = "moe-e2e-j1-csrf";
 const PROJECT_ID = SEEDED_LOW_RISK_TASK.projectId;
 export const NODE_REF = SEEDED_LOW_RISK_TASK.nodeRef;
 
-export type AgentArm = "complete" | "forge-credential" | "skip-review";
+export type AgentArm = "complete" | "fail-verify" | "forge-credential" | "skip-review";
 
 export interface J1Scratch {
   readonly agentPidFile: string;

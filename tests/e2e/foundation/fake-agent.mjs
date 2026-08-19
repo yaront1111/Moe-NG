@@ -179,14 +179,25 @@ function packageItems(subjectRef, submittedBytes) {
   ];
 }
 
-/** The deliverable. The daemon's verifier - not this agent - decides whether it passes. */
-function implement(target) {
+/**
+ * The deliverable. The daemon's verifier - not this agent - decides whether it passes.
+ *
+ * The `fail-verify` arm writes a deliverable that is WRONG but well-formed: it imports, it
+ * exports both names, and `multiply` returns a sum. So the node's test fails on behaviour
+ * rather than on a syntax error, and the agent below still reports a clean round - which is
+ * exactly the disagreement J4 needs. An agent that reported its own failure would be testing
+ * the agent's honesty instead of the daemon's verdict.
+ */
+function implement(target, arm) {
+  const multiply = arm === "fail-verify"
+    ? "export const multiply = (left, right) => left + right;"
+    : "export const multiply = (left, right) => left * right;";
   writeFileSync(target, [
     "export const add = (left, right) => left + right;",
-    "export const multiply = (left, right) => left * right;",
+    multiply,
     "",
   ].join("\n"), "utf8");
-  say(`wrote ${target}`);
+  say(`wrote ${target}${arm === "fail-verify" ? " (arm=fail-verify: multiply is wrong)" : ""}`);
   return readFileSync(target, "utf8");
 }
 
@@ -232,7 +243,7 @@ async function main() {
   const offer = offerFor(context.daemon, nodeRef);
   say(`offer commandId=${offer.commandId} expectedVersion=${offer.expectedVersion}`);
 
-  const submittedBytes = implement(flagValue("--implement") ?? "math.mjs");
+  const submittedBytes = implement(flagValue("--implement") ?? "math.mjs", arm);
 
   if (arm === "skip-review") {
     // The negative control: everything except the durable submission, and a CLEAN exit, so a
