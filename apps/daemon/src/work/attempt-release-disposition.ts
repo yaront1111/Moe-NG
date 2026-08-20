@@ -49,6 +49,10 @@ import {
   carriesBoundaryClaim, deriveSafeBoundary, refuseBoundaryClaim,
 } from "./attempt-release-boundary.js";
 import {
+  carriesTerminalClaim, deriveReleaseTerminal, refuseTerminalClaim,
+} from "./attempt-release-terminal.js";
+import type { ReleaseTerminalFlags } from "./attempt-release-terminal.js";
+import {
   ATTEMPT_RELEASE_RECORD_VERSION, carryAuthorityRejection, carrySlotRejection, commitRelease,
   durableActivation, readAttemptRelease, refuse, sameActivation, withOutcome,
 } from "./attempt-release-store.js";
@@ -68,42 +72,39 @@ export type {
 } from "./attempt-release-store.js";
 
 /**
- * What THIS release carried. SIX keys, and the seventh the kernel wants is not
- * one of them.
+ * What THIS release carried. FOUR keys, and NONE of the three settle facts the
+ * kernel wants is one of them.
  *
- * `effectsTerminal` and `resourcesTerminal` are typed `unknown` on purpose: their
- * durable producer is task-6d400781 and it has not landed, so the daemon relays
- * whatever it was given and never synthesizes, defaults or optimistically
- * upgrades one. The kernel demands a real boolean, so an omitted flag is refused
- * rather than read as false-and-drained or true-and-released. `handoff` is the
- * same relay pending task-af9454f4.
+ * ALL THREE ARE DERIVED NOW, and none has a key here at all. `safeBoundaryObserved`
+ * came off first (task-ded026d6's producer, see `./attempt-release-boundary.js`);
+ * `effectsTerminal` and `resourcesTerminal` follow the same route against
+ * task-6d400781's, in `./attempt-release-terminal.js` — which likewise REFUSES a
+ * request still carrying a retired key rather than ignoring it. `handoff` remains
+ * a relay pending task-af9454f4; do not read its `unknown` typing as drift.
  *
- * `safeBoundaryObserved` IS NO LONGER A RELAY and has no key here at all. Its
- * producer landed as task-ded026d6, so the value is DERIVED from the durable
- * provider-run record the host committed — see `./attempt-release-boundary.js`,
- * which also refuses a request that still carries the retired key rather than
- * ignoring it. An agent may still say WHICH attempt is being released; it may no
- * longer say that its own boundary was safe.
+ * An agent may still say WHICH attempt is being released and why. It may no
+ * longer say that its own boundary was safe, or that its own effects and
+ * resources were finished.
  */
 export interface AttemptReleaseRequest {
   readonly disposition: unknown;
-  readonly effectsTerminal: unknown;
   readonly handoff: unknown;
   readonly intentRefs: unknown;
   readonly reason: string;
-  readonly resourcesTerminal: unknown;
 }
 
-/** Exactly the seven keys `releaseWork` accepts. Spreading the caller's record
- *  instead would let one extra key refuse the whole release as malformed. The
- *  seventh is passed SEPARATELY because it is server-derived: there is no field
- *  on the request for this function to reach for. */
+/** Exactly the seven keys `releaseWork` accepts. Spreading the CALLER's record
+ *  instead would let one extra key refuse the whole release as malformed. Three
+ *  arrive SEPARATELY because they are server-derived: there is no field on the
+ *  request for this function to reach for. The terminality pair is spread as ONE
+ *  frozen two-key record rather than written key by key, so this seam holds no
+ *  place to transpose two booleans the kernel could not tell apart. */
 const kernelRequest = (
   request: AttemptReleaseRequest, safeBoundaryObserved: boolean,
+  terminal: ReleaseTerminalFlags,
 ): Record<string, unknown> => ({
-  disposition: request.disposition, effectsTerminal: request.effectsTerminal,
-  handoff: request.handoff, intentRefs: request.intentRefs, reason: request.reason,
-  resourcesTerminal: request.resourcesTerminal, safeBoundaryObserved,
+  disposition: request.disposition, handoff: request.handoff,
+  intentRefs: request.intentRefs, reason: request.reason, safeBoundaryObserved, ...terminal,
 });
 
 /** Every field comes off the durable lease itself, so there is no channel for a
@@ -177,10 +178,13 @@ export function recordAttemptRelease(
   store: SqliteEventStore, bound: FoundationAttemptBound, record: ActivationLedgerRecord,
   request: AttemptReleaseRequest,
 ): AttemptReleaseOutcome {
-  // BEFORE ANY STORE READ. A caller that spoke about the boundary at all is
-  // refused here, so a spoofed flag cannot even cause an observation to be
-  // recorded on its way to being discarded.
+  // BEFORE ANY STORE READ. A caller that spoke about ANY settle fact is refused
+  // here, so a spoofed flag cannot even cause an observation to be recorded on
+  // its way to being discarded. THE ORDER IS LOAD-BEARING: the boundary predicate
+  // is the total one over `unknown`, so it answers for a null or non-object
+  // request and the terminality predicate below only ever sees a real object.
   if (carriesBoundaryClaim(request)) return refuseBoundaryClaim();
+  if (carriesTerminalClaim(request)) return refuseTerminalClaim();
   const durable = durableActivation(store, bound);
   if ("ok" in durable) return durable;
   if (!sameActivation(durable, record)) return refuse("ATTEMPT_RELEASE_BINDING_MISMATCH");
@@ -202,8 +206,15 @@ export function recordAttemptRelease(
   // an unknown boundary is not an unsafe one, and they demand opposite repairs.
   const boundary = deriveSafeBoundary(store, bound, durable);
   if (!boundary.ok) return boundary;
-  const released =
-    releaseWork(lease, proofOf(lease), kernelRequest(request, boundary.safeBoundaryObserved));
+  // AND SO IS TERMINALITY, from the ledgers that own it. An item whose state
+  // cannot be read refuses under the PRODUCER's layer rather than draining: an
+  // unknown terminality is not an unfinished one, and treating it as false would
+  // drain a release nobody could investigate — while treating it as true would
+  // release work nothing proved finished.
+  const terminal = deriveReleaseTerminal(store, bound, durable);
+  if (!terminal.ok) return terminal;
+  const released = releaseWork(lease, proofOf(lease),
+    kernelRequest(request, boundary.safeBoundaryObserved, terminal.flags));
   if (!released.ok) return carryAuthorityRejection(released);
   const result = released.value;
   if (result.outcome === "NO_OP") {

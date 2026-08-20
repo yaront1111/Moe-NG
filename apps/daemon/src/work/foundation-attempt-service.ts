@@ -107,20 +107,19 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
 } {
   const { store } = deps;
 
-  /** No producer proves the TERMINALITY flags or handoff yet, so report them
-   *  false/null. `safeBoundaryObserved` is absent because it is no longer ours to
-   *  report: task-ded026d6's producer derives it from the durable provider-run
-   *  record, and a request carrying the key at all is now refused. The durable
-   *  effect intent is the only honest release reference. */
+  /** NONE of the three settle facts is ours to report any more, so none is here:
+   *  `safeBoundaryObserved` comes from the durable provider-run record
+   *  (task-ded026d6) and the terminality pair from the terminal ledger and the
+   *  resource authority (task-6d400781); a request carrying any key is refused,
+   *  not obeyed. Only `handoff` is still a relay, pending task-af9454f4. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     settled: FoundationAttemptOutcome,
   ): FoundationAttemptOutcome {
     recordAttemptRelease(store, bound, record, {
-      disposition: null, effectsTerminal: false, handoff: null,
+      disposition: null, handoff: null,
       intentRefs: [record.effectIntent.intentId],
       reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
-      resourcesTerminal: false,
     });
     return settled;
   }
@@ -152,9 +151,10 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     // that is exactly how the first real producer answer refused. The workspace
     // the answer describes was hydrated from the AUTHORITATIVE declared scope,
     // so that is the input it must be sealed against.
-    // THE DURABLE TERMINAL, derived by the runner from already-committed evidence — never from
-    // the advisory release below, which still pins `effectsTerminal: false`. Refusals are not
-    // consumed: no terminal proven must not stop an attempt that ran. Reader: task-6d400781.
+    // THE DURABLE TERMINAL, derived by the runner from already-committed evidence and recorded
+    // BEFORE the advisory release, which now DERIVES its terminality from this very ledger —
+    // load-bearing order, not incidental. Refusals are still not consumed: no terminal proven
+    // must not stop an attempt that ran, and the release says so by draining, not releasing.
     recordTerminalEffect(store, {
       attemptRef: record.attempt.attemptId, projectId: bound.projectId,
     });

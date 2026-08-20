@@ -28,6 +28,9 @@ import {
 } from "./foundation-attempt-codec.js";
 import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import type {
+  ReleaseTerminalCode, ReleaseTerminalLayer, ReleaseTerminalRefusal,
+} from "./release-terminal-evidence.js";
+import type {
   SafeBoundaryObservationLayer, SafeBoundaryRefusalCode, SafeBoundaryRefused,
 } from "./safe-boundary-observation.js";
 
@@ -59,8 +62,12 @@ export const SCHEDULER_PROVIDER_SLOT_RELEASE = "SCHEDULER_PROVIDER_SLOT_RELEASE"
  *  different fact, and a different repair, from a lease that would not fence or
  *  a row this daemon composed badly. Its five refusal codes ride along verbatim
  *  under its own name rather than being flattened into a daemon code. */
+/** The FIFTH layer, and the second that is not a kernel. Both terminality flags
+ *  are DERIVED by task-6d400781's producer, so a release can fail because an
+ *  ITEM's state cannot be READ — a different repair from an unrecorded run or an
+ *  unfenceable lease, so its five codes ride along verbatim. */
 export type AttemptReleaseLayer = typeof DAEMON_ATTEMPT_RELEASE
-  | SafeBoundaryObservationLayer
+  | ReleaseTerminalLayer | SafeBoundaryObservationLayer
   | typeof SCHEDULER_LEASE_DRAIN | typeof SCHEDULER_PROVIDER_SLOT_RELEASE;
 
 /** Closed, and every member names a DIFFERENT repair. Zero rows, two rows and
@@ -86,7 +93,8 @@ export type AttemptReleaseOutcomeName = (typeof ATTEMPT_RELEASE_OUTCOMES)[number
 
 export interface AttemptReleaseRefused {
   readonly advisoryOnly: true; readonly authority: "NONE";
-  readonly code: AttemptReleaseCode | AuthorityErrorCode | SafeBoundaryRefusalCode;
+  readonly code: AttemptReleaseCode | AuthorityErrorCode | ReleaseTerminalCode
+    | SafeBoundaryRefusalCode;
   /** The refusing layer's own words when it had any; never rewritten here. */
   readonly message: string | null;
   readonly ok: false; readonly refusedBy: AttemptReleaseLayer;
@@ -144,6 +152,15 @@ export function carryBoundaryRefusal(refusal: SafeBoundaryRefused): AttemptRelea
   return Object.freeze({
     advisoryOnly: true as const, authority: "NONE" as const, code: refusal.code,
     message: refusal.upstreamCode, ok: false as const, refusedBy: refusal.layer,
+  });
+}
+
+/** The terminality producer's refusal, under ITS layer with ITS code, its
+ *  upstream's code kept as the message so the ORIGINAL refuser survives two hops. */
+export function carryTerminalRefusal(refusal: ReleaseTerminalRefusal): AttemptReleaseRefused {
+  return Object.freeze({
+    advisoryOnly: true as const, authority: "NONE" as const, code: refusal.code,
+    message: refusal.upstream?.code ?? null, ok: false as const, refusedBy: refusal.layer,
   });
 }
 
