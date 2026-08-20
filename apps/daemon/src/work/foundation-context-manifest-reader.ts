@@ -22,6 +22,7 @@ import type {
 } from "@moe/store";
 
 import { decodeFoundationContextManifestRecord } from "./foundation-context-manifest-codec.js";
+import { proveEventIdentity } from "./foundation-context-manifest-event-proofs.js";
 import {
   deriveFoundationContextAggregateId,
   deriveFoundationContextDecisionKey,
@@ -112,11 +113,14 @@ export function readFoundationContextManifestEvent(
  * that array into its own roster and documents it as "everything this module
  * can answer with", and the ledger can only ever produce the minimal four. A
  * kind it cannot answer must not appear on its advertised surface.
+ *
+ * The two halves are spread and nothing is spelled out twice: BINDING_MISMATCH
+ * and STALE were once ALSO literals here beside the proof roster that already
+ * carries them, making the array's own length a lie. The suite pins that this
+ * roster is duplicate-free and that every member is reachable.
  */
 export const FOUNDATION_CONTEXT_STRICT_CODES = Object.freeze([
   ...FOUNDATION_CONTEXT_READER_CODES,
-  "FOUNDATION_CONTEXT_READER_BINDING_MISMATCH",
-  "FOUNDATION_CONTEXT_READER_STALE",
   ...FOUNDATION_CONTEXT_PROOF_CODES,
 ] as const);
 
@@ -207,17 +211,21 @@ export function readFoundationContextManifest(
   const event = events[0];
   if (event === undefined) return strictRefuse("FOUNDATION_CONTEXT_READER_ABSENT");
 
-  // NO SECOND RE-ENCODE HERE, and that is deliberate. `decodeFoundationContext
-  // ManifestRecord` (codec :242-246) already re-encodes what it decoded and
-  // byte-compares it against the stored payload, answering its own
-  // FOUNDATION_CONTEXT_NONCANONICAL when they differ — so the stored digest is
-  // never trusted, it is just not trusted HERE. Repeating the comparison in this
-  // module would be unreachable by construction: no input exists that the codec
-  // admits and a second re-encode would reject. That refusal reaches a caller
-  // through the landed reader above with the CODEC's code intact in `codecCode`,
-  // which is what tells a reader that the bytes, not the binding, were wrong.
+  // NO SECOND RE-ENCODE HERE, deliberately: the codec's decode (codec :242-246)
+  // already re-encodes and byte-compares against the stored payload, answering
+  // FOUNDATION_CONTEXT_NONCANONICAL itself — the stored digest is never trusted,
+  // it is just not trusted HERE, and repeating the compare would be unreachable
+  // by construction. That refusal arrives above with the CODEC's own code intact
+  // in `codecCode`, which is what says the bytes, not the binding, were wrong.
 
+  // Everything below is derived from the record's OWN selection, so the row must
+  // be the one that selection names before any of it means anything: a port that
+  // returned another aggregate's event, or a row edited after sealing, derives a
+  // different id than the store wrote. It is also the only check that can see a
+  // port ignoring the aggregate id it was handed.
   const selection = selectionOf(durable.record);
+  const eventFault = proveEventIdentity(event, selection);
+  if (eventFault !== null) return strictRefuse(eventFault);
   let decision: CommandDecisionRecord | null;
   let receipt: CommandReceipt | null;
   try {

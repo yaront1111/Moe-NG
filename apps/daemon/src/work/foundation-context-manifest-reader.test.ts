@@ -183,10 +183,19 @@ describe("readFoundationContextManifest — accepted read", () => {
     if (!result.ok) throw new Error("unreachable");
     // Compared against the WRITER's own record, never transcribed values.
     expect(result.record).toEqual(record);
-    // The durable bytes, and deeply frozen: a caller must not be able to edit
-    // the authority it was just handed.
+    // THE DURABLE BYTES, byte for byte. `length > 0` would have been satisfied
+    // by any non-empty buffer the reader chose to hand back, including a
+    // re-encode of its own; only equality with what the store actually holds
+    // says these are the bytes that were committed.
+    const stored = store.readEvents(deriveFoundationContextAggregateId(SLOT))[0]?.payload;
+    expect(stored).toBeDefined();
+    expect([...result.bytes]).toEqual([...(stored ?? new Uint8Array())]);
+    // DEEPLY frozen: a shallow freeze leaves every nested object — the whole
+    // manifest, its binding, its section array — writable by the caller that
+    // was just handed this as authority.
     expect(Object.isFrozen(result.record)).toBe(true);
-    expect(result.bytes.length).toBeGreaterThan(0);
+    expect(Object.isFrozen(result.record.manifest)).toBe(true);
+    expect(Object.isFrozen(result.record.manifest.binding)).toBe(true);
   });
 
   it("re-reads identically from a reopened store", () => {

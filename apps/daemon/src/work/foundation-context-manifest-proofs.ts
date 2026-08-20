@@ -20,6 +20,7 @@
 import type { CommandDecisionRecord, CommandReceipt, StoredEvent } from "@moe/store";
 
 import type { FoundationContextManifestRecord } from "./foundation-context-manifest-codec.js";
+import { FOUNDATION_CONTEXT_COMMAND_KIND } from "./foundation-context-manifest-identity.js";
 import type {
   FoundationContextSelectionIdentity,
   FoundationContextSlotIdentity,
@@ -30,10 +31,17 @@ const EXPECTED_PREVIOUS_VERSION = 0;
 /** And after: exactly one event, so exactly one version step. */
 const EXPECTED_CURRENT_VERSION = 1;
 
+/** Byte equality, length first: a prefix must not read as a match. */
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.length !== right.length) return false;
+  return left.every((byte, index) => byte === right[index]);
+}
+
 export const FOUNDATION_CONTEXT_PROOF_CODES = Object.freeze([
   "FOUNDATION_CONTEXT_READER_BINDING_MISMATCH",
   "FOUNDATION_CONTEXT_READER_DECISION_INVALID",
   "FOUNDATION_CONTEXT_READER_DECISION_MISSING",
+  "FOUNDATION_CONTEXT_READER_EVENT_INVALID",
   "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID",
   "FOUNDATION_CONTEXT_READER_RECEIPT_MISSING",
   "FOUNDATION_CONTEXT_READER_STALE",
@@ -107,6 +115,20 @@ export function compareBinding(
  * `businessEventIds` is checked as a singleton rather than "contains": a
  * decision that committed a second effect alongside this one is not a decision
  * that sealed exactly this manifest, and a containment check would admit it.
+ *
+ * THE RESULT IS PROVEN BY BYTES, NOT BY ITS DIGEST. `decision.resultSha256` is
+ * the store's own scoped hash (`identifyDecisionResult`, store-digests.ts:97),
+ * which `@moe/store` does not export — its package exports are only ".",
+ * "./projections/*" and "./subscriptions/*" — so recomputing it here would mean
+ * transcribing the store's framing into this module, which is precisely the
+ * derivation drift the aggregate id is imported to avoid. Comparing the RESULT
+ * BYTES against the appended payload is the stronger claim anyway: it proves
+ * the decision committed exactly these bytes rather than a digest of them.
+ *
+ * The REQUEST digest is proven cross-witness for the same reason: the store's
+ * `identifyExpectedVersionRequest` (store-digests.ts:82) is likewise unexported,
+ * so the proof is that the decision row and the event's OWN decision trace agree
+ * on it. Two durable witnesses; editing one alone is what this catches.
  */
 export function proveDecision(
   decision: CommandDecisionRecord | null, event: StoredEvent,
@@ -115,12 +137,24 @@ export function proveDecision(
   if (decision.effectDisposition !== "EFFECTS_COMMITTED") {
     return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
   }
+  if (decision.commandKind !== FOUNDATION_CONTEXT_COMMAND_KIND) {
+    return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
+  }
+  if (decision.targetAggregateId !== event.aggregateId) {
+    return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
+  }
   if (decision.businessEventIds.length !== 1) return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
   if (decision.businessEventIds[0] !== event.eventId) {
     return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
   }
   if (decision.outboxMessageIds.length !== 0) return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
   if (decision.expectedVersion !== EXPECTED_PREVIOUS_VERSION) {
+    return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
+  }
+  if (!sameBytes(decision.resultBytes, event.payload)) {
+    return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
+  }
+  if (event.decisionTrace?.requestSha256 !== decision.requestSha256) {
     return "FOUNDATION_CONTEXT_READER_DECISION_INVALID";
   }
   return null;
@@ -151,14 +185,22 @@ export function proveReceipt(
     return "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID";
   }
   if (receipt.outboxMessageIds.length !== 0) return "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID";
-  // THE EFFECT DIGEST IS THE LINK, and `requestSha256` deliberately is NOT.
+  // THE EFFECT DIGEST BINDS THE RECEIPT TO THE DECISION, and the receipt's
+  // `requestSha256` deliberately is NOT compared against the decision's.
   // Measured against the real store: the event's `commandId` is an INTERNAL
   // `moe-internal:decision-effect:*` identifier, so this receipt describes the
   // effect application rather than the caller's request — its `requestSha256`
   // is over that internal command and does not equal the decision's. Requiring
-  // them to match would be a false invariant that refuses every honest record;
-  // `effectSha256` is what actually binds the two to one committed effect.
+  // that match would be a false invariant refusing every honest record.
   if (receipt.effectSha256 !== decision.effectSha256) {
+    return "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID";
+  }
+  // IT IS COMPARED AGAINST THE EVENT INSTEAD, which is the witness that shares
+  // that internal command: the receipt and the appended row must agree on both
+  // the command that applied the effect and its request digest, or the receipt
+  // describes some other append that merely reached the same aggregate.
+  if (receipt.commandId !== event.commandId) return "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID";
+  if (receipt.requestSha256 !== event.requestSha256) {
     return "FOUNDATION_CONTEXT_READER_RECEIPT_INVALID";
   }
   return null;
