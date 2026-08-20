@@ -221,7 +221,9 @@ export function project(
   draft: NodeAuthorityDraft, identity: DerivedIdentity, edges: ComposedEdges,
 ): NodeDefinition {
   return deepFreeze<NodeDefinition>({
-    budgetRequest: draft.budgetRequest, capability: draft.capability,
+    admissionAmounts: draft.admissionAmounts,
+    admissionGatePolicy: draft.admissionGatePolicy,
+    capability: draft.capability,
     completionLinkage: draft.completionLinkage, constraints: draft.constraints,
     criterionBindings: identity.criteria, directHardDependencies: edges.entries,
     joinRole: draft.joinRole, monotonicPredicateProofs: edges.proofs, nodeKey: draft.nodeKey,

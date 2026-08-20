@@ -29,17 +29,40 @@ import { createHash } from "node:crypto";
 import type {
   DependencyContract, MonotonicPredicateRegistryEntry,
 } from "../dependencies/dependency-contract.js";
+import type { AdmissionAmount, AdmissionGate } from "../budget/budget-reservation.js";
 
 /** The wire tag; separate from the digest domain so the two rotate apart. */
-export const NODE_AUTHORITY_SCHEMA_TAG = "MOE-NODE-AUTHORITY/1";
-export const NODE_AUTHORITY_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/1";
-export const NODE_AUTHORITY_SCHEMA_VERSION = 1 as const;
+export const NODE_AUTHORITY_SCHEMA_TAG = "MOE-NODE-AUTHORITY/2";
+export const NODE_AUTHORITY_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/2";
+export const NODE_AUTHORITY_SCHEMA_VERSION = 2 as const;
 export const NODE_JOIN_ROLES = Object.freeze(["COMPLETION", "JOIN", "NONE"] as const);
 export type NodeJoinRole = (typeof NODE_JOIN_ROLES)[number];
+/** Closed only at the NodeDefinition authority boundary. The budget ledger keeps
+ * its bounded string meter so an explicit future version can admit a new durable meter. */
+export const NODE_ADMISSION_METERS = Object.freeze([
+  "attempt.count", // Budget design 11.2 and the durable settlement reducer.
+  "provider.cache_creation_input_tokens", // Provider-run normalized usage measurement.
+  "provider.cache_read_input_tokens", // Provider-run normalized usage measurement.
+  "provider.input_tokens", // Provider-run normalized usage measurement.
+  "provider.output_tokens", // Provider-run normalized usage measurement.
+  "runner.authorized_ms", // Budget design 11.2 and runnerAuthorizedMsPerAttempt.
+  "verification.authorized_ms", // Budget design 11.2 verification reserve measurement.
+] as const);
+export type NodeAdmissionMeter = (typeof NODE_ADMISSION_METERS)[number];
+/** The landed AdmissionAmount shape, narrowed only at this versioned authority boundary. */
+export type NodeAdmissionAmount = AdmissionAmount & { readonly meter: NodeAdmissionMeter };
+/** Policy only: the corresponding AdmissionGate witness is resolved later from durable facts. */
+export const NODE_ADMISSION_GATE_POLICIES = Object.freeze([
+  "HUMAN_APPROVAL", "POLICY_ALLOWANCE",
+] as const);
+export type NodeAdmissionGatePolicy = (typeof NODE_ADMISSION_GATE_POLICIES)[number];
+export const NODE_ADMISSION_GATE_POLICY_WITNESS: Readonly<
+  Record<NodeAdmissionGatePolicy, keyof AdmissionGate>
+> = Object.freeze({ HUMAN_APPROVAL: "approval", POLICY_ALLOWANCE: "allowance" });
 
 /** The closed field roster, alphabetical — the one canonical serialization order. */
 export const NODE_DEFINITION_KEYS = Object.freeze([
-  "budgetRequest", "capability", "completionLinkage", "constraints", "criterionBindings",
+  "admissionAmounts", "admissionGatePolicy", "capability", "completionLinkage", "constraints", "criterionBindings",
   "directHardDependencies", "joinRole", "monotonicPredicateProofs", "nodeKey", "objective",
   "planExecutionContentDigest", "policySliceHash", "readScopes", "repositoryBaseTree",
   "resources", "schemaVersion", "verificationRecipeRevisions", "writeScopes",
@@ -62,7 +85,11 @@ export const NODE_AUTHORITY_EXCLUDED_STATE_KEYS = Object.freeze([
   "outgoingConsumers", "result", "selectedWitnesses", "status", "workspace",
 ]);
 export const NODE_AUTHORITY_CODES = Object.freeze([
-  "NODE_AUTHORITY_APPLICABILITY_MISMATCH", "NODE_AUTHORITY_CALLER_DIGEST_FORBIDDEN",
+  "NODE_AUTHORITY_APPLICABILITY_MISMATCH",
+  "NODE_AUTHORITY_BUDGET_AMOUNT_INVALID", "NODE_AUTHORITY_BUDGET_DUPLICATE_PAIR",
+  "NODE_AUTHORITY_BUDGET_GATE_POLICY_INVALID", "NODE_AUTHORITY_BUDGET_GATE_WITNESS_FORBIDDEN",
+  "NODE_AUTHORITY_BUDGET_LEGACY_SCALAR", "NODE_AUTHORITY_BUDGET_METER_UNKNOWN",
+  "NODE_AUTHORITY_CALLER_DIGEST_FORBIDDEN",
   "NODE_AUTHORITY_DIGEST_MISMATCH", "NODE_AUTHORITY_DUPLICATE_EDGE", "NODE_AUTHORITY_EDGE_ORDER",
   "NODE_AUTHORITY_EXCLUDED_FIELD", "NODE_AUTHORITY_FIELD_INVALID",
   "NODE_AUTHORITY_JOIN_LINKAGE_INVALID", "NODE_AUTHORITY_LIMIT_EXCEEDED",
@@ -72,7 +99,7 @@ export const NODE_AUTHORITY_CODES = Object.freeze([
 ] as const);
 export type NodeAuthorityCode = (typeof NODE_AUTHORITY_CODES)[number];
 const LAYER_NAMES = Object.freeze([
-  "NODE_AUTHORITY_ADMISSION", "NODE_AUTHORITY_CODEC", "NODE_AUTHORITY_DEPENDENCIES",
+  "NODE_AUTHORITY_ADMISSION", "NODE_AUTHORITY_BUDGET", "NODE_AUTHORITY_CODEC", "NODE_AUTHORITY_DEPENDENCIES",
   "NODE_AUTHORITY_IDENTITY", "NODE_AUTHORITY_LIMITS", "NODE_AUTHORITY_PROOFS",
   "NODE_AUTHORITY_SCHEMA", "NODE_AUTHORITY_SCOPES", "DEPENDENCY_CONTRACT", "PLANNING_SOURCE",
 ] as const);
@@ -83,7 +110,8 @@ const LAYER_NAMES = Object.freeze([
  */
 export type NodeAuthorityLayer = (typeof LAYER_NAMES)[number];
 export const NODE_AUTHORITY_LIMITS = Object.freeze({
-  maxBytes: 1_048_576, maxCriterionBindings: 512, maxDependencyEntries: 128, maxIdBytes: 512,
+  maxAdmissionAmounts: 35, maxBytes: 1_048_576, maxCriterionBindings: 512,
+  maxDependencyEntries: 128, maxIdBytes: 512,
   maxListEntries: 64, maxObjectiveBytes: 4096, maxProofEntries: 128, maxRationaleBytes: 1024,
   maxScopeBytes: 1024, maxScopeEntries: 128,
 });
@@ -110,7 +138,8 @@ export interface NodeAuthorityEdgeInput {
  * production dependency validator may rule on a dependency contract.
  */
 export interface NodeAuthorityDraft {
-  readonly budgetRequest: number;
+  readonly admissionAmounts: readonly NodeAdmissionAmount[];
+  readonly admissionGatePolicy: NodeAdmissionGatePolicy;
   readonly capability: string;
   readonly completionLinkage: string | null;
   readonly constraints: readonly string[];

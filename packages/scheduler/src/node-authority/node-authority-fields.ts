@@ -10,6 +10,7 @@ import { isGraphKey } from "../graph-key.js";
 import {
   hasOnlyOwnStringKeys, isPlainArray, isPlainRecord, readOwnDataProperty,
 } from "../runtime-shape.js";
+import { forbiddenBudgetKeyRefusal, readNodeAuthorityBudget } from "./node-authority-budget.js";
 import {
   NODE_AUTHORITY_DRAFT_KEYS, NODE_AUTHORITY_EXCLUDED_STATE_KEYS,
   NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS, NODE_AUTHORITY_LIMITS, NODE_JOIN_ROLES,
@@ -139,7 +140,7 @@ export function forbiddenKeyRefusal(value: object): NodeAuthorityRefusal | null 
         `${key} is excluded from the execution contract`);
     }
   }
-  return null;
+  return forbiddenBudgetKeyRefusal(value);
 }
 
 /**
@@ -189,14 +190,16 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
   if (!readScopes.ok) return readScopes;
   if (!writeScopes.ok) return writeScopes;
   if (!edges.ok) return edges;
-  const budget = read.get("budgetRequest");
+  const budget = readNodeAuthorityBudget(
+    read.get("admissionAmounts"), read.get("admissionGatePolicy"),
+  );
+  if (!budget.ok) return budget;
   const linkage = read.get("completionLinkage");
   const role = read.get("joinRole");
   const nodeKey = read.get("nodeKey");
   const policySliceHash = read.get("policySliceHash");
   const repositoryBaseTree = read.get("repositoryBaseTree");
-  if (!isGraphKey(nodeKey) || !isGraphKey(read.get("capability")) || typeof budget !== "number"
-    || !Number.isSafeInteger(budget) || budget < 0 || Object.is(budget, -0)
+  if (!isGraphKey(nodeKey) || !isGraphKey(read.get("capability"))
     || typeof policySliceHash !== "string" || !HEX_64.test(policySliceHash)
     || typeof repositoryBaseTree !== "string" || !HEX_TREE.test(repositoryBaseTree)
     || !(NODE_JOIN_ROLES as readonly unknown[]).includes(role)
@@ -213,7 +216,9 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
   return {
     ok: true as const,
     draft: deepFreeze<NodeAuthorityDraft>({
-      budgetRequest: budget, capability: read.get("capability") as string,
+      admissionAmounts: budget.value.admissionAmounts,
+      admissionGatePolicy: budget.value.admissionGatePolicy,
+      capability: read.get("capability") as string,
       completionLinkage: linkage as string | null, constraints: constraints.value,
       directHardDependencies: edges.value, joinRole: role as NodeJoinRole, nodeKey,
       objective: objective.value, policySliceHash, readScopes: readScopes.value,

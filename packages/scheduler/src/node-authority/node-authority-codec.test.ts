@@ -8,7 +8,9 @@ import {
 } from "@moe/core";
 import { describe, expect, it } from "vitest";
 
+import { ADMISSION_PURPOSES, type AdmissionAmount } from "../budget/budget-reservation.js";
 import { validateDependencyContract } from "../dependencies/dependency-contract.js";
+import * as nodeAuthorityContract from "./node-authority-contract.js";
 import {
   NODE_AUTHORITY_CODES,
   NODE_AUTHORITY_DIGEST_DOMAIN,
@@ -25,10 +27,21 @@ import {
   draftNodeAuthority,
   encodeNodeDefinition,
 } from "./node-authority-codec.js";
-import type { NodeAuthorityRefusal } from "./node-authority-contract.js";
+import type { NodeAdmissionGatePolicy, NodeAuthorityRefusal } from "./node-authority-contract.js";
 
 const hex = (digit: string): string => digit.repeat(64);
 const decoder = new TextDecoder();
+const PRIOR_NODE_AUTHORITY_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/1";
+const NODE_ADMISSION_METERS_EXPECTED = Object.freeze([
+  "attempt.count",
+  "provider.cache_creation_input_tokens",
+  "provider.cache_read_input_tokens",
+  "provider.input_tokens",
+  "provider.output_tokens",
+  "runner.authorized_ms",
+  "verification.authorized_ms",
+] as const);
+const PURPOSE_ORDER = Object.freeze([...ADMISSION_PURPOSES].sort());
 
 const planDraft = () => ({
   affectedCriterionIds: ["criterion-a"],
@@ -120,7 +133,8 @@ const requirement = () => ({
 });
 
 const authorityDraft = () => ({
-  budgetRequest: 3,
+  admissionAmounts: admissionAmounts(),
+  admissionGatePolicy: "POLICY_ALLOWANCE" as NodeAdmissionGatePolicy,
   capability: "capability-implement",
   completionLinkage: null as string | null,
   constraints: ["constraint-a", "constraint-b"],
@@ -135,6 +149,19 @@ const authorityDraft = () => ({
   verificationRecipeRevisions: ["recipe-a"],
   writeScopes: ["services/api/src/node"],
 });
+
+const admissionAmounts = (
+  meter: string = "runner.authorized_ms",
+): AdmissionAmount[] => PURPOSE_ORDER.map((purpose, index) => ({
+  purpose, meter, quantity: index + 1,
+}));
+
+const typedAuthorityDraft = (): Record<string, unknown> => {
+  return authorityDraft() as unknown as Record<string, unknown>;
+};
+
+const typedInput = (draft: Record<string, unknown> = typedAuthorityDraft()) =>
+  createInput({ draft });
 
 type AuthorityDraft = ReturnType<typeof authorityDraft>;
 type PlanDraft = ReturnType<typeof planDraft>;
@@ -205,7 +232,8 @@ describe("node authority admission", () => {
     expect(definition.capability).toBe("capability-implement");
     expect(definition.constraints).toEqual(["constraint-a", "constraint-b"]);
     expect(definition.resources).toEqual(["resource-a"]);
-    expect(definition.budgetRequest).toBe(3);
+    expect(definition.admissionAmounts).toEqual(admissionAmounts());
+    expect(definition.admissionGatePolicy).toBe("POLICY_ALLOWANCE");
     expect(definition.repositoryBaseTree).toBe(hex("4"));
     expect(definition.policySliceHash).toBe(hex("3"));
     expect(definition.verificationRecipeRevisions).toEqual(["recipe-a"]);
@@ -302,6 +330,234 @@ describe("node authority admission", () => {
     expect(Object.keys(drafted.draft)).not.toContain("criterionBindings");
     expect(Object.keys(drafted.draft)).not.toContain("planExecutionContentDigest");
     expect(drafted.draft.readScopes).toEqual(["services/api/docs", "services/api/src"]);
+  });
+});
+
+function expectTypedAcceptance(input: unknown): ReturnType<typeof createNodeDefinition> | null {
+  const result = createNodeDefinition(input);
+  expect(result.ok).toBe(true);
+  return result.ok ? result : null;
+}
+
+function amountsOf(definition: unknown): readonly AdmissionAmount[] {
+  return (definition as Record<string, unknown>)["admissionAmounts"] as readonly AdmissionAmount[];
+}
+
+describe("typed budget authority", () => {
+  it("closes the authority-side meter and gate-policy vocabularies", () => {
+    const surface = nodeAuthorityContract as unknown as Record<string, unknown>;
+    expect(surface["NODE_ADMISSION_METERS"]).toEqual(NODE_ADMISSION_METERS_EXPECTED);
+    expect(surface["NODE_ADMISSION_GATE_POLICIES"])
+      .toEqual(["HUMAN_APPROVAL", "POLICY_ALLOWANCE"]);
+    expect(surface["NODE_ADMISSION_GATE_POLICY_WITNESS"]).toEqual({
+      HUMAN_APPROVAL: "approval", POLICY_ALLOWANCE: "allowance",
+    });
+  });
+
+  it("rotates the schema and digest domain for the typed authority body", () => {
+    expect(NODE_AUTHORITY_SCHEMA_VERSION).toBe(2);
+    expect(NODE_AUTHORITY_SCHEMA_TAG).toBe("MOE-NODE-AUTHORITY/2");
+    expect(NODE_AUTHORITY_DIGEST_DOMAIN).toBe("MOE-NODE-AUTHORITY-BODY-HASH/2");
+    expect(new Set([
+      NODE_AUTHORITY_SCHEMA_TAG,
+      PRIOR_NODE_AUTHORITY_DIGEST_DOMAIN,
+      NODE_AUTHORITY_DIGEST_DOMAIN,
+    ]).size).toBe(3);
+  });
+
+  it("round-trips a deeply frozen five-purpose budget on one meter", () => {
+    expect(PURPOSE_ORDER).toEqual([
+      "CONTINGENCY", "EXECUTION", "FINAL_ACCEPTANCE", "INDEPENDENT_REVIEW", "VERIFICATION",
+    ]);
+    expect(admissionAmounts()).toHaveLength(5);
+    const accepted = expectTypedAcceptance(typedInput());
+    if (accepted === null || !accepted.ok) return;
+    const { definition } = accepted.value;
+    expect(amountsOf(definition)).toEqual(admissionAmounts());
+    expect((definition as unknown as Record<string, unknown>)["admissionGatePolicy"])
+      .toBe("POLICY_ALLOWANCE");
+    expect(everyValueFrozen(definition)).toEqual([]);
+    const encoded = encodeNodeDefinition(definition);
+    expect(encoded.ok).toBe(true);
+    if (!encoded.ok) return;
+    const decoded = decodeNodeDefinitionBytes(encoded.bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect(decoded.value.definition).toEqual(definition);
+  });
+
+  it("retires the legacy scalar with its own budget-layer reason", () => {
+    const draft = typedAuthorityDraft();
+    draft["budgetRequest"] = 3;
+    expect(NODE_DEFINITION_KEYS).not.toContain("budgetRequest");
+    expectRefusal(
+      createNodeDefinition(typedInput(draft)),
+      "NODE_AUTHORITY_BUDGET_LEGACY_SCALAR", "NODE_AUTHORITY_BUDGET",
+    );
+  });
+
+  it("sorts admission amounts by the canonical purpose-meter pair", () => {
+    const draft = typedAuthorityDraft();
+    draft["admissionAmounts"] = [
+      ...admissionAmounts(),
+      { purpose: "EXECUTION", meter: "provider.output_tokens", quantity: 9 },
+      { purpose: "EXECUTION", meter: "attempt.count", quantity: 8 },
+    ].reverse();
+    const accepted = expectTypedAcceptance(typedInput(draft));
+    if (accepted === null || !accepted.ok) return;
+    expect(amountsOf(accepted.value.definition).map((amount) => `${amount.purpose}:${amount.meter}`))
+      .toEqual([
+        "CONTINGENCY:runner.authorized_ms",
+        "EXECUTION:attempt.count",
+        "EXECUTION:provider.output_tokens",
+        "EXECUTION:runner.authorized_ms",
+        "FINAL_ACCEPTANCE:runner.authorized_ms",
+        "INDEPENDENT_REVIEW:runner.authorized_ms",
+        "VERIFICATION:runner.authorized_ms",
+      ]);
+  });
+
+  it("moves the digest for quantity, meter, purpose, and gate-policy changes", () => {
+    const changes: readonly (readonly [
+      string, () => readonly [Record<string, unknown>, Record<string, unknown>],
+    ])[] = [
+      ["quantity", () => {
+        const control = typedAuthorityDraft();
+        const changed = typedAuthorityDraft();
+        const amounts = admissionAmounts();
+        amounts[0] = { ...amounts[0]!, quantity: amounts[0]!.quantity + 1 };
+        changed["admissionAmounts"] = amounts;
+        return [control, changed];
+      }],
+      ["meter", () => {
+        const control = typedAuthorityDraft();
+        const changed = typedAuthorityDraft();
+        const amounts = admissionAmounts();
+        amounts[0] = { ...amounts[0]!, meter: "provider.input_tokens" };
+        changed["admissionAmounts"] = amounts;
+        return [control, changed];
+      }],
+      ["purpose", () => {
+        const before = admissionAmounts();
+        before[0] = { ...before[0]!, meter: "provider.input_tokens" };
+        const after = before.map((amount) => ({ ...amount }));
+        after[0] = { ...after[0]!, purpose: "EXECUTION" };
+        const control = typedAuthorityDraft();
+        control["admissionAmounts"] = before;
+        const changed = typedAuthorityDraft();
+        changed["admissionAmounts"] = after;
+        return [control, changed];
+      }],
+      ["gate policy", () => {
+        const control = typedAuthorityDraft();
+        const changed = typedAuthorityDraft();
+        changed["admissionGatePolicy"] = "HUMAN_APPROVAL";
+        return [control, changed];
+      }],
+    ];
+    expect(changes).toHaveLength(4);
+    let swept = 0;
+    for (const [name, build] of changes) {
+      swept += 1;
+      const [before, after] = build();
+      const control = expectTypedAcceptance(typedInput(before));
+      const changed = expectTypedAcceptance(typedInput(after));
+      if (control === null || changed === null || !control.ok || !changed.ok) continue;
+      expect(`${name}:${changed.value.bodyContentDigest}`)
+        .not.toBe(`${name}:${control.value.bodyContentDigest}`);
+    }
+    expect(swept).toBe(changes.length);
+  });
+
+  it("keeps excluded planning fields byte-identical with typed budgets", () => {
+    const otherPlan = planDraft();
+    otherPlan.approvalState = "PENDING_APPROVAL";
+    otherPlan.authorRef = "principal-z";
+    otherPlan.revisionId = "plan-revision-z";
+    const left = expectTypedAcceptance(typedInput());
+    const right = expectTypedAcceptance(createInput({
+      draft: typedAuthorityDraft(), planRevision: planOrThrow(otherPlan),
+    }));
+    if (left === null || right === null || !left.ok || !right.ok) return;
+    expect(decoder.decode(right.value.bytes)).toBe(decoder.decode(left.value.bytes));
+  });
+
+  it("refuses an unknown meter with the exact budget-layer reason", () => {
+    const draft = typedAuthorityDraft();
+    draft["admissionAmounts"] = admissionAmounts("speculative.meter");
+    expectRefusal(
+      createNodeDefinition(typedInput(draft)),
+      "NODE_AUTHORITY_BUDGET_METER_UNKNOWN", "NODE_AUTHORITY_BUDGET",
+    );
+  });
+
+  it("accepts every unique purpose-meter pair at the bound and refuses one over", () => {
+    const maximum = PURPOSE_ORDER.flatMap((purpose) =>
+      NODE_ADMISSION_METERS_EXPECTED.map((meter, index) => ({
+        purpose, meter, quantity: index + 1,
+      })));
+    expect(maximum).toHaveLength(35);
+    expect((NODE_AUTHORITY_LIMITS as Record<string, number>)["maxAdmissionAmounts"]).toBe(35);
+    const atLimit = typedAuthorityDraft();
+    atLimit["admissionAmounts"] = maximum;
+    expectTypedAcceptance(typedInput(atLimit));
+    const over = typedAuthorityDraft();
+    over["admissionAmounts"] = [...maximum, maximum[0]];
+    expectRefusal(
+      createNodeDefinition(typedInput(over)),
+      "NODE_AUTHORITY_LIMIT_EXCEEDED", "NODE_AUTHORITY_LIMITS",
+    );
+  });
+
+  it("refuses a duplicate purpose-meter pair but accepts shared meters across purposes", () => {
+    expectTypedAcceptance(typedInput());
+    const duplicate = typedAuthorityDraft();
+    const amounts = admissionAmounts();
+    duplicate["admissionAmounts"] = [...amounts, { ...amounts[0]!, quantity: 99 }];
+    expectRefusal(
+      createNodeDefinition(typedInput(duplicate)),
+      "NODE_AUTHORITY_BUDGET_DUPLICATE_PAIR", "NODE_AUTHORITY_BUDGET",
+    );
+  });
+
+  it("refuses a pre-granted gate witness instead of persisting minted authority", () => {
+    const draft = typedAuthorityDraft();
+    draft["admissionGate"] = {
+      allowance: null,
+      approval: { approvalRef: "approval-a", decision: "APPROVE", validity: "CURRENT" },
+    };
+    expectRefusal(
+      createNodeDefinition(typedInput(draft)),
+      "NODE_AUTHORITY_BUDGET_GATE_WITNESS_FORBIDDEN", "NODE_AUTHORITY_BUDGET",
+    );
+  });
+
+  it("refuses malformed amounts and gate policies with exact budget-layer reasons", () => {
+    const hostile: readonly (readonly [string, unknown, string])[] = [
+      ["zero quantity", [{ purpose: "EXECUTION", meter: "attempt.count", quantity: 0 }],
+        "NODE_AUTHORITY_BUDGET_AMOUNT_INVALID"],
+      ["unknown purpose", [{ purpose: "SIDE_QUEST", meter: "attempt.count", quantity: 1 }],
+        "NODE_AUTHORITY_BUDGET_AMOUNT_INVALID"],
+      ["extra amount field", [{ purpose: "EXECUTION", meter: "attempt.count", quantity: 1, unit: "ms" }],
+        "NODE_AUTHORITY_BUDGET_AMOUNT_INVALID"],
+      ["non-array", { purpose: "EXECUTION", meter: "attempt.count", quantity: 1 },
+        "NODE_AUTHORITY_BUDGET_AMOUNT_INVALID"],
+    ];
+    expect(hostile).toHaveLength(4);
+    let swept = 0;
+    for (const [, amounts, code] of hostile) {
+      swept += 1;
+      const draft = typedAuthorityDraft();
+      draft["admissionAmounts"] = amounts;
+      expectRefusal(createNodeDefinition(typedInput(draft)), code, "NODE_AUTHORITY_BUDGET");
+    }
+    expect(swept).toBe(hostile.length);
+    const gate = typedAuthorityDraft();
+    gate["admissionGatePolicy"] = "EMBEDDED_APPROVAL";
+    expectRefusal(
+      createNodeDefinition(typedInput(gate)),
+      "NODE_AUTHORITY_BUDGET_GATE_POLICY_INVALID", "NODE_AUTHORITY_BUDGET",
+    );
   });
 });
 
@@ -767,7 +1023,10 @@ describe("byte stability", () => {
       ["capability", () => wideDraft((d) => { d.capability = "capability-review"; })],
       ["constraints", () => wideDraft((d) => { d.constraints = ["constraint-a"]; })],
       ["resources", () => wideDraft((d) => { d.resources = ["resource-b"]; })],
-      ["budgetRequest", () => wideDraft((d) => { d.budgetRequest = 4; })],
+      ["admissionAmounts", () => wideDraft((d) => {
+        d.admissionAmounts = admissionAmounts("provider.input_tokens");
+      })],
+      ["admissionGatePolicy", () => wideDraft((d) => { d.admissionGatePolicy = "HUMAN_APPROVAL"; })],
       ["readScopes", () => wideDraft((d) => { d.readScopes = ["services/api/src"]; })],
       ["writeScopes", () => wideDraft((d) => { d.writeScopes = ["services/api/src/other"]; })],
       ["repositoryBaseTree", () => wideDraft((d) => { d.repositoryBaseTree = hex("5"); })],
