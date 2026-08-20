@@ -933,6 +933,33 @@ describe("release CLI and filesystem boundary", () => {
     assert.equal(archiveSource.calls.length, 2);
     assert.deepEqual(readdirSync(outside), []);
   });
+
+  // A DANGLING junction — target removed after the link was made — reads as absent to existsSync
+  // while lstat still sees the reparse point, so the ascent to the deepest existing ancestor would
+  // step straight over it and the symlink walk above would never visit it. A planted redirect is a
+  // containment failure whichever way it points, so it must carry the containment code: without the
+  // ascent's own lstat the publish instead dies in the write half as EVIDENCE_WRITE_INTERRUPTED,
+  // which reports a containment violation as a disk mishap.
+  test("refuses a dangling junction in the target span with the containment code", async () => {
+    const evidenceRoot = temp();
+    const vanished = join(temp(), "vanished");
+    mkdirSync(vanished);
+    symlinkSync(vanished, join(evidenceRoot, SOURCE_SHA), "junction");
+    rmSync(vanished, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+    const result = await runSupply({ evidenceRoot });
+    assert.notEqual(result.reason, "EVIDENCE_WRITE_INTERRUPTED");
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+  });
+
+  // Mirror negative for that lstat: an ancestor chain that is merely ABSENT, with no link anywhere,
+  // must still publish. Every segment of this root is walked by the same ascent as the dangling
+  // case, so a probe that refused on absence rather than on a surviving reparse point reds here.
+  test("publishes into an evidence root whose ancestor chain does not exist yet", async () => {
+    const result = await runSupply({ evidenceRoot: join(temp(), "absent", "chain") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
 });
 
 describe("release package command", () => {

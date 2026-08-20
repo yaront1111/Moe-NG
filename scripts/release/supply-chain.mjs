@@ -114,14 +114,19 @@ async function observeTools(/** @type {{repositoryRoot: string}} */ request) {
   return { node: probes[0].stdout.trim().replace(/^v/u, ""), pnpm: probes[1].stdout.trim(),
     git: probes[2].stdout.trim(), tar: probes[3].stdout.split(/\r?\n/u)[0], cdxgen: cdxgenVersion };
 }
-function nearestExistingPath(/** @type {string} */ path) { // The deepest ancestor that exists, so the walk below only ever lstats real entries.
-  let cursor = resolve(path);
-  while (!existsSync(cursor)) { const parent = dirname(cursor); if (parent === cursor) break; cursor = parent; }
-  return cursor;
+function nearestExistingPath(/** @type {string} */ path) { // The deepest ancestor that exists, so the walk below only ever lstats real entries, PLUS whether the span skipped over a DANGLING link — one whose target is gone, so existsSync reads false while lstat still sees the reparse point. The walk never visits those, so without this probe a planted redirect passes containment and only surfaces later as a write error.
+  let cursor = resolve(path); let dangling = false;
+  while (!existsSync(cursor)) {
+    try { if (lstatSync(cursor).isSymbolicLink()) dangling = true; } catch (error) { if (/** @type {{code?: string}} */ (error).code !== "ENOENT") dangling = true; }
+    const parent = dirname(cursor); if (parent === cursor) break; cursor = parent;
+  }
+  return { cursor, dangling };
 }
 function unsafeExistingPath(/** @type {string} */ target, /** @type {string} */ evidenceRoot) { // Bounded at the evidence root's nearest EXISTING ancestor, INCLUSIVE. Above that boundary the caller controls nothing, so a legitimate symlinked ancestor there is not an escape (macOS $TMPDIR is /var/folders/..., and /var is itself a symlink to /private/var). The bound cannot be the root itself: on a clean checkout dist/release does not exist yet, the cursor never equals it, and the walk would run to the filesystem root again.
   try {
-    const ceiling = nearestExistingPath(evidenceRoot); let cursor = nearestExistingPath(target);
+    const ceiling = nearestExistingPath(evidenceRoot).cursor; const start = nearestExistingPath(target);
+    if (start.dangling) return true; // Only the target's span is probed: it strictly contains the root's whenever the root is absent, and when the root exists its own span is empty.
+    let cursor = start.cursor;
     while (existsSync(cursor)) {
       if (lstatSync(cursor).isSymbolicLink()) return true;
       if (cursor === ceiling) break;
