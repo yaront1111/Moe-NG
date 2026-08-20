@@ -55,6 +55,10 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // persistence module keeps its layer const private, and the compile-time agreement check is
   // `proposePlan` passing that module's closed layer TYPE straight into `refuse`.
   "PLANNING_AUTHORITY_PERSISTENCE",
+  // Same discipline one seam later: the planning-authority ENVELOPE codec keeps its layer const
+  // private too, and `proposePlan` passing the finalize module's closed layer TYPE into `refuse`
+  // is what makes this literal verified rather than merely asserted.
+  "PLANNING_AUTHORITY_ENVELOPE",
   // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
   // travels under the layer that produced it rather than under a daemon restatement.
   ...ACCEPTANCE_CONTRACT_LAYERS,

@@ -31,6 +31,11 @@ import {
   readApprovalGate,
 } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
+import {
+  callerSuppliedAuthorityBodies,
+  classifyPlanningChain,
+} from "./planning-authority-finalize-ingress.js";
+import { commitFinalizedSubmission } from "./planning-authority-finalize.js";
 import { buildPlanningAuthorityLeg } from "./planning-authority-persistence.js";
 
 /**
@@ -41,6 +46,11 @@ import { buildPlanningAuthorityLeg } from "./planning-authority-persistence.js";
  * rewrites an `expectedVersion`: every element of the chain is decided by the core, and the
  * first rejection aborts the whole fold with the core's own code, committing nothing. That is
  * what keeps the run's arrival at PLANNING command-driven rather than hand-editable.
+ *
+ * The chain has TWO terminals, and design 201/1021 is why both live under this one kind:
+ * finalization belongs to the same compound submission, as a LATER runner-proven boundary
+ * (design 289/310/342) judged against the drained durable state. They are mutually exclusive —
+ * each business effect owes its own durable decision — so a mixed chain is refused, not merged.
  */
 
 interface FoldRejected {
@@ -97,12 +107,15 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   if (runId === null || commands === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
-  const last = commands[commands.length - 1];
-  const lastKind = last !== null && typeof last === "object" && !Array.isArray(last)
-    ? (last as JsonObject)["kind"]
-    : null;
-  if (lastKind !== "plan.propose") {
+  const terminal = classifyPlanningChain(commands);
+  if (terminal.kind === "UNSUPPORTED") {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  if (terminal.kind === "REFUSED") return refuse(request.kind, terminal.code, "DAEMON_INGRESS");
+  // The durable record is the ONLY body source at finalize, so authority content presented by
+  // the caller is refused here, before the fold, rather than quietly ignored by the reducer.
+  if (terminal.kind === "FINALIZE" && callerSuppliedAuthorityBodies(request.payload, commands)) {
+    return refuse(request.kind, "PLANNING_FINALIZE_BODIES_SUPPLIED", "DAEMON_INGRESS");
   }
 
   const prior = stateOf(ledger, runId);
@@ -113,11 +126,12 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
     commands,
   );
   if (!folded.ok) return folded.outcome;
+  if (terminal.kind === "FINALIZE") return commitFinalizedSubmission(context, runId, prior, folded);
 
   // Built BEFORE any durable write, so a refusal leaves no event and no decision behind. An
   // ABSENT member is the legacy arm and keeps the single-aggregate seam byte-identical.
   const authority = buildPlanningAuthorityLeg({
-    lastCommand: last, request, runId, state: folded.state, store,
+    lastCommand: commands[commands.length - 1], request, runId, state: folded.state, store,
   });
   if (authority.kind === "REFUSED") return refuse(request.kind, authority.code, authority.layer);
   const carried = authority.kind === "LEG" ? authority.binding : {};
