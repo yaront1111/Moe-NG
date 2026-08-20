@@ -148,6 +148,7 @@ jobs:
           cache: pnpm
 
       - name: Install
+        id: install
         run: pnpm install --frozen-lockfile
 
       - name: Platform identity
@@ -197,7 +198,17 @@ jobs:
       # `*.security.ts` suffix, which no root config ever matches. Same
       # executed-proof discipline as the root step: exit code AND a positive
       # count line, because a lane whose include matched nothing exits 0.
+      #
+      # `always()` on all four population steps, guarded on the install: a step
+      # that fails would otherwise SKIP every step after it, so one red erases
+      # three populations' evidence — witnessed on run 32407365014, where the
+      # daemon step's red left control-room and supply-chain unreported. Skipped
+      # is not green and not red; it is no evidence at all, which is exactly what
+      # this job exists to stop producing. The install guard (the shape
+      # portability-evidence already uses) keeps a failed setup from fabricating
+      # four test failures out of one missing node_modules.
       - name: Test (security lane)
+        if: ${{ always() && steps.install.conclusion == 'success' }}
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
@@ -222,6 +233,7 @@ jobs:
       # concurrently with it: several daemon suites carry wall-clock bounds that
       # go red under machine load, and a shared runner is exactly that.
       - name: Test (daemon app)
+        if: ${{ always() && steps.install.conclusion == 'success' }}
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
@@ -241,6 +253,7 @@ jobs:
           }
 
       - name: Test (control-room app)
+        if: ${{ always() && steps.install.conclusion == 'success' }}
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
@@ -265,6 +278,7 @@ jobs:
       # the portability-evidence step that runs this same leg on ubuntu/macos;
       # what windows adds is the host, not the suite.
       - name: Test (release supply chain)
+        if: ${{ always() && steps.install.conclusion == 'success' }}
         run: |
           $ErrorActionPreference = 'Continue'
           $PSNativeCommandUseErrorActionPreference = $false
