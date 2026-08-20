@@ -34,8 +34,9 @@ no keychain and has no other way to authenticate:
 MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY (set one; run `claude setup-token` for a subscription token)
 ```
 
-Any ONE of those three satisfies it. Setting `MOE_AGENT_COMMAND` to a
-non-claude command waives it.
+Any ONE of those three satisfies it. Setting `MOE_AGENT_COMMAND` to `codex`
+gates on the Codex roster instead (see below); any other command waives the
+check entirely.
 
 ## Agent credentials
 
@@ -58,6 +59,44 @@ children as `ANTHROPIC_AUTH_TOKEN`. Exporting `ANTHROPIC_AUTH_TOKEN` yourself is
 equivalent and skips the mapping entirely. Re-probe after a CLI upgrade; the day
 the alias starts working, the mapping becomes a harmless no-op rather than a
 requirement.
+
+### Codex seats (`MOE_AGENT_COMMAND=codex`)
+
+For an individual user on an OpenAI/ChatGPT subscription, the seat is minted
+INTERACTIVELY once and then carried headlessly by a directory path rather than a
+token:
+
+```
+codex login                      # or: codex login --device-auth
+codex login status               # -> Logged in using ChatGPT
+$env:CODEX_HOME = "$env:USERPROFILE\.codex"
+```
+
+`codex login` writes `auth.json` under `CODEX_HOME` (default
+`%USERPROFILE%\.codex`), and every later run reads it from there with no
+interaction. Exporting `CODEX_HOME` explicitly is what makes the seat survive
+the hop into a spawned agent process, whose environment is an allowlist rather
+than an inheritance.
+
+The refusal names the whole roster, same shape as the Claude one:
+
+```
+MOE_UP_ENV_MISSING: CODEX_HOME, CODEX_ACCESS_TOKEN, OPENAI_API_KEY, CODEX_API_KEY (set one; run `codex login` once, then export CODEX_HOME so the seat travels)
+```
+
+Measured on **codex-cli 0.147.0** and re-checkable with one command each:
+`codex exec --help` states "auth still uses `CODEX_HOME`"; pointing `CODEX_HOME`
+at an empty directory turns `codex login status` into `Not logged in` (exit 1)
+while the default home answers `Logged in using ChatGPT` (exit 0); and
+`CODEX_ACCESS_TOKEN` is read straight from the environment (an invalid value is
+rejected as `invalid agent identity JWT format`). `OPENAI_API_KEY` and
+`CODEX_API_KEY` are the API-key alternatives — `codex login --with-api-key`
+reads the former from stdin. No `CHATGPT_*` variable is honored by this version.
+Re-probe after a CLI upgrade; this landscape moves.
+
+The two gates are independent: a `codex` command holding only Claude variables
+is refused naming the Codex roster, and vice versa. Neither gate reads the
+other's names.
 
 The daemon binds an EPHEMERAL port on purpose, so read the printed origin rather
 than assuming `39123`. Ctrl-C in this console stops both children; either child
@@ -99,6 +138,9 @@ need a fixed port, a `--csrf-token`, or one component without the other.
 | `CLAUDE_CODE_OAUTH_TOKEN` | Subscription token from `claude setup-token`; accepted, and delivered to children as `ANTHROPIC_AUTH_TOKEN` (2.1.235 does not read it under `--bare`) |
 | `ANTHROPIC_AUTH_TOKEN` | The name `claude --bare` actually authenticates with; export it directly to skip the mapping |
 | `ANTHROPIC_API_KEY` or configured Bedrock/Vertex/Foundry credentials | The API-key alternative. ONE of these three variables is required by the wrapper's `claude --bare` child; bare mode does not read OAuth/keychain auth |
+| `CODEX_HOME` | Codex state directory holding `auth.json`; carries a ChatGPT SUBSCRIPTION seat after one interactive `codex login`. First of the four the Codex gate looks for |
+| `CODEX_ACCESS_TOKEN` | Codex seat token, read straight from the environment and parsed as a JWT |
+| `OPENAI_API_KEY` or `CODEX_API_KEY` | The Codex API-key alternatives. ONE of these four is required when `MOE_AGENT_COMMAND` names `codex` |
 
 On Linux, Claude's subprocess credential scrub also requires `bubblewrap`
 (`bwrap`) on `PATH`. Treat either missing agent authentication or missing

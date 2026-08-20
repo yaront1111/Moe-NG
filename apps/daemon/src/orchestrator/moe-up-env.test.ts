@@ -44,6 +44,18 @@ const ACCEPTED_VARIABLES =
 const REFUSAL_MESSAGE = `${MOE_UP_ENV_MISSING}: ${ACCEPTED_VARIABLES}`
   + " (set one; run `claude setup-token` for a subscription token)";
 
+/** Obviously-fake codex fixtures; CODEX_HOME is a path, never a real profile. */
+const CODEX_HOME = "D:/fixture/.codex";
+const CODEX_ACCESS_TOKEN = "tok-fixture-codex-access";
+const OPENAI_API_KEY = "tok-fixture-openai";
+const CODEX_API_KEY = "tok-fixture-codex-api";
+
+/** The documented codex order: subscription seat first, api key last. */
+const CODEX_ACCEPTED_VARIABLES =
+  "CODEX_HOME, CODEX_ACCESS_TOKEN, OPENAI_API_KEY, CODEX_API_KEY";
+const CODEX_REFUSAL_MESSAGE = `${MOE_UP_ENV_MISSING}: ${CODEX_ACCEPTED_VARIABLES}`
+  + " (set one; run `codex login` once, then export CODEX_HOME so the seat travels)";
+
 const entryOf = (
   config: Extract<LaunchEnvResolution, { ok: true }>,
   name: string,
@@ -266,5 +278,122 @@ describe("resolveLaunchEnv credential acceptance", () => {
     for (const value of [API_KEY, AUTH_TOKEN, OAUTH_TOKEN]) {
       expect(joined).not.toContain(value);
     }
+  });
+});
+
+describe("resolveLaunchEnv codex credential acceptance", () => {
+  const acceptedAlone = [
+    ["CODEX_HOME", CODEX_HOME],
+    ["CODEX_ACCESS_TOKEN", CODEX_ACCESS_TOKEN],
+    ["OPENAI_API_KEY", OPENAI_API_KEY],
+    ["CODEX_API_KEY", CODEX_API_KEY],
+  ] as const;
+
+  for (const [name, value] of acceptedAlone) {
+    it(`accepts ${name} alone under a codex agent command and reports it as a hidden preset`, () => {
+      const config = resolved({ MOE_AGENT_COMMAND: "codex", [name]: value });
+      const entry = entryOf(config, name);
+      expect(entry?.source).toBe("PRESET");
+      expect(entry?.secret).toBe(true);
+      // The overlay carries it to the children: the gate entry IS the delivery.
+      expect(config.env[name]).toBe(value);
+      expect(describeLaunchVariables(config.variables).join(LINE_BREAK))
+        .toContain(`${name}=<preset, hidden>`);
+    });
+  }
+
+  it("refuses by naming every accepted codex credential exactly when the agent command is codex", () => {
+    const result = refused({ MOE_AGENT_COMMAND: "codex" });
+    expect(result.refusals).toHaveLength(1);
+    expect(result.refusals[0]?.code).toBe(MOE_UP_ENV_MISSING);
+    expect(result.refusals[0]?.variable).toBe(CODEX_ACCEPTED_VARIABLES);
+    // Hand-written, like the claude line above: all four names plus the seat
+    // hint ARE the contract an operator reads, not a detail of the roster.
+    expect(result.refusals[0]?.message).toBe(CODEX_REFUSAL_MESSAGE);
+  });
+
+  it("treats an empty value as absent for every accepted codex credential", () => {
+    const result = refused({
+      CODEX_ACCESS_TOKEN: "", CODEX_API_KEY: "", CODEX_HOME: "",
+      MOE_AGENT_COMMAND: "codex", OPENAI_API_KEY: "",
+    });
+    expect(result.refusals[0]?.message).toBe(CODEX_REFUSAL_MESSAGE);
+  });
+
+  it("still refuses when MOE_AGENT_COMMAND names codex by absolute path or launcher suffix", () => {
+    for (const command of ["codex", "C:\\tools\\codex.cmd", "/usr/local/bin/codex", "CODEX.EXE"]) {
+      const result = refused({ MOE_AGENT_COMMAND: command });
+      expect(result.refusals.map((entry) => entry.variable)).toEqual([CODEX_ACCEPTED_VARIABLES]);
+    }
+  });
+
+  it("reports the first variable in the documented presence order when all four are set", () => {
+    const config = resolved({
+      CODEX_ACCESS_TOKEN, CODEX_API_KEY, CODEX_HOME,
+      MOE_AGENT_COMMAND: "codex", OPENAI_API_KEY,
+    });
+    // PRESENCE order at the gate, NOT a claim about how codex itself resolves
+    // auth when it can see several credentials at once.
+    expect(entryOf(config, "CODEX_HOME")?.source).toBe("PRESET");
+    for (const name of ["CODEX_ACCESS_TOKEN", "CODEX_API_KEY", "OPENAI_API_KEY"]) {
+      expect(entryOf(config, name)).toBeUndefined();
+    }
+  });
+
+  it("prints no codex credential value on any disclosure or refusal line", () => {
+    const all = resolved({
+      CODEX_ACCESS_TOKEN, CODEX_API_KEY, CODEX_HOME,
+      MOE_AGENT_COMMAND: "codex", OPENAI_API_KEY,
+    });
+    const lines = [
+      ...describeLaunchVariables(all.variables),
+      ...describeLaunchVariables(resolved({ MOE_AGENT_COMMAND: "codex", OPENAI_API_KEY }).variables),
+      ...refused({ MOE_AGENT_COMMAND: "codex" }).refusals.map((entry) => entry.message),
+    ];
+    // A sweep over zero lines passes without asserting anything, so the line
+    // count is pinned before the values are looked for.
+    expect(lines.length).toBeGreaterThan(8);
+    const joined = lines.join(LINE_BREAK);
+    for (const value of [CODEX_ACCESS_TOKEN, CODEX_API_KEY, CODEX_HOME, OPENAI_API_KEY]) {
+      expect(joined).not.toContain(value);
+    }
+  });
+});
+
+describe("resolveLaunchEnv keeps the two provider gates apart", () => {
+  it("refuses a codex command holding only claude credentials, naming the codex set", () => {
+    const result = refused({
+      ANTHROPIC_API_KEY: API_KEY, ANTHROPIC_AUTH_TOKEN: AUTH_TOKEN,
+      CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN, MOE_AGENT_COMMAND: "codex",
+    });
+    expect(result.refusals[0]?.variable).toBe(CODEX_ACCEPTED_VARIABLES);
+  });
+
+  it("refuses a claude command holding only codex credentials, naming the claude set", () => {
+    const result = refused({
+      CODEX_ACCESS_TOKEN, CODEX_API_KEY, CODEX_HOME, OPENAI_API_KEY,
+    });
+    expect(result.refusals[0]?.variable).toBe(ACCEPTED_VARIABLES);
+  });
+
+  it("hands a codex seat no claude variable and a claude token no codex variable", () => {
+    const codex = resolved({ CODEX_HOME, MOE_AGENT_COMMAND: "codex" });
+    expect(Object.keys(codex.env).toSorted()).toEqual([
+      "CODEX_HOME",
+      "MOE_AGENT_COMMAND", "MOE_DAEMON_CREDENTIAL", "MOE_PROJECT_ID", "MOE_STORE_PATH",
+    ]);
+    const claude = resolved({ CLAUDE_CODE_OAUTH_TOKEN: OAUTH_TOKEN });
+    expect(Object.keys(claude.env).toSorted()).toEqual([
+      "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+      "MOE_AGENT_COMMAND", "MOE_DAEMON_CREDENTIAL", "MOE_PROJECT_ID", "MOE_STORE_PATH",
+    ]);
+  });
+
+  it("leaves a command that is neither claude nor codex ungated", () => {
+    const config = resolved({ MOE_AGENT_COMMAND: "node" });
+    expect(config.agentCommand).toBe("node");
+    expect(Object.keys(config.env).toSorted()).toEqual([
+      "MOE_AGENT_COMMAND", "MOE_DAEMON_CREDENTIAL", "MOE_PROJECT_ID", "MOE_STORE_PATH",
+    ]);
   });
 });
