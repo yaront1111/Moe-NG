@@ -434,21 +434,32 @@ jobs:
           cache: pnpm
 
       - name: Install
+        id: install
         run: pnpm install --frozen-lockfile
 
       # Exit code alone is not evidence: `pnpm --filter <pkg>` on an absent
       # package, and a vitest run whose include matched nothing, both exit 0.
       # Every leg below therefore asserts a POSITIVE count line as well, and
       # captures ${PIPESTATUS[0]} because a piped run reports tee's exit.
-      - name: Integration gate
+      - name: Integration gate (vitest)
         run: |
           set -o pipefail
           set +e
-          pnpm test:integration 2>&1 | tee portability-integration.log
-          status=${PIPESTATUS[0]}
+          pnpm typecheck:packaging 2>&1 | tee portability-integration.log
+          typecheck_status=${PIPESTATUS[0]}
+          pnpm exec vitest run tests/integration 2>&1 | tee -a portability-integration.log
+          vitest_status=${PIPESTATUS[0]}
           set -e
-          if [ "${status}" -ne 0 ]; then
-            echo "::error title=portability-evidence::pnpm test:integration exited ${status}"
+          failed=0
+          if [ "${typecheck_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::pnpm typecheck:packaging exited ${typecheck_status}"
+            failed=1
+          fi
+          if [ "${vitest_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::integration vitest exited ${vitest_status}"
+            failed=1
+          fi
+          if [ "${failed}" -ne 0 ]; then
             exit 1
           fi
           if ! grep -Eq '^ *Test Files +[1-9][0-9]* passed' portability-integration.log; then
@@ -459,11 +470,28 @@ jobs:
             echo "::error title=portability-evidence::integration vitest leg ran no case"
             exit 1
           fi
-          if ! grep -Eq 'pass [1-9][0-9]*' portability-integration.log; then
+
+      # `always()` keeps this evidence leg independent from the sibling vitest
+      # result. The install guard deliberately skips after failed setup instead
+      # of fabricating a release-supply-chain test failure.
+      - name: Release supply-chain gate (node:test)
+        id: release-supply-chain
+        if: ${{ always() && steps.install.conclusion == 'success' }}
+        run: |
+          set -o pipefail
+          set +e
+          node --test tests/integration/release-supply-chain.test.mjs 2>&1 | tee portability-supply-chain.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "${status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::release supply-chain node:test exited ${status}"
+            exit 1
+          fi
+          if ! grep -Eq 'pass [1-9][0-9]*' portability-supply-chain.log; then
             echo "::error title=portability-evidence::release supply-chain node:test reported no pass count"
             exit 1
           fi
-          if grep -Eq 'fail [1-9][0-9]*' portability-integration.log; then
+          if grep -Eq 'fail [1-9][0-9]*' portability-supply-chain.log; then
             echo "::error title=portability-evidence::release supply-chain node:test reported failures"
             exit 1
           fi
@@ -539,6 +567,7 @@ jobs:
           name: portability-evidence-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             portability-integration.log
+            portability-supply-chain.log
             portability-migration.log
             portability-matrix.json
             portability-matrix.log
