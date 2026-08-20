@@ -188,10 +188,17 @@ async function main(): Promise<void> {
     if (subscriptions === undefined) throw new Error("provider serves no subscription surface");
 
     // DEVELOPMENT payload suggestions from the control room's dev table, loaded
-    // leniently: a missing module just means missions carry no hint.
+    // leniently: a missing module just means missions carry no hint. The failure
+    // is DISCLOSED, never swallowed — a silent null here cost a live run
+    // 2026-08-20: live-dispatch.ts grew a `.js`-suffixed import with no bridge
+    // file, every mission shipped hintless, and agents guessed payload shapes at
+    // steps whose exact input the hint already knew.
     const hintModule = await import(
       new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url).href
-    ).catch(() => null) as
+    ).catch((error: unknown) => {
+      console.error(`[wrapper] payload hints unavailable: ${String(error)}`);
+      return null;
+    }) as
       { payloadFor?: (kind: string, target: string | null) => object | null } | null;
     if (stop.requested()) return;
 
