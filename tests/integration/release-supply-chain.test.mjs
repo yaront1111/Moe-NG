@@ -1014,6 +1014,42 @@ describe("release evidence containment", () => {
     assert.equal(result.reused, false);
   });
 
+  test("repository ceiling does not inspect a symlink above the repository root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const repositoryRoot = join(link, "repo");
+    mkdirSync(repositoryRoot);
+    const evidenceRoot = join(repositoryRoot, "dist", "release");
+    const result = await runSupply({ evidenceRoot, repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  test("re-guards with the pre-write ceiling after creating an absent root", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const base = temp();
+    const outside = temp();
+    const seam = join(base, "seam");
+    const evidenceRoot = join(seam, "release");
+    const bytes = new TextEncoder().encode("frozen-ceiling-drill");
+    const evidencePath = join(evidenceRoot, SOURCE_SHA, "digest", "evidence.json");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath, evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, seam, "junction");
+          planted.push(seam);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.deepEqual(planted, [seam]);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest")), true);
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest", "evidence.json")), false);
+  });
+
   // The guard-to-write window is sub-millisecond, far below what any spawn-based race can hit, so
   // the drill injects at the only in-window seam: the first mkdir runs strictly AFTER the pre-write
   // guard passed. The write itself genuinely escapes through the junction — the trailing read-back
