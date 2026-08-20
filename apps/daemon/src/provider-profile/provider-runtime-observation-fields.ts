@@ -40,6 +40,15 @@ const FRESHNESS_KEYS: readonly string[] = Object.freeze(["observedAt"]);
 
 export const MAX_OBSERVATION_TEXT_CHARS = 512;
 export const MAX_CLOSURE_ENTRIES = 128;
+/**
+ * The durable row's hard ceiling on CANONICAL bytes, and the one bound the structural limits
+ * above cannot imply: text limits are counted in CHARACTERS and 128 entries of 512 characters
+ * compose well past this. It is therefore enforced at ADMISSION, once, by
+ * `provider-runtime-observation.ts` — never a second time on the read path. A section this
+ * daemon accepts is a section it can read back; the two paths cannot disagree because there is
+ * only one check. An observation too large to store is REFUSED at the probe seam with an exact
+ * code rather than committed as evidence nobody can decode.
+ */
 export const MAX_OBSERVATION_BYTES = 32_768;
 const UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u;
 

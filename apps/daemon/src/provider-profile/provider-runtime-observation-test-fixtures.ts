@@ -68,6 +68,28 @@ export function runtimeSection(options: { closureSha?: string } = {}): Json {
   return JSON.parse(JSON.stringify(built.observation)) as Json;
 }
 
+/**
+ * A runner-built observation with an EXACT closure entry count and path width, so a size-boundary
+ * case addresses the product the adapter really emits rather than a hand-shaped lookalike. Paths
+ * carry a zero-padded index prefix, which keeps them strictly ascending after the runner sorts.
+ */
+export function sizedRuntimeSection(entries: number, pathChars: number): Json {
+  const built = buildProviderRuntimeObservation({
+    adapterCapabilitySchemaDigest: "a1".repeat(32),
+    clock: { observedAt: () => "2026-08-20T00:00:00.000Z" },
+    pinningMethod: "CONTENT_ADDRESSED_COPY",
+    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
+    reportedVersion: "2.0.14",
+    resolvedRuntimeClosure: Array.from({ length: entries }, (_unused, index) => ({
+      kind: "EXECUTABLE" as const,
+      path: `/opt/claude/${String(index).padStart(4, "0")}/`.padEnd(pathChars, "x"),
+      sha256: "b2".repeat(32),
+    })),
+  });
+  if (!built.ok) throw new Error(`sized fixture observation refused: ${built.code}`);
+  return JSON.parse(JSON.stringify(built.observation)) as Json;
+}
+
 /** A weak-truth observation: no closure and no reported version classify as UNKNOWN. */
 export function unknownTruthSection(): Json {
   const built = buildProviderRuntimeObservation({

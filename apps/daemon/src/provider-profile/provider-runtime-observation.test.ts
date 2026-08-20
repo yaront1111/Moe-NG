@@ -13,20 +13,26 @@
 import { afterAll, describe, expect, it } from "vitest";
 
 import { PROJECT_ID, closeStores, send } from "../bootstrap/bootstrap-test-fixtures.js";
+import { MAX_OBSERVATION_BYTES } from "./provider-runtime-observation-fields.js";
 import { readCurrentRuntimeObservation } from "./provider-runtime-observation-reader.js";
+import { encodeProviderRuntimeObservationBytes } from "./provider-runtime-observation.js";
+import type { ProviderRuntimeObservation } from "./provider-runtime-observation.js";
 import {
   CODEC_LAYER,
+  READER_LAYER,
   REGISTRATION_LAYER,
   REVISION_ID,
   accepted,
   closeForeignStores,
   omit,
+  plantProbe,
   probeFor,
   probedEventText,
   probedEvents,
   refused,
   registeredStore,
   runtimeSection,
+  sizedRuntimeSection,
   validDraft,
 } from "./provider-runtime-observation-test-fixtures.js";
 import type { Json } from "./provider-runtime-observation-test-fixtures.js";
@@ -268,5 +274,79 @@ describe("provider.probe — runtime observation admission", () => {
     expect(Object.keys(probedEvents(store)[0] ?? {}).sort()).toEqual([
       "profile", "profileDigest", "providerMinimumProfileRef", "truthClass",
     ]);
+  });
+});
+
+/**
+ * The DURABLE SIZE BOUND, exercised end to end on the production seam.
+ *
+ * The defect this closes: admission never measured the canonical bytes, while the read path did,
+ * so `provider.probe` could accept and commit a genuine `@moe/runner` product that the strict
+ * reader then refused as UNREADABLE. Evidence that cannot be read back is not evidence.
+ *
+ * The boundary is SEARCHED with the production encoder rather than hard-coded, so the pair is
+ * "largest that fits" and "exactly one entry more" BY CONSTRUCTION, and a change to the record
+ * shape moves both cases instead of silently turning one of them into a duplicate of the other.
+ */
+describe("provider runtime observation durable size bound", () => {
+  /** The runner's own text ceiling. Not importable: it is not published from that package root. */
+  const PATH_CHARS = 400;
+  /** The runner's own closure ceiling; asking for more makes its builder refuse and throw. */
+  const RUNNER_MAX_ENTRIES = 64;
+
+  const bytesOf = (section: Json): number =>
+    encodeProviderRuntimeObservationBytes(section as unknown as ProviderRuntimeObservation)
+      .byteLength;
+
+  function boundary(): { readonly fits: Json; readonly over: Json } {
+    for (let entries = 1; entries < RUNNER_MAX_ENTRIES; entries += 1) {
+      const over = sizedRuntimeSection(entries + 1, PATH_CHARS);
+      if (bytesOf(over) > MAX_OBSERVATION_BYTES) {
+        return { fits: sizedRuntimeSection(entries, PATH_CHARS), over };
+      }
+    }
+    throw new Error("no canonical-byte boundary exists below the runner closure ceiling");
+  }
+
+  it("generates a real boundary pair that straddles the bound", () => {
+    const { fits, over } = boundary();
+    expect(bytesOf(fits)).toBeLessThanOrEqual(MAX_OBSERVATION_BYTES);
+    expect(bytesOf(over)).toBeGreaterThan(MAX_OBSERVATION_BYTES);
+    expect(bytesOf(over)).toBeGreaterThan(bytesOf(fits));
+  });
+
+  it("accepts the largest runner product that fits and reads it back byte-identical", () => {
+    const store = registeredStore();
+    const { fits } = boundary();
+    accepted(send(store, probeFor({ runtime: fits })));
+    const read = readCurrentRuntimeObservation(store, PROJECT_ID, REVISION_ID);
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error(`the at-limit control was refused: ${read.code}`);
+    expect(JSON.parse(JSON.stringify(read.observation))).toEqual(fits);
+    expect(probedEvents(store).length).toBe(1);
+  });
+
+  it("refuses one entry more at the codec, before anything is committed", () => {
+    const store = registeredStore();
+    expect(refused(send(store, probeFor({ runtime: boundary().over })))).toEqual({
+      code: "PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE",
+      refusedBy: CODEC_LAYER,
+    });
+    expect(probedEvents(store).length).toBe(0);
+  });
+
+  it("answers a planted oversized row with the same code, upstream of the reader", () => {
+    const store = registeredStore();
+    accepted(send(store, probeFor({})));
+    const planted = probedEvents(store)[0] ?? {};
+    plantProbe(store, { ...planted, runtime: boundary().over }, "event-oversized");
+    const read = readCurrentRuntimeObservation(store, PROJECT_ID, REVISION_ID);
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error("a planted oversized row was read as evidence");
+    expect({ code: read.code, layer: read.layer, upstream: read.upstream }).toEqual({
+      code: "PROVIDER_RUNTIME_OBSERVATION_UNREADABLE",
+      layer: READER_LAYER,
+      upstream: { code: "PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE", layer: CODEC_LAYER },
+    });
   });
 });

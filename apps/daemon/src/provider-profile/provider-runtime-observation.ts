@@ -40,6 +40,7 @@ export const PROVIDER_RUNTIME_OBSERVATION_CODEC_CODES = Object.freeze([
   "PROVIDER_RUNTIME_OBSERVATION_VERSION_UNSUPPORTED",
   "PROVIDER_RUNTIME_OBSERVATION_NONCANONICAL",
   "PROVIDER_RUNTIME_OBSERVATION_DIGEST_MISMATCH",
+  "PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE",
 ] as const);
 
 /**
@@ -152,6 +153,13 @@ export function admitProviderRuntimeObservation(
   if (resealed.observationDigest !== claimed) {
     return refusal("PROVIDER_RUNTIME_OBSERVATION_DIGEST_MISMATCH", "digest does not recompute");
   }
+  const bytes = encodeProviderRuntimeObservationBytes(resealed).byteLength;
+  if (bytes > MAX_OBSERVATION_BYTES) {
+    return refusal(
+      "PROVIDER_RUNTIME_OBSERVATION_TOO_LARGE",
+      `canonical bytes ${bytes} exceed the durable bound ${MAX_OBSERVATION_BYTES}`,
+    );
+  }
   return Object.freeze({ observation: resealed, ok: true as const });
 }
 
@@ -161,10 +169,16 @@ export function encodeProviderRuntimeObservationBytes(
   return encoder.encode(canonicalJson(observation));
 }
 
-/** The exact bytes as text, so canonicality is judged against what arrived, not a re-parse. */
+/**
+ * The exact bytes as text, so canonicality is judged against what arrived, not a re-parse.
+ *
+ * The size ceiling is deliberately NOT re-stated here. It is enforced once, in admission, so the
+ * write path and the read path cannot disagree about what fits: a section this daemon accepted is
+ * a section this daemon can read back. A second copy of the bound here is how they drifted apart.
+ * `decodeBoundedJsonBytes` below still bounds the parse itself.
+ */
 function textOf(input: unknown): string | null {
-  if (!(input instanceof Uint8Array)) return null;
-  if (input.byteLength === 0 || input.byteLength > MAX_OBSERVATION_BYTES) return null;
+  if (!(input instanceof Uint8Array) || input.byteLength === 0) return null;
   try {
     return decoder.decode(input);
   } catch {
