@@ -16,6 +16,8 @@ import type {
   ProviderProfileRegistrationLayer,
   ProviderProfileRevision,
 } from "./provider-profile-codec.js";
+import { encodeProviderRuntimeObservationBytes } from "./provider-runtime-observation.js";
+import type { ProviderRuntimeObservation } from "./provider-runtime-observation.js";
 
 /**
  * The layer name is a closed TYPE from the codec rather than a bare string, so a rename there
@@ -37,24 +39,36 @@ export const PROVIDER_PROBED_EVENT = "ProviderProbed";
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 /**
- * The persisted shape: the envelope's two facts, plus the CANONICAL profile and its digest.
+ * The persisted shape: the envelope's two facts, the CANONICAL profile and its digest, and —
+ * when the probe carried one — the CANONICAL runtime observation as a second section.
  *
- * The profile value is parsed back from the production encoder's own output, so the durable
- * bytes are the canonical bytes rather than whatever key order the revision object happened to
+ * Both content sections are parsed back from their production encoders' own output, so the
+ * durable bytes are the canonical bytes rather than whatever key order the object happened to
  * be built in. An identical body therefore re-persists identically, which is what makes a
  * re-probe byte-stable instead of merely equal.
+ *
+ * The observation is OPTIONAL and its absence adds no key at all. A probe that predates this
+ * section is legal and reads back ABSENT; a probe that carries a section it cannot justify was
+ * already refused upstream by the observation codec, so "absent" here never means "dropped".
  */
 export function providerProbePayload(
   providerMinimumProfileRef: string,
   truthClass: string,
   revision: ProviderProfileRevision,
+  observation: ProviderRuntimeObservation | null = null,
 ): JsonValue {
-  return {
+  const payload: Record<string, JsonValue> = {
     profile: JSON.parse(decoder.decode(encodeProviderProfileBytes(revision))) as JsonValue,
     profileDigest: revision.profileDigest,
     providerMinimumProfileRef,
     truthClass,
   };
+  if (observation !== null) {
+    payload.runtime = JSON.parse(
+      decoder.decode(encodeProviderRuntimeObservationBytes(observation)),
+    ) as JsonValue;
+  }
+  return payload;
 }
 
 function recordOf(value: JsonValue | undefined): Readonly<Record<string, JsonValue>> | null {
@@ -64,23 +78,43 @@ function recordOf(value: JsonValue | undefined): Readonly<Record<string, JsonVal
 }
 
 /**
- * Does ONE already-registered profile collide with the incoming revision?
+ * The observation digest a persisted probe carries, or `null` when it carried no section.
+ *
+ * `null` is a CONTENT value here, not a "skip this comparison" sentinel: an identity that once
+ * probed without an observation and comes back carrying one has changed what it says about
+ * itself, and that is a rebind in exactly the sense this rule forbids.
+ */
+function observationDigestOf(payload: Readonly<Record<string, JsonValue>>): string | null {
+  const runtime = recordOf(payload.runtime);
+  if (runtime === null) return null;
+  const digest = runtime.observationDigest;
+  return typeof digest === "string" ? digest : null;
+}
+
+/**
+ * Does ONE already-registered probe collide with the incoming content?
  *
  * Deliberately module-private: a caller holding only the previous probe would enforce the rule
  * against an adjacent pair, and one interleaved probe under a different identity would then be
  * enough to rebind a revision id to new content. `conflictsWithProfileHistory` is the only
  * supported entry point, so that mistake cannot be made from outside this module.
+ *
+ * Both sections are compared under the SAME identity. Comparing only the profile would let an
+ * operator's `profileRevisionId` keep its meaning while the runtime evidence filed under it was
+ * quietly replaced — the same laundering the whole-history sweep exists to stop, one field over.
  */
 function conflictsWithPriorProfile(
   prior: JsonValue | undefined,
   revision: ProviderProfileRevision,
+  observationDigest: string | null,
 ): boolean {
   const priorPayload = recordOf(prior);
   if (priorPayload === null) return false;
   const priorProfile = recordOf(priorPayload.profile);
   if (priorProfile === null) return false;
   if (priorProfile.profileRevisionId !== revision.profileRevisionId) return false;
-  return priorProfile.profileDigest !== revision.profileDigest;
+  if (priorProfile.profileDigest !== revision.profileDigest) return true;
+  return observationDigestOf(priorPayload) !== observationDigest;
 }
 
 /**
@@ -115,8 +149,10 @@ export function conflictsWithProfileHistory(
   store: SqliteEventStore,
   aggregateId: string,
   revision: ProviderProfileRevision,
+  observation: ProviderRuntimeObservation | null = null,
 ): boolean {
+  const observationDigest = observation === null ? null : observation.observationDigest;
   return registeredProfiles(store, aggregateId).some((prior) =>
-    conflictsWithPriorProfile(prior, revision),
+    conflictsWithPriorProfile(prior, revision, observationDigest),
   );
 }

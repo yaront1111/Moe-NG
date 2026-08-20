@@ -33,6 +33,8 @@ import {
   conflictsWithProfileHistory,
   providerProbePayload,
 } from "../provider-profile/provider-profile-registration.js";
+import { admitProviderRuntimeObservation } from "../provider-profile/provider-runtime-observation.js";
+import type { ProviderRuntimeObservation } from "../provider-profile/provider-runtime-observation.js";
 
 /**
  * Project-scoped bootstrap services and the pipeline every command in this task runs through.
@@ -122,11 +124,16 @@ const activateProject: CommandHandler = (context): ServiceOutcome => {
  * else — no dispatch request, no runtime observation — may supply a model, an effort, a
  * concurrency ceiling or a limit.
  *
- * Three layers can refuse here and each names itself. The envelope shape stays with the
+ * Four layers can refuse here and each names itself. The envelope shape stays with the
  * existing `DAEMON_INGRESS` guard, so a hostile `truthClass` still answers first and the new
- * codes cannot absorb it. The profile body is judged by the codec, which returns its own code
- * and layer. Agreement between the envelope's ref and the body's, and immutability of a
- * `profileRevisionId` already on record, are registration facts and refuse as such.
+ * codes cannot absorb it. The profile body is judged by the profile codec and the runtime
+ * observation section by its own codec, each returning its own code and layer. Agreement
+ * between the envelope's ref and the body's, and immutability of a `profileRevisionId` already
+ * on record, are registration facts and refuse as such.
+ *
+ * The observation section is OPTIONAL — a probe predating it is legal and simply files no
+ * runtime evidence — but a section that is PRESENT and inadmissible refuses the whole probe.
+ * Dropping it would persist a profile the operator believes came with observed runtime facts.
  */
 const recordProbe: CommandHandler = (context): ServiceOutcome => {
   const { ledger, request, store } = context;
@@ -143,16 +150,22 @@ const recordProbe: CommandHandler = (context): ServiceOutcome => {
   const admission = admitProviderProfile(observation.profile);
   if (!admission.ok) return refuse(request.kind, admission.issue.code, admission.issue.layer);
   const { revision } = admission;
+  let runtime: ProviderRuntimeObservation | null = null;
+  if (observation.runtime !== undefined) {
+    const admitted = admitProviderRuntimeObservation(observation.runtime);
+    if (!admitted.ok) return refuse(request.kind, admitted.issue.code, admitted.issue.layer);
+    runtime = admitted.observation;
+  }
   if (profileRef !== revision.providerMinimumProfileRef) {
     return refuse(request.kind, "PROVIDER_PROFILE_REF_MISMATCH", PROFILE_REGISTRATION);
   }
   if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
     return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
-  if (conflictsWithProfileHistory(store, aggregateId, revision)) {
+  if (conflictsWithProfileHistory(store, aggregateId, revision, runtime)) {
     return refuse(request.kind, "PROVIDER_PROFILE_IMMUTABILITY_CONFLICT", PROFILE_REGISTRATION);
   }
-  const persisted = providerProbePayload(profileRef, truthClass, revision);
+  const persisted = providerProbePayload(profileRef, truthClass, revision, runtime);
   return commitAccepted(store, request, {
     aggregateId,
     eventPayload: persisted,
