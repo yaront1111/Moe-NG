@@ -10,8 +10,8 @@
  *
  * A record is answered only when it survives a round trip: the durable section is
  * re-canonicalised, decoded through the codec, and the codec's own re-encoding is compared BYTE
- * FOR BYTE against those bytes. Returning the caller's stored bytes without that comparison
- * would hand back whatever was written, which is exactly what a tampered row wants.
+ * FOR BYTE against the section AS STORED. Answering without that comparison would hand back
+ * whatever was written, which is exactly what a hand-written row wants.
  */
 
 import type { ProjectConfigurationStore } from "../configuration/project-configuration-selection.js";
@@ -157,17 +157,22 @@ export function readCurrentRuntimeObservation(
 }
 
 /**
- * Re-canonicalised before decoding so the codec judges the observer's facts rather than a key
- * order, then re-encoded and compared as BYTES. `toEqual`-style structural equality would be
- * blind to exactly the key-order drift this comparison exists to catch.
+ * Decoded from the RE-CANONICALISED section so the codec judges the observer's facts rather
+ * than a key order, then compared as BYTES against the section AS STORED.
+ *
+ * Those are two different questions and both have to be asked. The codec's own canonicality
+ * arm can only ever see the bytes this function handed it, so on its own it is satisfied by
+ * construction here. What it cannot see is that the durable row was written in some other key
+ * order — which the production writer never does, because it persists the encoder's own output.
+ * A row that decodes to the right facts in the wrong order was hand-written, and answering from
+ * it would let a row nobody wrote acquire the standing of one the probe seam produced.
  */
 function decodedRecord(
   section: unknown,
   probeTruthClass: string,
   profileRevisionId: string,
 ): ReadRuntimeObservationResult {
-  const bytes = encoder.encode(canonicalJson(section));
-  const decoded = decodeProviderRuntimeObservationBytes(bytes);
+  const decoded = decodeProviderRuntimeObservationBytes(encoder.encode(canonicalJson(section)));
   if (!decoded.ok) {
     return refuse(
       "PROVIDER_RUNTIME_OBSERVATION_UNREADABLE",
@@ -175,10 +180,11 @@ function decodedRecord(
       { code: decoded.issue.code, layer: decoded.issue.layer },
     );
   }
-  if (!bytesEqual(encodeProviderRuntimeObservationBytes(decoded.observation), bytes)) {
+  const stored = encoder.encode(JSON.stringify(section));
+  if (!bytesEqual(encodeProviderRuntimeObservationBytes(decoded.observation), stored)) {
     return refuse(
       "PROVIDER_RUNTIME_OBSERVATION_UNREADABLE",
-      "persisted observation does not re-encode to its own bytes",
+      "persisted observation is not stored in its own canonical encoding",
     );
   }
   return Object.freeze({

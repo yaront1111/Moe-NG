@@ -132,6 +132,27 @@ describe("readCurrentRuntimeObservation", () => {
     });
   });
 
+  it("reads UNREADABLE for a section stored in a NON-CANONICAL key order", () => {
+    // The facts are untouched and every one of them decodes, so the codec's own canonicality
+    // arm cannot see this: the reader re-canonicalises before decoding. What gives the row away
+    // is that the production writer persists the encoder's own output, so a differently ordered
+    // row was hand-written and must not acquire the standing of one the probe seam produced.
+    const store = registeredStore();
+    accepted(send(store, probeFor()));
+    const section = runtimeSection();
+    const shuffled: Json = {};
+    for (const key of Object.keys(section).reverse()) shuffled[key] = section[key];
+    expect(Object.keys(shuffled)).not.toEqual(Object.keys(section));
+    plantProbe(store, { ...legacySections(store), runtime: shuffled }, "provider-probed-order");
+
+    const refusal = readRefusal(store);
+    expect(refusal.code).toBe("PROVIDER_RUNTIME_OBSERVATION_UNREADABLE");
+    expect(refusal.layer).toBe(READER_LAYER);
+    // The CODEC accepted it — this refusal is the reader's own, so `upstream` stays null.
+    expect(refusal.upstream).toBeNull();
+    expect(refusal.detail).toContain("canonical encoding");
+  });
+
   it("reads UNREADABLE when the planted section is not a record at all", () => {
     const store = registeredStore();
     accepted(send(store, probeFor()));
