@@ -6,6 +6,7 @@ import type {
   CommandDecisionRecord,
   CommitExpectedVersionDecisionInput,
 } from "./store-contracts.js";
+import type { AdditionalLegFence } from "./decision-ledger-fences.js";
 import {
   expectedVersionConflictResultBytes,
   identifyCommandDecisionId,
@@ -16,7 +17,6 @@ import {
   rejectionAuditEventId,
   rejectionAuditPayload,
 } from "./store-digests.js";
-import type { AdditionalLegFence } from "./store-digests.js";
 import {
   snapshotCommittedProposal,
   snapshotDecisionMetadata,

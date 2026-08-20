@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import type { AdditionalLegFence } from "./decision-ledger-fences.js";
 import {
   COMMAND_DECISION_IDENTITY_VERSION,
   COMMAND_DECISION_REQUEST_IDENTITY_VERSION,
@@ -78,12 +79,6 @@ export function identifyCommandDecisionId(key: CommandDecisionKey): string {
   updateString(hash, key.principalId);
   updateString(hash, key.commandId);
   return hash.digest("hex");
-}
-
-/** One non-primary leg's fence, as it enters the scoped request digest. */
-export interface AdditionalLegFence {
-  readonly aggregateId: string;
-  readonly expectedVersion: number;
 }
 
 /**

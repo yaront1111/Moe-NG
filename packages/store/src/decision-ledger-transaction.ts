@@ -20,7 +20,6 @@ import {
 import type {
   CanonicalDecisionEffect,
   DecisionEffectContext,
-  DecisionIdentities,
   DecisionPlan,
 } from "./decision-ledger-canonical.js";
 import { writeCanonicalDecision } from "./decision-ledger-record.js";
@@ -34,9 +33,7 @@ import {
   snapshotLegsRequest,
 } from "./decision-ledger-legs.js";
 import type { DecisionLegsPlan } from "./decision-ledger-legs.js";
-
-const COLLIDING_DECISION_ID_QUERY =
-  "SELECT 1 AS value FROM command_decisions WHERE decision_id = ?";
+import { assertDecisionNamespaceFree } from "./decision-ledger-namespace.js";
 
 interface DecisionAttempt {
   commitAttempted: boolean;
@@ -140,7 +137,12 @@ export class DecisionTransactionStore extends DecisionPreflightStore {
         }
         return this.commitAndRespond(attempt, historical, "REPLAYED");
       }
-      this.assertDecisionNamespaceFree(plan.identities, legsPlan);
+      assertDecisionNamespaceFree(
+        this.database,
+        (commandId) => this.loadReceipt(commandId, false) !== null,
+        plan.identities,
+        legsPlan,
+      );
       return this.commitAndRespond(
         attempt,
         legsPlan === null
@@ -166,33 +168,6 @@ export class DecisionTransactionStore extends DecisionPreflightStore {
     attempt.commitAttempted = true;
     this.database.exec("COMMIT");
     return toCommandDecisionResponse(decision, disposition);
-  }
-
-  private assertDecisionNamespaceFree(
-    identities: DecisionIdentities,
-    legsPlan: DecisionLegsPlan | null,
-  ): void {
-    const collidingDecision = this.database
-      .prepare(COLLIDING_DECISION_ID_QUERY)
-      .get(identities.decisionId);
-    if (collidingDecision !== undefined) {
-      throw new DurableStoreError(
-        "STORE_CORRUPT",
-        "a scoped command decision ID collides with a different composite key",
-      );
-    }
-    const receiptCommandIds =
-      legsPlan === null
-        ? [identities.receiptCommandId]
-        : legsPlan.legs.map((legPlan) => legPlan.commitInput.commandId);
-    for (const receiptCommandId of receiptCommandIds) {
-      if (this.loadReceipt(receiptCommandId, false) !== null) {
-        throw new DurableStoreError(
-          "DURABLE_ID_CONFLICT",
-          "the internal decision receipt ID is already occupied",
-        );
-      }
-    }
   }
 
   private decideUnderLock(

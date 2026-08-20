@@ -2,11 +2,11 @@ import { MAX_COMMIT_BYTES } from "./store-contracts.js";
 import type { CommitInput } from "./store-contracts.js";
 import { MAX_DECISION_LEGS } from "./decision-legs-contracts.js";
 import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
+import type { AdditionalLegFence } from "./decision-ledger-fences.js";
 import {
   identifyCommandRequest,
   legReceiptCommandId,
 } from "./store-digests.js";
-import type { AdditionalLegFence } from "./store-digests.js";
 import {
   assertExternalCommitIdentifiers,
   invalidInput,
@@ -196,12 +196,9 @@ export function decideLegsUnderLock(
   metadata: SnapshotDecisionMetadata,
   plan: DecisionLegsPlan,
 ): StoredCommandDecision {
-  const observedVersions = plan.legs.map((legPlan) =>
-    ctx.effect.assertAggregateTail(legPlan.commitInput.aggregateId),
-  );
+  const observedVersions = plan.legs.map((legPlan) => ctx.effect.assertAggregateTail(legPlan.commitInput.aggregateId));
   const staleIndex = observedVersions.findIndex(
-    (observedVersion, legIndex) =>
-      observedVersion !== plan.legs[legIndex]!.commitInput.expectedVersion,
+    (version, index) => version !== plan.legs[index]!.commitInput.expectedVersion,
   );
   if (staleIndex !== -1) {
     const staleLeg = plan.legs[staleIndex]!;

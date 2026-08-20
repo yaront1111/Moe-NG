@@ -292,7 +292,7 @@ describe("multi-aggregate expected-version decision legs", () => {
   });
 
   it("refuses a different leg list under the same key and leaves the first record intact", () => {
-    const fixture = openFixture("conflict");
+    const fixture = openFixture("leg-conflict");
     try {
       const { store } = fixture;
       const first = store.commitExpectedVersionDecisionLegs(legsInput());
@@ -312,6 +312,47 @@ describe("multi-aggregate expected-version decision legs", () => {
         }),
       ).toStrictEqual(first.decision);
       expect(store.readEvents("goal-z")).toEqual([]);
+    } finally {
+      closeFixture(fixture);
+    }
+  });
+
+  it("refuses different request bytes under the same key without changing either leg", () => {
+    const fixture = openFixture("conflict");
+    try {
+      const { store } = fixture;
+      const first = store.commitExpectedVersionDecisionLegs(legsInput());
+      const countsBeforeConflict = {
+        decisions: store.readCommandDecisionsAfter(0n, 100).items.length,
+        goalAEvents: store.readEvents("goal-a").length,
+        goalAHead: store.getAggregateVersion("goal-a"),
+        goalBEvents: store.readEvents("goal-b").length,
+        goalBHead: store.getAggregateVersion("goal-b"),
+        rawEvents: store.readEventsAfter(0n, 100).items.length,
+      };
+
+      expect(
+        refusalCode(() =>
+          store.commitExpectedVersionDecisionLegs(
+            legsInput({ requestBytes: bytes("goal.create/v2") }),
+          ),
+        ),
+      ).toBe("IDEMPOTENCY_CONFLICT");
+      expect(
+        store.getCommandDecision({
+          commandId: "command-1",
+          principalId: "principal-1",
+          projectId: PROJECT_ID,
+        }),
+      ).toStrictEqual(first.decision);
+      expect({
+        decisions: store.readCommandDecisionsAfter(0n, 100).items.length,
+        goalAEvents: store.readEvents("goal-a").length,
+        goalAHead: store.getAggregateVersion("goal-a"),
+        goalBEvents: store.readEvents("goal-b").length,
+        goalBHead: store.getAggregateVersion("goal-b"),
+        rawEvents: store.readEventsAfter(0n, 100).items.length,
+      }).toStrictEqual(countsBeforeConflict);
     } finally {
       closeFixture(fixture);
     }
