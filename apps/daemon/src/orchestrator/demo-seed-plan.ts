@@ -72,12 +72,16 @@ export const DEMO_SEED_KINDS = Object.freeze([
   "project.bind_repository",
   "provider.probe",
   "project.activate",
-  // Twice, and before goal.create: the two slices the daemon-side verifier reads. Without them
-  // `createVerifierAuthorityProvider` returns null and `readReviewerCalibration` refuses
-  // REVIEWER_CALIBRATION_NOT_INSTALLED, so node-verifier.ts reports
-  // VERIFICATION_AUTHORITY_UNAVAILABLE before any test runs and no seeded node can reach
-  // COMMITTED. `policy.install` names no prerequisite and rides the project's `-policy` stream,
-  // so their position is free and their versions are their own.
+  // Three times, and before goal.create. The first two are the slices the daemon-side verifier
+  // reads: without them `createVerifierAuthorityProvider` returns null and
+  // `readReviewerCalibration` refuses REVIEWER_CALIBRATION_NOT_INSTALLED, so node-verifier.ts
+  // reports VERIFICATION_AUTHORITY_UNAVAILABLE before any test runs and no seeded node can reach
+  // COMMITTED. The third is the VALIDATABLE slice at the 64-hex address the development payload
+  // hint names: the seeded surface offers `policy.validate` as a READY step, and without an
+  // installed nameable revision that step is unsatisfiable by construction (the other two live
+  // at non-hex addresses on purpose). `policy.install` names no prerequisite and rides the
+  // project's `-policy` stream, so their position is free and their versions are their own.
+  "policy.install",
   "policy.install",
   "policy.install",
   "goal.create",
@@ -94,6 +98,7 @@ import {
   probeObservation,
   repositoryObservation,
   reviewerCalibrationSlice,
+  validatablePolicySlice,
   verifierPolicySlice,
 } from "./demo-seed-payloads.js";
 
@@ -146,10 +151,11 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     build("project.bind_repository", 1, { observation: repositoryObservation(input) }),
     build("provider.probe", 0, { observation: probeObservation(input) }),
     build("project.activate", 2, { witness: activationWitness(input) }),
-    // The policy stream's own 0 -> 1 line; `installPolicy` refuses
+    // The policy stream's own 0 -> 1 -> 2 line; `installPolicy` refuses
     // BOOTSTRAP_EXPECTED_VERSION_STALE on anything else.
     build("policy.install", 0, { slice: verifierPolicySlice(input) }, "-verifier-policy"),
     build("policy.install", 1, { slice: reviewerCalibrationSlice(input) }, "-reviewer-calibration"),
+    build("policy.install", 2, { slice: validatablePolicySlice() }, "-validatable-policy"),
     build("goal.create", 0, {
       budgetAccountRef: `${input.projectId}-budget-account`,
       goalId: input.goalId,

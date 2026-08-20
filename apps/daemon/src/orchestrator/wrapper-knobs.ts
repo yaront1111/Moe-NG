@@ -9,6 +9,8 @@
 export interface WrapperKnobs {
   readonly intervalMs: number;
   readonly maxAgents: number;
+  /** Consecutive staffings of ONE unmoved item before the wrapper stops respawning it. */
+  readonly maxItemAttempts: number;
   readonly once: boolean;
 }
 
@@ -18,6 +20,13 @@ const DEFAULT_MAX_AGENTS = 2;
 const DEFAULT_INTERVAL_MS = 15_000;
 /** Below this the loop is a busy-wait against SQLite, not a poll. */
 const MIN_INTERVAL_MS = 100;
+/**
+ * Live run 2026-08-20: a READY step whose command refuses at a daemon prerequisite
+ * (BOOTSTRAP_POLICY_UNKNOWN) was restaffed every pass forever — each cycle minting a session,
+ * claiming, spawning a real model, and releasing. Three attempts is enough to distinguish a
+ * transient race from an unsatisfiable step; the counter resets when the step moves at all.
+ */
+const DEFAULT_MAX_ITEM_ATTEMPTS = 3;
 
 function integer(env: Readonly<Record<string, string | undefined>>, name: string, fallback: number, minimum: number): number {
   const raw = env[name];
@@ -35,6 +44,8 @@ export function readWrapperKnobs(
   return Object.freeze({
     intervalMs: integer(env, "MOE_WRAPPER_INTERVAL_MS", DEFAULT_INTERVAL_MS, MIN_INTERVAL_MS),
     maxAgents: integer(env, "MOE_WRAPPER_MAX_AGENTS", DEFAULT_MAX_AGENTS, 1),
+    maxItemAttempts:
+      integer(env, "MOE_WRAPPER_MAX_ITEM_ATTEMPTS", DEFAULT_MAX_ITEM_ATTEMPTS, 1),
     once: env["MOE_WRAPPER_ONCE"] === "1",
   });
 }

@@ -158,7 +158,9 @@ export async function shutdownWrapperRuntime(
  * Environment: the store trio + MOE_DAEMON_CREDENTIAL (operator), and
  * optionally MOE_AGENT_COMMAND (default "claude"), MOE_WRAPPER_MAX_AGENTS
  * (default 2), MOE_WRAPPER_INTERVAL_MS (default 15000), MOE_WRAPPER_ONCE=1 for
- * a single pass. The trusted wrapper hosts MCP on loopback; each agent receives
+ * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
+ * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
+ * respawned. The trusted wrapper hosts MCP on loopback; each agent receives
  * only its scoped bearer, never the operator credential or store path.
  */
 async function main(): Promise<void> {
@@ -241,6 +243,7 @@ async function main(): Promise<void> {
       clock: () => Date.now(),
       deps: provider.provide(),
       maxAgents: knobs.maxAgents,
+      maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),
       operatorCredential: config.credential,
       spawnAgent: (request) => secureSpawn === null

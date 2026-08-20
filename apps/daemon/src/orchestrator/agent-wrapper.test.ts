@@ -1520,6 +1520,115 @@ describe("createAgentWrapper — durable staffing fence", () => {
     }
   });
 
+  it("stops restaffing an unmoved item after maxItemAttempts spawn cycles", async () => {
+    // Live run 2026-08-20: policy.validate refused BOOTSTRAP_POLICY_UNKNOWN for every input,
+    // the agent released its claim, and the wrapper respawned another agent at the same READY
+    // step every pass — a real model per cycle, forever. This runs the honest cycle over the
+    // REAL surface: spawn, immediate exit, durable release, step unmoved, respawn.
+    const projectId = "proj-wrapper-breaker";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const started: SpawnRequest[] = [];
+      const breaker = createAgentWrapper({
+        affordances: harness.port,
+        claimTtlMs: 60_000,
+        clock: () => NOW,
+        deps: harness.isolated.provide(),
+        maxAgents: 1,
+        maxItemAttempts: 3,
+        mintSecret: () => `breaker-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        // The child exits immediately without doing the step's work, so the step
+        // stays READY and unclaimed on the next pass — the live pathology exactly.
+        spawnAgent: async (request) => {
+          started.push(request);
+          return { exit: Promise.resolve(), ok: true, pid: CHILD_PID };
+        },
+      });
+
+      const first = await breaker.runOnce();
+      expect(first.spawned[0]?.outcome).toBe("SPAWNED");
+      const itemId = first.spawned[0]?.workItemId;
+      if (itemId === undefined) throw new Error("nothing staffed");
+      await breaker.settle();
+      for (let round = 0; round < 2; round += 1) {
+        const report = await breaker.runOnce();
+        expect(report.spawned.find((entry) => entry.workItemId === itemId)?.outcome)
+          .toBe("SPAWNED");
+        await breaker.settle();
+      }
+      expect(started.filter((request) => request.workItemId === itemId)).toHaveLength(3);
+
+      // Fourth pass: the exhaustion is REPORTED, not silent, and the item is not respawned.
+      const exhausted = await breaker.runOnce();
+      expect(exhausted.spawned.find((entry) => entry.workItemId === itemId)).toMatchObject({
+        outcome: "STAFFING_ATTEMPTS_EXHAUSTED",
+      });
+      expect(started.filter((request) => request.workItemId === itemId)).toHaveLength(3);
+      await breaker.settle();
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("re-arms an exhausted item once it leaves the READY surface", async () => {
+    // Counter semantics only, so the surface is a stub and every staffing TRY counts —
+    // spawned or refused at the durable claim. Movement is defined as leaving the READY
+    // surface; a claim alone is the staffed child's own working state and must NOT reset.
+    const projectId = "proj-wrapper-rearm";
+    const harness = isolatedHarness(projectId);
+    try {
+      let suffix = 0;
+      const step = {
+        aggregateId: "rearm-policy", claim: null, claimAggregateVersion: 0,
+        kind: "policy.install", missing: [], status: "READY", version: 0,
+      };
+      let present = true;
+      const rearm = createAgentWrapper({
+        affordances: {
+          boundProjectId: projectId,
+          readSurface: () => ({
+            nextAllowedCommands: [],
+            outcome: "SURFACE",
+            steps: present ? [{ ...step }] : [],
+          }),
+        } as never,
+        claimTtlMs: 60_000,
+        clock: () => NOW,
+        deps: harness.isolated.provide(),
+        maxAgents: 1,
+        maxItemAttempts: 2,
+        mintSecret: () => `rearm-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => ({ exit: Promise.resolve(), ok: true, pid: CHILD_PID }),
+      });
+      const itemId = workItemIdFor("policy.install", "rearm-policy");
+      const outcomeOf = async (): Promise<string | undefined> => {
+        const report = await rearm.runOnce();
+        await rearm.settle();
+        return report.spawned.find((entry) => entry.workItemId === itemId)?.outcome;
+      };
+
+      // Attempt 1 spawns; the stub hides the durable claim from cleanup, so attempt 2
+      // refuses at the claim — BOTH count: each try burns identity and possibly a model.
+      expect(await outcomeOf()).toBe("SPAWNED");
+      const second = await outcomeOf();
+      expect(second).not.toBe("STAFFING_ATTEMPTS_EXHAUSTED");
+      expect(await outcomeOf()).toBe("STAFFING_ATTEMPTS_EXHAUSTED");
+
+      // One pass with the step gone — movement — then back: tried again, not suppressed.
+      present = false;
+      await rearm.runOnce();
+      present = true;
+      const retried = await outcomeOf();
+      expect(retried).toBeDefined();
+      expect(retried).not.toBe("STAFFING_ATTEMPTS_EXHAUSTED");
+    } finally {
+      harness.dispose();
+    }
+  });
+
   it("refuses an unopened session credential at the identity layer", () => {
     // The second layer that can answer for a superseded session. It answers with
     // a VERDICT and no reason code — worth pinning literally, because a reader

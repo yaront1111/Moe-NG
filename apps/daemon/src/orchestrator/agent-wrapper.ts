@@ -61,6 +61,14 @@ export interface AgentWrapperConfig {
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
   readonly maxAgents: number;
+  /**
+   * Consecutive staffing attempts for ONE item whose step never moves before the
+   * wrapper stops restaffing it. Live run 2026-08-20: a READY step refusing at a
+   * daemon prerequisite was respawned every pass forever, burning a real model
+   * per cycle. The counter clears the moment the step leaves the READY surface
+   * (committed, blocked, or withdrawn), so genuine progress always re-arms it.
+   */
+  readonly maxItemAttempts?: number | undefined;
   readonly mintSecret: () => string;
   /** Coding brief per node ref; a node step without one is not staffed. */
   readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
@@ -108,6 +116,13 @@ export { codeMission } from "./agent-mission-text.js";
 export function createAgentWrapper(config: AgentWrapperConfig) {
   const active = new Map<string, Promise<void>>();
   const cleanupFailures: Error[] = [];
+  const maxItemAttempts = config.maxItemAttempts ?? 3;
+  // Staffing attempts per work item since it last MOVED. Counts every try —
+  // spawned or refused at claim — because each one mints identity and possibly
+  // a process. Not durable on purpose: a wrapper restart re-arms every item,
+  // which errs toward staffing, and the durable staffing gate still fences the
+  // restart races this map cannot see.
+  const attempts = new Map<string, number>();
   // The durable half of the staffing decision. `active` below is the in-process
   // half and is NOT replaced by it: it stays the correct cheap guard within one
   // process, while the gate is what survives a restart.
@@ -320,6 +335,16 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { active: active.size, spawned: [], surfaceOutcome: surface.code };
     }
     const spawned: SpawnReport[] = [];
+    // A step that left the READY surface MOVED — committed, blocked, claimed away
+    // and resolved, or withdrawn — so its attempt counter re-arms. A claim alone
+    // is not movement: the staffed child holds one while it works, and resetting
+    // on it would let an unsatisfiable step spin forever in claim-sized hops.
+    const ready = new Set(surface.steps
+      .filter((step) => step.status === "READY")
+      .map((step) => workItemIdFor(step.kind, step.aggregateId)));
+    for (const item of [...attempts.keys()]) {
+      if (!ready.has(item)) attempts.delete(item);
+    }
     // Staffing priority: code nodes are the point of the board, so they come first.
     // Human approval and goal closure stay visible on the board but are never delegated.
     const ordered = [...surface.steps].sort((a, b) => {
@@ -334,7 +359,14 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       // Session lifecycle steps are identity plumbing the wrapper itself uses,
       // not board work an agent should be staffed on.
       if (step.kind.startsWith("session.")) continue;
-      if (active.has(workItemIdFor(step.kind, step.aggregateId))) continue;
+      const workItemId = workItemIdFor(step.kind, step.aggregateId);
+      if (active.has(workItemId)) continue;
+      const tried = attempts.get(workItemId) ?? 0;
+      if (tried >= maxItemAttempts) {
+        spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
+        continue;
+      }
+      attempts.set(workItemId, tried + 1);
       spawned.push(await staff(step));
       if (failureOutcome() !== null) break;
     }

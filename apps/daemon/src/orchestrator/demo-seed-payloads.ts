@@ -43,6 +43,27 @@ const DEMO_ACCEPTANCE_TIER = "R0";
 const DEMO_POLICY_EVALUATED_AT_EPOCH_MS = 1_760_000_000_000;
 
 /**
+ * The one policy address a caller can NAME in `policy.validate`: `evaluatePolicy` requires a
+ * 64-hex `policyRevisionRef`, and the value here mirrors the development payload table's
+ * `POLICY_REF` (`live-dispatch.ts` / `bootstrap-test-fixtures.ts` — both `hex64("a1b2c3")`,
+ * neither importable from a production bin).
+ */
+export const DEMO_VALIDATABLE_POLICY_REF = hex64("a1b2c3");
+
+/**
+ * The validatable policy slice. The verifier and calibration slices below live at deliberately
+ * NON-hex addresses so they can never be named as policy revisions — but the seeded surface
+ * still offers `policy.validate` as a READY step, and the mission hint an agent receives names
+ * `DEMO_VALIDATABLE_POLICY_REF`. Live run 2026-08-20: without this install every input shape
+ * refused BOOTSTRAP_POLICY_UNKNOWN at DAEMON_PREREQUISITE, and the wrapper respawned an agent
+ * at the unsatisfiable step every pass. Installing the hinted address makes the offered step
+ * completable; it grants nothing (no rules, no opt-ins).
+ */
+export function validatablePolicySlice(): Record<string, unknown> {
+  return { autoApprovalOptIns: [], rules: [], sliceRef: DEMO_VALIDATABLE_POLICY_REF };
+}
+
+/**
  * The reviewer calibration the demo DECLARES, at the well-known address its reader owns.
  *
  * Design 15.3 calls these "caller-supplied durable facts", and this seed is the caller - but

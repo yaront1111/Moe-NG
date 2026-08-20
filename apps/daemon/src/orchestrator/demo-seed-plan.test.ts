@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { COMMAND_PREREQUISITES } from "../bootstrap/bootstrap-sequence.js";
 import { DEMO_SEED_KINDS, buildDemoSeedPlan, toWireEnvelope } from "./demo-seed-plan.js";
+import { DEMO_VALIDATABLE_POLICY_REF } from "./demo-seed-payloads.js";
 import type { DemoSeedInput, SeedCommand } from "./demo-seed-plan.js";
 import { formatDaemonRefusal, readDaemonRefusal } from "./demo-seed-refusal.js";
 
@@ -115,6 +116,27 @@ describe("buildDemoSeedPlan envelopes", () => {
 
     expect(new Set(ids).size).toBe(plan.length);
     expect(ids.every((id) => id.length > 0)).toBe(true);
+  });
+
+  it("installs a validatable policy at the 64-hex address the payload hint names", () => {
+    // Live run 2026-08-20: with only the two non-hex installs, the seeded surface offered
+    // policy.validate as a READY step no input could satisfy — BOOTSTRAP_POLICY_UNKNOWN on
+    // every shape — and the wrapper restaffed it forever. The third install is the one
+    // address `evaluatePolicy` can accept and the development hint actually names.
+    const plan = buildDemoSeedPlan(INPUT);
+    const installs = plan.filter((command) => command.commandKind === "policy.install");
+
+    expect(installs).toHaveLength(3);
+    expect(installs.map((command) => command.expectedVersion)).toEqual([0, 1, 2]);
+    const validatable = installs[2]?.payload["slice"] as Record<string, unknown>;
+    expect(validatable["sliceRef"]).toBe(DEMO_VALIDATABLE_POLICY_REF);
+    expect(validatable["sliceRef"]).toMatch(/^[0-9a-f]{64}$/u);
+    // The verifier and calibration slices live at deliberately NON-hex addresses: they can
+    // never be named as policy revisions, which is exactly why they cannot carry validate.
+    for (const install of installs.slice(0, 2)) {
+      const slice = install.payload["slice"] as Record<string, unknown>;
+      expect(String(slice["sliceRef"])).not.toMatch(/^[0-9a-f]{64}$/u);
+    }
   });
 
   it("approves at goal version 1, the version goal.create leaves behind", () => {

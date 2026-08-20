@@ -3,17 +3,26 @@ import { describe, expect, it } from "vitest";
 import { WRAPPER_ENV_INVALID, readWrapperKnobs } from "./wrapper-knobs.js";
 
 describe("readWrapperKnobs", () => {
-  it("defaults to two agents, a 15 s poll, and continuous mode", () => {
-    expect(readWrapperKnobs({})).toEqual({ intervalMs: 15_000, maxAgents: 2, once: false });
+  it("defaults to two agents, a 15 s poll, three item attempts, and continuous mode", () => {
+    expect(readWrapperKnobs({}))
+      .toEqual({ intervalMs: 15_000, maxAgents: 2, maxItemAttempts: 3, once: false });
     // Empty is absent, not zero.
     expect(readWrapperKnobs({ MOE_WRAPPER_INTERVAL_MS: "", MOE_WRAPPER_MAX_AGENTS: "" }))
-      .toEqual({ intervalMs: 15_000, maxAgents: 2, once: false });
+      .toEqual({ intervalMs: 15_000, maxAgents: 2, maxItemAttempts: 3, once: false });
   });
 
   it("reads explicit values", () => {
     expect(readWrapperKnobs({
-      MOE_WRAPPER_INTERVAL_MS: "10000", MOE_WRAPPER_MAX_AGENTS: "1", MOE_WRAPPER_ONCE: "1",
-    })).toEqual({ intervalMs: 10_000, maxAgents: 1, once: true });
+      MOE_WRAPPER_INTERVAL_MS: "10000", MOE_WRAPPER_MAX_AGENTS: "1",
+      MOE_WRAPPER_MAX_ITEM_ATTEMPTS: "5", MOE_WRAPPER_ONCE: "1",
+    })).toEqual({ intervalMs: 10_000, maxAgents: 1, maxItemAttempts: 5, once: true });
+  });
+
+  it("refuses a non-numeric or zero attempt cap by name instead of suppressing every item", () => {
+    expect(() => readWrapperKnobs({ MOE_WRAPPER_MAX_ITEM_ATTEMPTS: "three" }))
+      .toThrow(new RegExp(`${WRAPPER_ENV_INVALID}: MOE_WRAPPER_MAX_ITEM_ATTEMPTS`, "u"));
+    expect(() => readWrapperKnobs({ MOE_WRAPPER_MAX_ITEM_ATTEMPTS: "0" }))
+      .toThrow(WRAPPER_ENV_INVALID);
   });
 
   it("refuses a non-numeric interval by name instead of busy-looping on NaN", () => {

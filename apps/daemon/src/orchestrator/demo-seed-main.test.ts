@@ -244,6 +244,7 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         "demo-seed-project.activate",
         "demo-seed-policy.install-verifier-policy",
         "demo-seed-policy.install-reviewer-calibration",
+        "demo-seed-policy.install-validatable-policy",
         "demo-seed-goal.create",
         "demo-seed-plan.propose",
         "demo-seed-approval.decide",

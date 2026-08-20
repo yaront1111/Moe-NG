@@ -30,7 +30,8 @@ import {
   createVerifierAuthorityProvider,
 } from "../review/verifier-authority-provider.js";
 import type { NodeMission } from "./agent-wrapper.js";
-import { activationWitness, probeObservation, providerProfileRef } from "./demo-seed-payloads.js";
+import { DEMO_VALIDATABLE_POLICY_REF, activationWitness, probeObservation,
+  providerProfileRef } from "./demo-seed-payloads.js";
 import { buildDemoSeedPlan } from "./demo-seed-plan.js";
 import type { DemoSeedInput, SeedCommand } from "./demo-seed-plan.js";
 
@@ -193,17 +194,18 @@ function seedCleanRound(store: SqliteEventStore): void {
 describe("the demo seed's policy slices", () => {
   afterEach(closeStores);
 
-  it("builds exactly the two slices the verifier's readers address, before goal.create", () => {
+  it("builds the verifier's two slices plus the validatable one, all before goal.create", () => {
     const plan = buildDemoSeedPlan(DURABLE_INPUT);
     const kinds = plan.map((command) => command.commandKind);
 
-    expect(policyInstalls().map(sliceRefOf))
-      .toEqual([VERIFIER_POLICY_SLICE_REF, REVIEWER_CALIBRATION_SLICE_REF]);
+    expect(policyInstalls().map(sliceRefOf)).toEqual([
+      VERIFIER_POLICY_SLICE_REF, REVIEWER_CALIBRATION_SLICE_REF, DEMO_VALIDATABLE_POLICY_REF,
+    ]);
     expect(kinds.lastIndexOf("policy.install")).toBeLessThan(kinds.indexOf("goal.create"));
     for (const command of policyInstalls()) {
       expect(command.targetAggregateId).toBe(`${REVIEW_PROJECT_ID}-policy`);
     }
-    expect(policyInstalls().map((command) => command.expectedVersion)).toEqual([0, 1]);
+    expect(policyInstalls().map((command) => command.expectedVersion)).toEqual([0, 1, 2]);
   });
 
   it("flips readReviewerCalibration from NOT_INSTALLED to an eligible durable record", () => {
