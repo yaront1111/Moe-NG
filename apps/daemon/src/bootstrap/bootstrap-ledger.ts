@@ -1,10 +1,13 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue, RuntimeError } from "@moe/contracts";
-import { APPROVAL_AUTHORITY_LAYERS } from "@moe/core";
+import {
+  ACCEPTANCE_CONTRACT_LAYERS, APPROVAL_AUTHORITY_LAYERS, PLAN_REVISION_LAYERS,
+} from "@moe/core";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
   EventDraft,
+  ExpectedVersionDecisionLeg,
   SqliteEventStore,
 } from "@moe/store";
 
@@ -48,7 +51,15 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   "PROVIDER_PROFILE_CODEC",
   "PROVIDER_PROFILE_REGISTRATION",
   "PROVIDER_RUNTIME_OBSERVATION_CODEC",
+  // Spelled literally for the same reason as the provider pair: the planning-authority
+  // persistence module keeps its layer const private, and the compile-time agreement check is
+  // `proposePlan` passing that module's closed layer TYPE straight into `refuse`.
+  "PLANNING_AUTHORITY_PERSISTENCE",
+  // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
+  // travels under the layer that produced it rather than under a daemon restatement.
+  ...ACCEPTANCE_CONTRACT_LAYERS,
   ...APPROVAL_AUTHORITY_LAYERS,
+  ...PLAN_REVISION_LAYERS,
 ] as const);
 
 export type ServiceRefusedBy = (typeof SERVICE_REFUSED_BY)[number];
@@ -199,6 +210,30 @@ export interface CommitPlan {
   readonly result: JsonValue;
 }
 
+/**
+ * The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row and
+ * reports the conflict in `resultCode`. Reporting that as an accepted decision would be a
+ * fail-open — authority claimed for a command that committed nothing — so the store's own code is
+ * surfaced under its own layer. Reachable when a concurrent writer moves the head between the
+ * ledger read and the commit, and on a MULTI-LEG decision when ANY leg's fence is stale.
+ */
+function decided(
+  request: BootstrapRequest,
+  response: { readonly decision: CommandDecisionRecord; readonly disposition: "DECIDED" | "REPLAYED" },
+): ServiceOutcome {
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+  }
+  return Object.freeze({
+    advisoryOnly: false as const,
+    authority: "DURABLE_DECISION" as const,
+    decision: response.decision,
+    disposition: response.disposition,
+    kind: request.kind,
+    ok: true as const,
+  });
+}
+
 function eventDraft(request: BootstrapRequest, plan: CommitPlan): EventDraft {
   return {
     eventId: `${request.commandId}-${plan.eventType}`,
@@ -228,22 +263,40 @@ export function commitAccepted(
     requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
     targetAggregateId: plan.aggregateId,
   });
-  // The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row
-  // and reports the conflict in `resultCode`. Reporting that as an accepted decision would be
-  // a fail-open — authority claimed for a command that committed nothing — so the store's own
-  // code is surfaced under its own layer. Reachable when a concurrent writer moves the head
-  // between the ledger read and this commit.
-  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
-  }
-  return Object.freeze({
-    advisoryOnly: false as const,
-    authority: "DURABLE_DECISION" as const,
-    decision: response.decision,
-    disposition: response.disposition,
-    kind: request.kind,
-    ok: true as const,
-  });
+  return decided(request, response);
+}
+
+/**
+ * The MULTI-LEG variant of the same seam, for a command whose business effect spans two
+ * aggregates. `legs[0]` is the primary and is built exactly as the single-aggregate path builds
+ * its only leg, so the decision record a reader sees is identical in shape either way; the extra
+ * legs are fenced and appended inside the SAME decision, which is what makes "one cannot survive
+ * without the other" a property of the store rather than of a call site.
+ *
+ * Existing single-aggregate callers are deliberately NOT rerouted through this: they have no
+ * second leg, and an empty `extraLegs` would only add a code path that never runs.
+ */
+export function commitAcceptedLegs(
+  store: SqliteEventStore,
+  request: BootstrapRequest,
+  plan: CommitPlan,
+  extraLegs: readonly ExpectedVersionDecisionLeg[],
+): ServiceOutcome {
+  return decided(request, store.commitExpectedVersionDecisionLegs({
+    commandKind: request.kind,
+    committedResultBytes: encoder.encode(JSON.stringify(plan.result)),
+    correlationId: request.correlationId,
+    decidedAt: request.decidedAt,
+    key: decisionKey(request),
+    legs: [
+      {
+        aggregateId: plan.aggregateId, events: [eventDraft(request, plan)],
+        expectedVersion: plan.expectedVersion,
+      },
+      ...extraLegs,
+    ],
+    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+  }));
 }
 
 /**

@@ -9,6 +9,7 @@ import type {
 
 import {
   commitAccepted,
+  commitAcceptedLegs,
   payloadObject,
   payloadRef,
   refuse,
@@ -30,6 +31,7 @@ import {
   readApprovalGate,
 } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
+import { buildPlanningAuthorityLeg } from "./planning-authority-persistence.js";
 
 /**
  * Plan proposal and approval — the two authority-bearing commands in this task.
@@ -112,17 +114,30 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   );
   if (!folded.ok) return folded.outcome;
 
+  // Built BEFORE any durable write, so a refusal leaves no event and no decision behind. An
+  // ABSENT member is the legacy arm and keeps the single-aggregate seam byte-identical.
+  const authority = buildPlanningAuthorityLeg({
+    lastCommand: last, request, runId, state: folded.state, store,
+  });
+  if (authority.kind === "REFUSED") return refuse(request.kind, authority.code, authority.layer);
+  const carried = authority.kind === "LEG" ? authority.binding : {};
   const result = persistApprovalGate({
+    ...carried,
     state: folded.state as unknown as JsonValue,
     submissionHash: folded.state.submissionHash,
   }, prior, request.payload["humanAuthorityGate"]);
-  return commitAccepted(store, request, {
+  // ONE decision either way. With bodies, the run leg stays primary and the authority leg rides
+  // the same commit, so plan and criteria content cannot survive without PlanProposed.
+  const plan = {
     aggregateId: runId,
     eventPayload: folded.events as unknown as JsonValue,
     eventType: "PlanProposed",
     expectedVersion: versionOf(ledger, runId),
     result,
-  });
+  };
+  return authority.kind === "LEG"
+    ? commitAcceptedLegs(store, request, plan, [authority.leg])
+    : commitAccepted(store, request, plan);
 };
 
 interface DurableRun {
