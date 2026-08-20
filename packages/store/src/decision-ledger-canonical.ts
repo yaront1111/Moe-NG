@@ -16,6 +16,7 @@ import {
   rejectionAuditEventId,
   rejectionAuditPayload,
 } from "./store-digests.js";
+import type { AdditionalLegFence } from "./store-digests.js";
 import {
   snapshotCommittedProposal,
   snapshotDecisionMetadata,
@@ -83,8 +84,9 @@ export function snapshotDecisionRequest(
 
 export function identifyDecisionRequest(
   request: SnapshotExpectedVersionRequest,
+  additionalLegs: readonly AdditionalLegFence[] = [],
 ): DecisionIdentities {
-  const requestSha256 = identifyExpectedVersionRequest(request);
+  const requestSha256 = identifyExpectedVersionRequest(request, additionalLegs);
   const decisionId = identifyCommandDecisionId(request.key);
   return {
     decisionId,

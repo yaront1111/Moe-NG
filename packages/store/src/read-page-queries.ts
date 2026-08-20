@@ -1,7 +1,28 @@
 import { READ_PAGE_ROW_OVERHEAD_BYTES } from "./read-page-budget.js";
+import { LEG_RECEIPT_SEPARATOR } from "./store-internals.js";
 
 const bytes = (column: string): string =>
   `COALESCE(length(CAST(${column} AS BLOB)), 0)`;
+
+/**
+ * Matches `command_decisions.receipt_command_id` against a receipt or event
+ * command ID that may be a multi-leg decision's leg receipt. Leg receipts append
+ * `:leg:<index>` to the canonical ID, so truncating at the separator recovers the
+ * canonical ID and keeps this an EQUALITY probe on a unique column rather than a
+ * scan. A single-aggregate ID never contains the separator, so the second
+ * disjunct is dead for every pre-leg row and cannot change its plan.
+ */
+export const decisionReceiptMatchSql = (commandIdColumn: string): string => `(
+      decisions.receipt_command_id = ${commandIdColumn}
+      OR (
+        instr(${commandIdColumn}, '${LEG_RECEIPT_SEPARATOR}') > 0
+        AND decisions.receipt_command_id = substr(
+          ${commandIdColumn},
+          1,
+          instr(${commandIdColumn}, '${LEG_RECEIPT_SEPARATOR}') - 1
+        )
+      )
+    )`;
 
 export const STORED_EVENT_SELECT_COLUMNS = `
   CAST(events.global_position AS TEXT) AS global_position,
@@ -27,7 +48,7 @@ export const STORED_EVENT_SELECT_COLUMNS = `
 
 export const STORED_EVENT_DECISION_JOIN = `
   LEFT JOIN command_decisions AS decisions
-    ON decisions.receipt_command_id = events.command_id
+    ON ${decisionReceiptMatchSql("events.command_id")}
 ` as const;
 
 export const EVENT_DECODED_BYTES_SQL = `(

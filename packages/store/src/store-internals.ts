@@ -14,6 +14,12 @@ export const SCHEMA_V5_MANIFEST_VERSION = "moe-sqlite-schema/5" as const;
 export const EMPTY_BYTES = new Uint8Array();
 export const PENDING_EFFECT_SHA256 = "0".repeat(64);
 export const INTERNAL_IDENTIFIER_PREFIX = "moe-internal:" as const;
+/**
+ * Separates a multi-leg decision's canonical receipt ID from the leg index. A
+ * leg receipt is `<canonical>:leg:<index>`, so SQL recovers the canonical ID by
+ * truncating at this separator and stays an equality probe on a unique column.
+ */
+export const LEG_RECEIPT_SEPARATOR = ":leg:" as const;
 export const MAX_IDENTIFIER_UTF8_BYTES = 512;
 export const MAX_SQLITE_INTEGER = 9_223_372_036_854_775_807n;
 export const textEncoder = new TextEncoder();

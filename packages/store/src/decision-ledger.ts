@@ -14,6 +14,7 @@ import type {
   StoreHealth,
 } from "./store-contracts.js";
 import type { CommitApply } from "./event-ledger-transaction.js";
+import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
 import { RecoveryInitialInstallStore } from "./recovery-initial-install.js";
 import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
 import type {
@@ -44,6 +45,9 @@ export interface DecisionLedgerCore {
   readonly commit: (input: CommitInput) => CommitResult;
   readonly commitExpectedVersionDecision: (
     input: CommitExpectedVersionDecisionInput,
+  ) => CommandDecisionResponse;
+  readonly commitExpectedVersionDecisionLegs: (
+    input: CommitExpectedVersionDecisionLegsInput,
   ) => CommandDecisionResponse;
   readonly commitExpectedVersionDecisionWithApply: (
     input: CommitExpectedVersionDecisionInput,
@@ -109,6 +113,8 @@ export function createDecisionLedgerCore(
     commit: (input: CommitInput) => ledger.commit(input),
     commitExpectedVersionDecision: (input: CommitExpectedVersionDecisionInput) =>
       ledger.commitExpectedVersionDecision(input),
+    commitExpectedVersionDecisionLegs: (input: CommitExpectedVersionDecisionLegsInput) =>
+      ledger.commitExpectedVersionDecisionLegs(input),
     commitExpectedVersionDecisionWithApply: (
       input: CommitExpectedVersionDecisionInput,
       apply: CommitApply,

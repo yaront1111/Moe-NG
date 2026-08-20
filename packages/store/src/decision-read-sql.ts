@@ -1,4 +1,7 @@
-import { DECISION_DECODED_BYTES_SQL } from "./read-page-queries.js";
+import {
+  DECISION_DECODED_BYTES_SQL,
+  decisionReceiptMatchSql,
+} from "./read-page-queries.js";
 
 export const STORED_COMMAND_DECISION_SELECT_COLUMNS = `CAST(decision_position AS TEXT) AS decision_position,
           project_id,
@@ -70,7 +73,7 @@ export const RESERVED_DECISION_NAMESPACE_QUERY = `
           SELECT receipts.command_id AS durable_id
           FROM command_receipts AS receipts
           LEFT JOIN command_decisions AS decisions
-            ON decisions.receipt_command_id = receipts.command_id
+            ON ${decisionReceiptMatchSql("receipts.command_id")}
           WHERE receipts.command_id GLOB 'moe-internal:*'
             AND (
               receipts.command_id NOT GLOB 'moe-internal:decision-effect:*'
@@ -82,7 +85,7 @@ export const RESERVED_DECISION_NAMESPACE_QUERY = `
           SELECT events.event_id AS durable_id
           FROM domain_events AS events
           LEFT JOIN command_decisions AS decisions
-            ON decisions.receipt_command_id = events.command_id
+            ON ${decisionReceiptMatchSql("events.command_id")}
           WHERE (
               events.command_id GLOB 'moe-internal:*'
               OR events.aggregate_id GLOB 'moe-internal:*'
