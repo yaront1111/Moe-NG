@@ -585,6 +585,10 @@ describe("projection shadow matrix — the untouched-bytes proof", () => {
       const corpusBefore = inventoryOf(corpusRoot);
       const storeBefore = storeFactsOf(store, databasePath);
       expect(Object.keys(corpusBefore).length).toBeGreaterThan(0);
+      // ...and the durable side really carries rows, so "unchanged" below is
+      // never 0 == 0. Without this the whole read-only proof goes vacuous the
+      // day the ingest stops committing, and stays green while doing it.
+      expect(storeBefore.eventCount).toBeGreaterThan(0);
 
       const request = { manifestDigest: ingested.manifestDigest };
       // Accepted arm, plus one refusal of every shape reachable from a real store.
@@ -628,6 +632,23 @@ describe("projection shadow matrix — the untouched-bytes proof", () => {
       for (const key of Object.keys(before)) {
         if (key !== target) expect(after[key]).toEqual(before[key]);
       }
+    });
+  });
+
+  it("proves the STORE side can fail too — counts that never move prove nothing", () => {
+    withCorpus("store-control", ({ corpusRoot, databasePath, store }) => {
+      // Snapshot BEFORE the writer runs, so the only thing that can move the
+      // facts is the production import commit.
+      const before = storeFactsOf(store, databasePath);
+      expect(before.eventCount).toBe(0);
+
+      ingestCorpus(corpusRoot, store);
+      const after = storeFactsOf(store, databasePath);
+
+      // The corpus inventory has a control above; the store side had none, so
+      // `expectStoreUntouched` was an equality nothing had shown could break.
+      expect(after.eventCount).toBeGreaterThan(before.eventCount);
+      expect(() => { expectStoreUntouched(before, after); }).toThrow();
     });
   });
 
