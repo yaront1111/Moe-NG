@@ -53,6 +53,16 @@ import type {
   ProjectConfigurationCodecRefusal, ProjectConfigurationManifestCreateResult,
   ProjectConfigurationManifestDecodeResult, ProjectConfigurationManifestEncodeResult,
 } from "@moe/core";
+import type {
+  AcceptanceContract, AcceptanceContractApplicability, AcceptanceContractCode,
+  AcceptanceContractCreateResult, AcceptanceContractDecodeResult, AcceptanceContractDigestResult,
+  AcceptanceContractDraft, AcceptanceContractEncodeResult, AcceptanceContractLayer,
+  AcceptanceContractRefusal, AcceptanceCriterionContent, AcceptanceCriterionContentResult,
+  AcceptanceCriterionObligation, AcceptanceEvidenceRequirement, PlanExecutionContentResult,
+  PlanRevision, PlanRevisionCode, PlanRevisionCreateResult, PlanRevisionDecodeResult,
+  PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
+  PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
+} from "@moe/core";
 import {
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
 } from "@moe/contracts";
@@ -475,6 +485,154 @@ it("grants and then honours human authority through the root", () => {
   const decision: ApprovalAuthorityDecision = result;
   expect([grant?.principalId, grant?.principalKind]).toEqual(["human:yaron", "HUMAN"]);
   expect([decision.delayMs, decision.grant?.grantedAtEpochMs]).toEqual([0, 1_755_216_000_000]);
+});
+
+/**
+ * The two planning-authority records, exercised through the bare specifier and
+ * naming every published type. Guard 1 is blind to all 26 of them: deleting an
+ * `export type` line from index.ts leaves the runtime count at 105 and the name
+ * set untouched, and guard 3 never sees them because strip-types ERASES them.
+ * This block is therefore the only thing between the published type surface and
+ * a silent disappearance, and it fails at `pnpm --filter @moe/core typecheck`
+ * rather than in vitest, which does not typecheck.
+ *
+ * Every fixture is ANNOTATED as the published draft shape rather than cast into
+ * it, for the same reason as the expansion and configuration fixtures above: a
+ * cast asserts the shape instead of checking it against what the codec admits.
+ */
+const planStep = (
+  stepId: string, kind: PlanRevisionStep["kind"], description: string,
+): PlanRevisionStep => ({ description, kind, stepId });
+const planGraphBinding = (): PlanRevisionGraphBinding =>
+  ({ graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a" });
+const planDraft = (): PlanRevisionDraft => ({
+  affectedCriterionIds: ["criterion-a"], affectedNodeIds: ["node-a"], approvalState: "APPROVED",
+  authorRef: "principal-a", graphBinding: planGraphBinding(), parentRevisionId: null,
+  rejectionRef: null, revisionId: "plan-revision-a",
+  steps: [
+    planStep("step-a", "ANALYSIS", "Analyse the graph."),
+    planStep("step-b", "IMPLEMENTATION", "Implement the change."),
+  ],
+  verificationRecipeRefs: ["verify-a"],
+});
+const evidenceRequirement = (): AcceptanceEvidenceRequirement =>
+  ({ evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" });
+const criterionObligation = (): AcceptanceCriterionObligation => ({
+  criterionId: "criterion-a", evidenceRequirements: [evidenceRequirement()],
+  statement: "The build passes its focused verification.",
+  verificationRecipeRefs: ["recipe-a", "recipe-b"],
+});
+const contractApplicability = (): AcceptanceContractApplicability => ({
+  graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
+  nodeIds: ["node-a", "node-b"], nodeKind: "LEAF",
+});
+const contractDraft = (): AcceptanceContractDraft => ({
+  applicability: contractApplicability(), authorRef: "principal-a", contractId: "contract-a",
+  obligations: [criterionObligation()],
+});
+
+it("round-trips a plan revision through the root and names every published plan type", () => {
+  const created: PlanRevisionCreateResult = core.createPlanRevision(planDraft());
+  if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+  const revision: PlanRevision = created.revision;
+  const encoded: PlanRevisionEncodeResult = core.encodePlanRevision(revision);
+  if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+  const decoded: PlanRevisionDecodeResult = core.decodePlanRevisionBytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+  const digest: PlanRevisionDigestResult = core.derivePlanRevisionDigest(revision);
+  if (!digest.ok) throw new Error(`unexpected refusal ${digest.code}`);
+  const content: PlanExecutionContentResult = core.derivePlanExecutionContent(revision);
+  if (!content.ok) throw new Error(`unexpected refusal ${content.code}`);
+  const binding: PlanRevisionGraphBinding = revision.graphBinding;
+  const step: PlanRevisionStep | undefined = revision.steps[0];
+
+  expect(revision.version).toBe(core.PLAN_REVISION_VERSION);
+  expect([digest.planHash, decoded.revision.planHash]).toEqual([revision.planHash, revision.planHash]);
+  expect([binding.graphContentHash, binding.graphRevisionRef])
+    .toEqual([hex("a"), "graph-revision-a"]);
+  expect([step?.stepId, step?.kind]).toEqual(["step-a", "ANALYSIS"]);
+  // A DIFFERENT digest under a DIFFERENT domain: the graph-independent projection
+  // is what a nodeAuthorityHash embeds, so proving it is not the planHash matters.
+  expect(content.digest).toMatch(/^[0-9a-f]{64}$/u);
+  expect(content.digest).not.toBe(revision.planHash);
+  expect([core.PLAN_REVISION_DIGEST_DOMAIN, core.PLAN_EXECUTION_CONTENT_DOMAIN])
+    .toEqual(["moe-plan-revision-digest/1", "@moe/core.plan-execution-content/1"]);
+});
+
+/**
+ * A DUPLICATE step id, not an empty `steps`, because both malformed-shape paths
+ * answer PLAN_REVISION_MALFORMED@PLAN_REVISION_ADMISSION and could not tell me
+ * WHICH guard refused. Only the step-id uniqueness guard answers DUPLICATE_ID@
+ * PLAN_REVISION_LIMITS, and the round-trip above is its positive control: the
+ * same fixture without the override is admitted, so the refusal is attributable
+ * to the override and not to a fixture that quietly went invalid.
+ */
+it("refuses a plan revision with a duplicate step id from the root, naming code and layer", () => {
+  const result: PlanRevisionCreateResult = core.createPlanRevision({
+    ...planDraft(),
+    steps: [planStep("step-a", "ANALYSIS", "First."), planStep("step-a", "REVIEW", "Second.")],
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: PlanRevisionRefusal = result;
+  const code: PlanRevisionCode = "PLAN_REVISION_DUPLICATE_ID";
+  const layer: PlanRevisionLayer = "PLAN_REVISION_LIMITS";
+  expect([refusal.code, refusal.layer]).toEqual([code, layer]);
+  expect(core.PLAN_REVISION_CODES).toContain(code);
+  expect(core.PLAN_REVISION_LAYERS).toContain(layer);
+  expect([Object.isFrozen(core.PLAN_REVISION_CODES), Object.isFrozen(core.PLAN_REVISION_LAYERS)])
+    .toEqual([true, true]);
+});
+
+it("round-trips an acceptance contract through the root and names every published contract type",
+  () => {
+    const created: AcceptanceContractCreateResult = core.createAcceptanceContract(contractDraft());
+    if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+    const contract: AcceptanceContract = created.contract;
+    const encoded: AcceptanceContractEncodeResult = core.encodeAcceptanceContract(contract);
+    if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+    const decoded: AcceptanceContractDecodeResult =
+      core.decodeAcceptanceContractBytes(encoded.bytes);
+    if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+    const digest: AcceptanceContractDigestResult = core.deriveAcceptanceContractDigest(contract);
+    if (!digest.ok) throw new Error(`unexpected refusal ${digest.code}`);
+    const content: AcceptanceCriterionContentResult =
+      core.deriveAcceptanceCriterionContent(contract);
+    if (!content.ok) throw new Error(`unexpected refusal ${content.code}`);
+    const applicability: AcceptanceContractApplicability = contract.applicability;
+    const obligation: AcceptanceCriterionObligation | undefined = contract.obligations[0];
+    const requirement: AcceptanceEvidenceRequirement | undefined =
+      obligation?.evidenceRequirements[0];
+    const criterion: AcceptanceCriterionContent | undefined = content.criteria[0];
+
+    expect(contract.version).toBe(core.ACCEPTANCE_CONTRACT_VERSION);
+    expect([digest.criteriaDigest, decoded.contract.criteriaDigest])
+      .toEqual([contract.criteriaDigest, contract.criteriaDigest]);
+    expect([applicability.nodeKind, applicability.graphContentHash]).toEqual(["LEAF", hex("a")]);
+    expect([requirement?.kind, requirement?.requirementId]).toEqual(["ARTIFACT", "requirement-a"]);
+    // Lengths first: `criterion?.x === obligation?.x` would pass on two undefineds.
+    expect([contract.obligations.length, content.criteria.length]).toEqual([1, 1]);
+    expect([criterion?.criterionId, obligation?.criterionId])
+      .toEqual(["criterion-a", "criterion-a"]);
+    expect(criterion?.contentDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(criterion?.contentDigest).not.toBe(contract.criteriaDigest);
+    expect([core.ACCEPTANCE_CONTRACT_DIGEST_DOMAIN, core.ACCEPTANCE_CRITERION_CONTENT_DOMAIN])
+      .toEqual(["moe-acceptance-contract-digest/1", "@moe/core.acceptance-criterion-content/1"]);
+  });
+
+it("refuses an obligation-free acceptance contract from the root, naming code and layer", () => {
+  const result: AcceptanceContractCreateResult =
+    core.createAcceptanceContract({ ...contractDraft(), obligations: [] });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: AcceptanceContractRefusal = result;
+  const code: AcceptanceContractCode = "ACCEPTANCE_CONTRACT_EMPTY_OBLIGATIONS";
+  const layer: AcceptanceContractLayer = "ACCEPTANCE_CONTRACT_LIMITS";
+  expect([refusal.code, refusal.layer]).toEqual([code, layer]);
+  expect(core.ACCEPTANCE_CONTRACT_CODES).toContain(code);
+  expect(core.ACCEPTANCE_CONTRACT_LAYERS).toContain(layer);
+  expect([Object.isFrozen(core.ACCEPTANCE_CONTRACT_CODES),
+    Object.isFrozen(core.ACCEPTANCE_CONTRACT_LAYERS)]).toEqual([true, true]);
 });
 
 const execFileAsync = promisify(execFile);
