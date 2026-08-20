@@ -1036,7 +1036,11 @@ describe("release evidence containment", () => {
     });
     assert.equal(planted.length, 1);
     expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
-    assert.equal(readFileSync(join(outside, "digest", "evidence.json"), "utf8"), "in-window-drill");
+    // The window was real — the write escaped through the junction — and the escaped bytes are
+    // OURS at this exit, so the refusal also unlinked them. The directory shell the rename created
+    // proves the escape happened before cleanup.
+    assert.equal(existsSync(join(outside, "digest")), true);
+    assert.equal(existsSync(join(outside, "digest", "evidence.json")), false);
   });
 
   // Same window, third ok-exit: rename onto the junction-backed existing digest directory throws
@@ -1059,6 +1063,10 @@ describe("release evidence containment", () => {
     });
     expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
     assert.equal(result.reused, undefined);
+    // Unlike the fresh-write exit, the catch must LEAVE the bytes: from inside the catch they are
+    // indistinguishable from a concurrent publisher's real evidence, and destroying that would
+    // turn a containment refusal into data loss.
+    assert.equal(readFileSync(join(outside, "digest", "evidence.json"), "utf8"), "catch-adoption-drill");
   });
 });
 

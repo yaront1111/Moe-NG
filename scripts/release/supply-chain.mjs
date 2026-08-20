@@ -166,9 +166,14 @@ export function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: str
     writeFileSync(join(temporary, basename(target)), request.bytes, { flag: "wx" });
     renameSync(temporary, targetDir);
     // Re-guard AFTER the write: a junction born between the guard above and the rename redirects
-    // every byte outside the root while still answering ok. The refusal cannot un-write an escaped
-    // file, but it refuses to ADOPT it as durable evidence.
-    if (unsafeExistingPath(target, ceiling)) return releaseRefusal("OUTPUT_PATH_INVALID");
+    // every byte outside the root while still answering ok. The bytes at this exit are OURS — the
+    // wx write and the rename both succeeded — so best-effort unlink the escaped file before
+    // refusing to adopt it. The catch below must NOT do the same: its comparison bytes belong to a
+    // concurrent publisher whose rename won, and removing them would destroy real evidence.
+    if (unsafeExistingPath(target, ceiling)) {
+      try { rmSync(target, { force: true }); } catch (error) { console.error(`release escaped evidence cleanup failed: ${target}: ${String(error)}`); }
+      return releaseRefusal("OUTPUT_PATH_INVALID");
+    }
     return { ok: true, reused: false };
   } catch {
     rmSync(temporary, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
