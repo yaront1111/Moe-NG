@@ -1146,11 +1146,17 @@ describe("release package command", () => {
   test("records truthful evidence through the actual package script", { timeout: 900_000 }, () => {
     const root = packageJson();
     assert.equal(typeof root.scripts["release:evidence"], "string");
-    const run = spawnSync(process.platform === "win32" ? "pnpm.exe" : "pnpm",
-      ["--silent", "release:evidence"], {
-        cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        timeout: 840_000, windowsHide: true,
-      });
+    // `pnpm/action-setup` puts a SHIM on PATH and never a `pnpm.exe`, so spawning that name
+    // is ENOENT on every runner while staying green on every dev box. Resolve the Corepack
+    // entry production itself spawns (supply-chain.mjs PNPM_ENTRY) so this case drives the
+    // same launcher on both host classes, and name a missing entry rather than letting the
+    // spawn answer with a bare ENOENT.
+    const pnpmEntry = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
+    assert.ok(existsSync(pnpmEntry), `pnpm entry missing: ${pnpmEntry}`);
+    const run = spawnSync(process.execPath, [pnpmEntry, "--silent", "release:evidence"], {
+      cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+      timeout: 840_000, windowsHide: true,
+    });
     assert.equal(run.error, undefined);
     const record = JSON.parse(run.stdout.trim().split(/\r?\n/u).at(-1));
     if (process.platform !== "win32") {
