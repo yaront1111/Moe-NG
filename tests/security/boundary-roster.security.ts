@@ -103,9 +103,20 @@ interface ScannedBoundary {
  * key-provider layers), and `apps/daemon/src/work/foundation-attempt-contracts.ts`
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
- * Axis totals for the sibling slices: transport 15, integrity 17, durable-store 15,
- * runtime-provider 24, scheduler-activation 28 — sums to 99. These tags, NOT the subset
- * counts in the siblings' own descriptions, are the authority. (87→89 on 2026-08-16:
+ * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
+ * the previous one did not: transport 15, integrity 17, durable-store 16, runtime-provider
+ * 25, scheduler-activation 29 — sums to 102, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
+ *
+ * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
+ * the roster: the five axis groups sum to the roster size" in this file; the per-axis figures
+ * are asserted where each slice pins its own subset — "takes the durable-store subset from the
+ * committed roster in both directions" (16), "reads a positive number of scheduler-activation
+ * entries off the roster" (29), and "partitions exactly the roster's runtime-provider entries,
+ * in BOTH directions" (25). The prose above went one landing stale twice before this note was
+ * written — it read "runtime-provider 24 … sums to 99" while the pin already said 100 — so a
+ * reader who trusts a number here without opening the assertion that owns it is reading a
+ * comment, not a measurement. (87→89 on 2026-08-16:
  * BENCHMARK_PROJECTION_LAYERS runtime-provider, FOUNDATION_VERIFICATION_LAYERS
  * scheduler-activation — producer-registers rule, governor entries. 89→90:
  * AGENT_STAFFING_LAYER scheduler-activation. 90→91 on 2026-08-17:
@@ -182,10 +193,24 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "PROVIDER_RUN_LEDGER_LAYERS", file: "apps/daemon/src/telemetry/provider-run-refusals.ts", axis: "runtime-provider" },
   { constant: "RUNNER_WORKSPACE_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "runtime-provider" },
   { constant: "SCHEDULER_GRAPH_LAYER", file: "apps/daemon/src/work/foundation-attempt-contracts.ts", axis: "scheduler-activation" },
+  // What a `foundation.dispatch` may take from its CALLER, and what it must read from the
+  // server's own durable world. `scheduler-activation` by SUBJECT: it is an admission
+  // decision — whether this dispatch proceeds, and on whose authority — not a codec's
+  // content identity and not a provider run's evidence. Its directory neighbours above and
+  // below agree. Producer task-a9fd91c3 (69420cf); row and arms task-120403f7.
+  { constant: "FOUNDATION_DISPATCH_DERIVATION_LAYER", file: "apps/daemon/src/work/foundation-dispatch-derivation.ts", axis: "scheduler-activation" },
   // The daemon-startup repository/scope catalog: a versioned, digest-sealed codec whose
   // subject is the seal over its own admitted fields, so it is integrity rather than
   // durable-store despite reading durable project state (producer task-4af0e3dc).
   { constant: "FOUNDATION_REPOSITORY_SCOPE_LAYERS", file: "apps/daemon/src/work/foundation-repository-scope-contracts.ts", axis: "integrity" },
+  // The durable safe-boundary observation: it reads ONE durable provider-run record and
+  // COMMITS another durable record. `durable-store` by SUBJECT even though it answers about a
+  // provider run — the alternative (runtime-provider, by the PROVIDER_EFFECT_SETTLEMENT_LAYER
+  // precedent) was measured and rejected: this module owns no process, platform or provider
+  // invocation, four of its five refusal codes are durable read/write facts, and its race is a
+  // `commitExpectedVersionDecision` conflict at expectedVersion 0 — this axis's own race
+  // shape. Producer task-ded026d6 (5d35739); row and arms task-120403f7.
+  { constant: "SAFE_BOUNDARY_OBSERVATION_LAYER", file: "apps/daemon/src/work/safe-boundary-observation.ts", axis: "durable-store" },
   { constant: "WORK_LAYERS", file: "apps/daemon/src/work/work-kernel.ts", axis: "scheduler-activation" },
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
@@ -288,6 +313,15 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * `integrity` by SUBJECT: this is the canonical criteria-body codec/digest vocabulary,
  * not an execution or scheduler decision. Its BEFORE/AFTER/RACE arms land atomically.
  *
+ * 100 -> 102 for FOUNDATION_DISPATCH_DERIVATION_LAYER (`scheduler-activation`, producer
+ * task-a9fd91c3) and SAFE_BOUNDARY_OBSERVATION_LAYER (`durable-store`, producer
+ * task-ded026d6), both entered by task-120403f7 on 2026-08-20 WITH their BEFORE/AFTER/RACE
+ * arms, because a roster row on its own only moves the red into `completeness.security.ts`.
+ * Measured with the SUITE's own scan at HEAD bd9b9fd — scan 102, roster 100 before these
+ * entries; the hand-rolled ` = `-anchored grep returns 99 here and is NOT the authority,
+ * because `SAFE_BOUNDARY_OBSERVATION_LAYER: SafeBoundaryObservationLayer = LAYER` is an
+ * ANNOTATED declaration the coarse pattern cannot see.
+ *
  * 97 -> 98 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, 2026-08-18). `integrity`
  * by SUBJECT: the canonical plan-revision body codec/digest vocabulary, the direct
  * sibling of ACCEPTANCE_CONTRACT_LAYERS. The producer landed without the roster row and
@@ -295,7 +329,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
  * row on its own only moves the red into `completeness.security.ts`.
  */
-const EXPECTED_ROSTER_SIZE = 100;
+const EXPECTED_ROSTER_SIZE = 102;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -303,7 +337,7 @@ const EXPECTED_ROSTER_SIZE = 100;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 39,
+  "apps/daemon": 41,
   "packages/benchmark": 1,
   "packages/runner": 22,
   "packages/core": 12,

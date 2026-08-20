@@ -295,6 +295,24 @@ function seedActiveRevisionWithBody(
   }
 }
 
+/**
+ * THE LAWFUL ACTIVE PATH, exposed for the foundation-dispatch slice on this same axis.
+ *
+ * `deriveFoundationDispatchFacts` reads `readCurrentActiveGraph` FIRST, so none of its own
+ * refusals is reachable without a graph THIS module's authority admits. Re-deriving a
+ * revision history over there would police a copy of the reducer rather than the reducer,
+ * and the two would drift the first time the lifecycle changed. Same content and same
+ * driver as the accepted control below, so a fixture that stops reaching ACTIVE reddens in
+ * both places at once.
+ */
+export function seedAcceptedActiveGraph(
+  store: SqliteEventStore,
+  revisionId: string,
+  tag: string,
+): void {
+  seedActiveRevisionWithBody(store, revisionId, PRIMARY, tag);
+}
+
 // --- captured outcomes, for properties no {code, layer} case can carry -------
 
 export interface PlanningGraphProof {
