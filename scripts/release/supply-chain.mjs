@@ -114,12 +114,17 @@ async function observeTools(/** @type {{repositoryRoot: string}} */ request) {
   return { node: probes[0].stdout.trim().replace(/^v/u, ""), pnpm: probes[1].stdout.trim(),
     git: probes[2].stdout.trim(), tar: probes[3].stdout.split(/\r?\n/u)[0], cdxgen: cdxgenVersion };
 }
-function unsafeExistingPath(/** @type {string} */ root) {
+function nearestExistingPath(/** @type {string} */ path) { // The deepest ancestor that exists, so the walk below only ever lstats real entries.
+  let cursor = resolve(path);
+  while (!existsSync(cursor)) { const parent = dirname(cursor); if (parent === cursor) break; cursor = parent; }
+  return cursor;
+}
+function unsafeExistingPath(/** @type {string} */ target, /** @type {string} */ evidenceRoot) { // Bounded at the evidence root's nearest EXISTING ancestor, INCLUSIVE. Above that boundary the caller controls nothing, so a legitimate symlinked ancestor there is not an escape (macOS $TMPDIR is /var/folders/..., and /var is itself a symlink to /private/var). The bound cannot be the root itself: on a clean checkout dist/release does not exist yet, the cursor never equals it, and the walk would run to the filesystem root again.
   try {
-    let cursor = resolve(root);
-    while (!existsSync(cursor)) { const parent = dirname(cursor); if (parent === cursor) break; cursor = parent; }
+    const ceiling = nearestExistingPath(evidenceRoot); let cursor = nearestExistingPath(target);
     while (existsSync(cursor)) {
       if (lstatSync(cursor).isSymbolicLink()) return true;
+      if (cursor === ceiling) break;
       const parent = dirname(cursor); if (parent === cursor) break; cursor = parent;
     }
     return false;
@@ -127,10 +132,10 @@ function unsafeExistingPath(/** @type {string} */ root) {
 }
 function publishEvidence(/** @type {{bytes: Uint8Array, evidencePath: string, evidenceRoot: string}} */ request) {
   const root = resolve(request.evidenceRoot); const target = resolve(request.evidencePath);
-  // Walk the TARGET chain, not just the root's: it covers every existing ancestor up to
-  // the filesystem root, so a junction planted between evidenceRoot and the target
-  // (e.g. dist/release/<sha>) refuses instead of silently redirecting durable evidence.
-  if (relative(root, target).startsWith("..") || unsafeExistingPath(target)) return releaseRefusal("OUTPUT_PATH_INVALID");
+  // Walk the TARGET chain, not just the root's: a junction planted between evidenceRoot and the
+  // target (e.g. dist/release/<sha>), or one standing at the root itself, refuses instead of
+  // silently redirecting durable evidence. The root bounds the walk; it is never above it.
+  if (relative(root, target).startsWith("..") || unsafeExistingPath(target, root)) return releaseRefusal("OUTPUT_PATH_INVALID");
   if (existsSync(target)) {
     return Buffer.from(readFileSync(target)).equals(Buffer.from(request.bytes))
       ? { ok: true, reused: true } : releaseRefusal("EVIDENCE_PUBLICATION_CONFLICT");

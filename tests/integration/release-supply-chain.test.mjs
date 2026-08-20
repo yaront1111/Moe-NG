@@ -888,6 +888,51 @@ describe("release CLI and filesystem boundary", () => {
     expectReleaseRefusal(await runSupply({ evidenceRoot }), "OUTPUT_PATH_INVALID");
     assert.deepEqual(readdirSync(outside), []);
   });
+
+  // The macOS $TMPDIR shape, made host-independent. On darwin runners /var is a symlink to
+  // /private/var, so EVERY temp evidence root carries a symlinked ancestor ABOVE it. A win32
+  // junction reproduces that exactly — lstatSync(junction).isSymbolicLink() is true here too —
+  // so these two accept cases pin the darwin behaviour on every host, no macOS lane required.
+  test("publishes through a symlinked ancestor above an existing evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const evidenceRoot = join(link, "root");
+    mkdirSync(evidenceRoot);
+    const result = await runSupply({ evidenceRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(JSON.parse(readFileSync(result.evidencePath, "utf8")).operation, "RECORDED");
+  });
+
+  // Production's own shape, and the reason the ceiling is the root's nearest EXISTING ancestor
+  // rather than the root itself: main() passes evidenceRoot = join(repositoryRoot, "dist",
+  // "release") and dist/ is gitignored, so on a clean checkout the root does not exist when the
+  // guard runs. A bound expressed as "stop when the cursor equals the root" can never fire there.
+  test("publishes through a symlinked ancestor above an absent evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    mkdirSync(join(link, "repo"));
+    const result = await runSupply({ evidenceRoot: join(link, "repo", "dist", "release") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  // The fence at the exact boundary those two accept cases move: the ceiling is INCLUSIVE, so an
+  // evidence root that IS itself a junction to a real outside destination still refuses and writes
+  // nothing there. The archive call count pins WHICH layer refused — validInput returns
+  // OUTPUT_PATH_INVALID before any port runs, so two archive calls prove this one came from the
+  // publisher's path guard and not from input validation.
+  test("refuses an evidence root that is itself a junction to an outside destination", async () => {
+    const outside = temp();
+    const evidenceRoot = join(temp(), "asroot");
+    symlinkSync(outside, evidenceRoot, "junction");
+    const archiveSource = spy(async ({ destination }) => ({ destination, ok: true }));
+    expectReleaseRefusal(await runSupply({ evidenceRoot }, { archiveSource }), "OUTPUT_PATH_INVALID");
+    assert.equal(archiveSource.calls.length, 2);
+    assert.deepEqual(readdirSync(outside), []);
+  });
 });
 
 describe("release package command", () => {
