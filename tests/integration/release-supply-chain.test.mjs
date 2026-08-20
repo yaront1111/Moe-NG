@@ -962,6 +962,106 @@ describe("release CLI and filesystem boundary", () => {
   });
 });
 
+describe("release evidence containment", () => {
+  test("escapesRoot refuses targets outside the root on every host", async () => {
+    const { escapesRoot } = await loadSupplyChain();
+    if (process.platform === "win32") {
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\corepack\\pnpm.js"), false);
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\..\\outside"), true);
+      // win32 relative() across drives answers an ABSOLUTE path, which does not start with
+      // "..", so the classic startsWith probe alone silently passes a cross-drive redirect.
+      assert.equal(escapesRoot("C:\\node", "D:\\redirected\\pnpm.js"), true);
+    } else {
+      assert.equal(escapesRoot("/node", "/node/corepack/pnpm.js"), false);
+      assert.equal(escapesRoot("/node", "/outside/pnpm.js"), true);
+    }
+  });
+
+  test("both containment call sites consume the shared escape probe", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    assert.match(source, /escapesRoot\(nodeRoot, entry\)/u);
+    assert.match(source, /escapesRoot\(root, target\)/u);
+    assert.doesNotMatch(source, /relative\([^)]*\)\.startsWith\("\.\."\)/u);
+  });
+
+  // Production's exact shape: evidenceRoot is <repo>/dist/release, dist/ is gitignored and so
+  // plantable, and the junction's outside target really contains release/ — which pushes the
+  // nearest-existing ceiling BELOW the junction, so the walk breaks before ever lstat'ing dist.
+  // Raising the ceiling to the repository root (only when the evidence root sits inside it) puts
+  // the dist seam inside the walked span. Cross-repository roots keep the near bound, which the
+  // symlinked-ancestor accept cases above pin.
+  test("refuses a junction at the repository dist seam that resolves to a real outside tree", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const outside = temp();
+    mkdirSync(join(outside, "release"));
+    symlinkSync(outside, join(repositoryRoot, "dist"), "junction");
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.deepEqual(readdirSync(join(outside, "release")), []);
+  });
+
+  // Positive control for the raised ceiling: an honest repository-contained root, absent chain and
+  // no links anywhere, must still publish — including the post-write re-guard walking the
+  // directories the write itself just created under the FROZEN pre-write ceiling.
+  test("publishes into a repository-contained evidence root whose span is real", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(result.reused, false);
+  });
+
+  // The guard-to-write window is sub-millisecond, far below what any spawn-based race can hit, so
+  // the drill injects at the only in-window seam: the first mkdir runs strictly AFTER the pre-write
+  // guard passed. The write itself genuinely escapes through the junction — the trailing read-back
+  // proves the window is real — and the post-write re-guard refuses to ADOPT the escaped bytes.
+  test("re-guards after the write: a junction born in the guard-to-write window is refused", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("in-window-drill");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, shaDir, "junction");
+          planted.push(shaDir);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.equal(planted.length, 1);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(readFileSync(join(outside, "digest", "evidence.json"), "utf8"), "in-window-drill");
+  });
+
+  // Same window, third ok-exit: rename onto the junction-backed existing digest directory throws
+  // EPERM, and the catch then reads the comparison bytes back THROUGH the junction — adopting
+  // foreign-redirected content as reused evidence with zero bytes written locally. The catch must
+  // re-guard before adopting.
+  test("the interrupted-write catch re-guards before adopting bytes read through a junction", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("catch-adoption-drill");
+    mkdirSync(join(outside, "digest"), { recursive: true });
+    writeFileSync(join(outside, "digest", "evidence.json"), bytes);
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (!existsSync(shaDir)) symlinkSync(outside, shaDir, "junction");
+        return mkdirSync(path, options);
+      },
+    });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(result.reused, undefined);
+  });
+});
+
 describe("release package command", () => {
   const packageJson = () => JSON.parse(readFileSync(join(REPO_ROOT, "package.json"), "utf8"));
 
