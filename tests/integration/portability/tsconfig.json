@@ -5,6 +5,7 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
+    "skipLibCheck": true,
     "types": ["node"]
   },
   "include": ["./**/*.ts"]
