@@ -9,7 +9,20 @@
  */
 import { expect, it } from "vitest";
 
-import { reduceExpansionPlanningHold, validExpansionHoldBinding } from "@moe/core";
+import {
+  createAcceptanceContract, createPlanRevision,
+  reduceExpansionPlanningHold, validExpansionHoldBinding,
+} from "@moe/core";
+/**
+ * FIXTURE ONLY. The SUBJECT of every assertion below is still the bare package
+ * root; these three are reached relatively because a v3 `GraphRevisionContent`
+ * cannot be built without them and publishing them on the root belongs to
+ * task-210efa47, not to the task that landed v3. Using them here is therefore the
+ * opposite of a surface claim — it records that they are NOT yet root-reachable.
+ */
+import { snapshotIdentityHash } from "./graph-content-format.js";
+import { createNodeDefinition } from "./node-authority/node-authority-codec.js";
+import { deriveNodeAuthoritySet } from "./node-authority/node-authority-recursion.js";
 import type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 import * as scheduler from "@moe/scheduler";
@@ -236,6 +249,129 @@ it("withholds the wire mechanics that would let a consumer mint content identity
     .toEqual([true, true]);
 });
 
+const hex = (digit: string): string => digit.repeat(64);
+const CODEC_NODES = ["dev-a", "dev-b"] as const;
+
+/**
+ * The v3 node-authority section for the two-node graph below, built by PRODUCTION
+ * code end to end — no hand-written body and no hand-written authority hash — so
+ * this file exercises the real codec rather than a shape that merely looks like
+ * one. `graphBindingDigest` is the graph's own structural identity because the
+ * composer requires exactly that; a made-up digest would be refused.
+ */
+function codecNodeAuthority(snapshot: unknown): Record<string, unknown> {
+  const validated = scheduler.validateGraphSnapshot(snapshot);
+  if (!validated.ok) throw new Error("codec fixture graph refused");
+  const binding = snapshotIdentityHash(validated.graph);
+  const plan = createPlanRevision({
+    affectedCriterionIds: ["criterion-a"],
+    affectedNodeIds: [...CODEC_NODES],
+    approvalState: "APPROVED",
+    authorRef: "principal-a",
+    graphBinding: { graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a" },
+    parentRevisionId: null,
+    rejectionRef: null,
+    revisionId: "plan-revision-a",
+    steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-a" }],
+    verificationRecipeRefs: ["recipe-a"],
+  });
+  const acceptance = createAcceptanceContract({
+    applicability: {
+      graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
+      nodeIds: [...CODEC_NODES], nodeKind: "LEAF",
+    },
+    authorRef: "principal-a",
+    contractId: "acceptance-contract-a",
+    obligations: [{
+      criterionId: "criterion-a",
+      evidenceRequirements: [
+        { evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" },
+      ],
+      statement: "The node ships its focused verification.",
+      verificationRecipeRefs: ["recipe-a"],
+    }],
+  });
+  if (!plan.ok || !acceptance.ok) throw new Error("codec fixture plan/acceptance refused");
+  const contract = {
+    alternateProducers: [] as string[],
+    alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+    consumer: { contractHash: hex("c"), criterionRef: "criterion-a", kind: "PRECONDITION" },
+    consumerNodeKey: "dev-b",
+    consumptionHorizon: "RESULT_SEAL",
+    edgeKind: "ARTIFACT_CONSUMPTION",
+    graphBindingDigest: binding,
+    invalidationFacts: [
+      { sourceFactDigest: hex("e"), sourceFactRef: "fact-a", sourceFactVersion: 1 },
+    ],
+    minimumQualifyingMilestone: "RESULT_SEALED",
+    necessity: {
+      failedConsumerCriterionRef: "criterion-a", failureKind: "MISSING_ARTIFACT",
+      truthClass: "OBSERVED",
+    },
+    producer: {
+      artifactOrInterfaceRef: "artifact-a", digest: hex("f"), kind: "ARTIFACT_CONSUMPTION",
+    },
+    producerNodeKey: "dev-a",
+    recheckPredicateRef: "predicate-a",
+    satisfactionPredicate: {
+      parametersDigest: hex("1"), predicateRef: "predicate-a", schemaId: "schema-a",
+      schemaVersion: 1,
+    },
+    satisfactionWitnesses: [{
+      sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: hex("2"),
+      witnessRef: "witness-a", witnessVersion: 1,
+    }],
+    stability: "MONOTONIC",
+    truthClass: "OBSERVED",
+  };
+  const body = (nodeKey: string, edges: unknown[]): unknown => {
+    const built = createNodeDefinition({
+      acceptanceContract: acceptance.contract,
+      draft: {
+        admissionAmounts: [...scheduler.ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+          meter: "runner.authorized_ms", purpose, quantity: index + 1,
+        })),
+        admissionGatePolicy: "POLICY_ALLOWANCE",
+        capability: "capability-implement",
+        completionLinkage: nodeKey === "dev-b" ? "dev-b" : null,
+        constraints: ["constraint-a"],
+        directHardDependencies: edges,
+        joinRole: nodeKey === "dev-b" ? "COMPLETION" : "NONE",
+        nodeKey,
+        objective: `Land ${nodeKey}.`,
+        policySliceHash: hex("3"),
+        readScopes: ["services/api/src/0"],
+        repositoryBaseTree: hex("4"),
+        resources: ["resource-a"],
+        verificationRecipeRevisions: ["recipe-a"],
+        writeScopes: ["services/api/src/node"],
+      },
+      planRevision: plan.revision,
+      predicateRegistry: [{
+        parameterSchema: { digest: hex("b"), kind: "JSON_SCHEMA" },
+        predicateRef: "predicate-a",
+        proofRationale: "An artifact seal cannot become unsealed.",
+        schemaId: "schema-a",
+        schemaVersion: 1,
+        sourceOperationClass: "ARTIFACT_SEAL",
+      }],
+    });
+    if (!built.ok) {
+      throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    return built.value.definition;
+  };
+  const definitions = [
+    body("dev-a", []),
+    body("dev-b", [{ edgeKey: "dev-e1", requirement: { contract, edgeKind: "ARTIFACT_CONSUMPTION" } }]),
+  ];
+  const derived = deriveNodeAuthoritySet(snapshot, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return { authorities: [...derived.value], definitions };
+}
+
 it("reaches the real graph content codec through the bare package root", () => {
   const snapshot = {
     nodes: [
@@ -248,17 +384,20 @@ it("reaches the real graph content codec through the bare package root", () => {
     }],
     completionNodeKey: "dev-b",
   };
+  const nodeAuthority = codecNodeAuthority(snapshot);
   const encoded = scheduler.encodeGraphContent({
     author: "human:architect-2cc07e26",
     completionNode: "dev-b",
     decompositionBudget: 24,
+    nodeAuthority,
     parentRevision: null,
     policyRevision: "pol-000000000001",
     repositoryBaseTree: "4".repeat(40),
     snapshot,
   });
-  expect(encoded.ok).toBe(true);
-  if (!encoded.ok) return;
+  if (!encoded.ok) {
+    throw new Error(encoded.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
 
   // A real production result, not a shape: the hash is the digest @moe/core's
   // revision gate accepts, and the canonical order is the validator's, not the
@@ -267,6 +406,14 @@ it("reaches the real graph content codec through the bare package root", () => {
   expect(encoded.value.content.snapshot.nodes.map((node) => node.nodeKey))
     .toEqual(["dev-a", "dev-b"]);
   expect(encoded.value.schemaVersion).toBe(scheduler.GRAPH_CONTENT_SCHEMA_VERSION);
+  // The v3 section survived the round through the ROOT codec, carrying the
+  // composer's own derived authority for every snapshot node in canonical order.
+  expect(encoded.value.content.nodeAuthority.authorities.map((entry) => entry.nodeKey))
+    .toEqual(["dev-a", "dev-b"]);
+  expect(encoded.value.content.nodeAuthority.definitions).toHaveLength(2);
+  for (const entry of encoded.value.content.nodeAuthority.authorities) {
+    expect(entry.nodeAuthorityHash).toMatch(/^[0-9a-f]{64}$/u);
+  }
   // Content authority is not the structural identity — dec-64b2391c, reached
   // through the bare package root rather than the internal module.
   expect(encoded.value.snapshotIdentity).toMatch(/^[0-9a-f]{64}$/u);
@@ -281,6 +428,29 @@ it("reaches the real graph content codec through the bare package root", () => {
 
   // And the refusal path reaches the same implementation, with the exported
   // vocabulary describing it rather than a string the test made up.
+  // A stated authority set the composer does not derive: shape-valid, so only the
+  // codec's consumer edge can refuse it, and it must do so under its own code.
+  const forged = scheduler.encodeGraphContent({
+    author: "human:architect-2cc07e26",
+    completionNode: "dev-b",
+    decompositionBudget: 24,
+    nodeAuthority: {
+      authorities: [
+        { nodeAuthorityHash: hex("8"), nodeKey: "dev-a" },
+        { nodeAuthorityHash: hex("9"), nodeKey: "dev-b" },
+      ],
+      definitions: (nodeAuthority["definitions"] as unknown[]),
+    },
+    parentRevision: null,
+    policyRevision: "pol-000000000001",
+    repositoryBaseTree: "4".repeat(40),
+    snapshot,
+  });
+  expect(forged.ok).toBe(false);
+  if (forged.ok) return;
+  expect(forged.issues.map((issue) => [issue.code, issue.layer]))
+    .toEqual([["GRAPH_CONTENT_AUTHORITY_DISAGREEMENT", "GRAPH_CONTENT_IDENTITY"]]);
+
   const refused = scheduler.decodeGraphContent("not bytes");
   expect(refused.ok).toBe(false);
   if (refused.ok) return;

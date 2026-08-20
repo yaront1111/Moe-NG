@@ -41,14 +41,22 @@ it("loads and executes the scheduler entrypoint in Node's strip-types runtime", 
 
   expect(result).toEqual({
     admissionReadyWidth: 1,
+    // The v3 node-authority section, derived by the production composer under
+    // Node's own resolution: a 64-char hash bound to the one snapshot node proves
+    // the codec's consumer edge RAN here, and `authorityRefusal` proves that edge
+    // is the thing refusing a stated set the composer does not derive — neither is
+    // reachable if `./node-authority/*.js` fails to resolve outside vitest.
+    authorityHashLength: 64,
+    authorityNodeKeys: ["runtime-done"],
+    authorityRefusal: "GRAPH_CONTENT_AUTHORITY_DISAGREEMENT:GRAPH_CONTENT_IDENTITY",
     // The graph-content codec loaded and RAN under Node's own resolution, so its
     // three sibling `.js` bridges resolve; `SEPARATE` pins dec-64b2391c through
     // the bare specifier, and the refusal pin proves the fail-closed path is the
     // production one and not a vitest-only artefact.
     contentAuthority: "SEPARATE",
     contentHashLength: 64,
-    contentIssueCodeCount: 9,
-    contentKeyCount: 7,
+    contentIssueCodeCount: 10,
+    contentKeyCount: 8,
     contentRefusal: "GRAPH_CONTENT_COMPLETION_DRIFT:GRAPH_CONTENT_IDENTITY",
     contentRoundTrip: "MATCHED",
     counterfactualEdgeCount: 0,
