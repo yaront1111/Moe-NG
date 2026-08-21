@@ -1563,15 +1563,207 @@ const selfEdgeGraph = (): Record<string, unknown> => {
   };
 };
 
-/** The seven design-197 content fields. `completionNode` agrees with the snapshot's own
- *  completion node, and `repositoryBaseTree` is a legal 40-hex tree id, so the field reader
- *  and the reconciliation both admit every record built here. */
+
+/**
+ * V3 AUTHORITY FOR THIS BLOCK'S FIXTURES (task-8c7e6ce4). `GraphRevisionContent` v3 makes
+ * `nodeAuthority` a MANDATORY field and `bindAuthority` RE-DERIVES the stated set rather
+ * than adopting it, so the seven-field bodies this block used to seal can no longer encode
+ * at all. Everything below COMPOSES the published producers and judges nothing.
+ *
+ * DELIBERATELY LOCAL TO THIS BLOCK. The NODE_AUTHORITY sections further down build their
+ * own v3 bodies, and reaching into them would couple these arms to fixtures that answer a
+ * different boundary - and to node keys (`node-a`..`node-c`) this chain does not use.
+ */
+const gcHex = (digit: string): string => digit.repeat(64);
+
+const gcPlanDraft = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-security"],
+  affectedNodeIds: [...nodeKeys],
+  approvalState: "APPROVED",
+  authorRef: "principal-security",
+  graphBinding: { graphContentHash: gcHex("a"), graphRevisionRef: "graph-revision-security" },
+  parentRevisionId: null,
+  rejectionRef: null,
+  revisionId: "plan-revision-security",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-security" }],
+  verificationRecipeRefs: ["recipe-security"],
+});
+
+const gcAcceptanceDraft = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: gcHex("a"), graphRevisionRef: "graph-revision-security",
+    nodeIds: [...nodeKeys], nodeKind: "LEAF",
+  },
+  authorRef: "principal-security",
+  contractId: "acceptance-security-authority",
+  obligations: [{
+    criterionId: "criterion-security",
+    evidenceRequirements: [{
+      evidenceRef: "artifact-security", kind: "ARTIFACT", requirementId: "requirement-security",
+    }],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-security"],
+  }],
+});
+
+/** A MONOTONIC contract owes a matching registry proof, else the node codec refuses
+ *  NODE_AUTHORITY_MONOTONIC_PROOF_MISSING @ NODE_AUTHORITY_PROOFS before any of these
+ *  arms could reach the guard it arranged. */
+const GC_REGISTRY_ENTRY: Record<string, unknown> = {
+  parameterSchema: { digest: gcHex("b"), kind: "JSON_SCHEMA" },
+  predicateRef: "predicate-security",
+  proofRationale: "An artifact seal cannot become unsealed.",
+  schemaId: "schema-security",
+  schemaVersion: 1,
+  sourceOperationClass: "ARTIFACT_SEAL",
+};
+
+/** ONE contract per HARD edge ENTERING a node. `binding` is a PARAMETER rather than a
+ *  derived constant on purpose: handing it a DIFFERENT graph's structural identity is
+ *  exactly the binding forgery DoD 3 requires an arm for, and it is the only knob moved. */
+const gcRequirement = (
+  edge: Record<string, unknown>, binding: string,
+): Record<string, unknown> => ({
+  edgeKey: edge["edgeKey"],
+  requirement: {
+    contract: {
+      alternateProducers: [] as string[],
+      alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+      consumer: {
+        contractHash: gcHex("c"), criterionRef: "criterion-security", kind: "PRECONDITION",
+      },
+      consumerNodeKey: edge["consumerNodeKey"],
+      consumptionHorizon: "RESULT_SEAL",
+      edgeKind: "ARTIFACT_CONSUMPTION",
+      graphBindingDigest: binding,
+      invalidationFacts: [{
+        sourceFactDigest: gcHex("e"), sourceFactRef: "fact-security", sourceFactVersion: 1,
+      }],
+      minimumQualifyingMilestone: "RESULT_SEALED",
+      necessity: {
+        failedConsumerCriterionRef: "criterion-security", failureKind: "MISSING_ARTIFACT",
+        truthClass: "OBSERVED",
+      },
+      producer: {
+        artifactOrInterfaceRef: "artifact-security", digest: gcHex("f"),
+        kind: "ARTIFACT_CONSUMPTION",
+      },
+      producerNodeKey: edge["producerNodeKey"],
+      recheckPredicateRef: "predicate-security",
+      satisfactionPredicate: {
+        parametersDigest: gcHex("1"), predicateRef: "predicate-security",
+        schemaId: "schema-security", schemaVersion: 1,
+      },
+      satisfactionWitnesses: [{
+        sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: gcHex("2"),
+        witnessRef: "witness-security", witnessVersion: 1,
+      }],
+      stability: "MONOTONIC",
+      truthClass: "OBSERVED",
+    },
+    edgeKind: "ARTIFACT_CONSUMPTION",
+  },
+});
+
+/** The structural identity PRODUCTION assigns this snapshot. `snapshotIdentityHash` accepts
+ *  only the brand-protected `ValidatedGraph`, so it cannot be reached for a graph the kernel
+ *  never accepted - which is what makes the donor binding below a REAL one rather than a
+ *  hex literal a mismatch test could pass against by accident. */
+function gcBinding(snapshot: Record<string, unknown>): string {
+  const validated = validateGraphSnapshot(snapshot);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  return snapshotIdentityHash(validated.graph);
+}
+
+/** Admitted by PRODUCTION or not built at all: a body the node codec refuses could never
+ *  reach the graph-content guard the arm using it arranged. */
+function gcDefinitions(
+  snapshot: Record<string, unknown>, binding: string,
+): readonly unknown[] {
+  const nodes = snapshot["nodes"] as readonly Record<string, unknown>[];
+  const edges = snapshot["edges"] as readonly Record<string, unknown>[];
+  const nodeKeys = nodes.map((node) => String(node["nodeKey"]));
+  return [...nodeKeys].sort().map((nodeKey) => {
+    const plan = createPlanRevision(gcPlanDraft(nodeKeys));
+    if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+    const acceptance = createAcceptanceContract(gcAcceptanceDraft(nodeKeys));
+    if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+    const completes = nodeKey === snapshot["completionNodeKey"];
+    const built = createNodeDefinition({
+      acceptanceContract: acceptance.contract,
+      draft: {
+        admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+          meter: "runner.authorized_ms", purpose, quantity: index + 1,
+        })),
+        admissionGatePolicy: "POLICY_ALLOWANCE", capability: "capability-implement",
+        completionLinkage: completes ? nodeKey : null,
+        constraints: ["constraint-security"],
+        directHardDependencies: edges
+          .filter((edge) => edge["kind"] === "HARD" && edge["consumerNodeKey"] === nodeKey)
+          .map((edge) => gcRequirement(edge, binding)),
+        joinRole: completes ? "COMPLETION" : "NONE",
+        nodeKey, objective: `Land ${nodeKey}.`, policySliceHash: gcHex("3"),
+        readScopes: ["services/api/src"], repositoryBaseTree: gcHex("4"),
+        resources: ["resource-security"], verificationRecipeRevisions: ["recipe-security"],
+        writeScopes: ["services/api/src/node"],
+      },
+      planRevision: plan.revision,
+      predicateRegistry: [GC_REGISTRY_ENTRY],
+    });
+    if (!built.ok) {
+      throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    return built.value.definition;
+  });
+}
+
+/** The PRODUCER'S own set, never a rebuilt one. Memoised because every seal below walks it
+ *  and the arms differ in the BYTES they forge, never in the graph they seal. */
+let gcSection: Record<string, unknown> | null = null;
+function graphAuthority(): Record<string, unknown> {
+  if (gcSection !== null) return gcSection;
+  const chain = graphChain();
+  const definitions = gcDefinitions(chain, gcBinding(chain));
+  const derived = deriveNodeAuthoritySet(chain, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  gcSection = { authorities: derived.value, definitions };
+  return gcSection;
+}
+
+/** A structurally DIFFERENT accepted graph, so its identity is a real production binding
+ *  that this chain's contracts have no right to carry. */
+const gcDonorChain = (): Record<string, unknown> => ({
+  nodes: [1, 2].map((index) => ({ nodeKey: `dev-node-${index}`, executionBearing: true })),
+  edges: [{
+    edgeKey: "dev-edge-1", producerNodeKey: "dev-node-1",
+    consumerNodeKey: "dev-node-2", kind: "HARD",
+  }],
+  completionNodeKey: "dev-node-2",
+});
+
+/** The EIGHT design-197/255 content fields. `completionNode` agrees with the snapshot's own
+ *  completion node, `repositoryBaseTree` is a legal 40-hex tree id, and `nodeAuthority` is
+ *  the production-DERIVED v3 section, so the field reader and the reconciliation both admit
+ *  every record built here.
+ *
+ *  `authority` DEFAULTS to the accepted chain's section instead of being derived from the
+ *  `snapshot` argument, and that default is load-bearing: the self-edge arm below passes a
+ *  snapshot the kernel REFUSES, so deriving from it would throw inside the fixture instead
+ *  of letting `encodeGraphContent` answer. The field reader checks only the section's SHAPE
+ *  and validation runs before `bindAuthority` (`graph-content.ts:157-166`), so a well-formed
+ *  section keeps the graph kernel as the branch that provably answered. */
 const graphContentRecord = (
   author: string, snapshot: Record<string, unknown> = graphChain(),
+  authority: Record<string, unknown> = graphAuthority(),
 ): Record<string, unknown> => ({
   author,
   completionNode: snapshot["completionNodeKey"],
   decompositionBudget: 3,
+  nodeAuthority: authority,
   parentRevision: null,
   policyRevision: "dev-policy-1",
   repositoryBaseTree: "a".repeat(40),
@@ -1617,6 +1809,33 @@ function duplicateKeyGraphBytes(): Uint8Array {
   return utf8.encode(
     decoder.decode(sealed.bytes).replace('"hash":', `"hash":"${"0".repeat(64)}","hash":`),
   );
+}
+
+
+/** Sealed bytes whose ENVELOPE names the SUPERSEDED schema version. Content, hash and the
+ *  v3 authority section are all production's own and untouched, so exactly two guards sit
+ *  earlier - a real Uint8Array under the ceiling, and one fatal-decodable JSON document -
+ *  and both admit it. The version gate is provably the branch that answered. */
+function oldVersionGraphBytes(): Uint8Array {
+  const text = decoder.decode(sealedGraphContent("dev-author-a").bytes);
+  const stale = text.replace(
+    '"schema":"MOE-GRAPH-CONTENT/3"', '"schema":"MOE-GRAPH-CONTENT/2"',
+  );
+  if (stale === text) throw new Error("sealed graph content did not state the v3 schema tag");
+  return utf8.encode(stale);
+}
+
+/** The accepted chain's REAL derived authorities, beside definitions whose HARD-edge
+ *  contracts are bound to a DIFFERENT accepted graph. Every half is production-minted: the
+ *  donor binding is `snapshotIdentityHash` over a graph the kernel accepted, and each body
+ *  carrying it was admitted by `createNodeDefinition` - so no earlier guard can answer and
+ *  the recursion's closure check is the first thing on the path that can. */
+function bindingForgedGraphRecord(): Record<string, unknown> {
+  const chain = graphChain();
+  return graphContentRecord("dev-author-a", chain, {
+    authorities: graphAuthority()["authorities"],
+    definitions: gcDefinitions(chain, gcBinding(gcDonorChain())),
+  });
 }
 
 const graphContentCases: readonly HostileCase[] = [
@@ -1687,6 +1906,46 @@ const graphContentCases: readonly HostileCase[] = [
     // That is what makes the pin mean something: a codec that stopped re-encoding would answer
     // `ok: true` on these bytes, and this arm reddens on its own code rather than on a crash.
     async () => soleIssue(decodeGraphContent(reSpelledGraphBytes())),
+  ),
+  before(
+    "GRAPH_CONTENT_LAYERS", "sealed bytes whose envelope names the superseded schema version",
+    {
+      code: "GRAPH_CONTENT_UNSUPPORTED_SCHEMA",
+      layer: layerOf(GRAPH_CONTENT, "GRAPH_CONTENT_CODEC"),
+    },
+    // DoD 3's OLD-VERSION path. The tag is the only edit; the content beneath it is a v3
+    // record with a real derived authority section, so a codec that stopped checking the
+    // version would decode these bytes successfully rather than fail some other way.
+    async () => soleIssue(decodeGraphContent(oldVersionGraphBytes())),
+  ),
+  forged(
+    "GRAPH_CONTENT_LAYERS", "hard-edge contracts sealed to a different accepted graph",
+    {
+      code: "NODE_AUTHORITY_RECURSION_BINDING_MISMATCH",
+      // The FOREIGN authority's own layer, read out of ITS declared roster rather than this
+      // codec's: GRAPH_CONTENT_LAYERS has three members and this is not one of them. That is
+      // the property under test - `authorityPassthrough` must carry the composer's code AND
+      // layer out unrestamped, so a reader can tell which authority refused.
+      layer: layerOf(NODE_AUTHORITY_RECURSION_LAYERS, "NODE_AUTHORITY_RECURSION"),
+    },
+    // HALF ONE. The donor binding is a REAL production identity over a genuinely different
+    // accepted graph, not a hex literal, and it differs from the carrier's. `gcDefinitions`
+    // throws unless `createNodeDefinition` ADMITTED every body carrying it, so reaching this
+    // return proves the forged material passed its own admission.
+    async () => {
+      const chain = graphChain();
+      const carrier = gcBinding(chain);
+      const donor = gcBinding(gcDonorChain());
+      const definitions = gcDefinitions(chain, donor);
+      return {
+        ok: donor !== carrier && /^[0-9a-f]{64}$/u.test(donor)
+          && definitions.length === (chain["nodes"] as readonly unknown[]).length,
+      };
+    },
+    // HALF TWO. The field reader admits the section, the kernel accepts the snapshot and the
+    // completion node still agrees, so `bindAuthority` is reached and the recursion's closure
+    // check answers. DoD 3's BINDING path.
+    async () => soleIssue(encodeGraphContent(bindingForgedGraphRecord())),
   ),
   racing(
     "GRAPH_CONTENT_LAYERS", "a re-spelled envelope races a duplicated hash key",

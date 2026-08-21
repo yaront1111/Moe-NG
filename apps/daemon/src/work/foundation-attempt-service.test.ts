@@ -15,8 +15,19 @@ import type {
   WorktreeMaterializationResult, WorktreeMaterializer, WorktreeReleaseRequest,
   WorktreeReleaseResult,
 } from "@moe/runner";
-import { reduceGraphRevision } from "@moe/core";
-import { encodeGraphContent } from "@moe/scheduler";
+import {
+  createAcceptanceContract, createPlanRevision, reduceGraphRevision,
+} from "@moe/core";
+import {
+  ADMISSION_PURPOSES,
+  createNodeDefinition,
+  deriveNodeAuthoritySet,
+  encodeGraphContent,
+  validateGraphSnapshot,
+} from "@moe/scheduler";
+import type {
+  GraphRevisionContent, GraphSnapshot, NodeAuthoritySection, NodeDefinition,
+} from "@moe/scheduler";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
@@ -552,14 +563,126 @@ interface HarnessOptions {
  * Driven through the real revision reducer, committed as the events it emitted, and the
  * body stored under the hash the revision names — the whole path, not a shaped literal.
  */
+// --- v3 node-authority fixtures (task-8c7e6ce4) ------------------------------
+
+/**
+ * `GraphRevisionContent` v3 (task-6ba1ff89) makes `nodeAuthority` MANDATORY, and
+ * `encodeGraphContent` RE-DERIVES the set it is handed rather than adopting it
+ * (`graph-content.ts:120-141`), so a hand-built section can never pass. Everything below
+ * COMPOSES the published producers — `createPlanRevision` / `createAcceptanceContract`
+ * (@moe/core), then `createNodeDefinition` and `deriveNodeAuthoritySet` (@moe/scheduler) —
+ * and judges nothing: each helper hands back what production returned, or throws carrying
+ * production's own code, so a fixture that stopped building is never mistaken for a
+ * boundary that stopped refusing.
+ */
+const AUTHORITY_HEX = (digit: string): string => digit.repeat(64);
+
+const planDraftFor = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-a"],
+  affectedNodeIds: [...nodeKeys],
+  approvalState: "APPROVED",
+  authorRef: "principal-a",
+  graphBinding: { graphContentHash: AUTHORITY_HEX("a"), graphRevisionRef: "graph-revision-a" },
+  parentRevisionId: null,
+  rejectionRef: null,
+  revisionId: "plan-revision-a",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-a" }],
+  verificationRecipeRefs: ["recipe-a"],
+});
+
+const acceptanceDraftFor = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: AUTHORITY_HEX("a"), graphRevisionRef: "graph-revision-a",
+    nodeIds: [...nodeKeys], nodeKind: "LEAF",
+  },
+  authorRef: "principal-a",
+  contractId: "acceptance-contract-a",
+  obligations: [{
+    criterionId: "criterion-a",
+    evidenceRequirements: [
+      { evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" },
+    ],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-a"],
+  }],
+});
+
+/** Admitted by PRODUCTION or not built at all: a body the codec refuses could never reach
+ *  the encode this fixture exists to feed. */
+function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefinition {
+  const nodeKeys = snapshot.nodes.map((node) => node.nodeKey);
+  const plan = createPlanRevision(planDraftFor(nodeKeys));
+  if (!plan.ok) throw new Error(`plan revision fixture refused: ${plan.code}`);
+  const acceptance = createAcceptanceContract(acceptanceDraftFor(nodeKeys));
+  if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+  const completes = nodeKey === snapshot.completionNodeKey;
+  const built = createNodeDefinition({
+    acceptanceContract: acceptance.contract,
+    draft: {
+      admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+        meter: "runner.authorized_ms", purpose, quantity: index + 1,
+      })),
+      admissionGatePolicy: "POLICY_ALLOWANCE",
+      capability: "capability-implement",
+      completionLinkage: completes ? nodeKey : null,
+      constraints: ["constraint-a"],
+      directHardDependencies: [],
+      joinRole: completes ? "COMPLETION" : "NONE",
+      nodeKey,
+      objective: `Land ${nodeKey}.`,
+      policySliceHash: AUTHORITY_HEX("3"),
+      readScopes: ["services/api/src"],
+      repositoryBaseTree: AUTHORITY_HEX("4"),
+      resources: ["resource-a"],
+      verificationRecipeRevisions: ["recipe-a"],
+      writeScopes: ["services/api/src/node"],
+    },
+    planRevision: plan.revision,
+    predicateRegistry: [],
+  });
+  if (!built.ok) {
+    throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return built.value.definition;
+}
+
+/**
+ * The authenticated half of a v3 record. `definitions` is sorted by `nodeKey` because
+ * `readAuthoritySection` requires the two arrays index-aligned and STRICTLY ASCENDING
+ * (`graph-content-fields.ts:121-147`), and `deriveNodeAuthoritySet` already returns its
+ * entries in that order. `authorities` is the PRODUCER'S own value, never a rebuilt one:
+ * `bindAuthority` re-derives and refuses GRAPH_CONTENT_AUTHORITY_DISAGREEMENT on any
+ * stated set that is not the derived one.
+ */
+function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
+  const validated = validateGraphSnapshot(snapshot);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  const definitions = snapshot.nodes
+    .map((node) => node.nodeKey)
+    .slice()
+    .sort()
+    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot));
+  const derived = deriveNodeAuthoritySet(snapshot, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return { authorities: derived.value, definitions };
+}
+
 function seedActiveGraphRevision(store: SqliteEventStore): void {
-  const encodedGraph = encodeGraphContent({
+  const snapshot: GraphSnapshot = {
+    completionNodeKey: NODE_KEY, edges: [],
+    nodes: [{ executionBearing: true, nodeKey: NODE_KEY }],
+  };
+  const content: GraphRevisionContent = {
     author: "human:architect-primary", completionNode: NODE_KEY, decompositionBudget: 24,
+    nodeAuthority: authoritySectionFor(snapshot),
     parentRevision: "rev-000000000000", policyRevision: "pol-000000000001",
-    repositoryBaseTree: "4".repeat(40),
-    snapshot: { completionNodeKey: NODE_KEY, edges: [],
-      nodes: [{ executionBearing: true, nodeKey: NODE_KEY }] },
-  } as never);
+    repositoryBaseTree: "4".repeat(40), snapshot,
+  };
+  const encodedGraph = encodeGraphContent(content);
   if (!encodedGraph.ok) throw new Error("graph fixture failed to encode");
   const seed = (value: string): string => value.repeat(64).slice(0, 64);
   const binding = {

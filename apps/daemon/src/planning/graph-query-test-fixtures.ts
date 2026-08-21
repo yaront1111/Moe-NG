@@ -23,19 +23,30 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { reduceGraphRevision } from "@moe/core";
+import {
+  createAcceptanceContract, createPlanRevision, reduceGraphRevision,
+} from "@moe/core";
 import type {
   GraphRevisionCommand,
   GraphRevisionEvent,
   GraphRevisionState,
 } from "@moe/core";
-import { encodeGraphContent } from "@moe/scheduler";
+import {
+  ADMISSION_PURPOSES,
+  createNodeDefinition,
+  deriveNodeAuthoritySet,
+  encodeGraphContent,
+  snapshotIdentityHash,
+  validateGraphSnapshot,
+} from "@moe/scheduler";
 import type {
   GraphContent,
   GraphEdge,
   GraphNode,
   GraphRevisionContent,
   GraphSnapshot,
+  NodeAuthoritySection,
+  NodeDefinition,
 } from "@moe/scheduler";
 import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 
@@ -83,16 +94,188 @@ export function baseSnapshot(): GraphSnapshot {
   return { nodes, edges, completionNodeKey: "dev-c" };
 }
 
+// --- v3 node-authority fixtures (task-8c7e6ce4) ------------------------------
+
+/**
+ * `GraphRevisionContent` v3 (task-6ba1ff89) makes `nodeAuthority` MANDATORY, and
+ * `encodeGraphContent` RE-DERIVES the set it is handed rather than adopting it
+ * (`graph-content.ts:120-141`), so a hand-built section can never pass. Everything below
+ * COMPOSES the published producers — `createPlanRevision` / `createAcceptanceContract`
+ * (@moe/core), then `createNodeDefinition` and `deriveNodeAuthoritySet` (@moe/scheduler) —
+ * and judges nothing: each helper hands back what production returned, or throws carrying
+ * production's own code, so a fixture that stopped building is never mistaken for a
+ * boundary that stopped refusing.
+ */
+const AUTHORITY_HEX = (digit: string): string => digit.repeat(64);
+
+const planDraftFor = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-a"],
+  affectedNodeIds: [...nodeKeys],
+  approvalState: "APPROVED",
+  authorRef: "principal-a",
+  graphBinding: { graphContentHash: AUTHORITY_HEX("a"), graphRevisionRef: "graph-revision-a" },
+  parentRevisionId: null,
+  rejectionRef: null,
+  revisionId: "plan-revision-a",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-a" }],
+  verificationRecipeRefs: ["recipe-a"],
+});
+
+const acceptanceDraftFor = (nodeKeys: readonly string[]): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: AUTHORITY_HEX("a"), graphRevisionRef: "graph-revision-a",
+    nodeIds: [...nodeKeys], nodeKind: "LEAF",
+  },
+  authorRef: "principal-a",
+  contractId: "acceptance-contract-a",
+  obligations: [{
+    criterionId: "criterion-a",
+    evidenceRequirements: [
+      { evidenceRef: "artifact-a", kind: "ARTIFACT", requirementId: "requirement-a" },
+    ],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-a"],
+  }],
+});
+
+/** A MONOTONIC contract owes a matching registry proof, else the codec refuses
+ *  NODE_AUTHORITY_MONOTONIC_PROOF_MISSING @ NODE_AUTHORITY_PROOFS. */
+const AUTHORITY_REGISTRY_ENTRY: Record<string, unknown> = {
+  parameterSchema: { digest: AUTHORITY_HEX("b"), kind: "JSON_SCHEMA" },
+  predicateRef: "predicate-a",
+  proofRationale: "An artifact seal cannot become unsealed.",
+  schemaId: "schema-a",
+  schemaVersion: 1,
+  sourceOperationClass: "ARTIFACT_SEAL",
+};
+
+/** ONE contract per HARD edge ENTERING a node. `graphBindingDigest` is PRODUCTION's
+ *  `snapshotIdentityHash` over the ACCEPTED graph, never a literal: a digest that did not
+ *  come from this structure refuses NODE_AUTHORITY_RECURSION_BINDING_MISMATCH at derive
+ *  time (`node-authority-recursion.ts:164-167`). */
+const hardEdgeRequirement = (edge: GraphEdge, binding: string): Record<string, unknown> => ({
+  edgeKey: edge.edgeKey,
+  requirement: {
+    contract: {
+      alternateProducers: [] as string[],
+      alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+      consumer: {
+        contractHash: AUTHORITY_HEX("c"), criterionRef: "criterion-a", kind: "PRECONDITION",
+      },
+      consumerNodeKey: edge.consumerNodeKey,
+      consumptionHorizon: "RESULT_SEAL",
+      edgeKind: "ARTIFACT_CONSUMPTION",
+      graphBindingDigest: binding,
+      invalidationFacts: [
+        { sourceFactDigest: AUTHORITY_HEX("e"), sourceFactRef: "fact-a", sourceFactVersion: 1 },
+      ],
+      minimumQualifyingMilestone: "RESULT_SEALED",
+      necessity: {
+        failedConsumerCriterionRef: "criterion-a", failureKind: "MISSING_ARTIFACT",
+        truthClass: "OBSERVED",
+      },
+      producer: {
+        artifactOrInterfaceRef: "artifact-a", digest: AUTHORITY_HEX("f"),
+        kind: "ARTIFACT_CONSUMPTION",
+      },
+      producerNodeKey: edge.producerNodeKey,
+      recheckPredicateRef: "predicate-a",
+      satisfactionPredicate: {
+        parametersDigest: AUTHORITY_HEX("1"), predicateRef: "predicate-a",
+        schemaId: "schema-a", schemaVersion: 1,
+      },
+      satisfactionWitnesses: [{
+        sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: AUTHORITY_HEX("2"),
+        witnessRef: "witness-a", witnessVersion: 1,
+      }],
+      stability: "MONOTONIC",
+      truthClass: "OBSERVED",
+    },
+    edgeKind: "ARTIFACT_CONSUMPTION",
+  },
+});
+
+/** Admitted by PRODUCTION or not built at all: a body the codec refuses could never reach
+ *  the encode this fixture exists to feed. */
+function nodeDefinitionFor(
+  nodeKey: string, snapshot: GraphSnapshot, binding: string,
+): NodeDefinition {
+  const nodeKeys = snapshot.nodes.map((node) => node.nodeKey);
+  const plan = createPlanRevision(planDraftFor(nodeKeys));
+  if (!plan.ok) throw new Error(`plan revision fixture refused: ${plan.code}`);
+  const acceptance = createAcceptanceContract(acceptanceDraftFor(nodeKeys));
+  if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+  const completes = nodeKey === snapshot.completionNodeKey;
+  const built = createNodeDefinition({
+    acceptanceContract: acceptance.contract,
+    draft: {
+      admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
+        meter: "runner.authorized_ms", purpose, quantity: index + 1,
+      })),
+      admissionGatePolicy: "POLICY_ALLOWANCE",
+      capability: "capability-implement",
+      completionLinkage: completes ? nodeKey : null,
+      constraints: ["constraint-a"],
+      directHardDependencies: snapshot.edges
+        .filter((edge) => edge.kind === "HARD" && edge.consumerNodeKey === nodeKey)
+        .map((edge) => hardEdgeRequirement(edge, binding)),
+      joinRole: completes ? "COMPLETION" : "NONE",
+      nodeKey,
+      objective: `Land ${nodeKey}.`,
+      policySliceHash: AUTHORITY_HEX("3"),
+      readScopes: ["services/api/src"],
+      repositoryBaseTree: AUTHORITY_HEX("4"),
+      resources: ["resource-a"],
+      verificationRecipeRevisions: ["recipe-a"],
+      writeScopes: ["services/api/src/node"],
+    },
+    planRevision: plan.revision,
+    predicateRegistry: [AUTHORITY_REGISTRY_ENTRY],
+  });
+  if (!built.ok) {
+    throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return built.value.definition;
+}
+
+/**
+ * The authenticated half of a v3 record. `definitions` is sorted by `nodeKey` because
+ * `readAuthoritySection` requires the two arrays index-aligned and STRICTLY ASCENDING
+ * (`graph-content-fields.ts:121-147`), and `deriveNodeAuthoritySet` already returns its
+ * entries in that order. `authorities` is the PRODUCER'S own value, never a rebuilt one:
+ * `bindAuthority` re-derives and refuses GRAPH_CONTENT_AUTHORITY_DISAGREEMENT on any
+ * stated set that is not the derived one.
+ */
+export function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
+  const validated = validateGraphSnapshot(snapshot);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  const binding = snapshotIdentityHash(validated.graph);
+  const definitions = snapshot.nodes
+    .map((node) => node.nodeKey)
+    .slice()
+    .sort()
+    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot, binding));
+  const derived = deriveNodeAuthoritySet(snapshot, definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return { authorities: derived.value, definitions };
+}
+
 export function encoded(author: string): GraphContent {
-  const content = {
+  const snapshot = baseSnapshot();
+  const content: GraphRevisionContent = {
     author,
     completionNode: "dev-c",
     decompositionBudget: 24,
+    nodeAuthority: authoritySectionFor(snapshot),
     parentRevision: "rev-000000000000",
     policyRevision: "pol-000000000001",
     repositoryBaseTree: "4".repeat(40),
-    snapshot: baseSnapshot(),
-  } as unknown as GraphRevisionContent;
+    snapshot,
+  };
   const result = encodeGraphContent(content);
   if (!result.ok) throw new Error(`fixture failed to encode: ${JSON.stringify(result.issues)}`);
   return result.value;
