@@ -44,8 +44,8 @@ export interface DemoSeedInput {
   readonly projectId: string;
   readonly runId: string;
   /**
-   * Ends the plan at `plan.propose`, leaving `approval.decide` pending for the
-   * live board. The seed authenticates with the OPERATOR credential, so its own
+   * Ends the plan at the finalize terminal, leaving `approval.decide` pending
+   * for the live board. The seed authenticates with the OPERATOR credential, so its own
    * approval dispatch counts as the human review — a chain that should wait for
    * a click on the board must therefore never send that command at all.
    */
@@ -93,6 +93,11 @@ export const DEMO_SEED_KINDS = Object.freeze([
   "policy.install",
   "goal.create",
   "plan.propose",
+  // Twice: the proposal, then the finalize terminal. They may not share one chain -
+  // `classifyPlanningChain` refuses that pairing with PLANNING_FINALIZE_CHAIN_MIXED - so the
+  // seed finalizes in a request of its own, and the run reaches `approval.decide` at
+  // lifecycle PLAN_REVIEW rather than PLANNING.
+  "plan.propose",
   "approval.decide",
 ] as const);
 
@@ -100,6 +105,7 @@ import {
   DEMO_VERIFIED,
   activationWitness,
   approvalRecord,
+  finalizeChain,
   planningActivation,
   planningChain,
   probeObservation,
@@ -170,6 +176,12 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
       witness: { projectReadyRef: `${input.projectId}-ready`, truthClass: DEMO_VERIFIED },
     }),
     build("plan.propose", 0, { commands: planningChain(input), runId: input.runId }),
+    // The seed FINALIZES before it approves. The finalize terminal may not share a chain with
+    // `plan.propose` - `classifyPlanningChain` refuses that with PLANNING_FINALIZE_CHAIN_MIXED -
+    // so it rides its own request, and the run reaches `approval.decide` at lifecycle
+    // PLAN_REVIEW with a durable graphRevisionRef instead of the PLANNING state a propose-only
+    // chain leaves behind.
+    build("plan.propose", 0, { commands: finalizeChain(input), runId: input.runId }, "-finalize"),
     build("approval.decide", 0, {
       activation: planningActivation(input),
       command: {

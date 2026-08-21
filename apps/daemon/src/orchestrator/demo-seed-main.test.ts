@@ -247,6 +247,7 @@ describe("runDemoSeed against a loopback daemon stub", () => {
         "demo-seed-policy.install-validatable-policy",
         "demo-seed-goal.create",
         "demo-seed-plan.propose",
+        "demo-seed-plan.propose-finalize",
         "demo-seed-approval.decide",
       ]);
       expect(lines.some((line) => line.includes(`READY ${NODE_DELIVER_KIND}@${NODE_REF}`))).toBe(true);

@@ -21,6 +21,7 @@ import {
   openStore,
   send,
 } from "./bootstrap-test-fixtures.js";
+import { driveTo } from "./bootstrap-journey-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import {
   cleanupGoalClosureFixtures,
@@ -121,18 +122,24 @@ describe("bootstrap sequence is command-driven (DoD 1)", () => {
 describe("one durable terminal decision and exact replay (DoD 2)", () => {
   const sequence = bootstrapSequence();
 
-  it("drives every owned command kind exactly once", () => {
-    expect(sequence).toHaveLength(10);
-    expect(sequence).toHaveLength(BOOTSTRAP_COMMAND_KINDS.length);
+  it("drives every owned command kind, and plan.propose exactly twice", () => {
+    // Eleven requests over TEN distinct kinds: the journey issues `plan.propose` for the
+    // proposal and again for the finalize terminal, which may not share a chain with it
+    // (`classifyPlanningChain` refuses that pairing with PLANNING_FINALIZE_CHAIN_MIXED).
+    expect(sequence).toHaveLength(11);
+    expect(sequence.length).toBe(BOOTSTRAP_COMMAND_KINDS.length + 1);
     expect(new Set(sequence.map((entry) => entry.kind)))
       .toEqual(new Set<string>(BOOTSTRAP_COMMAND_KINDS));
+    expect(sequence.filter((entry) => entry.kind === "plan.propose")).toHaveLength(2);
   });
 
   it.each(sequence.map((request, index) => [request.kind, index] as const))(
     "%s commits one decision and replays it exactly",
     async (kind, index) => {
       const store = openStore();
-      driveThrough(store, kind);
+      // By INDEX: `driveThrough` keys on kind and would rewind the finalize request's prefix
+      // back to the proposal, sending a finalize against a run that never proposed.
+      driveTo(store, index);
       if (kind === "goal.close") await qualifyClosure(store, "node-1");
       const before = decisionCount(store);
 

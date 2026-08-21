@@ -274,6 +274,38 @@ export function planningChain(input: DemoSeedInput): readonly Record<string, unk
   ];
 }
 
+/**
+ * The finalize terminal, in a request of its OWN. `classifyPlanningChain` refuses a chain that
+ * holds both terminals with PLANNING_FINALIZE_CHAIN_MIXED - they are mutually exclusive by
+ * design, because each business effect owes its own durable decision - so the seed finalizes by
+ * issuing a SECOND `plan.propose` whose chain is exactly this one command, never by growing
+ * `planningChain()` a fifth element.
+ */
+export function finalizeChain(input: DemoSeedInput): readonly Record<string, unknown>[] {
+  return [
+    {
+      commandId: `${input.runId}-finalize`,
+      expectedVersion: 4,
+      kind: "planning.finalize_submission",
+      revision: {
+        dependencyHash: hex64("d1"),
+        graphContentHash: hex64("c0ffee"),
+        graphRevisionRef: `${input.runId}-graph-revision`,
+        planHash: hex64("dec0de"),
+        qualityHash: hex64("dd"),
+      },
+      witness: {
+        attemptTerminalRef: `${input.runId}-attempt-terminal`,
+        effectTerminalRef: `${input.runId}-effect-terminal`,
+        nodeSummaries: [{ executionBearing: true, nodeKey: input.node.nodeRef }],
+        providerSlotTerminalRef: `${input.runId}-slot-terminal`,
+        resourcesTerminalRef: `${input.runId}-resources-terminal`,
+        truthClass: DEMO_VERIFIED,
+      },
+    },
+  ];
+}
+
 /** `expectedGoalVersion` is 1: `goal.create` leaves the goal at domain version 1. */
 export function planningActivation(input: DemoSeedInput): Record<string, unknown> {
   return {

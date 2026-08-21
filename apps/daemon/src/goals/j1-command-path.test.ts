@@ -193,8 +193,11 @@ describe("each command is idempotent on replay (DoD 5)", () => {
 
   it("generates a case for every owned kind", () => {
     // A sweep that silently produced zero cases would pass every arm below without testing one.
-    expect(cases).toHaveLength(OWNED_KINDS.length);
+    // One case per REQUEST, not per kind: the journey issues `plan.propose` twice, so the
+    // owned-kind claim is a SET claim while the case count follows the sequence.
+    expect(cases).toHaveLength(sequence.length);
     expect(cases.length).toBeGreaterThan(0);
+    expect(new Set(cases.map(([kind]) => kind))).toEqual(new Set<string>(OWNED_KINDS));
   });
 
   it.each(cases)("%s replays to the same decision and leaves one durable row", async (

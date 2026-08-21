@@ -266,6 +266,38 @@ export function planningChain(): readonly Record<string, unknown>[] {
   ];
 }
 
+/**
+ * The finalize terminal, in a request of its OWN. `classifyPlanningChain` refuses a chain that
+ * holds both terminals with PLANNING_FINALIZE_CHAIN_MIXED — they are mutually exclusive by
+ * design, because each business effect owes its own durable decision — so the shipped journey
+ * finalizes by issuing a SECOND `plan.propose` whose chain is exactly this one command, never by
+ * growing `planningChain()` a fifth element.
+ */
+export function finalizeChain(): readonly Record<string, unknown>[] {
+  return [
+    {
+      commandId: "chain-finalize",
+      expectedVersion: 4,
+      kind: "planning.finalize_submission",
+      revision: {
+        dependencyHash: hex64("d1"),
+        graphContentHash: hex64("c0ffee"),
+        graphRevisionRef: GRAPH_REVISION_REF,
+        planHash: SUBMISSION_HASH,
+        qualityHash: hex64("dd"),
+      },
+      witness: {
+        attemptTerminalRef: "attempt-terminal-1",
+        effectTerminalRef: "effect-terminal-1",
+        nodeSummaries: [{ executionBearing: true, nodeKey: "node-a" }],
+        providerSlotTerminalRef: "slot-terminal-1",
+        resourcesTerminalRef: "resources-terminal-1",
+        truthClass: "DAEMON_VERIFIED",
+      },
+    },
+  ];
+}
+
 export function approvalCommand(): Record<string, unknown> {
   return {
     decision: "APPROVE",
@@ -374,7 +406,7 @@ export function approvalRecord(exactRevisionHash: string): Record<string, unknow
   };
 }
 
-/** The ten owned commands in durable order; every other fixture is derived from this list. */
+/** The eleven owned commands in durable order; every other fixture is derived from this list. */
 export function bootstrapSequence(): readonly Envelope[] {
   return [
     envelope("project.register", 0, { owner: "owner-1" }),
@@ -385,6 +417,10 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
     envelope("goal.create", 0, goalPayload()),
     envelope("plan.propose", 0, { commands: planningChain(), runId: RUN_ID }),
+    // The shipped journey FINALIZES before it approves: this request carries the finalize
+    // terminal alone, so the run reaches `approval.decide` at lifecycle PLAN_REVIEW with a
+    // durable graphRevisionRef instead of the PLANNING state a propose-only chain leaves.
+    envelope("plan.propose", 0, { commands: finalizeChain(), runId: RUN_ID }, "cmd-finalize"),
     envelope("approval.decide", 0, approvalPayload()),
     // The goal is at domain version 2 here: `goal.create` left it at 1 and the approval's
     // activation half advanced it to 2 in the same decision.
