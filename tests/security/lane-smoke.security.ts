@@ -193,13 +193,30 @@ describe("hostile lane smoke — security config", () => {
 describe("hostile lane smoke — ordinary root config is untouched", () => {
   const block = laneTest(rootConfig, "root");
 
+  /**
+   * The roster is pinned EXACTLY, in config order, so a new discovery root can
+   * never appear without a deliberate edit here. `tools/**` is the fourth root:
+   * f28cfe4 added it so tools/import/import-shadow.test.ts — the coverage for
+   * binding the shadow importer to the durable store's MAX_EVENTS_PER_COMMIT —
+   * executes in some root lane; tools/ was in no include root before it.
+   *
+   * The pin's rationale ("hostile files are not regression evidence") survives
+   * that fourth root: tools/ was enumerated at landing and holds one *.test.ts
+   * and zero *.fault.ts / *.security.ts / *.spec.ts / fixture files, and the
+   * pattern itself still matches only the .test.ts suffix. The durable guard is
+   * the suffix sweep below, which iterates block.include and so covers any
+   * future root automatically — the length witness keeps it from going vacuous
+   * if the include is ever silently emptied.
+   */
   it("still discovers *.test.ts only, so hostile files are not regression evidence", () => {
     expect(block.include).toStrictEqual([
       "adapters/**/*.test.ts",
       "packages/**/*.test.ts",
       "tests/**/*.test.ts",
+      "tools/**/*.test.ts",
     ]);
     expect(block.passWithNoTests).toBe(false);
+    expect(block.include).toHaveLength(4);
     for (const pattern of block.include ?? []) {
       expect(pattern.endsWith(".fault.ts")).toBe(false);
       expect(pattern.endsWith(".security.ts")).toBe(false);
