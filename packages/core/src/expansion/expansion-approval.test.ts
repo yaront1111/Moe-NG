@@ -210,6 +210,9 @@ const PERTURBATIONS: readonly Perturbation[] = [
     apply: (input) => { input["policy"].decisionDigest = hex("f"); } },
   { family: "policy", name: "policy.policyRevisionRef",
     apply: (input) => { input["policy"].policyRevisionRef = hex("0"); } },
+  // Reaches the identity ONLY through policyInputHash: actor is in no bound decided fact.
+  { family: "policy", name: "policy.actor",
+    apply: (input) => { input["policy"].actor = "human:reviewer-2"; } },
   { family: "supersession disposition", name: "supersession.dispositions[0].nodeKey",
     apply: (input) => { input["supersession"].dispositions[0].nodeKey = "node-other"; } },
   { family: "supersession disposition", name: "supersession.successor.revisionId",
@@ -234,7 +237,7 @@ const PERTURBATION_NAMES: readonly string[] = [
   "fairness.opportunityRef", "fairness.capRevisionRef", "criteria.approvalRef",
   "criteria.budgetRef", "criteria.criteriaRef", "criteria.riskTier", "criteria.dependencyChanges",
   "deadlineEpochMs", "fence.authorityFencedRef", "fence.fencedAtEpoch", "funding.fundingRef",
-  "funding.quantity", "policy.decisionDigest", "policy.policyRevisionRef",
+  "funding.quantity", "policy.decisionDigest", "policy.policyRevisionRef", "policy.actor",
   "supersession.dispositions[0].nodeKey", "supersession.successor.revisionId",
   "supersession graph epoch pair", "supersession graph content hash pair",
 ];
@@ -275,11 +278,12 @@ describe("expansion preparation identity", () => {
     const { bound, identity } = accepted(prepareExpansion(preparationInput()));
     expect(Object.keys(bound).sort()).toEqual([
       "admitted", "criteria", "deadlineEpochMs", "fence", "funding", "graphLifecycle",
-      "policyDecision", "supersessionAuthorityHash",
+      "policyDecision", "policyInputHash", "supersessionAuthorityHash",
     ]);
     expect(bound["policyDecision"]).toEqual({
       decision: "REQUIRE_HUMAN_APPROVAL", decisionDigest: hex("c"), policyRevisionRef: hex("d"),
     });
+    expect(bound["policyInputHash"]).toMatch(/^[0-9a-f]{64}$/u);
     expect(bound["graphLifecycle"]).toBe("ACTIVE");
     expect(identity).toMatch(/^[0-9a-f]{64}$/u);
   });
@@ -308,7 +312,7 @@ describe("expansion preparation identity", () => {
 
   it("generates one perturbation case per bound field and covers every family", () => {
     expect(PERTURBATIONS.map((entry) => entry.name)).toEqual(PERTURBATION_NAMES);
-    expect(PERTURBATIONS.length).toBe(30);
+    expect(PERTURBATIONS.length).toBe(31);
     expect([...new Set(PERTURBATIONS.map((entry) => entry.family))].sort())
       .toEqual(BOUND_FAMILIES);
   });
@@ -739,6 +743,25 @@ describe("expansion manual approval races", () => {
   it("refuses when the stored policy input no longer yields the bound decision", () => {
     const request = approvalRequest();
     request["preparation"].sources.policy.decisionDigest = hex("e");
+    expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
+      "POLICY_EVALUATION");
+  });
+
+  it("refuses a swapped stored policy fact that still yields the bound triple", () => {
+    const request = approvalRequest();
+    // R3 is human-only exactly like R2, and decisionDigest / policyRevisionRef are caller
+    // passthroughs, so this forged input re-evaluates to a byte-identical bound triple; only
+    // the bound policyInputHash ties the stored evidence to the input actually evaluated.
+    request["preparation"].sources.policy.facts[0].tier = "R3";
+    expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
+      "POLICY_EVALUATION");
+    // Positive control: the untampered twin of the same request still verifies and approves.
+    expect(approveExpansionManually(approvalRequest()).ok).toBe(true);
+  });
+
+  it("refuses a swapped stored slice chain that still yields the bound triple", () => {
+    const request = approvalRequest();
+    request["preparation"].sources.policy.sliceChain[0].sliceRef = "slice-forged";
     expectApprovalRefusal(request, "EXPANSION_APPROVAL_POLICY_CHANGED", "POLICY",
       "POLICY_EVALUATION");
   });
