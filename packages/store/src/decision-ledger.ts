@@ -34,9 +34,14 @@ class DecisionLedgerStore extends RecoveryInitialInstallStore {
   }
 
   public validateStartup(): void {
-    this.validateAllReceipts();
-    this.validateAllCommandDecisions();
-    this.validateReservedDecisionNamespace();
+    // The receipt sweep memoizes each receipt it proves so the decision sweep
+    // reuses that materialization instead of re-reading and re-hashing the
+    // same rows; the memo lives exactly as long as this call.
+    this.withStartupReceiptMemo(() => {
+      this.validateAllReceipts();
+      this.validateAllCommandDecisions();
+      this.validateReservedDecisionNamespace();
+    });
   }
 }
 
