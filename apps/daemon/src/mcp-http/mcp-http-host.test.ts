@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -275,6 +277,62 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     });
   }, 30_000);
 
+  it("frees the SSE stream slot when the client DROPS, instead of leaking the dead pump", async () => {
+    // The observable is the SDK transport's own single-stream rule: while a standalone SSE
+    // stream is mapped, a second GET on the session answers 409. A bridge that never observes
+    // the disconnect keeps a dropped client's pump parked in reader.read() forever, so the
+    // mapping — and its session state — outlives the client for the daemon's whole life, and
+    // the slot never frees. The 409 positive control proves the slot really was occupied
+    // before the drop, so the later 200 is evidence of cleanup, not of a rule that never
+    // engaged.
+    await withHarness(async ({ host }) => {
+      const started = await within("start", host.start());
+      if (!started.ok) throw new Error("start refused");
+      const sessionId = await openSession(host, started.origin);
+      const streamHeaders = {
+        accept: ACCEPT,
+        authorization: `Bearer ${CREDENTIAL}`,
+        [SESSION_ID_HEADER]: sessionId,
+      };
+
+      // A RAW node request rather than fetch, so the client side can be severed mid-stream:
+      // fetch owns its socket and offers no handle to destroy.
+      const dropped = await within(
+        "open raw SSE stream",
+        new Promise<IncomingMessage>((resolve, reject) => {
+          const opened = httpRequest(`${started.origin}/`, { headers: streamHeaders, method: "GET" });
+          opened.once("response", resolve);
+          opened.once("error", reject);
+          opened.end();
+        }),
+      );
+      expect(dropped.statusCode).toBe(200);
+
+      const occupied = await within("second stream while occupied", fetch(`${started.origin}/`, {
+        headers: streamHeaders,
+        method: "GET",
+      }));
+      expect(occupied.status).toBe(409);
+      await occupied.body?.cancel();
+
+      // The client vanishes. The host's 'close' wiring must cancel the pump's reader, which
+      // runs the SDK stream's cancel() — the only code that deletes the mapping.
+      dropped.destroy();
+
+      const reopened = await within("stream slot frees after the drop", (async (): Promise<Response> => {
+        for (;;) {
+          const attempt = await fetch(`${started.origin}/`, { headers: streamHeaders, method: "GET" });
+          if (attempt.status === 200) return attempt;
+          // While the disconnect propagates, "still occupied" is the only acceptable answer.
+          expect(attempt.status).toBe(409);
+          await attempt.body?.cancel();
+          await new Promise((resolve) => { setTimeout(resolve, 50); });
+        }
+      })());
+      await reopened.body?.cancel();
+    });
+  }, 30_000);
+
   it("mints a session on initialize and answers tools/call from the PRODUCTION pipeline", async () => {
     await withHarness(async ({ host }) => {
       const started = await within("start", host.start());
@@ -493,11 +551,11 @@ describe("mcp-http host — official Streamable HTTP adapter over the production
     }
   });
 
-  it("covers exactly the ten host behaviours this suite claims", async () => {
+  it("covers exactly the eleven host behaviours this suite claims", async () => {
     // A hand-written count is only worth writing if it can FAIL. `expect(6).toBe(6)` cannot, so
     // the number is read back off this file's own source: delete or add a case and this reddens.
     const source = readFileSync(new URL(import.meta.url), "utf8");
-    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(11); // ten behaviours + this counter
+    expect(source.match(/^ {2}it\(/gmu) ?? []).toHaveLength(12); // eleven behaviours + this counter
     // And the host's public surface, hand-listed so a silently dropped method is visible.
     await withHarness(async ({ host }) => {
       expect(Object.keys(host).sort()).toEqual(["handleRequest", "start", "stop"]);

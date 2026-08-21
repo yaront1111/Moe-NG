@@ -171,8 +171,21 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     let bound: Server | null = null;
     try {
       bound = createServer((incoming, outgoing) => {
+        // THE DISCONNECT LIFELINE, wired here because only the host holds the node pair. The
+        // response 'close' event is the one signal that fires when the peer terminates the
+        // connection prematurely — since Node 16 the request's own 'close' means "message
+        // complete", which for a bodiless SSE GET is immediately — and `writableFinished`
+        // separates that termination from a normally finished exchange, where aborting would
+        // be noise. The bridge threads the signal into the Request and cancels its own reader
+        // on the same event, so both the adapter and the pump observe the drop.
+        const lifeline = new AbortController();
+        outgoing.on("close", () => {
+          if (!outgoing.writableFinished) lifeline.abort();
+        });
         void (async (): Promise<void> => {
-          const response = await handleRequest(await webRequestFrom(incoming, origin));
+          const response = await handleRequest(
+            await webRequestFrom(incoming, origin, lifeline.signal),
+          );
           await writeWebResponse(response, outgoing);
         })().catch((error: unknown) => {
           // A throw must still answer and must still leave the listener closable; it may never
