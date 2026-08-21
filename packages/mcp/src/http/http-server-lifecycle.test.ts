@@ -1,6 +1,6 @@
 /**
- * Session lifecycle, transport parity, cancellation/disconnect, and typed-resumption
- * tests for the official Streamable HTTP adapter.
+ * Session lifecycle, transport parity, cancellation/disconnect, close-latch, idle-reaping,
+ * and typed-resumption tests for the official Streamable HTTP adapter.
  *
  * The disconnect cases assert the SDK's actual semantics: cancelling an SSE body does not
  * abort dispatch. The result is lost and the adapter fabricates nothing.
@@ -12,6 +12,7 @@ import {
   CONFORMANCE_COMMAND_ARGS,
   CONFORMANCE_COMMAND_LABEL,
   CONFORMANCE_COMMAND_RESPONSE_BYTES,
+  CONFORMANCE_COMMAND_RESPONSE_TEXT,
   createRecordingPort,
 } from "../dispatch-conformance.js";
 import {
@@ -28,6 +29,7 @@ import {
   build,
   openSession,
   readPayload,
+  resultText,
   toolCallBody,
 } from "./http-server-test-helpers.js";
 
@@ -56,6 +58,43 @@ async function openSessionOn(adapter: { handleRequest(request: Request): Promise
   await response.text();
   if (sessionId === null) throw new Error(`initialize did not mint a session: ${response.status}`);
   return sessionId;
+}
+
+interface DeferredPort extends HttpDispatchPort {
+  readonly captured: readonly AbortSignal[];
+  release(): void;
+}
+
+/** Holds every dispatch open until `release()`, so a call can be caught genuinely in flight. */
+function createDeferredPort(): DeferredPort {
+  const captured: AbortSignal[] = [];
+  const releases: (() => void)[] = [];
+  const dispatch = (
+    _bytes: Uint8Array,
+    context: HttpDispatchContext,
+  ): Promise<Uint8Array> => {
+    if (context.signal !== undefined) captured.push(context.signal);
+    return new Promise((resolve) => {
+      releases.push(() => {
+        resolve(CONFORMANCE_COMMAND_RESPONSE_BYTES);
+      });
+    });
+  };
+  return {
+    authenticate: () => ({ ok: true as const }),
+    captured,
+    dispatchCommandBytes: dispatch,
+    dispatchQueryBytes: dispatch,
+    release(): void {
+      for (const resolve of releases.splice(0)) resolve();
+    },
+  };
+}
+
+async function settle(): Promise<void> {
+  await new Promise((resolve) => {
+    setImmediate(resolve);
+  });
 }
 
 describe("http adapter — session lifecycle", () => {
@@ -241,42 +280,6 @@ describe("http adapter — no transport-specific bypass", () => {
 });
 
 describe("http adapter — cancellation and disconnect", () => {
-  interface DeferredPort extends HttpDispatchPort {
-    readonly captured: readonly AbortSignal[];
-    release(): void;
-  }
-
-  function createDeferredPort(): DeferredPort {
-    const captured: AbortSignal[] = [];
-    const releases: (() => void)[] = [];
-    const dispatch = (
-      _bytes: Uint8Array,
-      context: HttpDispatchContext,
-    ): Promise<Uint8Array> => {
-      if (context.signal !== undefined) captured.push(context.signal);
-      return new Promise((resolve) => {
-        releases.push(() => {
-          resolve(CONFORMANCE_COMMAND_RESPONSE_BYTES);
-        });
-      });
-    };
-    return {
-      authenticate: () => ({ ok: true as const }),
-      captured,
-      dispatchCommandBytes: dispatch,
-      dispatchQueryBytes: dispatch,
-      release(): void {
-        for (const resolve of releases.splice(0)) resolve();
-      },
-    };
-  }
-
-  async function settle(): Promise<void> {
-    await new Promise((resolve) => {
-      setImmediate(resolve);
-    });
-  }
-
   it("aborts the dispatch signal when the client sends notifications/cancelled", async () => {
     const port = createDeferredPort();
     const { adapter, sessionId } = await openSession(port, false);
@@ -323,6 +326,155 @@ describe("http adapter — cancellation and disconnect", () => {
     port.release();
     await settle();
     expect(response.bodyUsed || response.body?.locked).toBeTruthy();
+    await adapter.close();
+  });
+});
+
+describe("http adapter — session close settles JSON-mode POSTs", () => {
+  it("settles an in-flight tools/call with SESSION_EXPIRED when the session is DELETEd", async () => {
+    const port = createDeferredPort();
+    const { adapter, sessionId } = await openSession(port);
+    // Deliberately NOT awaited: in JSON response mode (the default) the SDK parks this whole
+    // Promise<Response> behind its stream mapping until the tool completes, and the deferred
+    // port holds the tool open.
+    const inFlight = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId }),
+    );
+    await settle();
+    expect(port.captured).toHaveLength(1);
+
+    const deleted = await adapter.handleRequest(build({ method: "DELETE", sessionId }));
+    expect(deleted.status).toBe(200);
+
+    // Before the close latch existed this await NEVER settled: the SDK's close() deletes its
+    // stream mapping without resolving the parked response, and the close-abort makes the
+    // handler's completion path return early. The latch turns the close into the same 404 a
+    // request arriving after the DELETE receives.
+    const response = await inFlight;
+    expect(response.status).toBe(404);
+    const error = (await readPayload(response))["error"] as {
+      code?: number;
+      data?: { code?: string };
+    };
+    expect(error.code).toBe(-32001);
+    expect(error.data?.code).toBe("SESSION_EXPIRED");
+    port.release();
+    await adapter.close();
+  });
+
+  it("settles an in-flight tools/call when the adapter itself closes", async () => {
+    const port = createDeferredPort();
+    const { adapter, sessionId } = await openSession(port);
+    const inFlight = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId }),
+    );
+    await settle();
+    expect(port.captured).toHaveLength(1);
+
+    // The shutdown sweep releases each session's latch right after closing its transport.
+    await adapter.close();
+
+    const response = await inFlight;
+    expect(response.status).toBe(404);
+    const error = (await readPayload(response))["error"] as { data?: { code?: string } };
+    expect(error.data?.code).toBe("SESSION_EXPIRED");
+    port.release();
+  });
+});
+
+describe("http adapter — idle session reaping", () => {
+  const IDLE_TTL_MS = 60_000;
+
+  it("releases a session idle past the TTL at the next initialize, leaving fresh ones alone", async () => {
+    const observed: string[] = [];
+    let clock = 1_000_000;
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      now: (): number => clock,
+      sessionIdleTtlMs: IDLE_TTL_MS,
+      sessionPort: recordingSessionPort(observed),
+    });
+    const staleId = await openSessionOn(adapter);
+    clock += 30_000;
+    const freshId = await openSessionOn(adapter);
+    clock += 45_000;
+    // Stale is now 75s idle and fresh 45s: only stale is past the 60s TTL. The whole ordered
+    // trace pins the release BEFORE the new bind — the sweep runs before the pair is minted —
+    // and pins that the fresh session was not swept along with the stale one.
+    const mintedId = await openSessionOn(adapter);
+    expect(observed).toEqual([
+      `bind:${staleId}`,
+      `bind:${freshId}`,
+      `close:${staleId}`,
+      `bind:${mintedId}`,
+    ]);
+
+    // The reaped session is unroutable with the same 404 a DELETE leaves behind ...
+    const late = await adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId: staleId }),
+    );
+    expect(late.status).toBe(404);
+    // ... while the surviving session still serves a call.
+    const alive = await adapter.handleRequest(
+      build({ body: toolCallBody(3, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId: freshId }),
+    );
+    expect(resultText(await readPayload(alive))).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+    await adapter.close();
+  });
+
+  it("keeps a session alive when routed activity resets its idle clock", async () => {
+    const observed: string[] = [];
+    let clock = 1_000_000;
+    const port = createRecordingPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      now: (): number => clock,
+      sessionIdleTtlMs: IDLE_TTL_MS,
+      sessionPort: recordingSessionPort(observed),
+    });
+    const activeId = await openSessionOn(adapter);
+    clock += 45_000;
+    const touched = await adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId: activeId }),
+    );
+    expect(touched.status).toBe(200);
+    await touched.text();
+    clock += 45_000;
+    // 90s since the bind but only 45s since the routed call: the bind-time stamp alone would
+    // read as idle past the TTL, so the absence of a close here is what proves the touch.
+    const mintedId = await openSessionOn(adapter);
+    expect(observed).toEqual([`bind:${activeId}`, `bind:${mintedId}`]);
+    await adapter.close();
+  });
+
+  it("settles an in-flight tools/call on a session the reap sweeps away", async () => {
+    const observed: string[] = [];
+    let clock = 1_000_000;
+    const port = createDeferredPort();
+    const adapter = createHttpMcpAdapter({
+      dispatchPort: port,
+      now: (): number => clock,
+      sessionIdleTtlMs: IDLE_TTL_MS,
+      sessionPort: recordingSessionPort(observed),
+    });
+    const staleId = await openSessionOn(adapter);
+    const inFlight = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId: staleId }),
+    );
+    await settle();
+    expect(port.captured).toHaveLength(1);
+
+    clock += IDLE_TTL_MS + 1;
+    await openSessionOn(adapter);
+
+    // The reap runs the same sweep shutdown uses, so the reaped session's latch settled the
+    // response parked behind the still-open tool call.
+    const response = await inFlight;
+    expect(response.status).toBe(404);
+    const error = (await readPayload(response))["error"] as { data?: { code?: string } };
+    expect(error.data?.code).toBe("SESSION_EXPIRED");
+    port.release();
     await adapter.close();
   });
 });

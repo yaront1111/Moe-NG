@@ -65,6 +65,13 @@ export interface HttpSessionPort {
 export interface HttpSessionEntry<TAttachment> {
   /** Transport and server instances owned by this session, opaque to this module. */
   readonly attachment: TAttachment;
+  /**
+   * Epoch-millisecond stamp of the last request routed to this entry; the bind counts as the
+   * first activity. Idle reaping reads it. Optional only because entries are also built by
+   * hand outside this factory: an unstamped entry fails toward staying alive, never toward
+   * being torn down. Every entry this registry mints carries one.
+   */
+  readonly lastActivityAt?: number;
   readonly sessionId: string;
   readonly verdict: HttpAuthAccepted;
 }
@@ -75,17 +82,27 @@ export interface HttpSessionEntry<TAttachment> {
  * registry to pick the right instance before the transport is ever consulted.
  */
 export interface HttpSessionRegistry<TAttachment> {
-  bind(mcpSessionId: string, verdict: HttpAuthAccepted, attachment: TAttachment): void;
+  bind(
+    mcpSessionId: string,
+    verdict: HttpAuthAccepted,
+    attachment: TAttachment,
+    boundAt?: number,
+  ): void;
   delete(mcpSessionId: string): void;
   entries(): readonly HttpSessionEntry<TAttachment>[];
   get(mcpSessionId: string): HttpSessionEntry<TAttachment> | undefined;
+  /** Re-stamps `lastActivityAt`. A touch for an id this registry does not hold is a no-op. */
+  touch(mcpSessionId: string, at: number): void;
 }
 
 export function createHttpSessionRegistry<TAttachment>(): HttpSessionRegistry<TAttachment> {
   const sessions = new Map<string, HttpSessionEntry<TAttachment>>();
   return {
-    bind(mcpSessionId, verdict, attachment): void {
-      sessions.set(mcpSessionId, Object.freeze({ attachment, sessionId: mcpSessionId, verdict }));
+    bind(mcpSessionId, verdict, attachment, boundAt = Date.now()): void {
+      sessions.set(
+        mcpSessionId,
+        Object.freeze({ attachment, lastActivityAt: boundAt, sessionId: mcpSessionId, verdict }),
+      );
     },
     delete(mcpSessionId): void {
       sessions.delete(mcpSessionId);
@@ -95,6 +112,14 @@ export function createHttpSessionRegistry<TAttachment>(): HttpSessionRegistry<TA
     },
     get(mcpSessionId): HttpSessionEntry<TAttachment> | undefined {
       return sessions.get(mcpSessionId);
+    },
+    touch(mcpSessionId, at): void {
+      const entry = sessions.get(mcpSessionId);
+      if (entry === undefined) return;
+      // Entries are frozen, so a touch REPLACES rather than mutates; a reference captured
+      // before the touch keeps its own stamp, which is fine — only the registry's copy is
+      // ever consulted for idleness.
+      sessions.set(mcpSessionId, Object.freeze({ ...entry, lastActivityAt: at }));
     },
   };
 }
@@ -205,9 +230,10 @@ export async function bindDaemonSession<TAttachment>(
   mcpSessionId: string,
   verdict: HttpAuthAccepted,
   attachment: TAttachment,
+  boundAt?: number,
 ): Promise<void> {
   await port.bindSession(mcpSessionId, verdict);
-  registry.bind(mcpSessionId, verdict, attachment);
+  registry.bind(mcpSessionId, verdict, attachment, boundAt);
 }
 
 /**

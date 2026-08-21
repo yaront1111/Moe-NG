@@ -5,11 +5,11 @@ import type { HttpSessionEntry, HttpSessionPort, HttpSessionRegistry } from "./h
  * Shutdown sweep for the Streamable HTTP adapter.
  *
  * WHY IT IS NOT INLINE IN THE ADAPTER. Releasing a session at shutdown is three acts on three
- * different owners — the daemon binding, the transport, the server — and each can fail without
- * the others being in doubt. Written as a bare loop inside `close()` the first throw abandons
- * every session after it, so a partial shutdown reports as a completed one. The containment
- * that prevents this needs a per-step and per-entry structure that does not belong in a file
- * already at the top of its size budget.
+ * different owners — the daemon binding, the transport, the server — plus the adapter's own
+ * close latch between them, and each can fail without the others being in doubt. Written as a
+ * bare loop inside `close()` the first throw abandons every session after it, so a partial
+ * shutdown reports as a completed one. The containment that prevents this needs a per-step and
+ * per-entry structure that does not belong in a file already at the top of its size budget.
  *
  * THE DAEMON RELEASE GOES THROUGH `closeDaemonSession` AND NOT AROUND IT. That helper is the
  * DELETE path's release too, and it encodes the order this adapter has already decided on:
@@ -38,11 +38,15 @@ export const HTTP_SHUTDOWN_REFUSAL_CODES = Object.freeze([
 export type HttpShutdownRefusalCode = (typeof HTTP_SHUTDOWN_REFUSAL_CODES)[number];
 
 /**
- * The two closables a session owns, named structurally rather than by SDK type. The adapter's
- * real attachment carries an SDK `Server` and transport, which satisfy this; a test can supply
- * recorders. Nothing here needs to know what either one is.
+ * The two closables a session owns plus its close latch, named structurally rather than by SDK
+ * type. The adapter's real attachment carries an SDK `Server`, a transport, and a latch that
+ * settles JSON-mode responses still parked on the session, which satisfy this; a test can
+ * supply recorders. The latch is optional so entries built by hand elsewhere stay sweepable.
+ * Nothing here needs to know what any of them is.
  */
 export interface ClosableSession {
+  /** Adapter-owned close signal. Releasing it settles any response still awaiting the session. */
+  readonly latch?: { release(): void };
   readonly server: { close(): Promise<void> | void };
   readonly transport: { close(): Promise<void> | void };
 }
@@ -85,8 +89,8 @@ async function attempt(act: () => Promise<void> | void): Promise<unknown> {
 /**
  * Releases and closes every session the adapter still holds.
  *
- * Each entry gets all three acts INDEPENDENTLY: a failed daemon release does not skip closing
- * the transport and server, and a failed close does not skip the entries after it. `entries` is
+ * Each entry gets every act INDEPENDENTLY: a failed daemon release does not skip closing the
+ * transport and server, and a failed close does not skip the entries after it. `entries` is
  * a snapshot — `HttpSessionRegistry.entries()` returns a copy — so removing entries as the
  * sweep runs is safe and is not the mutate-while-iterating bug it resembles.
  */
@@ -99,10 +103,15 @@ export async function closeAllDaemonSessions<TAttachment extends ClosableSession
   let firstCause: unknown;
 
   for (const entry of entries) {
-    const { server, transport } = entry.attachment;
+    const { latch, server, transport } = entry.attachment;
     const causes = [
       await attempt(() => closeDaemonSession(registry, port, entry.sessionId)),
       await attempt(() => transport.close()),
+      // Right after the transport close, because that close is what strands a JSON-mode POST:
+      // the SDK deletes its stream mapping without settling the parked response, and only the
+      // latch can settle it afterwards. Contained like the acts around it so a hostile double
+      // cannot abandon the entries behind it.
+      await attempt(() => latch?.release()),
       await attempt(() => server.close()),
     ].filter((cause) => cause !== undefined);
     if (causes.length === 0) continue;

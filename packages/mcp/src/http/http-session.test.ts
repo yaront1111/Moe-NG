@@ -350,6 +350,27 @@ describe("http session lifecycle", () => {
     expect(registry.get("mcp-session-new")).toBeUndefined();
   });
 
+  it("stamps activity at bind and moves it on touch without disturbing the binding", async () => {
+    const port = createRecordingSessionPort({ [BEARER_A]: VERDICT_A });
+    const registry = createHttpSessionRegistry<Attachment>();
+    await bindDaemonSession(registry, port, "mcp-session-a", VERDICT_A, { label: "fresh" }, 1_000);
+    expect(registry.get("mcp-session-a")?.lastActivityAt).toBe(1_000);
+
+    registry.touch("mcp-session-a", 2_000);
+    const touched = registry.get("mcp-session-a");
+    expect(touched?.lastActivityAt).toBe(2_000);
+    // The touch moves ONLY the stamp: the identity binding and the attachment must survive it,
+    // or a routine request would detach the session from its daemon identity.
+    expect(touched?.verdict).toEqual(VERDICT_A);
+    expect(touched?.attachment.label).toBe("fresh");
+  });
+
+  it("ignores a touch for a session id it does not hold", () => {
+    const registry = createHttpSessionRegistry<Attachment>();
+    registry.touch("mcp-session-absent", 2_000);
+    expect(registry.entries()).toEqual([]);
+  });
+
   it("reaps the entry and notifies the port on close", async () => {
     const port = createRecordingSessionPort({ [BEARER_A]: VERDICT_A });
     const registry = registryWith("mcp-session-a", VERDICT_A);
