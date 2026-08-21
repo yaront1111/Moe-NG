@@ -126,6 +126,10 @@ import {
 } from "../../apps/daemon/src/goals/goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "../../apps/daemon/src/goals/goal-qualification.js";
 import { hostileRoot } from "./hostile-harness.js";
+// ONE authority for the readback, not two. The control lives beside the other seeded
+// security lane (task-64a72f8d owns both files); a second copy here would be a second
+// definition of "correctly seeded" and the two would drift apart silently.
+import { assertActivationWorldSeeded } from "./safe-boundary-observation-scenarios.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
 
 export type HostileArm = "BEFORE" | "AFTER" | "RACE";
@@ -285,6 +289,12 @@ export function openHostileStore(label: string): SqliteEventStore {
   const store = openHarnessStore(`${hostileRoot(label)}/store.sqlite`);
   openStores.push(store);
   seedReadyProject(store);
+  // task-64a72f8d: `seedReadyProject` gained the durable ACTIVE graph + authorized budget
+  // root in task-acc1a3b4, and it is a STRICT NO-OP today -- nothing reads either record
+  // until effect.activate moves onto durable authority. So this lane going green proves
+  // nothing about the world it was handed, and a HOSTILE suite built on a silently-wrong
+  // world would be arranging a deficiency it never declared. Read it back instead.
+  assertActivationWorldSeeded(store);
   return store;
 }
 

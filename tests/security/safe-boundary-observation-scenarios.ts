@@ -36,8 +36,15 @@ import {
 } from "../../apps/daemon/src/activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "../../apps/daemon/src/activation/activation-ingress.js";
 import {
+  ACTIVATION_WORLD_BEARING_NODE_COUNT, ACTIVATION_WORLD_METER, ACTIVATION_WORLD_REVISION_ID,
+} from "../../apps/daemon/src/activation/activation-world-fixtures.js";
+import { readCurrentBudgetLedger } from "../../apps/daemon/src/budget/budget-current-projection.js";
+import { readCurrentActiveGraph } from "../../apps/daemon/src/planning/active-graph-projection.js";
+import { GOAL_ID } from "../../apps/daemon/src/bootstrap/bootstrap-test-fixtures.js";
+import {
   PRINCIPAL_ID, PROJECT_ID, seedReadyProject,
 } from "../../apps/daemon/src/recovery/restore-test-harness.js";
+import { NODE_ADMISSION_METERS } from "../../packages/scheduler/src/index.js";
 import { PROVIDER_RUN_RECORD_VERSION } from "../../apps/daemon/src/telemetry/provider-run-contracts.js";
 import type { ProviderRunRecord } from "../../apps/daemon/src/telemetry/provider-run-contracts.js";
 import { commitProviderRunRecord } from "../../apps/daemon/src/telemetry/provider-run-ledger.js";
@@ -67,7 +74,56 @@ function openBoundaryStore(label: string): { path: string; store: SqliteEventSto
   const store = SqliteEventStore.openForProject(path, PROJECT_ID);
   openStores.push(store);
   seedReadyProject(store);
+  assertActivationWorldSeeded(store);
   return { path, store };
+}
+
+/**
+ * THE POSITIVE CONTROL ON THE SEEDED WORLD (task-64a72f8d).
+ *
+ * `seedReadyProject` gained the durable ACTIVE graph + authorized budget root in task-acc1a3b4,
+ * which is what keeps this lane off the wall when `effect.activate` moves onto durable
+ * authority (task-e194c5f6 step 6). That enrichment is a STRICT NO-OP today — nothing reads
+ * either record yet — so this lane going green proves nothing about it: a seeder planting an
+ * empty graph, a root in ledger meter vocabulary, or nothing at all yields the identical green.
+ *
+ * So the world is read back HERE, through COMMITTED production readers, and a wrong world
+ * throws with the refusing code and layer rather than surviving to be discovered a row later.
+ * It throws rather than asserting because this is a scenario provider, not a suite — and a
+ * hostile lane that built its store on a silently-wrong world would be arranging a deficiency
+ * it never declared.
+ */
+export function assertActivationWorldSeeded(store: SqliteEventStore): void {
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) {
+    throw new Error(`activation world graph absent: ${active.code}@${active.layer}`);
+  }
+  if (active.revisionId !== ACTIVATION_WORLD_REVISION_ID) {
+    throw new Error(`activation world revision ${active.revisionId}, not ${ACTIVATION_WORLD_REVISION_ID}`);
+  }
+  // EXACT, never `> 0`: an empty graph satisfies `> 0` vacuously because there is nothing
+  // to count, which is precisely the wrong seed this control exists to catch.
+  const bearing = active.snapshot.nodes.filter((node) => node.executionBearing);
+  if (bearing.length !== ACTIVATION_WORLD_BEARING_NODE_COUNT) {
+    throw new Error(`activation world has ${bearing.length} execution-bearing nodes, not ${ACTIVATION_WORLD_BEARING_NODE_COUNT}`);
+  }
+  const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+  if (!ledger.ok) {
+    throw new Error(`activation world budget root absent: ${ledger.code}@${ledger.layer}`);
+  }
+  // MEMBERSHIP IS NOT ENOUGH. A root funded on `attempt.count` is a member of the closed list
+  // and still has zero durable coverage for a node denominated in `runner.authorized_ms`, so
+  // the root's meter must also EQUAL what the seeded node's admissionAmounts actually spend.
+  const nodeMeters = new Set<string>(active.content.nodeAuthority.definitions
+    .flatMap((definition) => definition.admissionAmounts).map((amount) => amount.meter));
+  for (const { meter } of ledger.authorization.amounts) {
+    if (!(NODE_ADMISSION_METERS as readonly string[]).includes(meter)) {
+      throw new Error(`budget root meter ${meter} is outside NODE_ADMISSION_METERS`);
+    }
+    if (!nodeMeters.has(meter) || meter !== ACTIVATION_WORLD_METER) {
+      throw new Error(`budget root meter ${meter} does not match the node's admissionAmounts`);
+    }
+  }
 }
 
 /** A SECOND connection to the same durable file. The race needs two real connections: one
