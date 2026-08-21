@@ -43,7 +43,9 @@
     --cr-ink: #edf2f6;
     --cr-ink-soft: #a9b4bf;
     --cr-line: #2f3b47;
-    --cr-line-strong: #52606d;
+    /* 3.15:1 against the dark surface — the boundary bar for non-text UI;
+     * #52606d sat at 2.52 and load-bearing borders faded into the panels. */
+    --cr-line-strong: #5f6f7e;
     --cr-link: #9bafff;
     --cr-attention-text: #e5a06d;
     --cr-attention-wash: #38271f;
