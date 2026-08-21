@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
   acknowledge, reseatToSnapshot,
@@ -18,6 +18,7 @@ import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
+import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
 import { createBootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
@@ -151,21 +152,68 @@ export function createStoreDependencies(
 
   const DEFAULT_READER = "control-room-1";
 
+  /** One acquisition = one handle plus the board built over it; the pair travels
+   *  together because a board fold is only meaningful over the handle it read. */
+  type SubscriptionHandles = Readonly<{ board: BoardProjectionService; database: DatabaseSync }>;
+
   const subscriptions = (): SubscriptionPort => {
-    const database = subscriptionDatabase ?? new DatabaseSync(config.storePath);
-    subscriptionDatabase = database;
-    database.exec("PRAGMA busy_timeout = 5000;");
-    const board = createBoardProjectionService({ database, store });
-    const baseline = board.ensureBaseline("daemon provider startup");
-    if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
+    /** This port's view of the shared handle. Dropped on quarantine, so staleness
+     *  is per port: a sibling that never saw the ambiguity re-acquires on its next
+     *  operation because its pair no longer matches the module cache. */
+    let cached: SubscriptionHandles | null = null;
+
+    const acquire = (): SubscriptionHandles => {
+      if (cached !== null && cached.database === subscriptionDatabase) return cached;
+      const database = subscriptionDatabase ?? new DatabaseSync(config.storePath);
+      subscriptionDatabase = database;
+      database.exec("PRAGMA busy_timeout = 5000;");
+      const board = createBoardProjectionService({ database, store });
+      const baseline = board.ensureBaseline("daemon provider startup");
+      if (baseline.outcome === "BASELINE_READY") board.registerReader(DEFAULT_READER);
+      cached = Object.freeze({ board, database });
+      return cached;
+    };
+
+    /**
+     * OUTCOME_UNKNOWN means the COMMIT threw after the transaction already ended:
+     * the write may have durably landed, so every in-memory assumption held over
+     * this handle (board fold, cursor positions) may now diverge from the durable
+     * rows. The handle is QUARANTINED — both caches are dropped so the NEXT
+     * operation re-acquires fresh and re-reads durable state — and the error is
+     * rethrown unchanged, following the decision ledger's poison() precedent of
+     * discarding state on ambiguity. The superseded handle is deliberately NOT
+     * close()d: sibling port instances (http listener, mcp, mcp-http can coexist)
+     * legitimately hold it, and closing under them would convert one ambiguous
+     * write into permanent failures everywhere; it is left to GC.
+     */
+    const quarantining = <Result>(run: (handles: SubscriptionHandles) => Result): Result => {
+      const handles = acquire();
+      try {
+        return run(handles);
+      } catch (error) {
+        if (error instanceof DurableStoreError && error.code === "OUTCOME_UNKNOWN") {
+          if (subscriptionDatabase === handles.database) subscriptionDatabase = null;
+          if (cached?.database === handles.database) cached = null;
+        }
+        throw error;
+      }
+    };
+
+    // Eager: boot-time baseline/reader-registration semantics are unchanged.
+    acquire();
     return Object.freeze({
-      acknowledge: (request: StreamAcknowledgeRequest) => acknowledge(database, request),
+      acknowledge: (request: StreamAcknowledgeRequest) =>
+        quarantining(({ database }) => acknowledge(database, request)),
       readPage: (request: StreamPageRequest) => {
+        // Re-acquired through the same gate, so a quarantined port heals on its
+        // next read too; reads never produce OUTCOME_UNKNOWN, so no wrap here.
+        const { board, database } = acquire();
         const folded = board.foldOnce();
         if (folded.outcome !== "FOLDED") return folded;
         return readSubscriptionPage(store, database, request);
       },
-      reseat: (request: StreamReseatRequest) => reseatToSnapshot(database, request),
+      reseat: (request: StreamReseatRequest) =>
+        quarantining(({ database }) => reseatToSnapshot(database, request)),
     });
   };
 
