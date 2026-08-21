@@ -115,7 +115,9 @@ export function encodeBudgetLedgerRecord(value: unknown): BudgetEncodeResult {
   const digest = budgetLedgerDigest(encoder.encode(body));
   const bytes = encoder.encode(`${BUDGET_LEDGER_RECORD_VERSION}\n${digest}\n${body}`);
   if (bytes.byteLength > MAX_RECORD_BYTES) {
-    return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_RECORD_MALFORMED");
+    // Its OWN code, not MALFORMED: a record past the frame cap is well-formed and exhausted.
+    // MALFORMED tells a caller to fix the bytes; nothing about these bytes can be fixed.
+    return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_RECORD_TOO_LARGE");
   }
   return Object.freeze({ bytes, digest, ok: true as const, record: deepFreeze(validated) });
 }

@@ -40,6 +40,7 @@ import {
   BUDGET_RESERVE_INPUT_KEYS,
   BUDGET_SETTLE_INPUT_KEYS,
 } from "./budget-ledger-requests.js";
+import { reconcileBudgetSettlement, settleBudgetReservation } from "./budget-ledger-holds.js";
 import { allocateBudgetToChild, authorizeBudgetRoot, returnBudgetToParent } from "./budget-ledger.js";
 import {
   BUDGET_ACCOUNT_REF,
@@ -58,10 +59,13 @@ import {
   CHILD_OWNER,
   accepted,
   authorizeInput,
+  context,
   currentLedger,
   movementInput,
+  observation,
   refused,
   seedActivatedHold,
+  unknownObservation,
 } from "./budget-transition-fixtures.js";
 
 /**
@@ -330,6 +334,152 @@ describe("hierarchical movements delegate to the account reducer", () => {
   });
 });
 
+/**
+ * The whole lifecycle behind the drain cases: reserve, activate, settle UNMEASURED, reconcile
+ * with an exact receipt. Ends with the child's hold view fully settled — reserved and
+ * quarantined both zero, 60 of the 100-token hold committed, 40 refunded back to available —
+ * while the CHILD ACCOUNT RECORD still says all 400 allocated tokens are available. (A COMPLETE
+ * settle cannot be followed by a reconcile — reconciliation only exits QUARANTINED — so the
+ * quarantine detour IS the longest honest lifecycle.)
+ */
+function seedSettledHold(store: SqliteEventStore): void {
+  seedActivatedHold(store);
+  const [reservation] = currentLedger(store).reservations;
+  if (reservation === undefined) throw new Error("no durable reservation");
+  accepted(settleBudgetReservation(store, {
+    context: context("cmd-settle-unknown"), goalRef: GOAL_ID, observations: [unknownObservation()],
+    projectId: PROJECT_ID, reservationId: reservation.reservationId,
+  }));
+  accepted(reconcileBudgetSettlement(store, {
+    context: context("cmd-reconcile"), goalRef: GOAL_ID, neverStartedProofRef: null,
+    observations: [observation({ sequence: 1 })], projectId: PROJECT_ID,
+    reservationId: reservation.reservationId,
+  }));
+}
+
+/**
+ * `heldAccount` used to refuse on MERE VIEW EXISTENCE while nothing ever removed a view, so an
+ * account that had ever carried a reservation stayed barred from movements FOREVER — while the
+ * projection reported its unconsumed units as refundable. The drain is the one composed exit:
+ * return EXACTLY the view's refundable units, sized by the VIEW (the account record never learns
+ * committed spend), and close the view through the settlement reducer's own terminal.
+ */
+describe("a fully settled hold view drains back to the parent", () => {
+  it("returns exactly the refundable units and commits the view's CLOSED successor", () => {
+    withBudgetStore("drain", (store) => {
+      seedSettledHold(store);
+      const prior = priorState(store);
+
+      const result = accepted(
+        returnBudgetToParent(store, movementInput("cmd-drain", [{ meter: "tokens", amount: 340 }])),
+      );
+
+      // The account successor is the REDUCER'S own, exactly as for any other movement.
+      const reducer = returnToParent(prior, {
+        amounts: [{ meter: "tokens", amount: 340 }], childAccountId: CHILD, childOwnerRef: CHILD_OWNER,
+        expectedChildVersion: versionOf(prior, CHILD), expectedParentVersion: versionOf(prior, BUDGET_ACCOUNT_REF),
+        parentAccountId: BUDGET_ACCOUNT_REF,
+      });
+      expect(reducer.ok).toBe(true);
+      if (!reducer.ok) throw new Error("reducer refused");
+      expect(canonicalBudgetJson(result.record.accounts)).toBe(canonicalBudgetJson(reducer.state.accounts));
+      expect(canonicalBudgetJson(result.record.appended))
+        .toBe(canonicalBudgetJson(reducer.state.entries.slice(prior.entries.length)));
+      expect(result.record.transition).toBe("RETURNED");
+
+      // The CLOSED successor is durable, and the projection still reads clean over it — the
+      // conservation cross-check passes with the RETURNED entries folded in.
+      const current = currentLedger(store);
+      const closedView = current.views.find((entry) => entry.accountId === CHILD);
+      expect(closedView?.state).toBe("CLOSED");
+      expect(closedView?.meters).toEqual([
+        { available: 0, committed: 60, meter: "tokens", quarantined: 0, reserved: 0 },
+      ]);
+
+      // Nothing vanished and nothing consumed came back: the 340 refundable tokens live at the
+      // parent, the 60 committed stay visible on the closed view.
+      const parent = current.accounts.find((entry) => entry.accountId === BUDGET_ACCOUNT_REF);
+      expect(parent?.meters.find((bucket) => bucket.meter === "tokens")?.available).toBe(940);
+      const tokens = current.meters.find((entry) => entry.meter === "tokens");
+      expect(tokens?.buckets).toEqual({ available: 940, committed: 60, meter: "tokens", quarantined: 0, reserved: 0 });
+      expect(tokens?.coverage).toBe("COMPLETE");
+      expect(tokens?.refundable).toBe(940);
+    });
+  });
+
+  it("sizes the drain by the VIEW, never by the stale account record", () => {
+    withBudgetStore("drain-stale-record", (store) => {
+      seedSettledHold(store);
+      const before = rawCounts(store, AGGREGATE);
+
+      // The trap: the account fold never learned the 60 committed tokens, so the child RECORD
+      // still claims the whole 400-token allocation is available.
+      const child = currentLedger(store).accounts.find((entry) => entry.accountId === CHILD);
+      expect(child?.meters.find((bucket) => bucket.meter === "tokens")?.available).toBe(400);
+
+      // Asking for what the record claims — or any amount but the view's exact 340 — would
+      // refund consumed units, so every such request stays refused.
+      for (const amount of [400, 341, 60]) {
+        const result = refused(returnBudgetToParent(
+          store, movementInput(`cmd-drain-record-${amount}`, [{ meter: "tokens", amount }]),
+        ));
+        expect(result.code).toBe("BUDGET_LEDGER_ACCOUNT_HELD");
+        expect(result.sourceLayer).toBeNull();
+      }
+      expect(rawCounts(store, AGGREGATE).events).toBe(before.events);
+    });
+  });
+
+  it("keeps refusing while units are still quarantined, even for the exact available balance", () => {
+    withBudgetStore("drain-quarantined", (store) => {
+      seedActivatedHold(store);
+      const [reservation] = currentLedger(store).reservations;
+      if (reservation === undefined) throw new Error("no durable reservation");
+      accepted(settleBudgetReservation(store, {
+        context: context("cmd-settle-unknown"), goalRef: GOAL_ID, observations: [unknownObservation()],
+        projectId: PROJECT_ID, reservationId: reservation.reservationId,
+      }));
+      const before = rawCounts(store, AGGREGATE);
+
+      // Settled but NOT reconciled: the whole hold is quarantined, nothing is refundable yet.
+      const result = refused(
+        returnBudgetToParent(store, movementInput("cmd-drain-held", [{ meter: "tokens", amount: 300 }])),
+      );
+
+      expect(result.code).toBe("BUDGET_LEDGER_ACCOUNT_HELD");
+      expect(result.layer).toBe("BUDGET_LEDGER");
+      expect(rawCounts(store, AGGREGATE).events).toBe(before.events);
+    });
+  });
+
+  it("leaves the drained account terminal and the parent fully live", () => {
+    withBudgetStore("drain-terminal", (store) => {
+      seedSettledHold(store);
+      accepted(returnBudgetToParent(store, movementInput("cmd-drain", [{ meter: "tokens", amount: 340 }])));
+      const before = rawCounts(store, AGGREGATE);
+
+      // The CLOSED view is the durable bar: the stale child record — still claiming the 60
+      // consumed tokens as available — may never move again, in either direction.
+      const again = refused(
+        returnBudgetToParent(store, movementInput("cmd-drain-again", [{ meter: "tokens", amount: 60 }])),
+      );
+      expect(again.code).toBe("BUDGET_LEDGER_ACCOUNT_HELD");
+      const refund = refused(
+        allocateBudgetToChild(store, movementInput("cmd-refund-closed", [{ meter: "tokens", amount: 10 }])),
+      );
+      expect(refund.code).toBe("BUDGET_LEDGER_ACCOUNT_HELD");
+      expect(rawCounts(store, AGGREGATE).events).toBe(before.events);
+
+      // ...while the PARENT is unheld: the drained units fund a fresh child account.
+      const sibling = accepted(allocateBudgetToChild(store, {
+        ...movementInput("cmd-allocate-sibling", [{ meter: "tokens", amount: 100 }]),
+        childAccountId: "child-account-b", childOwnerRef: "graph-node:dev-c",
+      }));
+      expect(sibling.record.transition).toBe("ALLOCATED");
+    });
+  });
+});
+
 describe("one decision-bound transition, atomically", () => {
   it("leaves ZERO partial movements when the head moves between the read and the commit", () => {
     withBudgetStore("race", (store) => {
@@ -452,6 +602,28 @@ describe("the canonical record codec", () => {
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error("duplicate key accepted");
       expect(result.code).toBe("BUDGET_LEDGER_RECORD_MALFORMED");
+      expect(result.layer).toBe("BUDGET_LEDGER");
+    });
+  });
+
+  it("refuses a record past the frame cap with its own code, never generic malformation", () => {
+    withBudgetStore("codec-too-large", (store) => {
+      seedDurableBindings(store);
+      const record = accepted(authorizeBudgetRoot(store, authorizeInput())).record;
+
+      // One reservation row of canonical-JSON bulk past the 4 MiB frame cap. The list's CONTENT
+      // is producer-owned and preserved verbatim, so only its size is what the codec judges.
+      const bloated = { ...record, reservations: ["x".repeat(4_194_304)] };
+
+      const result = encodeBudgetLedgerRecord(bloated);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error("an oversized record was sealed");
+      // The distinction is load-bearing: MALFORMED tells a caller to fix the bytes, TOO_LARGE
+      // says the record itself no longer fits the frame — acting on the wrong one is what made
+      // a grown ledger read as corruption.
+      expect(result.code).toBe("BUDGET_LEDGER_RECORD_TOO_LARGE");
+      expect(result.code).not.toBe("BUDGET_LEDGER_RECORD_MALFORMED");
       expect(result.layer).toBe("BUDGET_LEDGER");
     });
   });
