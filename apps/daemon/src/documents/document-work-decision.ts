@@ -23,7 +23,8 @@ const DECISION_KEYS = Object.freeze([
   "businessEventIds", "commandKind", "correlationSha256", "coverage", "decidedAt",
   "decisionId", "decisionIdentityVersion", "decisionPosition", "decisionSha256",
   "effectIdentityVersion", "effectSha256", "expectedVersion", "key", "observedVersion",
-  "outboxMessageIds", "recordVersion", "requestIdentityVersion", "requestSha256",
+  "outboxMessageIds", "recordVersion", "replayRequestSha256", "requestIdentityVersion",
+  "requestSha256",
   "resultBytes", "resultSha256", "resultVersion", "targetAggregateId", "auditEventId",
   "currentVersion", "effectDisposition", "previousVersion", "resultCode",
 ]);

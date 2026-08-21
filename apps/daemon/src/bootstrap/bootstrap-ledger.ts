@@ -3,6 +3,7 @@ import type { JsonValue, RuntimeError } from "@moe/contracts";
 import {
   ACCEPTANCE_CONTRACT_LAYERS, APPROVAL_AUTHORITY_LAYERS, PLAN_REVISION_LAYERS,
 } from "@moe/core";
+import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
@@ -76,6 +77,7 @@ export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "BOOTSTRAP_POLICY_UNKNOWN",
   "BOOTSTRAP_REVISION_HASH_MISMATCH",
   "BOOTSTRAP_COMMAND_ID_REUSED",
+  "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
 ] as const);
 
 export type PrerequisiteRefusalCode = (typeof PREREQUISITE_REFUSAL_CODES)[number];
@@ -131,6 +133,15 @@ export function decisionKey(request: BootstrapRequest): CommandDecisionKey {
     principalId: request.principalId,
     projectId: request.projectId,
   };
+}
+
+/**
+ * The canonical request bytes of a command: the exact preimage every commit seam writes and the
+ * exact preimage the replay proof re-derives. It exists as ONE function because two copies of a
+ * byte construction drift silently — and a drifted copy here would refuse honest replays.
+ */
+function requestBytesOf(request: BootstrapRequest): Uint8Array {
+  return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
 }
 
 function decodeResult(bytes: Uint8Array): JsonValue {
@@ -264,7 +275,7 @@ export function commitAccepted(
     events: [eventDraft(request, plan)],
     expectedVersion: plan.expectedVersion,
     key: decisionKey(request),
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
     targetAggregateId: plan.aggregateId,
   });
   return decided(request, response);
@@ -299,7 +310,7 @@ export function commitAcceptedLegs(
       },
       ...extraLegs,
     ],
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
   }));
 }
 
@@ -324,7 +335,21 @@ export function replayOf(
   if (existing.commandKind !== request.kind) {
     return refuse(request.kind, "BOOTSTRAP_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
+  // No same-bytes evidence, no replay: a refused decision's receipt commits the rejection audit
+  // payload, so its `replayRequestSha256` is null and nothing here could prove the resubmit is
+  // the command that was decided. Falling through is not a fail-open — the command is decided
+  // again from scratch — and it must stay AHEAD of the byte compare below, which reads a digest
+  // only an accepted decision carries.
   if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // The key does not cover the payload either, so a caller reusing a commandId under the SAME
+  // kind with DIFFERENT bytes would otherwise be handed the earlier result as an accepted
+  // replay: authority for a command never decided with those bytes. The store's own conflict arm
+  // cannot catch it, because this short-circuit answers before any store write. Recomputed from
+  // the STORED decision's own fence, so the resubmitted bytes are the only free variable and a
+  // match is byte equality — an honest replay still matches after its aggregates have advanced.
+  if (identifyReplayRequest(existing, requestBytesOf(request)) !== existing.replayRequestSha256) {
+    return refuse(request.kind, "BOOTSTRAP_COMMAND_BYTES_CONFLICT", "DAEMON_PREREQUISITE");
+  }
   return Object.freeze({
     advisoryOnly: false as const,
     authority: "DURABLE_DECISION" as const,

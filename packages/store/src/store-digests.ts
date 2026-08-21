@@ -11,7 +11,7 @@ import {
   EVENT_RECORD_VERSION,
   OPAQUE_PAYLOAD_CODEC_VERSION,
 } from "./store-contracts.js";
-import type { CommandDecisionKey } from "./store-contracts.js";
+import type { CommandDecisionKey, ReplayRequestFence } from "./store-contracts.js";
 import {
   INTERNAL_IDENTIFIER_PREFIX,
   LEG_RECEIPT_SEPARATOR,
@@ -35,15 +35,52 @@ function updateLengthFramed(
   hash.update(value);
 }
 
-export function identifyCommandRequest(input: SnapshotCommitInput): string {
+/**
+ * The one implementation of the commit-request preimage. Both the receipt path and the replay
+ * proof go through it, so the two can never drift into disagreeing about what a request is.
+ */
+function identifyCommandRequestParts(
+  aggregateId: string,
+  fencedVersion: number,
+  commandBytes: Uint8Array,
+): string {
   const hash = createHash("sha256");
   updateLengthFramed(hash, textEncoder.encode(COMMAND_REQUEST_IDENTITY_VERSION));
-  updateLengthFramed(hash, textEncoder.encode(input.aggregateId));
+  updateLengthFramed(hash, textEncoder.encode(aggregateId));
   const expectedVersion = Buffer.allocUnsafe(8);
-  expectedVersion.writeBigUInt64BE(BigInt(input.expectedVersion));
+  expectedVersion.writeBigUInt64BE(BigInt(fencedVersion));
   updateLengthFramed(hash, expectedVersion);
-  updateLengthFramed(hash, input.commandBytes);
+  updateLengthFramed(hash, commandBytes);
   return hash.digest("hex");
+}
+
+export function identifyCommandRequest(input: SnapshotCommitInput): string {
+  return identifyCommandRequestParts(
+    input.aggregateId,
+    input.expectedVersion,
+    input.commandBytes,
+  );
+}
+
+/**
+ * The digest a decision WOULD carry in {@link CommandDecisionRecord.replayRequestSha256} had it
+ * been decided with `requestBytes`. A replay path compares this against the stored value to prove
+ * SAME BYTES before echoing an earlier decision's authority.
+ *
+ * Both co-inputs are read back off the decision itself — they are the primary leg's fence, which
+ * every commit path copies verbatim into the record — so the request bytes are the only free
+ * variable and equality here is byte equality. Nothing is recomputed from live state, so an
+ * honest replay of a decision whose aggregates have since advanced still matches.
+ */
+export function identifyReplayRequest(
+  decision: ReplayRequestFence,
+  requestBytes: Uint8Array,
+): string {
+  return identifyCommandRequestParts(
+    decision.targetAggregateId,
+    decision.expectedVersion,
+    requestBytes,
+  );
 }
 
 function updateUnsignedInteger(hash: ReturnType<typeof createHash>, value: number): void {

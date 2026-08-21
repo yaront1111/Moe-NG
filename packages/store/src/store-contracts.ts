@@ -83,6 +83,16 @@ export interface CommitExpectedVersionDecisionInput {
   readonly targetAggregateId: string;
 }
 
+/**
+ * The primary leg's fence, as a replay proof reads it back off a decision. Named separately so
+ * the digest helper cannot be handed live state by accident: both members must come from the
+ * stored record, never from the caller resubmitting the command.
+ */
+export interface ReplayRequestFence {
+  readonly expectedVersion: number;
+  readonly targetAggregateId: string;
+}
+
 interface CommandDecisionRecordBase {
   readonly businessEventIds: readonly string[];
   readonly commandKind: string;
@@ -113,6 +123,13 @@ export interface EffectsCommittedDecision extends CommandDecisionRecordBase {
   readonly currentVersion: number;
   readonly effectDisposition: "EFFECTS_COMMITTED";
   readonly previousVersion: number;
+  /**
+   * The committed request's identity under the primary leg's fence — the digest a replay path
+   * recomputes from this record plus the resubmitted bytes to prove SAME BYTES before echoing
+   * this decision. It is the effect receipt's own request identity, so it is already folded into
+   * {@link CommandDecisionRecordBase.effectSha256} and covered by the decision digest chain.
+   */
+  readonly replayRequestSha256: string;
   readonly resultCode: "EFFECTS_COMMITTED";
 }
 
@@ -123,6 +140,13 @@ export interface NoBusinessEffectDecision extends CommandDecisionRecordBase {
   readonly effectDisposition: "NO_BUSINESS_EFFECT";
   readonly outboxMessageIds: readonly [];
   readonly previousVersion: null;
+  /**
+   * Always null: a refused command's receipt covers the rejection-audit payload, not the request
+   * bytes, so there is no same-bytes evidence here to offer. A replay path must treat that as
+   * UNKNOWN rather than as a match — which it already does, since a NO_BUSINESS_EFFECT decision
+   * is never replayed as authority.
+   */
+  readonly replayRequestSha256: null;
   readonly resultCode: "EXPECTED_VERSION_CONFLICT";
 }
 

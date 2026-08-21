@@ -1194,6 +1194,7 @@ const MUTATIONS: readonly MutationCase[] = Object.freeze([
       effectDisposition: "NO_BUSINESS_EFFECT" as const,
       outboxMessageIds: [] as const,
       previousVersion: null,
+      replayRequestSha256: null,
       resultCode: "EXPECTED_VERSION_CONFLICT" as const,
     })),
   },
