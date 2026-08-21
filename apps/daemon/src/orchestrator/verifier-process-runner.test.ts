@@ -263,6 +263,49 @@ describe("createVerifierProcessRunner", () => {
     }
   });
 
+  it("treats any nonzero taskkill exit as confirmed containment once the recipe provably closed", async () => {
+    vi.useFakeTimers();
+    const testProcess = fakeChild(8765);
+    const taskkill = fakeChild(9876);
+    const followUp = fakeChild(7654);
+    let recipes = 0;
+    const spawn: NonNullable<VerifierProcessRunnerOptions["spawn"]> = (file) => {
+      if (file.endsWith("taskkill.exe")) return taskkill.child;
+      recipes += 1;
+      return recipes === 1 ? testProcess.child : followUp.child;
+    };
+    const runner = createVerifierProcessRunner({
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      killGraceMs: 30,
+      platform: "win32",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Not the 128 arm: taskkill reports a garden-variety failure, but the
+      // recipe has already provably closed — the same proof of an already-
+      // dead tree. Only a LIVE recipe turns a failed killer fatal.
+      testProcess.emitter.emit("close", null, "SIGKILL");
+      taskkill.emitter.emit("close", 1, null);
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a POSIX group-kill failure despite direct-child close", async () => {
     vi.useFakeTimers();
     const fake = fakeChild(4321);

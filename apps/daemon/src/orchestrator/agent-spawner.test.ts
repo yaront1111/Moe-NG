@@ -440,6 +440,42 @@ describe("claudeSpawner", () => {
     }
   });
 
+  it("treats any nonzero taskkill exit as confirmed containment once the child provably closed", async () => {
+    vi.useFakeTimers();
+    const agent = fakeSpawn(8765);
+    const killer = fakeSpawn(9876);
+    const followUp = fakeSpawn(7654);
+    const order = [agent, killer, followUp];
+    const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
+      const selected = order.shift();
+      if (selected === undefined) throw new Error("unexpected extra spawn");
+      return selected.spawn(file, args, options);
+    };
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude", killGraceMs: 30, log: () => undefined,
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      platform: "win32", spawn, timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Not the 128 arm: taskkill reports a garden-variety failure, but the
+      // direct child has already provably closed — the same proof of an
+      // already-dead tree. Only a LIVE child turns a failed killer fatal.
+      agent.calls[0]?.emitter.emit("close", 0, null);
+      killer.calls[0]?.emitter.emit("close", 1, null);
+      await expect(done).resolves.toBeUndefined();
+
+      // The spawner stayed open: the next spawn is admitted, not refused closed.
+      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      followUp.calls[0]?.emitter.emit("close", 0, null);
+      await expect(later).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a POSIX group-kill failure even when the direct child closes", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
