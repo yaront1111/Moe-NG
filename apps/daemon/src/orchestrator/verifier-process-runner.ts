@@ -229,7 +229,12 @@ export function createVerifierProcessRunner(
             killer.once("close", (code) => {
               if (killerSettled) return;
               killerSettled = true;
-              if (code !== 0) {
+              // 128 is taskkill's "no running instance": the tree is ALREADY
+              // dead, which is the outcome containment exists to reach, not an
+              // escape from it. A closed direct child is the same proof for any
+              // other nonzero exit — a recipe that dies in the same instant the
+              // killer lands must not shut the whole runner down.
+              if (code !== 0 && code !== 128 && !childClosed) {
                 killDirectBestEffort();
                 failContainment("TREE_KILL_FAILED");
                 return;
@@ -247,12 +252,18 @@ export function createVerifierProcessRunner(
           // detached:true makes the shell the leader; the negative pid targets
           // the whole test recipe group, including grandchildren.
           killProcessGroup(-child.pid, "SIGKILL");
-          treeKillConfirmed = true;
-          maybeFinishTermination();
-        } catch {
-          killDirectBestEffort();
-          failContainment("TREE_KILL_FAILED");
+        } catch (error) {
+          // ESRCH means the group is already gone — the exact state the signal
+          // was sent to reach — so a recipe that exits as the kill lands is
+          // confirmed containment, never a failure of it.
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            killDirectBestEffort();
+            failContainment("TREE_KILL_FAILED");
+            return;
+          }
         }
+        treeKillConfirmed = true;
+        maybeFinishTermination();
       };
 
       const beginTermination = (reason: "CANCEL" | "PROCESS_ERROR" | "TIMEOUT"): void => {

@@ -403,6 +403,43 @@ describe("claudeSpawner", () => {
     }
   });
 
+  it("treats taskkill's no-running-instance exit as confirmed containment, not an escape", async () => {
+    vi.useFakeTimers();
+    const agent = fakeSpawn(8765);
+    const killer = fakeSpawn(9876);
+    const followUp = fakeSpawn(7654);
+    const order = [agent, killer, followUp];
+    const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
+      const selected = order.shift();
+      if (selected === undefined) throw new Error("unexpected extra spawn");
+      return selected.spawn(file, args, options);
+    };
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude", killGraceMs: 30, log: () => undefined,
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      platform: "win32", spawn, timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      await vi.advanceTimersByTimeAsync(20);
+
+      // The agent exits naturally in the same instant the killer lands, so
+      // taskkill finds no running instance and reports 128 instead of 0. An
+      // already-dead tree is the terminated outcome containment was asked
+      // for, not a containment failure.
+      agent.calls[0]?.emitter.emit("close", 0, null);
+      killer.calls[0]?.emitter.emit("close", 128, null);
+      await expect(done).resolves.toBeUndefined();
+
+      // The spawner stayed open: the next spawn is admitted, not refused closed.
+      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      followUp.calls[0]?.emitter.emit("close", 0, null);
+      await expect(later).resolves.toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a POSIX group-kill failure even when the direct child closes", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
@@ -424,6 +461,37 @@ describe("claudeSpawner", () => {
         code: "AGENT_PROCESS_CONTAINMENT_FAILED",
         reason: "TREE_KILL_FAILED",
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats an ESRCH group kill as an already-dead tree, not a tree-kill failure", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(4321);
+    const spawner = claudeSpawner(MCP_ORIGIN, {
+      command: "claude",
+      killGraceMs: 30,
+      // The group leader exited before the signal landed: the kernel reports
+      // ESRCH, which proves the tree is gone rather than out of reach.
+      killProcessGroup: () => {
+        throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      },
+      log: () => undefined,
+      platform: "linux",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = spawner(request());
+      await vi.advanceTimersByTimeAsync(20);
+      calls[0]?.emitter.emit("close", null, "SIGKILL");
+      await expect(done).resolves.toBeUndefined();
+
+      // The spawner stayed open: the next spawn is admitted, not refused closed.
+      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      calls[1]?.emitter.emit("close", 0, null);
+      await expect(later).resolves.toBeUndefined();
     } finally {
       vi.useRealTimers();
     }

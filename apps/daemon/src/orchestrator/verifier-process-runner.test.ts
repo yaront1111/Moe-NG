@@ -220,6 +220,49 @@ describe("createVerifierProcessRunner", () => {
     }
   });
 
+  it("treats taskkill's no-running-instance exit as confirmed containment, not an escape", async () => {
+    vi.useFakeTimers();
+    const testProcess = fakeChild(8765);
+    const taskkill = fakeChild(9876);
+    const followUp = fakeChild(7654);
+    let recipes = 0;
+    const spawn: NonNullable<VerifierProcessRunnerOptions["spawn"]> = (file) => {
+      if (file.endsWith("taskkill.exe")) return taskkill.child;
+      recipes += 1;
+      return recipes === 1 ? testProcess.child : followUp.child;
+    };
+    const runner = createVerifierProcessRunner({
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      killGraceMs: 30,
+      platform: "win32",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+
+      // The recipe exits in the same instant the killer lands, so taskkill
+      // finds no running instance and reports 128 instead of 0. An already-
+      // dead tree is the timed-out capture, not a containment failure.
+      taskkill.emitter.emit("close", 128, null);
+      testProcess.emitter.emit("close", null, "SIGKILL");
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a POSIX group-kill failure despite direct-child close", async () => {
     vi.useFakeTimers();
     const fake = fakeChild(4321);
@@ -239,6 +282,45 @@ describe("createVerifierProcessRunner", () => {
         code: "VERIFIER_PROCESS_CONTAINMENT_FAILED",
         reason: "TREE_KILL_FAILED",
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats an ESRCH group kill as an already-dead tree, not fatal containment", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const followUp = fakeChild(5678);
+    let spawned = 0;
+    const runner = createVerifierProcessRunner({
+      killGraceMs: 30,
+      // The group leader exited before the signal landed: the kernel reports
+      // ESRCH, which proves the tree is gone rather than out of reach.
+      killProcessGroup: () => {
+        throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      },
+      platform: "linux",
+      spawn: () => {
+        spawned += 1;
+        return spawned === 1 ? fake.child : followUp.child;
+      },
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+      fake.emitter.emit("close", null, "SIGKILL");
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
     } finally {
       vi.useRealTimers();
     }

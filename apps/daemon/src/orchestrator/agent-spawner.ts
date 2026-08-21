@@ -220,7 +220,12 @@ function spawnRuntime(
             killer.once("close", (code) => {
               if (killerSettled) return;
               killerSettled = true;
-              if (code !== 0) {
+              // 128 is taskkill's "no running instance": the tree is ALREADY
+              // dead, which is the outcome containment exists to reach, not an
+              // escape from it. A closed direct child is the same proof for any
+              // other nonzero exit — an agent that dies in the same instant the
+              // killer lands must not shut the whole wrapper down.
+              if (code !== 0 && code !== 128 && !childClosed) {
                 killDirectBestEffort();
                 failContainment("TREE_KILL_FAILED");
                 return;
@@ -240,12 +245,18 @@ function spawnRuntime(
           // This is lifecycle containment, not hermetic isolation: a hostile
           // same-UID process can still escape into a new session/process group.
           killProcessGroup(-child.pid, "SIGKILL");
-          treeKillConfirmed = true;
-          maybeFinishTermination();
-        } catch {
-          killDirectBestEffort();
-          failContainment("TREE_KILL_FAILED");
+        } catch (error) {
+          // ESRCH means the group is already gone — the exact state the signal
+          // was sent to reach — so an agent that exits as the kill lands is
+          // confirmed containment, never a failure of it.
+          if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+            killDirectBestEffort();
+            failContainment("TREE_KILL_FAILED");
+            return;
+          }
         }
+        treeKillConfirmed = true;
+        maybeFinishTermination();
       };
       const beginTermination = (): void => {
         if (settled || terminating) return;
