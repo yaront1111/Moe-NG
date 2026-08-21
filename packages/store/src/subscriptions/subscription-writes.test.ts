@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { SqliteEventStore } from "../sqlite-event-store.js";
 import { bytes } from "../sqlite-event-store-test-helpers.js";
+import { DurableStoreError } from "../store-contracts.js";
 import { snapshotSubscriberId } from "./subscription-contracts.js";
 import type {
   GenerationBaseline, SnapshotDoc, SubscriptionAckResult, SubscriptionAdvanceResult,
@@ -633,6 +634,66 @@ describe("write concurrency", () => {
         blocker.close();
         impatient.close();
       }
+    });
+  });
+});
+
+describe("commit outcome classification", () => {
+  /** Runs one write entry point under a patched exec and hands back whatever it threw. */
+  function capture(harness: Harness, exec: (original: typeof DatabaseSync.prototype.exec) =>
+    typeof DatabaseSync.prototype.exec): unknown {
+    const originalExec = DatabaseSync.prototype.exec;
+    DatabaseSync.prototype.exec = exec(originalExec);
+    try {
+      register(harness);
+      return null;
+    } catch (error) {
+      return error;
+    } finally {
+      DatabaseSync.prototype.exec = originalExec;
+    }
+  }
+
+  it("raises OUTCOME_UNKNOWN when a COMMIT lands but its acknowledgement is lost", () => {
+    withHarness((harness) => {
+      seed(harness);
+      let loseAcknowledgement = true;
+
+      const caught = capture(harness, (original) => function execWithLostAck(this: DatabaseSync, sql: string): void {
+        original.call(this, sql);
+        if (loseAcknowledgement && sql.trim() === "COMMIT") {
+          loseAcknowledgement = false;
+          throw new Error("simulated lost COMMIT acknowledgement");
+        }
+      });
+
+      expect(caught).toBeInstanceOf(DurableStoreError);
+      expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+      expect((caught as DurableStoreError).cause).toBeInstanceOf(Error);
+      // The write durably landed, so a clean refusal or rollback report would have lied.
+      expect(storedDoc(harness.database, SUBSCRIBER)).not.toBeNull();
+    });
+  });
+
+  it("still rolls back and rethrows when a COMMIT is rejected before execution", () => {
+    withHarness((harness) => {
+      seed(harness);
+      let rejectCommit = true;
+
+      const caught = capture(harness, (original) => function execWithRejectedCommit(this: DatabaseSync, sql: string): void {
+        if (rejectCommit && sql.trim() === "COMMIT") {
+          rejectCommit = false;
+          throw new Error("simulated COMMIT rejection before execution");
+        }
+        original.call(this, sql);
+      });
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(caught).not.toBeInstanceOf(DurableStoreError);
+      expect((caught as Error).message).toContain("simulated COMMIT rejection");
+      expect(harness.database.isTransaction).toBe(false);
+      expect(storedDoc(harness.database, SUBSCRIBER)).toBeNull();
+      expect(seated(register(harness)).cursor).toBe("0");
     });
   });
 });
