@@ -14,6 +14,7 @@ import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "../activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
@@ -262,6 +263,11 @@ export interface SeededAttempt {
 export function seedProvenAttempt(
   store: SqliteEventStore, nodeRef: string, label: string = nextLabel(nodeRef),
 ): SeededAttempt {
+  // The activation below is the exact call whose authority moves from the caller's budget
+  // section to the durable ACTIVE graph (task-e194c5f6 step 6). Enriching the world here is a
+  // strict no-op today and is what keeps this lineage off that wall; it is idempotent, so a
+  // caller that already drove the planning chain to an ACTIVE graph is left untouched.
+  seedActivationWorld(store);
   const activationAggregate = deriveActivationAggregateId(`agg-${label}`, `idem-${label}`);
   const activated = runEffectActivateCommand(store, activationBytes(label));
   if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);

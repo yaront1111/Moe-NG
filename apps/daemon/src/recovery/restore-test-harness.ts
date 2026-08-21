@@ -13,6 +13,7 @@ import {
   PROVIDER_OBSERVATION,
   envelope,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import { ensureGenesisRecoveryBinding } from "../identity/genesis-recovery-binding.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
@@ -165,6 +166,14 @@ export function seedReadyProject(store: SqliteEventStore): void {
   send(store, "project.bind_repository", 1, { observation: OBSERVATION });
   send(store, "provider.probe", 0, { observation: PROVIDER_OBSERVATION });
   send(store, "project.activate", 2, { witness: ACTIVATION_WITNESS });
+  // task-acc1a3b4: the durable ACTIVE graph + authorized budget root every world here will owe
+  // once `effect.activate` derives its budget from durable authority instead of the caller's
+  // payload section. A strict no-op today — nothing reads either yet — and IDEMPOTENT, so a
+  // caller that drives the planning chain to its own ACTIVE revision is left exactly as it was.
+  // The deliberately UNSEEDED worlds live in activation-world-fixtures.ts: they are the homes
+  // BUDGET_PROJECTION_GRAPH_UNAVAILABLE and _GOAL_ABSENT keep once the flip lands, and seeding
+  // them here would delete the coverage this precondition guards.
+  seedActivationWorld(store);
 }
 
 /** The four project-aggregate events the seed commits, so a cursor is not guessed. */
