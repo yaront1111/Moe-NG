@@ -23,6 +23,7 @@ import type {
   CommandHandler,
   HandlerContext,
   HandlerTable,
+  HumanReviewWitness,
   ServiceOutcome,
 } from "./bootstrap-ledger.js";
 import { installPolicy, validatePolicy } from "./bootstrap-policy-services.js";
@@ -193,6 +194,7 @@ export function runBootstrapCommand(
   store: SqliteEventStore,
   input: unknown,
   handlers: HandlerTable = BOOTSTRAP_HANDLERS,
+  humanReview?: HumanReviewWitness,
 ): ServiceOutcome {
   const decoded = decodeBootstrapRequestBytes(input);
   if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
@@ -211,5 +213,9 @@ export function runBootstrapCommand(
   if (missing.length > 0) {
     return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
   }
-  return handler({ ledger, request, store });
+  // The witness travels only from this call's own arguments — never off the
+  // decoded bytes — so a payload cannot present one (see HumanReviewWitness).
+  return handler(humanReview === undefined
+    ? { ledger, request, store }
+    : { humanReview, ledger, request, store });
 }

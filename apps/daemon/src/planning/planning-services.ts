@@ -1,5 +1,7 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
-import { applyApprovalCommand, decideApprovalAuthority, reducePlanningRun } from "@moe/core";
+import {
+  applyApprovalCommand, decideApprovalAuthority, grantHumanAuthority, reducePlanningRun,
+} from "@moe/core";
 import type {
   HumanAuthorityGate,
   PlanningRunCommand,
@@ -21,6 +23,7 @@ import type {
   CommandHandler,
   HandlerContext,
   HandlerTable,
+  HumanReviewWitness,
   ServiceOutcome,
 } from "../bootstrap/bootstrap-ledger.js";
 import { activateInitialGraph } from "./approval-activation.js";
@@ -161,6 +164,37 @@ interface DurableRun {
 }
 
 /**
+ * The operator's own dispatch IS the human review the policy is waiting for.
+ *
+ * Reached only when `decideApprovalAuthority` refused at the APPROVAL_POLICY
+ * layer for want of a human AND the composition root attached a server-assembled
+ * {@link HumanReviewWitness} — evidence that the AUTHENTICATED principal on this
+ * very request is the configured operator, the same human seat
+ * OPERATOR_PRINCIPAL_KINDS reserves `approval.decide` for. A gate-layer refusal
+ * never reaches here: an explicit GO gate on the run outranks any click.
+ *
+ * The grant is minted from the witness through the core's own
+ * `grantHumanAuthority` — never from caller bytes — and the verdict is then
+ * RE-DERIVED by handing the granted gate back to `decideApprovalAuthority`,
+ * which consults the gate first by construction. This module decides nothing
+ * about the grant's validity; the kernel does, both ways.
+ */
+function operatorReviewAuthority(
+  witness: HumanReviewWitness,
+  runId: string,
+  decidedAt: string,
+  policy: ReturnType<typeof readApprovalPolicySettings>,
+): ReturnType<typeof decideApprovalAuthority> {
+  const granted = grantHumanAuthority(
+    { gateId: `approval-review:${runId}`, grant: null, workRef: runId },
+    { kind: "HUMAN", principalId: witness.principalId },
+    Date.parse(decidedAt),
+  );
+  if (!granted.ok) return granted;
+  return decideApprovalAuthority({ gate: granted.gate, policy });
+}
+
+/**
  * The durably proposed run. `goalRef` is read from the run rather than from the request so the
  * activation cannot be redirected at a goal this plan was never proposed for.
  */
@@ -213,10 +247,19 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
   // The policy comes from the daemon's own settings and from nowhere else. There is no
   // default and no payload branch: a caller cannot present one, so self-approval is
   // unrepresentable here rather than merely blocked by the registry's allow-list next door.
-  const authority = decideApprovalAuthority({
-    gate: run.gate,
-    policy: readApprovalPolicySettings(process.env),
-  });
+  const policy = readApprovalPolicySettings(process.env);
+  const decided = decideApprovalAuthority({ gate: run.gate, policy });
+  // ONLY the policy's want-of-a-human refusal escalates, and only under a
+  // server-assembled witness: requests decoded without one — every path that
+  // cannot prove its principal is the operator — keep refusing byte-for-byte
+  // as before, and a HUMAN_AUTHORITY_GATE refusal (an explicit GO on the run)
+  // stands regardless of who is clicking.
+  const authority = !decided.ok
+    && decided.code === "APPROVAL_HUMAN_REVIEW_REQUIRED"
+    && decided.layer === "APPROVAL_POLICY"
+    && context.humanReview !== undefined
+    ? operatorReviewAuthority(context.humanReview, runId, request.decidedAt, policy)
+    : decided;
   if (!authority.ok) return refuse(request.kind, authority.code, authority.layer);
   // The delay is bounded HERE, where a timer would live, and it REFUSES rather than clamps:
   // `delayMs` is a safe non-negative integer, wider than `setTimeout` accepts, and above

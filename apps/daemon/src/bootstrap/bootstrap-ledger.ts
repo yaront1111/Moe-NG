@@ -114,7 +114,20 @@ export interface ServiceRefused {
 
 export type ServiceOutcome = ServiceAccepted | ServiceRefused;
 
+/**
+ * SERVER-ASSEMBLED evidence that a named human authenticated THIS request. Only
+ * the composition root may supply it — it knows the authenticated principal and
+ * the configured operator — and it is never decoded from request bytes, so no
+ * payload can present one. A handler holding this witness may treat the request
+ * itself as the human review the approval policy is waiting for; a handler
+ * without it must keep refusing exactly as before.
+ */
+export interface HumanReviewWitness {
+  readonly principalId: string;
+}
+
 export interface HandlerContext {
+  readonly humanReview?: HumanReviewWitness;
   readonly ledger: DurableLedger;
   readonly request: BootstrapRequest;
   readonly store: SqliteEventStore;

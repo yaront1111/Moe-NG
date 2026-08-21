@@ -68,4 +68,11 @@ describe("seed defaults follow the dev-subject convention", () => {
     expect(read.config.runId).toBe("run-mine");
     expect(read.config.goalId).toBe("goal-mine");
   });
+
+  it("defaults to the full chain and stops before approval only when asked", () => {
+    const full = readSeedConfig(BASE_ENV);
+    expect(full.ok && !full.config.stopBeforeApproval).toBe(true);
+    const stopped = readSeedConfig({ ...BASE_ENV, MOE_SEED_STOP_BEFORE_APPROVAL: "1" });
+    expect(stopped.ok && stopped.config.stopBeforeApproval).toBe(true);
+  });
 });

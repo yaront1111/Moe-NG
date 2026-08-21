@@ -28,6 +28,7 @@ import {
   planningActivation,
   planningChain,
   send,
+  sendReviewed,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readApprovalGate } from "./approval-gate.js";
 import {
@@ -562,6 +563,92 @@ describe("approval decide", () => {
     driveThrough(store, "approval.decide");
 
     const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  /**
+   * THE OPERATOR'S CLICK IS THE HUMAN REVIEW — but only under the composition
+   * root's server-assembled witness. Every witness-less arm above keeps its
+   * refusal byte-for-byte: the handler still cannot know a caller is human on
+   * its own, so nothing decoded from bytes can flip these outcomes. The witness
+   * path exists so a REQUIRE_HUMAN board is operable by the human it requires,
+   * while an explicit GO gate and the delay bound both keep outranking it.
+   */
+  it("commits gate-free approval as the operator's own review under unstated settings", () => {
+    useApprovalSettings(undefined, undefined);
+    expectUnstatedPolicy();
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    // The same dispatch WITHOUT the witness must keep refusing first — the
+    // contrast is the contract: bytes alone can never become a human.
+    const unwitnessed = send(store, envelope("approval.decide", 0, approvalPayload()));
+    expect(unwitnessed.ok).toBe(false);
+    expect(decisionCount(store)).toBe(before);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  it("keeps an explicit GO gate outranking the operator's click", () => {
+    useApprovalSettings(undefined, undefined);
+    const store = openStore();
+    proposeGatedWork(store);
+    const before = decisionCount(store);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the unsatisfied gate to stand");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
+    expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("keeps the deferred-delay bound outranking the operator's click", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "25");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the stated delay to defer");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("fails a witness that names no principal closed at the gate layer", () => {
+    useApprovalSettings(undefined, undefined);
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()), "");
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the unnamed witness to refuse");
+    expect(outcome.code).toBe("APPROVAL_PRINCIPAL_UNNAMED");
+    expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("leaves the SPEED path untouched by the witness", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     expect(durableApprovalRefs(store)).toEqual(["approval-1"]);

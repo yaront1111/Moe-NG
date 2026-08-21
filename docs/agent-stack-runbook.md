@@ -305,17 +305,28 @@ before sending the next, then reads `/affordances/read` and exits 0 only once th
 node's `node.deliver` step is READY, printing every dispatched command id. Any
 daemon refusal is echoed with the daemon's own code and layer and exits nonzero.
 
-The DAEMON must be started with `MOE_APPROVAL_MODE=SPEED` and
-`MOE_SPEED_MODE_DELAY_MS=0` for the approval step to proceed without a human.
-Both are required together and the decoder fails closed by design
-(`approval-policy-settings.ts`), so a daemon started without them answers the
-seed's last command `APPROVAL_HUMAN_REVIEW_REQUIRED` / `APPROVAL_POLICY` — which
-the seed echoes verbatim. The delay must be exactly `0`: this approval path is
-synchronous and holds no timer, so `approvalDelayDisposition` (approval-gate.ts)
-calls any positive delay DEFERRED and answers the same refusal. Measured — a
-daemon started at `MOE_SPEED_MODE_DELAY_MS=1` commits the first six commands and
-refuses `approval.decide`. That is the daemon's policy, not a seed setting: leave
-those two unset when you WANT a human to approve on the board.
+TWO APPROVAL MODES, both real:
+
+- **Auto**: plain `pnpm seed` completes the whole chain, `approval.decide`
+  included. The seed authenticates with `MOE_DAEMON_CREDENTIAL` — the operator's
+  own secret — and an OPERATOR-authenticated `approval.decide` carries the
+  daemon's server-assembled human-review witness, so the dispatch itself counts
+  as the human review (`planning-services.ts`, `operatorReviewAuthority`).
+  `MOE_APPROVAL_MODE=SPEED` + `MOE_SPEED_MODE_DELAY_MS=0` also still authorize
+  the ungated path by policy, exactly as before; the decoder fails closed on
+  anything else (`approval-policy-settings.ts`), and a stated positive delay
+  stays DEFERRED — `approvalDelayDisposition` refuses rather than clamps, and no
+  witness overrides that bound.
+- **Human on the board**: `MOE_SEED_STOP_BEFORE_APPROVAL=1 pnpm seed` ends the
+  chain at `plan.propose`, verifies `approval.decide` is READY on
+  `/affordances/read`, and prints the handoff
+  (`PENDING approval.decide@<runId> — approve it on the live board`). Open the
+  live board and click Dispatch on the approval card: the click commits, the
+  card moves to COMMITTED, and `node.deliver` appears. The witness travels only
+  with the operator credential — a scoped agent session dispatching the same
+  bytes still answers `APPROVAL_HUMAN_REVIEW_REQUIRED`, and an explicit
+  `humanAuthorityGate` on the run outranks any click
+  (`APPROVAL_HUMAN_AUTHORITY_REQUIRED` until its own GO is granted).
 
 The DAEMON must ALSO see the same `MOE_NODE_SPECS_DIR`. It loads the node specs
 itself (`daemon-store-dependencies.ts`), so a daemon started without it publishes

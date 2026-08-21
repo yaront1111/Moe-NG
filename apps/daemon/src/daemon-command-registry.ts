@@ -214,7 +214,20 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
-      return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
+      // The human-review witness is minted HERE and only here, because this is
+      // the one seam that holds both the AUTHENTICATED principal and the
+      // configured operator. The operator credential is the human seat — the
+      // same identity OPERATOR_PRINCIPAL_KINDS reserves approval.decide for —
+      // so an operator-authenticated dispatch carries the witness and a scoped
+      // agent session never does, whatever its capabilities say.
+      return decisionOf(runBootstrapCommand(
+        store,
+        bytes,
+        bootstrapTable,
+        principal.principalId === operatorPrincipalId
+          ? Object.freeze({ principalId: principal.principalId })
+          : undefined,
+      ));
     };
     // ADMIN is the reach fence, NOT the human-only fence. `recovery.complete`
     // is human-only because its concrete session authority authenticates a

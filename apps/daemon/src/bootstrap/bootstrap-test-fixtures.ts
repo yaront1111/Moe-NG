@@ -98,6 +98,25 @@ export function send(store: SqliteEventStore, request: Envelope): ServiceOutcome
   return runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), ALL_HANDLERS);
 }
 
+/**
+ * `send`, carrying the composition root's server-assembled human-review witness —
+ * the shape the registry supplies for an OPERATOR-authenticated dispatch. Kept
+ * separate from `send` so every existing arm keeps modeling the witness-less
+ * path, where the old refusals must hold byte-for-byte.
+ */
+export function sendReviewed(
+  store: SqliteEventStore,
+  request: Envelope,
+  principalId: string = request.principalId,
+): ServiceOutcome {
+  return runBootstrapCommand(
+    store,
+    encoder.encode(JSON.stringify(request)),
+    ALL_HANDLERS,
+    Object.freeze({ principalId }),
+  );
+}
+
 export function decisionCount(store: SqliteEventStore): number {
   return readDurableLedger(store, PROJECT_ID).decisionCount;
 }

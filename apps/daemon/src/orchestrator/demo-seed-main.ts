@@ -113,19 +113,25 @@ async function awaitCommit(
   );
 }
 
-/** The whole point of the seed: a READY node step the wrapper can staff. */
-async function checkNodeReady(
-  wire: Wire, config: SeedConfig,
-): Promise<SeedOutcome | null> {
+/** One step off the affordance surface, by kind and aggregate. */
+async function surfaceStep(
+  wire: Wire, config: SeedConfig, kind: string, aggregateId: string,
+): Promise<SeedOutcome | Record<string, unknown> | undefined> {
   const frame = await wire.post("/affordances/read", { projectId: config.projectId });
   if (isOutcome(frame)) return frame;
   const refused = refusalOutcome("affordances/read", frame);
   if (refused !== null) return refused;
   const steps = Array.isArray(frame["steps"]) ? frame["steps"] : [];
   const rows = steps.map(asObject).filter((row): row is Record<string, unknown> => row !== null);
-  const node = rows.find(
-    (row) => row["kind"] === NODE_DELIVER_KIND && row["aggregateId"] === config.node.nodeRef,
-  );
+  return rows.find((row) => row["kind"] === kind && row["aggregateId"] === aggregateId);
+}
+
+/** The whole point of the seed: a READY node step the wrapper can staff. */
+async function checkNodeReady(
+  wire: Wire, config: SeedConfig,
+): Promise<SeedOutcome | null> {
+  const node = await surfaceStep(wire, config, NODE_DELIVER_KIND, config.node.nodeRef);
+  if (node !== undefined && isOutcome(node)) return node;
   if (node?.["status"] === "READY") return null;
   // Report what the surface DID say: an absent step and a blocked one are
   // different failures, and the operator needs to know which one they have.
@@ -133,6 +139,24 @@ async function checkNodeReady(
   return failure(
     MOE_SEED_NODE_NOT_READY,
     `${NODE_DELIVER_KIND}@${config.node.nodeRef} is ${stated} on /affordances/read`,
+  );
+}
+
+/**
+ * The stop-before-approval handoff: the seed's success is a PENDING decision,
+ * so what must be READY on the surface is `approval.decide` itself — the offer
+ * the live board renders as its Dispatch button.
+ */
+async function checkApprovalPending(
+  wire: Wire, config: SeedConfig,
+): Promise<SeedOutcome | null> {
+  const approval = await surfaceStep(wire, config, "approval.decide", config.runId);
+  if (approval !== undefined && isOutcome(approval)) return approval;
+  if (approval?.["status"] === "READY") return null;
+  const stated = approval === undefined ? "absent" : `status=${String(approval["status"])}`;
+  return failure(
+    MOE_SEED_NODE_NOT_READY,
+    `approval.decide@${config.runId} is ${stated} on /affordances/read`,
   );
 }
 
@@ -153,6 +177,7 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
     principalId: config.principalId,
     projectId: config.projectId,
     runId: config.runId,
+    stopBeforeApproval: config.stopBeforeApproval,
   });
   const watch: CommitWatch = { seen: new Set<string>() };
   const commandIds: string[] = [];
@@ -185,6 +210,14 @@ export async function runDemoSeed(deps: SeedDeps): Promise<SeedOutcome> {
     if (waited !== null) return waited;
     commandIds.push(command.commandId);
     deps.log(`committed ${command.commandKind} ${command.commandId} (effect ${effectId})`);
+  }
+  if (config.stopBeforeApproval) {
+    const pending = await checkApprovalPending(wire, config);
+    if (pending !== null) return pending;
+    deps.log(`PENDING approval.decide@${config.runId} — approve it on the live board`);
+    return Object.freeze({
+      commandIds: Object.freeze(commandIds), nodeRef: config.node.nodeRef, ok: true,
+    });
   }
   const ready = await checkNodeReady(wire, config);
   if (ready !== null) return ready;

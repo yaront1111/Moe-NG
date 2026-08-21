@@ -41,6 +41,14 @@ export interface SeedConfig {
   readonly principalId: string;
   readonly projectId: string;
   readonly runId: string;
+  /**
+   * `MOE_SEED_STOP_BEFORE_APPROVAL` (any non-empty value): end at
+   * `plan.propose`, leaving the approval pending for the live board. The seed
+   * carries the OPERATOR credential, so a chain it sends to the end is
+   * approved by that same human authority — the only way to leave the decision
+   * for a click on the board is to never send it here.
+   */
+  readonly stopBeforeApproval: boolean;
   /** The only reader the daemon registers at startup; see readSeedConfig. */
   readonly subscriberId: string;
 }
@@ -183,6 +191,7 @@ export function readSeedConfig(env: Env): SeedConfigResult {
       principalId: value(env, "MOE_PRINCIPAL_ID") || `${projectId}-operator`,
       projectId,
       runId: value(env, "MOE_RUN_ID") || DEFAULT_RUN_SUBJECT,
+      stopBeforeApproval: value(env, "MOE_SEED_STOP_BEFORE_APPROVAL") !== "",
       subscriberId: value(env, "MOE_EVENT_SUBSCRIBER") || "control-room-1",
     }),
     ok: true,

@@ -43,6 +43,13 @@ export interface DemoSeedInput {
   readonly principalId: string;
   readonly projectId: string;
   readonly runId: string;
+  /**
+   * Ends the plan at `plan.propose`, leaving `approval.decide` pending for the
+   * live board. The seed authenticates with the OPERATOR credential, so its own
+   * approval dispatch counts as the human review — a chain that should wait for
+   * a click on the board must therefore never send that command at all.
+   */
+  readonly stopBeforeApproval?: boolean;
 }
 
 /**
@@ -146,7 +153,7 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
     payload: Record<string, unknown>,
     idSuffix = "",
   ): SeedCommand => frozenCommand(input, kind, expectedVersion, payload, idSuffix);
-  return Object.freeze([
+  const plan = [
     build("project.register", 0, { owner: input.principalId }),
     build("project.bind_repository", 1, { observation: repositoryObservation(input) }),
     build("provider.probe", 0, { observation: probeObservation(input) }),
@@ -175,7 +182,12 @@ export function buildDemoSeedPlan(input: DemoSeedInput): readonly SeedCommand[] 
       record: approvalRecord(input),
       runId: input.runId,
     }),
-  ]);
+  ];
+  return Object.freeze(
+    input.stopBeforeApproval === true
+      ? plan.filter((command) => command.commandKind !== "approval.decide")
+      : plan,
+  );
 }
 
 /**

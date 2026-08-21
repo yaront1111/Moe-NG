@@ -67,6 +67,19 @@ describe("buildDemoSeedPlan order", () => {
     expect(plan[plan.length - 1]?.commandKind).toBe("approval.decide");
   });
 
+  it("stops before approval.decide when asked, leaving the decision for the board", () => {
+    const full = buildDemoSeedPlan(INPUT);
+    const stopped = buildDemoSeedPlan({ ...INPUT, stopBeforeApproval: true });
+
+    // Exactly one command shorter, and the missing one IS the approval: the
+    // seed carries the operator credential, so a decision meant for the live
+    // board must never be sent from here at all.
+    expect(stopped.map((command) => command.commandKind))
+      .toEqual(full.slice(0, -1).map((command) => command.commandKind));
+    expect(stopped[stopped.length - 1]?.commandKind).toBe("plan.propose");
+    expect(stopped.some((command) => command.commandKind === "approval.decide")).toBe(false);
+  });
+
   it("names provider.probe, which project.activate requires and a shorter chain omits", () => {
     const plan = buildDemoSeedPlan(INPUT);
     const kinds = plan.map((command) => command.commandKind);
