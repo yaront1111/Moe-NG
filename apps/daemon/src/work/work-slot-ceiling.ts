@@ -10,6 +10,13 @@ import type { WorkResult } from "./work-kernel.js";
  * RESERVED; it does no counting, and no ceiling constant exists anywhere in
  * `packages/scheduler`. `work-claim.ts` therefore consults this module BEFORE
  * calling the scheduler, so a scheduler-level accept cannot bypass the ceiling.
+ *
+ * THIS KERNEL COUNTS WHATEVER TABLE IT IS HANDED and holds no store. Production
+ * hands it the SERVER-DERIVED durable occupancy — `activation-slot-occupancy.ts`
+ * via `activation-ingress.ts` stage B2 — never the request's own `liveClaims`
+ * section, which stays admitted at the envelope and feeds nothing. A
+ * caller-counted table was the design-427 bypass: an empty table admitted a
+ * fifth slot, and a padded one manufactured exhaustion.
  */
 
 const PROVIDER_SLOT_CEILING = 4;

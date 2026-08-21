@@ -543,45 +543,113 @@ export function grantDurableAdmissions(): number {
 }
 
 /**
- * TWO ATTEMPTS RACING FOR THE LAST SLOT, which is the exclusivity property stated as a fact
- * about production rather than about the fixture: the live-claim table is filled to one below
- * `PROVIDER_SLOT_CEILING`, both attempts run against ONE shared table, and an admitted claim
- * appends its own occupancy before the next read. Exactly one can therefore be admitted.
+ * TWO ACTIVATIONS RACING FOR THE LAST SLOT, which is the exclusivity property stated as a
+ * fact about production rather than about the fixture: three activations are committed
+ * through the full production ingress — distinct command, idempotency, intent and slot
+ * identities, slot dimension "default", never released, so each durably occupies — and both
+ * racers then drive `runEffectActivateCommand` against the SAME store. The table the ceiling
+ * counts is stage B2's server-side derivation from those commits; every `liveClaims` section
+ * this fixture sends is EMPTY, which under the design-427 bypass admitted a fifth slot. The
+ * first racer therefore lands the fourth slot durably and the second is refused off the
+ * occupancy its win just committed.
  *
  * The refused side must carry `WORK_SLOT_EXHAUSTED` — not merely "a refusal": a boundary that
  * refused for a malformed payload would otherwise satisfy a weaker assertion while the
  * ceiling was never consulted.
  */
-let slotLiveClaims: readonly unknown[] = [];
+const SLOT_RACE_SEEDS = Object.freeze(["seed-a", "seed-b", "seed-c"] as const);
+const SLOT_RACE_SIDES = Object.freeze(["race-left", "race-right"] as const);
 
-export async function slotClaimedConcurrently(): Promise<readonly [unknown, unknown]> {
-  const occupancy = (index: number): Record<string, unknown> => ({
-    dimension: "default", slotRef: `held-${index}`, state: "RESERVED",
-  });
-  const table: unknown[] = [occupancy(0), occupancy(1), occupancy(2)];
-  const attempt = (slotRef: string): unknown => {
-    const payload = claimPayload();
-    payload["liveClaims"] = table.map((entry) => structuredClone(entry));
-    const slot = payload["slot"] as Record<string, unknown>;
-    slot["slotRef"] = slotRef;
-    const outcome = claimWork(payload);
-    // Only an ADMITTED claim occupies the slot it just took. Appending unconditionally
-    // would make the second attempt's refusal an artefact of this fixture rather than of
-    // the ceiling production enforces.
-    if (isAdmitted(outcome)) {
-      table.push(occupancy(table.length));
-    }
-    return fromFailure(outcome);
-  };
-  const left = attempt("slot-left");
-  const right = attempt("slot-right");
-  slotLiveClaims = table;
-  return [left, right];
+let slotRaceStore: ActivationLedgerStore | null = null;
+
+/**
+ * The accepted-path envelope with EVERY identity the ledger keys on renamed per slug, so
+ * several committed activations coexist in one store: the commit's aggregate is
+ * `deriveActivationAggregateId(aggregateId, idempotencyKey)` and the minted grant id is
+ * derived from the intent id, so reusing any of them would answer the seed with a replay or
+ * a grant conflict instead of a fourth occupied slot.
+ */
+function slotActivateBytes(slug: string): Uint8Array {
+  const intentId = `intent-${slug}`;
+  const lease = { ...LEASE_RECORD, leaseId: `lease-${slug}`, leaseToken: `token-${slug}` };
+  const proof = { ...LEASE_PROOF, leaseToken: `token-${slug}` };
+  return encoder.encode(JSON.stringify({
+    commandId: `cmd-activate-${slug}`, correlationId: `corr-${slug}`, decidedAt: DECIDED_AT,
+    expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
+    payload: {
+      activation: {
+        attempt: {
+          aggregateId: `agg-${slug}`, attemptId: `attempt-${slug}`, intentId,
+          state: "LAUNCH_REQUESTED", version: 0,
+        },
+        claim: {
+          claimId: `claim-${slug}`, claimedAt: DECIDED_AT, intentId,
+          lockIdentity: `lock-${slug}`, wrapperIdentity: `wrapper-${slug}`,
+        },
+        dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: proof,
+        lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
+        tombstone: null, wrapperIdentity: `wrapper-${slug}`,
+      },
+      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
+      effect: {
+        command: { kind: "claim" },
+        intent: {
+          ...EFFECT_INTENT, aggregateId: `agg-${slug}`, idempotencyKey: `idem-${slug}`,
+          intentId, leaseBinding: lease, predecessorCursor: `cursor-${slug}`,
+        },
+      },
+      lease: { proof, record: lease },
+      // Deliberately EMPTY: the caller's table is admitted at the envelope and must decide
+      // nothing. An empty table was exactly what the design-427 bypass admitted a fifth
+      // slot from, so a ceiling that still read it would admit BOTH racers here.
+      liveClaims: [],
+      slot: {
+        dimension: "default", requestId: `req-${slug}`, rows: [RESOURCE_ROW],
+        slotRef: `slot-${slug}`,
+      },
+    },
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+  }));
 }
 
-/** How many slots the shared table durably holds beyond the three it started with. */
+export async function slotClaimedConcurrently(): Promise<readonly [unknown, unknown]> {
+  const store = openHostileStore("slot-ceiling-race");
+  slotRaceStore = store as unknown as ActivationLedgerStore;
+  for (const slug of SLOT_RACE_SEEDS) {
+    const seeded = runEffectActivateCommand(store, slotActivateBytes(slug));
+    // A refused seed would leave fewer than three slots durably held, and the race below
+    // would then prove exhaustion against a ceiling nobody reached.
+    if (!isAdmitted(seeded)) {
+      throw new Error(`slot race seed ${slug} was refused instead of occupying`);
+    }
+  }
+  const [left, right] = SLOT_RACE_SIDES;
+  return [
+    ingressOf(runEffectActivateCommand(store, slotActivateBytes(left))),
+    ingressOf(runEffectActivateCommand(store, slotActivateBytes(right))),
+  ] as const;
+}
+
+/**
+ * The DURABLE count of activation-ledger events across BOTH racing aggregates.
+ *
+ * Negative when `run` never stored a handle, so a case that silently stopped driving the
+ * store reddens here rather than reporting a satisfying zero. The three seeds are
+ * deliberately excluded: they are the arrangement, and a count that included them would
+ * report a double-admitted race as `3 + 2` instead of the `1` the suite requires — a
+ * refusal returned to one racer is not evidence that racer's write never landed.
+ */
 export function slotDurableAdmissions(): number {
-  return slotLiveClaims.length - 3;
+  if (slotRaceStore === null) {
+    return -1;
+  }
+  const store = slotRaceStore;
+  return SLOT_RACE_SIDES.reduce(
+    (total, slug) =>
+      total + activationEventCount(store, deriveActivationAggregateId(`agg-${slug}`, `idem-${slug}`)),
+    0,
+  );
 }
 
 /** The durable proof: how many activation events the ledger aggregate actually holds. */

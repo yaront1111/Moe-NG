@@ -448,8 +448,10 @@ describe("work.claim — malformed payload refuses before any leg", () => {
  * DoD 4. The scheduler does NO counting — reserveProviderSlot validates one
  * slot's resources and returns RESERVED, and no ceiling constant exists
  * anywhere in packages/scheduler. Design line 427's "at most four RESERVED|
- * ACTIVE provider slots project-wide" is therefore this daemon's job, counted
- * over the caller-supplied live claim table.
+ * ACTIVE provider slots project-wide" is therefore this daemon's job. The
+ * kernel counts whatever live claim table it is handed — these cases hand it
+ * one directly — and PRODUCTION hands it the durable derivation from
+ * `activation-slot-occupancy.ts`, never the request's own liveClaims section.
  */
 describe("work.claim — the design-427 provider slot ceiling", () => {
   const live = (count: number, state = "RESERVED"): Record<string, unknown>[] =>

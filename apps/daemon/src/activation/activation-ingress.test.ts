@@ -21,8 +21,12 @@ import {
 } from "../recovery/restore-test-harness.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
-import { deriveActivationAggregateId } from "./activation-ledger-contracts.js";
+import {
+  ACTIVATION_LEDGER_EVENT_TYPE,
+  deriveActivationAggregateId,
+} from "./activation-ledger-contracts.js";
 import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
+import { DAEMON_SLOT_OCCUPANCY } from "./activation-slot-occupancy.js";
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION,
   EFFECT_ACTIVATE_COMMAND_KIND,
@@ -444,4 +448,120 @@ describe("effect.activate ingress — the recovery embargo fences allocation", (
     expectRefusal(outcome, "ACTIVATION_INGRESS_PAYLOAD_MALFORMED", "DAEMON_INGRESS");
     expect(countsOf(store)).toEqual(before);
   });
+});
+
+/** Distinct identities per slug, so several activations coexist in one store.
+ *  `liveClaims` is a parameter BECAUSE it must not matter: the ceiling cases
+ *  below hand it the exact tables that used to decide, and assert they no
+ *  longer do. */
+function slugActivateBytes(slug: string, liveClaims: readonly unknown[]): Uint8Array {
+  const intentId = `intent-${slug}`;
+  const lease = {
+    authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT",
+    leaseId: `lease-${slug}`, leaseToken: `token-${slug}`, monotonicObservation: 500,
+    ownerSessionRef: "session-1", serverWallDeadline: 1_000, state: "ACTIVE", version: 7,
+  } as const;
+  const proof = {
+    authorityHashRef: DIGEST, epoch: 3, expectedVersion: 7, leaseToken: `token-${slug}`,
+    ownerSessionRef: "session-1",
+  } as const;
+  return encoder.encode(JSON.stringify({
+    commandId: `cmd-activate-${slug}`, correlationId: `corr-${slug}`, decidedAt: DECIDED_AT,
+    expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
+    payload: structuredClone({
+      activation: {
+        attempt: {
+          aggregateId: `agg-${slug}`, attemptId: `attempt-${slug}`, intentId,
+          state: "LAUNCH_REQUESTED", version: 0,
+        },
+        claim: {
+          claimId: `claim-${slug}`, claimedAt: DECIDED_AT, intentId,
+          lockIdentity: `lock-${slug}`, wrapperIdentity: `wrapper-${slug}`,
+        },
+        dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: proof,
+        lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
+        tombstone: null, wrapperIdentity: `wrapper-${slug}`,
+      },
+      budget: { ...activationPayload()["budget"] as Record<string, unknown> },
+      effect: {
+        command: { kind: "claim" },
+        intent: {
+          aggregateId: `agg-${slug}`, desiredState: "ACTIVE", expectedGraphEpoch: 4,
+          idempotencyKey: `idem-${slug}`, inputBinding: DIGEST, intentId, leaseBinding: lease,
+          predecessorCursor: `cursor-${slug}`, protocolVersion: "moe-effect-intent/1",
+          runtimeObservationDigest: DIGEST, state: "PENDING", version: 0,
+        },
+      },
+      lease: { proof, record: lease },
+      liveClaims,
+      slot: {
+        dimension: "default", requestId: `req-${slug}`, rows: [RESOURCE_ROW],
+        slotRef: `slot-${slug}`,
+      },
+    }),
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+  }));
+}
+
+const slugAggregate = (slug: string): string =>
+  deriveActivationAggregateId(`agg-${slug}`, `idem-${slug}`);
+
+describe("effect.activate ingress — the design-427 ceiling counts the DURABLE table", () => {
+  it("refuses the fifth activation from durable occupancy even when every caller table was empty",
+    () => {
+      const store = readyStore("durable-ceiling");
+      for (const slug of ["c1", "c2", "c3", "c4"]) {
+        const seeded = runEffectActivateCommand(store, slugActivateBytes(slug, []));
+        expect(seeded).toMatchObject({ disposition: "DECIDED", ok: true });
+      }
+
+      const outcome = runEffectActivateCommand(store, slugActivateBytes("c5", []));
+
+      // THE design-427 bypass, closed: four slots are durably held, the caller
+      // says nothing about any of them, and the kernel still refuses — because
+      // the table it counts is derived from the store, not from the request.
+      expectRefusal(outcome, "WORK_SLOT_EXHAUSTED", "AUTHORITY");
+      expect(store.readEvents(slugAggregate("c5"))).toHaveLength(0);
+    });
+
+  it("admits over a padded caller table when nothing is durably held", () => {
+    const store = readyStore("padded-caller");
+    const padded = Array.from({ length: 4 }, (_unused, index) => ({
+      dimension: "default", slotRef: `fake-${index}`, state: "RESERVED",
+    }));
+
+    const outcome = runEffectActivateCommand(store, slugActivateBytes("solo", padded));
+
+    // The inverse bypass: a caller cannot manufacture exhaustion either. Four
+    // fake entries used to refuse this claim outright; now they feed nothing.
+    expect(outcome).toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(store.readEvents(slugAggregate("solo"))).toHaveLength(1);
+  });
+
+  it("refuses the activation verbatim when the occupancy derivation refuses, committing nothing",
+    () => {
+      const store = readyStore("occupancy-refused");
+      const poison = encoder.encode("not an activation record");
+      store.commitExpectedVersionDecision({
+        commandKind: "test.plant_occupancy", committedResultBytes: poison,
+        correlationId: "corr-plant-poison", decidedAt: DECIDED_AT,
+        events: [{
+          eventId: "plant-poison", eventType: ACTIVATION_LEDGER_EVENT_TYPE, payload: poison,
+        }],
+        expectedVersion: 0,
+        key: { commandId: "cmd-plant-poison", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+        requestBytes: poison, targetAggregateId: slugAggregate("poison"),
+      });
+      const before = readDurableLedger(store, PROJECT_ID).decisionCount;
+
+      const outcome = runEffectActivateCommand(store, slugActivateBytes("after-poison", []));
+
+      // The derivation's own code and layer, unflattened — and no decision or
+      // ledger row for the refused activation, because a count that cannot be
+      // derived must never be answered as an empty table that admits.
+      expectRefusal(outcome, "ACTIVATION_SLOT_OCCUPANCY_RECORD_MALFORMED", DAEMON_SLOT_OCCUPANCY);
+      expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+      expect(store.readEvents(slugAggregate("after-poison"))).toHaveLength(0);
+    });
 });

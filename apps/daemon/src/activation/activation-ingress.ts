@@ -27,6 +27,8 @@ import type {
   ActivationIngressRefused,
   ActivationIngressRequest,
 } from "./activation-ingress-contracts.js";
+import { deriveSlotOccupancy } from "./activation-slot-occupancy.js";
+import type { SlotOccupancyEntry } from "./activation-slot-occupancy.js";
 
 /**
  * `effect.activate` — the daemon's production consumer of the four-leg execution
@@ -36,6 +38,7 @@ import type {
  *
  *   A  envelope decode        structural, and the ONLY stage above the embargo
  *   B  recovery embargo       nothing below runs until it clears
+ *   B2 deriveSlotOccupancy    the design-427 table, derived from the durable store
  *   C  claimWork              lease + slot ceiling + slot + budget + effect
  *   D  arm                    CLAIMED -> ARMED, server-owned command
  *   E  activateEffect         ARMED -> ACTIVE, mints the attempt and grant
@@ -49,11 +52,15 @@ import type {
  * a broken payload is answered by the embargo — a fence that could be probed by
  * sending deliberate garbage is not a fence.
  *
- * EVERY AUTHORITY INPUT BELOW STAGE C IS SERVER-DERIVED. The intent handed to
- * `activateEffect` comes from (D), never from the payload; the slot and budget
- * commands are built from (C)'s own successors and (E)'s own attempt id. A
- * caller can propose an activation; it cannot name the records that authorise
- * one.
+ * EVERY AUTHORITY INPUT BELOW STAGE C IS SERVER-DERIVED, AND SO IS THE ONE
+ * STAGE C COUNTS. The live-claim table the slot ceiling judges is (B2)'s
+ * derivation from committed activations minus kernel-settled releases — the
+ * caller's `liveClaims` key stays admitted at the envelope and feeds nothing,
+ * because a caller-counted ceiling was the design-427 bypass (an empty table
+ * admitted a fifth slot). The intent handed to `activateEffect` comes from (D),
+ * never from the payload; the slot and budget commands are built from (C)'s own
+ * successors and (E)'s own attempt id. A caller can propose an activation; it
+ * cannot name the records that authorise one.
  *
  * NOTHING HERE CONSTRUCTS A SUCCESSOR. Each transition is performed by the
  * package that owns the aggregate, and this module only sequences them and
@@ -105,14 +112,19 @@ type Stage<T> = ActivationIngressRefused | { readonly value: T };
 
 const isRefusal = <T>(stage: Stage<T>): stage is ActivationIngressRefused => !("value" in stage);
 
-/** (C) The four-leg claim. A refusal publishes no successor at all. */
-function claimStage(request: ActivationIngressRequest): Stage<ClaimSuccessors> {
+/** (C) The four-leg claim. A refusal publishes no successor at all. `held` is
+ *  (B2)'s durable occupancy table, fed where the caller's `liveClaims` section
+ *  once was; the section itself is inert for the decision. */
+function claimStage(
+  request: ActivationIngressRequest,
+  held: readonly SlotOccupancyEntry[],
+): Stage<ClaimSuccessors> {
   const { payload } = request;
   const claimed = claimWork({
     budget: payload["budget"],
     effect: payload["effect"],
     lease: payload["lease"],
-    liveClaims: payload["liveClaims"],
+    liveClaims: held,
     slot: payload["slot"],
   });
   if (!claimed.ok) return refuseWork(claimed);
@@ -301,7 +313,15 @@ export function runEffectActivateCommand(
   if (!embargo.ok) {
     return activationIngressRefusal({ code: embargo.code, embargo, refusedBy: embargo.layer });
   }
-  const claim = claimStage(request);
+  // (B2) The durable occupancy table the ceiling will count. A refusal is
+  // carried VERBATIM — its own code and layer — because flattening it would
+  // make an unreadable ledger indistinguishable from a malformed payload, and
+  // answering it as an empty table would reopen the design-427 bypass.
+  const occupancy = deriveSlotOccupancy(store, request.projectId);
+  if (!occupancy.ok) {
+    return activationIngressRefusal({ code: occupancy.code, refusedBy: occupancy.layer });
+  }
+  const claim = claimStage(request, occupancy.held);
   if (isRefusal(claim)) return claim;
   const arm = armStage(claim.value.effectIntent);
   if (isRefusal(arm)) return arm;
