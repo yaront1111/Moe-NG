@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 15, integrity 17, durable-store 16, runtime-provider
- * 25, scheduler-activation 29 — sums to 102, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 15, integrity 19, durable-store 16, runtime-provider
+ * 25, scheduler-activation 29 — sums to 104, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -130,7 +130,10 @@ interface ScannedBoundary {
  * 2026-08-18: PLAN_REVISION_LAYERS integrity, producer task-9fe1a0e0 — governor entry,
  * landed with its three arms after the ratchet caught the unrostered constant. 98→99 on
  * 2026-08-19: FOUNDATION_REPOSITORY_SCOPE_LAYERS integrity, producer task-4af0e3dc,
- * landed with its three arms in the same change.)
+ * landed with its three arms in the same change. 102→104 on 2026-08-21:
+ * NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS integrity, producer
+ * task-210efa47 deferred both to task-515d2f90, which lands the mint, these rows and
+ * six arms in one commit — axis by human REPL ruling, comment-2a7c5a33.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
@@ -263,6 +266,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EXPANSION_EVIDENCE_LAYERS", file: "packages/scheduler/src/expansion/expansion-receipt.ts", axis: "scheduler-activation" },
   { constant: "FAIRNESS_CONTRACT_LAYERS", file: "packages/scheduler/src/fairness/fairness-contract.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_CONTENT_LAYERS", file: "packages/scheduler/src/graph-content-issues.ts", axis: "integrity" },
+  { constant: "NODE_AUTHORITY_LAYERS", file: "packages/scheduler/src/node-authority/node-authority-public.ts", axis: "integrity" },
+  { constant: "NODE_AUTHORITY_RECURSION_LAYERS", file: "packages/scheduler/src/node-authority/node-authority-public.ts", axis: "integrity" },
   { constant: "READINESS_LAYERS", file: "packages/scheduler/src/readiness/readiness-model.ts", axis: "scheduler-activation" },
   { constant: "SUPERSESSION_DISPOSITION_LAYERS", file: "packages/scheduler/src/supersession/supersession-disposition-contract.ts", axis: "scheduler-activation" },
   { constant: "RECOVERY_ANCHOR_LAYER", file: "packages/store/src/recovery-anchor-contracts.ts", axis: "durable-store" },
@@ -328,8 +333,16 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * the ratchet reddened by name (scan 98 vs roster 97); this governor entry lands the
  * row WITH its BEFORE/AFTER/RACE arms in `integrity-hostile-cases.ts`, because a roster
  * row on its own only moves the red into `completeness.security.ts`.
+ *
+ * 102 -> 104 for NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS (producer
+ * task-210efa47 deferred both to this row, task-515d2f90, precisely so the mint and this
+ * bump could land in one commit). `integrity` by SUBJECT per the human REPL axis ruling
+ * recorded as comment-2a7c5a33: they name the refusal layers of the canonical node-body
+ * codec and of the recursion digest that FEED GraphRevisionContent v3 - the direct sibling
+ * of GRAPH_CONTENT_LAYERS above and of ACCEPTANCE_CONTRACT_LAYERS / PLAN_REVISION_LAYERS -
+ * not an in-force execution or scheduler decision. Both rows land WITH their arms.
  */
-const EXPECTED_ROSTER_SIZE = 102;
+const EXPECTED_ROSTER_SIZE = 104;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -341,7 +354,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "packages/benchmark": 1,
   "packages/runner": 22,
   "packages/core": 12,
-  "packages/scheduler": 8,
+  "packages/scheduler": 10,
   "packages/store": 4,
   "apps/control-room": 4,
   "packages/contracts": 3,

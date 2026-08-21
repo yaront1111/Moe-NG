@@ -139,7 +139,10 @@ import {
   EMPTY_REVIEW_LINEAGE, REVIEW_DECISION_LAYERS, buildReviewPackage, recordReviewRound,
 } from "../../packages/review/src/index.js";
 import {
-  GRAPH_CONTENT_LAYERS, decodeGraphContent, encodeGraphContent,
+  ADMISSION_PURPOSES, GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_LAYERS,
+  NODE_AUTHORITY_RECURSION_LAYERS, createNodeDefinition, decodeGraphContent,
+  decodeNodeDefinitionBytes, deriveNodeAuthoritySet, encodeGraphContent, encodeNodeDefinition,
+  snapshotIdentityHash, validateGraphSnapshot,
 } from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore, verifyBackupGeneration } from "../../packages/store/src/index.js";
 
@@ -1821,10 +1824,399 @@ const repositoryScopeCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS - design 199/255's canonical
+// node-body codec and the recursive authority derivation over a validated graph.
+// ---------------------------------------------------------------------------
+
+/**
+ * ONLY THE PUBLISHED BARREL IS CALLED. `packages/scheduler/src/index.ts` forwards
+ * `node-authority-public.ts` wholesale and that module deliberately WITHHOLDS
+ * `canonicalText`, `nodeBodyDigest` and `canonicalEnvelopeJson`, because a caller holding
+ * any of them could mint a body digest for a definition the codec never admitted. Every
+ * fixture below is therefore sealed by `createNodeDefinition` + `encodeNodeDefinition`, and
+ * every forged byte string is derived from bytes production itself sealed. Not one digest
+ * in this block is hand-written.
+ *
+ * TWO CONSTANTS, TWO SUBJECTS, ONE FAMILY. `NODE_AUTHORITY_LAYERS` names the layers of the
+ * body codec; `NODE_AUTHORITY_RECURSION_LAYERS` names the recursion's own two PLUS the
+ * codec's eleven, because a foreign verdict travels out unchanged. They are covered
+ * separately: a single block would let one boundary's arms satisfy the other's roster row.
+ *
+ * THE LAYERS ARE SPREAD ACROSS THE ARMS rather than one exercised three times.
+ * NODE_AUTHORITY_CODEC answers the truncated read; NODE_AUTHORITY_IDENTITY answers twice, at
+ * two guards neither of which subsumes the other (`node-authority-codec.ts:213` vs `:217`) -
+ * a swapped VALUE is caught only by the digest recompute, an alternate SPELLING of correct
+ * content recomputes the right digest and is caught only by the byte re-encode. On the
+ * recursion side GRAPH_SNAPSHOT carries the graph kernel's OWN code out of the passthrough
+ * branch, and NODE_AUTHORITY_RECURSION answers for what no single body can see.
+ */
+
+/**
+ * The append-only twin of `soleIssue` above. Both codecs refuse with
+ * `{ ok: false, issues: [...] }`, which `assertRefusedWith` cannot read and `asLayered` does
+ * not reach. This one is separate rather than a reuse because its throw has to NAME this
+ * boundary: a message about graph-content would misdirect the next reader of a red. It
+ * refuses to choose between multiple issues for the same reason - picking `issues[0]` would
+ * pin whichever branch happened to sort first, and the arm would assert something it never
+ * arranged. An ADMITTED result passes through unread so `admitted()` can see its own
+ * `ok: true` and redden, on a race arm as well as on a refusal arm.
+ */
+const soleNodeIssue = (value: unknown): unknown => {
+  if (typeof value !== "object" || value === null) return value;
+  const record = value as Record<string, unknown>;
+  if (record["ok"] !== false) return value;
+  const issues = record["issues"];
+  if (!Array.isArray(issues) || issues.length !== 1) {
+    throw new Error(
+      "a node-authority refusal must carry exactly one issue for a layer assertion to mean "
+      + `anything, got ${Array.isArray(issues) ? issues.length : 0}`,
+    );
+  }
+  const issue = issues[0] as Record<string, unknown>;
+  return { ...record, code: issue["code"], layer: issue["layer"] };
+};
+
+const NODE_BODY = NODE_AUTHORITY_LAYERS;
+const NODE_RECURSION = NODE_AUTHORITY_RECURSION_LAYERS;
+
+const nodeHex = (digit: string): string => digit.repeat(64);
+const NODE_PURPOSES = Object.freeze([...ADMISSION_PURPOSES].sort());
+
+/** A HARD chain node-a -> node-b -> node-c(completion), plus one ADVISORY that carries no
+ *  contract. `nodeCount` shortens the chain so a SECOND, genuinely different structure can
+ *  be validated for the binding forgery below. */
+const nodeSnapshotDraft = (nodeCount = 3): Record<string, unknown> => ({
+  completionNodeKey: `node-${String.fromCharCode(96 + nodeCount)}`,
+  edges: [
+    ...Array.from({ length: nodeCount - 1 }, (_unused, index) => ({
+      consumerNodeKey: `node-${String.fromCharCode(98 + index)}`,
+      edgeKey: `edge-${String.fromCharCode(97 + index)}${String.fromCharCode(98 + index)}`,
+      kind: "HARD", producerNodeKey: `node-${String.fromCharCode(97 + index)}`,
+    })),
+  ],
+  nodes: Array.from({ length: nodeCount }, (_unused, index) => ({
+    executionBearing: true, nodeKey: `node-${String.fromCharCode(97 + index)}`,
+  })),
+});
+
+/**
+ * The same chain plus a HARD SELF EDGE. `validate-graph.ts:18-24` collects integrity defects
+ * first and evaluates cycle and completion closure only once integrity holds, so this
+ * snapshot yields exactly ONE issue and there is no ambiguity about which layer answered.
+ */
+const nodeSelfEdgeSnapshot = (): Record<string, unknown> => {
+  const draft = nodeSnapshotDraft();
+  return {
+    ...draft,
+    edges: [...(draft["edges"] as readonly unknown[]), {
+      consumerNodeKey: "node-a", edgeKey: "edge-self", kind: "HARD", producerNodeKey: "node-a",
+    }],
+  };
+};
+
+/** The structural binding a hard-edge contract must carry, taken from PRODUCTION. */
+function nodeBinding(draft: Record<string, unknown>): string {
+  const validated = validateGraphSnapshot(draft);
+  if (!validated.ok) {
+    throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
+  }
+  return snapshotIdentityHash(validated.graph);
+}
+
+const NODE_BINDING = nodeBinding(nodeSnapshotDraft());
+/** A DIFFERENT accepted structure, so the forged binding below is a real graph's identity
+ *  rather than a random hex string a shape check could dismiss. */
+const NODE_DONOR_BINDING = nodeBinding(nodeSnapshotDraft(2));
+
+const nodePlanDraft = (): Record<string, unknown> => ({
+  affectedCriterionIds: ["criterion-node"], affectedNodeIds: ["node-a", "node-b", "node-c"],
+  approvalState: "APPROVED", authorRef: "principal-node",
+  graphBinding: { graphContentHash: nodeHex("a"), graphRevisionRef: "graph-revision-node" },
+  parentRevisionId: null, rejectionRef: null, revisionId: "plan-revision-node",
+  steps: [{ description: "Land the node.", kind: "IMPLEMENTATION", stepId: "step-node" }],
+  verificationRecipeRefs: ["recipe-node"],
+});
+
+const nodeAcceptanceDraft = (): Record<string, unknown> => ({
+  applicability: {
+    graphContentHash: nodeHex("a"), graphRevisionRef: "graph-revision-node",
+    nodeIds: ["node-a", "node-b", "node-c"], nodeKind: "LEAF",
+  },
+  authorRef: "principal-node", contractId: "acceptance-node",
+  obligations: [{
+    criterionId: "criterion-node",
+    evidenceRequirements: [
+      { evidenceRef: "artifact-node", kind: "ARTIFACT", requirementId: "requirement-node" },
+    ],
+    statement: "The node ships its focused verification.",
+    verificationRecipeRefs: ["recipe-node"],
+  }],
+});
+
+const nodeRegistryEntry = (): Record<string, unknown> => ({
+  parameterSchema: { digest: nodeHex("b"), kind: "JSON_SCHEMA" }, predicateRef: "predicate-node",
+  proofRationale: "An artifact seal cannot become unsealed.", schemaId: "schema-node",
+  schemaVersion: 1, sourceOperationClass: "ARTIFACT_SEAL",
+});
+
+const nodeContract = (
+  consumer: string, producer: string, binding: string,
+): Record<string, unknown> => ({
+  alternateProducers: [] as string[],
+  alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
+  consumer: { contractHash: nodeHex("c"), criterionRef: "criterion-node", kind: "PRECONDITION" },
+  consumerNodeKey: consumer, consumptionHorizon: "RESULT_SEAL", edgeKind: "ARTIFACT_CONSUMPTION",
+  graphBindingDigest: binding,
+  invalidationFacts: [
+    { sourceFactDigest: nodeHex("e"), sourceFactRef: "fact-node", sourceFactVersion: 1 },
+  ],
+  minimumQualifyingMilestone: "RESULT_SEALED",
+  necessity: {
+    failedConsumerCriterionRef: "criterion-node", failureKind: "MISSING_ARTIFACT",
+    truthClass: "OBSERVED",
+  },
+  producer: {
+    artifactOrInterfaceRef: "artifact-node", digest: nodeHex("f"), kind: "ARTIFACT_CONSUMPTION",
+  },
+  producerNodeKey: producer, recheckPredicateRef: "predicate-node",
+  satisfactionPredicate: {
+    parametersDigest: nodeHex("1"), predicateRef: "predicate-node", schemaId: "schema-node",
+    schemaVersion: 1,
+  },
+  satisfactionWitnesses: [{
+    sourceOperationClass: "ARTIFACT_SEAL", witnessDigest: nodeHex("2"),
+    witnessRef: "witness-node", witnessVersion: 1,
+  }],
+  stability: "MONOTONIC", truthClass: "OBSERVED",
+});
+
+const nodeEdge = (
+  edgeKey: string, consumer: string, producer: string, binding: string,
+): Record<string, unknown> => ({
+  edgeKey,
+  requirement: { contract: nodeContract(consumer, producer, binding), edgeKind: "ARTIFACT_CONSUMPTION" },
+});
+
+/** `objective` is the only field a tag moves, so two sealed bodies differ in exactly one
+ *  admitted value and their digests differ for a reason the arm can state. */
+const nodeBodyDraft = (
+  nodeKey: string, tag: string, edges: readonly Record<string, unknown>[] = [],
+): Record<string, unknown> => ({
+  admissionAmounts: NODE_PURPOSES.map((purpose, index) => ({
+    meter: "runner.authorized_ms", purpose, quantity: index + 1,
+  })),
+  admissionGatePolicy: "POLICY_ALLOWANCE", capability: "capability-implement",
+  completionLinkage: nodeKey === "node-c" ? "node-c" : null,
+  constraints: ["constraint-node"], directHardDependencies: edges,
+  joinRole: nodeKey === "node-c" ? "COMPLETION" : "NONE",
+  nodeKey, objective: `Land ${nodeKey} for ${tag}.`, policySliceHash: nodeHex("3"),
+  readScopes: ["services/api/src"], repositoryBaseTree: nodeHex("4"),
+  resources: ["resource-node"], verificationRecipeRevisions: ["recipe-node"],
+  writeScopes: ["services/api/src/node"],
+});
+
+/** Admitted by PRODUCTION or not used at all: a body this throws on could never reach the
+ *  guard an arm below arranges, so the arm would be asserting an unreachable branch. */
+function admittedNodeBody(
+  nodeKey: string, tag: string, edges: readonly Record<string, unknown>[] = [],
+): unknown {
+  const plan = createPlanRevision(nodePlanDraft());
+  if (!plan.ok) throw new Error(`plan fixture refused: ${plan.code}`);
+  const acceptance = createAcceptanceContract(nodeAcceptanceDraft());
+  if (!acceptance.ok) throw new Error(`acceptance fixture refused: ${acceptance.code}`);
+  const built = createNodeDefinition({
+    acceptanceContract: acceptance.contract, draft: nodeBodyDraft(nodeKey, tag, edges),
+    planRevision: plan.revision, predicateRegistry: [nodeRegistryEntry()],
+  });
+  if (!built.ok) {
+    throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return built.value.definition;
+}
+
+/** Seals through the PRODUCTION encoder, then reads the envelope digest back OUT of the
+ *  sealed bytes. Nothing here computes a digest; the envelope is production's own. */
+function sealedNodeDefinition(tag: string): { bytes: Uint8Array; digest: string } {
+  const encoded = encodeNodeDefinition(admittedNodeBody("node-a", tag));
+  if (!encoded.ok) {
+    throw new Error(`node body reseal refused at encode: ${encoded.issues[0]?.code ?? "?"}`);
+  }
+  const envelope = JSON.parse(decoder.decode(encoded.bytes)) as Record<string, unknown>;
+  return { bytes: encoded.bytes, digest: String(envelope["digest"]) };
+}
+
+/** One body's canonical bytes carrying ANOTHER body's production-sealed digest. The envelope
+ *  still parses, the key set is exact, the schema tag is untouched and the body still admits,
+ *  so the digest recompute is the first thing on the path that can possibly refuse. */
+function forgedNodeBytes(): Uint8Array {
+  const donor = sealedNodeDefinition("donor");
+  const carrier = sealedNodeDefinition("carrier");
+  const text = decoder.decode(carrier.bytes);
+  if (text.split(carrier.digest).length !== 2) {
+    throw new Error("the sealed envelope does not state its digest exactly once");
+  }
+  return utf8.encode(text.replace(carrier.digest, donor.digest));
+}
+
+/** The sealed bytes with the ENVELOPE keys REVERSED. `readEnvelope` compares the key SET and
+ *  says so in its own prose (`node-authority-codec.ts:163-164`), so shape, schema, admission
+ *  and the digest all still pass and the byte re-encode is provably the only branch left. */
+function reSpelledNodeBytes(): Uint8Array {
+  const parsed = JSON.parse(
+    decoder.decode(sealedNodeDefinition("canonical").bytes),
+  ) as Record<string, unknown>;
+  return utf8.encode(JSON.stringify(
+    Object.fromEntries(Object.keys(parsed).reverse().map((key) => [key, parsed[key]])),
+  ));
+}
+
+/** A DUPLICATED `digest` key. `JSON.parse` keeps the LAST, so the envelope reads clean and
+ *  the digest still matches - but the bytes are not the canonical spelling of their content. */
+function duplicateDigestKeyNodeBytes(): Uint8Array {
+  const source = decoder.decode(sealedNodeDefinition("canonical").bytes);
+  const duplicated = source.replace('"digest":', `"digest":"${"0".repeat(64)}","digest":`);
+  if (duplicated === source) throw new Error("sealed node envelope carried no digest key");
+  return utf8.encode(duplicated);
+}
+
+const nodeAuthorityCases: readonly HostileCase[] = [
+  before(
+    "NODE_AUTHORITY_LAYERS", "canonical node-body bytes truncated mid-envelope",
+    {
+      code: "NODE_AUTHORITY_UNREADABLE",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_CODEC"),
+    },
+    // Forty bytes lands inside the envelope, so the input never becomes one JSON document.
+    // Exactly two guards sit earlier and both ADMIT it - it is a real Uint8Array and it is
+    // far under `NODE_AUTHORITY_LIMITS.maxBytes` - so the bounded read is provably the
+    // branch that answered and nothing later on the path is reachable.
+    async () => soleNodeIssue(
+      decodeNodeDefinitionBytes(sealedNodeDefinition("before").bytes.slice(0, 40)),
+    ),
+  ),
+  forged(
+    "NODE_AUTHORITY_LAYERS", "one body's sealed digest carried onto a different body",
+    {
+      code: "NODE_AUTHORITY_DIGEST_MISMATCH",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    // HALF ONE. Both halves are sealed through the PRODUCTION encoder and the forged bytes
+    // are asserted to be EXACTLY the carrier's own canonical bytes with the donor's
+    // production digest substituted. Without this the case is indistinguishable from a
+    // stale-digest probe and would pass against a codec that binds no body at all.
+    async () => {
+      const donor = sealedNodeDefinition("donor");
+      const carrier = sealedNodeDefinition("carrier");
+      const resealed = decoder.decode(carrier.bytes).replace(carrier.digest, donor.digest);
+      return {
+        ok: donor.digest !== carrier.digest
+          && resealed === decoder.decode(forgedNodeBytes()),
+      };
+    },
+    // HALF TWO. The envelope reads, the schema tag is the sealed one and the body is
+    // re-admitted on its own, so IDENTITY answers with a mismatch rather than the
+    // misleading NONCANONICAL that a re-spelling would produce.
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(forgedNodeBytes())),
+  ),
+  racingExactly(
+    "NODE_AUTHORITY_LAYERS", "a re-spelled envelope races a duplicated digest key",
+    // Both legs are pinned exactly rather than left to the shape assertion: the two inputs
+    // reach the SAME guard by different routes, and only the exact tuple proves that a
+    // codec which stopped re-encoding would redden here instead of admitting both.
+    {
+      code: "NODE_AUTHORITY_NONCANONICAL",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    {
+      code: "NODE_AUTHORITY_NONCANONICAL",
+      layer: layerOf(NODE_BODY, "NODE_AUTHORITY_IDENTITY"),
+    },
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(reSpelledNodeBytes())),
+    async () => soleNodeIssue(decodeNodeDefinitionBytes(duplicateDigestKeyNodeBytes())),
+  ),
+];
+
+/** The three admitted bodies of the default chain, each edge wired to its CONSUMER's body.
+ *  `binding` is a knob so the forgery below moves exactly one field. */
+const nodeBodies = (binding: string = NODE_BINDING): unknown[] => [
+  admittedNodeBody("node-a", "set"),
+  admittedNodeBody("node-b", "set", [nodeEdge("edge-ab", "node-b", "node-a", binding)]),
+  admittedNodeBody("node-c", "set", [nodeEdge("edge-bc", "node-c", "node-b", NODE_BINDING)]),
+];
+
+const nodeRecursionCases: readonly HostileCase[] = [
+  before(
+    "NODE_AUTHORITY_RECURSION_LAYERS",
+    "a structurally invalid snapshot keeps the graph kernel's own code",
+    {
+      code: "GRAPH_SELF_EDGE",
+      layer: layerOf(NODE_RECURSION, "GRAPH_SNAPSHOT"),
+    },
+    // The bodies handed in are the REAL admitted three, so the refusal cannot be an artifact
+    // of an empty body set. The expected code is the KERNEL's, not this module's: the arm
+    // reddens if a structural failure is ever restamped as NODE_AUTHORITY_RECURSION_MALFORMED,
+    // which is the whole point of the `passthrough` branch at `node-authority-recursion.ts:213`.
+    async () => soleNodeIssue(deriveNodeAuthoritySet(nodeSelfEdgeSnapshot(), nodeBodies())),
+  ),
+  forged(
+    "NODE_AUTHORITY_RECURSION_LAYERS", "a hard-edge contract sealed to another graph structure",
+    {
+      code: "NODE_AUTHORITY_RECURSION_BINDING_MISMATCH",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    // HALF ONE. The forged binding is a REAL accepted graph's identity, and the body that
+    // carries it is still ADMITTED by `createNodeDefinition` - proven by re-running that
+    // admission here. Without this half the case could pass against a module that refused
+    // the body outright, which would test admission and not the structural binding at all.
+    async () => {
+      const plan = createPlanRevision(nodePlanDraft());
+      const acceptance = createAcceptanceContract(nodeAcceptanceDraft());
+      if (!plan.ok || !acceptance.ok) return { ok: false };
+      const admittedForged = createNodeDefinition({
+        acceptanceContract: acceptance.contract,
+        draft: nodeBodyDraft("node-b", "set", [
+          nodeEdge("edge-ab", "node-b", "node-a", NODE_DONOR_BINDING),
+        ]),
+        planRevision: plan.revision,
+        predicateRegistry: [nodeRegistryEntry()],
+      });
+      return { ok: NODE_DONOR_BINDING !== NODE_BINDING && admittedForged.ok };
+    },
+    // HALF TWO. Validation admits the snapshot, all three bodies admit, the body set indexes
+    // exactly onto the snapshot's nodes and the contract's endpoints match the edge, so the
+    // binding comparison at `node-authority-recursion.ts:164` is the first guard that can
+    // answer - and it answers under this module's own layer, not the graph's.
+    async () => soleNodeIssue(
+      deriveNodeAuthoritySet(nodeSnapshotDraft(), nodeBodies(NODE_DONOR_BINDING)),
+    ),
+  ),
+  racingExactly(
+    "NODE_AUTHORITY_RECURSION_LAYERS", "a body set short of a node races one that repeats one",
+    // Two DISTINCT codes, both from `indexBodies`, so a module that collapsed the two
+    // conditions into one verdict reddens on a named leg instead of staying green.
+    {
+      code: "NODE_AUTHORITY_RECURSION_NODE_MISSING",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    {
+      code: "NODE_AUTHORITY_RECURSION_NODE_DUPLICATE",
+      layer: layerOf(NODE_RECURSION, "NODE_AUTHORITY_RECURSION"),
+    },
+    async () => soleNodeIssue(
+      deriveNodeAuthoritySet(nodeSnapshotDraft(), nodeBodies().slice(0, 2)),
+    ),
+    async () => soleNodeIssue(deriveNodeAuthoritySet(nodeSnapshotDraft(), [
+      ...nodeBodies().slice(0, 2), admittedNodeBody("node-b", "repeat"),
+    ])),
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
   ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
   ...graphContentCases, ...repositoryScopeCases,
+  ...nodeAuthorityCases, ...nodeRecursionCases,
 ]);

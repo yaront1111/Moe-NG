@@ -110,7 +110,11 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // three arms land with this bump for the same reason.
     // 16 -> 17 for FOUNDATION_REPOSITORY_SCOPE_LAYERS (producer task-4af0e3dc), the
     // daemon-startup repository/scope catalog, whose three arms land with this bump.
-    expect(ROSTER_INTEGRITY).toHaveLength(17);
+    // 17 -> 19 for NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS
+    // (task-515d2f90, cashing producer task-210efa47's deferral), the canonical node-body
+    // codec and the recursion digest that feed GraphRevisionContent v3. Axis by human REPL
+    // ruling, comment-2a7c5a33; both boundaries' three arms land with this bump.
+    expect(ROSTER_INTEGRITY).toHaveLength(19);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -154,6 +158,13 @@ describe("integrity axis versus the declared-boundary roster", () => {
       // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
       // and omitting it would let the new `forged` arm redden a passing assertion.
       "GRAPH_CONTENT_LAYERS",
+      // Added with the NODE_AUTHORITY arms (task-515d2f90). Both are digest-bearing and so
+      // owe a forgery: the node-body codec seals a `bodyContentDigest` over the admitted
+      // body, and a hard-edge dependency contract is sealed to ONE graph structure by its
+      // `graphBindingDigest`. Each forgery re-passes its own production seal before the
+      // refusal is asserted, so neither can degrade into a plain stale-digest probe.
+      "NODE_AUTHORITY_LAYERS",
+      "NODE_AUTHORITY_RECURSION_LAYERS",
       // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
       // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
       "PLAN_REVISION_LAYERS",

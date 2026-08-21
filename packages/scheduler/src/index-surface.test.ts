@@ -164,8 +164,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["NODE_ADMISSION_METERS", "array"], ["NODE_AUTHORITY_CODES", "array"],
   ["NODE_AUTHORITY_DIGEST_DOMAIN", "string"], ["NODE_AUTHORITY_DRAFT_KEYS", "array"],
   ["NODE_AUTHORITY_EXCLUDED_STATE_KEYS", "array"],
-  ["NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS", "array"], ["NODE_AUTHORITY_LIMITS", "record"],
-  ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
+  ["NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS", "array"], ["NODE_AUTHORITY_LAYERS", "array"],
+  ["NODE_AUTHORITY_LIMITS", "record"],
+  ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_RECURSION_LAYERS", "array"],
+  ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
   ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
   ["NODE_JOIN_ROLES", "array"],
   ["PROTECTED_ADMISSION_PURPOSES", "array"],
@@ -214,7 +216,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(131);
+  expect(EXPECTED_EXPORTS.length).toBe(133);
 });
 
 /**

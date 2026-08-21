@@ -15,6 +15,8 @@
  * family's rationale travels WITH its block, because that prose is the argument
  * for what the family publishes and what it deliberately does not.
  */
+import type { NodeAuthorityLayer } from "./node-authority-contract.js";
+import type { NodeAuthorityRecursionLayer } from "./node-authority-recursion.js";
 /**
  * The codec boundary. `createNodeDefinition` and `admitNodeDefinition` are the
  * only routes to a `NodeDefinition`, and `encodeNodeDefinition` /
@@ -100,25 +102,68 @@ export type {
   NodeJoinRole,
 } from "./node-authority-contract.js";
 /**
- * NO RUNTIME LAYER ROSTER IS PUBLISHED HERE, and this is not an oversight.
+ * Compile-pins a hand-carried roster to a module-private union in BOTH
+ * directions, which is the only reason re-declaring these values is honest.
  *
- * `LAYER_NAMES` is module-private in BOTH producing modules
- * (node-authority-contract.ts:23, node-authority-recursion.ts:12) and both say
- * in prose why: the security lane rosters every column-0
- * `export const *_LAYER(S)` declaration against a pinned size. Minting
- * `NODE_AUTHORITY_LAYERS` / `NODE_AUTHORITY_RECURSION_LAYERS` here would be
- * counted by that live source scan (tests/security/boundary-roster.security.ts,
- * DECLARATION_PATTERN at :366, SCAN_ROOTS covering `packages`) and would red a
- * file this task does not own — reversing a written security decision as a side
- * effect of a forwarding change.
- *
- * The runtime rosters are DEFERRED to task-515d2f90, which owns the security
- * files and lands the roster entries, the EXPECTED_ROSTER_SIZE and distribution
- * bumps, and the hostile arms together, the way this suite's own header records
- * every prior boundary landing. The layer VOCABULARY is still reachable from the
- * root at type level: `NodeAuthorityLayer` above and `NodeAuthorityRecursionLayer`
- * beside it, so a consumer can still name which layer refused, exhaustively.
+ * A BOGUS member fails `Roster extends readonly [Union, ...Union[]]`. A DROPPED
+ * member leaves `Exclude<Union, Roster[number]>` inhabited, which turns the rest
+ * parameter into `[never]` and makes the one-argument call an arity error. The
+ * two guards are independent: neither can answer for the other's condition, so
+ * dropping either one leaves a real way for the roster to detach in silence.
  */
+const publishedRoster = <Union extends string>() =>
+  <Roster extends readonly [Union, ...Union[]]>(
+    roster: Roster,
+    ..._exhaustive: [Exclude<Union, Roster[number]>] extends [never] ? [] : [never]
+  ): Readonly<Roster> => Object.freeze(roster);
+/**
+ * THE RUNTIME LAYER ROSTERS, published here and nowhere else (task-515d2f90).
+ *
+ * This cashes the deferral task-210efa47's branch-A amendment recorded in this
+ * exact spot: minting a column-0 `export const *_LAYER(S)` is counted by the live
+ * source scan in `tests/security/boundary-roster.security.ts`
+ * (DECLARATION_PATTERN :366, SCAN_ROOTS covering `packages`), so the mint could
+ * not land until one task owned both it and the security files. It does now: the
+ * two roster rows, EXPECTED_ROSTER_SIZE 102->104, the `packages/scheduler`
+ * distribution 8->10, the integrity axis pin 17->19 and six BEFORE/AFTER/RACE
+ * arms land in the same commit. The axis is `integrity` by SUBJECT under the
+ * human REPL ruling recorded as comment-2a7c5a33: these name the refusal layers
+ * of the canonical node-body codec and of the recursion digest that feed
+ * GraphRevisionContent v3, not an in-force scheduling decision.
+ *
+ * THE VALUES ARE RE-DECLARED, NOT RE-EXPORTED, and that is deliberate.
+ * `LAYER_NAMES` is module-private in BOTH producing modules
+ * (node-authority-contract.ts:101, node-authority-recursion.ts:27) and that
+ * privacy is a documented security decision this module must not reverse. The
+ * compile pins above are what stop a re-declared copy from drifting: it is
+ * bound to the private union in both directions, so the copy cannot gain a
+ * member the producer never named, and cannot lose one the producer added.
+ */
+export const NODE_AUTHORITY_LAYERS = publishedRoster<NodeAuthorityLayer>()([
+  "NODE_AUTHORITY_ADMISSION",
+  "NODE_AUTHORITY_BUDGET",
+  "NODE_AUTHORITY_CODEC",
+  "NODE_AUTHORITY_DEPENDENCIES",
+  "NODE_AUTHORITY_IDENTITY",
+  "NODE_AUTHORITY_LIMITS",
+  "NODE_AUTHORITY_PROOFS",
+  "NODE_AUTHORITY_SCHEMA",
+  "NODE_AUTHORITY_SCOPES",
+  "DEPENDENCY_CONTRACT",
+  "PLANNING_SOURCE",
+] as const) satisfies readonly NodeAuthorityLayer[];
+/**
+ * The recursion's own two, then the codec's eleven verbatim: a foreign verdict
+ * travels out of `deriveNodeAuthoritySet` unchanged, so a consumer reading a
+ * recursion refusal can meet any of the thirteen. Spread rather than retyped, so
+ * the two rosters cannot disagree about the eleven they share.
+ */
+export const NODE_AUTHORITY_RECURSION_LAYERS =
+  publishedRoster<NodeAuthorityRecursionLayer>()([
+    "NODE_AUTHORITY_RECURSION",
+    "GRAPH_SNAPSHOT",
+    ...NODE_AUTHORITY_LAYERS,
+  ] as const) satisfies readonly NodeAuthorityRecursionLayer[];
 /**
  * `snapshotIdentityHash` is the graph's own structural identity, and publishing
  * it does NOT widen the content-identity surface. It accepts ONLY the
