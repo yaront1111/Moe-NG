@@ -8,8 +8,19 @@
  * so a dispatch later presents the daemon's own identity back to it untouched.
  */
 
+/**
+ * An active durable claim on a step, copied verbatim off the wire. The board
+ * renders it as the fact it is: an agent (or another operator) is holding this
+ * work right now, and a dispatch would race that holder.
+ */
+export interface SurfaceStepClaim {
+  readonly claimedBy: string;
+  readonly expiresAt: string;
+}
+
 export interface SurfaceStep {
   readonly aggregateId: string | null;
+  readonly claim: SurfaceStepClaim | null;
   readonly kind: string;
   readonly missing: readonly string[];
   readonly status: "BLOCKED" | "COMMITTED" | "READY";
@@ -46,6 +57,21 @@ function text(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+/**
+ * A claim must NAME its holder and its expiry to be rendered as one; anything
+ * else — absent, null, or a shape this reader cannot vouch for — carries as
+ * null rather than as a half-claim, and never fails the whole frame: a board
+ * that goes UNREADABLE because one claim field drifted would hide the chain
+ * behind the least important thing on it.
+ */
+function claimOf(value: unknown): SurfaceStepClaim | null {
+  if (!isRecord(value)) return null;
+  const claimedBy = text(value["claimedBy"]);
+  const expiresAt = text(value["expiresAt"]);
+  if (claimedBy === "" || expiresAt === "") return null;
+  return Object.freeze({ claimedBy, expiresAt });
+}
+
 function stepOf(value: unknown): SurfaceStep | null {
   if (!isRecord(value)) return null;
   const status = value["status"];
@@ -61,6 +87,7 @@ function stepOf(value: unknown): SurfaceStep | null {
     && (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0)) return null;
   return Object.freeze({
     aggregateId,
+    claim: claimOf(value["claim"]),
     kind,
     missing: Object.freeze([...missing]) as readonly string[],
     status,

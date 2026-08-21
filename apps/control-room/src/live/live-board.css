@@ -56,6 +56,13 @@
   font-size: 0.62rem;
 }
 
+/* A live holder on the step: attention-toned so it reads BEFORE the button —
+ * dispatching this card races whoever the claim names. */
+.cr-liveboard-card small.cr-liveboard-claim {
+  color: var(--cr-attention-text);
+  font-family: var(--cr-font-utility);
+}
+
 .cr-liveboard-card button {
   background: var(--cr-action);
   border-radius: var(--cr-radius-xs);

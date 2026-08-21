@@ -96,7 +96,7 @@ describe("what the board may hand back", () => {
     // The production predicate, not a restatement of it: the board renders its
     // control through this exact function.
     expect(boardMayDispatch({
-      aggregateId: "target-0", kind, missing: [], status: "READY", version: 0,
+      aggregateId: "target-0", claim: null, kind, missing: [], status: "READY", version: 0,
     })).toBe(true);
   });
 
@@ -105,14 +105,14 @@ describe("what the board may hand back", () => {
     // the predicate the board renders through says no.
     expect(payloadFor(AGENT_KIND, "node-code-1")).toBeNull();
     expect(boardMayDispatch({
-      aggregateId: "node-code-1", kind: AGENT_KIND, missing: [], status: "READY", version: 0,
+      aggregateId: "node-code-1", claim: null, kind: AGENT_KIND, missing: [], status: "READY", version: 0,
     })).toBe(false);
   });
 
   it.each(PAYLOAD_KINDS)("%s is a fact, not an offer, off the READY column", (kind) => {
     for (const status of ["BLOCKED", "COMMITTED"] as const) {
       expect(boardMayDispatch({
-        aggregateId: "target-0", kind, missing: [], status, version: 0,
+        aggregateId: "target-0", claim: null, kind, missing: [], status, version: 0,
       }), `${kind} ${status}`).toBe(false);
     }
   });
@@ -207,6 +207,43 @@ describe("the board renders one control per authorable READY step", () => {
     const kinds = sent.map((envelope) =>
       (envelope as unknown as Record<string, unknown>)["commandKind"]);
     expect([...kinds].sort()).toEqual([...PAYLOAD_KINDS]);
+  });
+});
+
+describe("an active claim renders as a fact beside the dispatch decision", () => {
+  const CLAIMED_SURFACE = frameOfSurface({
+    nextAllowedCommands: [{
+      commandId: "afford-claimed-1", commandKind: "approval.decide", expectedVersion: 2,
+      targetAggregateId: "run-claimed",
+    }],
+    outcome: "SURFACE",
+    steps: [
+      {
+        aggregateId: "run-claimed",
+        claim: { claimedBy: "agent-7", expiresAt: "2026-08-22T12:00:00.000Z", version: 3 },
+        kind: "approval.decide", missing: [], status: "READY", version: 2,
+      },
+      { aggregateId: "goal-quiet", kind: "goal.create", missing: [], status: "READY", version: 0 },
+    ],
+  });
+
+  it("names the holder and the expiry on the claimed card, and only there", () => {
+    render(
+      <LiveBoard
+        client={builderFor(["approval.decide", "goal.create"]) as never}
+        frame={CLAIMED_SURFACE}
+        sessionCredential="cred"
+        transport={{ sendCommand: () => Promise.reject(new Error("must not send")) }}
+      />,
+    );
+
+    const claimLine = screen.getByTestId("cr.liveboard.claim.approval.decide@run-claimed");
+    expect(claimLine.textContent).toContain("agent-7");
+    expect(claimLine.textContent).toContain("2026-08-22T12:00:00.000Z");
+    expect(screen.queryByTestId("cr.liveboard.claim.goal.create@goal-quiet")).toBeNull();
+    // The claim informs the decision; it does not confiscate it. The control
+    // stays, and the daemon's own fences answer whoever loses the race.
+    expect(screen.getByTestId("cr.liveboard.dispatch.approval.decide")).toBeTruthy();
   });
 });
 

@@ -54,6 +54,38 @@ describe("frameOfSurface", () => {
     });
   });
 
+  it("carries an active claim verbatim, and a shape it cannot vouch for as null", () => {
+    const frame = frameOfSurface({
+      nextAllowedCommands: [],
+      outcome: "SURFACE",
+      steps: [
+        {
+          aggregateId: "node-code-1",
+          claim: { claimedBy: "agent-7", expiresAt: "2026-08-22T12:00:00.000Z", version: 3 },
+          kind: "node.deliver", missing: [], status: "READY", version: 0,
+        },
+        // Absent, null, and drifted shapes all carry as null — a half-claim is
+        // worse than none, and one drifted field must not hide the whole chain.
+        { aggregateId: "run-live-1", kind: "plan.propose", missing: [], status: "READY", version: 0 },
+        {
+          aggregateId: "goal-live-1", claim: null,
+          kind: "goal.create", missing: [], status: "READY", version: 0,
+        },
+        {
+          aggregateId: "proj", claim: { claimedBy: "", expiresAt: "soon" },
+          kind: "project.register", missing: [], status: "READY", version: 0,
+        },
+      ],
+    });
+    expect(frame.outcome).toBe("SURFACE");
+    expect(frame.steps.map((step) => step.claim)).toEqual([
+      { claimedBy: "agent-7", expiresAt: "2026-08-22T12:00:00.000Z" },
+      null,
+      null,
+      null,
+    ]);
+  });
+
   it("carries a daemon refusal verbatim", () => {
     expect(frameOfSurface({ code: "SESSION_LEDGER_UNREADABLE", outcome: "REFUSED" }))
       .toMatchObject({ connection: "CONNECTED", detail: "SESSION_LEDGER_UNREADABLE" });
@@ -358,7 +390,7 @@ describe("LiveBoard", () => {
       }],
       outcome: "SURFACE",
       steps: [{
-        aggregateId: "approval-x", kind: "approval.decide", missing: [],
+        aggregateId: "approval-x", claim: null, kind: "approval.decide", missing: [],
         status: "READY" as const, version: 2,
       }],
     };

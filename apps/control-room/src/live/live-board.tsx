@@ -168,6 +168,16 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
                     {step.aggregateId === null ? null : <code>{step.aggregateId}</code>}
                   </header>
                   {step.version === null ? null : <small>version {step.version}</small>}
+                  {step.claim === null ? null : (
+                    // A live holder is a FACT about this step, stated where the
+                    // dispatch decision is made: clicking races this claimant.
+                    <small
+                      className="cr-liveboard-claim"
+                      data-testid={`cr.liveboard.claim.${key}`}
+                    >
+                      claimed by {step.claim.claimedBy} · until {step.claim.expiresAt}
+                    </small>
+                  )}
                   {step.status === "BLOCKED" ? (
                     <small data-testid={`cr.liveboard.missing.${step.kind}`}>
                       needs {step.missing.join(", ")}
