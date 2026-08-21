@@ -14,7 +14,7 @@
  */
 
 import { PROVIDER_TELEMETRY_CONTRACT_VERSION, settleEffectFromProviderObservation } from "@moe/runner";
-import type { CommandDecisionResponse, SqliteEventStore } from "@moe/store";
+import type { CommandDecisionResponse, SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { readFoundationActivationByAttempt } from "../activation/activation-attempt-reader.js";
 import { readActivationLedgerRecord } from "../activation/activation-ledger-reader.js";
@@ -124,11 +124,19 @@ function deriveTerminal(
       { code: String(absent.code ?? binding.status), layer: "FOUNDATION_ACTIVATION_BINDING" });
   }
   // The binding is primitives-only by design, so the durable INTENT is read from the activation
-  // ledger record itself rather than reconstructed from the id the binding carries.
-  const decoded = readActivationLedgerRecord(
-    binding.activationAggregateId,
-    store.readEvents(binding.activationAggregateId),
-  );
+  // ledger record itself rather than reconstructed from the id the binding carries. The read is
+  // HOISTED AND GUARDED: the binding scan above catches a throwing store inside its own walls,
+  // so a store that dies between that scan and this read would otherwise escape as a THROW —
+  // and the dispatch capture path treats a terminal refusal as advisory but a throw as a wedge,
+  // leaving a launched attempt with no durable record at all.
+  let activationEvents: readonly StoredEvent[];
+  try {
+    activationEvents = store.readEvents(binding.activationAggregateId);
+  } catch {
+    return refuseTerminal("EFFECT_TERMINAL_EVIDENCE_ABSENT", "the activation ledger is unreadable",
+      { code: "ACTIVATION_LEDGER_STORE_UNAVAILABLE", layer: "ACTIVATION_LEDGER" });
+  }
+  const decoded = readActivationLedgerRecord(binding.activationAggregateId, activationEvents);
   if (!decoded.ok) {
     const issue = decoded as unknown as Record<string, unknown>;
     return refuseTerminal("EFFECT_TERMINAL_EVIDENCE_ABSENT", "the activation record is not readable",

@@ -407,6 +407,74 @@ describe("recordTerminalEffect — advisory records are never terminal authority
   });
 });
 
+/** A real store whose SECOND read of one aggregate throws. Every other method is the genuine
+ *  store, so the mid-derivation failure is the only injected fact. Idiom shared with the
+ *  attempt service suite's `abortingStore`. */
+function readFailingStore(store: SqliteEventStore, aggregateId: string): {
+  readonly fired: () => number; readonly store: SqliteEventStore;
+} {
+  let reads = 0, fired = 0;
+  const proxy = new Proxy(store, {
+    get(target, property, receiver) {
+      if (property !== "readEvents") {
+        const value = Reflect.get(target, property, receiver) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      }
+      return (requested: string) => {
+        if (requested === aggregateId) {
+          reads += 1;
+          if (reads >= 2) {
+            fired += 1;
+            throw new Error("injected activation ledger read failure");
+          }
+        }
+        return target.readEvents(requested);
+      };
+    },
+  });
+  return { fired: () => fired, store: proxy };
+}
+
+describe("recordTerminalEffect — a throwing store read refuses, never throws", () => {
+  /**
+   * THE MID-DERIVATION FAILURE WINDOW. The binding scan reads the activation aggregate once,
+   * guarded inside the attempt reader's own walls; the writer then reads it AGAIN for the
+   * durable intent. A store that dies between those two reads used to escape this module as a
+   * THROW — and the dispatch capture path treats a terminal refusal as advisory but a throw as
+   * a wedge, leaving a launched attempt with no durable record at all. The injection is keyed
+   * to the SECOND read so the first arm cannot answer for the one under test, and the upstream
+   * assertion pins the activation ledger's own vocabulary: if the throw ever fired inside the
+   * binding scan instead, the upstream layer would read FOUNDATION_ACTIVATION_BINDING and this
+   * case would go red for the drift rather than passing for the wrong reason.
+   */
+  it("refuses EVIDENCE_ABSENT when the activation ledger read throws mid-derivation", () => {
+    const store = seed();
+    const binding = readFoundationActivationByAttempt(store, PROJECT_ID, ATTEMPT);
+    if (binding.status !== "BOUND") throw new Error(`fixture binding not bound: ${binding.status}`);
+    const before = horizonOf(store);
+    const injected = readFailingStore(store, binding.activationAggregateId);
+
+    const refusal = expectRefusal(
+      recordTerminalEffect(injected.store, { attemptRef: ATTEMPT, projectId: PROJECT_ID }),
+      "EFFECT_TERMINAL_EVIDENCE_ABSENT",
+    );
+
+    expect(injected.fired()).toBe(1);
+    // The activation ledger's OWN store-unavailability code, not one invented at this seam.
+    expect(refusal.upstream).toEqual({
+      code: "ACTIVATION_LEDGER_STORE_UNAVAILABLE", layer: "ACTIVATION_LEDGER",
+    });
+    // A returned refusal is not evidence that nothing was written.
+    expect(horizonOf(store)).toBe(before);
+
+    // The refusal wedged nothing durable: the SAME store, reading again, still lands the record.
+    const recovered = recordTerminalEffect(store, { attemptRef: ATTEMPT, projectId: PROJECT_ID });
+    expect(recovered.ok).toBe(true);
+    if (!recovered.ok) return;
+    expect(readCurrentTerminalEffect(store, readRequest)).toEqual(recovered);
+  });
+});
+
 /** Raw decision count, paged. The replay assertions pin NUMBERS, never verdicts. */
 function decisionCountOf(store: SqliteEventStore): number {
   let cursor = 0n;
