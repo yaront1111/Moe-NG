@@ -40,12 +40,10 @@ import {
   createNodeDefinition,
   deriveNodeAuthoritySet,
   encodeGraphContent,
-  snapshotIdentityHash,
   validateGraphSnapshot,
 } from "@moe/scheduler";
 import type {
   GraphContent,
-  GraphEdge,
   GraphNode,
   GraphRevisionContent,
   GraphSnapshot,
@@ -115,52 +113,6 @@ const acceptanceDraftFor = (nodeKeys: readonly string[]): Record<string, unknown
   }],
 });
 
-/** ONE contract per HARD edge ENTERING a node; the solo world has none, so this stays unused
- *  by the seeded snapshot and exists only so a widened snapshot cannot silently skip it. */
-const hardEdgeRequirement = (edge: GraphEdge, binding: string): Record<string, unknown> => ({
-  edgeKey: edge.edgeKey,
-  requirement: {
-    contract: {
-      alternateProducers: [] as string[],
-      alternativeRuling: { kind: "NOT_APPLICABLE", reason: "No alternate producer exists." },
-      consumer: { contractHash: hex("c"), criterionRef: "criterion-a", kind: "PRECONDITION" },
-      consumerNodeKey: edge.consumerNodeKey,
-      consumptionHorizon: "RESULT_SEAL",
-      edgeKind: "ARTIFACT_CONSUMPTION",
-      graphBindingDigest: binding,
-      invalidationFacts: [
-        { sourceFactDigest: hex("e"), sourceFactRef: "fact-a", sourceFactVersion: 1 },
-      ],
-      minimumQualifyingMilestone: "RESULT_SEALED",
-      necessity: {
-        failedConsumerCriterionRef: "criterion-a",
-        failureKind: "MISSING_ARTIFACT",
-        truthClass: "OBSERVED",
-      },
-      producer: {
-        artifactOrInterfaceRef: "artifact-a", digest: hex("f"), kind: "ARTIFACT_CONSUMPTION",
-      },
-      producerNodeKey: edge.producerNodeKey,
-      recheckPredicateRef: "predicate-a",
-      satisfactionPredicate: {
-        parametersDigest: hex("1"),
-        predicateRef: "predicate-a",
-        schemaId: "schema-a",
-        schemaVersion: 1,
-      },
-      satisfactionWitnesses: [{
-        sourceOperationClass: "ARTIFACT_SEAL",
-        witnessDigest: hex("2"),
-        witnessRef: "witness-a",
-        witnessVersion: 1,
-      }],
-      stability: "MONOTONIC",
-      truthClass: "OBSERVED",
-    },
-    edgeKind: "ARTIFACT_CONSUMPTION",
-  },
-});
-
 /** A MONOTONIC contract owes a matching registry proof, else the codec refuses
  *  NODE_AUTHORITY_MONOTONIC_PROOF_MISSING @ NODE_AUTHORITY_PROOFS. */
 const AUTHORITY_REGISTRY_ENTRY: Record<string, unknown> = {
@@ -174,9 +126,7 @@ const AUTHORITY_REGISTRY_ENTRY: Record<string, unknown> = {
 
 /** Admitted by PRODUCTION or not built at all: a body the codec refuses could never reach the
  *  encode this fixture exists to feed. */
-function nodeDefinitionFor(
-  nodeKey: string, snapshot: GraphSnapshot, binding: string,
-): NodeDefinition {
+function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefinition {
   const nodeKeys = snapshot.nodes.map((node) => node.nodeKey);
   const plan = createPlanRevision(planDraftFor(nodeKeys));
   if (!plan.ok) throw new Error(`plan revision fixture refused: ${plan.code}`);
@@ -193,9 +143,11 @@ function nodeDefinitionFor(
       capability: "capability-implement",
       completionLinkage: completes ? nodeKey : null,
       constraints: ["constraint-a"],
-      directHardDependencies: snapshot.edges
-        .filter((edge) => edge.kind === "HARD" && edge.consumerNodeKey === nodeKey)
-        .map((edge) => hardEdgeRequirement(edge, binding)),
+      // Edge-free BY DESIGN, so no node owes a dependency contract. This is not a shortcut a
+      // widened snapshot could silently inherit: `deriveNodeAuthoritySet` re-derives against the
+      // real structure, so a HARD in-edge with no contract fails derivation rather than
+      // producing an under-specified node.
+      directHardDependencies: [],
       joinRole: completes ? "COMPLETION" : "NONE",
       nodeKey,
       objective: `Land ${nodeKey}.`,
@@ -221,12 +173,11 @@ function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
   if (!validated.ok) {
     throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
   }
-  const binding = snapshotIdentityHash(validated.graph);
   const definitions = snapshot.nodes
     .map((node) => node.nodeKey)
     .slice()
     .sort()
-    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot, binding));
+    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot));
   const derived = deriveNodeAuthoritySet(snapshot, definitions);
   if (!derived.ok) {
     throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
