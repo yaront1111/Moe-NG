@@ -200,7 +200,13 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
   }
 
   const run = durableRun(context, runId);
-  if (run === null || payloadRef(record, "exactRevisionHash") !== run.submissionHash) {
+  // An unknown run is a MISSING prerequisite, not a hash disagreement. Collapsing the two made
+  // a wrong runId report as revision drift — measured live: a dispatch naming a run the ledger
+  // never committed was answered with the hash code, and the operator chased the wrong field.
+  if (run === null) {
+    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
+  }
+  if (payloadRef(record, "exactRevisionHash") !== run.submissionHash) {
     return refuse(request.kind, "BOOTSTRAP_REVISION_HASH_MISMATCH", "DAEMON_PREREQUISITE");
   }
 

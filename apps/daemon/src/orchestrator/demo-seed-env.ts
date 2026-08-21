@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+import { DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT } from "../http/affordance-read.js";
 import type { DemoNodeSpec } from "./demo-seed-plan.js";
 
 /**
@@ -171,12 +172,17 @@ export function readSeedConfig(env: Env): SeedConfigResult {
       correlationId: value(env, "MOE_SEED_CORRELATION_ID") || `${projectId}-seed`,
       credential: value(env, "MOE_DAEMON_CREDENTIAL"),
       csrfToken: value(env, "MOE_CSRF_TOKEN"),
-      goalId: value(env, "MOE_GOAL_ID") || `${projectId}-goal`,
+      // The dev-subject convention, not a free choice: the affordance surface
+      // offers approval.decide/goal.close against exactly these ids and the
+      // control room's dev payloads address them. A seed that committed under
+      // `${projectId}-run` left the board's Dispatch answering a misleading
+      // refusal, because the run it named durably did not exist.
+      goalId: value(env, "MOE_GOAL_ID") || DEFAULT_GOAL_SUBJECT,
       node,
       origin,
       principalId: value(env, "MOE_PRINCIPAL_ID") || `${projectId}-operator`,
       projectId,
-      runId: value(env, "MOE_RUN_ID") || `${projectId}-run`,
+      runId: value(env, "MOE_RUN_ID") || DEFAULT_RUN_SUBJECT,
       subscriberId: value(env, "MOE_EVENT_SUBSCRIBER") || "control-room-1",
     }),
     ok: true,

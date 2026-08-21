@@ -683,6 +683,26 @@ describe("approval decide", () => {
     expect(decisionCount(store)).toBe(before);
   });
 
+  it("refuses a runId no plan was proposed under as MISSING, never as a hash mismatch", () => {
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    // The durable proposal exists — under RUN_ID. Naming a different run is a
+    // missing prerequisite for THAT run; the old collapsed guard blamed the
+    // revision hash, and a live operator chased the wrong field (measured on
+    // the board: a dev payload naming an uncommitted run answered HASH_MISMATCH).
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
+      runId: "run-nobody-proposed",
+    })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
   it("refuses an approval before any plan is durably proposed", () => {
     const store = openStore();
     driveThrough(store, "plan.propose");

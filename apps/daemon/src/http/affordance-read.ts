@@ -35,12 +35,23 @@ import type {
  * a different subject re-derives its own expectedVersion by reading events —
  * that flow belongs to a later query surface, not to this one.
  */
+/**
+ * The two dev subjects, exported by name so every party to the convention can
+ * bind to the SAME literal: this surface offers against them, the control
+ * room's dev payloads address them, and the demo seed commits under them. A
+ * seed that picked different ids produced a board whose one human action
+ * refused with a misleading code — three copies of a literal drift silently,
+ * one exported pair cannot.
+ */
+export const DEFAULT_RUN_SUBJECT = "run-live-1";
+export const DEFAULT_GOAL_SUBJECT = "goal-live-1";
+
 export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, string>>> =
   Object.freeze({
-    "approval.decide": "run-live-1",
-    "goal.close": "goal-live-1",
-    "goal.create": "goal-live-1",
-    "plan.propose": "run-live-1",
+    "approval.decide": DEFAULT_RUN_SUBJECT,
+    "goal.close": DEFAULT_GOAL_SUBJECT,
+    "goal.create": DEFAULT_GOAL_SUBJECT,
+    "plan.propose": DEFAULT_RUN_SUBJECT,
   });
 
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
