@@ -273,6 +273,32 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       credential: secret, expiresAt, kind: step.kind,
       mission: missionText, sessionId, workItemId, workspace,
     };
+    // Retirement, used by EVERY route past a committed provisional record —
+    // the two aborted starts below and both lifetime routes at the bottom. A
+    // route that forgets to retire wedges the item permanently, which is worse
+    // than the race this fence closes and breaks resume-after-crash outright.
+    const retire = (): readonly Error[] => gate.retire(workItemId);
+    // THE PROVISIONAL RECORD, before the child can exist. Recording only after
+    // `spawnAgent` resolved left a window — wrapper death or a refused commit
+    // between spawn admission and record — where a live, claim-holding child
+    // had NO durable record: the exact orphan/double-staffing state the fence
+    // exists to prevent. Pid-less on purpose (no child exists yet): the fence
+    // folds a pid-less admission UNREADABLE and refuses restaffing until it is
+    // retired, so a wrapper that dies right here fails closed, never open.
+    const provisional = gate.record({
+      childPid: undefined,
+      claimAggregateVersion: step.claimAggregateVersion,
+      sessionId,
+      workItemId,
+    });
+    if (provisional.length > 0) {
+      // No durable record means no child may exist: spawning past a refused
+      // commit would reopen the very window the provisional write closes. Not
+      // retired — a commit that failed left nothing to clear, and if it half
+      // landed, the fence's UNREADABLE refusal is the correct standing answer.
+      cleanupFailures.push(...provisional, ...cleanupAuthority(true));
+      return uncoded(step.kind, "AGENT_STAFFING_RECORD_FAILED:UNSPAWNED", sessionId, workItemId);
+    }
     // ADMISSION ONLY. A synchronous throw becomes the same rejected path a
     // failed start takes, so the caller sees one shape either way.
     let start: AgentSpawnStartResult;
@@ -284,30 +310,32 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       cleanupFailures.push(
         error instanceof Error ? error : new Error("AGENT_SPAWN_FAILED:UNKNOWN"),
         ...cleanupAuthority(true),
+        ...retire(),
       );
       return uncoded(step.kind, "AGENT_SPAWN_FAILED:UNADMITTED", sessionId, workItemId);
     }
     if (!start.ok) {
       // The refusal travels verbatim: re-wrapping it into a wrapper-local code
-      // would erase which layer actually answered.
-      cleanupFailures.push(...cleanupAuthority(true));
+      // would erase which layer actually answered. The provisional record is
+      // retired: a refused start earned no child, so nothing live remains.
+      cleanupFailures.push(...cleanupAuthority(true), ...retire());
       return { kind: step.kind, outcome: start.code, refusal: start, sessionId, workItemId };
     }
     // `exit` is the child's LIFETIME. It is handled — an unhandled rejection
-    // would escape the wrapper — but it is never awaited on this path.
-    // The child is live from here, so the durable record goes down BEFORE the
-    // lifetime handlers are attached — a record written later could be skipped
-    // by a child that exits immediately.
+    // would escape the wrapper — but it is never awaited on this path. The
+    // pid-bearing record UPGRADES the provisional one — the fence's fold is
+    // last-event-wins — so the child turns probeable the moment it is live,
+    // and BEFORE the lifetime handlers are attached: an upgrade written later
+    // could be skipped by a child that exits immediately. If THIS commit fails
+    // the pid-less record stands, folds UNREADABLE, and keeps refusing
+    // restaffing until the lifetime retire below clears it — fail closed,
+    // never a recordless child.
     cleanupFailures.push(...gate.record({
       childPid: start.pid,
       claimAggregateVersion: step.claimAggregateVersion,
       sessionId,
       workItemId,
     }));
-    // Retired on BOTH lifetime routes. A route that forgets to retire wedges
-    // the item permanently, which is worse than the race this fence closes and
-    // breaks resume-after-crash outright.
-    const retire = (): readonly Error[] => gate.retire(workItemId);
     const exit = start.exit
       .then(
         () => { cleanupFailures.push(...cleanupAuthority(true), ...retire()); },
