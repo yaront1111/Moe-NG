@@ -23,6 +23,7 @@ import type {
   ReconcileEntry,
   SourceManifest,
 } from "../../packages/import/src/index.js";
+import { MAX_EVENTS_PER_COMMIT } from "../../packages/store/src/store-contracts.js";
 import { parseOptions, readCurrent } from "./shadow-input.js";
 
 /**
@@ -130,9 +131,11 @@ function entriesFor(
  * disagreeing with the importer it is supposed to shadow.
  *
  * The store discards, so this composes the derivation without anything durable happening.
- * `maxEventsPerCommit` is deliberately finite: an unbounded value would let this tool
+ * `maxEventsPerCommit` is the store's own MAX_EVENTS_PER_COMMIT — the same bound
+ * `import-commit.ts` passes to the durable run: any looser value here would let this tool
  * accept a snapshot the real importer would refuse, and the shadow must not be more
- * permissive than the thing it shadows.
+ * permissive than the thing it shadows. The constant is plain data out of
+ * store-contracts.ts; no store, and no other store code, is imported with it.
  */
 function applyShadowImport(
   manifest: SourceManifest,
@@ -142,7 +145,7 @@ function applyShadowImport(
     declaredRecordCount: null,
     knownFields: KNOWN_FIELDS,
     manifest,
-    maxEventsPerCommit: 10_000,
+    maxEventsPerCommit: MAX_EVENTS_PER_COMMIT,
     records,
     store: DISCARDING_STORE,
   });
