@@ -14,15 +14,14 @@ import {
   reduceExpansionPlanningHold, validExpansionHoldBinding,
 } from "@moe/core";
 /**
- * FIXTURE ONLY. The SUBJECT of every assertion below is still the bare package
- * root; these three are reached relatively because a v3 `GraphRevisionContent`
- * cannot be built without them and publishing them on the root belongs to
- * task-210efa47, not to the task that landed v3. Using them here is therefore the
- * opposite of a surface claim — it records that they are NOT yet root-reachable.
+ * Reached through the BARE root, not relatively: task-210efa47 published them, so
+ * the fixture that builds a v3 `GraphRevisionContent` now travels the same path a
+ * real consumer does. A relative import here would have proven nothing about the
+ * package root, which is the subject of every assertion below.
  */
-import { snapshotIdentityHash } from "./graph-content-format.js";
-import { createNodeDefinition } from "./node-authority/node-authority-codec.js";
-import { deriveNodeAuthoritySet } from "./node-authority/node-authority-recursion.js";
+import {
+  createNodeDefinition, deriveNodeAuthoritySet, snapshotIdentityHash,
+} from "@moe/scheduler";
 import type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 import * as scheduler from "@moe/scheduler";
@@ -96,8 +95,23 @@ import type {
   ExpansionBindingRequest, ExpansionBindingResult, ExpansionCurrentAuthority,
   ExpansionCurrentHoldRequest, ExpansionCurrentHoldResult,
 } from "@moe/scheduler";
+/**
+ * The 24 node-authority types the root publishes. They are invisible to
+ * EXPECTED_EXPORTS -- a type publishes no runtime key -- so the only way to prove
+ * the root exports them is to make production values flow through them, which the
+ * annotations further down do. Imported from the BARE specifier on purpose: a
+ * relative import here would prove nothing about the package root.
+ */
+import type {
+  NodeAdmissionAmount, NodeAdmissionGatePolicy, NodeAdmissionMeter, NodeAuthorityBody,
+  NodeAuthorityBytesResult, NodeAuthorityCode, NodeAuthorityDraft, NodeAuthorityDraftResult,
+  NodeAuthorityEdgeInput, NodeAuthorityEntry, NodeAuthorityIssue, NodeAuthorityLayer,
+  NodeAuthorityRecursionCode, NodeAuthorityRecursionIssue, NodeAuthorityRecursionLayer,
+  NodeAuthorityRecursionResult, NodeAuthorityRefusal, NodeAuthorityResult, NodeAuthoritySection,
+  NodeCriterionBinding, NodeDefinition, NodeDefinitionKey, NodeDependencyEntry, NodeJoinRole,
+} from "@moe/scheduler";
 
-type ExportKind = "array" | "function" | "number" | "record";
+type ExportKind = "array" | "function" | "number" | "record" | "string";
 /**
  * Hand-transcribed: 17 pre-existing graph values + 20 approved claim-composition
  * values + 11 fairness contract values + 6 supersession disposition values +
@@ -145,7 +159,16 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["MAX_BUDGET_VERSION", "number"], ["MAX_GRAPH_CONTENT_BYTES", "number"],
   ["MAX_GRAPH_KEY_CODE_UNITS", "number"],
   ["MEASUREMENT_ISSUE_CODES", "array"], ["MEASUREMENT_ISSUE_LAYERS", "array"],
-  ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"], ["PROTECTED_ADMISSION_PURPOSES", "array"],
+  ["MIN_GATED_DESCENDANTS_FOR_REVIEW", "number"],
+  ["NODE_ADMISSION_GATE_POLICIES", "array"], ["NODE_ADMISSION_GATE_POLICY_WITNESS", "record"],
+  ["NODE_ADMISSION_METERS", "array"], ["NODE_AUTHORITY_CODES", "array"],
+  ["NODE_AUTHORITY_DIGEST_DOMAIN", "string"], ["NODE_AUTHORITY_DRAFT_KEYS", "array"],
+  ["NODE_AUTHORITY_EXCLUDED_STATE_KEYS", "array"],
+  ["NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS", "array"], ["NODE_AUTHORITY_LIMITS", "record"],
+  ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
+  ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
+  ["NODE_JOIN_ROLES", "array"],
+  ["PROTECTED_ADMISSION_PURPOSES", "array"],
   ["RESERVATION_STATES", "array"], ["SETTLEMENT_STATES", "array"], ["SLOT_STATES", "array"],
   ["SUPERSESSION_BOUND_DISPOSITION_FIELDS", "array"],
   ["SUPERSESSION_DISPOSITION_FAMILIES", "array"],
@@ -153,7 +176,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SUPPORTED_SOURCE_PARSER_VERSIONS", "array"],
   ["activateProviderSlot", "function"],
   ["activateReservation", "function"], ["adapterConfirm", "function"],
-  ["adapterFail", "function"], ["admitExpansion", "function"], ["ageWorkItem", "function"],
+  ["adapterFail", "function"], ["admitExpansion", "function"],
+  ["admitNodeDefinition", "function"], ["ageWorkItem", "function"],
   ["allocateToChild", "function"], ["analyzeGraphStructure", "function"],
   ["analyzeHardEdgeCounterfactuals", "function"],
   ["bindCurrentExpansionHold", "function"], ["bindExpansionAdmission", "function"],
@@ -161,11 +185,13 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["cancelReservation", "function"],
   ["carryWaitProjection", "function"], ["closeBudgetAccount", "function"],
   ["closeSettledView", "function"], ["conservativeSettle", "function"],
-  ["createTraversalCounter", "function"], ["decodeGraphContent", "function"],
-  ["deriveExpansionEvidence", "function"],
+  ["createNodeDefinition", "function"], ["createTraversalCounter", "function"],
+  ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
+  ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
   ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
   ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
-  ["fenceAuthority", "function"], ["grantSuccessorCapacity", "function"],
+  ["encodeNodeDefinition", "function"], ["fenceAuthority", "function"],
+  ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["openBudgetRoot", "function"],
   ["parseClock", "function"], ["parseLeaseRecord", "function"], ["parseProof", "function"],
@@ -176,6 +202,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["reserveProviderSlot", "function"], ["resolveGraphPolicy", "function"],
   ["resourceRotationOrder", "function"], ["returnToParent", "function"],
   ["rotateOnce", "function"], ["settleReservation", "function"],
+  ["snapshotIdentityHash", "function"],
   ["validateBypassClaim", "function"], ["validateCapRevision", "function"],
   ["validateGraphSnapshot", "function"], ["validateOpportunityAttestation", "function"],
   ["validateResourceCapacity", "function"],
@@ -187,7 +214,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(111);
+  expect(EXPECTED_EXPORTS.length).toBe(131);
 });
 
 /**
@@ -237,15 +264,53 @@ const WITHHELD_GRAPH_CONTENT_NAMES: readonly string[] = [
   "canonicalGraphJson", "graphContentHash", "projectGraphSnapshot",
   "readContentBytes", "readContentEnvelope", "sameBytes", "SCHEMA_TAG",
   "DECODE_POLICY",
+  // The v3 content mechanics the node-authority publication must NOT drag onto the
+  // root with it. Each one takes an already-validated structure and would let a
+  // consumer mint canonical bytes, a field read, or a digest that no encode
+  // produced -- the same bypass the four names above exist to close.
+  "canonicalContentJson", "projectContent", "graphContentDigest", "readContentFields",
 ];
 
 it("withholds the wire mechanics that would let a consumer mint content identity", () => {
-  expect(WITHHELD_GRAPH_CONTENT_NAMES.length).toBe(8);
+  expect(WITHHELD_GRAPH_CONTENT_NAMES.length).toBe(12);
   const published = new Set(Object.keys(scheduler));
   expect(WITHHELD_GRAPH_CONTENT_NAMES.filter((name) => published.has(name)))
     .toStrictEqual([]);
   // Positive control on the same block: the values that ARE published resolve.
   expect([published.has("encodeGraphContent"), published.has("decodeGraphContent")])
+    .toEqual([true, true]);
+});
+
+/**
+ * The 22 node-authority bindings the six modules export and the root deliberately
+ * withholds. Publishing 19 of the 41 leaves exactly these: the preimage and
+ * canonical-text mechanics (canonicalText, nodeBodyDigest, canonicalEnvelopeJson)
+ * would let a consumer mint a body digest for a definition the codec never
+ * admitted; draftNodeAuthority yields an IDENTITY-LESS draft that looks like a
+ * definition and is not one; and the compose/field/budget readers are internal
+ * halves of admission whose partial verdicts mean nothing outside it.
+ *
+ * BIDIRECTIONAL BY CONSTRUCTION: 19 published + 22 withheld = the 41 runtime
+ * bindings those modules export, so a name added to the public module without
+ * review lands in neither list and the set-equality above names it.
+ */
+const WITHHELD_NODE_AUTHORITY_NAMES: readonly string[] = [
+  "draftNodeAuthority", "readDraftFields", "readText", "normalizeScope",
+  "forbiddenKeyRefusal", "forbiddenBudgetKeyRefusal", "readNodeAuthorityBudget",
+  "ok", "refuse", "passthrough", "compareStrings", "deepFreeze",
+  "canonicalText", "nodeBodyDigest", "canonicalEnvelopeJson",
+  "pick", "admitPlanning", "applicable", "composeEdges", "requirementsOf",
+  "readDerived", "project",
+];
+
+it("withholds the node-authority internals that would bypass the admission authority", () => {
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.length).toBe(22);
+  const published = new Set(Object.keys(scheduler));
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.filter((name) => published.has(name)))
+    .toStrictEqual([]);
+  // Positive controls on the same block: the two values that ARE published resolve,
+  // so an empty namespace cannot pass this leak check vacuously.
+  expect([published.has("createNodeDefinition"), published.has("deriveNodeAuthoritySet")])
     .toEqual([true, true]);
 });
 
@@ -259,7 +324,7 @@ const CODEC_NODES = ["dev-a", "dev-b"] as const;
  * one. `graphBindingDigest` is the graph's own structural identity because the
  * composer requires exactly that; a made-up digest would be refused.
  */
-function codecNodeAuthority(snapshot: unknown): Record<string, unknown> {
+function codecNodeAuthority(snapshot: unknown): NodeAuthoritySection {
   const validated = scheduler.validateGraphSnapshot(snapshot);
   if (!validated.ok) throw new Error("codec fixture graph refused");
   const binding = snapshotIdentityHash(validated.graph);
@@ -324,8 +389,8 @@ function codecNodeAuthority(snapshot: unknown): Record<string, unknown> {
     stability: "MONOTONIC",
     truthClass: "OBSERVED",
   };
-  const body = (nodeKey: string, edges: unknown[]): unknown => {
-    const built = createNodeDefinition({
+  const body = (nodeKey: string, edges: readonly NodeAuthorityEdgeInput[]): NodeDefinition => {
+    const built: NodeAuthorityResult = createNodeDefinition({
       acceptanceContract: acceptance.contract,
       draft: {
         admissionAmounts: [...scheduler.ADMISSION_PURPOSES].sort().map((purpose, index) => ({
@@ -357,33 +422,91 @@ function codecNodeAuthority(snapshot: unknown): Record<string, unknown> {
       }],
     });
     if (!built.ok) {
-      throw new Error(built.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+      throw new Error(built.issues
+        .map((issue: NodeAuthorityIssue) => `${issue.code}@${issue.layer}`).join(","));
     }
-    return built.value.definition;
+    const authored: NodeAuthorityBody = built.value;
+    return authored.definition;
   };
   const definitions = [
     body("dev-a", []),
     body("dev-b", [{ edgeKey: "dev-e1", requirement: { contract, edgeKind: "ARTIFACT_CONSUMPTION" } }]),
   ];
-  const derived = deriveNodeAuthoritySet(snapshot, definitions);
+  const derived: NodeAuthorityRecursionResult = deriveNodeAuthoritySet(snapshot, definitions);
   if (!derived.ok) {
-    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    throw new Error(derived.issues
+      .map((issue: NodeAuthorityRecursionIssue) => `${issue.code}@${issue.layer}`).join(","));
   }
-  return { authorities: [...derived.value], definitions };
+  const authorities: readonly NodeAuthorityEntry[] = [...derived.value];
+  return { authorities, definitions };
 }
 
+/** The two-node hard-edge graph both codec cases below build their authority from. */
+const CODEC_SNAPSHOT = {
+  nodes: [
+    { nodeKey: "dev-b", executionBearing: true },
+    { nodeKey: "dev-a", executionBearing: true },
+  ],
+  edges: [{
+    edgeKey: "dev-e1", producerNodeKey: "dev-a",
+    consumerNodeKey: "dev-b", kind: "HARD",
+  }],
+  completionNodeKey: "dev-b",
+};
+
+/**
+ * The published type surface, closed over PRODUCTION values. `EXPECTED_EXPORTS` is
+ * blind to all 24 node-authority types, so without this case the root could publish
+ * every runtime name and no type at all and every other assertion in this file would
+ * still pass. Each annotation below is a real value the production codec built.
+ *
+ * The two refusal arms pin the exact code AND the layer that refused (epic rail 6):
+ * asserting only "it refused" would survive a second layer answering first.
+ */
+it("closes the published node-authority type surface over production values", () => {
+  const section: NodeAuthoritySection = codecNodeAuthority(CODEC_SNAPSHOT);
+  const definition: NodeDefinition = section.definitions[0]!;
+  const joinRole: NodeJoinRole = definition.joinRole;
+  const gatePolicy: NodeAdmissionGatePolicy = definition.admissionGatePolicy;
+  const amount: NodeAdmissionAmount = definition.admissionAmounts[0]!;
+  const meter: NodeAdmissionMeter = amount.meter;
+  const bindings: readonly NodeCriterionBinding[] = definition.criterionBindings;
+  const dependencies: readonly NodeDependencyEntry[] = definition.directHardDependencies;
+  const draft: NodeAuthorityDraft = { ...definition, directHardDependencies: [] };
+  const drafted: NodeAuthorityDraftResult = { draft, ok: true };
+  const keys: readonly NodeDefinitionKey[] = scheduler.NODE_DEFINITION_KEYS;
+  const encoded: NodeAuthorityBytesResult = scheduler.encodeNodeDefinition(definition);
+
+  expect(joinRole).toBe("NONE");
+  expect(gatePolicy).toBe("POLICY_ALLOWANCE");
+  expect(meter).toBe("runner.authorized_ms");
+  expect(bindings.map((binding) => binding.criterionId)).toStrictEqual(["criterion-a"]);
+  expect(dependencies).toStrictEqual([]);
+  expect(drafted.ok).toBe(true);
+  expect(keys).toContain("nodeKey");
+  expect(encoded.ok).toBe(true);
+
+  const refused: NodeAuthorityResult = scheduler.admitNodeDefinition({});
+  if (refused.ok) throw new Error("admitNodeDefinition admitted a non-definition");
+  const refusal: NodeAuthorityRefusal = refused;
+  const issue: NodeAuthorityIssue = refusal.issues[0]!;
+  const code: NodeAuthorityCode | string = issue.code;
+  const layer: NodeAuthorityLayer = issue.layer;
+  expect([code, layer])
+    .toEqual(["NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA"]);
+
+  const recursed: NodeAuthorityRecursionResult =
+    scheduler.deriveNodeAuthoritySet(CODEC_SNAPSHOT, []);
+  if (recursed.ok) throw new Error("deriveNodeAuthoritySet derived from no definitions");
+  const recursionIssue: NodeAuthorityRecursionIssue = recursed.issues[0]!;
+  const recursionCode: NodeAuthorityRecursionCode | string = recursionIssue.code;
+  const recursionLayer: NodeAuthorityRecursionLayer = recursionIssue.layer;
+  expect([recursionCode, recursionLayer])
+    .toEqual(["NODE_AUTHORITY_RECURSION_NODE_MISSING", "NODE_AUTHORITY_RECURSION"]);
+});
+
 it("reaches the real graph content codec through the bare package root", () => {
-  const snapshot = {
-    nodes: [
-      { nodeKey: "dev-b", executionBearing: true },
-      { nodeKey: "dev-a", executionBearing: true },
-    ],
-    edges: [{
-      edgeKey: "dev-e1", producerNodeKey: "dev-a",
-      consumerNodeKey: "dev-b", kind: "HARD",
-    }],
-    completionNodeKey: "dev-b",
-  };
+  const snapshot = CODEC_SNAPSHOT;
   const nodeAuthority = codecNodeAuthority(snapshot);
   const encoded = scheduler.encodeGraphContent({
     author: "human:architect-2cc07e26",

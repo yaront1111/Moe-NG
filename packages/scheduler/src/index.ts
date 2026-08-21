@@ -247,3 +247,4 @@ export type {
   SupersessionRefusalCode,
   SupersessionResourceFacts,
 } from "./supersession/supersession-disposition-contract.js";
+export * from "./node-authority/node-authority-public.js";

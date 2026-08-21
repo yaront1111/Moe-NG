@@ -2,6 +2,16 @@ import { parentPort } from "node:worker_threads";
 
 import { createAcceptanceContract, createPlanRevision } from "@moe/core";
 
+// The node-authority builders now arrive with everything else, through the BARE
+// root: task-210efa47 landed the publication, so this worker imports them the way
+// a real consumer would. The sibling-bridge coverage this file used to buy with a
+// relative import is UNCHANGED, and that is the point of the root chain: under
+// Node's REAL resolution the root reaches ./node-authority/node-authority-public.js,
+// which reaches ./node-authority-codec.js and ./node-authority-recursion.js, which
+// reach the remaining three. A missing or CRLF sibling bridge anywhere along that
+// chain still surfaces here as ERR_MODULE_NOT_FOUND rather than passing silently —
+// vitest resolves ./x.js back to x.ts and is blind to it, so this worker stays the
+// only witness.
 import {
   ADMISSION_PURPOSES,
   FAIRNESS_CONTRACT_ISSUE_CODES,
@@ -10,7 +20,9 @@ import {
   GRAPH_REVISION_CONTENT_KEYS,
   analyzeHardEdgeCounterfactuals,
   analyzeGraphStructure,
+  createNodeDefinition,
   decodeGraphContent,
+  deriveNodeAuthoritySet,
   encodeGraphContent,
   partitionFrontier,
   previewGraphSnapshot,
@@ -18,13 +30,6 @@ import {
   validateGraphSnapshot,
   validateRing,
 } from "@moe/scheduler";
-// FIXTURE ONLY, and reached relatively on purpose: publishing the node-authority
-// builders on the package root is task-210efa47's, not this task's. A v3 content
-// record cannot be built without them, and importing them here additionally puts
-// ./node-authority/*.js under Node's REAL resolution, where a missing or CRLF
-// sibling bridge shows up as ERR_MODULE_NOT_FOUND rather than passing silently.
-import { createNodeDefinition } from "./node-authority/node-authority-codec.js";
-import { deriveNodeAuthoritySet } from "./node-authority/node-authority-recursion.js";
 
 if (parentPort === null) {
   throw new Error("scheduler entrypoint smoke worker requires a parent port");
