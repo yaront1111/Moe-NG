@@ -101,6 +101,9 @@ function advanceEpoch(state: GoalState, command: GoalAdvanceGraphEpochCommand): 
   if (predecessorGraphRevisionRef !== state.activeGraphRevisionRef) {
     return illegal(state, command.kind);
   }
+  if (successorGraphRevisionRef === predecessorGraphRevisionRef) {
+    return illegal(state, command.kind);
+  }
   if (graphEpoch !== nextGraphEpoch(state)) return illegal(state, command.kind);
   const next = activatedState(state, successorGraphRevisionRef);
   return accepted(next, [deepFreeze({ activeGraphRevisionRef: successorGraphRevisionRef,
