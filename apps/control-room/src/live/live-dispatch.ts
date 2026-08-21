@@ -21,6 +21,11 @@ import { recordDispatchEffort } from "./live-effort-edge.js";
 const hex64 = (seed: string): string =>
   (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
 
+// THE DEV-SUBJECT CONVENTION, spelled by hand because this package cannot
+// import the daemon: these three literals MUST agree with DEFAULT_RUN_SUBJECT /
+// DEFAULT_GOAL_SUBJECT / DEFAULT_SESSION_SUBJECT in apps/daemon/src/http/
+// affordance-read.ts (and the demo seed binds to the same exports). A drifted
+// copy here is exactly how the provider-probe chain silently broke once.
 const GOAL_ID = "goal-live-1";
 const RUN_ID = "run-live-1";
 const POLICY_REF = hex64("a1b2c3");
@@ -127,7 +132,29 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
   },
   "project.register": { owner: "operator-local" },
   "provider.probe": {
+    // The PROFILE is what the probe registers; an observation without one
+    // refuses PROVIDER_PROFILE_INPUT_INVALID at the codec, which silently
+    // bricked the whole board-driven chain (project.activate names the probe
+    // as its prerequisite). Mirrors the daemon's CLAUDE_PROFILE fixture; the
+    // ref MUST agree with project.activate's witness below.
     observation: {
+      profile: {
+        capabilitySchemaDigest: hex64("ca9ab111"),
+        concurrencyCeiling: 4,
+        limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096, timeoutMs: 900_000 },
+        modelSnapshotEvidence: "claude --version reported a dated snapshot",
+        modelSnapshotKind: "DATED_SNAPSHOT",
+        profileRevisionId: "profile-revision-1",
+        provider: "claude",
+        providerMinimumProfileRef: "provider-profile-1",
+        reasoningEffort: "high",
+        selectedModelId: "claude-opus-5",
+        selection: {
+          modelRef: "model-ref-1", profileRef: "profile-ref-1", providerRef: "provider-ref-1",
+          reasoningEffortRef: "reasoning-effort-ref-1", runtimeRef: "runtime-ref-1",
+          snapshotRef: "snapshot-ref-1", structuredOutputSchemaRef: "structured-output-schema-ref-1",
+        },
+      },
       providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
     },
   },
@@ -156,33 +183,16 @@ function reviewPayloadFor(kind: string, subjectRef: string): JsonObject | null {
     };
   }
   if (kind === "integration.accept_output") {
-    return {
-      calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" },
-      packageItems: REVIEW_PACKAGE_ITEMS,
-      policy: {
-        action: "integration.accept_output", actor: "reviewer-1", callerRiskHint: "R1",
-        decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-        evaluatorVersion: "evaluator-1",
-        facts: [{ factId: "fact-review-risk", tier: "R1", truthClass: "DAEMON_VERIFIED" }],
-        graphNodeRevisionRefs: [], policyRevisionRef: hex64("a1"), requiredFactIds: [],
-        scope: [],
-        sliceChain: [{
-          autoApprovalOptIns: [{ action: "integration.accept_output", tier: "R1" }],
-          rules: [], sliceRef: hex64("a1"),
-        }],
-        waivers: [],
-      },
-      proof: "PASSED",
-      reviewer: {
-        authors: ["author-1"], authorshipResolved: true,
-        leaseHistory: [{ kind: "READ_ONLY", principal: "reviewer-1", subjectRef }],
-        leaseHistoryResolved: true, reviewer: "reviewer-1", subjectRef,
-      },
-      subjectRef,
-    };
+    // Exactly the seam's allow-list — PAYLOAD_KEYS admits ["receiptId",
+    // "subjectRef"] and nothing else; the previous richer shape was refused
+    // whole at PAYLOAD_SHAPE before any gate could even read it.
+    return { receiptId: `receipt-${subjectRef}`, subjectRef };
   }
   return null;
 }
+
+/** The one session the board may operate: its own dev subject, never an agent's. */
+const DEV_SESSION_ID = "sess-ui-1";
 
 /** session.close / session.renew derive their payload from the step's aggregate. */
 export function payloadFor(kind: string, aggregateId: string | null): JsonObject | null {
@@ -190,7 +200,11 @@ export function payloadFor(kind: string, aggregateId: string | null): JsonObject
     const sessionId = aggregateId?.startsWith("session/") === true
       ? aggregateId.slice("session/".length)
       : null;
-    if (sessionId === null) return null;
+    // ONLY the dev session. The surface offers close/renew for EVERY open
+    // session, including the ones the wrapper minted for live agents — a
+    // one-click close there kills an agent's session mid-work, and a renew
+    // silently rewrites its expiry. The board authors neither.
+    if (sessionId !== DEV_SESSION_ID) return null;
     return kind === "session.close"
       ? { sessionId }
       : { expiresAt: "2027-06-01T00:00:00.000Z", sessionId };

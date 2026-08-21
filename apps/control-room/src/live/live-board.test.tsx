@@ -163,9 +163,9 @@ describe("LiveBoard", () => {
   afterEach(cleanup);
 
   /**
-   * `approval.decide` throughout: it is the ONE kind the board still dispatches
-   * (see live-board-readonly.test.tsx), so a fixture built on any other kind
-   * would now be asserting over a control that no longer exists.
+   * `approval.decide` throughout as the representative kind; the per-kind
+   * dispatch sweep lives in live-board-dispatch.test.tsx, so these arms only
+   * need one card whose control certainly renders.
    */
   const READY_SURFACE = frameOfSurface({
     nextAllowedCommands: [{

@@ -3,25 +3,28 @@ import type { JSX } from "react";
 
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
-import { dispatchAffordance } from "./live-dispatch.js";
+import { dispatchAffordance, payloadFor } from "./live-dispatch.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
 
 /**
- * The chain board: what the daemon offers, blocks, and has committed.
+ * The chain board: what the daemon offers, blocks, and has committed — and the
+ * OPERATING SURFACE for all of it.
  *
- * READ-ONLY, with exactly one exception. The board reports the daemon's own
- * chain and hands nothing back except {@link BOARD_DISPATCH_COMMAND_KIND} — the
- * approval decision, which a human is the only legitimate author of. Every other
- * offer the daemon lists is rendered as the fact it is and nothing more: there is
- * no control, no drag target, and no code path that can emit it from here.
+ * Every step the daemon's own affordance surface marks READY, and this module's
+ * dispatch companion can build a payload for, renders a Dispatch control: the
+ * whole bootstrap chain is drivable from here, card by card, in the exact order
+ * the daemon's prerequisite table admits — the runbook's "driving the chain by
+ * hand — the live board" made literal. A step with no buildable payload (the
+ * wrapper's `node.deliver`, whose author is a staffed agent, never a click)
+ * renders as the fact it is and nothing more.
  *
- * The drag-to-dispatch gesture that used to sit on READY cards is gone with the
- * rest of the mutation surface. Nothing on this board moves a card either; only
- * the next surface poll does, because only the ledger moves cards.
+ * Two things did NOT come back with the controls. There is still no drag
+ * surface: dispatch is a button, its refusal renders under the card verbatim,
+ * and nothing on this board moves a card — only the next surface poll does,
+ * because only the ledger moves cards. And the board still decides nothing:
+ * every click is answered by the daemon's own gates (authority, prerequisites,
+ * versions), and a refusal IS the answer, rendered as such.
  */
-
-/** The one command kind this surface may hand back to the daemon. */
-export const BOARD_DISPATCH_COMMAND_KIND = "approval.decide" as const;
 
 export interface LiveBoardProps {
   readonly client: ControlRoomClientSurface;
@@ -48,12 +51,13 @@ const COLUMNS = [
  * render. The board renders its control through this function and calls
  * `dispatchAffordance` from nowhere else, so a kind this refuses has no path out.
  *
- * READY is required as well as the kind: an approval the ledger has already
- * committed, or one still waiting on prerequisites, is a fact to read, not an
- * offer to hand back.
+ * READY is required as well as a buildable payload: a step the ledger has
+ * already committed, or one still waiting on prerequisites, is a fact to read,
+ * not an offer to hand back — and a kind the dispatch module cannot author
+ * (`node.deliver`) gets no control at all.
  */
 export function boardMayDispatch(step: SurfaceStep): boolean {
-  return step.status === "READY" && step.kind === BOARD_DISPATCH_COMMAND_KIND;
+  return step.status === "READY" && payloadFor(step.kind, step.aggregateId) !== null;
 }
 
 function stepIdentity(step: SurfaceStep): string {

@@ -3,7 +3,6 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { LiveControlRoom } from "./live-app.js";
-import { BOARD_DISPATCH_COMMAND_KIND } from "./live-board.js";
 import type { LiveSetup } from "./live-config.js";
 import { dispatchAffordance } from "./live-dispatch.js";
 import type { DispatchReport } from "./live-dispatch.js";
@@ -24,7 +23,7 @@ import { ClockProvider } from "../performance/command-latency.js";
  * board's click handler calls — and reads the observation production recorded on the way
  * through. The APPROVE arms additionally render the live application and click the board's
  * own Dispatch button, which is what keeps the click-to-seam edge proven; the board is
- * read-only for every other kind now, so no click exists to make for them.
+ * driven through one representative click here; the per-kind dispatch sweep lives in live-board-dispatch.test.tsx.
  *
  * Nothing below hands the surface a record, a decision kind, a source or a reason code.
  * Every asserted value is one production produced from the command kind and the
@@ -119,8 +118,8 @@ function reportOf(entry: Card): HTMLElement {
 /**
  * TWO DRIVERS, and the split is forced rather than chosen.
  *
- * The board is read-only now except for `approval.decide`, so the rendered
- * application can only be clicked for that one kind. Every other kind is driven
+ * The rendered application is clicked for `approval.decide` as the
+ * representative kind. Every other kind is driven
  * through `dispatchAffordance` — the SAME production function the board's own
  * click handler calls, with the same affordance record the surface carries — so
  * no assertion below is weakened: what is lost is the click, not the production
@@ -138,11 +137,11 @@ async function dispatchThroughBoard(
     </ClockProvider>,
   );
   for (const entry of clicks) {
-    // The board offers a control for the approval decision and nothing else; a
-    // caller that asked this driver for another kind has asked for a control
-    // that no longer exists, and should say so rather than time out.
-    expect(entry.kind, "only approval.decide is clickable on the board")
-      .toBe(BOARD_DISPATCH_COMMAND_KIND);
+    // This driver renders and clicks the approval card only; a caller asking
+    // for another kind wants the seam driver below, and should hear so
+    // rather than time out.
+    expect(entry.kind, "this driver clicks only the approval card")
+      .toBe("approval.decide");
     await userEvent.click(await screen.findByTestId(`cr.liveboard.dispatch.${entry.kind}`));
     await waitFor(() => {
       expect(reportOf(entry).textContent).not.toContain("dispatching");
@@ -150,7 +149,7 @@ async function dispatchThroughBoard(
   }
 }
 
-/** The seam the board's click handler calls, driven directly for read-only kinds. */
+/** The seam the board's click handler calls, driven directly for the un-clicked kinds. */
 async function dispatchThroughSeam(
   cards: readonly Card[], dispatched: readonly Card[],
 ): Promise<readonly DispatchReport[]> {
@@ -208,7 +207,7 @@ describe("the live board records the decision it demanded of the operator", () =
     const approve = card("approval.decide", "afford-sweep-approve", "approval-b");
     const accept = card("integration.accept_output", "afford-sweep-accept", "node-b");
     const cards = [create, approve, accept];
-    // APPROVE goes through the rendered board; the read-only kinds go through the
+    // APPROVE goes through the rendered board; the remaining kinds go through the
     // seam that board click calls. Same order the single-driver version used.
     await dispatchThroughSeam(cards, [create]);
     await dispatchThroughBoard(cards, [approve]);

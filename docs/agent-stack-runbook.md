@@ -207,7 +207,7 @@ by `apps/control-room/src/shell-mode.ts`:
 
 | URL | Requires | What renders |
 | --- | --- | --- |
-| `/` | both `VITE_MOE_LIVE_*` values | the live board, read-only except the approval decision |
+| `/` | both `VITE_MOE_LIVE_*` values | the live board — the operating surface: every READY step with a dev payload dispatches from its card |
 | `/?fixtures=1` | nothing | frozen fixtures under a persistent `DEVELOPMENT_ONLY/NOT_CONFIRMATORY` banner |
 | `/` with either value unset | — | a notice naming both variables; **never** fixtures standing in for live data |
 

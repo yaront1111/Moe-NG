@@ -21,9 +21,10 @@ import { DAEMON_LANE_OWNER } from "./journey-coverage.js";
  */
 export const DAEMON_LANE_RECORD = Object.freeze({
   doesNotProve:
-    "No spec section-12 scenario. The journey drives the READ-ONLY board only: it "
-    + "completes no human action, performs no state transition, kills nothing and "
-    + "restarts nothing. All seventeen UNKNOWN rows in the matrix stay UNKNOWN.",
+    "No spec section-12 scenario. The journey only READS the board: it clicks no "
+    + "dispatch control, completes no human action, performs no state transition, "
+    + "kills nothing and restarts nothing. All seventeen UNKNOWN rows in the matrix "
+    + "stay UNKNOWN.",
   journeyFile: "tests/e2e/control-room/daemon-board.spec.ts",
   journeyTitle: "the live board renders the daemon's own seeded step, and says so honestly",
   owner: DAEMON_LANE_OWNER,

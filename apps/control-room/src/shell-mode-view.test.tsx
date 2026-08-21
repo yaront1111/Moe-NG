@@ -4,7 +4,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { CONTROL_ROOM_FIXTURE_KIND } from "./fixtures.js";
 import { resolveLiveSetup } from "./live/live-config.js";
 import type { LiveSetup, LiveSetupResult } from "./live/live-config.js";
-import { BOARD_DISPATCH_COMMAND_KIND } from "./live/live-board.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import { LIVE_CREDENTIAL_ENV_VARS } from "./shell-mode.js";
 import { ShellModeRoot } from "./shell-mode-view.js";
@@ -134,13 +133,13 @@ describe("the LIVE arm", () => {
 describe("the LIVE arm reads the daemon through the unchanged polling feeds", () => {
   const SURFACE_BODY = {
     nextAllowedCommands: [{
-      commandId: "afford-live-1", commandKind: BOARD_DISPATCH_COMMAND_KIND,
+      commandId: "afford-live-1", commandKind: "approval.decide",
       expectedVersion: 3, targetAggregateId: "approval-live",
     }],
     outcome: "SURFACE",
     steps: [
       {
-        aggregateId: "approval-live", kind: BOARD_DISPATCH_COMMAND_KIND, missing: [],
+        aggregateId: "approval-live", kind: "approval.decide", missing: [],
         status: "READY", version: 3,
       },
       {
@@ -176,7 +175,7 @@ describe("the LIVE arm reads the daemon through the unchanged polling feeds", ()
     return { posted, setup };
   }
 
-  it("paints the daemon's own chain, and offers the approval decision only", async () => {
+  it("paints the daemon's own chain, with a control per READY step and none for BLOCKED", async () => {
     const { posted, setup } = stubbedFeeds();
     render(
       <ClockProvider clock={{ now: () => 1_000 }}>
@@ -186,16 +185,18 @@ describe("the LIVE arm reads the daemon through the unchanged polling feeds", ()
 
     // Both daemon rows land on the board, in the columns the daemon put them in.
     const ready = await screen.findByTestId(
-      `cr.liveboard.card.${BOARD_DISPATCH_COMMAND_KIND}@approval-live`);
+      "cr.liveboard.card.approval.decide@approval-live");
     expect(ready.getAttribute("data-status")).toBe("READY");
     const blocked = screen.getByTestId("cr.liveboard.card.goal.create@goal-live");
     expect(blocked.getAttribute("data-status")).toBe("BLOCKED");
     expect(screen.getByTestId("cr.liveboard.missing.goal.create").textContent)
       .toContain("project.activate");
 
-    // …and the only control on that board is the approval decision.
+    // …and the control census matches the READY census: the approval card is
+    // the fixture's one READY step, so it holds the one Dispatch control, and
+    // the BLOCKED goal.create renders none.
     expect(screen.getAllByRole("button", { name: /^Dispatch /u })).toHaveLength(1);
-    expect(screen.getByTestId(`cr.liveboard.dispatch.${BOARD_DISPATCH_COMMAND_KIND}`))
+    expect(screen.getByTestId("cr.liveboard.dispatch.approval.decide"))
       .toBeTruthy();
 
     // The rows came off the wire, not out of a fixture: the board feed really

@@ -4,20 +4,23 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 
-import { BOARD_DISPATCH_COMMAND_KIND, LiveBoard, boardMayDispatch } from "./live-board.js";
+import { LiveBoard, boardMayDispatch } from "./live-board.js";
 import { frameOfSurface } from "./live-board-feed.js";
 import type { SurfaceFrame, SurfaceStep } from "./live-board-feed.js";
-import { DEV_PAYLOADS } from "./live-dispatch.js";
+import { DEV_PAYLOADS, payloadFor } from "./live-dispatch.js";
 
 /**
- * The board is READ-ONLY except for the one command a human is the only
- * legitimate author of: `approval.decide`.
+ * The board is the OPERATING SURFACE: every READY step the dispatch module can
+ * build a payload for renders a control, so the whole bootstrap chain drives
+ * from here — and the one kind it cannot author (`node.deliver`, whose author
+ * is a staffed agent) still renders none.
  *
- * Two things are asserted separately on purpose. The DOM sweep proves no OTHER
- * kind renders a control; the predicate sweep proves the production rule itself
- * says so, over every kind the dispatch module can even build a payload for. A
- * DOM-only assertion would stay green if a control were re-added behind a
- * condition this fixture happens not to hit.
+ * Two things are asserted separately on purpose. The DOM sweep proves what the
+ * board actually renders across every kind at once; the predicate sweep proves
+ * the production rule itself says so. A DOM-only assertion would stay green if
+ * a control were added or dropped behind a condition this fixture happens not
+ * to hit. The dead drag surface stays pinned dead: dispatch is a button and a
+ * daemon answer, never a gesture that moves a card locally.
  */
 
 beforeAll(() => {
@@ -27,6 +30,9 @@ afterEach(cleanup);
 
 /** Every kind `live-dispatch.ts` can build a payload for, read from production. */
 const PAYLOAD_KINDS: readonly string[] = Object.freeze(Object.keys(DEV_PAYLOADS).sort());
+
+/** The staffed-agent step: on the surface, never authored from the board. */
+const AGENT_KIND = "node.deliver";
 
 function step(kind: string, status: SurfaceStep["status"], index: number): unknown {
   return {
@@ -38,17 +44,18 @@ function step(kind: string, status: SurfaceStep["status"], index: number): unkno
   };
 }
 
-/** One READY card per payload kind, each with a matching daemon offer. */
+/** One READY card per payload kind PLUS the agent's step, each with an offer. */
 function everyKindReady(): SurfaceFrame {
+  const kinds = [...PAYLOAD_KINDS, AGENT_KIND];
   return frameOfSurface({
-    nextAllowedCommands: PAYLOAD_KINDS.map((kind, index) => ({
+    nextAllowedCommands: kinds.map((kind, index) => ({
       commandId: `afford-${kind}`,
       commandKind: kind,
       expectedVersion: index,
       targetAggregateId: `target-${String(index)}`,
     })),
     outcome: "SURFACE",
-    steps: PAYLOAD_KINDS.map((kind, index) => step(kind, "READY", index)),
+    steps: kinds.map((kind, index) => step(kind, "READY", index)),
   });
 }
 
@@ -76,37 +83,43 @@ describe("the corpus this file sweeps", () => {
   it("is non-empty, holds the approval kind, and holds many others", () => {
     // A sweep over an emptied roster generates zero cases and passes green.
     expect(PAYLOAD_KINDS.length).toBeGreaterThan(5);
-    expect(PAYLOAD_KINDS).toContain(BOARD_DISPATCH_COMMAND_KIND);
-    expect(PAYLOAD_KINDS.filter((kind) => kind !== BOARD_DISPATCH_COMMAND_KIND).length)
+    expect(PAYLOAD_KINDS).toContain("approval.decide");
+    expect(PAYLOAD_KINDS.filter((kind) => kind !== "approval.decide").length)
       .toBeGreaterThan(4);
+    // The exclusion below is about a kind that really is surface-visible.
+    expect(PAYLOAD_KINDS).not.toContain(AGENT_KIND);
   });
 });
 
-describe("the one command kind the board may hand back", () => {
-  it("is approval.decide, and nothing else", () => {
-    expect(BOARD_DISPATCH_COMMAND_KIND).toBe("approval.decide");
-  });
-
-  it.each(PAYLOAD_KINDS)("%s is dispatchable only if it is the approval decision", (kind) => {
+describe("what the board may hand back", () => {
+  it.each(PAYLOAD_KINDS)("%s is dispatchable when the daemon says READY", (kind) => {
     // The production predicate, not a restatement of it: the board renders its
     // control through this exact function.
     expect(boardMayDispatch({
       aggregateId: "target-0", kind, missing: [], status: "READY", version: 0,
-    })).toBe(kind === BOARD_DISPATCH_COMMAND_KIND);
+    })).toBe(true);
   });
 
-  it("refuses the approval kind itself when the ledger has not made it READY", () => {
+  it("never authors the staffed agent's step", () => {
+    // Both halves of the exclusion: the payload source refuses the kind, and
+    // the predicate the board renders through says no.
+    expect(payloadFor(AGENT_KIND, "node-code-1")).toBeNull();
+    expect(boardMayDispatch({
+      aggregateId: "node-code-1", kind: AGENT_KIND, missing: [], status: "READY", version: 0,
+    })).toBe(false);
+  });
+
+  it.each(PAYLOAD_KINDS)("%s is a fact, not an offer, off the READY column", (kind) => {
     for (const status of ["BLOCKED", "COMMITTED"] as const) {
       expect(boardMayDispatch({
-        aggregateId: "target-0", kind: BOARD_DISPATCH_COMMAND_KIND,
-        missing: [], status, version: 0,
-      }), status).toBe(false);
+        aggregateId: "target-0", kind, missing: [], status, version: 0,
+      }), `${kind} ${status}`).toBe(false);
     }
   });
 });
 
-describe("the board offers no mutation surface beyond the approval decision", () => {
-  it("renders exactly one dispatch control across every READY kind the daemon offers", () => {
+describe("the board renders one control per authorable READY step", () => {
+  it("renders a dispatch control for every payload kind and none for the agent's step", () => {
     const { container } = render(
       <LiveBoard
         client={builderFor(PAYLOAD_KINDS) as never}
@@ -116,13 +129,15 @@ describe("the board offers no mutation surface beyond the approval decision", ()
       />,
     );
 
-    // Every kind painted a card, so the absence of controls is about the controls.
+    // Every kind painted a card, so the control census below is about controls.
     expect(container.querySelectorAll("[data-testid^='cr.liveboard.card.']"))
-      .toHaveLength(PAYLOAD_KINDS.length);
+      .toHaveLength(PAYLOAD_KINDS.length + 1);
     const controls = [...container.querySelectorAll("[data-testid^='cr.liveboard.dispatch.']")]
-      .map((element) => element.getAttribute("data-testid"));
-    expect(controls).toEqual([`cr.liveboard.dispatch.${BOARD_DISPATCH_COMMAND_KIND}`]);
-    expect(container.querySelectorAll("button")).toHaveLength(1);
+      .map((element) => element.getAttribute("data-testid"))
+      .sort();
+    expect(controls).toEqual(PAYLOAD_KINDS.map((kind) => `cr.liveboard.dispatch.${kind}`));
+    expect(container.querySelectorAll("button")).toHaveLength(PAYLOAD_KINDS.length);
+    expect(screen.queryByTestId(`cr.liveboard.dispatch.${AGENT_KIND}`)).toBeNull();
   });
 
   it("makes no card draggable and offers no drop target", () => {
@@ -171,7 +186,7 @@ describe("the board offers no mutation surface beyond the approval decision", ()
     expect(screen.queryByTestId("cr.liveboard.dropnote")).toBeNull();
   });
 
-  it("emits ONLY approval.decide when every control the board rendered is used", async () => {
+  it("emits every payload kind exactly once when every rendered control is used", async () => {
     const sent: RuntimeCommandEnvelope[] = [];
     render(
       <LiveBoard
@@ -185,17 +200,17 @@ describe("the board offers no mutation surface beyond the approval decision", ()
     );
 
     const buttons = screen.getAllByRole("button");
-    expect(buttons.length).toBeGreaterThan(0);
+    expect(buttons).toHaveLength(PAYLOAD_KINDS.length);
     for (const button of buttons) await userEvent.click(button);
     await waitFor(() => { expect(sent).toHaveLength(buttons.length); });
 
     const kinds = sent.map((envelope) =>
       (envelope as unknown as Record<string, unknown>)["commandKind"]);
-    expect([...new Set(kinds)]).toEqual([BOARD_DISPATCH_COMMAND_KIND]);
+    expect([...kinds].sort()).toEqual([...PAYLOAD_KINDS]);
   });
 });
 
-describe("the approval decision still dispatches, credentialed, exactly as before", () => {
+describe("a dispatch is credentialed and carries the daemon's own affordance", () => {
   const APPROVAL_SURFACE = frameOfSurface({
     nextAllowedCommands: [{
       commandId: "afford-approve-1", commandKind: "approval.decide", expectedVersion: 4,

@@ -27,9 +27,11 @@ entry points, environment, and knobs):
   READY, unclaimed non-human steps with a scoped agent session and a real
   `claude -p` process; human approval and goal closure are never delegated. A
   daemon-side development verifier reruns a node test before acceptance.
-- **Control room** (`apps/control-room`): the truth-preserving board. It renders
-  the daemon's own offer surface by DEFAULT over the Vite proxy, read-only apart
-  from the approval decision, which it hands back verbatim. Frozen development
+- **Control room** (`apps/control-room`): the truth-preserving board and the
+  operating surface. It renders the daemon's own offer surface by DEFAULT over
+  the Vite proxy, and every step the daemon marks READY dispatches from its
+  card — the daemon's own gates answer each click, refusals render verbatim,
+  and cards move only when the ledger does. Frozen development
   fixtures live behind `?fixtures=1` and render under a banner saying so; a build
   with no credentials shows a configuration notice, never fixtures in their place.
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,

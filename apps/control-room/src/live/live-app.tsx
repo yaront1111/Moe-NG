@@ -25,9 +25,9 @@ import type { LiveSetupResult } from "./live-config.js";
  * The live attachment: the shell rendered over what the daemon actually says,
  * and nothing else. It is the DEFAULT surface — see `shell-mode.ts`.
  *
- * The shell's affordance snapshot keeps its OWN command set empty: the one offer
- * the board still hands back (the approval decision) is dispatched by the board
- * itself, and no shell action is wired to a daemon command, so every shell action
+ * The shell's affordance snapshot keeps its OWN command set empty: every offer
+ * the board hands back is dispatched by the board itself, and no shell action is
+ * wired to a daemon command, so every shell action
  * renders disabled — the fail-closed truth, not a limitation to paper over. The status label, however, is a statement about
  * the daemon and must agree with the board rendered under it, so it is derived
  * from the affordance surface as well as the event relay. Event rows carry no
@@ -216,10 +216,10 @@ export function LiveControlRoom({ setup }: LiveControlRoomProps): JSX.Element {
           <p>Development live attachment</p>
           <h1>What the daemon says, as it says it.</h1>
           <span>
-            The board is the daemon&apos;s own offer surface, and it is read-only:
-            the one thing you can hand back from here is an approval decision,
-            because a human is the only legitimate author of one. Cards move only
-            when the ledger does.
+            The board is the daemon&apos;s own offer surface, and the operating
+            one: every step the daemon marks ready dispatches from its card, the
+            daemon&apos;s own gates answer every click, and a refusal renders
+            verbatim as the answer it is. Cards move only when the ledger does.
           </span>
         </header>
         <LiveBoard
