@@ -69,8 +69,6 @@ import {
 import type { ProviderRunRecord } from "./provider-run-contracts.js";
 import { commitProviderRunRecord } from "./provider-run-ledger.js";
 import {
-  PROVIDER_RUN_READER_MAX_CANDIDATES,
-  PROVIDER_RUN_READER_MAX_PAGES,
   PROVIDER_RUN_READER_PAGE_SIZE,
   readCurrentProviderRun,
 } from "./provider-run-reader.js";
@@ -817,48 +815,6 @@ describe("readCurrentProviderRun refuses unreadable bytes, pages and stores", ()
     expect(snapshot(store)).toEqual(before);
   });
 
-  it("answers EVIDENCE_UNREADABLE when the page ceiling is reached on short pages", () => {
-    const store = openStore("page-ceiling");
-    const target = seedBoundPair(store);
-    seedForeignRuns(store, 1);
-    const before = positiveSnapshot(store);
-    // ONE real foreign row per page. The candidate ceiling cannot fire here —
-    // PROVIDER_RUN_READER_MAX_PAGES pages of one row is far below it — so this is
-    // the arm that reaches the page bound, and it exists because a pager serving
-    // short pages forever is otherwise an unbounded walk.
-    const foreign = store.readEventsByTypeAfter(PROVIDER_RUN_EVENT_TYPE, 0n, 100).items
-      .filter((event) => event.aggregateId !== target.aggregateId);
-    expect(foreign.length).toBeGreaterThan(0);
-    const port: ProviderRunReadStore = {
-      ...delegate(store),
-      readEventHorizon: () => 1_000_000n,
-      readEventsByTypeAfter: (eventType, after, limit) => {
-        if (eventType !== PROVIDER_RUN_EVENT_TYPE) {
-          return store.readEventsByTypeAfter(eventType, after, limit);
-        }
-        return {
-          hasMore: true,
-          items: [{ ...(foreign[0] as StoredEvent), globalPosition: after + 1n }],
-          nextCursor: after + 1n,
-        };
-      },
-    };
-
-    const result = refusedHere(readWithoutThrowing(port, {
-      attemptRef: ATTEMPT, projectId: PROJECT_ID,
-    }));
-
-    expect(PROVIDER_RUN_READER_MAX_PAGES).toBeLessThan(PROVIDER_RUN_READER_MAX_CANDIDATES);
-    expect(result).toStrictEqual({
-      code: "PROVIDER_RUN_EVIDENCE_UNREADABLE",
-      layer: READER,
-      ok: false,
-      outcome: "UNKNOWN",
-      storeCode: null,
-    });
-    expect(snapshot(store)).toEqual(before);
-  });
-
   it("answers EVIDENCE_MALFORMED for a cursor that does not advance", () => {
     const store = openStore("cursor-drift");
     seedBoundPair(store);
@@ -1006,29 +962,61 @@ describe("readCurrentProviderRun refuses unreadable bytes, pages and stores", ()
     expect(snapshot(store)).toEqual(before);
   });
 
-  // The default 5s budget is not enough, and that is the point: reaching the
-  // ceiling means PROVIDER_RUN_READER_MAX_CANDIDATES real rows are decoded and
-  // each one's decision and receipt are read from a file-backed store. The wall
-  // clock is evidence the bound was walked rather than short-circuited.
-  it("answers EVIDENCE_UNREADABLE rather than truncating when the candidate ceiling is hit", () => {
-    const store = openStore("ceiling");
+});
+
+/* -------------------------------------------------------------------------
+ * Termination comes from the captured horizon, not from page/candidate caps.
+ * ----------------------------------------------------------------------- */
+
+/**
+ * THE NUMBERS ARE WRITTEN OUT ON PURPOSE, exactly as the launch-authority suite
+ * pins the activation twin: the scan used to stop after 64 pages or 6,400
+ * candidates and refuse EVIDENCE_UNREADABLE forever after — a cap on TOTAL
+ * COMMITTED RUNS, not on anything about the queried attempt, so one busy
+ * append-only ledger bricked every run lookup at once. Deriving these from
+ * surviving constants would make the proof move with the bound it exists to
+ * bury.
+ */
+const OLD_SCAN_CEILING = 6_400;
+const CANDIDATES_PAST_THE_OLD_CEILING = 6_500;
+const OLD_PAGE_CEILING = 64;
+
+describe("readCurrentProviderRun is bounded by the horizon alone", () => {
+  // The default 5s budget is not enough, and that is the point: clearing the
+  // retired ceiling means more than 6,400 real rows are decoded and each one's
+  // decision and receipt are read from a file-backed store. The wall clock is
+  // evidence the horizon was walked rather than short-circuited.
+  it("still answers a run that sits past the retired 6,400-candidate ceiling", () => {
+    const store = openStore("past-ceiling");
     const target = seedBoundPair(store);
     seedForeignRuns(store, 2);
     const before = positiveSnapshot(store);
-    // Real committed FOREIGN rows, re-paged forever with a strictly advancing
-    // cursor under a large stable horizon. Every row verifies and none matches,
-    // so nothing but the ceiling can stop the walk. The target IS on the ledger,
-    // which is what makes this sharp: a scan that truncated silently would answer
-    // ABSENT — a confident wrong answer — instead of refusing.
+    const targetEvent = store.readEvents(target.aggregateId)[0];
+    if (targetEvent === undefined) throw new Error("the target run committed no event");
+    // Real committed FOREIGN rows re-paged across the first 6,500 positions,
+    // then the ONE real target row: the ledger of a project whose run count
+    // outgrew the retired caps, where every lookup used to refuse
+    // EVIDENCE_UNREADABLE forever. Every row verifies and only the last one
+    // matches, so nothing but the horizon decides how far the walk reaches.
     const foreign = store.readEventsByTypeAfter(PROVIDER_RUN_EVENT_TYPE, 0n, 100).items
       .filter((event) => event.aggregateId !== target.aggregateId);
     expect(foreign.length).toBeGreaterThan(0);
+    const horizon = BigInt(CANDIDATES_PAST_THE_OLD_CEILING + 1);
+    let served = 0;
     const port: ProviderRunReadStore = {
       ...delegate(store),
-      readEventHorizon: () => 1_000_000n,
+      readEventHorizon: () => horizon,
       readEventsByTypeAfter: (eventType, after, limit) => {
         if (eventType !== PROVIDER_RUN_EVENT_TYPE) {
           return store.readEventsByTypeAfter(eventType, after, limit);
+        }
+        if (after >= BigInt(CANDIDATES_PAST_THE_OLD_CEILING)) {
+          served += 1;
+          return {
+            hasMore: false,
+            items: [{ ...targetEvent, globalPosition: horizon }],
+            nextCursor: horizon,
+          };
         }
         const items = Array.from(
           { length: PROVIDER_RUN_READER_PAGE_SIZE },
@@ -1037,6 +1025,7 @@ describe("readCurrentProviderRun refuses unreadable bytes, pages and stores", ()
             globalPosition: after + BigInt(index + 1),
           }),
         );
+        served += items.length;
         return {
           hasMore: true,
           items,
@@ -1045,13 +1034,56 @@ describe("readCurrentProviderRun refuses unreadable bytes, pages and stores", ()
       },
     };
 
-    const result = refusedHere(readCurrentProviderRun(port, {
+    const result = accepted(readWithoutThrowing(port, {
       attemptRef: ATTEMPT, projectId: PROJECT_ID,
     }));
 
-    expect(PROVIDER_RUN_READER_MAX_CANDIDATES).toBeGreaterThan(PROVIDER_RUN_READER_PAGE_SIZE);
+    expect(served).toBeGreaterThan(OLD_SCAN_CEILING);
+    expect(result.record.providerRunRef).toStrictEqual(target.record.providerRunRef);
+    expect(result.recordDigest).toBe(target.digest);
+    expect(result.sessionId).toBe(SESSION);
+    expect(result.horizon).toBe(horizon);
+    expect(snapshot(store)).toEqual(before);
+  }, 180_000);
+
+  it("ends a pager that never stops claiming more at the horizon, not a page count", () => {
+    const store = openStore("endless-pager");
+    const target = seedBoundPair(store);
+    seedForeignRuns(store, 1);
+    const before = positiveSnapshot(store);
+    // ONE real foreign row per page, forever: past the retired 64-page ceiling
+    // the pager still claims more with a strictly advancing cursor, so nothing
+    // but the captured horizon can end this walk. 200 single-row pages against
+    // a horizon of 200 is the whole assertion, and the answer is the honest
+    // ABSENT for a never-committed attempt rather than a refusal at a cap.
+    const foreign = store.readEventsByTypeAfter(PROVIDER_RUN_EVENT_TYPE, 0n, 100).items
+      .filter((event) => event.aggregateId !== target.aggregateId);
+    expect(foreign.length).toBeGreaterThan(0);
+    let served = 0;
+    const port: ProviderRunReadStore = {
+      ...delegate(store),
+      readEventHorizon: () => 200n,
+      readEventsByTypeAfter: (eventType, after, limit) => {
+        if (eventType !== PROVIDER_RUN_EVENT_TYPE) {
+          return store.readEventsByTypeAfter(eventType, after, limit);
+        }
+        served += 1;
+        return {
+          hasMore: true,
+          items: [{ ...(foreign[0] as StoredEvent), globalPosition: after + 1n }],
+          nextCursor: after + 1n,
+        };
+      },
+    };
+
+    const result = refusedHere(readWithoutThrowing(port, {
+      attemptRef: "attempt-never-committed", projectId: PROJECT_ID,
+    }));
+
+    expect(served).toBe(200);
+    expect(served).toBeGreaterThan(OLD_PAGE_CEILING);
     expect(result).toStrictEqual({
-      code: "PROVIDER_RUN_EVIDENCE_UNREADABLE",
+      code: "PROVIDER_RUN_EVIDENCE_ABSENT",
       layer: READER,
       ok: false,
       outcome: "UNKNOWN",
@@ -1388,8 +1420,7 @@ describe("readCurrentProviderRun keeps its identity checks honest", () => {
     })).record.providerRunRef.attemptRef).toBe(ATTEMPT);
   });
 
-  it("declares ceilings this module owns rather than trusting the pager's defaults", () => {
+  it("declares the page size this module owns rather than trusting the pager's default", () => {
     expect(PROVIDER_RUN_READER_PAGE_SIZE).toBeGreaterThan(0);
-    expect(PROVIDER_RUN_READER_MAX_CANDIDATES).toBeGreaterThan(PROVIDER_RUN_READER_PAGE_SIZE);
   });
 });

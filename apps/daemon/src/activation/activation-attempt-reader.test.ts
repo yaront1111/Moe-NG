@@ -340,11 +340,11 @@ describe("readFoundationActivationByAttempt reports a durable absence", () => {
 });
 
 /* ---------------------------------------------------------------------------
- * Uniqueness across a page boundary, provenance, explicit bounds, and a real
- * concurrent writer. Every hostile case below is a THIN READ-ONLY DECORATOR over
- * a store seeded by production ingress: the bytes stay real, exactly one fact
- * drifts, and a guard no honest fixture can reach is reached by planting the row
- * a production writer would never emit.
+ * Uniqueness across a page boundary, provenance, horizon-bounded termination,
+ * and a real concurrent writer. Every hostile case below is a THIN READ-ONLY
+ * DECORATOR over a store seeded by production ingress: the bytes stay real,
+ * exactly one fact drifts, and a guard no honest fixture can reach is reached
+ * by planting the row a production writer would never emit.
  * ------------------------------------------------------------------------- */
 
 type Port = ActivationAttemptStore;
@@ -1155,60 +1155,103 @@ describe("readFoundationActivationByAttempt refuses an unusable query", () => {
 });
 
 /* -------------------------------------------------------------------------
- * The literal preview ceilings.
+ * Termination comes from the captured horizon, not from page/candidate caps.
  * ----------------------------------------------------------------------- */
 
-interface Bounded {
-  readonly port: Port;
-  readonly served: () => number;
-}
-
 /**
- * A never-ending but WELL-FORMED indexed stream generated from the real planted
- * candidate: strictly increasing positions under a horizon that never moves and
- * a cursor that always names the last served position. Only the ceilings can
- * stop this walk, which is the point.
+ * THE NUMBERS ARE WRITTEN OUT ON PURPOSE, exactly as the launch-authority suite
+ * pins its twin: the scan used to stop after 64 pages of 100 = 6,400 candidates
+ * and refuse SCAN_INCOMPLETE forever after — a cap on TOTAL PROJECT ACTIVATIONS,
+ * not on anything about the queried attempt, so one busy append-only ledger
+ * bricked every attempt lookup at once. Deriving these from surviving constants
+ * would make the proof move with the bound it exists to bury.
  */
-function boundedFeed(planted: Planted, perPage: number): Bounded {
-  let served = 0;
-  const port = decorate(planted.store, {
-    readEventHorizon: (): bigint => 1_000_000n,
-    readEventsByTypeAfter: (_type: string, after: bigint): CursorPage<StoredEvent, bigint> => {
-      const items = Array.from({ length: perPage }, (_value, index) =>
-        ({ ...planted.event, globalPosition: after + BigInt(index + 1) }));
-      served += items.length;
-      return { hasMore: true, items, nextCursor: after + BigInt(perPage) };
-    },
-  });
-  return { port, served: (): number => served };
-}
+const OLD_SCAN_CEILING = 6_400;
+const CANDIDATES_PAST_THE_OLD_CEILING = 6_500;
+const OLD_PAGE_CEILING = 64;
 
-describe("readFoundationActivationByAttempt walks inside explicit ceilings", () => {
-  it("refuses once the page ceiling is crossed and grants nothing", () => {
-    const planted = plant("page-ceiling");
+describe("readFoundationActivationByAttempt is bounded by the horizon alone", () => {
+  it("binds an attempt whose activation sits past the retired 6,400 ceiling", () => {
+    const planted = plant("past-ceiling");
+    // A SECOND real activation supplies the verifiable non-matching bulk: every
+    // filler candidate must survive `verifyCandidate` for the walk to reach the
+    // match, so what is being proved is reach, not refusal.
+    const filler = activate(planted.store, {
+      attemptId: "attempt-filler", epoch: 7, sessionId: "session-filler", slug: "filler",
+    });
+    const fillerEvent = planted.store.readEvents(filler.aggregateId)[0];
+    if (fillerEvent === undefined) throw new Error("the filler activation committed no event");
     const before = positiveSnapshot(planted.store);
-    const feed = boundedFeed(planted, 1);
+    const horizon = BigInt(CANDIDATES_PAST_THE_OLD_CEILING + 1);
+    let served = 0;
+    // A WELL-FORMED walk the retired ceilings could never finish: 6,500 real
+    // verifiable filler candidates ahead of the ONE match, under a horizon that
+    // never moves and a cursor that always names the last served position. A
+    // scan that truncated silently would answer NOT_FOUND — a confident wrong
+    // answer — and the retired caps refused SCAN_INCOMPLETE here, forever.
+    const port = decorate(planted.store, {
+      readEventHorizon: (): bigint => horizon,
+      readEventsByTypeAfter: (_type: string, after: bigint): CursorPage<StoredEvent, bigint> => {
+        if (after >= BigInt(CANDIDATES_PAST_THE_OLD_CEILING)) {
+          served += 1;
+          return {
+            hasMore: false, items: [{ ...planted.event, globalPosition: horizon }],
+            nextCursor: horizon,
+          };
+        }
+        const items = Array.from({ length: PAGE_LIMIT }, (_value, index) =>
+          ({ ...fillerEvent, globalPosition: after + BigInt(index + 1) }));
+        served += items.length;
+        return { hasMore: true, items, nextCursor: after + BigInt(PAGE_LIMIT) };
+      },
+    });
 
-    expectUnknown(
-      readFoundationActivationByAttempt(feed.port, PROJECT_ID, "attempt-never-committed"),
-      "FOUNDATION_BINDING_SCAN_INCOMPLETE",
-    );
-    expect(feed.served()).toBe(64);
+    const answer = readFoundationActivationByAttempt(port, PROJECT_ID, PLANTED_ATTEMPT);
+
+    expect(answer).toEqual({
+      activationAggregateId: planted.aggregateId,
+      activationDigest: planted.record.activationDigest,
+      attemptId: PLANTED_ATTEMPT,
+      effectIntentId: "intent-planted",
+      epoch: 12,
+      ownerSessionRef: "session-planted",
+      projectId: PROJECT_ID,
+      status: "BOUND",
+    });
+    expect(served).toBeGreaterThan(OLD_SCAN_CEILING);
+    expect(snapshot(planted.store)).toEqual(before);
+  }, 180_000);
+
+  it("ends a pager that never stops claiming more at the horizon, not a page count", () => {
+    const planted = plant("endless-pager");
+    const before = positiveSnapshot(planted.store);
+    // The synthetic horizon must clear every REAL position: `verifyCandidate`
+    // re-reads the planted aggregate and refuses history beyond the horizon.
+    expect(planted.store.readEventHorizon()).toBeLessThan(200n);
+    let served = 0;
+    // ONE real candidate per page, forever: past the retired 64-page ceiling the
+    // pager still claims more with a strictly advancing cursor, so nothing but
+    // the captured horizon can end this walk. 200 single-row pages against a
+    // horizon of 200 is the whole assertion.
+    const port = decorate(planted.store, {
+      readEventHorizon: (): bigint => 200n,
+      readEventsByTypeAfter: (_type: string, after: bigint): CursorPage<StoredEvent, bigint> => {
+        served += 1;
+        return {
+          hasMore: true, items: [{ ...planted.event, globalPosition: after + 1n }],
+          nextCursor: after + 1n,
+        };
+      },
+    });
+
+    const missing = readFoundationActivationByAttempt(
+      port, PROJECT_ID, "attempt-never-committed");
+
+    expect(missing).toEqual(foundationBindingAbsent("FOUNDATION_BINDING_NOT_FOUND"));
+    expect(served).toBe(200);
+    expect(served).toBeGreaterThan(OLD_PAGE_CEILING);
     expect(snapshot(planted.store)).toEqual(before);
   }, 60_000);
-
-  it("refuses once the candidate ceiling is reached and grants nothing", () => {
-    const planted = plant("candidate-ceiling");
-    const before = positiveSnapshot(planted.store);
-    const feed = boundedFeed(planted, PAGE_LIMIT);
-
-    expectUnknown(
-      readFoundationActivationByAttempt(feed.port, PROJECT_ID, "attempt-never-committed"),
-      "FOUNDATION_BINDING_SCAN_INCOMPLETE",
-    );
-    expect(feed.served()).toBe(6_400);
-    expect(snapshot(planted.store)).toEqual(before);
-  }, 120_000);
 });
 
 /* -------------------------------------------------------------------------

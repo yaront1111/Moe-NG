@@ -12,8 +12,8 @@
  *
  * EVERY CANDIDATE IS VERIFIED BEFORE THE ATTEMPT IS COMPARED: filtering first
  * would skip a malformed neighbour and return a partial answer as authority. The
- * walk is bounded by ONE captured horizon plus explicit page and candidate
- * ceilings, never early-returns, and never picks a match by order or epoch.
+ * walk is bounded by ONE captured horizon and by nothing else, never
+ * early-returns, and never picks a match by order or epoch.
  */
 import { validateActivationCommit } from "@moe/runner";
 import { parseLeaseRecord } from "@moe/scheduler";
@@ -66,9 +66,7 @@ export interface FoundationAttemptUnknown {
 type AttemptRefusal = FoundationAttemptAbsent | FoundationAttemptUnknown;
 type DecisionTrace = NonNullable<StoredEvent["decisionTrace"]>;
 export type FoundationAttemptResult = AttemptRefusal | FoundationAttemptBinding;
-const PAGE_SIZE = 100, MAX_SCAN_PAGES = 64;
-/** Reached, not exceeded: with a strict `>`, 64 pages of 100 could never fire it. */
-const MAX_SCAN_CANDIDATES = 6_400;
+const PAGE_SIZE = 100;
 const INCOMPLETE = "FOUNDATION_BINDING_SCAN_INCOMPLETE";
 const MALFORMED = "FOUNDATION_BINDING_EVIDENCE_MALFORMED";
 const INCOHERENT = "FOUNDATION_BINDING_ACTIVATION_INCOHERENT";
@@ -178,18 +176,20 @@ function verifyCandidate(
   }
   return { epoch: lease.epoch, ownerSessionRef: lease.ownerSessionRef, record };
 }
-/** Pages ONLY the activation event type, to bounded exhaustion. No early return on
- *  a hit: the answer is not "one matched" but "exactly one did", and a second match
+/** Pages ONLY the activation event type, BOUNDED BY THE CAPTURED HORIZON AND NOT
+ *  BY A PAGE OR CANDIDATE COUNT: a fixed cap bounds TOTAL PROJECT ACTIVATIONS,
+ *  past which every attempt lookup refuses forever on an append-only ledger — a
+ *  refusal indistinguishable from a real authority answer. Termination is the
+ *  strict per-page position increase under that horizon. No early return on a
+ *  hit: the answer is not "one matched" but "exactly one did", and a second match
  *  on a later page is the difference between a refusal and a wrong answer. A row
  *  beyond the horizon refuses: a binding must not come from a ledger that moved. */
 function scanForAttempt(
   store: ActivationAttemptStore, projectId: string, attemptId: string, horizon: bigint,
 ): AttemptRefusal | FoundationAttemptBinding | null {
-  let cursor = 0n, pages = 0, candidates = 0;
+  let cursor = 0n;
   let binding: FoundationAttemptBinding | null = null;
   while (cursor < horizon) {
-    pages += 1;
-    if (pages > MAX_SCAN_PAGES) return no(INCOMPLETE);
     let page: CursorPage<StoredEvent, bigint>;
     try {
       page = store.readEventsByTypeAfter(ACTIVATION_LEDGER_EVENT_TYPE, cursor, PAGE_SIZE);
@@ -197,8 +197,6 @@ function scanForAttempt(
     if (!wellShaped(page)) return no(INCOMPLETE);
     let position = cursor;
     for (const event of page.items) {
-      candidates += 1;
-      if (candidates >= MAX_SCAN_CANDIDATES) return no(INCOMPLETE);
       if (typeof event.globalPosition !== "bigint" || event.globalPosition <= position) {
         return no(INCOMPLETE);
       }

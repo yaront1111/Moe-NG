@@ -8,12 +8,14 @@
  * this event, and `readFoundationActivationByAttempt` supplies the session,
  * effect and epoch. No caller-supplied value ever becomes a fact.
  *
- * THE SCAN IS BOUNDED BY ONE CAPTURED HORIZON plus page and candidate ceilings
- * this module owns. It verifies EVERY reserved provider row before comparing the
- * attempt — filtering first would drop a corrupt neighbour silently, after which
- * a later duplicate reads as the unique match. It never returns on a first hit
- * and never prefers a maximum epoch: the answer is not "one matched" but
- * "exactly one did", so two matches is a refusal rather than a choice.
+ * THE SCAN IS BOUNDED BY ONE CAPTURED HORIZON and by nothing else: a page or
+ * candidate ceiling would bound TOTAL COMMITTED RUNS, past which every lookup
+ * for every attempt refuses forever on an append-only ledger. It verifies EVERY
+ * reserved provider row before comparing the attempt — filtering first would
+ * drop a corrupt neighbour silently, after which a later duplicate reads as the
+ * unique match. It never returns on a first hit and never prefers a maximum
+ * epoch: the answer is not "one matched" but "exactly one did", so two matches
+ * is a refusal rather than a choice.
  *
  * THE PRINCIPAL RULE, and the constraint it places on the WRITER. A committed
  * run is only this attempt's if `decision.key.principalId` is the session that
@@ -30,8 +32,8 @@
  * extend. EVIDENCE_MALFORMED: the query text, or a page whose SHAPE or contents
  * contradict the pager's contract; `storeCode` null. EVIDENCE_UNREADABLE: a read
  * that could not be obtained or completed — a store call threw (`storeCode` is
- * the store's own code, verbatim), a decision or receipt was absent, the horizon
- * moved, or a ceiling was reached (`storeCode` null). BINDING_MISMATCH:
+ * the store's own code, verbatim), a decision or receipt was absent, or the
+ * horizon moved (`storeCode` null). BINDING_MISMATCH:
  * everything parsed and the bindings disagree; the comparison is ours, so
  * `storeCode` is null. RECORD_UNREADABLE: the canonical bytes themselves.
  * ABSENT and AMBIGUOUS answer the candidate COUNT and nothing else.
@@ -94,9 +96,6 @@ export type ProviderRunReadResult =
   | ProviderRunReadSuccess | ProviderRunRefusal;
 /** Matches the activation attempt reader's page size: one discipline, one shape. */
 export const PROVIDER_RUN_READER_PAGE_SIZE = 100;
-/** Reached, not exceeded: with a strict `>`, 64 pages of 100 could never fire it. */
-export const PROVIDER_RUN_READER_MAX_CANDIDATES = 6_400;
-export const PROVIDER_RUN_READER_MAX_PAGES = 64;
 const MALFORMED = "PROVIDER_RUN_EVIDENCE_MALFORMED", MISMATCH = "PROVIDER_RUN_BINDING_MISMATCH";
 const UNREADABLE = "PROVIDER_RUN_EVIDENCE_UNREADABLE";
 
@@ -113,21 +112,23 @@ function wellShaped(page: unknown): page is CursorPage<StoredEvent, bigint> {
   return nextCursor === null || typeof nextCursor === "bigint";
 }
 /**
- * Pages ONLY the reserved provider-run event type, to bounded exhaustion. NO
- * EARLY RETURN ON A HIT and no preference for a maximum epoch: a second match on
- * a later page is the difference between a refusal and a confident wrong answer,
- * and a reader that stopped at the first would pass every other case in the
- * suite. A row beyond the horizon refuses, because an answer must not come from
- * a ledger that moved.
+ * Pages ONLY the reserved provider-run event type, BOUNDED BY THE CAPTURED
+ * HORIZON AND NOT BY A PAGE OR CANDIDATE COUNT: a fixed cap bounds TOTAL
+ * COMMITTED RUNS, past which every lookup for every attempt refuses forever on
+ * an append-only ledger — a refusal indistinguishable from a real evidence
+ * answer. Termination is the strict per-page position increase under that
+ * horizon. NO EARLY RETURN ON A HIT and no preference for a maximum epoch: a
+ * second match on a later page is the difference between a refusal and a
+ * confident wrong answer, and a reader that stopped at the first would pass
+ * every other case in the suite. A row beyond the horizon refuses, because an
+ * answer must not come from a ledger that moved.
  */
 function scanForAttempt(
   store: ProviderRunReadStore, projectId: string, attemptRef: string, horizon: bigint,
 ): ProviderRunCandidate | ProviderRunRefusal | null {
-  let cursor = 0n, pages = 0, candidates = 0;
+  let cursor = 0n;
   let match: ProviderRunCandidate | null = null;
   while (cursor < horizon) {
-    pages += 1;
-    if (pages > PROVIDER_RUN_READER_MAX_PAGES) return refuseRead(UNREADABLE);
     let page: CursorPage<StoredEvent, bigint>;
     try {
       page = store.readEventsByTypeAfter(
@@ -136,10 +137,6 @@ function scanForAttempt(
     if (!wellShaped(page)) return refuseRead(MALFORMED);
     let position = cursor;
     for (const event of page.items) {
-      candidates += 1;
-      // A truncated scan is refused rather than answered: silent truncation is
-      // exactly how a duplicate hides behind a confident unique match.
-      if (candidates >= PROVIDER_RUN_READER_MAX_CANDIDATES) return refuseRead(UNREADABLE);
       if (typeof event.globalPosition !== "bigint" || event.globalPosition <= position) {
         return refuseRead(MALFORMED);
       }
