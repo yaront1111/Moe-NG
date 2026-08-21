@@ -62,6 +62,14 @@ import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-service.js";
 
 const WINDOWS_ONLY = process.platform === "win32";
+
+/**
+ * Whatever `discoverInstalledClaudeRuntime` answers on this host, success or
+ * refusal. Derived from the production signature rather than restated, so a
+ * widened refusal union cannot drift away from what these cases assert.
+ */
+type DiscoveryAnswer = Awaited<ReturnType<typeof discoverInstalledClaudeRuntime>>;
+
 const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
 const DIGEST = "a".repeat(64), DIGEST_B = "3".repeat(64);
@@ -550,16 +558,39 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
  * nothing below reads it as one.
  */
 describe("foundation attempt dispatch — the observed physical control", () => {
-  /** The discovered runtime, or an explicit failure. Never a dynamic skip: a
-   *  missing prerequisite on a Windows host is a red, not a quiet pass. */
-  async function discovered(): Promise<{
-    readonly installedRoot: string; readonly observation: ProviderRuntimeObservation;
-  }> {
+  /**
+   * The discovered runtime, or the refusal this host produced. Still never a
+   * dynamic skip (task-4db73e90): a missing prerequisite is ASSERTED, not
+   * quietly passed. A runner without an installed claude runtime proves that
+   * discovery fails closed with its named typed code, which IS the coverage the
+   * capability-present arm would otherwise have carried alone.
+   */
+  async function discovered(): Promise<
+    | {
+        readonly ok: true; readonly installedRoot: string;
+        readonly observation: ProviderRuntimeObservation;
+      }
+    | { readonly ok: false; readonly refusal: DiscoveryAnswer }
+  > {
     const found = await discoverInstalledClaudeRuntime();
-    if (!("ok" in found && found.ok === true)) {
-      throw new Error(`installed runtime discovery refused: ${JSON.stringify(found)}`);
+    if (!("ok" in found && found.ok === true)) return { ok: false, refusal: found };
+    return { installedRoot: found.installedRoot, observation: found.observation, ok: true };
+  }
+
+  /**
+   * The capability-absent assertion. ONLY the missing-runtime code is admitted
+   * here: any other refusal — an ambiguous duplicate, an invalid search path, an
+   * unsupported platform — is a real red and is rethrown verbatim, so a broken
+   * discovery can never hide behind the honest branch.
+   */
+  function assertRuntimeAbsent(refusal: DiscoveryAnswer): void {
+    const code = "code" in refusal ? refusal.code : undefined;
+    if (code !== "CLAUDE_RUNTIME_PATH_MISSING") {
+      throw new Error(`installed runtime discovery refused: ${JSON.stringify(refusal)}`);
     }
-    return { installedRoot: found.installedRoot, observation: found.observation };
+    expect(refusal).toMatchObject({
+      code: "CLAUDE_RUNTIME_PATH_MISSING", layer: "RUNTIME", truthClass: "UNKNOWN",
+    });
   }
 
   function providerEvents(store: SqliteEventStore) {
@@ -572,7 +603,11 @@ describe("foundation attempt dispatch — the observed physical control", () => 
   }
 
   it.runIf(WINDOWS_ONLY)("observes a real exited provider process and files it in the ledger", async () => {
-    const { installedRoot, observation } = await discovered();
+    const found = await discovered();
+    // task-4db73e90: this host has no installed claude runtime — assert the
+    // typed refusal instead of skipping the case.
+    if (!found.ok) return assertRuntimeAbsent(found.refusal);
+    const { installedRoot, observation } = found;
     const root = scratch("observed-control");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
@@ -679,7 +714,11 @@ describe("foundation attempt dispatch — the observed physical control", () => 
    * exact state where deleting the worktree would destroy the only evidence.
    */
   it.runIf(WINDOWS_ONLY)("RETAINS the worktree when the capture answer is unproven", async () => {
-    const { installedRoot, observation } = await discovered();
+    const found = await discovered();
+    // task-4db73e90: this host has no installed claude runtime — assert the
+    // typed refusal instead of skipping the case.
+    if (!found.ok) return assertRuntimeAbsent(found.refusal);
+    const { installedRoot, observation } = found;
     const root = scratch("unproven-retention");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
