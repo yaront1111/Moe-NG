@@ -8,19 +8,24 @@
  * project/goal/graph/node facts, and the hold is committed by the ledger's own writer inside
  * the same decision as the activation.
  *
- * THE CALLER STILL SUPPLIES EXACTLY ONE THING: the admission GATE. That is disclosed, not
- * overlooked — there is no durable producer of an `AdmissionGate` witness yet, and inventing
- * one here would be this module deciding what a policy engine and a human approver decide.
- * Everything else the section carries is unreachable: `readCallerGate` narrows through
- * `BUDGET_KEYS` and returns the gate alone, so no expression below can name a view or an
- * amount even by mistake.
+ * THE CALLER NOW SUPPLIES NOTHING. Until task-93e8aab3 this module read ONE caller input — the
+ * admission GATE out of `payload.budget.gate` — because no durable producer of an
+ * `AdmissionGate` witness existed. `resolveAdmissionGate` is that producer, so the gate is
+ * derived from the policy decision or the approval record the node's OWN durable
+ * `admissionGatePolicy` names, and this module does not read request payload bytes at all.
  *
- * THE WITNESS CHECK IS NOT A SECOND GATE VALIDATOR. `checkGate` in `@moe/scheduler` accepts
- * EITHER witness — its only absence rule is `allowance === null && approval === null` — so a
- * node whose durable policy is HUMAN_APPROVAL would be satisfiable by a policy allowance alone.
- * This module checks ONE thing: that the witness the node's own policy names is present.
- * Whether that witness ALLOWS is still `checkGate`'s call, and its refusal travels out through
- * the reserve writer with its own code.
+ * TWO CODES WERE RETIRED WITH THAT READ, and the retirement is recorded rather than silent
+ * (governor `comment-1369e736`, anchored to the DELIVERED tree by `comment-370ca397`):
+ *   ACTIVATION_BUDGET_GATE_MALFORMED — "the caller's gate is not a record". Its world was a
+ *     payload shape; no payload reaches the gate now, so no path can construct it.
+ *   ACTIVATION_BUDGET_GATE_WITNESS_MISMATCH — "the caller's gate lacks the witness the node's
+ *     policy names". The resolver BUILDS the witness the policy names, so a gate carrying the
+ *     other kind is unrepresentable rather than refused.
+ * Both are SUPERSEDED by `ADMISSION_GATE_WITNESS_ABSENT` / `ADMISSION_GATE_SCOPE_MISMATCH` at
+ * the `DAEMON_ADMISSION_GATE` layer. Keeping them would leave unreachable arms in a closed enum.
+ *
+ * WHETHER THE WITNESS ALLOWS IS STILL NOT THIS MODULE'S QUESTION. `checkGate` in `@moe/scheduler`
+ * owns it, and its refusal travels out through the reserve writer with its own code and layer.
  *
  * REPLAY, THE NON-OBVIOUS ONE. The hold rides the activation's decision as a SECONDARY leg, so
  * it has no decision row of its own to replay through. Reserving a second time would fold
@@ -38,20 +43,17 @@ import {
   BUDGET_LEDGER_EVENT_TYPE, deriveBudgetAggregateId,
 } from "../budget/budget-ledger-contracts.js";
 import { reserveBudgetForAdmission } from "../budget/budget-ledger-holds.js";
-import { BUDGET_KEYS } from "../work/work-claim.js";
 import type { BudgetLeg } from "../work/work-claim.js";
-import { mirrorDeep } from "../work/work-claim-shape.js";
 
 import { captureBudgetLeg, deriveActivationBudget } from "./activation-budget-derivation.js";
 import type { ActivationBudgetAuthority } from "./activation-budget-derivation.js";
 import { ACTIVATION_INGRESS_LAYER } from "./activation-ingress-contracts.js";
 import type { ActivationIngressRequest } from "./activation-ingress-contracts.js";
+import { resolveAdmissionGate } from "./admission-gate-resolver.js";
 
 import type { BudgetLedgerRecord } from "../budget/budget-ledger-contracts.js";
 
-import type {
-  AdmissionGate, BudgetAvailableView, ReservationRecord,
-} from "@moe/scheduler";
+import type { BudgetAvailableView, ReservationRecord } from "@moe/scheduler";
 import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
 /**
@@ -59,8 +61,6 @@ import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
  * projection or the ledger writer and travels unrestamped.
  */
 export const ACTIVATION_BUDGET_STAGE_CODES = Object.freeze([
-  "ACTIVATION_BUDGET_GATE_MALFORMED",
-  "ACTIVATION_BUDGET_GATE_WITNESS_MISMATCH",
   "ACTIVATION_BUDGET_LEG_ABSENT",
   "ACTIVATION_BUDGET_RESERVATION_ABSENT",
 ] as const);
@@ -105,34 +105,6 @@ const refuse = (code: ActivationBudgetStageCode): ActivationBudgetStageRefused =
  * the same hold and two distinct commands never can.
  */
 export const activationAdmissionRef = (commandId: string): string => `activation:${commandId}`;
-
-/**
- * The gate, and ONLY the gate. The return type is the fence: `BUDGET_KEYS` is imported from
- * `work-claim.ts` rather than restated, so the two cannot drift apart.
- */
-function readCallerGate(payload: Record<string, unknown>): unknown {
-  return mirrorDeep(payload["budget"], BUDGET_KEYS)?.["gate"];
-}
-
-/**
- * Exactly one question: is the witness the node's DURABLE policy names actually present?
- *
- * Not whether it allows — `checkGate` owns that, and a second opinion here could disagree with
- * it. A gate that is not a record at all is malformed rather than mismatched, because those are
- * different faults and one may not stand in for the other.
- */
-function checkGateWitness(
-  gate: unknown, field: keyof AdmissionGate,
-): ActivationBudgetStageRefused | null {
-  if (gate === null || typeof gate !== "object" || Array.isArray(gate)) {
-    return refuse("ACTIVATION_BUDGET_GATE_MALFORMED");
-  }
-  const witness = (gate as Record<string, unknown>)[field];
-  if (witness === null || witness === undefined) {
-    return refuse("ACTIVATION_BUDGET_GATE_WITNESS_MISMATCH");
-  }
-  return null;
-}
 
 interface StandingHold {
   readonly budget: BudgetLeg;
@@ -234,9 +206,18 @@ export function runActivationBudgetStage(
     });
   }
 
-  const gate = readCallerGate(request.payload);
-  const mismatch = checkGateWitness(gate, authority.gateWitnessField);
-  if (mismatch !== null) return mismatch;
+  // The witness the node's OWN durable policy names, built from durable records. Its refusals
+  // carry the resolver's vocabulary and layer and travel out unrestamped, exactly like the
+  // derivation's: "no durable witness exists" and "the witness does not allow" are different
+  // faults answered by different authorities, and one may not wear the other's code.
+  const resolved = resolveAdmissionGate({
+    goalRef: authority.goalRef,
+    nodeKey: authority.nodeKey,
+    projectId: request.projectId,
+    store,
+    witnessField: authority.gateWitnessField,
+  });
+  if (!resolved.ok) return { code: resolved.code, layer: resolved.layer, ok: false as const };
 
   const captured = captureBudgetLeg((commit) =>
     reserveBudgetForAdmission(store, {
@@ -250,7 +231,7 @@ export function runActivationBudgetStage(
         principalId: request.principalId,
       },
       // Validated by the producer's own `readGate`, never by a copy of it here.
-      gate: gate as AdmissionGate,
+      gate: resolved.gate,
       goalRef: authority.goalRef,
       projectId: request.projectId,
     }, commit));

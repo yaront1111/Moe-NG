@@ -47,6 +47,7 @@ import type {
   GraphNode,
   GraphRevisionContent,
   GraphSnapshot,
+  NodeAdmissionGatePolicy,
   NodeAuthoritySection,
   NodeDefinition,
 } from "@moe/scheduler";
@@ -57,6 +58,8 @@ import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js"
 import { authorizeBudgetRoot } from "../budget/budget-ledger.js";
 import { graphRevisionAggregateId, readCurrentActiveGraph } from "../planning/active-graph-projection.js";
 import { putGraphBody } from "../planning/graph-body-record.js";
+
+import { policyDecisionAllows, seedAllowingPolicyDecision } from "./admission-witness-fixtures.js";
 
 const ENCODER = new TextEncoder();
 const hex = (digit: string): string => digit.repeat(64);
@@ -126,7 +129,9 @@ const AUTHORITY_REGISTRY_ENTRY: Record<string, unknown> = {
 
 /** Admitted by PRODUCTION or not built at all: a body the codec refuses could never reach the
  *  encode this fixture exists to feed. */
-function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefinition {
+function nodeDefinitionFor(
+  nodeKey: string, snapshot: GraphSnapshot, gatePolicy: NodeAdmissionGatePolicy,
+): NodeDefinition {
   const nodeKeys = snapshot.nodes.map((node) => node.nodeKey);
   const plan = createPlanRevision(planDraftFor(nodeKeys));
   if (!plan.ok) throw new Error(`plan revision fixture refused: ${plan.code}`);
@@ -139,7 +144,7 @@ function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefini
       admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
         meter: ACTIVATION_WORLD_METER, purpose, quantity: index + 1,
       })),
-      admissionGatePolicy: "POLICY_ALLOWANCE",
+      admissionGatePolicy: gatePolicy,
       capability: "capability-implement",
       completionLinkage: completes ? nodeKey : null,
       constraints: ["constraint-a"],
@@ -168,7 +173,9 @@ function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefini
 }
 
 /** `authorities` is the PRODUCER'S value: `bindAuthority` re-derives and refuses any other. */
-function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
+function authoritySectionFor(
+  snapshot: GraphSnapshot, gatePolicy: NodeAdmissionGatePolicy,
+): NodeAuthoritySection {
   const validated = validateGraphSnapshot(snapshot);
   if (!validated.ok) {
     throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
@@ -177,7 +184,7 @@ function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
     .map((node) => node.nodeKey)
     .slice()
     .sort()
-    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot));
+    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot, gatePolicy));
   const derived = deriveNodeAuthoritySet(snapshot, definitions);
   if (!derived.ok) {
     throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
@@ -185,12 +192,14 @@ function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
   return { authorities: derived.value, definitions };
 }
 
-function encodedContent(snapshot: GraphSnapshot): GraphContent {
+function encodedContent(
+  snapshot: GraphSnapshot, gatePolicy: NodeAdmissionGatePolicy,
+): GraphContent {
   const content: GraphRevisionContent = {
     author: "human:architect-primary",
     completionNode: snapshot.completionNodeKey,
     decompositionBudget: 24,
-    nodeAuthority: authoritySectionFor(snapshot),
+    nodeAuthority: authoritySectionFor(snapshot, gatePolicy),
     parentRevision: "rev-000000000000",
     policyRevision: "pol-000000000001",
     repositoryBaseTree: "4".repeat(40),
@@ -281,9 +290,22 @@ export function ensureSeededGoal(store: SqliteEventStore): void {
   if (!outcome.ok) throw new Error(`activation world goal.create refused: ${outcome.code}`);
 }
 
+/**
+ * The gate policy the seeded node carries unless a caller names another.
+ *
+ * POLICY_ALLOWANCE is what every world here has always seeded, so it stays the default and no
+ * existing seeder changes behaviour. It is a NAMED constant rather than an inline literal
+ * because the sibling suite reads it back: a world whose node silently changed policy would
+ * otherwise move which durable witness the activation owes, with nothing pointing at it.
+ */
+export const ACTIVATION_WORLD_GATE_POLICY: NodeAdmissionGatePolicy = "POLICY_ALLOWANCE";
+
 /** The durable ACTIVE graph on its own — no budget root. */
-export function seedActivationGraph(store: SqliteEventStore): GraphContent {
-  const content = encodedContent(soloSnapshot());
+export function seedActivationGraph(
+  store: SqliteEventStore,
+  gatePolicy: NodeAdmissionGatePolicy = ACTIVATION_WORLD_GATE_POLICY,
+): GraphContent {
+  const content = encodedContent(soloSnapshot(), gatePolicy);
   commitRevision(store, driveRevision(content.graphContentHash));
   const recorded = putGraphBody(store, PROJECT_ID, content);
   if (!recorded.ok) throw new Error(`activation world graph body refused: ${recorded.code}`);
@@ -302,11 +324,69 @@ export function seedActivationGraph(store: SqliteEventStore): GraphContent {
  * `ACTIVE_GRAPH_SPLIT_BRAIN` — measured, not hypothesised. So each layer is added ONLY when it
  * is the missing one, which is exactly this row's mandate: enrich the world, never rebuild it.
  */
-export function seedActivationWorld(store: SqliteEventStore): void {
+export function seedActivationWorld(
+  store: SqliteEventStore,
+  gatePolicy: NodeAdmissionGatePolicy = ACTIVATION_WORLD_GATE_POLICY,
+): void {
+  seedActivationWorldWithoutPolicyWitness(store, gatePolicy);
+  // task-93e8aab3, and the exact successor of the graph+root layer above: `effect.activate` now
+  // resolves its `AdmissionGate` from durable records instead of the caller's payload, so a
+  // POLICY_ALLOWANCE world with no allowing decision refuses ADMISSION_GATE_WITNESS_ABSENT.
+  // MEASURED, not predicted: without this line 25 daemon suites / 445 tests refuse there.
+  // Only for the default policy — a HUMAN_APPROVAL world owes an APPROVAL, and its seeder is
+  // `seedApprovedNodeScope`; adding a policy decision it never consults would be noise.
+  if (gatePolicy === "POLICY_ALLOWANCE") ensureAllowingPolicyDecision(store);
+}
+
+/**
+ * THE HAPPY WORLD MINUS ITS DURABLE ADMISSION WITNESS — the home of
+ * `ADMISSION_GATE_WITNESS_ABSENT`, and a deliberate negative world in the same sense as
+ * `seedActivationWorldWithoutGraph`.
+ *
+ * A refusal with no reachable world is a guard that is green forever and killable by deleting
+ * the check, so the witness-absent world keeps a named seeder rather than being reconstructed
+ * ad hoc by whichever suite needs it.
+ */
+export function seedActivationWorldWithoutPolicyWitness(
+  store: SqliteEventStore,
+  gatePolicy: NodeAdmissionGatePolicy = ACTIVATION_WORLD_GATE_POLICY,
+): void {
   ensureSeededGoal(store);
-  ensureActiveGraph(store);
+  ensureActiveGraph(store, gatePolicy);
   ensureAuthorizedBudgetRoot(store);
 }
+
+/**
+ * The durable ALLOWING policy decision, added ONLY when it is the missing layer.
+ *
+ * Asked through `resolveAdmissionGate` itself, so a world whose latest decision the resolver
+ * would reject is upgraded and one it accepts is left untouched. Seeding unconditionally would
+ * append a second decision on every call and silently overwrite a world that deliberately
+ * decided otherwise.
+ */
+function ensureAllowingPolicyDecision(store: SqliteEventStore): void {
+  if (policyDecisionAllows(store)) return;
+  seedAllowingPolicyDecision(store);
+}
+
+/**
+ * The happy world with the node's ADMISSION GATE POLICY chosen by the caller.
+ *
+ * Named rather than left as `seedActivationWorld`'s second argument at the call site, because
+ * the whole point of a HUMAN_APPROVAL world is that it owes a DIFFERENT durable witness — an
+ * approval record instead of a policy decision — and a bare positional argument would read as a
+ * detail rather than as the world's defining fact.
+ *
+ * IT ONLY BINDS WHEN THE GRAPH IS ABSENT. `ensureActiveGraph` refuses to publish a second ACTIVE
+ * revision, so a world that already activated one keeps ITS policy and this argument is a no-op.
+ * A caller that needs the policy to take must seed before any graph exists.
+ */
+export function seedActivationWorldWithGatePolicy(
+  store: SqliteEventStore, gatePolicy: NodeAdmissionGatePolicy,
+): void {
+  seedActivationWorld(store, gatePolicy);
+}
+
 
 /**
  * Seeds a graph only when the projection says one is ABSENT — never on any other refusal.
@@ -316,10 +396,12 @@ export function seedActivationWorld(store: SqliteEventStore): void {
  * revision on top of it would bury that real refusal under `ACTIVE_GRAPH_SPLIT_BRAIN` from a
  * fixture. Absent means seed; broken means leave it broken and visible.
  */
-function ensureActiveGraph(store: SqliteEventStore): void {
+function ensureActiveGraph(
+  store: SqliteEventStore, gatePolicy: NodeAdmissionGatePolicy,
+): void {
   const current = readCurrentActiveGraph(store, PROJECT_ID);
   if (current.ok || current.code !== "ACTIVE_GRAPH_ABSENT") return;
-  seedActivationGraph(store);
+  seedActivationGraph(store, gatePolicy);
 }
 
 /**
