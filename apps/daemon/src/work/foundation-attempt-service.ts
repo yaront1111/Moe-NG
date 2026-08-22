@@ -126,11 +126,15 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   }
 
   /** Only a proven physical observation reaches result capture. The captureRef
-   *  travels here lexically, from the preparation this very dispatch made. */
+   *  travels here lexically, from the preparation this very dispatch made, and so
+   *  does `decidedAt`: it is the ACTIVATION's own decided-at, the single durable
+   *  stamp this dispatch was decided under. No daemon clock exists to read one
+   *  from, and a stamp invented here would be a durable audit field asserting a
+   *  time nothing observed. */
   async function capture(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, observation: unknown, registration: unknown,
-    prepared: PreparedCapture,
+    prepared: PreparedCapture, decidedAt: string,
   ): Promise<FoundationAttemptOutcome> {
     const answer = await contained(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
@@ -171,14 +175,21 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     // identity on a surface this change does not own. A settlement refusal is ADVISORY here for
     // the same reason the terminal's own refusal is — an attempt that ran is not unmade by a
     // ledger that could not be read, and the refusal carries its own code and layer for a reader.
+    //
+    // THE DECISION KEY IS THE DURABLE TRUTH, NOT A CONVENIENCE. `decidedAt` is written straight
+    // onto the durable decision as its own `decidedAt` (and onto the rejection audit as
+    // `committedAt`), and `principalId` is a third of `budgetDecisionKey` — together they are the
+    // row a recovery reads to answer WHO decided this settlement and WHEN.
+    // Both therefore come from durable facts this dispatch already holds: the activation's own
+    // decided-at, and the lease owner session the provider-run commit below is keyed by too.
+    // Neither is a daemon clock reading and neither is the project — a project decides nothing.
     if (terminal.ok) {
       applyProviderUsageToBudget(store, {
         attemptRef: record.attempt.attemptId,
         context: {
           commandId: `settle-${record.attempt.attemptId}`,
           correlationId: `budget-settlement-${record.attempt.attemptId}`,
-          decidedAt: new Date(0).toISOString(),
-          principalId: bound.projectId,
+          decidedAt, principalId: record.lease.ownerSessionRef,
         },
         projectId: bound.projectId,
       });
@@ -332,7 +343,9 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     if (observed === null) {
       return unproven(bound, record, manifest, launched.result as unknown as Record<string, unknown>);
     }
-    return await capture(bound, record, manifest, observed[0], observed[1], prepared);
+    return await capture(
+      bound, record, manifest, observed[0], observed[1], prepared,
+      activation.decision.decidedAt);
   }
 
   return Object.freeze({ dispatch });

@@ -22,6 +22,60 @@ const observedBoundaryProbe = vi.hoisted(() => ({
   launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
 }));
 
+/**
+ * EVERY settlement attempt the capture path makes, recorded and FORWARDED.
+ *
+ * The production writer still runs — this observes the seam, it does not replace it. It exists
+ * because "the budget settles only after the terminal is durable" is an ORDERING claim, and the
+ * durable ledger alone cannot witness it: when the terminal is missing the settlement refuses on
+ * its own too, so a gate that had been deleted would leave the very same empty ledger behind.
+ * The call itself is the only fact that separates "never attempted" from "attempted and refused".
+ */
+const settlementProbe = vi.hoisted(() => ({
+  calls: [] as Array<Record<string, unknown>>,
+}));
+
+/** The terminal verdict the capture path ACTUALLY gated on, recorded as it was produced.
+ *  Re-deriving it after the dispatch answers a different question: the dispatch appends to the
+ *  activation aggregate on its way out, so a post-hoc call can refuse for a later reason. */
+const terminalProbe = vi.hoisted(() => ({
+  /** Opens the gate for the ONE arm that has to read what travels through it. `--version` is a
+   *  real process but not a provider session, so no honest run on this host proves a terminal
+   *  arc — and the settlement CONTEXT is durable audit truth that must be asserted anyway. The
+   *  double supplies exactly the `ok` the gate reads and nothing else; the arm that uses it
+   *  pins that the production reader still refuses, so it can never stand in for a real one. */
+  forceOk: false,
+  results: [] as unknown[],
+}));
+
+vi.mock("./effect-terminal-ledger.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./effect-terminal-ledger.js")>();
+  return {
+    ...actual,
+    recordTerminalEffect: (...args: Parameters<typeof actual.recordTerminalEffect>) => {
+      const real = actual.recordTerminalEffect(...args);
+      terminalProbe.results.push(real);
+      if (!terminalProbe.forceOk) return real;
+      return { ok: true, record: real } as unknown as ReturnType<typeof actual.recordTerminalEffect>;
+    },
+  };
+});
+
+vi.mock("../budget/budget-settlement-application.js", async (importOriginal) => {
+  const actual = await importOriginal<
+    typeof import("../budget/budget-settlement-application.js")
+  >();
+  return {
+    ...actual,
+    applyProviderUsageToBudget: (
+      ...args: Parameters<typeof actual.applyProviderUsageToBudget>
+    ) => {
+      settlementProbe.calls.push(args[1] as unknown as Record<string, unknown>);
+      return actual.applyProviderUsageToBudget(...args);
+    },
+  };
+});
+
 vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) => {
   const actual = await importOriginal<
     typeof import("../activation/activation-telemetry-launch.js")
@@ -46,7 +100,7 @@ import {
   ACTIVATION_WORLD_NODE_KEY, seedActivationWorld,
 } from "../activation/activation-world-fixtures.js";
 import {
-  ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
+  ACTIVATION_WITNESS, GOAL_ID, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -58,6 +112,10 @@ import {
   DAEMON_FOUNDATION_ATTEMPT, deriveDispatchAggregateId,
 } from "./foundation-attempt-contracts.js";
 import { createFoundationAttemptService, readFoundationAttemptRecord } from "./foundation-attempt-service.js";
+import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
+import { BUDGET_LEDGER_COMMAND_KIND } from "../budget/budget-ledger-contracts.js";
+import { applyProviderUsageToBudget } from "../budget/budget-settlement-application.js";
+import { readCurrentTerminalEffect } from "./effect-terminal-ledger.js";
 import {
   PROVIDER_RUN_COMMAND_KIND, PROVIDER_RUN_EVENT_TYPE,
 } from "../telemetry/provider-run-contracts.js";
@@ -81,6 +139,9 @@ const NODE_KEY = ACTIVATION_WORLD_NODE_KEY, SESSION_ID = "session-1";
 
 afterEach(() => {
   observedBoundaryProbe.launches.length = 0;
+  settlementProbe.calls.length = 0;
+  terminalProbe.results.length = 0;
+  terminalProbe.forceOk = false;
   cleanupRestoreHarnesses();
 });
 afterAll(() => {
@@ -771,4 +832,220 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       store.close();
     }
   }, 300_000);
+
+  /**
+   * THE ORDERING GATE ITSELF, and it needs a real launch for the same reason release does:
+   * `capture()` is the only place the gate exists, and no blind arm reaches it.
+   *
+   * The claim under test is the one the production comment makes load-bearing — the budget
+   * settles ONLY after the terminal effect is durable, because `recordTerminalEffect` refusing is
+   * what makes committed telemetry a PRECONDITION of settlement rather than a coincidence. A
+   * settlement wired ahead of it would read UNKNOWN forever while its own UNKNOWN arm passed
+   * green, which is the silent-money failure this row exists to prevent.
+   *
+   * `--version` is a real provider process that really exits, so the run is DURABLE while its
+   * telemetry is not a provider stream — the runner refuses it and no terminal arc is proven.
+   * That is exactly the state the gate is for, reached physically rather than simulated.
+   */
+  it.runIf(WINDOWS_ONLY)("attempts NO budget settlement while the terminal effect is not durable", async () => {
+    const found = await discovered();
+    // task-4db73e90: this host has no installed claude runtime — assert the
+    // typed refusal instead of skipping the case.
+    if (!found.ok) return assertRuntimeAbsent(found.refusal);
+    const { installedRoot, observation } = found;
+    const root = scratch("terminal-gate");
+    const store = readyStore(root);
+    const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
+    const pinRoot = join(root, "pins");
+    const request = {
+      activationRequestBytes: activationBytes(observation.observationDigest),
+      binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
+      graphSnapshot: structuredClone(GRAPH),
+      inputManifest: structuredClone(INPUT_MANIFEST),
+      launchTemplate: {
+        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+        environment: {
+          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        },
+        launchSelection: SELECTION,
+        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+        runtime: { installedRoot, pinRoot, quotedObservation: observation },
+      },
+    };
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer, launchOptions: { platform: "win32" },
+      lifecycle: lifecycleFor(store), store,
+    });
+
+    try {
+      const outcome = await service.dispatch(request);
+
+      // THE CAPTURE PATH REALLY RAN. Without this, every assertion below would also hold for a
+      // dispatch that refused long before the gate existed.
+      expect(outcome.ok).toBe(true);
+      expect(observedBoundaryProbe.launches).toHaveLength(1);
+      expect(existsSync(pinRoot)).toBe(true);
+
+      // THE TELEMETRY IS DURABLE. The gap this arm is about is the TERMINAL, not the run: a
+      // missing run would close the gate for a different reason and prove nothing about ordering.
+      const run = readCurrentProviderRun(store, { attemptRef: "attempt-1", projectId: PROJECT_ID });
+      expect(run).toMatchObject({ ok: true });
+      expect(providerDecisions(store)).toHaveLength(1);
+
+      // AND THE TERMINAL IS NOT — asserted by its own code and layer, from both the reader and
+      // the writer, because "absent" and "refused to derive" are different facts.
+      expect(readCurrentTerminalEffect(
+        store, { attemptRef: "attempt-1", intentId: "intent-1", projectId: PROJECT_ID },
+      )).toMatchObject({ code: "EFFECT_TERMINAL_ABSENT", layer: "EFFECT_TERMINAL_LEDGER", ok: false });
+      // The verdict the GATE saw, captured as the dispatch produced it: exactly one call, and
+      // its own code, layer and upstream pair rather than "it did not succeed".
+      expect(terminalProbe.results).toHaveLength(1);
+      expect(terminalProbe.results[0]).toMatchObject({
+        code: "EFFECT_TERMINAL_EVIDENCE_ABSENT", layer: "EFFECT_TERMINAL_LEDGER", ok: false,
+      });
+
+      // THE MONEY DID NOT MOVE: no settlement decision under this attempt's own command id, no
+      // settlement row, and the reservation still ACTIVATED rather than quarantined.
+      expect(store.readCommandDecisionsAfter(0n, 500).items.filter(
+        (decision) => decision.commandKind === BUDGET_LEDGER_COMMAND_KIND
+          && decision.key.commandId === "settle-attempt-1",
+      )).toHaveLength(0);
+      const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+      if (!ledger.ok) throw new Error(`the ledger must read back: ${ledger.code}`);
+      expect(ledger.settlements).toHaveLength(0);
+      expect(ledger.reservations
+        .filter((entry) => entry.attemptRef === "attempt-1")
+        .map((entry) => entry.state)).toEqual(["ACTIVATED"]);
+
+      // AND THE GATE ITSELF. Both halves are drilled: under `if (terminal.ok)` -> `if (true)`
+      // the ungated settlement really commits, so the decision filter above reds at 1 — the
+      // money moves on evidence no terminal proved. This line is kept beside it because it is
+      // the DIRECT witness: it separates "never attempted" from "attempted and refused", which
+      // stays true even for a future state where the ungated settlement would refuse instead.
+      expect(settlementProbe.calls).toHaveLength(0);
+    } finally {
+      store.close();
+    }
+  }, 300_000);
+
+  /**
+   * WHAT THE SETTLEMENT ASSERTS ABOUT ITSELF, once the gate opens.
+   *
+   * `decidedAt` reaches the durable decision row as `committedAt` and `principalId` is a third of
+   * `budgetDecisionKey`: together they are the audit answer to WHO decided this settlement and
+   * WHEN. Both must come from durable facts this dispatch already holds — the activation's own
+   * decided-at and the lease owner session — never from a daemon clock (there is none) and never
+   * from the project, which decides nothing. A settlement stamped 1970 by a project passes every
+   * balance assertion ever written, which is exactly why this arm asserts the KEY, not the money.
+   */
+  it.runIf(WINDOWS_ONLY)("settles under the ACTIVATION's decided-at and the LEASE OWNER as principal", async () => {
+    const found = await discovered();
+    // task-4db73e90: this host has no installed claude runtime — assert the
+    // typed refusal instead of skipping the case.
+    if (!found.ok) return assertRuntimeAbsent(found.refusal);
+    const { installedRoot, observation } = found;
+    const root = scratch("settlement-key");
+    const store = readyStore(root);
+    const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
+    const request = {
+      activationRequestBytes: activationBytes(observation.observationDigest),
+      binding: { attemptAggregateId: ACTIVATION_AGGREGATE, nodeKey: NODE_KEY, sessionId: SESSION_ID },
+      graphSnapshot: structuredClone(GRAPH),
+      inputManifest: structuredClone(INPUT_MANIFEST),
+      launchTemplate: {
+        argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
+        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+        environment: {
+          COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
+          PATH: process.env["Path"] ?? join(systemRoot, "System32"),
+          SYSTEMROOT: systemRoot, TEMP: root, TMP: root,
+        },
+        launchSelection: SELECTION,
+        limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 120_000 },
+        runtime: { installedRoot, pinRoot: join(root, "pins"), quotedObservation: observation },
+      },
+    };
+    const service = createFoundationAttemptService({
+      captureResult: captureAnswer, launchOptions: { platform: "win32" },
+      lifecycle: lifecycleFor(store), store,
+    });
+    terminalProbe.forceOk = true;
+
+    try {
+      const outcome = await service.dispatch(request);
+
+      expect(outcome.ok).toBe(true);
+      expect(observedBoundaryProbe.launches).toHaveLength(1);
+      // THE DOUBLE NEVER STANDS IN FOR A DERIVATION: the production reader was still driven and
+      // still refused on this host's evidence. Only the gate's boolean was supplied.
+      expect(terminalProbe.results[0]).toMatchObject({
+        code: "EFFECT_TERMINAL_EVIDENCE_ABSENT", layer: "EFFECT_TERMINAL_LEDGER", ok: false,
+      });
+
+      // THE DURABLE ROW FIRST, because it is the audit a recovery reads rather than the argument
+      // the seam passed: the decision carries the stamp as `decidedAt` and the principal as a
+      // third of its own key. Both are drilled — an epoch stamp and a project principal each
+      // redden this assertion by name.
+      const settlement = store.readCommandDecisionsAfter(0n, 500).items.filter(
+        (decision) => decision.commandKind === BUDGET_LEDGER_COMMAND_KIND
+          && decision.key.commandId === "settle-attempt-1",
+      );
+      expect(settlement).toHaveLength(1);
+      expect(settlement[0]).toMatchObject({
+        decidedAt: DECIDED_AT,
+        key: {
+          commandId: "settle-attempt-1", principalId: SESSION_ID, projectId: PROJECT_ID,
+        },
+      });
+      // The two values a fabricated stamp and a project principal would have produced, named so
+      // the assertion above cannot pass by coincidence.
+      expect(DECIDED_AT).not.toBe(new Date(0).toISOString());
+      expect(SESSION_ID).not.toBe(PROJECT_ID);
+
+      // THEN THE CONTEXT THE SEAM BUILT, field for field. It carries what the decision key does
+      // not — `correlationId` and the attempt this settlement is for — and is drilled on its own
+      // (a mutated correlation reddens here and nowhere else).
+      expect(settlementProbe.calls).toHaveLength(1);
+      expect(settlementProbe.calls[0]).toStrictEqual({
+        attemptRef: "attempt-1",
+        context: {
+          commandId: "settle-attempt-1", correlationId: "budget-settlement-attempt-1",
+          decidedAt: DECIDED_AT, principalId: SESSION_ID,
+        },
+        projectId: PROJECT_ID,
+      });
+    } finally {
+      store.close();
+    }
+  }, 300_000);
+
+  /**
+   * THE INSTRUMENT'S OWN CONTROL. `toHaveLength(0)` above is only evidence if a call would have
+   * been seen; a probe wired to a module the service does not import would read zero forever.
+   */
+  it("records a settlement call when one is really made", () => {
+    const store = readyStore(scratch("settlement-probe-control"));
+    try {
+      const refused = applyProviderUsageToBudget(store, {
+        attemptRef: "attempt-absent",
+        context: {
+          commandId: "settle-attempt-absent", correlationId: "corr-probe",
+          decidedAt: DECIDED_AT, principalId: SESSION_ID,
+        },
+        projectId: PROJECT_ID,
+      });
+
+      // The production module answered — the probe forwards rather than replaces it.
+      expect(refused).toMatchObject({
+        code: "BUDGET_SETTLEMENT_RUN_ABSENT", layer: "BUDGET_SETTLEMENT_APPLICATION", ok: false,
+      });
+      expect(settlementProbe.calls).toHaveLength(1);
+      expect(settlementProbe.calls[0]).toMatchObject({ attemptRef: "attempt-absent" });
+    } finally {
+      store.close();
+    }
+  });
 });
