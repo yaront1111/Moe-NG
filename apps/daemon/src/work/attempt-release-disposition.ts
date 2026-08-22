@@ -40,7 +40,7 @@
 
 import { parseLeaseRecord, releaseProviderSlot, releaseWork } from "@moe/scheduler";
 import type {
-  AuthorityProof, LeaseRecord, ProviderSlotReleaseCommand, ProviderSlotReservation, ReleaseResult,
+  AuthorityProof, LeaseRecord, ProviderSlotReleaseCommand, ProviderSlotReservation,
 } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -49,11 +49,15 @@ import {
   carriesBoundaryClaim, deriveSafeBoundary, refuseBoundaryClaim,
 } from "./attempt-release-boundary.js";
 import {
+  carriesHandoffClaim, deriveHandoffBinding, refuseHandoffClaim,
+} from "./attempt-release-handoff.js";
+import { releaseRecordBody } from "./attempt-release-record.js";
+import {
   carriesTerminalClaim, deriveReleaseTerminal, refuseTerminalClaim,
 } from "./attempt-release-terminal.js";
 import type { ReleaseTerminalFlags } from "./attempt-release-terminal.js";
 import {
-  ATTEMPT_RELEASE_RECORD_VERSION, carryAuthorityRejection, carrySlotRejection, commitRelease,
+  carryAuthorityRejection, carrySlotRejection, commitRelease,
   durableActivation, readAttemptRelease, refuse, sameActivation, withOutcome,
 } from "./attempt-release-store.js";
 import type { AttemptReleaseOutcome } from "./attempt-release-store.js";
@@ -131,42 +135,6 @@ const slotReleaseCommand = (durable: ActivationLedgerRecord): ProviderSlotReleas
   requestId: durable.providerSlot.requestId, slotRef: durable.providerSlot.slotRef,
 });
 
-function releaseRecordBody(
-  bound: FoundationAttemptBound, durable: ActivationLedgerRecord,
-  result: Extract<ReleaseResult, { outcome: "DRAINING" | "RELEASED" }>, reason: string,
-  slot: ProviderSlotReservation,
-): Record<string, unknown> {
-  const { disposition, lease } = result;
-  return {
-    attemptAggregateId: bound.aggregateId,
-    // The SAFE-BOUNDARY TRANSACTION OUTCOME, not the activation slice. The row
-    // says what this release did to the attempt; the slice said RUNNING forever.
-    attemptRef: durable.attempt.attemptId, attemptState: result.outcome,
-    disposition: {
-      resumable: disposition.resumable, strongestReason: disposition.strongestReason,
-      terminalTarget: disposition.terminalTarget,
-    },
-    handoff: result.outcome === "RELEASED" ? { ...result.handoff } : null,
-    intentRefs: result.outcome === "DRAINING" ? [...result.intentRefs] : null,
-    lease: { ...lease },
-    leaseRef: lease.leaseId, leaseState: lease.state,
-    nodeKey: bound.nodeKey,
-    outcome: result.outcome,
-    // The SUCCESSOR the slot kernel answered on a settled boundary, and the
-    // untouched durable fact on a draining one — never a state composed here.
-    providerSlotRef: slot.slotRef,
-    providerSlotState: slot.state,
-    reason,
-    reasons: [...disposition.reasons],
-    recordVersion: ATTEMPT_RELEASE_RECORD_VERSION,
-    releasePending: result.releasePending,
-    // The KERNEL's answer for this release, which is NOT the disposition's own:
-    // an unsettled boundary is never resumable however resumable its reason set.
-    resumable: result.resumable,
-    sessionId: bound.sessionId,
-    truthClass: "DAEMON_VERIFIED",
-  };
-}
 
 /**
  * The one writer. Re-read the activation -> agree on identity -> take the lease
@@ -185,6 +153,7 @@ export function recordAttemptRelease(
   // request and the terminality predicate below only ever sees a real object.
   if (carriesBoundaryClaim(request)) return refuseBoundaryClaim();
   if (carriesTerminalClaim(request)) return refuseTerminalClaim();
+  if (carriesHandoffClaim(request)) return refuseHandoffClaim();
   const durable = durableActivation(store, bound);
   if ("ok" in durable) return durable;
   if (!sameActivation(durable, record)) return refuse("ATTEMPT_RELEASE_BINDING_MISMATCH");
@@ -213,6 +182,11 @@ export function recordAttemptRelease(
   // release work nothing proved finished.
   const terminal = deriveReleaseTerminal(store, bound, durable);
   if (!terminal.ok) return terminal;
+  // AND SO IS THE HANDOFF BINDING, before the kernel is asked: production passes
+  // a null scheduler handoff, so a binding derived after the kernel would never
+  // be written. It is a FACT about what the attempt handed off, not authority.
+  const handoff = deriveHandoffBinding(store, bound, durable);
+  if (!handoff.ok) return handoff;
   const released = releaseWork(lease, proofOf(lease),
     kernelRequest(request, boundary.safeBoundaryObserved, terminal.flags));
   if (!released.ok) return carryAuthorityRejection(released);
