@@ -4,6 +4,7 @@
  * with its OWN stable code at layer RECOVERY_ANCHOR, so a test can say which
  * fault was found rather than only that something was wrong.
  */
+import { createHash } from "node:crypto";
 import {
   cpSync,
   mkdirSync,
@@ -185,6 +186,78 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_DATABASE_MISMATCH");
+  });
+});
+
+/**
+ * The database is the one payload every restore must deliver, so it is the one
+ * payload the slot proof must cover. Before this, the proof listed artifact
+ * digests only: a restore with no artifacts could never verify (it burned its
+ * fence on prepare, wrote the slot, and then refused PERSISTENCE_UNPROVEN over
+ * an empty digest table, identically on every retry), while a restore WITH
+ * artifacts verified a database whose bytes nobody had ever read back.
+ */
+describe("recovery anchor proves the restored database, not only the artifacts", () => {
+  function slotDatabaseDigest(root: string, anchor: RecoveryAnchorRecord): string {
+    const bytes = readFileSync(join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME));
+    return createHash("sha256").update(bytes).digest("hex");
+  }
+
+  it("installs and verifies a restore that delivers only the database", async () => {
+    const root = temporaryDirectory("artifactless");
+    const result = await installRecoveryAnchor(
+      request(root, { payload: { artifacts: [], databaseBytes: restoredDatabaseBytes() } }),
+    );
+    expect(result.ok, result.ok ? "installed" : `${result.layer}/${result.code}`).toBe(true);
+    if (!result.ok) throw new Error("unreachable");
+    expect(result.outcome).toBe("INSTALLED");
+    expect(Object.keys(result.anchor.payloadDigests)).toEqual([]);
+
+    // A fresh reader agrees: the slot holds a proof and the proof holds.
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  it("carries the digest of the STAMPED database in the slot manifest", async () => {
+    const { root, anchor } = await installedRoot("dbdigest");
+    const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+
+    expect(manifest.databaseDigest).toBe(slotDatabaseDigest(root, anchor));
+    // Not the anchor's digest: that one describes the payload as delivered,
+    // and the install transaction rewrote pages after delivery. A proof taken
+    // from the anchor would fail every honest slot.
+    expect(manifest.databaseDigest).not.toBe(anchor.databaseDigest);
+  });
+
+  it("reports unverifiable bytes when the slot database no longer matches its proof", async () => {
+    const { root, anchor } = await installedRoot("dbtamper");
+    writeFileSync(
+      join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+      "not the restored database",
+    );
+
+    // Answered, not raised: these bytes are not a database SQLite can open,
+    // and a verifier that opened them before comparing them would throw.
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+  });
+
+  it("reports absent persistence proof when the slot manifest carries no database digest", async () => {
+    const { root, anchor } = await installedRoot("dbproofless");
+    const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+    const { databaseDigest: _dropped, ...withoutProof } = JSON.parse(
+      readFileSync(manifestPath, "utf8"),
+    );
+    writeFileSync(manifestPath, JSON.stringify(withoutProof));
+
+    // Artifacts and the stamped incarnation still agree, so only the missing
+    // database proof can answer, and "no proof" is not "bytes disagree".
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
   });
 });
 

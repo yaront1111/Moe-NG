@@ -29,6 +29,7 @@ import type {
 } from "./recovery-anchor-contracts.js";
 import {
   clearDirectory,
+  digestBytes,
   persistDirectoryDurably,
   persistFileDurably,
   publishFileAtomically,
@@ -87,8 +88,14 @@ export async function readStoredAnchor(
   return bytes === null ? null : decodeAnchorRecord(bytes);
 }
 
-function slotManifestBytes(anchor: RecoveryAnchorRecord): Uint8Array {
+/**
+ * `databaseDigest` is supplied by the caller rather than read off the anchor:
+ * the anchor digests the payload as delivered, and the slot's database stops
+ * being those bytes the moment the install transaction stamps it.
+ */
+function slotManifestBytes(anchor: RecoveryAnchorRecord, databaseDigest: string): Uint8Array {
   const manifest: RecoveryAnchorSlotManifest = {
+    databaseDigest,
     generationDigest: anchor.generationDigest,
     incarnationRef: anchor.incarnationRef,
     keyEpochRef: anchor.keyEpochRef,
@@ -98,6 +105,17 @@ function slotManifestBytes(anchor: RecoveryAnchorRecord): Uint8Array {
   return encoder.encode(JSON.stringify(manifest));
 }
 
+/** The digest of the database file as it sits in the slot, or null if unreadable. */
+async function digestSlotDatabase(slotRoot: string): Promise<string | null> {
+  const bytes = await readFileIfReadable(join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME));
+  return bytes === null ? null : digestBytes(bytes);
+}
+
+/**
+ * A manifest that does not carry a database digest is no persistence proof at
+ * all (the database is the one payload every restore must deliver), so it is
+ * answered exactly like a missing manifest rather than verified around.
+ */
 async function readSlotManifest(slotRoot: string): Promise<RecoveryAnchorSlotManifest | null> {
   const bytes = await readFileIfReadable(join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME));
   if (bytes === null) return null;
@@ -105,7 +123,8 @@ async function readSlotManifest(slotRoot: string): Promise<RecoveryAnchorSlotMan
     const parsed: unknown = JSON.parse(bytes.toString("utf8"));
     if (parsed === null || typeof parsed !== "object") return null;
     const candidate = parsed as RecoveryAnchorSlotManifest;
-    return candidate.slotManifestVersion === RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION
+    return candidate.slotManifestVersion === RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION &&
+      typeof candidate.databaseDigest === "string"
       ? candidate
       : null;
   } catch {
@@ -166,17 +185,23 @@ export async function verifySlot(
     return RECOVERY_ANCHOR_DATABASE_MISMATCH;
   }
 
-  const entries = Object.entries(manifest.payloadDigests);
-  if (entries.length === 0) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
-  for (const [logicalPath, digest] of entries) {
+  // An empty artifact set is a legal restore: the database is the required
+  // payload and it is digest-checked below, so there is nothing unproven here.
+  for (const [logicalPath, digest] of Object.entries(manifest.payloadDigests)) {
     if (!(await readBackMatches(artifactPath(slotRoot, logicalPath), digest))) {
       return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
     }
   }
 
+  // Absent is "no proof"; present-but-different is "bytes disagree with the
+  // proof", the same split the artifacts get. The digest is checked BEFORE the
+  // database is opened: SQLite opening a file it cannot parse throws, and a
+  // verifier's whole contract is to answer, never to raise.
   const databasePath = join(slotRoot, RECOVERY_ANCHOR_DATABASE_NAME);
-  if ((await readFileIfReadable(databasePath)) === null) {
-    return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  const observedDatabaseDigest = await digestSlotDatabase(slotRoot);
+  if (observedDatabaseDigest === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
+  if (observedDatabaseDigest !== manifest.databaseDigest) {
+    return RECOVERY_ANCHOR_SLOT_UNVERIFIABLE;
   }
   const store = SqliteEventStore.openForProject(databasePath, projectId);
   try {
@@ -204,9 +229,11 @@ async function writeInactiveSlot(
   for (const artifact of request.artifacts) {
     await persistFileDurably(artifactPath(slotRoot, artifact.logicalPath), artifact.bytes);
   }
+  // Truthful for exactly this instant: the bytes just written ARE the
+  // delivered payload. The post-stamp rewrite in runInstall replaces it.
   await persistFileDurably(
     join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME),
-    slotManifestBytes(anchor),
+    slotManifestBytes(anchor, anchor.databaseDigest),
   );
 }
 
@@ -237,11 +264,15 @@ export async function runInstall(
   if (stamped !== null) return stamped;
 
   // The transaction reopened and wrote the database, so the bytes flushed
-  // during writeInactiveSlot are no longer the bytes now on disk.
+  // during writeInactiveSlot are no longer the bytes now on disk, and neither
+  // is their digest. The proof is re-taken from the file as it now sits, and a
+  // file that cannot be read back yields no proof to write at all.
   fault?.("FILE_FSYNC");
+  const stampedDatabaseDigest = await digestSlotDatabase(slotRoot);
+  if (stampedDatabaseDigest === null) return RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN;
   await persistFileDurably(
     join(slotRoot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME),
-    slotManifestBytes(prepared),
+    slotManifestBytes(prepared, stampedDatabaseDigest),
   );
 
   fault?.("DIRECTORY_PERSISTENCE");
