@@ -3,9 +3,11 @@
  * measured?" — answered from durable events only, in ONE pass over the ledger aggregate.
  *
  * THE FOLD IS NOT THIS MODULE'S. Account balances come from `@moe/scheduler`'s own
- * `replayBudgetLedger` over the concatenated entry stream, and the committed successor is then
- * cross-checked against that replay. A projection that added up buckets itself would be a
- * second implementation of the arithmetic, free to drift from the reducer that governs.
+ * `replayBudgetLedger` over the per-record entry groups — each committed record's `appended` is
+ * the delta of exactly ONE applied command, so the record boundary is the command boundary the
+ * replay needs — and the committed successor is then cross-checked against that replay. A
+ * projection that added up buckets itself would be a second implementation of the arithmetic,
+ * free to drift from the reducer that governs.
  *
  * COVERAGE IS PER METER, AND UNKNOWN IS NOT ZERO. A meter whose consumption nobody measured
  * carries no `refundable` number at all — `null`, not `0` — because a zero refund claim is a
@@ -199,7 +201,9 @@ export function readCurrentBudgetLedger(
   const root = records[0];
   if (head === undefined || root === undefined) return budgetProjectionRefusal("BUDGET_PROJECTION_ABSENT");
   const entries = records.flatMap((record) => [...record.appended]);
-  const replay = replayBudgetLedger(root.authorization, entries);
+  // One group per record: a multi-meter movement replays as the single command that produced
+  // it, never as one movement per entry. A record that appended nothing folds to nothing.
+  const replay = replayBudgetLedger(root.authorization, records.map((record) => record.appended));
   if (!replay.ok) {
     const issue = replay.issues[0];
     return budgetProjectionRefusal(

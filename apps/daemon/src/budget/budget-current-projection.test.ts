@@ -26,7 +26,7 @@ import { canonicalBudgetJson, encodeBudgetLedgerRecord } from "./budget-ledger-c
 import { BUDGET_LEDGER_EVENT_TYPE, BUDGET_PROJECTION_CODES } from "./budget-ledger-contracts.js";
 import type { BudgetLedgerRecord } from "./budget-ledger-contracts.js";
 import { settleBudgetReservation } from "./budget-ledger-holds.js";
-import { authorizeBudgetRoot } from "./budget-ledger.js";
+import { allocateBudgetToChild, authorizeBudgetRoot, returnBudgetToParent } from "./budget-ledger.js";
 import {
   BUDGET_ACCOUNT_REF,
   GOAL_ID,
@@ -42,8 +42,10 @@ import {
   AUTHORIZED,
   CHILD,
   accepted,
+  authorizeInput,
   context,
   currentLedger,
+  movementInput,
   observation,
   seedActivatedHold,
   seedFundedChild,
@@ -93,8 +95,13 @@ describe("the current projection replays the durable ledger", () => {
 
       const current = projected(read(store));
 
-      // THE FOLD IS THE REDUCER'S. Nothing here re-adds a bucket.
-      const replay = replayBudgetLedger(current.authorization, current.entries);
+      // THE FOLD IS THE REDUCER'S. Nothing here re-adds a bucket. The seed committed exactly
+      // two commands — the root authorization and one allocation — so the command grouping is
+      // recoverable here from the entry kinds alone.
+      const replay = replayBudgetLedger(current.authorization, [
+        current.entries.filter((entry) => entry.kind === "ROOT_OPENED"),
+        current.entries.filter((entry) => entry.kind === "ALLOCATED"),
+      ]);
       expect(replay.ok).toBe(true);
       expect(canonicalBudgetJson(current.accounts)).toBe(canonicalBudgetJson(replay.state.accounts));
       expect(current.accounts.length).toBe(2);
@@ -117,6 +124,29 @@ describe("the current projection replays the durable ledger", () => {
       expect(Object.isFrozen(current)).toBe(true);
       expect(Object.isFrozen(current.meters)).toBe(true);
       expect(Object.isFrozen(tokens)).toBe(true);
+    });
+  });
+
+  it("projects a ledger whose committed movements each span several meters", () => {
+    withBudgetStore("projection-multi-meter", (store) => {
+      seedDurableBindings(store);
+      accepted(authorizeBudgetRoot(store, authorizeInput()));
+      // Each writer commits ONE record per command, so a two-meter movement is a two-entry
+      // `appended` group — the exact shape a per-entry replay folds to a divergent successor.
+      accepted(allocateBudgetToChild(store, movementInput("cmd-allocate-multi",
+        [{ meter: "tokens", amount: 400 }, { meter: "seconds", amount: 120 }])));
+      accepted(returnBudgetToParent(store, movementInput("cmd-return-multi",
+        [{ meter: "tokens", amount: 400 }, { meter: "seconds", amount: 120 }])));
+
+      const current = projected(read(store));
+
+      // Live application advanced each account once PER COMMAND, never once per meter.
+      expect(current.accounts.find((account) => account.accountId === BUDGET_ACCOUNT_REF)?.version).toBe(2);
+      expect(current.accounts.find((account) => account.accountId === CHILD)?.version).toBe(1);
+      expect(meterOf(current, "tokens").buckets.available).toBe(1_000);
+      expect(meterOf(current, "seconds").buckets.available).toBe(600);
+      // The exposed stream stays flat: two ROOT_OPENED plus two entries per movement.
+      expect(current.entries).toHaveLength(6);
     });
   });
 

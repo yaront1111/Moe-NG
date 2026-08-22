@@ -2325,8 +2325,10 @@ it("opens, funds, drains and closes a conserved account through the root exports
   const close: BudgetCloseCommand = { accountId: LEDGER_CHILD, expectedVersion: 1 };
   const closed: BudgetLedgerState = ledgerState(scheduler.closeBudgetAccount(returned, close));
   expect(accountOf(closed, LEDGER_CHILD)?.state).toBe("CLOSED");
-  // The recorded stream folds back to the same state through the same published core.
-  expect(ledgerState(scheduler.replayBudgetLedger(AUTHORIZATION, closed.entries))).toEqual(closed);
+  // The recorded stream folds back to the same state through the same published core. Every
+  // command in this walk moved exactly one meter, so singleton groups ARE its command grouping.
+  expect(ledgerState(scheduler.replayBudgetLedger(AUTHORIZATION,
+    closed.entries.map((entry) => [entry])))).toEqual(closed);
 });
 
 it("refuses a stale parent version from the root with BUDGET_ACCOUNT_STALE_VERSION", () => {

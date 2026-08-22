@@ -158,7 +158,8 @@ describe("closure and replay", () => {
     const live = must(allocateToChild(funded(), move({
       parentAccountId: CHILD, childAccountId: GRANDCHILD, childOwnerRef: "node:2",
       amounts: [{ meter: ATTEMPTS, amount: 3 }] })));
-    const replayed = must(replayBudgetLedger(AUTHORIZATION, live.entries));
+    const replayed = must(replayBudgetLedger(AUTHORIZATION, [
+      live.entries.slice(0, 2), live.entries.slice(2, 3), live.entries.slice(3)]));
     expect(replayed).toStrictEqual(live);
     expect(Object.isFrozen(replayed)).toBe(true);
     expect(Object.isFrozen(replayed.accounts)).toBe(true);
@@ -166,6 +167,47 @@ describe("closure and replay", () => {
     expect(Object.isFrozen(account(replayed, CHILD)?.meters)).toBe(true);
     expect(Object.isFrozen(bucket(replayed, CHILD, ATTEMPTS))).toBe(true);
     expectConserved(replayed);
+  });
+
+  it("replays a multi-meter creation as ONE movement: version parity and ownerRef on every entry", () => {
+    const live = must(allocateToChild(opened(), move({
+      amounts: [{ meter: ATTEMPTS, amount: 4 }, { meter: MS, amount: 250 }] })));
+    const replayed = must(replayBudgetLedger(AUTHORIZATION, [
+      live.entries.slice(0, 2), live.entries.slice(2)]));
+    expect(replayed).toStrictEqual(live);
+    // One command advanced each side once, not once per meter.
+    expect(account(replayed, ROOT)?.version).toBe(1);
+    expect(account(replayed, CHILD)?.version).toBe(0);
+    const rebuilt = replayed.entries.filter((entry) => entry.kind === "ALLOCATED");
+    expect(rebuilt).toHaveLength(2);
+    for (const entry of rebuilt) expect(entry.ownerRef).toBe("node:1");
+    expectConserved(replayed);
+  });
+
+  it("folds an empty command group to nothing: a hold moves units without a movement entry", () => {
+    const live = funded();
+    const replayed = must(replayBudgetLedger(AUTHORIZATION, [
+      live.entries.slice(0, 2), [], live.entries.slice(2), []]));
+    expect(replayed).toStrictEqual(live);
+    expectConserved(replayed);
+  });
+
+  it("refuses a group that is not one command's balanced double entry", () => {
+    const inverse = must(returnToParent(funded(), onFunded()));
+    // ALLOCATED and RETURNED folded into one group cannot be one command.
+    expect(codesOf(replayBudgetLedger(AUTHORIZATION, [
+      inverse.entries.slice(0, 2), inverse.entries.slice(2),
+    ]))).toStrictEqual(["BUDGET_ACCOUNT_COMMAND_MALFORMED"]);
+    // Two same-kind movements to two different children are two commands, not one.
+    const forked = withSibling();
+    expect(codesOf(replayBudgetLedger(AUTHORIZATION, [
+      forked.entries.slice(0, 2), forked.entries.slice(2),
+    ]))).toStrictEqual(["BUDGET_ACCOUNT_COMMAND_MALFORMED"]);
+    // Positive control: the SAME stream grouped at its command boundaries folds cleanly, so
+    // the refusals above indict the grouping and not the entries.
+    expect(replayBudgetLedger(AUTHORIZATION, [
+      forked.entries.slice(0, 2), forked.entries.slice(2, 3), forked.entries.slice(3),
+    ]).ok).toBe(true);
   });
 });
 
