@@ -1,5 +1,5 @@
 import type { SqliteEventStore } from "@moe/store";
-import { describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { readCurrentBudgetCoverage } from "./budget-coverage-reader.js";
 import type { BudgetCoverageResult } from "./budget-coverage-reader.js";
@@ -15,6 +15,17 @@ import {
 import { reserveBudgetForAdmission } from "./budget-ledger-holds.js";
 import { authorizeBudgetRoot } from "./budget-ledger.js";
 import {
+  GOAL_ID as SETTLEMENT_GOAL_ID,
+  PROJECT_ID as SETTLEMENT_PROJECT_ID,
+  activatedStore,
+  applySettlement,
+  cleanupRestoreHarnesses,
+  cleanupSettlementScratchRoots,
+  commitRun,
+  heldOf,
+  usageRows,
+} from "./budget-settlement-fixtures.js";
+import {
   AGGREGATE,
   accepted,
   authorizeInput,
@@ -27,14 +38,28 @@ import {
  *
  * Everything below is seeded through PRODUCTION writers — `authorizeBudgetRoot`,
  * `allocateBudgetToChild` (inside `seedFundedChild`) and `reserveBudgetForAdmission`. No raw
- * event planting, no `seedActivatedHold`, no settlement fixture: a reader certified against
- * state only a fixture can build proves the fixture, not the path.
+ * event planting and no `seedActivatedHold`: a reader certified against state only a fixture can
+ * build proves the fixture, not the path.
  *
- * THE TWO SETTLEMENT-DEPENDENT WORLDS ARE ABSENT ON PURPOSE, NOT BY OVERSIGHT. `settleReservation`
- * and `reconcileSettlement` have ZERO production callers at this HEAD (measured, excluding tests,
- * fixtures and the defining module), so PARTIAL and measured-COMPLETE cannot be reached by any
- * production writer. They are named `it.todo` below with their gate, rather than seeded around.
+ * PARTIAL IS PRODUCTION-REACHABLE AND IS EXERCISED BELOW (task-f432799c). It is driven through
+ * `applyProviderUsageToBudget`, the daemon's production caller of `settleBudgetReservation`
+ * (budget-settlement-application.ts:167), over the settlement world in
+ * `budget-settlement-fixtures.ts` — still production writers end to end, so the discipline above
+ * is preserved rather than broken.
+ *
+ * MEASURED-COMPLETE REMAINS GATED, ON ONE WRITER ALONE. At commit 9c09252
+ * `reconcileBudgetSettlement` (budget-ledger-holds.ts:284) had ZERO production callers:
+ * `git grep -n "reconcileBudgetSettlement" -- apps/daemon/src | grep -v "\.test\.ts"` returned
+ * only that definition and one prose line. Re-run that command rather than trusting this
+ * sentence — it is anchored at a named commit precisely so it can be checked, and a gate written
+ * against "this HEAD" silently goes false instead. The arm stays `it.todo` until a production
+ * writer reaches that function.
  */
+
+// The settlement world mints scratch roots and harness stores; this suite owns their teardown
+// rather than letting the fixture module register hooks across files.
+afterEach(cleanupRestoreHarnesses);
+afterAll(cleanupSettlementScratchRoots);
 
 const read = (store: SqliteEventStore): BudgetCoverageResult =>
   readCurrentBudgetCoverage(store, PROJECT_ID, GOAL_ID);
@@ -191,9 +216,56 @@ describe("the budgets/coverage reader refuses without ever inventing a standing"
     });
   });
 
-  // GATED PENDING task-a91e9fe2 — settleBudgetReservation and reconcileBudgetSettlement have ZERO
-  // production callers at this HEAD, so no production writer can reach a settled record. Seeding
-  // these through budget-transition-fixtures would certify a path production cannot run.
-  it.todo("GATED PENDING task-a91e9fe2: serves PARTIAL for a production-applied lower-bound receipt");
-  it.todo("GATED PENDING task-a91e9fe2: serves measured-COMPLETE after a production-applied settlement");
+  /**
+   * PARTIAL, REACHED THE WAY PRODUCTION REACHES IT (task-f432799c).
+   *
+   * Nothing here is seeded by this suite's budget-only writers, and nothing is planted: the
+   * reservation comes from a real `effect.activate`, the receipt from `commitProviderRunRecord`,
+   * the measurement identities from the scheduler's own `normalizeUsageMeasurement`, and the
+   * settlement from `applyProviderUsageToBudget` — which is the daemon's only production caller
+   * of `settleBudgetReservation` (budget-settlement-application.ts:167). That is the whole point
+   * of the arm: a reader certified against state only a fixture can build proves the fixture.
+   */
+  it("(task-f432799c) serves PARTIAL for a production-applied lower-bound receipt", () => {
+    const store = activatedStore("coverage-partial");
+    const held = heldOf(store);
+    const [meter] = held.meters;
+    if (meter === undefined) throw new Error("the reservation must hold a meter");
+    commitRun(store, held.attemptRef, usageRows(held.attemptRef,
+      held.meters.map((entry) => ({ coverage: "PARTIAL", meter: entry, quantity: 1 } as const))));
+
+    const settled = applySettlement(store, held.attemptRef) as Record<string, unknown>;
+    // Served, not merely un-refused. An arm that accepted a refusal here would assert the
+    // reader's behaviour on a store where no settlement ever landed.
+    if (settled["ok"] !== true) {
+      throw new Error(`the production settlement must be accepted, got ${String(settled["code"])}`
+        + `@${String(settled["layer"])}`);
+    }
+
+    // Read the coverage for the store THIS arm seeded, through the settlement world's own
+    // identities, rather than through the suite's `read` helper. The two identity sets are equal
+    // at commit 9c09252 (bootstrap-test-fixtures.ts:36-37 project-1/goal-1, re-exported by
+    // budget-ledger-fixtures.ts:49; restore-test-harness.ts:38 defines the same PROJECT_ID
+    // independently), and the aliased import means this arm does not depend on that coincidence.
+    const coverage = readCurrentBudgetCoverage(store, SETTLEMENT_PROJECT_ID, SETTLEMENT_GOAL_ID);
+    if (!coverage.ok) throw new Error(`coverage must be served, refused ${coverage.code}`);
+    const projection = coverage.meters.find((entry) => entry.meter === meter);
+    if (projection === undefined) throw new Error(`no coverage row for ${meter}`);
+
+    expect(projection.coverage).toBe("PARTIAL");
+    // The conserved position survives the settlement: the unmeasured remainder is HELD, which is
+    // what makes this a lower bound rather than a completed measurement.
+    expect(projection.buckets.quarantined).toBeGreaterThan(0);
+    expect(projection.buckets.meter).toBe(meter);
+    // refundable is non-null ONLY at COMPLETE (budget-current-projection.ts:184). Asserting NULL
+    // is what separates PARTIAL from COMPLETE; re-stating the enum would not.
+    expect(projection.refundable).toBeNull();
+  });
+
+  // GATED at commit 9c09252, and the gate is measured, not remembered: `reconcileBudgetSettlement`
+  // (budget-ledger-holds.ts:284) has ZERO production callers — `git grep -n
+  // "reconcileBudgetSettlement" -- apps/daemon/src | grep -v "\.test\.ts"` returns only that
+  // definition and one prose line. Until a production writer reaches it, measured-COMPLETE cannot
+  // be produced by any path this suite is allowed to seed. Owner: task-f432799c.
+  it.todo("(task-f432799c) serves measured-COMPLETE after a production-applied settlement");
 });
