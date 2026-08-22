@@ -28,12 +28,14 @@ import {
   type VerifierClock,
 } from "./verifier-process-contract.js";
 import {
+  MAX_CONSUMED_GRANT_MEMORY,
   createNodeProcessLauncher,
   runVerifierProcess,
   type LaunchedProcess,
   type ProcessLauncher,
   type RunVerifierProcessInput,
   type RunVerifierProcessResult,
+  type VerifierActivation,
   type VerifierExitObservation,
 } from "./verifier-process.js";
 
@@ -451,6 +453,73 @@ describe("duplicate delivery cannot execute the recipe twice", () => {
         layer: "REGISTRY",
       });
       expect(invocations()).toBe(1);
+    },
+    SLOW,
+  );
+
+  it(
+    "names the collision, not the consumption, when a settled grant returns with another recipe",
+    async () => {
+      // What a settled grant leaves behind is the recipe digest as well as the
+      // id. Keeping only the id would answer a genuine two-recipe collision with
+      // GRANT_ALREADY_CONSUMED, which names the wrong defect and the wrong layer.
+      const { launcher, invocations } = counting(createNodeProcessLauncher());
+      const input = inputFor("settled-divergent", nodeScript("process.exit(0)"), launcher);
+      acceptedRun(await runVerifierProcess(input));
+      const other = {
+        ...input,
+        recipe: recipeFor(nodeScript('process.stdout.write("b")')),
+        clock: fixedClock(),
+      };
+      expect(refusedByProcess(await runVerifierProcess(other))).toEqual({
+        code: "VERIFIER_PROCESS_GRANT_RUN_DIVERGENT",
+        layer: "REGISTRY",
+      });
+      expect(invocations()).toBe(1);
+    },
+    SLOW,
+  );
+
+  it(
+    "drops the longest-settled grant past the cap and still refuses the newest",
+    async () => {
+      // Settled through a fake launcher rather than real children: the bound is
+      // on how many grant ids the wrapper retains, not on how many processes a
+      // host can spawn. Recipe, manifest and observation are built once, so the
+      // only thing that varies across the loop is the grant id being remembered.
+      const closed = Promise.resolve<VerifierExitObservation>({ exitCode: 0, signal: null });
+      const { launcher, invocations } = counting(fakeLauncher(closed));
+      const base = inputFor("cap-base", nodeScript("process.exit(0)"), launcher);
+      const activationFor = (seed: string): VerifierActivation => {
+        const commit = commitFor(seed);
+        return { intent: commit.intent, attempt: commit.attempt, grant: commit.grant };
+      };
+      const settled = async (activation: VerifierActivation): Promise<RunVerifierProcessResult> =>
+        runVerifierProcess({ ...base, activation, clock: fixedClock() });
+
+      const oldest = activationFor("cap-0");
+      const nextOldest = activationFor("cap-1");
+      const newest = activationFor(`cap-${MAX_CONSUMED_GRANT_MEMORY}`);
+      acceptedRun(await settled(oldest));
+      acceptedRun(await settled(nextOldest));
+      for (let index = 2; index < MAX_CONSUMED_GRANT_MEMORY; index += 1) {
+        acceptedRun(await settled(activationFor(`cap-${index}`)));
+      }
+      acceptedRun(await settled(newest));
+      expect(invocations()).toBe(MAX_CONSUMED_GRANT_MEMORY + 1);
+
+      // One id over the cap evicts exactly one id, so everything but the very
+      // first is still refused. That pair is what "the memory stays at the cap"
+      // means: not merely bounded, and not wholesale forgotten either.
+      const consumed = { source: "SUPERVISOR", code: "GRANT_ALREADY_CONSUMED", layer: "GRANT" };
+      expect(refusedByForeign(await settled(newest))).toEqual(consumed);
+      expect(refusedByForeign(await settled(nextOldest))).toEqual(consumed);
+      expect(invocations()).toBe(MAX_CONSUMED_GRANT_MEMORY + 1);
+
+      // Probed last: a forgotten grant is admitted, and being admitted puts it
+      // back into the memory, which would evict an id the two lines above read.
+      acceptedRun(await settled(oldest));
+      expect(invocations()).toBe(MAX_CONSUMED_GRANT_MEMORY + 2);
     },
     SLOW,
   );
