@@ -191,6 +191,12 @@ const isRefusal = (
   value: ReleaseTerminalSplit | ReleaseTerminalRefusal,
 ): value is ReleaseTerminalRefusal => "ok" in value;
 
+/** A re-read that THROWS counts as moved: an unreadable horizon is not a stable one, and
+ *  this module owes its caller the fail-closed direction on every uncertainty. */
+function horizonMoved(store: SqliteEventStore, captured: bigint): boolean {
+  try { return store.readEventHorizon() !== captured; } catch { return true; }
+}
+
 /**
  * The whole answer, or a refusal that grants nothing. Reads only; no clock, no randomness, and no
  * consultation of `FoundationAttemptRecorded`, a process exit or a recovery inventory — none of
@@ -225,6 +231,14 @@ export function deriveReleaseTerminalEvidence(
   if (isRefusal(effects)) return effects;
   const resources = splitResources(store, bound.activationAggregateId, identity.projectId);
   if (isRefusal(resources)) return resources;
+  // The horizon was the EFFECT walk's bound and the resource split never consulted it, so an
+  // answer composed while the store grew could report a terminal TRUE over membership that has
+  // since moved. "Unknown" and "terminal" demand opposite handling from a caller about to
+  // release, so a bound this answer can no longer vouch for refuses instead of being reported.
+  if (horizonMoved(store, horizon)) {
+    return refuseReleaseTerminal("RELEASE_TERMINAL_RESOURCE_UNKNOWN",
+      "the event horizon moved while this answer was composed");
+  }
   const effectsTerminal = provenTerminal(effects);
   const resourcesTerminal = provenTerminal(resources);
   return Object.freeze({

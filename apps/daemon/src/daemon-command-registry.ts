@@ -21,6 +21,9 @@ import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/sess
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
+import {
+  RESOURCE_RECONCILE_COMMAND_KIND, runResourceReconcileCommand,
+} from "./work/resource-reconcile-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -155,6 +158,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
     const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
+    const reconcile = kind === RESOURCE_RECONCILE_COMMAND_KIND;
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
@@ -198,6 +202,31 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           resultCode: outcome.resultCode,
         });
       }
+      // Its request is identity plus one adapter observation, assembled from the
+      // ENVELOPE and the AUTHENTICATED principal, so it is built at its own edge
+      // rather than materialized as request bytes like the codec-backed families.
+      if (reconcile) {
+        const outcome = runResourceReconcileCommand(store, {
+          commandId: envelope.commandId,
+          correlationId: envelope.correlationId,
+          payload: envelope.payload,
+          principalId: principal.principalId,
+          projectId,
+        });
+        if (!outcome.ok) {
+          throw new DomainRefusal(
+            outcome.code, outcome.refusedBy, outcome.upstreamCode ?? outcome.code,
+          );
+        }
+        return Object.freeze({
+          commandId: envelope.commandId,
+          disposition: "DECIDED" as const,
+          effectId: outcome.attemptRef,
+          // The ANSWER's own authority word, read off the durable reader's result:
+          // a literal here would be this seam restating what the record already says.
+          resultCode: outcome.authority,
+        });
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
@@ -234,7 +263,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation || journal
+    const requiredCapability = activation || continuation || journal || reconcile
       ? CAPABILITIES.WORK
       : recovery
         ? CAPABILITIES.ADMIN

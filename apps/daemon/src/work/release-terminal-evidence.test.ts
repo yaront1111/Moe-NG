@@ -717,3 +717,68 @@ describe("release terminal evidence — an unreadable resource STATE", () => {
     });
   });
 });
+
+/**
+ * A store that GROWS once, mid-derivation. The plant fires on the terminal-effect walk, which
+ * runs strictly AFTER the horizon is captured (`walkTerminalIntents` is called with it), so the
+ * bound this answer was composed under is provably stale by the time the answer is returned.
+ * The planted row is of a FOREIGN type, so the walk's own index never sees it: the horizon is
+ * the only thing that moves.
+ * The proxy delegates with `bind(target)` for the same reason `countingStore` does: a receiver
+ * of the proxy breaks the store's private fields.
+ */
+function growingStore(store: SqliteEventStore, label: string): SqliteEventStore {
+  let grown = false;
+  return new Proxy(store, {
+    get(target, property): unknown {
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== "function") return value;
+      const call = (value as (...args: unknown[]) => unknown).bind(target);
+      if (property !== "readEventsByTypeAfter") return call;
+      return (...args: unknown[]): unknown => {
+        const page = call(...args);
+        // The EFFECT_TERMINAL family, and only it: the ACTIVATION_LEDGER scan runs BEFORE the
+        // horizon is captured, and growing the store under that scan refuses
+        // FOUNDATION_BINDING_SCAN_INCOMPLETE — a real refusal, but not this arm's subject.
+        if (!grown && args[0] === EFFECT_TERMINAL_EVENT_TYPE) {
+          grown = true;
+          plant(store, {
+            aggregateId: `horizon-aggregate-${label}`, eventType: NOISE_EVENT_TYPE,
+            expectedVersion: 0, label: `horizon-${label}`,
+            payload: encoder.encode(`horizon-${label}`),
+          });
+        }
+        return page;
+      };
+    },
+  }) as SqliteEventStore;
+}
+
+describe("release terminal evidence — the horizon it was composed under", () => {
+  it("refuses a terminal verdict when the horizon MOVED under the answer", () => {
+    const store = seed("horizon-moved");
+    // NEGATIVE CONTROL on the same seed: over a quiet store this world is releasable, so the
+    // refusal below is the moved horizon answering and not a world that was never terminal.
+    expect(evidenceOf(deriveReleaseTerminalEvidence(store, SELECTOR))).toMatchObject({
+      releasable: true, resourcesTerminal: true,
+    });
+    const before = store.readEventHorizon();
+
+    const outcome = deriveReleaseTerminalEvidence(growingStore(store, "moved"), SELECTOR);
+
+    // POSITIVE CONTROL on the fixture: the store really did grow during the derivation.
+    expect(store.readEventHorizon()).toBeGreaterThan(before);
+    expect(refusalOf(outcome)).toEqual({
+      code: "RELEASE_TERMINAL_RESOURCE_UNKNOWN", layer: OWN_LAYER, upstream: null,
+    });
+  });
+
+  it("still answers over a store that stays quiet through the whole derivation", () => {
+    const store = seed("horizon-quiet");
+    const before = store.readEventHorizon();
+    expect(evidenceOf(deriveReleaseTerminalEvidence(store, SELECTOR))).toMatchObject({
+      releasable: true,
+    });
+    expect(store.readEventHorizon()).toBe(before);
+  });
+});

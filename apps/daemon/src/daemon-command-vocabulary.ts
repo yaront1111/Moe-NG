@@ -13,6 +13,8 @@ import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
   from "./recovery/recovery-completion-digest.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
+import { RESOURCE_RECONCILE_COMMAND_KIND, RESOURCE_RECONCILE_PAYLOAD_KEYS }
+  from "./work/resource-reconcile-command.js";
 import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
 
 /**
@@ -60,7 +62,8 @@ export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
-  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND;
+  | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
+  | typeof RESOURCE_RECONCILE_COMMAND_KIND;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -84,6 +87,11 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // Appending a dead-end journal is WORK authority, not admin: the agent holding
   // the attempt's lease is exactly who records why an approach failed.
   if (kind === JOURNAL_APPEND_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Reconciling the resources of the attempt an agent already holds is that attempt's
+  // own authority, and design 312 admits the kind even from a FENCED attempt. The
+  // safety here is not a wider capability: the payload cannot state an outcome, and
+  // the scheduler reducers decide what an adapter report means.
+  if (kind === RESOURCE_RECONCILE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
@@ -109,6 +117,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
     [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
     [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,
+    [RESOURCE_RECONCILE_COMMAND_KIND]: RESOURCE_RECONCILE_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
