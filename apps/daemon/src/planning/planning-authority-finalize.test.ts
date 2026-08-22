@@ -311,13 +311,14 @@ describe("daemon finalize seam — the authority-absent arm", () => {
 
 describe("daemon finalize seam — the daemon owns two ingress refusals", () => {
   const SMUGGLED_KEYS = Object.freeze([
-    "acceptanceContract", "authority", "envelope", "planRevision", "sealedHashes",
+    "acceptanceContract", "authority", "envelope", "graphContentBytesBase64", "planRevision",
+    "sealedHashes",
   ]);
   const SMUGGLE_CASES = SMUGGLED_KEYS.flatMap((key) =>
     (["command", "payload"] as const).map((surface) => ({ key, surface })));
 
   it("generates one smuggling case per forbidden key on both surfaces", () => {
-    expect(SMUGGLE_CASES.length).toBe(10);
+    expect(SMUGGLE_CASES.length).toBe(12);
     expect(PLANNING_AUTHORITY_FINALIZE_CODES).toEqual([
       "PLANNING_FINALIZE_BODIES_SUPPLIED", "PLANNING_FINALIZE_CHAIN_MIXED",
     ]);

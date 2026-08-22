@@ -30,10 +30,14 @@ export type PlanningAuthorityFinalizeCode = (typeof PLANNING_AUTHORITY_FINALIZE_
  * A caller may never present authority content at finalize. `authority` and `envelope` are here
  * because the core reducer IGNORES unknown command members, so a smuggled one would otherwise
  * ride into the decision's request bytes unexamined; `sealedHashes` is here because the run's
- * hashes are the reducer's OUTPUT, never the caller's input.
+ * hashes are the reducer's OUTPUT, never the caller's input. `graphContentBytesBase64` joins them
+ * for the first reason and one more: propose is where a graph body ORIGINATES, and by finalize
+ * the durable record is the only body source there is — bytes arriving here could only restate
+ * or contradict a row already sealed under its own recomputed hash.
  */
 const FORBIDDEN_BODY_KEYS: readonly string[] = Object.freeze([
-  "acceptanceContract", "authority", "envelope", "planRevision", "sealedHashes",
+  "acceptanceContract", "authority", "envelope", "graphContentBytesBase64", "planRevision",
+  "sealedHashes",
 ]);
 
 export type PlanningChainTerminal =

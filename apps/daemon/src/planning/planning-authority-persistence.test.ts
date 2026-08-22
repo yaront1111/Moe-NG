@@ -23,6 +23,7 @@ import {
   decodeAcceptanceContractBytes,
   decodePlanRevisionBytes,
 } from "@moe/core";
+import { GRAPH_CONTENT_ISSUE_CODES, GRAPH_CONTENT_LAYERS } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -46,6 +47,8 @@ import {
   buildPlanningAuthorityLeg,
   planningAuthorityAggregateId,
 } from "./planning-authority-persistence.js";
+import { graphBodyAggregateId, readGraphBody } from "./graph-body-record.js";
+import { PRIMARY, SECONDARY } from "./graph-query-test-fixtures.js";
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -468,5 +471,352 @@ describe("plan.propose authority persistence — the builder refuses before any 
     ));
     if (result.kind !== "LEG") throw new Error("the control was refused");
     expect(result.leg.expectedVersion).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------------------
+// task-cd1784ce: the proposed graph body rides the propose decision.
+//
+// Every arm drives the PRODUCTION `plan.propose` handler through `send`; none calls the
+// ingress directly, because DoD-3 forbids a fixture-only proof. The content is REAL codec
+// output (`graph-query-test-fixtures`' PRIMARY/SECONDARY, built by `encodeGraphContent`),
+// so the hash a body is stored under is one only the codec could have produced.
+// ---------------------------------------------------------------------------------------
+
+const CONTENT = PRIMARY;
+const OTHER_CONTENT = SECONDARY;
+const CONTENT_HASH = PRIMARY.graphContentHash;
+const BODY_AGGREGATE = graphBodyAggregateId(PROJECT_ID, CONTENT_HASH);
+const INGRESS_LAYER = "PLANNING_GRAPH_CONTENT_INGRESS";
+const CONTENT_MEMBER = "graphContentBytesBase64";
+const SECOND_RUN_ID = "run-2";
+/** Four bytes whose canonical base64 is "+//+AQ==" — it exercises BOTH non-standard alphabet
+ *  characters and padding, neither of which the real body's encoding happens to contain. */
+const ALPHABET_SAMPLE = Buffer.from(Uint8Array.from([251, 255, 254, 1])).toString("base64");
+
+const base64Of = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
+
+/** Both bodies must state the SAME graph hash: core refuses PLAN_AUTHORITY_GRAPH_CONTENT_MISMATCH. */
+function boundChain(statedHash: string, overrides: Json = {}): readonly Json[] {
+  const chain = [...planningChain()] as Json[];
+  const revision = planRevision({
+    graphBinding: { graphContentHash: statedHash, graphRevisionRef: GRAPH_REVISION_REF },
+  });
+  const contract = acceptanceContract({
+    applicability: {
+      graphContentHash: statedHash, graphRevisionRef: GRAPH_REVISION_REF,
+      nodeIds: ["node-a"], nodeKind: "LEAF",
+    },
+  });
+  const last = chain[chain.length - 1] as Json;
+  chain[chain.length - 1] = {
+    ...last,
+    authority: { acceptanceContract: contract, planRevision: revision },
+    submissionHash: (revision as Json)["planHash"],
+    ...overrides,
+  };
+  return chain;
+}
+
+/** The accepted control: a body whose bytes recompute to the hash the plan revision states. */
+const contentChain = (overrides: Json = {}): readonly Json[] =>
+  boundChain(CONTENT_HASH, { [CONTENT_MEMBER]: base64Of(CONTENT.bytes), ...overrides });
+
+interface Residue {
+  readonly authorityEvents: number;
+  readonly bodyEvents: number;
+  readonly runEvents: number;
+}
+
+const residueOf = (store: SqliteEventStore): Residue => ({
+  authorityEvents: store.readEvents(AUTHORITY_AGGREGATE).length,
+  bodyEvents: store.readEvents(BODY_AGGREGATE).length,
+  runEvents: store.readEvents(RUN_ID).length,
+});
+
+function refusalOf(outcome: ReturnType<typeof propose>): { code: string; refusedBy: string } {
+  if (outcome.ok) throw new Error("expected a refusal, received an accepted decision");
+  return { code: outcome.code, refusedBy: outcome.refusedBy };
+}
+
+/** Names the refusal in the failure message: "ok was false" does not say which layer spoke. */
+function acceptedOf(outcome: ReturnType<typeof propose>): ReturnType<typeof propose> {
+  if (!outcome.ok) throw new Error(`expected acceptance, got ${outcome.code}@${outcome.refusedBy}`);
+  return outcome;
+}
+
+/** The four-hash seal the finalize terminal states; `graphContentHash` is what DoD-1 is about. */
+function finalizeCommand(planHash: unknown, graphContentHash: string): Json {
+  return {
+    commandId: "chain-finalize",
+    expectedVersion: 4,
+    kind: "planning.finalize_submission",
+    revision: {
+      dependencyHash: hex64("d1"), graphContentHash,
+      graphRevisionRef: GRAPH_REVISION_REF, planHash, qualityHash: hex64("dd"),
+    },
+    witness: {
+      attemptTerminalRef: "attempt-terminal-1", effectTerminalRef: "effect-terminal-1",
+      nodeSummaries: [{ executionBearing: true, nodeKey: "node-a" }],
+      providerSlotTerminalRef: "slot-terminal-1", resourcesTerminalRef: "resources-terminal-1",
+      truthClass: "DAEMON_VERIFIED",
+    },
+  };
+}
+
+describe("plan.propose graph content — the accepted control stores the body", () => {
+  it("admits a propose carrying the body and stores it under the RECOMPUTED hash", () => {
+    const store = readyStore();
+
+    const outcome = acceptedOf(propose(store, contentChain()));
+
+    expect(outcome.ok).toBe(true);
+    const body = readGraphBody(store, PROJECT_ID, CONTENT_HASH);
+    expect(body.ok).toBe(true);
+    if (!body.ok) throw new Error(`body refused: ${body.code}`);
+    // Asserted against the CODEC's own value, never a literal: the bytes on disk are the bytes
+    // `encodeGraphContent` produced, which is the only thing that makes the hash meaningful.
+    expect(Array.from(body.bytes)).toEqual(Array.from(CONTENT.bytes));
+    expect(body.graphContentHash).toBe(CONTENT.graphContentHash);
+  });
+
+  it("keeps the run event and the authority event on the SAME accepted decision", () => {
+    const store = readyStore();
+    const before = decisionCount(store);
+
+    acceptedOf(propose(store, contentChain()));
+
+    expect(decisionCount(store)).toBe(before + 1);
+    expect(residueOf(store)).toEqual({ authorityEvents: 1, bodyEvents: 1, runEvents: 1 });
+  });
+
+  it("stores the body under a key that is NOT the snapshot's structural identity", () => {
+    const store = readyStore();
+
+    acceptedOf(propose(store, contentChain()));
+
+    const body = readGraphBody(store, PROJECT_ID, CONTENT_HASH);
+    if (!body.ok) throw new Error(`body refused: ${body.code}`);
+    // dec-64b2391c OPTION A: the structural identity and the content hash are different facts,
+    // and this is the arm that survives a rename of either one.
+    expect(body.snapshotIdentity).not.toBe(CONTENT_HASH);
+    expect(store.readEvents(graphBodyAggregateId(PROJECT_ID, body.snapshotIdentity)).length).toBe(0);
+  });
+});
+
+describe("plan.propose graph content — the sealed hash is reachable as a body", () => {
+  it("seals the recomputed hash at finalize and serves that hash back from the store", () => {
+    const store = readyStore();
+    const chain = contentChain();
+    acceptedOf(propose(store, chain));
+    const planHash = ((chain[chain.length - 1] as Json)["authority"] as Json);
+    const revision = (planHash as Json)["planRevision"] as Json;
+
+    const finalized = propose(
+      store, [finalizeCommand(revision["planHash"], CONTENT_HASH)], "cmd-finalize",
+    );
+
+    expect(finalized.ok).toBe(true);
+    if (!finalized.ok) throw new Error(`finalize refused: ${finalized.code}`);
+    const result = JSON.parse(decoder.decode(finalized.decision.resultBytes)) as Json;
+    const sealed = (result["state"] as Json)["sealedHashes"] as Json;
+    expect(sealed["graphContentHash"]).toBe(CONTENT_HASH);
+    // The fact task-eacea969 needs: the SEALED value is reachable as a body, not just equal to one.
+    const body = readGraphBody(store, PROJECT_ID, String(sealed["graphContentHash"]));
+    expect(body.ok).toBe(true);
+  });
+});
+
+describe("plan.propose graph content — a body that does not recompute is refused", () => {
+  it("refuses PLANNING_GRAPH_CONTENT_HASH_MISMATCH when the bytes hash to another graph", () => {
+    const store = readyStore();
+    // Both bodies state OTHER_CONTENT's hash, so core's own cross-check is satisfied and the
+    // only disagreement left is the one this row exists to catch.
+    const chain = boundChain(OTHER_CONTENT.graphContentHash, {
+      [CONTENT_MEMBER]: base64Of(CONTENT.bytes),
+    });
+
+    expect(refusalOf(propose(store, chain))).toEqual({
+      code: "PLANNING_GRAPH_CONTENT_HASH_MISMATCH",
+      refusedBy: INGRESS_LAYER,
+    });
+  });
+
+  it("leaves ZERO residue on a mismatch — no run event, no authority event, no body row", () => {
+    const store = readyStore();
+    const chain = boundChain(OTHER_CONTENT.graphContentHash, {
+      [CONTENT_MEMBER]: base64Of(CONTENT.bytes),
+    });
+    const before = decisionCount(store);
+
+    expect(propose(store, chain).ok).toBe(false);
+
+    expect(residueOf(store)).toEqual({ authorityEvents: 0, bodyEvents: 0, runEvents: 0 });
+    expect(store.readEvents(graphBodyAggregateId(PROJECT_ID, OTHER_CONTENT.graphContentHash))
+      .length).toBe(0);
+    expect(decisionCount(store)).toBe(before);
+  });
+});
+
+describe("plan.propose graph content — malformed members are refused by this seam", () => {
+  it.each([
+    ["a number", 7],
+    ["an object", { bytes: "AAAA" }],
+    ["an empty string", ""],
+  ])("refuses %s as PLANNING_GRAPH_CONTENT_MALFORMED at the ingress layer", (_label, member) => {
+    const store = readyStore();
+
+    expect(refusalOf(propose(store, contentChain({ [CONTENT_MEMBER]: member })))).toEqual({
+      code: "PLANNING_GRAPH_CONTENT_MALFORMED",
+      refusedBy: INGRESS_LAYER,
+    });
+    expect(residueOf(store)).toEqual({ authorityEvents: 0, bodyEvents: 0, runEvents: 0 });
+  });
+
+  /**
+   * `Buffer.from(s, "base64")` never throws: whitespace, the url-safe alphabet and missing
+   * padding all decode best-effort. Each row asserts its spelling actually DIFFERS from the
+   * canonical one and still decodes to the same bytes, so a transform that silently no-ops
+   * cannot make the row assert nothing.
+   *
+   * The alphabet and padding rows use a four-byte sample rather than the real body because
+   * PRIMARY's base64 happens to contain no `+`, no `/` and no `=` — measured, not assumed: the
+   * first version of these rows was GREEN-on-the-control for exactly that reason. Sampling a
+   * spelling the fixture cannot express is how a canonical-form arm goes vacuous.
+   */
+  it.each([
+    ["leading and trailing whitespace", base64Of(CONTENT.bytes), (t: string): string => ` ${t} `],
+    ["an embedded newline", base64Of(CONTENT.bytes),
+      (t: string): string => `${t.slice(0, 8)}
+${t.slice(8)}`],
+    ["the url-safe alphabet", ALPHABET_SAMPLE,
+      (t: string): string => t.replace(/\+/gu, "-").replace(/\//gu, "_")],
+    ["no padding", ALPHABET_SAMPLE, (t: string): string => t.replace(/=+$/u, "")],
+  ])("refuses %s as PLANNING_GRAPH_CONTENT_MALFORMED at the ingress layer",
+    (_label, canonical, spell) => {
+      const member = spell(canonical);
+      expect(member).not.toBe(canonical);
+      expect(Array.from(Uint8Array.from(Buffer.from(member, "base64"))))
+        .toEqual(Array.from(Uint8Array.from(Buffer.from(canonical, "base64"))));
+      const store = readyStore();
+
+      expect(refusalOf(propose(store, contentChain({ [CONTENT_MEMBER]: member })))).toEqual({
+        code: "PLANNING_GRAPH_CONTENT_MALFORMED",
+        refusedBy: INGRESS_LAYER,
+      });
+      expect(residueOf(store)).toEqual({ authorityEvents: 0, bodyEvents: 0, runEvents: 0 });
+    });
+});
+
+describe("plan.propose graph content — a codec refusal travels unrestamped", () => {
+  it("hands back the CODEC's own code and layer for bytes that are not content", () => {
+    const store = readyStore();
+    const truncated = CONTENT.bytes.slice(0, Math.floor(CONTENT.bytes.length / 2));
+
+    const refusal = refusalOf(
+      propose(store, contentChain({ [CONTENT_MEMBER]: base64Of(truncated) })),
+    );
+
+    // The point of the arm is WHICH layer answered: a daemon restatement would still be a
+    // refusal, and a test that only asserted "refused" could not tell the two apart.
+    // Measured, then pinned: the exact pair, plus the roster membership that says WHY it is the
+    // codec's to answer. A daemon restatement would still be a refusal, so "refused" alone
+    // cannot tell the two apart — which layer spoke is the assertion.
+    expect(refusal).toEqual({
+      code: "GRAPH_CONTENT_UNREADABLE",
+      refusedBy: "GRAPH_CONTENT_CODEC",
+    });
+    expect(refusal.refusedBy).not.toBe(INGRESS_LAYER);
+    expect(GRAPH_CONTENT_LAYERS).toContain(refusal.refusedBy);
+    expect(GRAPH_CONTENT_ISSUE_CODES).toContain(refusal.code);
+    expect(residueOf(store)).toEqual({ authorityEvents: 0, bodyEvents: 0, runEvents: 0 });
+  });
+});
+
+describe("plan.propose graph content — the seam is TOLERANT until task-c96ef2d1", () => {
+  it("admits today's propose with no member and writes no body row", () => {
+    const store = readyStore();
+
+    // task-c96ef2d1fbb9420c9034ecea62d4eecd flips the member MANDATORY and re-points THIS arm.
+    // Until it lands, absent = exactly today's behaviour, and that tolerance is the reason the
+    // shipped journeys still seal hex64("c0ffee").
+    acceptedOf(propose(store, authorityChain()));
+
+    // BOTH aggregates, and the second one is the load-bearing half. `authorityChain()` states
+    // hex64("c0ffee"), so a seam that invented a row would file it under THAT hash, not under
+    // the real content's — checking only BODY_AGGREGATE looks at an aggregate the absent path
+    // could never touch, and a drill that emits an empty-bytes leg survives it. Measured: it did.
+    expect(store.readEvents(BODY_AGGREGATE).length).toBe(0);
+    expect(store.readEvents(graphBodyAggregateId(PROJECT_ID, hex64("c0ffee"))).length).toBe(0);
+    expect(store.readEvents(AUTHORITY_AGGREGATE).length).toBe(1);
+  });
+});
+
+/** The same chain under a different run id: the body aggregate is keyed by CONTENT, not by run. */
+function chainForRun(runId: string): readonly Json[] {
+  return contentChain().map((entry) =>
+    (entry as Json)["kind"] === "planning.create_draft" ? { ...(entry as Json), runId } : entry);
+}
+
+describe("plan.propose graph content — one body row however many runs propose it", () => {
+  it("admits a SECOND RUN proposing the same content and leaves exactly ONE body row", () => {
+    const store = readyStore();
+    acceptedOf(propose(store, contentChain()));
+
+    // The body aggregate is keyed by (project, contentHash) and event ids are GLOBALLY unique
+    // here, so a second emission of `graph-body-<hash>` THROWS DurableIdConflictError rather
+    // than refusing — the task-16a6a2b1 failure. Two runs sharing one graph is the reachable
+    // shape of that collision, and the pre-read guard is what makes this arm pass at all.
+    const second = send(store, envelope(
+      "plan.propose", 0, { commands: chainForRun(SECOND_RUN_ID), runId: SECOND_RUN_ID },
+      "cmd-plan.propose-run-2",
+    ));
+
+    expect(acceptedOf(second).ok).toBe(true);
+    expect(store.readEvents(BODY_AGGREGATE).length).toBe(1);
+    expect(store.readEvents(SECOND_RUN_ID).length).toBe(1);
+  });
+
+  it("replays a byte-identical resubmit without a second body row", () => {
+    const store = readyStore();
+    acceptedOf(propose(store, contentChain()));
+
+    acceptedOf(propose(store, contentChain()));
+
+    expect(store.readEvents(BODY_AGGREGATE).length).toBe(1);
+  });
+});
+
+describe("plan.propose graph content — the FINALIZE terminal refuses a body outright", () => {
+  it("refuses PLANNING_FINALIZE_BODIES_SUPPLIED at DAEMON_INGRESS, before the fold", () => {
+    const store = readyStore();
+    const chain = contentChain();
+    acceptedOf(propose(store, chain));
+    const revision = ((chain[chain.length - 1] as Json)["authority"] as Json)["planRevision"];
+    const before = residueOf(store);
+
+    const refused = propose(store, [{
+      ...finalizeCommand((revision as Json)["planHash"], CONTENT_HASH),
+      [CONTENT_MEMBER]: base64Of(CONTENT.bytes),
+    }], "cmd-finalize-smuggled");
+
+    // TWO layers can now refuse content bytes, so the arm pins WHICH: the ingress fence answers
+    // before the fold, not this row's own PLANNING_GRAPH_CONTENT_* codes.
+    expect(refusalOf(refused)).toEqual({
+      code: "PLANNING_FINALIZE_BODIES_SUPPLIED",
+      refusedBy: "DAEMON_INGRESS",
+    });
+    expect(refusalOf(refused).code).not.toBe("PLANNING_GRAPH_CONTENT_MALFORMED");
+    expect(residueOf(store)).toEqual(before);
+  });
+
+  it("admits the IDENTICAL body on a PROPOSE terminal — the fence is about the terminal", () => {
+    const store = readyStore();
+
+    // The positive control. Without it, the arm above is equally consistent with "this key is
+    // never admissible anywhere", which is the opposite of what this row landed.
+    acceptedOf(propose(store, contentChain()));
+
+    expect(store.readEvents(BODY_AGGREGATE).length).toBe(1);
   });
 });

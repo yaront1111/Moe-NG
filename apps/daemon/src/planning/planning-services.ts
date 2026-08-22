@@ -154,7 +154,12 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
     expectedVersion: versionOf(ledger, runId),
     result,
   };
-  return commitAcceptedLegs(store, request, plan, [authority.leg]);
+  // THREE legs at most, one decision. A body row cannot survive a refused propose, and an
+  // accepted propose cannot half-land: the store fences all three together or writes none.
+  const extraLegs = authority.graphBodyLeg === undefined
+    ? [authority.leg]
+    : [authority.leg, authority.graphBodyLeg];
+  return commitAcceptedLegs(store, request, plan, extraLegs);
 };
 
 interface DurableRun {

@@ -32,6 +32,9 @@ import {
 import type { AcceptanceContractRefusal, PlanRevisionRefusal } from "@moe/core";
 import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
+import { admitProposedGraphContent } from "./planning-graph-content-ingress.js";
+import type { PlanningGraphContentRefusalLayer } from "./planning-graph-content-ingress.js";
+
 const LAYER = "PLANNING_AUTHORITY_PERSISTENCE" as const;
 /** One aggregate per run, so the bodies of two runs can never share a fence. */
 const AGGREGATE_PREFIX = "planning-authority/";
@@ -47,7 +50,11 @@ export type PlanningAuthorityPersistenceLayer = typeof LAYER;
  */
 export type PlanningAuthorityRefusalLayer =
   | AcceptanceContractRefusal["layer"] | PlanRevisionRefusal["layer"]
-  | PlanningAuthorityPersistenceLayer;
+  | PlanningAuthorityPersistenceLayer
+  // The proposed BODY is admitted on this seam too, and a codec refusal keeps its own layer, so
+  // the union widens rather than restamping. This is what makes `proposePlan` passing the value
+  // into `refuse` a COMPILE-TIME check that SERVICE_REFUSED_BY still carries every layer.
+  | PlanningGraphContentRefusalLayer;
 
 export const PLANNING_AUTHORITY_PERSISTENCE_CODES = Object.freeze([
   "PLANNING_AUTHORITY_MALFORMED",
@@ -89,7 +96,10 @@ export type PlanningAuthorityLegResult =
     readonly layer: PlanningAuthorityRefusalLayer;
   }
   | {
-    readonly binding: PlanningAuthorityBinding; readonly kind: "LEG";
+    readonly binding: PlanningAuthorityBinding;
+    /** Present only when the terminal carried a body no row holds yet (task-cd1784ce). */
+    readonly graphBodyLeg?: ExpectedVersionDecisionLeg;
+    readonly kind: "LEG";
     readonly leg: ExpectedVersionDecisionLeg;
   };
 
@@ -215,6 +225,16 @@ export function buildPlanningAuthorityLeg(
   if (bodies.planHash !== submissionHash) {
     return refused("PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH", LAYER);
   }
+  // The STATED hash is `bodies.graphContentHash`, read verbatim off the decoded plan revision
+  // above, so the hash the body is verified against and the hash the revision seals are the same
+  // value by construction rather than by a second read of the caller's command.
+  const content = admitProposedGraphContent({
+    lastCommand: input.lastCommand,
+    projectId: input.request.projectId,
+    statedGraphContentHash: bodies.graphContentHash,
+    store: input.store,
+  });
+  if (content.kind === "REFUSED") return refused(content.code, content.layer);
   const authorityRef = planningAuthorityAggregateId(input.runId);
   const bodiesDigest = bodiesDigestOf(bodies.planBytes, bodies.contractBytes);
   const payload = {
@@ -236,6 +256,7 @@ export function buildPlanningAuthorityLeg(
     binding: Object.freeze({
       authorityRef, bodiesDigest, criteriaDigest: bodies.criteriaDigest, planHash: bodies.planHash,
     }),
+    ...(content.kind === "LEG" ? { graphBodyLeg: content.leg } : {}),
     kind: "LEG" as const,
     leg: Object.freeze({
       aggregateId: authorityRef,

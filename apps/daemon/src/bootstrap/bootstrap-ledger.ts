@@ -3,6 +3,7 @@ import type { JsonValue, RuntimeError } from "@moe/contracts";
 import {
   ACCEPTANCE_CONTRACT_LAYERS, APPROVAL_AUTHORITY_LAYERS, PLAN_REVISION_LAYERS,
 } from "@moe/core";
+import { GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_RECURSION_LAYERS } from "@moe/scheduler";
 import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
@@ -66,8 +67,16 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   "APPROVAL_RUN_BINDING",
   // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
   // travels under the layer that produced it rather than under a daemon restatement.
+  // Same discipline at the graph-content ingress: its layer const stays private and `proposePlan`
+  // passing the closed TYPE into `refuse` is what makes this literal verified, not asserted.
+  "PLANNING_GRAPH_CONTENT_INGRESS",
   ...ACCEPTANCE_CONTRACT_LAYERS,
   ...APPROVAL_AUTHORITY_LAYERS,
+  // BOTH scheduler rosters, spread rather than retyped. What a graph-content READER may observe
+  // is strictly wider than what that codec OWNS: `deriveNodeAuthoritySet`'s verdict travels out
+  // unrestamped, so a body refusal can arrive under any of the recursion's thirteen layers.
+  ...GRAPH_CONTENT_LAYERS,
+  ...NODE_AUTHORITY_RECURSION_LAYERS,
   ...PLAN_REVISION_LAYERS,
 ] as const);
 
