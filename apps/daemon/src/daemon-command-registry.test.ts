@@ -54,7 +54,7 @@ const ROWS: readonly Row[] = [
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
     kind: "effect.activate", layer: INGRESS,
-    payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
+    payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
   // An empty payload carries no base64 blob, so the seam materializes no bytes and the

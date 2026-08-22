@@ -43,8 +43,12 @@ const encoder = new TextEncoder();
  */
 const ADVERTISED: readonly string[] = PAYLOAD_KEYS[EFFECT_ACTIVATE_COMMAND_KIND];
 
-/** The one section this row makes optional. Every other advertised key stays mandatory. */
-const TOLERATED = "budget";
+/**
+ * The section task-b8b69e74 RETIRED. It is no longer in the advertised roster, so it is not a
+ * key the fence can serve — a payload carrying it is refused like any other unadvertised key.
+ * Named here so the arms below can say what they are about; every advertised key is mandatory.
+ */
+const RETIRED = "budget";
 
 const MALFORMED = Object.freeze({ code: "ACTIVATION_INGRESS_REQUEST_MALFORMED", ok: false });
 
@@ -72,7 +76,18 @@ const verdictFor = (keys: readonly string[]): ReturnType<typeof decodeActivation
 
 const without = (key: string): readonly string[] => ADVERTISED.filter((name) => name !== key);
 
-describe("effect.activate payload fence — exactly two tolerated shapes", () => {
+/** The three ways a caller could still try to name the retired section. */
+const RETIRED_SHAPES: readonly (readonly [string, unknown])[] = Object.freeze([
+  Object.freeze(["a full section", { admission: { admissionRef: "adm-1" }, view: {} }] as const),
+  Object.freeze(["an empty section", {}] as const),
+  Object.freeze(["a null section", null] as const),
+]);
+
+/** The advertised shape plus a `budget` key carrying `section`, and nothing else. */
+const withRetired = (section: unknown): ReturnType<typeof decodeActivationRequestBytes> =>
+  decodeActivationRequestBytes(bytesOf({ ...payloadOf(ADVERTISED), [RETIRED]: section }));
+
+describe("effect.activate payload fence — exactly ONE tolerated shape", () => {
   it("accepts the full advertised section set", () => {
     // Also DoD 3's first direction: every key the vocabulary advertises is a key
     // the fence serves. If the roster ever advertised a section the fence does
@@ -80,46 +95,51 @@ describe("effect.activate payload fence — exactly two tolerated shapes", () =>
     expect(verdictFor(ADVERTISED).ok).toBe(true);
   });
 
-  it("accepts the same payload minus the budget section", () => {
-    // THE MIGRATION WINDOW. Red before task-8be27625's fence edit:
-    // `keys.length === EFFECT_ACTIVATE_PAYLOAD_KEYS.length` refused this shape.
-    expect(verdictFor(without(TOLERATED)).ok).toBe(true);
+  it("advertises the retired section nowhere — it is not an accepted key at all", () => {
+    // The window task-8be27625 opened for links 2 and 3 is CLOSED, and this is
+    // the positive half of that claim: `budget` is absent from what the seam
+    // advertises, so the arms below refuse an UNADVERTISED key rather than a key
+    // the fence merely declines. The sweep's own case count is asserted here so
+    // an empty RETIRED_SHAPES could not pass the refusal arm vacuously.
+    expect(ADVERTISED).not.toContain(RETIRED);
+    expect(RETIRED_SHAPES.length).toBeGreaterThan(0);
   });
 
-  it("still passes the tolerated section through untouched when it is present", () => {
-    // The tolerance is not a silent drop: a sender that has NOT migrated must
-    // still see its bytes reach the domain stages, or link 2/3's incremental
-    // migration would change behaviour for the senders that have not moved yet.
-    const decoded = verdictFor(ADVERTISED);
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) return;
-    const section = decoded.request.payload[TOLERATED];
-    // STRUCTURAL, not `toStrictEqual`: the bounded JSON parser builds every
-    // object with `Object.create(null)` (bounded-json-parser.ts:87) as a
-    // prototype-pollution defence, so a strict comparison against a plain
-    // literal fails on the prototype alone and reports "no visual difference".
-    // The prototype is pinned on its own line rather than lost in that failure.
-    expect(section).toEqual({ opaque: TOLERATED });
-    expect(Object.getPrototypeOf(section)).toBeNull();
-  });
+  it.each(RETIRED_SHAPES)(
+    "refuses a payload carrying %s of retired caller budget", (_label, section) => {
+      // UNREPRESENTABLE, not ignored and not silently dropped. The VALUE cannot
+      // make the difference — all three shapes answer identically, with the
+      // fence's pre-existing code and no new vocabulary. The refusing LAYER is
+      // asserted through production in activation-ingress-dead-input.test.ts,
+      // where the seam that stamps it actually runs.
+      expect(withRetired(section)).toStrictEqual(MALFORMED);
+    });
 });
 
 describe("effect.activate payload fence — every other shape refuses, code unchanged", () => {
   /**
-   * Derived from the ADVERTISED roster minus the one tolerated key, so a future
-   * edit that drops `budget` from the roster (link 4's end state, arriving
-   * early) changes this list's length and reddens the count assertion below
-   * rather than silently shrinking the sweep.
+   * EVERY advertised key is mandatory now that the tolerated one is retired, so this list IS
+   * the roster. The count assertion below reddens if the roster grows or shrinks under the
+   * sweep rather than letting the sweep quietly narrow with it.
    */
-  const MANDATORY = without(TOLERATED);
+  const MANDATORY = ADVERTISED;
 
   it("sweeps every mandatory section — a sweep that generated nothing would pass vacuously", () => {
-    expect(MANDATORY.length).toBe(ADVERTISED.length - 1);
-    expect(MANDATORY.length).toBeGreaterThan(0);
-    expect(MANDATORY).not.toContain(TOLERATED);
+    // PINNED TO LITERALS ON PURPOSE. The per-section arms below are GENERATED from
+    // the roster, so they shrink with it: drop a section from
+    // `EFFECT_ACTIVATE_PAYLOAD_KEYS` and its own refusal arm disappears rather than
+    // failing. Measured — removing "lease" left this suite green except for an
+    // unrelated cardinality arm. Comparing the roster to itself
+    // (`MANDATORY.length === ADVERTISED.length`) is the same tautology one level up.
+    // These two lines are the only place the contract is stated independently of the
+    // code under test, which is what makes the generated sweep non-vacuous.
+    expect(MANDATORY.length).toBe(5);
+    expect([...MANDATORY].sort()).toStrictEqual(
+      ["activation", "effect", "lease", "liveClaims", "slot"]);
+    expect(MANDATORY).not.toContain(RETIRED);
   });
 
-  for (const section of without(TOLERATED)) {
+  for (const section of MANDATORY) {
     it(`refuses a payload missing the mandatory ${section} section`, () => {
       expect(verdictFor(without(section))).toStrictEqual(MALFORMED);
     });
@@ -136,16 +156,17 @@ describe("effect.activate payload fence — every other shape refuses, code unch
   });
 
   it("refuses a full-cardinality payload with one section swapped for an unknown key", () => {
-    // MEMBERSHIP STAYS EXACT WHILE THE COUNT RELAXES. This payload has the same
-    // cardinality as the accepted full shape, so any implementation that widens
-    // the fence by counting alone admits it.
-    expect(verdictFor([...without(TOLERATED), "smuggled"])).toStrictEqual(MALFORMED);
+    // MEMBERSHIP IS EXACT, NOT ARITHMETIC. Same cardinality as the accepted
+    // shape, one advertised section replaced, so a fence that counted alone
+    // would admit it.
+    expect(verdictFor([...ADVERTISED.slice(1), "smuggled"])).toStrictEqual(MALFORMED);
   });
 
-  it("refuses a budget-less-cardinality payload with one section swapped for an unknown key", () => {
-    // The same trap one cardinality down: five keys, four of them advertised.
-    // An implementation accepting "five or six keys, all known" would still
-    // refuse this, but one accepting "five or six keys" would not.
-    expect(verdictFor([...without(TOLERATED).slice(0, 4), "smuggled"])).toStrictEqual(MALFORMED);
+  it("refuses a full-cardinality payload whose RETIRED budget key replaces a section", () => {
+    // The trap this row's own edit creates, and the reason the arm above is not
+    // enough: `budget` is a name the fence used to know. A fence that kept the
+    // retired key in any tolerated shape, or that widened to "five keys, four of
+    // them advertised", would accept this. Exact membership refuses it.
+    expect(verdictFor([...ADVERTISED.slice(1), RETIRED])).toStrictEqual(MALFORMED);
   });
 });

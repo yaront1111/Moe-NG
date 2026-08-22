@@ -96,28 +96,6 @@ const RESOURCE_ROW = {
   state: "ACTIVE",
 } as const;
 
-/** Foreign account, foreign meter, 100 available: none of it may reach the hold. */
-const BUDGET_VIEW = {
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN",
-  version: 2,
-} as const;
-
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
-
 const EFFECT_INTENT = {
   aggregateId: "agg-1",
   desiredState: "ACTIVE",
@@ -163,10 +141,10 @@ const AGGREGATE_ID = deriveActivationAggregateId(
   EFFECT_INTENT.idempotencyKey,
 );
 
+/** The ONE accepted shape since task-b8b69e74: five sections, no caller budget. */
 function activationPayload(): Record<string, unknown> {
   return structuredClone({
     activation: ACTIVATION_SECTION,
-    budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
     liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -188,7 +166,7 @@ function activateBytes(payload: Record<string, unknown>): Uint8Array {
   }));
 }
 
-describe("effect.activate ingress — the tolerated budget section is dead input", () => {
+describe("effect.activate ingress — the caller budget section is UNREPRESENTABLE", () => {
   /** Foreign account, foreign meter, inflated balance, a COMPLETE coverage claim
    *  and a forged ALLOW gate: every lever a caller could hope to pull. */
   const HOSTILE_BUDGET = {
@@ -242,45 +220,60 @@ describe("effect.activate ingress — the tolerated budget section is dead input
     };
   }
 
-  it("commits the same hold with a hostile section as with no section at all", () => {
+  it("REFUSES a hostile budget section outright, and writes nothing", () => {
+    // WHAT THIS ARM USED TO SAY, and why it is re-pointed rather than deleted: while
+    // task-8be27625's window was open, this file proved the tolerated section was DEAD
+    // INPUT — the same hold committed with a hostile section as with none at all. Link 4
+    // (task-b8b69e74) retires the key, so the stronger property replaces the weaker one:
+    // the section cannot be SENT, and the refusal is the fence's pre-existing code and
+    // layer rather than any new vocabulary.
+    const store = readyStore("hostile-refused");
+    const before = readDurableLedger(store, PROJECT_ID).decisionCount;
     const hostile = activationPayload();
     hostile["budget"] = structuredClone(HOSTILE_BUDGET);
-    const absent = activationPayload();
-    delete absent["budget"];
 
-    const fromHostile = committedBudget("hostile", hostile);
-    const fromAbsent = committedBudget("absent", absent);
+    const outcome = runEffectActivateCommand(store, activateBytes(hostile));
 
-    // NON-VACUOUS FIRST: two empty or degenerate holds would compare equal too, so
-    // the hostile run is pinned to a real hold whose every caller-supplied lever
-    // was ignored, before the two runs are compared at all.
-    expect(fromHostile.embedded).toMatchObject({
+    expect(outcome).toMatchObject({
+      advisoryOnly: true,
+      authority: "NONE",
+      code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
+      ok: false,
+      refusedBy: ACTIVATION_INGRESS_LAYER,
+    });
+    expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
+    expect(store.readEvents(AGGREGATE_ID)).toHaveLength(0);
+  });
+
+  it("derives the hold from DURABLE authority for the one accepted shape", () => {
+    // The positive half a refusal arm cannot carry: refusing the hostile section proves
+    // nothing about what the accepted shape commits. Every lever the retired section used
+    // to offer is named here as a NEGATIVE against the durable hold, so this cannot pass
+    // by committing an empty or degenerate one.
+    const committed = committedBudget("absent", activationPayload());
+
+    expect(committed.embedded).toMatchObject({
       admissionRef: "activation:cmd-activate-1", state: "RESERVED",
     });
-    expect(fromHostile.embedded.accountId).not.toBe(HOSTILE_BUDGET.view.accountId);
-    expect(fromHostile.embedded.admissionRef).not.toBe(HOSTILE_BUDGET.admission.admissionRef);
-    expect(fromHostile.embedded.lines.map((line) => line.meter)).not.toContain("eur");
-    expect(fromHostile.embedded.lines.length).toBeGreaterThan(0);
-    // A `find` returning undefined on BOTH runs would make the head comparison
-    // pass by comparing nothing to nothing.
-    expect(fromHostile.head).toBeDefined();
-    expect(fromAbsent.head).toBeDefined();
-
-    expect(fromAbsent.embedded).toStrictEqual(fromHostile.embedded);
-    expect(fromAbsent.head).toStrictEqual(fromHostile.head);
+    expect(committed.embedded.accountId).not.toBe(HOSTILE_BUDGET.view.accountId);
+    expect(committed.embedded.admissionRef).not.toBe(HOSTILE_BUDGET.admission.admissionRef);
+    expect(committed.embedded.lines.map((line) => line.meter)).not.toContain("eur");
+    expect(committed.embedded.lines.length).toBeGreaterThan(0);
+    // A `find` returning undefined would make the head half of this arm vacuous.
+    expect(committed.head).toBeDefined();
   });
 
   it("keeps the fence's own refusal code and layer for every other cardinality", () => {
     // DoD 1's "refusing LAYER unchanged", asserted through PRODUCTION rather than
     // at the decoder: the decode result carries only a code, and the layer is
-    // stamped at `activation-ingress.ts`'s refusal seam. A four-key payload is a
-    // shape the widened fence must still refuse.
+    // stamped at `activation-ingress.ts`'s refusal seam. A payload one section
+    // SHORT of the accepted shape must refuse exactly as a payload one section
+    // OVER it does — the arm above is the over case, this is the under case.
     const store = readyStore("fence-layer");
     // The seeded project has already committed its own decisions, so the
     // zero-authority measure is "unchanged", never "zero".
     const before = readDurableLedger(store, PROJECT_ID).decisionCount;
     const short = activationPayload();
-    delete short["budget"];
     delete short["slot"];
 
     const outcome = runEffectActivateCommand(store, activateBytes(short));

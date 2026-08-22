@@ -44,7 +44,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "work.resume",
     payloadKeys: ["attemptRef", "successorRef"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "effect.activate",
-    payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
+    payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE", kind: "recovery.complete",
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
   // STANDALONE and WORK-capable: the agent holding the attempt's lease is exactly
