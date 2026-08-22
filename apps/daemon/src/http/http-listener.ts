@@ -8,6 +8,7 @@ import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
+import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { answerGatedGraphQuery, gateGraphQuery } from "../planning/graph-query.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
@@ -17,10 +18,12 @@ import {
   credentialOf,
   isLoopbackHost,
   originOf,
+  pairingTokenMatches,
   protocolVersionOf,
   readBoundedBody,
   readEventAcknowledgeRequest,
   readEventRequest,
+  readPairingToken,
   refuse,
   statusFor,
 } from "./http-listener-guards.js";
@@ -33,6 +36,7 @@ import {
   resolveControlRoomAssetRoot,
 } from "./static-asset-host.js";
 import type { ControlRoomAssetRoot } from "./static-asset-host.js";
+import type { SessionHandshakePort } from "../identity/session-handshake.js";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -87,6 +91,20 @@ export interface StartListenerOptions {
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
+  /**
+   * The runtime credential mint behind `/session/pair`, and the source of the
+   * `projectId` `/bootstrap` answers. Absent means neither handshake route is
+   * available and both refuse `LISTENER_PAIRING_UNAVAILABLE` - a daemon hosting
+   * no page needs no handshake.
+   */
+  readonly pairing?: SessionHandshakePort;
+  /**
+   * The one-time pairing token this listener will honour EXACTLY once. Minted by
+   * the entry when hosting is on and passed in here; written to no durable store
+   * and compared in constant time. Absent (hosting off) means `/session/pair`
+   * refuses `LISTENER_PAIRING_UNAVAILABLE` - there is nothing to pair against.
+   */
+  readonly pairingToken?: string;
   readonly port?: number;
   /** Absent means the stream route refuses rather than inventing an empty page. */
   readonly subscriptions?: SubscriptionPort;
@@ -97,6 +115,21 @@ const EVENT_PAGE_PATH = "/events/read";
 const EVENT_ACKNOWLEDGE_PATH = "/events/ack";
 const AFFORDANCE_PATH = "/affordances/read";
 const GRAPH_GET_PATH = "/graph/get";
+
+/**
+ * The handshake surface. Deliberately OUTSIDE `JSON_ROUTES` because it does not
+ * share their guard set: `/bootstrap` carries no credential and no CSRF (a page
+ * must be able to call it first), and `/session/pair` carries the CSRF and Origin
+ * gate but no credential - it IS the credential mint. Both are Host-checked and
+ * both carry the static route's policy headers.
+ */
+const BOOTSTRAP_PATH = "/bootstrap";
+const SESSION_PAIR_PATH = "/session/pair";
+
+/** The one-time consume latch for `/session/pair`, held in process for the daemon's life. */
+interface PairingState {
+  consumed: boolean;
+}
 
 /** The JSON surface. Anything else is either a hosted asset or an unknown route. */
 const JSON_ROUTES: readonly string[] = Object.freeze([
@@ -361,6 +394,124 @@ function serveAsset(
   response.end(bytes);
 }
 
+/**
+ * Host is checked; Origin, CSRF and the credential deliberately are NOT.
+ *
+ * A same-origin page must be able to call this FIRST, before it holds a CSRF
+ * token, to learn one. The reason that is safe: this route carries the static
+ * host's `cross-origin-resource-policy: same-origin` and sends no
+ * `access-control-allow-origin`, so only same-origin script - the page this
+ * daemon hosts - can READ the answer; a foreign origin cannot. A non-browser
+ * loopback client CAN read it, but the CSRF token is only a cross-site-forgery
+ * defence and is worthless to a client that can already forge Origin. The
+ * credential is what gates authority, and this route never carries or answers
+ * one. The answer is a fixed small JSON: the CSRF token, the wire protocol
+ * version, and this daemon's bound project id.
+ */
+function serveBootstrap(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  authority: string,
+): void {
+  const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
+  if (request.headers.host !== authority) {
+    refuseRequest(response, "LISTENER_HOST_INVALID", policy);
+    return;
+  }
+  // A read with no body and no state change: GET, and nothing else.
+  if (request.method !== "GET") {
+    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
+    return;
+  }
+  const pairing = options.pairing;
+  if (pairing === undefined) {
+    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
+    return;
+  }
+  reply(response, 200, {
+    csrfToken: options.csrfToken,
+    projectId: pairing.boundProjectId,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  }, policy);
+}
+
+/**
+ * The full JSON-route header gate (Host, Origin, CSRF) MINUS the credential,
+ * because this route IS the credential mint. It also checks the protocol header
+ * so an incompatible build never reaches the mint. The pairing token is consumed
+ * EXACTLY once, in process: the latch is reserved synchronously before the mint
+ * and released only if the mint itself refuses, so a replay arriving during an
+ * in-flight mint refuses while a transient mint failure stays retryable. A wrong,
+ * reused or expired token all receive the one `LISTENER_PAIRING_TOKEN_REJECTED`
+ * code at one status, so nothing distinguishes them. Every reply, success and
+ * refusal alike, carries the static host's policy headers, so the minted
+ * credential cannot be read cross-origin.
+ */
+async function serveSessionPair(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  pairingState: PairingState,
+  authority: string,
+  origin: string,
+): Promise<void> {
+  const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
+  const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
+  if (headerFault !== null) {
+    refuseRequest(response, headerFault, policy);
+    return;
+  }
+  if (request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
+    return;
+  }
+  if (protocolVersionOf(request) !== WIRE_PROTOCOL_VERSION) {
+    refuseRequest(response, "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED", policy);
+    return;
+  }
+  const pairing = options.pairing;
+  const token = options.pairingToken;
+  if (pairing === undefined || token === undefined || token === "") {
+    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
+    return;
+  }
+  const body = await readBoundedBody(request);
+  if (body === null) {
+    refuseRequest(response, "LISTENER_BODY_TOO_LARGE", policy);
+    return;
+  }
+  const presented = readPairingToken(body);
+  if (presented === null) {
+    refuseRequest(response, "LISTENER_PAIRING_REQUEST_INVALID", policy);
+    return;
+  }
+  // From here to the reserve there is no `await`: the consumed check and the
+  // reservation are one synchronous step, so two concurrent valid presentations
+  // cannot both pass. A used latch, or a token that does not match in constant
+  // time, is the SAME refusal.
+  if (pairingState.consumed || !pairingTokenMatches(presented, token)) {
+    refuseRequest(response, "LISTENER_PAIRING_TOKEN_REJECTED", policy);
+    return;
+  }
+  pairingState.consumed = true;
+  const minted = pairing.mint();
+  if (!minted.ok) {
+    // The token bought nothing, so it is released for a retry: no credential was
+    // issued, and a mint refusal is a daemon-side fault, not a spent token.
+    pairingState.consumed = false;
+    refuseRequest(response, "LISTENER_PAIRING_MINT_FAILED", policy);
+    return;
+  }
+  reply(response, 200, {
+    capabilities: minted.capabilities,
+    expiresAt: minted.expiresAt,
+    projectId: pairing.boundProjectId,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+    sessionCredential: minted.credential,
+  }, policy);
+}
+
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
@@ -368,12 +519,26 @@ async function serve(
   authority: string,
   origin: string,
   assets: ControlRoomAssetRoot | null,
+  pairingState: PairingState,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without the credential and without a query string, so neither can
-  // leak into a log line (design 19.2).
+  // leak into a log line (design 19.2). The pairing token travels only in a POST
+  // body, never on the request line, so it never reaches this log either.
   const path = (request.url ?? "").split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
+
+  // The handshake surface answers ahead of the asset/JSON split: it is neither an
+  // asset nor a member of the shared-guard JSON set, and each route owns its own
+  // guard order stated in its handler.
+  if (path === BOOTSTRAP_PATH) {
+    serveBootstrap(response, request, options, authority);
+    return;
+  }
+  if (path === SESSION_PAIR_PATH) {
+    await serveSessionPair(response, request, options, pairingState, authority, origin);
+    return;
+  }
 
   if (!JSON_ROUTES.includes(path)) {
     // No hosted bundle means the answer is the one it always was. The static
@@ -442,9 +607,13 @@ export async function startControlRoomListener(
   let authority = "";
   let origin = "";
   let server: Server | null = null;
+  // One latch for this listener's whole life: the pairing token is single-use, so
+  // the consume state is per process, not per request. A restart mints a new
+  // token and a fresh latch.
+  const pairingState: PairingState = { consumed: false };
   try {
     server = createServer((request, response) => {
-      const served = serve(request, response, options, authority, origin, assets);
+      const served = serve(request, response, options, authority, origin, assets, pairingState);
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket.

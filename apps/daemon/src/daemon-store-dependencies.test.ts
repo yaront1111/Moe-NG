@@ -582,7 +582,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
         "affordances", "documentDossiers", "graph", "provide", "reconciliation", "restore",
-        "subscriptions",
+        "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",

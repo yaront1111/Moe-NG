@@ -17,6 +17,10 @@ import {
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
+import {
+  OPERATOR_SESSION_TTL_MS, createOperatorSessionHandshakePort,
+} from "./identity/session-handshake.js";
+import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import { createBoardProjectionService } from "./projections/board-projection-service.js";
 import type { BoardProjectionService } from "./projections/board-projection-contracts.js";
 import { readLatestDocumentWorkDossier } from "./documents/document-work-service.js";
@@ -239,6 +243,22 @@ export function createStoreDependencies(
   });
 
   /**
+   * The operator credential mint. Built over this root's own store, project and
+   * operator principal - the only place they are FACTS rather than request input -
+   * so a minted session authenticates through the very authenticator wired above.
+   * The clock is epoch ms because the expiry it stamps is compared numerically.
+   */
+  const sessionHandshake = (): SessionHandshakePort => createOperatorSessionHandshakePort({
+    capabilities: OPERATOR_CAPABILITIES,
+    clock: () => Date.now(),
+    operatorPrincipalId: config.principalId,
+    projectId: config.projectId,
+    reservedPrincipalIds: [config.principalId],
+    sessionTtlMs: OPERATOR_SESSION_TTL_MS,
+    store,
+  });
+
+  /**
    * Built over the store and the durable configuration this root already holds —
    * the only place where the project and the operator principal are FACTS rather
    * than something a caller passed to `startDaemon`. The correlation and the
@@ -260,6 +280,7 @@ export function createStoreDependencies(
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
+    sessionHandshake,
     subscriptions,
   });
 }
@@ -301,6 +322,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     return port();
   },
   restore: () => fromEnv().restore(),
+  sessionHandshake: () => {
+    const port = fromEnv().sessionHandshake;
+    if (port === undefined) throw new Error("unreachable: the session handshake is always wired");
+    return port();
+  },
   subscriptions: () => {
     const port = fromEnv().subscriptions;
     if (port === undefined) throw new Error("unreachable: subscriptions is always wired");

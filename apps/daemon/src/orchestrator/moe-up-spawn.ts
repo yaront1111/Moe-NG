@@ -109,3 +109,44 @@ export function createProcessSpawn(): LaunchSpawn {
     windowsHide: true,
   });
 }
+
+/** The env switch that suppresses the browser launch, for a headless run or a test. */
+export const MOE_UP_NO_BROWSER_ENV = "MOE_UP_NO_BROWSER" as const;
+
+/**
+ * Whether the launcher must NOT open a browser: either `MOE_UP_NO_BROWSER` is set
+ * to a non-empty value, or `--no-open` was passed. Kept a pure predicate so both
+ * the switch and the flag are provable without spawning anything.
+ */
+export function browserOpenDisabled(
+  env: Readonly<Record<string, string | undefined>>, argv: readonly string[],
+): boolean {
+  return (env[MOE_UP_NO_BROWSER_ENV] ?? "") !== "" || argv.includes("--no-open");
+}
+
+/**
+ * Opens the operator's default browser on the pairing URL, Windows-style. The
+ * empty title argument to `start` is REQUIRED: `cmd /c start "http://..."` would
+ * otherwise consume the quoted URL as the new window's TITLE and open nothing.
+ * Detached with fully ignored stdio and unref'd, so the launcher neither waits on
+ * the browser nor pipes it - a browser that outlives the daemon is the operator's,
+ * not this process's child. `shell: false` because the argv is already exact.
+ *
+ * KNOWN RESIDUAL (H1, adversarial review 2026-08-22): when `url` carries the
+ * one-time #pair token, that token becomes a process command line, readable by
+ * any same-user process (Get-CimInstance Win32_Process) for the window before the
+ * browser consumes it - and it also reaches the launcher's stdout. On the hostile-
+ * loopback model (agent workers run as this user) that is the adversary, and a
+ * paired credential is full operator authority (project.admin, self-renewing via
+ * session.renew). The token is one-time so the window is small, but this is the
+ * one property the handshake does NOT deliver: "a local process cannot mint
+ * authority" holds for a GET of the page, not for reading our argv/stdout. MUST be
+ * closed before the page-side pairing ships end to end - deliver the token to the
+ * page through a localhost channel the OS does not expose in argv, not the URL.
+ */
+export function openDefaultBrowser(url: string): void {
+  const child = spawn("cmd", ["/c", "start", "", url], {
+    detached: true, shell: false, stdio: "ignore", windowsHide: true,
+  });
+  child.unref();
+}

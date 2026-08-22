@@ -120,6 +120,13 @@ export interface DaemonStartOptions {
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
   readonly log?: (line: string) => void;
+  /**
+   * The one-time pairing token that unlocks `POST /session/pair`, minted by the
+   * process wrapper when hosting is on and forwarded to the listener untouched.
+   * Absent (hosting off) means the pair route refuses: there is nothing to pair
+   * against. Never logged and never placed on a URL by this layer.
+   */
+  readonly pairingToken?: string;
   readonly port?: number;
 }
 
@@ -233,11 +240,14 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
+    ...(options.pairingToken === undefined ? {} : { pairingToken: options.pairingToken }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined
       ? {} : { documentDossiers: resolved.documentDossiers }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+    ...(resolved.sessionHandshake === undefined
+      ? {} : { pairing: resolved.sessionHandshake }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;

@@ -13,8 +13,8 @@ import {
   runMoeUp,
 } from "./moe-up-main.js";
 import {
-  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot,
-  createProcessSpawn, launchEntryPaths,
+  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, browserOpenDisabled,
+  controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchSpawn } from "./moe-up-spawn.js";
 
@@ -268,6 +268,69 @@ describe("runMoeUp origin handshake", () => {
     expect(harness.lines.join("\n")).toContain(MOE_UP_DAEMON_ORIGIN_TIMEOUT);
     expect(harness.calls[0]?.child.killCount).toBe(1);
     expect(harness.calls).toHaveLength(1);
+  });
+});
+
+describe("runMoeUp pairing handshake", () => {
+  function startWithOpener(
+    repoRoot: string,
+  ): { calls: SpawnRecord[]; lines: string[]; opened: string[]; result: Promise<number> } {
+    const { calls, spawn } = recordingSpawn();
+    const lines: string[] = [];
+    const opened: string[] = [];
+    const storeRoot = mkdtempSync(join(tmpdir(), "moe-up-pair-"));
+    tempRoots.push(storeRoot);
+    const result = runMoeUp({
+      env: { ...GOOD_ENV, MOE_STORE_PATH: join(storeRoot, "store.sqlite") },
+      log: (line) => lines.push(line),
+      onSignal: () => undefined,
+      openUrl: (url) => opened.push(url),
+      repoRoot,
+      spawn,
+    });
+    return { calls, lines, opened, result };
+  }
+
+  it("announces the #pair URL and opens it when the daemon prints a pairing token", async () => {
+    const { root } = hostedRoot();
+    const harness = startWithOpener(root);
+    await settle();
+    // The daemon prints the token BEFORE the origin, so both land in one buffer.
+    harness.calls[0]?.child.say("pairing token tok-XYZ");
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    const pairUrl = `${ORIGIN}/#pair=tok-XYZ`;
+    expect(harness.lines.join("\n")).toContain(`open ${pairUrl}`);
+    expect(harness.opened).toEqual([pairUrl]);
+    // The verbatim smoke line still leads.
+    expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
+
+    harness.calls[0]?.child.exit(0);
+    await harness.result;
+  });
+
+  it("opens no browser and prints no #pair fragment when nothing is hosted", async () => {
+    const harness = startWithOpener(bareRoot());
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    expect(harness.opened).toEqual([]);
+    expect(harness.lines.join("\n")).not.toContain("#pair=");
+
+    harness.calls[0]?.child.exit(0);
+    await harness.result;
+  });
+});
+
+describe("moe up browser gating", () => {
+  it("suppresses the browser on MOE_UP_NO_BROWSER or --no-open, and opens otherwise", () => {
+    expect(browserOpenDisabled({ MOE_UP_NO_BROWSER: "1" }, [])).toBe(true);
+    expect(browserOpenDisabled({}, ["--no-open"])).toBe(true);
+    // An empty value is not set: the switch must carry a value to disable.
+    expect(browserOpenDisabled({ MOE_UP_NO_BROWSER: "" }, [])).toBe(false);
+    expect(browserOpenDisabled({}, [])).toBe(false);
   });
 });
 

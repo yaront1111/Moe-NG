@@ -2,6 +2,7 @@ import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
+import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
@@ -16,6 +17,12 @@ export interface OptionalDaemonPortProvider {
    * sweep it may skip: `createStoreDependencies` always wires this one.
    */
   reconciliation?(): BootReconciliationPort;
+  /**
+   * The operator credential mint behind `/session/pair` and the source of
+   * `/bootstrap`'s project id. Absent only for a provider with no durable store,
+   * since a mint opens a real session; `createStoreDependencies` always wires it.
+   */
+  sessionHandshake?(): SessionHandshakePort;
   subscriptions?(): SubscriptionPort;
 }
 
@@ -24,6 +31,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly graph?: GraphQueryPort;
   readonly reconciliation?: BootReconciliationPort;
+  readonly sessionHandshake?: SessionHandshakePort;
   readonly subscriptions?: SubscriptionPort;
 }
 
@@ -33,6 +41,7 @@ export type OptionalDaemonPortResolution =
 
 const FACTORIES = Object.freeze([
   "subscriptions", "affordances", "documentDossiers", "graph", "reconciliation",
+  "sessionHandshake",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -98,11 +107,20 @@ export function resolveOptionalDaemonPorts(
     if (reconciliation !== undefined && !hasMethods(reconciliation, ["sweep"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const handshakeFactory = provider.sessionHandshake;
+    if (handshakeFactory !== undefined && typeof handshakeFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const sessionHandshake = handshakeFactory?.call(provider);
+    if (sessionHandshake !== undefined && !hasMethods(sessionHandshake, ["mint"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(graph === undefined ? {} : { graph }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
+      ...(sessionHandshake === undefined ? {} : { sessionHandshake }),
       ...(subscriptions === undefined ? {} : { subscriptions }),
     });
     return Object.freeze({ ok: true, ports } as const);

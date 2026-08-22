@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 
 import { describeLaunchVariables, resolveLaunchEnv } from "./moe-up-env.js";
 import {
-  NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
+  NODE_TRANSFORM_TYPES_FLAG, browserOpenDisabled, controlRoomAssetRoot, createProcessSpawn,
+  launchEntryPaths, openDefaultBrowser,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchEntryPaths, LaunchSpawn } from "./moe-up-spawn.js";
 
@@ -32,6 +33,11 @@ export const MOE_UP_WRAPPER_START_FAILED = "MOE_UP_WRAPPER_START_FAILED" as cons
 
 /** The daemon announces its bound address on stdout; `daemon-entry` owns the wording. */
 const ORIGIN_LINE = /^listening on (?<origin>\S+)$/mu;
+/**
+ * The one-time pairing token the daemon prints when hosting, ahead of its origin
+ * line, so by the time the origin lands this same buffer already holds the token.
+ */
+const PAIRING_LINE = /^pairing token (?<token>\S+)$/mu;
 const DEFAULT_ORIGIN_TIMEOUT_MS = 60_000;
 
 export interface MoeUpOptions {
@@ -39,6 +45,13 @@ export interface MoeUpOptions {
   readonly log: (line: string) => void;
   /** Registers the console interrupt handler; injected so a test can fire it. */
   readonly onSignal: (handler: () => void) => void;
+  /**
+   * Opens the pairing URL in the operator's browser. Absent means open nothing -
+   * the state a test, a headless run, or a `--no-open`/`MOE_UP_NO_BROWSER` run
+   * leaves it in. The launcher decides WHICH URL; whether to open at all is the
+   * caller's, gated before this is supplied.
+   */
+  readonly openUrl?: (url: string) => void;
   readonly originTimeoutMs?: number;
   readonly randomHex?: (bytes: number) => string;
   readonly repoRoot: string;
@@ -59,14 +72,21 @@ function pipeOutput(
   }
 }
 
+/** What the daemon child announces on stdout: its origin, and the pairing token
+ *  when it hosts a bundle (null otherwise). */
+interface DaemonSignals {
+  readonly origin: string;
+  readonly pairingToken: string | null;
+}
+
 interface OriginWatch {
-  readonly origin: Promise<string | null>;
-  readonly settle: (value: string | null) => void;
+  readonly settle: (value: DaemonSignals | null) => void;
+  readonly signals: Promise<DaemonSignals | null>;
 }
 
 function watchForOrigin(): OriginWatch {
-  let settle!: (value: string | null) => void;
-  const origin = new Promise<string | null>((resolve) => {
+  let settle!: (value: DaemonSignals | null) => void;
+  const signals = new Promise<DaemonSignals | null>((resolve) => {
     let done = false;
     settle = (value): void => {
       if (done) return;
@@ -74,7 +94,7 @@ function watchForOrigin(): OriginWatch {
       resolve(value);
     };
   });
-  return { origin, settle };
+  return { settle, signals };
 }
 
 interface Fleet {
@@ -151,10 +171,14 @@ function startDaemonChild(
   pipeOutput(child, "daemon", options.log, (chunk) => {
     if (seen === null) return;
     seen += chunk;
-    const found = ORIGIN_LINE.exec(seen)?.groups?.["origin"];
-    if (found === undefined) return;
+    const origin = ORIGIN_LINE.exec(seen)?.groups?.["origin"];
+    if (origin === undefined) return;
+    // The token line is printed BEFORE the origin, so when the origin lands the
+    // token (when hosting) is already in this same buffer. A daemon that hosts
+    // nothing prints no token line and this stays null.
+    const pairingToken = PAIRING_LINE.exec(seen)?.groups?.["token"] ?? null;
     seen = null;
-    watch.settle(found);
+    watch.settle({ origin, pairingToken });
   });
   return child;
 }
@@ -164,16 +188,35 @@ function startDaemonChild(
  * smoke-windows-artifact.ps1`) and its wording is fixed. After it, ONE story:
  * with a hosted bundle the operator opens the daemon's own origin - the literal
  * loopback IP the daemon printed, because its Host check refuses `localhost` -
- * and nothing else runs; without one, the two-process recipe as before.
+ * carrying the one-time pairing token as a `#pair=` fragment so the page mints a
+ * session credential and no secret is ever baked in; without a bundle, the
+ * two-process recipe as before. The pairing URL is also handed to `openUrl`, when
+ * one was supplied, so the operator's browser opens straight onto it.
  */
-function announce(origin: string, assetRoot: string | null, log: (line: string) => void): void {
-  log(`moe up: daemon listening on ${origin}`);
+function announce(
+  signals: DaemonSignals,
+  assetRoot: string | null,
+  log: (line: string) => void,
+  openUrl?: (url: string) => void,
+): void {
+  log(`moe up: daemon listening on ${signals.origin}`);
   if (assetRoot === null) {
-    log(`moe up: control room -> cd apps/control-room && MOE_DAEMON_ORIGIN=${origin} pnpm dev`);
+    log(`moe up: control room -> cd apps/control-room && MOE_DAEMON_ORIGIN=${signals.origin} pnpm dev`);
     log("moe up: then open http://localhost:5173/?live=1 - ctrl-c here stops both children");
     return;
   }
-  log(`moe up: control room -> open ${origin}/ (hosted by the daemon from ${assetRoot})`);
+  if (signals.pairingToken !== null) {
+    // The fragment never leaves the browser: it is not sent on the navigation
+    // request, so the token reaches only the page's own script, which pairs once.
+    const pairUrl = `${signals.origin}/#pair=${signals.pairingToken}`;
+    log(`moe up: control room -> open ${pairUrl} (hosted by the daemon from ${assetRoot})`);
+    log("moe up: ctrl-c here stops both children");
+    openUrl?.(pairUrl);
+    return;
+  }
+  // Hosting, but no pairing token was announced (an older daemon build): the board
+  // still loads on the origin; it simply cannot mint a credential automatically.
+  log(`moe up: control room -> open ${signals.origin}/ (hosted by the daemon from ${assetRoot})`);
   log("moe up: ctrl-c here stops both children");
 }
 
@@ -216,10 +259,10 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   const timedOut = new Promise<null>((resolve) => {
     timer = setTimeout(() => { resolve(null); }, timeoutMs);
   });
-  const origin = await Promise.race([watch.origin, timedOut]);
+  const signals = await Promise.race([watch.signals, timedOut]);
   clearTimeout(timer);
 
-  if (origin === null) {
+  if (signals === null) {
     // Two different faults, reported apart: the operator fixes a daemon that
     // died and a daemon that is merely silent by reading different things.
     options.log(fleet.childExited()
@@ -230,7 +273,7 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
     return fleet.firstFailure() ?? 1;
   }
 
-  announce(origin, assetRoot, options.log);
+  announce(signals, assetRoot, options.log, options.openUrl);
   let wrapper: LaunchChildProcess;
   try {
     wrapper = options.spawn(process.execPath, [NODE_TRANSFORM_TYPES_FLAG, paths.wrapperEntry], {
@@ -253,6 +296,10 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const repoRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+  // Whether to open a browser is decided HERE, at the process edge: a headless
+  // run or a test sets `MOE_UP_NO_BROWSER=1` or passes `--no-open`, and then no
+  // opener is supplied at all rather than one that must remember to no-op.
+  const noBrowser = browserOpenDisabled(process.env, process.argv.slice(2));
   process.exitCode = await runMoeUp({
     env: process.env,
     log: (line) => process.stdout.write(`${line}\n`),
@@ -262,6 +309,7 @@ if (meta.main === true) {
       process.on("SIGINT", handler);
       process.on("SIGTERM", handler);
     },
+    ...(noBrowser ? {} : { openUrl: openDefaultBrowser }),
     repoRoot,
     spawn: createProcessSpawn(),
   });

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -135,6 +136,14 @@ export async function runDaemonMain(
   // has it baked in. It travels in process only: the listener compares bytes and
   // names a file, never the value.
   const daemonCredential = env["MOE_DAEMON_CREDENTIAL"] ?? "";
+  // The one-time pairing token, minted HERE and only when hosting is on: with no
+  // hosted page there is no page to pair. Printed ONCE to stdout, ahead of the
+  // "listening on" line so a supervisor reading the stream has it in hand the
+  // moment the origin arrives, and passed to the listener so `/session/pair`
+  // honours exactly this value. Written to no file and placed on no URL by this
+  // process; the launcher is what turns it into the `#pair=` fragment.
+  const pairingToken = suppliedAssetRoot === "" ? undefined : randomUUID();
+  if (pairingToken !== undefined) log(`pairing token ${pairingToken}`);
   const started = await startDaemon({
     dependencies: provider,
     log,
@@ -144,6 +153,7 @@ export async function runDaemonMain(
     }),
     ...(csrfToken === null ? {} : { csrfToken }),
     ...(host === null ? {} : { host }),
+    ...(pairingToken === undefined ? {} : { pairingToken }),
     ...(port === undefined ? {} : { port }),
   });
   if (!started.ok) {
