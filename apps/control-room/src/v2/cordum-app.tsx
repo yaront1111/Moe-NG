@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { JSX } from "react";
 
-import { resolveLiveSetupFromBuild } from "../live/live-app.js";
+import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
 import type { LiveSetupResult } from "../live/live-config.js";
 import { MIDDOT } from "./glyphs.js";
 import { BoardStub } from "./goals/board-stub.js";
-import type { GoalDraft } from "./goals/goal-model.js";
+import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
@@ -62,6 +62,57 @@ function fixturesCreateGoal(_draft: GoalDraft): Promise<string> {
   );
 }
 
+/** The create action while the handshake is still in flight: nothing is attached yet. */
+function connectingCreateGoal(_draft: GoalDraft): Promise<string> {
+  return Promise.resolve(`Connecting to the daemon ${MIDDOT} try again once the board attaches.`);
+}
+
+/** The honest empty home shown while the runtime handshake is still resolving. */
+const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
+  source: "live",
+  goals: Object.freeze([]),
+  triage: Object.freeze([]),
+  goalCountLabel: "CONNECTING",
+  comingOnlineNote: "Pairing with the daemon over the runtime handshake. Nothing is shown until it answers.",
+});
+
+type LiveResolution =
+  | { readonly status: "PENDING" }
+  | { readonly status: "READY"; readonly setup: LiveSetupResult };
+
+/**
+ * Runs the RUNTIME credential handshake ONCE on mount for the live path: GET
+ * /bootstrap, pair from the URL fragment, and hold the resulting setup in memory.
+ * This replaces the build-time baked-secret resolver, so no VITE_MOE_LIVE_* secret
+ * is ever read into the page. On a successful pair the one-time token is stripped
+ * from the address bar so it neither lingers in history nor survives a copied URL;
+ * the path and query are left intact.
+ */
+function useLiveHandshake(enabled: boolean): LiveResolution {
+  const [resolution, setResolution] = useState<LiveResolution>({ status: "PENDING" });
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let cancelled = false;
+    const href = typeof window === "undefined" ? "" : window.location.href;
+    void resolveLiveSetupFromHandshake({
+      fetchImpl: (input, init) => fetch(input, init),
+      locationHref: href,
+    }).then((setup) => {
+      if (cancelled) return;
+      setResolution({ setup, status: "READY" });
+      if (setup.ok && typeof window !== "undefined") {
+        try {
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        } catch {
+          // A sandbox with no history API is not a reason to fail the attach.
+        }
+      }
+    });
+    return (): void => { cancelled = true; };
+  }, [enabled]);
+  return resolution;
+}
+
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
@@ -75,9 +126,9 @@ interface OpenBoard {
 export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
   useEffect(() => { ensureCordumFonts(); }, []);
   const fixtures = new URLSearchParams(search).get("fixtures") === "1";
-  // Resolved once; used only on the live path. In fixtures it is harmlessly a
-  // LIVE_CONFIG_MISSING refusal that nothing reads.
-  const liveSetup = useMemo<LiveSetupResult>(() => resolveLiveSetupFromBuild(), []);
+  // The live path acquires its credential at RUNTIME through the daemon handshake;
+  // in fixtures mode the handshake is disabled and nothing reads its result.
+  const live = useLiveHandshake(!fixtures);
   const [open, setOpen] = useState<OpenBoard | null>(null);
   const openBoard = useCallback((goalId: string, title: string) => { setOpen({ goalId, title }); }, []);
   const back = useCallback(() => { setOpen(null); }, []);
@@ -90,8 +141,12 @@ export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
     body = <BoardStub goalId={open.goalId} onBack={back} title={open.title} />;
   } else if (fixtures) {
     body = <GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={fixturesCreateGoal} onOpenBoard={openBoard} />;
+  } else if (live.status === "PENDING") {
+    body = (
+      <GoalsHome data={HANDSHAKE_PENDING_DATA} onCreateGoal={connectingCreateGoal} onOpenBoard={openBoard} />
+    );
   } else {
-    body = <LiveGoalsHome onOpenBoard={openBoard} setup={liveSetup} />;
+    body = <LiveGoalsHome onOpenBoard={openBoard} setup={live.setup} />;
   }
 
   return (
