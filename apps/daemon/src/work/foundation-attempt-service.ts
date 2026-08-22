@@ -215,7 +215,11 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     if (priorDigest !== null && priorDigest !== identity.digest) {
       return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
     }
-    const activation = runEffectActivateCommand(store, request.activationRequestBytes);
+    // DOOR 1: the key validated at `admitSingleExecutionNode` above, handed over as a
+    // daemon-internal argument. The derivation re-verifies it against the durable graph rather
+    // than trusting it — this caller is inside the trust boundary, its input is not.
+    const activation = runEffectActivateCommand(
+      store, request.activationRequestBytes, nodeKey);
     if (!activation.ok) return foundationAttemptRefusal(activation.code, activation.refusedBy);
     const { commandId, correlationId, principalId, projectId } = envelope.request;
     const bound: FoundationAttemptBound = Object.freeze({

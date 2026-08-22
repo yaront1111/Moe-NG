@@ -1,21 +1,22 @@
-import { SUPERVISOR_ACTIVATION_VERSION, activateEffect, applyEffectCommand } from "@moe/runner";
-import type { ActivationCommit, EffectIntent, SupervisorFailure } from "@moe/runner";
-import { activateProviderSlot, activateReservation } from "@moe/scheduler";
-import type { ProviderSlotReservation, ReservationRecord } from "@moe/scheduler";
-import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
+import { activateEffect, applyEffectCommand } from "@moe/runner";
+import type { EffectIntent, SupervisorFailure } from "@moe/runner";
+import { activateProviderSlot } from "@moe/scheduler";
+import type { ProviderSlotReservation } from "@moe/scheduler";
+import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
-import { claimWork } from "../work/work-claim.js";
+import {
+  admitClaimPrefix, finishClaim, isRefusal as isWorkRefusal,
+} from "../work/work-claim.js";
+import type { BudgetLeg, ClaimPrefix } from "../work/work-claim.js";
 import type { ClaimSuccessors, WorkResult } from "../work/work-kernel.js";
+import { runActivationBudgetStage } from "./activation-budget-stage.js";
 import { readActivationEmbargo } from "./activation-embargo.js";
-import { commitActivationLedgerRecord } from "./activation-ledger-commit.js";
 import {
-  ACTIVATION_LEDGER_LAYER,
-  ACTIVATION_LEDGER_RECORD_VERSION,
-} from "./activation-ledger-contracts.js";
+  assembleActivationRecord, commitActivationStage,
+} from "./activation-ingress-commit.js";
+import type { ActivationStageResult } from "./activation-ingress-commit.js";
 import { bindActivationResources } from "./activation-resource-binding.js";
-import type { ActivationLedgerRecord } from "./activation-ledger-contracts.js";
 import {
-  ACTIVATION_BUDGET_LAYER,
   ACTIVATION_INGRESS_LAYER,
   ACTIVATION_SECTION_KEYS,
   ACTIVATION_SLOT_LAYER,
@@ -39,12 +40,13 @@ import type { SlotOccupancyEntry } from "./activation-slot-occupancy.js";
  *   A  envelope decode        structural, and the ONLY stage above the embargo
  *   B  recovery embargo       nothing below runs until it clears
  *   B2 deriveSlotOccupancy    the design-427 table, derived from the durable store
- *   C  claimWork              lease + slot ceiling + slot + budget + effect
+ *   C1 admitClaimPrefix       lease + slot ceiling + slot
+ *   C2 durable budget         DERIVED account/amounts/version, plus its ledger leg
+ *   C3 finishClaim            the effect leg, and the whole successor closure
  *   D  arm                    CLAIMED -> ARMED, server-owned command
  *   E  activateEffect         ARMED -> ACTIVE, mints the attempt and grant
  *   F  activateProviderSlot   the sole RESERVED -> ACTIVE slot transition
- *   G  activateReservation    RESERVED -> ACTIVATED, moving no units
- *   H/I one atomic commit     all six authorities together or none
+ *   G/H one atomic commit     activation and budget legs together or neither
  *
  * A structurally broken envelope is refused before the embargo is consulted,
  * because a request that cannot be read names no project to fence. Every DOMAIN
@@ -58,9 +60,17 @@ import type { SlotOccupancyEntry } from "./activation-slot-occupancy.js";
  * caller's `liveClaims` key stays admitted at the envelope and feeds nothing,
  * because a caller-counted ceiling was the design-427 bypass (an empty table
  * admitted a fifth slot). The intent handed to `activateEffect` comes from (D),
- * never from the payload; the slot and budget commands are built from (C)'s own
- * successors and (E)'s own attempt id. A caller can propose an activation; it
- * cannot name the records that authorise one.
+ * never from the payload; the slot command is built from (C1)'s own successor
+ * and (E)'s own attempt id. A caller can propose an activation; it cannot name
+ * the records that authorise one.
+ *
+ * THE BUDGET IS DURABLE AND NO LONGER THE CALLER'S. (C2) derives the account,
+ * the authorized amounts and the fenced version from project/goal/graph/node
+ * facts and captures the ledger writer's own leg, which rides (G/H)'s single
+ * decision. `payload["budget"]` is still ADMITTED at the envelope — dropping the
+ * key would force every sender in the repository to change inside this commit —
+ * but on this route only its `gate` is ever read, and that narrowing is enforced
+ * by the section shape in `activation-budget-stage.ts`, not by a comment.
  *
  * NOTHING HERE CONSTRUCTS A SUCCESSOR. Each transition is performed by the
  * package that owns the aggregate, and this module only sequences them and
@@ -112,21 +122,50 @@ type Stage<T> = ActivationIngressRefused | { readonly value: T };
 
 const isRefusal = <T>(stage: Stage<T>): stage is ActivationIngressRefused => !("value" in stage);
 
-/** (C) The four-leg claim. A refusal publishes no successor at all. `held` is
- *  (B2)'s durable occupancy table, fed where the caller's `liveClaims` section
- *  once was; the section itself is inert for the decision. */
-function claimStage(
+/** (C1) Lease, ceiling and slot — the three legs above the budget's position.
+ *  A refusal publishes no successor at all. `held` is (B2)'s durable occupancy
+ *  table, fed where the caller's `liveClaims` section once was; the section
+ *  itself is inert for the decision. */
+function claimPrefixStage(
   request: ActivationIngressRequest,
   held: readonly SlotOccupancyEntry[],
-): Stage<ClaimSuccessors> {
+): Stage<ClaimPrefix> {
   const { payload } = request;
-  const claimed = claimWork({
+  const prefix = admitClaimPrefix({
     budget: payload["budget"],
     effect: payload["effect"],
     lease: payload["lease"],
     liveClaims: held,
     slot: payload["slot"],
   });
+  if (isWorkRefusal(prefix)) return refuseWork(prefix);
+  return { value: prefix.value };
+}
+
+/**
+ * (C2) The DURABLE budget, at the position `claimBudget` used to occupy.
+ *
+ * The position is the point. Deriving this eagerly and passing it into the claim would run it
+ * BEFORE the lease leg, so a request with a stale lease AND an unresolvable node would stop
+ * answering `WORK_LEASE_NOT_CURRENT` — which is why `work-claim.ts` was split rather than
+ * given a budget parameter.
+ */
+function durableBudgetStage(
+  store: SqliteEventStore, request: ActivationIngressRequest, nodeKey: string | undefined,
+): Stage<{ readonly budget: BudgetLeg; readonly leg: ExpectedVersionDecisionLeg }> {
+  const outcome = runActivationBudgetStage(
+    nodeKey === undefined ? { request, store } : { nodeKey, request, store },
+  );
+  // The derivation's, the projection's or the ledger writer's own code and layer, unrestamped.
+  if (!outcome.ok) {
+    return activationIngressRefusal({ code: outcome.code, refusedBy: outcome.layer });
+  }
+  return { value: { budget: outcome.budget, leg: outcome.leg } };
+}
+
+/** (C3) The effect leg, and the whole successor closure or none of it. */
+function claimTailStage(prefix: ClaimPrefix, budget: BudgetLeg): Stage<ClaimSuccessors> {
+  const claimed = finishClaim(prefix, budget);
   if (!claimed.ok) return refuseWork(claimed);
   if (claimed.outcome !== "WORK_GRANTED") return PAYLOAD_MALFORMED;
   return { value: claimed.successors };
@@ -164,11 +203,6 @@ function readAttemptVersion(section: Record<string, unknown>): number | null {
     : null;
 }
 
-export interface ActivationStageResult {
-  readonly commit: ActivationCommit;
-  readonly predecessorAttemptVersion: number;
-}
-
 /** (E) ARMED -> ACTIVE. The intent is (D)'s output; the caller's is never read. */
 function activateStage(
   request: ActivationIngressRequest,
@@ -202,103 +236,10 @@ function slotStage(
   });
 }
 
-/** (G) RESERVED -> ACTIVATED. Binds the attempt and moves no units. */
-function budgetStage(successors: ClaimSuccessors, attemptRef: string): Stage<ReservationRecord> {
-  const activated = activateReservation(successors.budgetView, successors.budgetReservation, {
-    attemptRef,
-    expectedVersion: successors.budgetReservation.version,
-  });
-  if (activated.ok) return { value: activated.reservation };
-  return activationIngressRefusal({
-    code: activated.issues[0]?.code ?? "BUDGET_RESERVATION_MALFORMED",
-    refusedBy: ACTIVATION_BUDGET_LAYER,
-  });
-}
-
-interface AssembleInput {
-  readonly activation: ActivationStageResult;
-  readonly armed: EffectIntent;
-  readonly budgetReservation: ReservationRecord;
-  readonly providerSlot: ProviderSlotReservation;
-  readonly successors: ClaimSuccessors;
-}
-
-/**
- * (H) Every field comes from the authority that produced it. `budgetView` is
- * `reserveForAdmission`'s own post-reservation view carried through stage C
- * untouched: recomputing it here would be a second unauthorised arithmetic over
- * the same units.
- */
-function assemble(input: AssembleInput): ActivationLedgerRecord {
-  const { armed, successors } = input;
-  const { commit } = input.activation;
-  return {
-    activationDigest: commit.activationDigest,
-    activationVersion: SUPERVISOR_ACTIVATION_VERSION,
-    attempt: commit.attempt,
-    budgetReservation: input.budgetReservation,
-    budgetView: successors.budgetView,
-    effectIntent: commit.intent,
-    grant: commit.grant,
-    lease: successors.lease,
-    predecessorAttemptVersion: input.activation.predecessorAttemptVersion,
-    predecessorIntentVersion: armed.version,
-    providerSlot: input.providerSlot,
-    recordVersion: ACTIVATION_LEDGER_RECORD_VERSION,
-  };
-}
-
-function accepted(
-  decision: CommandDecisionRecord,
-  disposition: "COMMITTED" | "REPLAYED",
-): ActivationIngressOutcome {
-  return Object.freeze({
-    advisoryOnly: false as const,
-    authority: "DURABLE_DECISION" as const,
-    decision,
-    disposition: disposition === "COMMITTED" ? ("DECIDED" as const) : ("REPLAYED" as const),
-    kind: "effect.activate" as const,
-    ok: true as const,
-  });
-}
-
-/** (I) One atomic decision: attempt, slot, lease, effect, grant and spend together. */
-function commitStage(
-  store: SqliteEventStore,
-  request: ActivationIngressRequest,
-  bytes: Uint8Array,
-  record: ActivationLedgerRecord,
-): ActivationIngressOutcome {
-  const key = {
-    commandId: request.commandId,
-    principalId: request.principalId,
-    projectId: request.projectId,
-  };
-  const committed = commitActivationLedgerRecord(store, {
-    correlationId: request.correlationId,
-    decidedAt: request.decidedAt,
-    key,
-    record,
-    requestBytes: bytes,
-  });
-  if (!committed.ok) {
-    return activationIngressRefusal({ code: committed.code, refusedBy: committed.layer });
-  }
-  const decision = store.getCommandDecision(key);
-  if (decision === null) {
-    // The ledger reported a commit the decision table cannot show. Unverifiable
-    // evidence never becomes authority, so this is a refusal, not an accept.
-    return activationIngressRefusal({
-      code: "ACTIVATION_LEDGER_EVIDENCE_ABSENT",
-      refusedBy: ACTIVATION_LEDGER_LAYER,
-    });
-  }
-  return accepted(decision, committed.disposition);
-}
-
 export function runEffectActivateCommand(
   store: SqliteEventStore,
   input: unknown,
+  nodeKey?: string,
 ): ActivationIngressOutcome {
   const decoded = decodeActivationRequestBytes(input);
   if (!decoded.ok) {
@@ -321,7 +262,11 @@ export function runEffectActivateCommand(
   if (!occupancy.ok) {
     return activationIngressRefusal({ code: occupancy.code, refusedBy: occupancy.layer });
   }
-  const claim = claimStage(request, occupancy.held);
+  const prefix = claimPrefixStage(request, occupancy.held);
+  if (isRefusal(prefix)) return prefix;
+  const budget = durableBudgetStage(store, request, nodeKey);
+  if (isRefusal(budget)) return budget;
+  const claim = claimTailStage(prefix.value, budget.value.budget);
   if (isRefusal(claim)) return claim;
   const arm = armStage(claim.value.effectIntent);
   if (isRefusal(arm)) return arm;
@@ -330,16 +275,13 @@ export function runEffectActivateCommand(
   const attemptRef = activation.value.commit.attempt.attemptId;
   const slot = slotStage(claim.value, attemptRef);
   if (isRefusal(slot)) return slot;
-  const budget = budgetStage(claim.value, attemptRef);
-  if (isRefusal(budget)) return budget;
-  const record = assemble({
+  const record = assembleActivationRecord({
     activation: activation.value,
     armed: arm.value,
-    budgetReservation: budget.value,
     providerSlot: slot.value,
     successors: claim.value,
   });
-  const committed = commitStage(store, request, bytes, record);
+  const committed = commitActivationStage(store, request, bytes, record, budget.value.leg);
   // (J) THE ORDER IS FORCED. The binder re-reads the COMMITTED activation for
   // attemptRef, the effect intent and the project fence, so it cannot run before
   // this commit exists — and it may not share the activation aggregate, whose

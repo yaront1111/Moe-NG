@@ -43,6 +43,9 @@ import {
 } from "../activation/activation-ingress-contracts.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import {
+  ACTIVATION_WORLD_NODE_KEY, seedActivationWorld,
+} from "../activation/activation-world-fixtures.js";
+import {
   ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -74,7 +77,7 @@ const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
 const DIGEST = "a".repeat(64), DIGEST_B = "3".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
-const NODE_KEY = "dev-done", SESSION_ID = "session-1";
+const NODE_KEY = ACTIVATION_WORLD_NODE_KEY, SESSION_ID = "session-1";
 
 afterEach(() => {
   observedBoundaryProbe.launches.length = 0;
@@ -203,6 +206,11 @@ function readyStore(root: string): SqliteEventStore {
     const outcome = sendBootstrap(store, bootstrapEnvelope(kind, version, payload));
     if (!outcome.ok) throw new Error(`fixture ${kind} refused: ${outcome.code}`);
   }
+  // The rest of what `seedReadyProject` drives — the durable ACTIVE graph and authorized budget
+  // root `effect.activate` now derives its budget from. This file re-runs the four bootstrap
+  // commands itself only to carry the fixture repository's real head, so it still owes the world
+  // every other seeder here gets. Idempotent: it enriches a world, it never rebuilds one.
+  seedActivationWorld(store);
   return store;
 }
 
@@ -403,18 +411,30 @@ function expectRefusal(outcome: FoundationAttemptOutcome, code: string, refusedB
   expect(outcome).toMatchObject({ advisoryOnly: true, authority: "NONE", code, ok: false, refusedBy });
 }
 
+/**
+ * BOTH expected-version commit seams share ONE ordinal. The activation adapter commits through
+ * `commitExpectedVersionDecisionLegs` (task-e194c5f6) while the budget and provider ledgers use
+ * the single-leg call; counting only one would renumber which commit `abortOnCall` names, and
+ * the injection would fire on a different write while this test still passed.
+ */
+const EXPECTED_VERSION_COMMITS = new Set([
+  "commitExpectedVersionDecision",
+  "commitExpectedVersionDecisionLegs",
+]);
+
 function abortingStore(store: SqliteEventStore, abortOnCall: number): SqliteEventStore {
   let calls = 0;
   return new Proxy(store, {
     get(target, property, receiver) {
-      if (property !== "commitExpectedVersionDecision") {
+      if (typeof property !== "string" || !EXPECTED_VERSION_COMMITS.has(property)) {
         const value = Reflect.get(target, property, receiver) as unknown;
         return typeof value === "function" ? value.bind(target) : value;
       }
       return (input: CommitExpectedVersionDecisionInput) => {
         calls += 1;
         if (calls === abortOnCall) throw new Error("injected transaction abort");
-        return target.commitExpectedVersionDecision(input);
+        const forward = Reflect.get(target, property, receiver) as (value: unknown) => unknown;
+        return forward.call(target, input);
       };
     },
   });

@@ -6,6 +6,8 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { GOAL_ID } from "../bootstrap/bootstrap-test-fixtures.js";
+import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { RECOVERY_INVENTORY_LAYER } from "../recovery/recovery-inventory-contract.js";
 import { runRestoreQuiesce } from "../recovery/restore-controller.js";
 import {
@@ -255,6 +257,35 @@ function countsOf(store: SqliteEventStore): Counts {
   };
 }
 
+/** The durable budget aggregate this project's goal spends from, read rather than assumed. */
+function budgetAggregateOf(store: SqliteEventStore): string {
+  const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+  if (!ledger.ok) throw new Error(`the seeded ledger must read back: ${ledger.code}`);
+  return ledger.aggregateId;
+}
+
+/**
+ * The REAL store with one seam widened: `before` runs immediately before the legs commit.
+ *
+ * Not a fake — every method still executes on the real `SqliteEventStore`, and the injected
+ * fault is an ordinary durable append. It is the only way to interleave a concurrent write at
+ * the exact instant the captured fence is about to be read.
+ */
+function interceptLegsCommit(store: SqliteEventStore, before: () => void): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property): unknown {
+      const held: unknown = Reflect.get(target, property, target);
+      if (typeof held !== "function") return held;
+      const method = held as (...args: unknown[]) => unknown;
+      if (property !== "commitExpectedVersionDecisionLegs") return method.bind(target);
+      return (...args: unknown[]): unknown => {
+        before();
+        return method.apply(target, args);
+      };
+    },
+  });
+}
+
 function expectRefusal(
   outcome: ActivationIngressOutcome,
   code: string,
@@ -266,6 +297,8 @@ function expectRefusal(
 describe("effect.activate ingress — the accepted path", () => {
   it("commits attempt, slot, lease, effect, grant and spend authority together", () => {
     const store = readyStore("accepted");
+    const before = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+    if (!before.ok) throw new Error(`the seeded ledger must read back: ${before.code}`);
 
     const outcome = runEffectActivateCommand(store, activateBytes());
 
@@ -283,17 +316,40 @@ describe("effect.activate ingress — the accepted path", () => {
     if (!durable.ok) throw new Error(`the durable record must read back: ${durable.code}`);
     const { record } = durable;
     expect(record.providerSlot).toMatchObject({ attemptRef: "attempt-1", state: "ACTIVE" });
-    expect(record.budgetReservation).toMatchObject({
-      attemptRef: "attempt-1",
-      state: "ACTIVATED",
-    });
     expect(record.effectIntent).toMatchObject({ intentId: "intent-1", state: "ACTIVE" });
     expect(record.attempt).toMatchObject({ attemptId: "attempt-1", state: "RUNNING" });
     expect(record.grant).toMatchObject({ intentId: "intent-1", state: "UNUSED" });
     expect(record.lease).toMatchObject({ leaseId: "lease-1", state: "ACTIVE" });
-    // The budget view is `reserveForAdmission`'s own post-reservation view: 30
-    // usd moved available -> reserved and the version advanced 2 -> 3.
-    expect(record.budgetView).toMatchObject({ accountId: "acct-1", version: 3 });
+
+    // THE CALLER'S BUDGET SECTION IS NOT AUTHORITY. It names account "acct-1", admission
+    // "adm-1", meter "usd" and 100 available; none of that reaches the durable record. The
+    // account is the DURABLE goal's own `budgetAccountRef`, the admission identity is the
+    // AUTHENTICATED commandId, and the meter is the node definition's.
+    const after = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+    if (!after.ok) throw new Error(`the durable ledger must read back: ${after.code}`);
+    expect(record.budgetReservation).toMatchObject({
+      accountId: after.binding.budgetAccountRef,
+      admissionRef: "activation:cmd-activate-1",
+      // RESERVED, never ACTIVATED: one legs commit may name the budget aggregate EXACTLY once,
+      // so the unit-MOVING transition rides it and the attempt binding is deferred to
+      // settlement. `settleBudgetReservation` locates its target by reservationId regardless.
+      attemptRef: null,
+      state: "RESERVED",
+    });
+    expect(record.budgetReservation.accountId).not.toBe(BUDGET_VIEW.accountId);
+    expect(record.budgetReservation.admissionRef).not.toBe(ADMISSION.admissionRef);
+    expect(record.budgetReservation.lines.map((line) => line.meter)).not.toContain("usd");
+
+    // ANTI-TAUTOLOGY: the expected operand is the LEDGER MODULE'S OWN committed output read
+    // back out of the durable aggregate, never a literal this suite chose. A hand-built
+    // expectation here would agree with itself no matter what was written.
+    expect(record.budgetReservation).toStrictEqual(after.reservations.find(
+      (entry) => entry.admissionRef === "activation:cmd-activate-1"));
+    expect(record.budgetView).toStrictEqual(after.views.find(
+      (entry) => entry.accountId === after.binding.budgetAccountRef));
+    // BOTH aggregates moved, in the SAME decision: exactly one activation event and exactly
+    // one new budget event. A second movement, or none, fails here.
+    expect(after.headVersion).toBe(before.headVersion + 1);
     expect(record.predecessorIntentVersion).toBe(PREDECESSOR_INTENT_VERSION);
     expect(record.predecessorAttemptVersion).toBe(PREDECESSOR_ATTEMPT_VERSION);
     expect(record.effectIntent.version).toBe(record.predecessorIntentVersion + 1);
@@ -304,6 +360,8 @@ describe("effect.activate ingress — the accepted path", () => {
     const store = readyStore("replay");
 
     const first = runEffectActivateCommand(store, activateBytes());
+    const budget = budgetAggregateOf(store);
+    const afterFirst = store.getAggregateVersion(budget);
     const second = runEffectActivateCommand(store, activateBytes());
 
     expect(first).toMatchObject({ disposition: "DECIDED", ok: true });
@@ -313,6 +371,47 @@ describe("effect.activate ingress — the accepted path", () => {
     const durable = readActivationLedgerRecord(AGGREGATE_ID, events);
     if (!durable.ok) throw new Error(`the durable record must read back: ${durable.code}`);
     expect(durable.record.grant.grantId).toBe(events[0]?.eventId);
+    // RAW COUNTS ON BOTH AGGREGATES, unchanged. The refusal-free return value is not evidence
+    // that nothing was written; a second reserve would move units again and show up here.
+    expect(store.getAggregateVersion(budget)).toBe(afterFirst);
+    const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+    if (!ledger.ok) throw new Error(`the durable ledger must read back: ${ledger.code}`);
+    expect(ledger.reservations.filter(
+      (entry) => entry.admissionRef === "activation:cmd-activate-1")).toHaveLength(1);
+  });
+
+  it("persists NEITHER aggregate when the budget leg loses an expected-version race", () => {
+    // ATOMICITY, forced through the real store. A foreign write lands on the BUDGET aggregate
+    // between the hold being captured and the legs commit, so the captured fence is stale by
+    // the time `decideLegsUnderLock` reads every leg's version. Nothing is mocked: the fault
+    // is a genuine concurrent append to a real aggregate.
+    const store = readyStore("legs-race");
+    const budget = budgetAggregateOf(store);
+    const before = store.getAggregateVersion(budget);
+    let raced = false;
+    const racing = interceptLegsCommit(store, () => {
+      if (raced) return;
+      raced = true;
+      store.commit({
+        aggregateId: budget, commandBytes: encoder.encode("race"), commandId: "cmd-race",
+        committedAt: DECIDED_AT,
+        events: [{
+          eventId: "race-1", eventType: "BudgetLedgerRaceProbe",
+          payload: encoder.encode("{}"),
+        }],
+        expectedVersion: store.getAggregateVersion(budget),
+      });
+    });
+
+    const outcome = runEffectActivateCommand(racing, activateBytes());
+
+    expect(raced).toBe(true);
+    // The STORE's own conflict, carried by the ledger adapter with its own layer.
+    expectRefusal(outcome, "ACTIVATION_LEDGER_EXPECTED_VERSION_CONFLICT", "ACTIVATION_LEDGER");
+    // BOTH aggregates read back RAW. The activation never appended, and the budget carries the
+    // racing write alone — no reservation rode a refused decision.
+    expect(store.getAggregateVersion(AGGREGATE_ID)).toBe(0);
+    expect(store.getAggregateVersion(budget)).toBe(before + 1);
   });
 
   it("accepts exactly one of two distinct commands on the same activation identity", () => {

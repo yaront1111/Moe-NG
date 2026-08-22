@@ -69,6 +69,12 @@ import {
 } from "../../apps/daemon/src/work/foundation-attempt-contracts.js";
 import type { FoundationAttemptDispatchRequest } from "../../apps/daemon/src/work/foundation-attempt-contracts.js";
 import { claimWork } from "../../apps/daemon/src/work/work-claim.js";
+import {
+  ACTIVATION_WORLD_METER,
+} from "../../apps/daemon/src/activation/activation-world-fixtures.js";
+import { readCurrentBudgetLedger } from "../../apps/daemon/src/budget/budget-current-projection.js";
+import { reserveBudgetForAdmission } from "../../apps/daemon/src/budget/budget-ledger-holds.js";
+import { ADMISSION_PURPOSES } from "../../packages/scheduler/src/index.js";
 import { WORK_LAYERS } from "../../apps/daemon/src/work/work-kernel.js";
 
 import { EXPANSION_APPROVAL_LAYERS, approveExpansionManually } from "../../packages/core/src/expansion/expansion-approval.js";
@@ -417,17 +423,57 @@ function inactiveSlotPayload(): Record<string, unknown> {
 }
 
 /** An admission asking for more than the view holds: the budget leg's own refusal. */
-function overdrawnBudgetPayload(): Record<string, unknown> {
-  const payload = activationPayload();
-  payload["budget"] = {
-    admission: {
-      ...ADMISSION,
-      amounts: ADMISSION.amounts.map((amount) => ({ ...amount, quantity: 10_000 })),
+/**
+ * Arranges a DURABLE overdraw: a real hold through the production writer that leaves the
+ * account short of what the node's own `admissionAmounts` require.
+ *
+ * WHY THIS REPLACED `overdrawnBudgetPayload`, and it is a correction rather than a
+ * relaxation. That fixture inflated the CALLER's admission quantities to 10_000 and relied on
+ * `claimBudget` refusing them. Since task-e194c5f6 the authenticated `effect.activate` route
+ * derives its amounts, its account and its fence from durable project/goal/graph/node facts
+ * and never reads the caller's admission at all, so an inflated caller payload is now simply
+ * IGNORED — the activation is admitted, and an arm asserting a refusal would be asserting a
+ * premise that no longer exists. The hostile INTENT is unchanged and now lands where the
+ * decision actually is: the durable account cannot cover the admission.
+ *
+ * Nothing is reimplemented here. The drain runs through `reserveBudgetForAdmission`, and the
+ * refusal that follows is `reserveForAdmission`'s own
+ * `BUDGET_RESERVATION_INSUFFICIENT_AVAILABLE`, which the durable writer forwards as
+ * `BUDGET_LEDGER_TRANSITION_REFUSED` at `BUDGET_LEDGER` with the scheduler's code preserved
+ * in `sourceCode`.
+ */
+function drainDurableBudget(store: SqliteEventStore, label: string): void {
+  const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+  if (!ledger.ok) throw new Error(`hostile drain could not read the ledger: ${ledger.code}`);
+  const available = ledger.meters.find(
+    (entry) => entry.meter === ACTIVATION_WORLD_METER)?.buckets.available;
+  if (available === undefined) throw new Error("hostile drain found no durable meter position");
+  const purposes = [...ADMISSION_PURPOSES].sort();
+  // Leaves 14 units against the seeded node's 15 (1+2+3+4+5), so the shortfall is exactly one
+  // unit: the arm proves the ceiling, not that the account was emptied.
+  const head = available - 14 - (purposes.length - 1);
+  if (head <= 0) throw new Error("hostile drain found an account too small to overdraw");
+  const held = reserveBudgetForAdmission(store, {
+    accountId: ledger.binding.budgetAccountRef,
+    admissionRef: `hostile-drain-${label}`,
+    amounts: purposes.map((purpose, index) => ({
+      meter: ACTIVATION_WORLD_METER, purpose, quantity: index === 0 ? head : 1,
+    })),
+    context: {
+      commandId: `cmd-hostile-drain-${label}`, correlationId: `corr-hostile-drain-${label}`,
+      decidedAt: DECIDED_AT, principalId: PRINCIPAL_ID,
     },
-    gate: GATE, view: BUDGET_VIEW,
-  };
-  return payload;
+    gate: { allowance: { decisionRef: "decision-hostile-drain", outcome: "ALLOW" }, approval: null },
+    goalRef: GOAL_ID,
+    projectId: PROJECT_ID,
+  });
+  if (!held.ok) throw new Error(`hostile drain was refused: ${held.code}`);
 }
+
+/** The durable pair an over-committed account answers with, taken from production, not chosen. */
+const DURABLE_OVERDRAW: RefusalExpectation = Object.freeze({
+  code: "BUDGET_LEDGER_TRANSITION_REFUSED", layer: "BUDGET_LEDGER",
+});
 
 /** An envelope carrying one payload key too many. Refused before any domain stage. */
 function smuggledSectionBytes(): Uint8Array {
@@ -837,21 +883,25 @@ export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze(
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER", arm: "BEFORE",
-    name: "an admission exceeding the view is answered by the claim kernel, not the budget stage",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
-    run: async () =>
-      ingressOf(runEffectActivateCommand(openHostileStore("budget-before"), activateBytes(overdrawnBudgetPayload()))),
+    name: "an admission the DURABLE account cannot cover is refused by the durable ledger",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
+    run: async () => {
+      const store = openHostileStore("budget-before");
+      drainDurableBudget(store, "before");
+      return ingressOf(runEffectActivateCommand(store, activateBytes()));
+    },
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER", arm: "AFTER",
-    name: "the same overdrawn admission is refused identically after an activation committed",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
+    name: "the same durable shortfall is refused identically after an activation committed",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
     run: async () => {
       const store = openHostileStore("budget-after");
       runEffectActivateCommand(store, activateBytes());
-      return ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload(), "cmd-activate-3")));
+      drainDurableBudget(store, "after");
+      return ingressOf(runEffectActivateCommand(store, activateBytes(activationPayload(), "cmd-activate-3")));
     },
   },
   {
@@ -1963,15 +2013,16 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER",
-    name: "two overdrawn admissions racing are both refused, and neither is admitted at zero cost",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
+    name: "two admissions racing a drained durable account are both refused at zero cost",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
     maxAdmitted: 0,
     run: async () => {
       const store = openHostileStore("budget-race");
+      drainDurableBudget(store, "race");
       return [
-        ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload()))),
-        ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload(), "cmd-activate-5"))),
+        ingressOf(runEffectActivateCommand(store, activateBytes())),
+        ingressOf(runEffectActivateCommand(store, activateBytes(activationPayload(), "cmd-activate-5"))),
       ] as const;
     },
   },

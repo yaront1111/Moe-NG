@@ -96,7 +96,9 @@ vi.mock("../activation/activation-run-commit.js", async (importOriginal) => {
 
 import { readAttemptRelease } from "./attempt-release-disposition.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
-import { graphRevisionAggregateId } from "../planning/active-graph-projection.js";
+import {
+  graphRevisionAggregateId, readCurrentActiveGraph,
+} from "../planning/active-graph-projection.js";
 import { putGraphBody } from "../planning/graph-body-record.js";
 import {
   ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
@@ -111,6 +113,9 @@ import {
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
+import {
+  ACTIVATION_WORLD_NODE_KEY, seedActivationWorld,
+} from "../activation/activation-world-fixtures.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
@@ -242,6 +247,12 @@ function readyStore(label: string): SqliteEventStore {
       store, bootstrapEnvelope(kind, version, payload, `cmd-${kind}-${label}`));
     if (!outcome.ok) throw new Error(`fixture ${kind} refused: ${outcome.code}`);
   }
+  // The rest of what `seedReadyProject` drives. This file re-runs the four bootstrap commands
+  // itself only to carry the fixture repository's real head, so it owes the same durable ACTIVE
+  // graph and authorized budget root every other world here gets — `effect.activate` now derives
+  // its budget from those facts instead of from the caller's payload section. Idempotent by
+  // construction: it enriches a world, it never rebuilds one.
+  seedActivationWorld(store);
   return store;
 }
 
@@ -249,7 +260,7 @@ const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const HEAD = REPOSITORY.head;
 const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64), DIGEST_C = "4".repeat(64);
-const NODE_KEY = "dev-done";
+const NODE_KEY = ACTIVATION_WORLD_NODE_KEY;
 const SESSION_ID = "session-1";
 
 const LEASE_RECORD = {
@@ -671,7 +682,15 @@ function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
   return { authorities: derived.value, definitions };
 }
 
+/**
+ * A PRECONDITION, not a rebuild — the same discipline `ensureActiveGraph` uses in
+ * `activation-world-fixtures.ts`. `readyStore` now drives the shared activation world, whose
+ * revision is ALSO `graph-revision-1`; committing this one on top of it reuses the command id
+ * `seed-graph-revision-1` with different bytes and throws COMMAND_ID_CONFLICT, and forcing a
+ * second revision id instead would publish a second ACTIVE revision and read as SPLIT_BRAIN.
+ */
 function seedActiveGraphRevision(store: SqliteEventStore): void {
+  if (readCurrentActiveGraph(store, PROJECT_ID).ok) return;
   const snapshot: GraphSnapshot = {
     completionNodeKey: NODE_KEY, edges: [],
     nodes: [{ executionBearing: true, nodeKey: NODE_KEY }],
@@ -1141,15 +1160,28 @@ describe("foundation attempt dispatch — authority gates", () => {
 
 });
 
-/** A real store whose Nth `commitExpectedVersionDecision` aborts. Every other
- *  method is the genuine store, so the abort is the only injected fact. */
+/**
+ * A real store whose Nth EXPECTED-VERSION COMMIT aborts. Every other method is the genuine
+ * store, so the abort is the only injected fact.
+ *
+ * BOTH commit seams are counted on ONE ordinal. The activation adapter commits through
+ * `commitExpectedVersionDecisionLegs` (task-e194c5f6) while the budget and provider ledgers
+ * still use the single-leg call, so watching only one of them would silently renumber which
+ * commit "call 2" names — the injection would still fire, on a different write, and these
+ * tests would keep passing while no longer testing what they say.
+ */
+const EXPECTED_VERSION_COMMITS = new Set([
+  "commitExpectedVersionDecision",
+  "commitExpectedVersionDecisionLegs",
+]);
+
 function abortingStore(store: SqliteEventStore, abortOnCall: number): {
   readonly fired: () => number; readonly store: SqliteEventStore;
 } {
   let calls = 0, fired = 0;
   const proxy = new Proxy(store, {
     get(target, property, receiver) {
-      if (property !== "commitExpectedVersionDecision") {
+      if (typeof property !== "string" || !EXPECTED_VERSION_COMMITS.has(property)) {
         const value = Reflect.get(target, property, receiver) as unknown;
         return typeof value === "function" ? value.bind(target) : value;
       }
@@ -1159,7 +1191,9 @@ function abortingStore(store: SqliteEventStore, abortOnCall: number): {
           fired += 1;
           throw new Error("injected SQLite transaction abort");
         }
-        return target.commitExpectedVersionDecision(input);
+        const forward = Reflect.get(target, property, receiver) as
+          (value: unknown) => unknown;
+        return forward.call(target, input);
       };
     },
   });

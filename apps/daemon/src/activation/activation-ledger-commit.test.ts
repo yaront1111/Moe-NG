@@ -18,7 +18,10 @@ import { pathToFileURL } from "node:url";
 import { Worker } from "node:worker_threads";
 
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
-import type { CommandDecisionResponse, CommitExpectedVersionDecisionInput } from "@moe/store";
+import type {
+  CommandDecisionResponse, CommitExpectedVersionDecisionInput,
+  CommitExpectedVersionDecisionLegsInput,
+} from "@moe/store";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { commitActivationLedgerRecord } from "./activation-ledger-commit.js";
@@ -85,6 +88,16 @@ function spyOn(store: SqliteEventStore, throwOnCommit?: Error): StoreSpy {
       calls.push("commitExpectedVersionDecision");
       if (throwOnCommit !== undefined) throw throwOnCommit;
       return store.commitExpectedVersionDecision(commit);
+    },
+    // The MULTI-LEG seam the adapter now commits through (task-e194c5f6). Recorded by name so
+    // the existing assertions still say WHICH store method the adapter reached for — a spy that
+    // silently answered both would stop distinguishing the single-leg path from the legs path.
+    commitExpectedVersionDecisionLegs(
+      commit: CommitExpectedVersionDecisionLegsInput,
+    ): CommandDecisionResponse {
+      calls.push("commitExpectedVersionDecisionLegs");
+      if (throwOnCommit !== undefined) throw throwOnCommit;
+      return store.commitExpectedVersionDecisionLegs(commit);
     },
     readEvents(aggregateId: string) {
       calls.push("readEvents");
@@ -166,7 +179,7 @@ describe("activation ledger commit adapter", () => {
         //     the call list and only on the replay path;
         //   - the returned record is a DIFFERENT object from the one passed in,
         //     because it was decoded out of the stored payload.
-        expect(spy.calls).toEqual(["commitExpectedVersionDecision", "readEvents"]);
+        expect(spy.calls).toEqual(["commitExpectedVersionDecisionLegs", "readEvents"]);
         expect(second.record).not.toBe(replayInput.record);
       });
 
@@ -363,7 +376,12 @@ describe("activation ledger commit adapter", () => {
       withStore(databasePath, (store) => {
         const spy = spyOn(store);
         expect(commitActivationLedgerRecord(spy, input()).ok).toBe(true);
-        expect(spy.calls).toEqual(["commitExpectedVersionDecision"]);
+        // The LEGS seam now, not the single-leg one (task-e194c5f6): one decision has to be
+        // able to fence a second aggregate. The apply variants stay unreachable for the same
+        // reason as before — `CommitApply` hands out a raw `DatabaseSync`, and a port that
+        // cannot name them cannot reach for one.
+        expect(spy.calls).toEqual(["commitExpectedVersionDecisionLegs"]);
+        expect(spy.calls).not.toContain("commitExpectedVersionDecision");
         expect(spy.calls).not.toContain("commitExpectedVersionDecisionWithApply");
         expect(spy.calls).not.toContain("commitWithApply");
       });

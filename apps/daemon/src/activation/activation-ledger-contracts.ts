@@ -33,7 +33,9 @@ import type {
   CommandDecisionKey,
   CommandDecisionResponse,
   CommitExpectedVersionDecisionInput,
+  CommitExpectedVersionDecisionLegsInput,
   DurableStoreErrorCode,
+  ExpectedVersionDecisionLeg,
   StoredEvent,
 } from "@moe/store";
 
@@ -186,10 +188,27 @@ export type ActivationLedgerDecodeResult =
  */
 export interface ActivationLedgerStore {
   commitExpectedVersionDecision(input: CommitExpectedVersionDecisionInput): CommandDecisionResponse;
+  /**
+   * The MULTI-LEG seam (task-46987831). One decision, several fenced aggregates, so an
+   * activation and the budget hold it authorises cannot survive one without the other.
+   * A METHOD, not a free import: `commitExpectedVersionDecisionLegs` is not a named export of
+   * `@moe/store` — it rides on `SqliteEventStore`, and naming it here is what lets this port
+   * stay the exact surface this ledger uses.
+   */
+  commitExpectedVersionDecisionLegs(
+    input: CommitExpectedVersionDecisionLegsInput,
+  ): CommandDecisionResponse;
   readEvents(aggregateId: string): readonly StoredEvent[];
 }
 
 export interface ActivationLedgerCommitInput {
+  /**
+   * The budget hold this activation authorises, CAPTURED from the ledger's own writer and
+   * carried here so it rides the SAME decision. Absent means there is no second aggregate to
+   * fence — never "commit the activation and settle the money later", which is precisely the
+   * pair this row exists to make inseparable.
+   */
+  readonly budgetLeg?: ExpectedVersionDecisionLeg;
   readonly correlationId: string;
   readonly decidedAt: string;
   readonly key: CommandDecisionKey;

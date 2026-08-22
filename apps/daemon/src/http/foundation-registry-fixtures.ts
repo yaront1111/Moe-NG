@@ -39,6 +39,7 @@ import {
   ACTIVATION_WITNESS, PROVIDER_OBSERVATION, envelope as bootstrapEnvelope,
   send as sendBootstrap,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import { PRINCIPAL_ID, PROJECT_ID } from "../recovery/restore-test-harness.js";
 import { deriveDispatchAggregateId } from "../work/foundation-attempt-contracts.js";
 
@@ -522,7 +523,16 @@ export function seedFoundationStore(
       const outcome = sendBootstrap(seed, bootstrapEnvelope(kind, version, payload));
       if (!outcome.ok) throw new Error(`seam fixture ${kind} refused: ${outcome.code}`);
     }
-    if (options.seedGraph !== false) seedActiveGraph(seed);
+    if (options.seedGraph !== false) {
+      seedActiveGraph(seed);
+      // The goal and authorized budget root that go with it: `effect.activate` now derives its
+      // budget from durable project/goal/graph/node facts instead of the caller's payload
+      // section. Idempotent, and ordered AFTER the seam's own revision on purpose — it enriches
+      // the world rather than rebuilding it, so the graph above is left exactly as it is. The
+      // `seedGraph: false` world stays deliberately empty: it is the durable home of the
+      // graph-absent refusal, and seeding it would delete that coverage.
+      seedActivationWorld(seed);
+    }
   } finally {
     seed.close();
   }
