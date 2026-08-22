@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
+import { readPlanningRun } from "../live/live-planning-run.js";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
 import type { LiveSetupResult } from "../live/live-config.js";
 import { MIDDOT } from "./glyphs.js";
+import { ApprovePlan } from "./goals/approve-plan.js";
 import { BoardStub } from "./goals/board-stub.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
@@ -27,6 +29,13 @@ const FIXTURE_BADGES: Partial<Record<NavId, NavBadge>> = Object.freeze({
   approvals: { count: "2", tone: "info" },
   health: { count: "1", tone: "danger" },
 });
+
+/**
+ * The dev subject the daemon composes a live plan-review run under. It MUST match
+ * DEFAULT_RUN_SUBJECT in affordance-read.ts (live-dispatch.ts spells it RUN_ID);
+ * this is the one run POST /planning/run/read can answer for in the dev lane.
+ */
+const LIVE_RUN_SUBJECT = "run-live-1" as const;
 
 /**
  * Google Fonts via <link>, injected here because this app cannot edit index.html.
@@ -136,9 +145,28 @@ export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
   const title = open === null ? "Goals" : open.title;
   const eyebrow = open === null ? `PROJECT ${MIDDOT} MOE-NG` : `${MIDDOT} ${open.goalId}`;
 
+  // Only an attached operator session carries the authenticated header set the
+  // plan-review read requires; unattached (fixtures / pending / refused) the open
+  // path keeps the daemon-free BoardStub placeholder.
+  const attached = !fixtures && live.status === "READY" && live.setup.ok ? live.setup : null;
+  const readRun = useMemo<((runId: string) => ReturnType<typeof readPlanningRun>) | null>(
+    () => (attached === null ? null : (runId: string) => readPlanningRun(attached.headers, runId)),
+    [attached],
+  );
+
   let body: JSX.Element;
   if (open !== null) {
-    body = <BoardStub goalId={open.goalId} onBack={back} title={open.title} />;
+    body = readRun === null
+      ? <BoardStub goalId={open.goalId} onBack={back} title={open.title} />
+      : (
+        <ApprovePlan
+          goalId={open.goalId}
+          onBack={back}
+          read={readRun}
+          runId={LIVE_RUN_SUBJECT}
+          title={open.title}
+        />
+      );
   } else if (fixtures) {
     body = <GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={fixturesCreateGoal} onOpenBoard={openBoard} />;
   } else if (live.status === "PENDING") {

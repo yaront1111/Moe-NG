@@ -538,6 +538,156 @@
   padding: 24px 4px;
 }
 
+/* --------------------------------------------------------------- plan review */
+
+.cr2-approve {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 720px;
+  padding: 24px 4px;
+}
+
+.cr2-approve-body,
+.cr2-approve-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.cr2-approve-banner {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-banner[data-reviewable="true"] {
+  color: var(--cr-ink);
+  font-weight: 600;
+}
+
+.cr2-approve-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr2-approve-heading {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-steps,
+.cr2-approve-obligations {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cr2-approve-step,
+.cr2-approve-obligation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--cr-line);
+  border-radius: 8px;
+  background: var(--cr-surface);
+}
+
+.cr2-approve-step-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cr2-approve-kind {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-step-body {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--cr-ink);
+}
+
+.cr2-approve-evidence {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-mono {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  word-break: break-all;
+}
+
+.cr2-approve-inspect {
+  font-size: 13px;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-inspect-summary {
+  cursor: pointer;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+}
+
+.cr2-approve-hashes {
+  margin: 8px 0 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+}
+
+.cr2-approve-hashes dt {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-hashes dd {
+  margin: 0;
+}
+
+.cr2-approve-refusal {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink);
+}
+
+.cr2-approve-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.cr2-approve-note {
+  margin: 0;
+  max-width: 560px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cr-ink-soft);
+}
+
 /* ------------------------------------------------------------------ motion --- */
 /*
  * The shell's universal reset (cordum-shell.css) already neutralises motion for
