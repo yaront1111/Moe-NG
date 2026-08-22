@@ -16,9 +16,10 @@
  * "the journey timed out" is the one report an operator cannot act on. Process
  * mechanics live in `daemon-children.ts`; scratch identities in `daemon-scratch.ts`.
  */
+import type { ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 
-import { freePort, killTree, spawnNode, survivingPids } from "./daemon-children.js";
+import { freePort, killTree, spawnNode, survivingChildren } from "./daemon-children.js";
 import {
   LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv, serverEnv,
 } from "./daemon-scratch.js";
@@ -53,7 +54,11 @@ export interface DaemonLane {
   readonly nodeRef: string;
   readonly projectId: string;
   readonly repoRoot: string;
-  /** The seed child. It has already exited by the time `body` runs. */
+  /**
+   * The seed child's pid, for the run's evidence line ONLY. It has already exited
+   * by the time `body` runs, so the number may name some other process by now and
+   * is never probed; see `lanePids`.
+   */
   readonly seedPid: number;
   readonly serverPid: number;
 }
@@ -80,7 +85,7 @@ interface StartedChild {
 }
 
 async function startDaemon(
-  root: string, scratch: LaneScratch, tracked: number[],
+  root: string, scratch: LaneScratch, tracked: ChildProcess[],
 ): Promise<LaneRefused | StartedChild> {
   const watched = spawnNode([
     "--experimental-transform-types",
@@ -95,8 +100,10 @@ async function startDaemon(
   // `let` assigned only inside the listener reads as never-assigned here.
   const failure: { message: string | null } = { message: null };
   watched.child.once("error", (error: Error) => { failure.message = error.message; });
+  // The HANDLE is tracked, not the pid: teardown must know whether this child is
+  // still the process its number names before it kills anything by that number.
+  tracked.push(watched.child);
   const pid = watched.child.pid;
-  if (pid !== undefined) tracked.push(pid);
   const announced = await watched.waitFor(DAEMON_ORIGIN_LINE, DAEMON_READY_BUDGET_MS);
   if (failure.message !== null) return refuse("E2E_DAEMON_SPAWN_FAILED", failure.message);
   if (pid === undefined) return refuse("E2E_DAEMON_SPAWN_FAILED", "the daemon reported no pid");
@@ -107,7 +114,7 @@ async function startDaemon(
 }
 
 async function runSeed(
-  root: string, scratch: LaneScratch, origin: string, tracked: number[],
+  root: string, scratch: LaneScratch, origin: string, tracked: ChildProcess[],
 ): Promise<LaneRefused | number> {
   const watched = spawnNode([
     "--experimental-transform-types",
@@ -115,9 +122,10 @@ async function runSeed(
   ], root, seedEnv(scratch, origin));
   // Tracked even though it exits on its own: a seed that HANGS hits its budget
   // below and would otherwise outlive the lane, since teardown only kills what
-  // it was told about.
+  // it was told about. A seed that exited is left alone by the same teardown,
+  // which reads the handle before it reads the number.
+  tracked.push(watched.child);
   const pid = watched.child.pid ?? -1;
-  if (pid > 0) tracked.push(pid);
   const exit = await new Promise<number | null>((done) => {
     const timer = setTimeout(() => { done(null); }, SEED_BUDGET_MS);
     watched.child.once("exit", (code) => { clearTimeout(timer); done(code); });
@@ -128,15 +136,15 @@ async function runSeed(
 }
 
 async function startServer(
-  root: string, origin: string, mode: LiveCredentialMode, tracked: number[],
+  root: string, origin: string, mode: LiveCredentialMode, tracked: ChildProcess[],
 ): Promise<LaneRefused | StartedChild> {
   const port = await freePort();
   const watched = spawnNode([
     `${root}/apps/control-room/node_modules/vite/bin/vite.js`,
     "--port", String(port), "--strictPort",
   ], `${root}/apps/control-room`, serverEnv(origin, mode));
+  tracked.push(watched.child);
   const pid = watched.child.pid;
-  if (pid !== undefined) tracked.push(pid);
   const announced = await watched.waitFor(SERVER_LOCAL_LINE, SERVER_READY_BUDGET_MS);
   if (announced === null) {
     return refuse("E2E_SERVER_READY_TIMEOUT", watched.transcript().slice(-600));
@@ -158,7 +166,7 @@ export interface DaemonLaneOptions {
 }
 
 async function openLane<T>(
-  root: string, options: DaemonLaneOptions, tracked: number[], scratchRoots: string[],
+  root: string, options: DaemonLaneOptions, tracked: ChildProcess[], scratchRoots: string[],
   body: (lane: DaemonLane) => Promise<T>,
 ): Promise<LaneOutcome<T>> {
   const scratch = createLaneScratch();
@@ -202,14 +210,14 @@ export async function withDaemonBackedControlRoom<T>(
 ): Promise<LaneOutcome<T>> {
   const root = repoRoot();
   if (root === null) return refuse("E2E_REPO_ROOT_UNRESOLVED", "package.json/pnpm-workspace.yaml");
-  const tracked: number[] = [];
+  const tracked: ChildProcess[] = [];
   const scratchRoots: string[] = [];
   let primary: LaneOutcome<T>;
   try {
     primary = await openLane(root, options, tracked, scratchRoots, body);
   } finally {
     // Newest first: the dev server holds the proxy connection to the daemon.
-    for (const pid of [...tracked].reverse()) await killTree(pid);
+    for (const child of [...tracked].reverse()) await killTree(child);
     // Best effort, and deliberately silent. The store file's handle may not be
     // released the instant its process dies, and a scratch directory that
     // survives is a few hundred kilobytes in TEMP — never a reason to fail a
@@ -222,16 +230,18 @@ export async function withDaemonBackedControlRoom<T>(
       }
     }
   }
-  const survivors = await survivingPids(tracked);
+  const survivors = await survivingChildren(tracked);
   return survivors.length > 0 && primary.ok
     ? refuse("E2E_TEARDOWN_ORPHAN", survivors.join(","))
     : primary;
 }
 
 /**
- * All three pids the lane started, for the caller's own orphan assertion. The
- * seed is included even though it exits on its own: an assertion over two of the
- * three children would be silent about exactly the one that can hang.
+ * The pids still alive when `body` ran, for the caller's own orphan assertion
+ * after teardown. The seed is NOT among them: `body` only runs once the seed has
+ * exited 0, so by the time any caller probes, its number is a reaped process's
+ * number and can only ever name a stranger. A seed that hangs never reaches
+ * `body` at all; it is refused as E2E_SEED_REFUSED and killed through its handle.
  */
 export const lanePids = (lane: DaemonLane): readonly number[] =>
-  Object.freeze([lane.daemonPid, lane.seedPid, lane.serverPid]);
+  Object.freeze([lane.daemonPid, lane.serverPid]);

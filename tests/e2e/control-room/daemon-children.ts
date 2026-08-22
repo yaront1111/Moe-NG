@@ -10,7 +10,12 @@
  * direct child only, so a Node process that itself spawned workers leaves them
  * holding the store file and the bound port; and a kill that "succeeded" is not
  * evidence the process is gone. Both halves are handled here — `taskkill /t /f`
- * for the tree, `tasklist` for the confirmation.
+ * for the tree, the handle's own exit for the confirmation, and `tasklist` for
+ * whatever the handle cannot account for.
+ *
+ * HANDLES, NOT NUMBERS, cross this module's boundary. A pid is only meaningful
+ * while the process it named is unreaped; the seed exits on its own long before
+ * teardown, and on a shared host its number may already belong to something else.
  */
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
@@ -79,13 +84,45 @@ export function spawnNode(
   return watch(spawn(process.execPath, [...args], { cwd, env: { ...env } }));
 }
 
-/** Kills the whole tree. An already-dead pid is SUCCESS, not a teardown failure. */
-export function killTree(pid: number): Promise<void> {
+/** How long a kill is given to show up on the handle before teardown moves on. */
+export const KILL_CONFIRM_BUDGET_MS = 3_000;
+
+/**
+ * True while Node has not reaped the child. A handle that carries an exit code
+ * or a signal is a process that is GONE, whatever `tasklist` says about its
+ * number: the OS may have handed that pid to someone else since.
+ */
+export const running = (child: ChildProcess): boolean =>
+  child.exitCode === null && child.signalCode === null;
+
+/** Resolves true once the child has exited, false when `ms` is spent first. */
+function exited(child: ChildProcess, ms: number): Promise<boolean> {
+  if (!running(child)) return Promise.resolve(true);
   return new Promise((done) => {
-    const child = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore" });
-    child.once("error", () => { done(); });
-    child.once("close", () => { done(); });
+    const timer = setTimeout(() => { done(false); }, ms);
+    child.once("exit", () => { clearTimeout(timer); done(true); });
   });
+}
+
+/**
+ * Kills the whole tree and waits for the HANDLE to agree.
+ *
+ * Takes the handle, never the number. A child that has already exited is SUCCESS
+ * and is not touched: its pid is no longer this lane's to kill, and a
+ * `taskkill /t /f` on a recycled number would reap a foreign process tree on a
+ * shared host. A child that never got a pid has nothing to kill. The kill is then
+ * confirmed through the handle's own exit rather than through `taskkill`'s exit
+ * status, which says only that the request was accepted.
+ */
+export async function killTree(child: ChildProcess): Promise<void> {
+  if (child.pid === undefined || !running(child)) return;
+  const pid = child.pid;
+  await new Promise<void>((done) => {
+    const killer = spawn("taskkill", ["/pid", String(pid), "/t", "/f"], { stdio: "ignore" });
+    killer.once("error", () => { done(); });
+    killer.once("close", () => { done(); });
+  });
+  await exited(child, KILL_CONFIRM_BUDGET_MS);
 }
 
 /**
@@ -113,6 +150,20 @@ export async function survivingPids(pids: readonly number[]): Promise<readonly n
   const survivors: number[] = [];
   for (const pid of pids) if (await isAlive(pid)) survivors.push(pid);
   return Object.freeze(survivors);
+}
+
+/**
+ * The same question asked of HANDLES. Only a child Node has not reaped is put to
+ * `tasklist`: a reaped child is gone by definition, and probing its number would
+ * report whichever foreign process now holds it as this lane's orphan. The
+ * fail-closed answer above is kept for every child that is still unaccounted for.
+ */
+export async function survivingChildren(
+  children: readonly ChildProcess[],
+): Promise<readonly number[]> {
+  const unreaped = children.flatMap((child) =>
+    child.pid !== undefined && running(child) ? [child.pid] : []);
+  return survivingPids(unreaped);
 }
 
 /**
