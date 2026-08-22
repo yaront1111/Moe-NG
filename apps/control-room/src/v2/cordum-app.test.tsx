@@ -23,7 +23,9 @@ afterEach(() => {
 
 describe("CordumApp live path uses the runtime handshake", () => {
   it("shows CONNECTING, calls /bootstrap, then renders the refused surface when no daemon answers", async () => {
-    const fetchMock = vi.fn(() => Promise.reject(new Error("no daemon on this origin")));
+    const fetchMock = vi.fn(
+      (_input: string, _init?: RequestInit) => Promise.reject(new Error("no daemon on this origin")),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<CordumApp search="" />);
