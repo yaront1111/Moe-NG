@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createCompatGate } from "@moe/control-room-client";
 import type { ControlRoomTransport } from "@moe/control-room-client";
@@ -153,6 +153,39 @@ describe("createBoardFeed", () => {
     expect(frames[0]).toMatchObject({
       connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
     });
+  });
+
+  it("re-arms as DISCONNECTED when the daemon accepts a poll and never answers", async () => {
+    // The DEFAULT post's deadline. A wedged-but-listening daemon rejects
+    // nothing on its own, so without one the poll pends forever: no frame, no
+    // reschedule, the board frozen on its last CONNECTED frame. The stub
+    // honours the abort contract exactly as a real fetch does — reject with
+    // the signal's reason when it fires, never resolve on its own.
+    const frames: SurfaceFrame[] = [];
+    let scheduled = 0;
+    vi.stubGlobal("fetch", (_input: RequestInfo | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => { reject(init.signal?.reason as Error); });
+      }));
+    try {
+      const feed = createBoardFeed({
+        headers: {},
+        intervalMs: 60_000,
+        onFrame: (frame) => frames.push(frame),
+        requestTimeoutMs: 20,
+        schedule: () => { scheduled += 1; return () => undefined; },
+      });
+      feed.start();
+      await waitFor(() => { expect(frames).toHaveLength(1); });
+      feed.stop();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(frames[0]).toMatchObject({
+      connection: "DISCONNECTED", detail: "TRANSPORT_REQUEST_FAILED", outcome: "UNDELIVERED",
+    });
+    // The hang converted to the already-handled rejection, so the loop re-armed.
+    expect(scheduled).toBe(1);
   });
 
   it("suppresses an in-flight poll across stop and restart instead of reviving it", async () => {

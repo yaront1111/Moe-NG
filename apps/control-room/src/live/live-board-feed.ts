@@ -41,6 +41,16 @@ export interface BoardFeedOptions {
   readonly intervalMs: number;
   readonly onFrame: (frame: SurfaceFrame) => void;
   readonly post?: ((body: string) => Promise<Response>) | undefined;
+  /**
+   * Upper bound in milliseconds on one poll's round trip (default 15_000).
+   * Consulted only by the DEFAULT post — an injected `post` owns its own
+   * deadline. Without one, a daemon that accepts the connection and never
+   * answers parks the loop forever: no rejection, so no frame and no
+   * reschedule, and the board freezes on its last CONNECTED frame. The
+   * deadline turns that hang into the rejection this loop already maps to
+   * DISCONNECTED / TRANSPORT_REQUEST_FAILED, and the loop re-arms.
+   */
+  readonly requestTimeoutMs?: number | undefined;
   readonly schedule?: ((run: () => void, delayMs: number) => () => void) | undefined;
 }
 
@@ -149,6 +159,7 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
   const post = options.post
     ?? ((body: string): Promise<Response> => fetch("/affordances/read", {
       body, headers: options.headers, method: "POST",
+      signal: AbortSignal.timeout(options.requestTimeoutMs ?? 15_000),
     }));
   const schedule = options.schedule
     ?? ((run: () => void, delayMs: number): (() => void) => {
