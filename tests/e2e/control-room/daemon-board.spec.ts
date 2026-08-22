@@ -37,7 +37,7 @@ import { readWireProtocolVersion } from "./daemon-scratch.js";
  * strings from the modules that render them would make the assertions
  * self-referential — they would pass whatever the page put on screen.
  */
-const FIXTURES_QUERY = "?fixtures=1";
+const FIXTURES_QUERY = "?v1=1&fixtures=1";
 const FIXTURE_MARKER = "Fixture board —";
 const CREDENTIALS_ABSENT_CODE = "LIVE_CONFIG_MISSING";
 
@@ -90,7 +90,7 @@ async function askDaemon(lane: DaemonLane, path: string, body: string): Promise<
 
 /** The live arm: the seeded step, its truth chips, and no fixture marker anywhere. */
 async function assertLiveBoard(page: Page, lane: DaemonLane): Promise<void> {
-  await page.goto(lane.baseUrl);
+  await page.goto(`${lane.baseUrl}?v1=1`);
   const card = page.getByTestId(seededCardTestId(lane));
   await expect(card, "the seeded node.deliver card must render").toBeVisible({ timeout: 60_000 });
   // In the READY column, which is where the daemon put it — a card rendered under
@@ -186,7 +186,7 @@ test("the live board renders the daemon's own seeded step, and says so honestly"
   const refused = await withDaemonBackedControlRoom(
     { liveCredentials: "ABSENT" },
     async (lane) => {
-      await page.goto(lane.baseUrl);
+      await page.goto(`${lane.baseUrl}?v1=1`);
       const notice = page.getByTestId("cr.config.notice");
       await expect(notice, "an unconfigured build must refuse visibly")
         .toBeVisible({ timeout: 60_000 });

@@ -277,7 +277,7 @@ test("an operator can click the whole bootstrap chain from an empty store", asyn
       // seed child rather than a fabricated pid that would name a stranger.
       expect(lane.seedPid, "an unseeded lane must claim no seed pid").toBeNull();
       await installReportRecorder(page);
-      await page.goto(lane.baseUrl);
+      await page.goto(`${lane.baseUrl}?v1=1`);
       await expect(page.getByTestId("cr.liveboard"), "the live board must attach")
         .toBeVisible({ timeout: CARD_BUDGET_MS });
       // No fixture board underneath: every card below is the daemon's answer.

@@ -38,7 +38,7 @@ import { createStaticControlRoomPorts } from "./static-ports.js";
  * apps/control-room (TS6059), and deriving the URL from the module that reads it would
  * make the assertion self-referential.
  */
-const FIXTURES_QUERY = "?fixtures=1";
+const FIXTURES_QUERY = "?v1=1&fixtures=1";
 
 /** Every workspace the nav rail offers, by its committed test id. */
 const WORKSPACES = ["goals", "approvals", "runs", "resources", "health", "policy"] as const;
@@ -355,9 +355,9 @@ test("an UNKNOWN fact renders as UNKNOWN and never as a blank or confident cell"
  * quietly serve frozen fixtures where live data belongs. So it asserts the shell root
  * and the fixture marker are ABSENT, not merely that a notice appeared.
  */
-test("the bare URL is a configuration notice, and fixtures are behind an explicit flag", async ({ page }) => {
+test("the v1 entry is a configuration notice, and fixtures are behind an explicit flag", async ({ page }) => {
   const outcome = await withStaticControlRoom(createStaticControlRoomPorts(), async (baseUrl) => {
-    await page.goto(baseUrl);
+    await page.goto(`${baseUrl}?v1=1`);
     const notice = page.getByTestId("cr.config.notice");
     await expect(notice).toHaveCount(1);
     // Both variable names, so the notice tells an operator what to actually set.

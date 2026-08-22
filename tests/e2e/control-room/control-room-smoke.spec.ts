@@ -20,7 +20,7 @@ import { createStaticControlRoomPorts } from "./static-ports.js";
  */
 test("serving the built control-room bundle mounts its shell root element", async ({ page }) => {
   const outcome = await withStaticControlRoom(createStaticControlRoomPorts(), async (baseUrl) => {
-    await page.goto(`${baseUrl}?fixtures=1`);
+    await page.goto(`${baseUrl}?v1=1&fixtures=1`);
     const shellRoot = page.getByTestId("cr.shell.root");
     // Asserts the element was FOUND, and retries while the module script runs.
     // A page that failed to mount throws nothing, so "no error" proves nothing.
