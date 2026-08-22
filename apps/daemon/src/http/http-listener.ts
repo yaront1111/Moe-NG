@@ -4,6 +4,8 @@ import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-c
 import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
+import { DOCUMENT_INGEST_PATH, handleDocumentIngestRequest } from "./document-ingest-route.js";
+import type { DocumentIngestPort } from "./document-ingest-route.js";
 import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
@@ -88,6 +90,8 @@ export interface StartListenerOptions {
   readonly deps: CommandAdapterDeps;
   /** Absent means an authenticated dossier read refuses rather than inventing one. */
   readonly documentDossiers?: DocumentDossierReadPort;
+  /** Absent means the operator ingest route refuses rather than recording a document. */
+  readonly documentIngest?: DocumentIngestPort;
   /** Absent means the graph route refuses rather than inventing a snapshot. */
   readonly graph?: GraphQueryPort;
   readonly host?: string;
@@ -140,6 +144,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   AFFORDANCE_PATH,
   COMMAND_PATH,
   DOCUMENT_DOSSIER_PATH,
+  DOCUMENT_INGEST_PATH,
   EVENT_ACKNOWLEDGE_PATH,
   EVENT_PAGE_PATH,
   GRAPH_GET_PATH,
@@ -349,6 +354,27 @@ function servePlanningRun(
   const result = handlePlanningRunReadRequest({
     authenticator: options.deps.authenticator,
     planningRuns: options.planningRuns,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveDocumentIngest(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleDocumentIngestRequest({
+    authenticator: options.deps.authenticator,
+    documentIngest: options.documentIngest,
   }, {
     body,
     credential: credentialOf(request),
@@ -590,6 +616,10 @@ async function serve(
     refuseRequest(response, "LISTENER_PLANNING_RUN_REQUEST_INVALID");
     return;
   }
+  if (path === DOCUMENT_INGEST_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID");
+    return;
+  }
   const body = await readBoundedBody(request);
   if (body === null) {
     refuseRequest(response, "LISTENER_BODY_TOO_LARGE");
@@ -602,6 +632,7 @@ async function serve(
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
   else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
+  else if (path === DOCUMENT_INGEST_PATH) serveDocumentIngest(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);
 }
 

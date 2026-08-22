@@ -32,6 +32,10 @@ import { createRestorePort } from "./recovery/restore-controller-commands.js";
 import type { RestorePort } from "./recovery/restore-controller-commands.js";
 import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
+import { createDocumentIngestPort } from "./http/document-ingest-route.js";
+import type { DocumentIngestPort } from "./http/document-ingest-route.js";
+import { createPlanningRunReadPort } from "./http/planning-run-read.js";
+import type { PlanningRunReadPort } from "./http/planning-run-read.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
   SubscriptionPort } from "./http/event-stream-contract.js";
@@ -243,6 +247,21 @@ export function createStoreDependencies(
   });
 
   /**
+   * The pending-plan read and the operator document ingest, both bound to this root's own store
+   * and project - the only place those are FACTS rather than request input. The ingest mints its
+   * correlation id and decision time per call, here, for the same reason.
+   */
+  const planningRuns = (): PlanningRunReadPort =>
+    createPlanningRunReadPort({ projectId: config.projectId, store });
+
+  const documentIngest = (): DocumentIngestPort => createDocumentIngestPort({
+    clock: () => new Date().toISOString(),
+    mintCorrelationId: () => `document-ingest:${randomUUID()}`,
+    projectId: config.projectId,
+    store,
+  });
+
+  /**
    * The operator credential mint. Built over this root's own store, project and
    * operator principal - the only place they are FACTS rather than request input -
    * so a minted session authenticates through the very authenticator wired above.
@@ -276,7 +295,9 @@ export function createStoreDependencies(
     affordances,
     close: (): void => { subscriptionDatabase?.close(); store.close(); },
     documentDossiers,
+    documentIngest,
     graph,
+    planningRuns,
     provide,
     reconciliation,
     restore: () => createRestorePort(store, config.projectId),
@@ -303,6 +324,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
     if (port === undefined) throw new Error("unreachable: document dossiers are always wired");
     return port();
   },
+  documentIngest: () => {
+    const port = fromEnv().documentIngest;
+    if (port === undefined) throw new Error("unreachable: document ingest is always wired");
+    return port();
+  },
   /**
    * FORWARDED, not merely constructed. `createStoreDependencies` returning a
    * `graph` factory is invisible to the shipped daemon: `daemon-main` loads THIS
@@ -313,6 +339,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   graph: () => {
     const port = fromEnv().graph;
     if (port === undefined) throw new Error("unreachable: the graph reader is always wired");
+    return port();
+  },
+  planningRuns: () => {
+    const port = fromEnv().planningRuns;
+    if (port === undefined) throw new Error("unreachable: the planning-run reader is always wired");
     return port();
   },
   provide: () => fromEnv().provide(),

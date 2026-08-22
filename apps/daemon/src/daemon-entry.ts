@@ -245,7 +245,11 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined
       ? {} : { documentDossiers: resolved.documentDossiers }),
+    ...(resolved.documentIngest === undefined
+      ? {} : { documentIngest: resolved.documentIngest }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+    ...(resolved.planningRuns === undefined
+      ? {} : { planningRuns: resolved.planningRuns }),
     ...(resolved.sessionHandshake === undefined
       ? {} : { pairing: resolved.sessionHandshake }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),

@@ -1,7 +1,9 @@
 import type { BootReconciliationPort } from "./recovery/boot-reconciliation.js";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
+import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
+import type { PlanningRunReadPort } from "./http/planning-run-read.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
@@ -9,8 +11,12 @@ export interface OptionalDaemonPortProvider {
   /** Every port is optional; absence is surfaced by its listener route. */
   affordances?(): AffordancePort;
   documentDossiers?(): DocumentDossierReadPort;
+  /** The operator document-ingest write port, bound to this daemon's own project. */
+  documentIngest?(): DocumentIngestPort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
+  /** The pending-plan read port, bound to this daemon's own project. */
+  planningRuns?(): PlanningRunReadPort;
   /**
    * The restart reconciliation sweep. Absent only for a provider with no durable
    * store — the fixture provider has none, and a sweep it cannot run is not a
@@ -29,7 +35,9 @@ export interface OptionalDaemonPortProvider {
 export interface ResolvedOptionalDaemonPorts {
   readonly affordances?: AffordancePort;
   readonly documentDossiers?: DocumentDossierReadPort;
+  readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
+  readonly planningRuns?: PlanningRunReadPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly sessionHandshake?: SessionHandshakePort;
   readonly subscriptions?: SubscriptionPort;
@@ -40,8 +48,8 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "documentDossiers", "graph", "reconciliation",
-  "sessionHandshake",
+  "subscriptions", "affordances", "documentDossiers", "documentIngest", "graph", "planningRuns",
+  "reconciliation", "sessionHandshake",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -91,12 +99,28 @@ export function resolveOptionalDaemonPorts(
     if (documentDossiers !== undefined && !hasMethods(documentDossiers, ["readLatest"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const ingestFactory = provider.documentIngest;
+    if (ingestFactory !== undefined && typeof ingestFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const documentIngest = ingestFactory?.call(provider);
+    if (documentIngest !== undefined && !hasMethods(documentIngest, ["ingest"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const graphFactory = provider.graph;
     if (graphFactory !== undefined && typeof graphFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const graph = graphFactory?.call(provider);
     if (graph !== undefined && !hasMethods(graph, ["readCurrentActiveGraph"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const planningRunFactory = provider.planningRuns;
+    if (planningRunFactory !== undefined && typeof planningRunFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const planningRuns = planningRunFactory?.call(provider);
+    if (planningRuns !== undefined && !hasMethods(planningRuns, ["readPlanningRun"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const reconciliationFactory = provider.reconciliation;
@@ -118,7 +142,9 @@ export function resolveOptionalDaemonPorts(
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
+      ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),
+      ...(planningRuns === undefined ? {} : { planningRuns }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(sessionHandshake === undefined ? {} : { sessionHandshake }),
       ...(subscriptions === undefined ? {} : { subscriptions }),

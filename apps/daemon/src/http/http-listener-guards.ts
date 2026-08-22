@@ -41,6 +41,10 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_CSRF_INVALID",
   "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID",
   "LISTENER_DOCUMENT_DOSSIER_UNAVAILABLE",
+  // The operator ingest route's transport faults, mirroring the dossier pair: a malformed or
+  // non-POST body, and a daemon composed without the ingest port.
+  "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID",
+  "LISTENER_DOCUMENT_INGEST_UNAVAILABLE",
   "LISTENER_GRAPH_REQUEST_INVALID",
   "LISTENER_HOST_INVALID",
   "LISTENER_NON_LOOPBACK_BIND",
@@ -141,6 +145,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_BODY_TOO_LARGE") return 413;
   if (code === "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DOCUMENT_DOSSIER_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DOCUMENT_INGEST_UNAVAILABLE") return 503;
   if (code === "LISTENER_GRAPH_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
