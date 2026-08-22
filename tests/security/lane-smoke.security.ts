@@ -33,6 +33,17 @@ const FAULT_SCRIPT =
 const SECURITY_SCRIPT =
   "tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts";
 
+/**
+ * Pinned for the same reason as the two lane scripts: it is the only invocation of
+ * `typecheck:import`, and `typecheck:import` is the only thing that type-checks
+ * `tools/import/**` at all: `pnpm --recursive typecheck` reaches workspace packages
+ * and `tools/` is in none. A typecheck script no gate runs is indistinguishable from
+ * one that does not exist, and losing either leg from here is silent.
+ */
+const INTEGRATION_SCRIPT =
+  "pnpm typecheck:packaging && pnpm typecheck:import && vitest run tests/integration"
+  + " && node --test tests/integration/release-supply-chain.test.mjs";
+
 /** Predecessor scripts that this task must preserve byte-for-byte. */
 const INHERITED_SCRIPTS = [
   "typecheck", "test", "test:meta", "test:property", "test:e2e", "test:e2e:browser",
@@ -113,6 +124,11 @@ describe("hostile lane smoke — root scripts", () => {
     const scripts = readScripts();
     expect(scripts["test:fault"]).toBe(FAULT_SCRIPT);
     expect(scripts["test:security"]).toBe(SECURITY_SCRIPT);
+  });
+
+  it("runs both tools typecheck legs inside test:integration", () => {
+    const scripts = readScripts();
+    expect(scripts["test:integration"]).toBe(INTEGRATION_SCRIPT);
   });
 
   it("typechecks before Vitest in both lane scripts", () => {
@@ -201,9 +217,10 @@ describe("hostile lane smoke — ordinary root config is untouched", () => {
    * executes in some root lane; tools/ was in no include root before it.
    *
    * The pin's rationale ("hostile files are not regression evidence") survives
-   * that fourth root: tools/ was enumerated at landing and holds one *.test.ts
-   * and zero *.fault.ts / *.security.ts / *.spec.ts / fixture files, and the
-   * pattern itself still matches only the .test.ts suffix. The durable guard is
+   * that fourth root: tools/ was enumerated again when pack-docs.test.ts landed
+   * and holds two *.test.ts and zero *.fault.ts / *.security.ts / *.spec.ts /
+   * fixture files, and the pattern itself still matches only the .test.ts
+   * suffix. The durable guard is
    * the suffix sweep below, which iterates block.include and so covers any
    * future root automatically — the length witness keeps it from going vacuous
    * if the include is ever silently emptied.

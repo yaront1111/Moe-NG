@@ -87,10 +87,27 @@ node "%~dp0apps\\daemon\\src\\cli\\moe-cli-main.ts" %*
 exit /b %errorlevel%
 `;
 
-/** `@args` splats without re-parsing, so a quoted target survives intact. */
+/**
+ * `@args` splats without re-parsing, so a quoted target survives intact.
+ *
+ * node is RESOLVED before it is called, because otherwise a missing runtime reads
+ * as SUCCESS: `& node` raises CommandNotFoundException, which never assigns
+ * `$LASTEXITCODE`, and `exit $null` exits 0. The absence is refused by name with
+ * the code cmd already gives `moe.cmd` for it - 9009 - so one condition has one
+ * code whichever launcher a wrapper drove. `Select-Object -First 1` because a
+ * PATH carrying more than one `node` yields more than one command object, and
+ * `$node.Source` would then be an array rather than a path.
+ */
 export const MOE_PS1 = `#!/usr/bin/env pwsh
 $entry = Join-Path $PSScriptRoot 'apps/daemon/src/cli/moe-cli-main.ts'
-& node $entry @args
+$node = Get-Command node -CommandType Application -ErrorAction SilentlyContinue |
+  Select-Object -First 1
+if ($null -eq $node) {
+  [Console]::Error.WriteLine(
+    'MOE_CLI_NODE_MISSING: no node on PATH; INSTALL.md names the version this build needs')
+  exit 9009
+}
+& $node.Source $entry @args
 exit $LASTEXITCODE
 `;
 

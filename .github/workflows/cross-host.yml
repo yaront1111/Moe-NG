@@ -518,8 +518,11 @@ jobs:
   # so the portability matrices DO execute there. What `gate` cannot give is
   # ATTRIBUTION: one aggregate `Test Files N passed` line cannot say that
   # projection-, provider- and transport- each ran a case, and `gate` runs
-  # neither `pnpm typecheck:packaging` (test:integration's first leg), nor the
-  # release supply-chain node:test leg, nor `tsc -p tests/migration/tsconfig.json`
+  # neither `pnpm typecheck:packaging` nor `pnpm typecheck:import`
+  # (test:integration's two typecheck legs; `pnpm --recursive typecheck` reaches
+  # workspace packages only and `tools/` is in none, so nothing else type-checks
+  # those files at all), nor
+  # the release supply-chain node:test leg, nor `tsc -p tests/migration/tsconfig.json`
   # (test:migration's first leg). This job runs the task's two named gates whole,
   # per host, and proves each matrix executed by NAME rather than in aggregate.
   #
@@ -571,12 +574,18 @@ jobs:
           set +e
           pnpm typecheck:packaging 2>&1 | tee portability-integration.log
           typecheck_status=${PIPESTATUS[0]}
+          pnpm typecheck:import 2>&1 | tee -a portability-integration.log
+          import_typecheck_status=${PIPESTATUS[0]}
           pnpm exec vitest run tests/integration 2>&1 | tee -a portability-integration.log
           vitest_status=${PIPESTATUS[0]}
           set -e
           failed=0
           if [ "${typecheck_status}" -ne 0 ]; then
             echo "::error title=portability-evidence::pnpm typecheck:packaging exited ${typecheck_status}"
+            failed=1
+          fi
+          if [ "${import_typecheck_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::pnpm typecheck:import exited ${import_typecheck_status}"
             failed=1
           fi
           if [ "${vitest_status}" -ne 0 ]; then

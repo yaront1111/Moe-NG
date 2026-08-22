@@ -118,3 +118,68 @@ describe("runImportShadow --current version", () => {
     });
   });
 });
+
+/**
+ * (kind, id) is the comparator's key and it keeps the FIRST entity under a key. A
+ * `--current` file carrying two conflicting rows for one key therefore decides the whole
+ * comparison by document order, and the operator is handed a confident mismatch list over
+ * a file that contradicts itself. The duplicate must be answered at the input boundary.
+ *
+ * Three controls sit against that refusal so it is a bound and not a blanket: identical
+ * duplicates collapse losslessly (they admit one reading, not two), one id under two kinds
+ * is two entities, and the key is a pair rather than a joined string.
+ */
+describe("runImportShadow --current duplicate identity", () => {
+  const projection = (entities: readonly unknown[]): string =>
+    currentOf({ entities, version: SHADOW_PROJECTION_VERSION });
+
+  it("refuses two rows for one (kind, id) whose fields disagree, not keeping either", () => {
+    const current = projection([
+      { fields: { principal: "alice", status: "HELD" }, id: "task-0", kind: "CLAIM" },
+      { fields: { principal: "bob", status: "HELD" }, id: "task-0", kind: "CLAIM" },
+    ]);
+    const result = runImportShadow([snapshotOf(1), "--current", current]);
+    expect(result.code).toBe(1);
+    expect(JSON.parse(result.text)).toMatchObject({
+      code: "IMPORT_SOURCE_AMBIGUOUS",
+      layer: "INPUT",
+      outcome: "REFUSED",
+    });
+  });
+
+  it("collapses a byte-identical duplicate onto the report the single row produces", () => {
+    // One root for both runs: the report carries the manifest digest, so a second
+    // snapshot would differ for a reason that has nothing to do with the duplicate.
+    const root = snapshotOf(1);
+    const row = { fields: { principal: "alice", status: "HELD" }, id: "task-0", kind: "CLAIM" };
+    const once = runImportShadow([root, "--current", projection([row])]);
+    const twice = runImportShadow([root, "--current", projection([row, row])]);
+    expect(twice.code).toBe(0);
+    expect(JSON.parse(twice.text)).toMatchObject({ outcome: "COMPLETED" });
+    expect(JSON.parse(twice.text)).toStrictEqual(JSON.parse(once.text));
+  });
+
+  it("keeps one id under two kinds, which is two entities and no contradiction", () => {
+    const current = projection([
+      { fields: { principal: "alice" }, id: "shared", kind: "CLAIM" },
+      { fields: { holder: "bob" }, id: "shared", kind: "BLOCKER" },
+    ]);
+    const result = runImportShadow([snapshotOf(1), "--current", current]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.text)).toMatchObject({ outcome: "COMPLETED" });
+  });
+
+  it("keys on the pair, so two rows a joined key would merge are still two entities", () => {
+    // The collision `index()` in shadow-projection.ts declines to have: a joined
+    // `kind:id` reads these as one key. Undeclared kinds are representable here because
+    // the input boundary does not narrow `kind`, and the comparator maps an unknown kind
+    // to no fields rather than refusing.
+    const current = projection([
+      { fields: { principal: "alice" }, id: ":x", kind: "CLAIM" },
+      { fields: { principal: "bob" }, id: "x", kind: "CLAIM:" },
+    ]);
+    const result = runImportShadow([snapshotOf(1), "--current", current]);
+    expect(result.code).toBe(0);
+    expect(JSON.parse(result.text)).toMatchObject({ outcome: "COMPLETED" });
+  });
+});
