@@ -1,5 +1,7 @@
 import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner";
 
+import { journeyAuthority } from "../planning/journey-authority-bodies.js";
+import type { JourneyAuthority } from "../planning/journey-authority-bodies.js";
 import { REVIEWER_CALIBRATION_SLICE_REF } from "../review/reviewer-calibration-record.js";
 import { VERIFIER_POLICY_SLICE_REF } from "../review/verifier-authority-provider.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "../review/verifier-receipt-contracts.js";
@@ -23,6 +25,22 @@ function hex64(label: string): string {
   return (base + "0".repeat(64)).slice(0, 64);
 }
 
+/**
+ * The seed's planning-authority bodies, minted through the shared journey producer so the demo
+ * seals the SAME shape the bootstrap harness does. Every id is derived from the caller's, so
+ * two builds over one input stay byte-identical.
+ */
+function sealedAuthority(input: DemoSeedInput): JourneyAuthority {
+  return journeyAuthority({
+    authorRef: input.principalId,
+    criterionIds: [`${input.goalId}-criterion`],
+    graphContentHash: hex64("c0ffee"),
+    graphRevisionRef: `${input.runId}-graph-revision`,
+    idPrefix: input.runId,
+    nodeIds: [input.node.nodeRef],
+    stepDescription: "Seed the demo plan.",
+  });
+}
 
 /**
  * The verifier's ACTION and the risk tier the demo claims for it. Both are pinned as literals
@@ -220,8 +238,17 @@ export function activationWitness(input: DemoSeedInput): Record<string, unknown>
   };
 }
 
-/** The core planning-run commands that carry a fresh run to PLANNING and then propose. */
+/**
+ * The core planning-run commands that carry a fresh run to PLANNING and then propose.
+ *
+ * The propose terminal is the ONLY command the authority member may ride: `planning-services.ts`
+ * returns `commitFinalizedSubmission` at :132 BEFORE `buildPlanningAuthorityLeg` at :136, so a
+ * finalize request never reads the member — and `callerSuppliedAuthorityBodies` lists
+ * `"authority"` among its forbidden keys, so putting it there is refused outright
+ * (`PLANNING_FINALIZE_BODIES_SUPPLIED`, DAEMON_INGRESS, :120-122) rather than merely ignored.
+ */
 export function planningChain(input: DemoSeedInput): readonly Record<string, unknown>[] {
+  const sealed = sealedAuthority(input);
   return [
     {
       commandId: `${input.runId}-create`,
@@ -255,6 +282,7 @@ export function planningChain(input: DemoSeedInput): readonly Record<string, unk
       },
     },
     {
+      authority: sealed.authority,
       commandId: `${input.runId}-propose`,
       effectTerminalProof: {
         effectTerminalRef: `${input.runId}-effect-terminal`,
@@ -264,7 +292,7 @@ export function planningChain(input: DemoSeedInput): readonly Record<string, unk
       expectedVersion: 3,
       kind: "plan.propose",
       proposalKind: "INITIAL",
-      submissionHash: hex64("dec0de"),
+      submissionHash: sealed.submissionHash,
       witness: {
         attemptRef: `${input.runId}-attempt`,
         submissionRef: `${input.runId}-submission`,
@@ -291,7 +319,9 @@ export function finalizeChain(input: DemoSeedInput): readonly Record<string, unk
         dependencyHash: hex64("d1"),
         graphContentHash: hex64("c0ffee"),
         graphRevisionRef: `${input.runId}-graph-revision`,
-        planHash: hex64("dec0de"),
+        // The run's sealed plan hash, not a constant: the propose terminal sealed the plan body
+        // whose own `planHash` this is, and the finalize is judged against that folded state.
+        planHash: sealedAuthority(input).submissionHash,
         qualityHash: hex64("dd"),
       },
       witness: {
@@ -334,7 +364,9 @@ export function approvalRecord(input: DemoSeedInput): Record<string, unknown> {
     decision: null,
     decisionReason: null,
     dependencyChanges: { additions: [], challenges: [], removals: [] },
-    exactRevisionHash: hex64("dec0de"),
+    // Joined to the run's submission hash, which task-2cc6c59d's inconsistency refusal compares
+    // against the sealed plan body; a spelled constant here reads as an INCONSISTENT approval.
+    exactRevisionHash: sealedAuthority(input).submissionHash,
     lifecycle: "PENDING",
     planQualityAssessmentRef: hex64("dd"),
     policyDecisionRef: null,

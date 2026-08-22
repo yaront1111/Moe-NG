@@ -8,7 +8,14 @@
  */
 import type { SqliteEventStore } from "@moe/store";
 
-import { bootstrapSequence, openStore, send } from "./bootstrap-test-fixtures.js";
+import {
+  RUN_ID,
+  bootstrapSequence,
+  envelope,
+  openStore,
+  planningChain,
+  send,
+} from "./bootstrap-test-fixtures.js";
 
 /**
  * A run that has PROPOSED but DELIBERATELY NOT FINALIZED, on the LIFECYCLE axis.
@@ -28,6 +35,43 @@ import { bootstrapSequence, openStore, send } from "./bootstrap-test-fixtures.js
 export function proposedNotFinalizedStore(): SqliteEventStore {
   const store = openStore();
   driveTo(store, finalizeRequestIndex());
+  return store;
+}
+
+/**
+ * A run PROPOSED WITHOUT AUTHORITY BODIES, on the AUTHORITY axis (task-074e6d2e).
+ *
+ * The omission is the point and must not be "fixed". `bootstrapSequence()` now proposes through
+ * `sealedPlanningChain()`, so without this seeder no world in the daemon would reach a durable
+ * proposal whose authority aggregate is EMPTY. Two named consumers depend on that world being
+ * reachable:
+ *   - the ABSENT branch of `buildPlanningAuthorityLeg` (planning-authority-persistence.ts:189),
+ *     which is also what the legacy pin at planning-authority-persistence.test.ts:257-274 asserts
+ *     byte-identically; and
+ *   - task-2cc6c59d's INCONSISTENCY refusal, which needs an unsealed run to refuse ON.
+ * A guard whose only world has been enriched away is green forever and killable by deleting the
+ * check, which is exactly how a negative world dies looking like a bug being fixed.
+ *
+ * The chain is `planningChain()` itself — the authority-LESS shared builder, byte-identical to
+ * what it was before this row. Nothing is mutated or hand-shortened here: the world IS the
+ * builder, so a later edit that seals the shared builder reddens this seeder rather than
+ * quietly turning it positive.
+ *
+ * The axis matters because two other rows designate negative worlds on OTHER axes, and neither
+ * is a candidate for this one's treatment: task-acc1a3b4's are negative on the BUDGET axis
+ * (`seedActivationWorldWithoutGraph` / `seedActivationWorldWithoutGoal`), and task-f216f085's is
+ * `proposedNotFinalizedStore` above, negative on the LIFECYCLE axis. This world is fully
+ * finalizable and fully budget-enriched; it is negative on AUTHORITY only.
+ */
+export function authorityLessProposedStore(): SqliteEventStore {
+  const store = openStore();
+  driveTo(store, finalizeRequestIndex() - 1);
+  const outcome = send(store, envelope("plan.propose", 0, {
+    commands: planningChain(), runId: RUN_ID,
+  }));
+  if (!outcome.ok) {
+    throw new Error(`authority-less proposal refused: ${outcome.code}`);
+  }
   return store;
 }
 

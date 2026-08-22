@@ -189,6 +189,17 @@ function proposeGrantedWork(store: SqliteEventStore): void {
   expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(SATISFIED_GATE);
 }
 
+/**
+ * The approval for a run THIS SUITE proposed, which is the authority-LESS world: the arms below
+ * send a legacy `planningChain()` rather than the shipped `sealedPlanningChain()`, so the run's
+ * submission hash is the spelled `SUBMISSION_HASH`. An approval naming the SEALED hash is refused
+ * BOOTSTRAP_REVISION_HASH_MISMATCH before it ever reaches the human-authority gate these arms are
+ * about (task-074e6d2e), which would answer the refusal at the wrong layer while staying red-free
+ * elsewhere. Keeping them legacy also keeps live consumers of the ABSENT arm inside this suite.
+ */
+const legacyApprovalPayload = (): Record<string, unknown> =>
+  approvalPayload({ record: approvalRecord(SUBMISSION_HASH) });
+
 afterEach(closeStores);
 afterEach(() => { vi.unstubAllEnvs(); });
 
@@ -363,7 +374,7 @@ describe("approval decide", () => {
       proposeGatedWork(store);
       const before = decisionCount(store);
 
-      const outcome = send(store, envelope("approval.decide", 0, approvalPayload(),
+      const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload(),
         `cmd-gated-${String(index)}`));
 
       expect(outcome.ok, why).toBe(false);
@@ -391,7 +402,7 @@ describe("approval decide", () => {
     // Under the most permissive settings the file can express, so the gate is what answers.
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected unreadable-gate refusal");
@@ -423,7 +434,7 @@ describe("approval decide", () => {
     const before = decisionCount(store);
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected forged-grant refusal");
@@ -603,7 +614,7 @@ describe("approval decide", () => {
     proposeGatedWork(store);
     const before = decisionCount(store);
 
-    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, legacyApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected the unsatisfied gate to stand");
@@ -711,7 +722,7 @@ describe("approval decide", () => {
     const store = openStore();
     proposeGrantedWork(store);
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload()));
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     expect(durableApprovalRefs(store)).toEqual(["approval-1"]);

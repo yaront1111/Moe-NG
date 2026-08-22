@@ -6,6 +6,7 @@ import {
   SPEED_APPROVAL_MODE,
   SPEED_MODE_DELAY_ENV_KEY,
 } from "../planning/approval-policy-settings.js";
+import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { BOOTSTRAP_SCHEMA_VERSION } from "./bootstrap-contracts.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
@@ -45,7 +46,38 @@ export function hex64(seed: string): string {
 }
 
 export const POLICY_REF = hex64("a1b2c3");
+export const GRAPH_REVISION_REF = "graph-revision-1";
+
+/**
+ * The LEGACY submission hash: a spelled constant carried by the authority-LESS `planningChain()`.
+ *
+ * It stays spelled, and `planningChain()` stays authority-less, because that pair IS the durable
+ * home of the ABSENT arm (`planning-authority-persistence.ts:189`) and of task-2cc6c59d's
+ * inconsistency refusal. `planning-authority-persistence.test.ts:257-274` pins it byte-identical.
+ */
 export const SUBMISSION_HASH = hex64("dec0de");
+
+/**
+ * The planning-authority the SHIPPED journey seals (task-074e6d2e), minted through the same
+ * production producer the demo seed uses (`journey-authority-bodies.ts`) so the harness and the
+ * product cannot drift into sealing differently-shaped authority while both stay green.
+ *
+ * `SEALED_SUBMISSION_HASH` is DERIVED from the minted plan rather than spelled: the leg refuses
+ * `PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH` unless the folded state's submission hash IS the
+ * plan's own hash, and a spelled constant cannot be kept in agreement with a minted body by hand.
+ */
+const JOURNEY_AUTHORITY = journeyAuthority({
+  authorRef: "architect-1",
+  criterionIds: ["criterion-a", "criterion-b"],
+  graphContentHash: hex64("c0ffee"),
+  graphRevisionRef: GRAPH_REVISION_REF,
+  idPrefix: RUN_ID,
+  nodeIds: ["node-a"],
+  stepDescription: "Land the journey plan.",
+});
+
+export const AUTHORITY_MEMBER = JOURNEY_AUTHORITY.authority;
+export const SEALED_SUBMISSION_HASH = JOURNEY_AUTHORITY.submissionHash;
 
 export function openStore(): SqliteEventStore {
   const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
@@ -267,6 +299,35 @@ export function planningChain(): readonly Record<string, unknown>[] {
 }
 
 /**
+ * The SHIPPED propose request: `planningChain()` with the authority member and its paired
+ * submission hash overlaid on the propose terminal (task-074e6d2e).
+ *
+ * The overlay lives HERE rather than inside `planningChain()` on purpose, and it is the row's
+ * load-bearing shape decision. `planningChain()` is imported by suites whose subject is the
+ * authority-LESS world — the legacy pin at `planning-authority-persistence.test.ts:257-274`
+ * above all — so sealing the shared builder would not have reddened them honestly; it would
+ * have left the pin GREEN while silently exercising a sealed chain. Sealing at the call site
+ * keeps the builder byte-identical and gives the shipped journey the sealed one.
+ *
+ * The member rides the PROPOSE terminal and only the propose terminal: `planning-services.ts`
+ * returns `commitFinalizedSubmission` at :132 BEFORE `buildPlanningAuthorityLeg` at :136, so a
+ * finalize request never reads it — and `callerSuppliedAuthorityBodies` lists `"authority"`
+ * among its forbidden keys, so a finalize carrying it is refused outright
+ * (`PLANNING_FINALIZE_BODIES_SUPPLIED`, `DAEMON_INGRESS`, :120-122) rather than merely ignored.
+ */
+export function sealedPlanningChain(): readonly Record<string, unknown>[] {
+  const chain = [...planningChain()];
+  const propose = chain[chain.length - 1];
+  if (propose === undefined) throw new Error("planningChain() is empty");
+  chain[chain.length - 1] = {
+    ...propose,
+    authority: AUTHORITY_MEMBER,
+    submissionHash: SEALED_SUBMISSION_HASH,
+  };
+  return chain;
+}
+
+/**
  * The finalize terminal, in a request of its OWN. `classifyPlanningChain` refuses a chain that
  * holds both terminals with PLANNING_FINALIZE_CHAIN_MIXED — they are mutually exclusive by
  * design, because each business effect owes its own durable decision — so the shipped journey
@@ -283,7 +344,9 @@ export function finalizeChain(): readonly Record<string, unknown>[] {
         dependencyHash: hex64("d1"),
         graphContentHash: hex64("c0ffee"),
         graphRevisionRef: GRAPH_REVISION_REF,
-        planHash: SUBMISSION_HASH,
+        // The run's SEALED plan hash: the propose terminal sealed the plan body whose own
+        // `planHash` this is, and the finalize is judged against that folded state.
+        planHash: SEALED_SUBMISSION_HASH,
         qualityHash: hex64("dd"),
       },
       witness: {
@@ -306,8 +369,6 @@ export function approvalCommand(): Record<string, unknown> {
     stepUpAuthRef: "stepup-1",
   };
 }
-
-export const GRAPH_REVISION_REF = "graph-revision-1";
 
 /**
  * The core's `PlanningActivationWitness` (planning-command-contract.ts:117). The daemon consumes
@@ -339,7 +400,7 @@ export function approvalPayload(
     activation: planningActivation(),
     command: approvalCommand(),
     graphRevisionRef: GRAPH_REVISION_REF,
-    record: approvalRecord(SUBMISSION_HASH),
+    record: approvalRecord(SEALED_SUBMISSION_HASH),
     runId: RUN_ID,
     ...overrides,
   };
@@ -416,7 +477,7 @@ export function bootstrapSequence(): readonly Envelope[] {
     envelope("policy.validate", 1, { input: evaluationInput(POLICY_REF) }),
     envelope("project.activate", 2, { witness: ACTIVATION_WITNESS }),
     envelope("goal.create", 0, goalPayload()),
-    envelope("plan.propose", 0, { commands: planningChain(), runId: RUN_ID }),
+    envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }),
     // The shipped journey FINALIZES before it approves: this request carries the finalize
     // terminal alone, so the run reaches `approval.decide` at lifecycle PLAN_REVIEW with a
     // durable graphRevisionRef instead of the PLANNING state a propose-only chain leaves.

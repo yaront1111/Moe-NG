@@ -16,25 +16,53 @@
  * unexported copies across the seam, and a fifth private copy would be one more thing a rename
  * could silently desynchronize.
  */
+import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it, afterEach } from "vitest";
 
+import {
+  seedActivationWorldWithoutGoal,
+  seedActivationWorldWithoutGraph,
+} from "../activation/activation-world-fixtures.js";
 import type { DemoSeedInput, SeedCommand } from "../orchestrator/demo-seed-plan.js";
 import { buildDemoSeedPlan } from "../orchestrator/demo-seed-plan.js";
+import { PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE } from "../planning/planning-authority-finalize.js";
 import { FINALIZE_COMMAND_KIND } from "../planning/planning-authority-finalize-ingress.js";
+import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
-import { finalizeRequestIndex, proposedNotFinalizedStore } from "./bootstrap-journey-fixtures.js";
+import {
+  authorityLessProposedStore,
+  finalizeRequestIndex,
+  proposedNotFinalizedStore,
+} from "./bootstrap-journey-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import {
+  AUTHORITY_MEMBER,
   PROJECT_ID,
   RUN_ID,
   bootstrapSequence,
   closeStores,
   driveThrough,
+  envelope,
   openStore,
+  planningChain,
   send,
 } from "./bootstrap-test-fixtures.js";
 
 const APPROVAL_KIND = "approval.decide";
+
+/**
+ * The bodies event type. The ENVELOPE half is imported above because
+ * `planning-authority-finalize.ts:48` exports it; this one is a fifth private copy only because
+ * no site exports it. The literal lives UNEXPORTED at four places today —
+ * `planning-authority-persistence.ts:38` (the writer), and the private copies in
+ * `planning-authority-finalize.test.ts:47`, `planning-authority-persistence.test.ts:52` and
+ * here. A rename at the writer silently nulls every selector keyed on the string and presents
+ * as "the journey carried no authority", so consolidating the constant is filed for the seam's
+ * owner (out of this row's scope under taskRail 1) rather than done here.
+ */
+const BODIES_EVENT_TYPE = "PlanningAuthorityBodiesSealed";
+
+const decoder = new TextDecoder();
 
 const NODE = Object.freeze({
   instructions: "Land the shipped finalize routing.",
@@ -226,5 +254,208 @@ describe("finalize against an unproposed run fails closed", () => {
     // this assertion is the thing that reddens and forces the update.
     expect(outcome.code).toBe("UNKNOWN_ERROR");
     expect(outcome.refusedBy).toBe("CORE_REDUCER");
+  });
+});
+
+/**
+ * DoD 1's operand: the shipped journey does not merely ROUTE a finalize, it SEALS authority.
+ *
+ * BEFORE-STATE, measured at HEAD 6755d22 by driving all of `bootstrapSequence()` through the
+ * production `send()` pipeline with every send ok=true: `planning-authority/run-1` held EXACTLY
+ * ZERO events, and the approved run record carried no `authorityRef`, no `envelopeDigest` and no
+ * `bodiesDigest`. `authorityOf` found no `authority` member on the propose terminal, took the
+ * ABSENT branch, and finalize spread an empty `carried` onto the record.
+ *
+ * The AGGREGATE is asserted, not only the record: record fields could in principle be populated
+ * by some other route, whereas the two sealed events are the seal itself having happened.
+ *
+ * Events are selected BY TYPE, never by index. Both halves land on the SAME aggregate — the
+ * bodies event from `planning-authority-persistence.ts` at propose, the envelope event from
+ * `planning-authority-finalize.ts` at finalize — and their write order is unpinned, so a
+ * take-first read would name whichever landed first and stay green while reading the wrong one.
+ *
+ * `bodiesDigest` is asserted WHERE IT LIVES, in the bodies event's payload, not on the run
+ * record: `planning-authority-finalize.ts:184-185` freezes the record's binding to
+ * `{authorityRef, envelopeDigest}` exactly, and widening it would mean editing a writer taskRail
+ * 1 forbids. It is also the operand task-2cc6c59d consumes.
+ */
+describe("the shipped journey seals planning authority", () => {
+  const sealedStore = (): SqliteEventStore => {
+    const store = openStore();
+    driveThrough(store, "goal.close");
+    return store;
+  };
+
+  const authorityEvents = (
+    store: SqliteEventStore,
+  ): readonly { readonly eventType: string; readonly payload: Uint8Array }[] =>
+    store.readEvents(planningAuthorityAggregateId(RUN_ID));
+
+  const payloadOfType = (store: SqliteEventStore, eventType: string): unknown => {
+    const found = authorityEvents(store).find((event) => event.eventType === eventType);
+    if (found === undefined) throw new Error(`the authority aggregate holds no ${eventType}`);
+    return JSON.parse(decoder.decode(found.payload)) as unknown;
+  };
+
+  it("writes both sealed events to the run's authority aggregate", () => {
+    const store = sealedStore();
+    const events = authorityEvents(store);
+
+    // The before-state was ZERO; anything non-empty is already a change, so the TYPES are what
+    // this arm actually pins.
+    expect(events.length).toBeGreaterThan(0);
+    expect(new Set(events.map((event) => event.eventType)))
+      .toEqual(new Set([BODIES_EVENT_TYPE, PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE]));
+  });
+
+  it("carries authorityRef and envelopeDigest on the durable run record", () => {
+    const store = sealedStore();
+    const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+    if (run === undefined) throw new Error(`the journey wrote no durable decision for ${RUN_ID}`);
+
+    // The ref is READ OUT of the production id builder rather than restated: two hand-authored
+    // operands agreeing would prove only that this file agrees with itself.
+    expect(own(run.result, "authorityRef")).toBe(planningAuthorityAggregateId(RUN_ID));
+    const envelopeDigest = own(run.result, "envelopeDigest");
+    expect(typeof envelopeDigest).toBe("string");
+    expect(envelopeDigest).not.toBeNull();
+  });
+
+  it("carries bodiesDigest in the bodies event, joined to the run's submission hash", () => {
+    const store = sealedStore();
+    const bodies = payloadOfType(store, BODIES_EVENT_TYPE);
+    const envelope = payloadOfType(store, PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE);
+
+    const bodiesDigest = own(bodies, "bodiesDigest");
+    expect(typeof bodiesDigest).toBe("string");
+    expect(bodiesDigest).not.toBeNull();
+
+    // The join task-2cc6c59d reads: the sealed plan body's own hash IS the run's submission
+    // hash. `buildPlanningAuthorityLeg` refuses PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH
+    // when they disagree, so a seal that reached here has already survived that check --
+    // pinning it keeps a later relaxation of the check visible from the journey.
+    expect(own(bodies, "planHash")).toBe(own(bodies, "submissionHash"));
+    expect(own(bodies, "runId")).toBe(RUN_ID);
+    expect(own(envelope, "runId")).toBe(RUN_ID);
+  });
+
+  /**
+   * The NEGATIVE CONTROL, and it is the leg that binds the three arms above to the mechanism
+   * rather than to their own fixture. `planningChain()` is the shipped chain MINUS the authority
+   * member -- it is the row's preserved authority-less world, not a mutation invented here -- so
+   * driving it proves the same reads collapse to the ABSENT shape when the member is gone.
+   * Without this, a world that reached sealed-looking fields by any other route would satisfy
+   * every assertion above identically.
+   */
+  it("reaches the ABSENT shape when the propose terminal carries no authority member", () => {
+    const store = authorityLessProposedStore();
+
+    expect(authorityEvents(store)).toEqual([]);
+    const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+    if (run === undefined) throw new Error(`the proposal wrote no durable decision for ${RUN_ID}`);
+    expect(own(run.result, "authorityRef")).toBeUndefined();
+    expect(own(run.result, "envelopeDigest")).toBeUndefined();
+    expect(own(run.result, "bodiesDigest")).toBeUndefined();
+  });
+});
+
+/**
+ * THE THREE-AXIS NEGATIVE-WORLD ROSTER (governor-7211ec87, comment-7a053f8c, condition 1).
+ *
+ * Three rows in the same shared-harness lineage each preserve a DELIBERATE negative world, on a
+ * different axis, in a different file, for a different reason. Row N+1's world-enrichment
+ * destroys row N's world while looking exactly like a bug being fixed — and a COMMENT saying
+ * "do not fix this" does not red. This describe is the only artifact that fails when someone
+ * tidies one away, which is why it asserts across all three rather than living beside any one.
+ *
+ * Each arm names the branch it protects and the row that required it. The BUDGET arm is
+ * asserted STRUCTURALLY here — its behavioural arms are owned by
+ * `activation-world-fixtures.test.ts` ("the deliberate negative worlds stay negative"), and
+ * duplicating them would put this file in the business of grading another row's seam. What this
+ * arm adds is the thing that suite cannot see: that the world still EXISTS at all when the
+ * other two axes are being edited.
+ */
+describe("all three deliberate negative worlds still exist", () => {
+  it("AUTHORITY axis (task-074e6d2e): a proposed run whose authority aggregate is EMPTY", () => {
+    // Protects the ABSENT branch at planning-authority-persistence.ts:189, the legacy pin at
+    // planning-authority-persistence.test.ts:257-274, and task-2cc6c59d's INCONSISTENCY refusal.
+    const store = authorityLessProposedStore();
+    expect(store.readEvents(planningAuthorityAggregateId(RUN_ID))).toEqual([]);
+    expect(store.getAggregateVersion(planningAuthorityAggregateId(RUN_ID))).toBe(0);
+  });
+
+  it("LIFECYCLE axis (task-f216f085): a proposed run that deliberately never finalized", () => {
+    // Protects any guard refusing a not-PLAN_REVIEW run — task-2cc6c59d's lifecycle arm.
+    const run = readDurableLedger(proposedNotFinalizedStore(), PROJECT_ID).aggregates.get(RUN_ID);
+    if (run === undefined) throw new Error("the lifecycle-axis world wrote no durable decision");
+    expect(own(own(run.result, "state"), "lifecycle")).not.toBe("PLAN_REVIEW");
+    expect(own(own(run.result, "state"), "graphRevisionRef")).toBeNull();
+  });
+
+  it("BUDGET axis (task-acc1a3b4): the no-graph and no-goal activation seeders", () => {
+    // Protect BUDGET_PROJECTION_GRAPH_UNAVAILABLE and BUDGET_PROJECTION_GOAL_ABSENT, which come
+    // from DIFFERENT branches of readBudgetBinding, so one cannot stand in for the other.
+    expect(typeof seedActivationWorldWithoutGraph).toBe("function");
+    expect(typeof seedActivationWorldWithoutGoal).toBe("function");
+  });
+});
+
+/**
+ * WHICH LAYER REFUSES A BROKEN AUTHORITY MEMBER — measured, and it is NOT the layer the plan
+ * for this row predicted. Recorded here rather than left in a drill log because the difference
+ * is invisible afterwards and a later reader would otherwise "fix" these expectations back.
+ *
+ * `planning-authority-persistence.ts` owns two refusals for a bad member —
+ * PLANNING_AUTHORITY_MALFORMED (the exact-arity check) and
+ * PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH (the plan hash must BE the run's submission hash).
+ * Neither is reachable from a chain payload: the CORE reducer folds the chain first and refuses
+ * ILLEGAL_TRANSITION @ CORE_REDUCER, so the daemon codes only answer when `lastCommand` is handed
+ * straight to `buildPlanningAuthorityLeg`, which is exactly what
+ * planning-authority-persistence.test.ts does at :310 and :333.
+ *
+ * Both arms are pinned as CODE + LAYER tuples, because "it refused" would stay green if the
+ * daemon layer quietly started answering first — which is precisely the drift this pin exists
+ * to catch. ILLEGAL_TRANSITION is fail-closed but OPAQUE against epic rail 4's stable-code
+ * requirement; the core reducer is off-limits to this row (taskRail 1), so the opacity is
+ * REPORTED for the seam owner and pinned here so its repair reddens this file.
+ *
+ * The POSITIVE CONTROLS are the sealed and legacy proposals above and in the roster describe:
+ * the same drive with a well-formed member commits, and with no member at all commits into the
+ * ABSENT world — so these two arms are refusing on the mutation, not on a broken fixture.
+ */
+describe("a malformed authority member fails closed at the core fold", () => {
+  const proposeWith = (last: Record<string, unknown>): { code: string; layer: string } => {
+    const store = openStore();
+    driveThrough(store, "plan.propose");
+    const chain = [...planningChain()];
+    chain[chain.length - 1] = last;
+    const outcome = send(store, envelope("plan.propose", 0, { commands: chain, runId: RUN_ID }));
+    if (outcome.ok) throw new Error("expected the malformed member to be refused");
+    return {
+      code: String((outcome as { code?: string }).code),
+      layer: String((outcome as { refusedBy?: string }).refusedBy),
+    };
+  };
+
+  const proposeCommand = (): Record<string, unknown> => {
+    const last = planningChain()[planningChain().length - 1];
+    if (last === undefined) throw new Error("planningChain() is empty");
+    return { ...last };
+  };
+
+  const sealedHash = (): unknown =>
+    (AUTHORITY_MEMBER["planRevision"] as Record<string, unknown>)["planHash"];
+
+  it("refuses a member whose paired submissionHash is missing", () => {
+    expect(proposeWith({ ...proposeCommand(), authority: AUTHORITY_MEMBER }))
+      .toEqual({ code: "ILLEGAL_TRANSITION", layer: "CORE_REDUCER" });
+  });
+
+  it("refuses a member carrying a THIRD key, which authorityOf's arity check forbids", () => {
+    expect(proposeWith({
+      ...proposeCommand(),
+      authority: { ...AUTHORITY_MEMBER, extraKey: "smuggled" },
+      submissionHash: sealedHash(),
+    })).toEqual({ code: "ILLEGAL_TRANSITION", layer: "CORE_REDUCER" });
   });
 });

@@ -19,7 +19,8 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  PROJECT_ID, SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope, send,
+  PROJECT_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope,
+  send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createFoundationVerificationService } from "../evidence/foundation-verification-service.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
@@ -414,7 +415,11 @@ export async function seedVerifiedNode(
 export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): void {
   driveThrough(store, "approval.decide");
   const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-    record: { ...approvalRecord(SUBMISSION_HASH), approvedNodeScope: [...nodeRefs] },
+    // The SEALED hash: `driveThrough` proposed through the shipped journey, whose propose
+    // terminal carries the authority member, so the run's submission hash is the sealed
+    // plan body's own `planHash` and an approval naming the legacy constant is refused
+    // BOOTSTRAP_REVISION_HASH_MISMATCH (task-074e6d2e).
+    record: { ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [...nodeRefs] },
   })));
   if (!outcome.ok) throw new Error(`approval setup failed: ${outcome.code}`);
 }

@@ -3,7 +3,10 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  PROJECT_ID as BOOTSTRAP_PROJECT_ID,
+  closeStores as closeBootstrapStores,
   envelope as bootstrapEnvelope,
+  openStore as openBootstrapStore,
   send as bootstrapSend,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
@@ -29,6 +32,8 @@ import {
   VERIFIER_POLICY_SLICE_REF,
   createVerifierAuthorityProvider,
 } from "../review/verifier-authority-provider.js";
+import { PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE } from "../planning/planning-authority-finalize.js";
+import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { DEMO_VALIDATABLE_POLICY_REF, activationWitness, probeObservation,
   providerProfileRef } from "./demo-seed-payloads.js";
@@ -273,5 +278,63 @@ describe("the demo seed's policy slices", () => {
 
   it("is byte-constant, so a second seed run replays instead of installing new bytes", () => {
     expect(JSON.stringify(policyInstalls())).toBe(JSON.stringify(policyInstalls()));
+  });
+});
+
+/**
+ * DoD 1's SHIPPED half. The bootstrap harness sealing authority proves nothing about the
+ * product: `bootstrap-test-fixtures.ts` is a test file, and a harness-only edit is the exact
+ * "green that certifies nothing" shape task-2cc6c59d blocked on. This arm drives the SEED'S OWN
+ * planned commands — payload, command id and expectedVersion all taken from `buildDemoSeedPlan`
+ * — through `runBootstrapCommand` and reads the authority aggregate the production writers own.
+ *
+ * A BARE GREP CANNOT SEE THIS GAP, and QA measured why: before this row,
+ * `grep -cE "authority|planRevision|acceptanceContract" demo-seed-payloads.ts` returned 4, and
+ * all four were VERIFIER-authority — one `VERIFIER_POLICY_SLICE_REF` import and three comments
+ * about `verifier-authority-provider.ts`. There were ZERO planning-authority payload members. A
+ * reviewer greping the file reads 4 and concludes the gap is imaginary.
+ *
+ * `stopBeforeApproval` is set because the seal is complete BEFORE the approval: the bodies event
+ * is written at the propose terminal and the envelope event at the finalize, both of which the
+ * plan issues ahead of `approval.decide`. Stopping there also keeps this arm off the operator
+ * credential path, which is a different subject entirely.
+ */
+describe("the shipped demo seed seals planning authority", () => {
+  afterEach(closeBootstrapStores);
+
+  // The project id is the BOOTSTRAP store's own: the drive below runs through
+  // `runBootstrapCommand`, whose decision key is (commandId, principalId, projectId).
+  const SEED_INPUT: DemoSeedInput = Object.freeze({
+    ...INPUT, projectId: BOOTSTRAP_PROJECT_ID, stopBeforeApproval: true,
+  });
+
+  /** Drives every planned command through the production pipeline, refusing to skip a refusal. */
+  function driveSeed(store: SqliteEventStore): void {
+    for (const command of buildDemoSeedPlan(SEED_INPUT)) {
+      const outcome = bootstrapSend(store, {
+        ...bootstrapEnvelope(
+          command.commandKind, command.expectedVersion, command.payload, command.commandId,
+        ),
+        correlationId: command.correlationId,
+        principalId: SEED_INPUT.principalId,
+        projectId: SEED_INPUT.projectId,
+      });
+      if (!outcome.ok) {
+        throw new Error(`seed drive refused at ${command.commandKind}: ${JSON.stringify(outcome)}`);
+      }
+    }
+  }
+
+  it("writes both sealed events to the seeded run's authority aggregate", () => {
+    const store = openBootstrapStore();
+    driveSeed(store);
+
+    // Selected BY TYPE, never by index: both halves land on this one aggregate and their write
+    // order is unpinned, so a take-first read names whichever landed first and stays green.
+    const events = store.readEvents(planningAuthorityAggregateId(SEED_INPUT.runId));
+    expect(events.length).toBeGreaterThan(0);
+    expect(new Set(events.map((event) => event.eventType))).toEqual(
+      new Set(["PlanningAuthorityBodiesSealed", PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE]),
+    );
   });
 });
