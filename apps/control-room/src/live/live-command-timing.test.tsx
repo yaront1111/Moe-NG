@@ -18,6 +18,22 @@ function fixedClock(at: number): Clock {
   return { now: () => at };
 }
 
+interface SettableClock extends Clock {
+  readonly set: (value: number) => void;
+}
+
+/**
+ * A clock the test moves by hand between renders. Its identity never changes, so the
+ * only thing that can move a reading taken through it is a render that reads it again.
+ */
+function settableClock(at: number): SettableClock {
+  let current = at;
+  return {
+    now: (): number => current,
+    set: (value: number): void => { current = value; },
+  };
+}
+
 function row(overrides: Partial<LiveEventRow> = {}): LiveEventRow {
   return {
     aggregateId: "session/sess-1",
@@ -134,5 +150,55 @@ describe("the live surface computes a receipt from what it observed", () => {
     expect(rendered.dataset["unknownCode"]).toBe("TIMING_CLOCK_UNAVAILABLE");
     expect(rendered.dataset["durationMs"]).toBeUndefined();
     expect(rendered.dataset["observedBy"]).toBe("CONTROL_ROOM");
+  });
+});
+
+/**
+ * The arrival reading is stamped once per poll, but the surface above this component
+ * repaints far more often than it polls: the board and document feeds re-render the whole
+ * live application every interval with the SAME frame. A render reading taken on every
+ * repaint would therefore move the render phase forward with each unrelated paint and
+ * publish time-since-arrival-at-the-latest-repaint under the name of paint latency: a
+ * plausible, confidently wrong duration, which is the one thing this surface exists to
+ * never show. The reading belongs to the frame it measures.
+ */
+describe("the render reading is bound to the frame, not to the repaint", () => {
+  it("keeps the render phase unchanged when the same frame is repainted later", () => {
+    const clock = settableClock(1_030);
+    const frame = frameOf([row()], 1_000);
+    const { rerender } = render(
+      <ClockProvider clock={clock}>
+        <LiveCommandTiming frame={frame} />
+      </ClockProvider>,
+    );
+    expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("30");
+    clock.set(1_999);
+    rerender(
+      <ClockProvider clock={clock}>
+        <LiveCommandTiming frame={frame} />
+      </ClockProvider>,
+    );
+    expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("30");
+  });
+
+  /**
+   * The positive control for the arm above. Binding to the frame is not freezing for the
+   * component's lifetime: a new frame is a new arrival, and its paint is a new reading.
+   */
+  it("takes a fresh render reading when a new frame arrives", () => {
+    const clock = settableClock(1_030);
+    const { rerender } = render(
+      <ClockProvider clock={clock}>
+        <LiveCommandTiming frame={frameOf([row()], 1_000)} />
+      </ClockProvider>,
+    );
+    expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("30");
+    clock.set(1_050);
+    rerender(
+      <ClockProvider clock={clock}>
+        <LiveCommandTiming frame={frameOf([row()], 1_000)} />
+      </ClockProvider>,
+    );
+    expect(phase(COMMAND_ID, "render").dataset["durationMs"]).toBe("50");
   });
 });
