@@ -89,6 +89,12 @@ export function isLocalAbsolutePath(value: unknown): value is string {
  * are both the device — so the stem is compared, not the whole segment. It is
  * compared by EQUALITY and not by substring, or `CONSOLE.EXE` would be refused
  * for containing `CON`.
+ *
+ * The stem's trailing SPACES are dropped first, because `RtlIsDosDeviceName_U`
+ * drops them: `CON .txt` is the device too. Only U+0020 is dropped, which is
+ * the only whitespace Windows drops; tabs and controls were refused above and
+ * a non-ASCII space is a real character to Windows, so `trimEnd` would be
+ * looser than the name resolution it mirrors.
  */
 function isUsableSegment(segment: string): boolean {
   if (
@@ -101,6 +107,6 @@ function isUsableSegment(segment: string): boolean {
   ) {
     return false;
   }
-  const stem = segment.split(".")[0] ?? "";
+  const stem = (segment.split(".")[0] ?? "").replace(/ +$/u, "");
   return !RESERVED_DEVICE_NAMES.has(stem.toUpperCase());
 }

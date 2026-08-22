@@ -124,6 +124,10 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
     ["an embedded NUL", "C:\\Windows\\PING.EXE\u0000.txt"],
     ["a reserved device name", "C:\\Windows\\NUL"],
     ["a reserved device name with an extension", "C:\\Windows\\CON.txt"],
+    // RtlIsDosDeviceName_U drops the stem's trailing spaces, so each is the device.
+    ["a reserved device name padded before its extension", "C:\\Windows\\CON .txt"],
+    ["a reserved device name padded by several spaces", "C:\\Windows\\NUL   .exe"],
+    ["a serial device name padded before its extension", "C:\\Windows\\COM1 .log"],
     ["a serial device name", "C:\\Windows\\COM1"],
     ["an alternate data stream", "C:\\Windows\\tool.exe:stream"],
     ["a trailing dot Win32 would trim", "C:\\Windows\\tool.exe."],
@@ -150,7 +154,7 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
   it("generated a case for every hostile path shape, in both positions", () => {
     // A sweep that silently produced zero cases would pass while testing
     // nothing, so the count is pinned by hand rather than derived.
-    expect(badPaths.length).toBe(22);
+    expect(badPaths.length).toBe(25);
   });
 
   it("accepts a drive-absolute path at exactly the bound", () => {
@@ -164,6 +168,10 @@ describe("a path must be a bounded, local, drive-absolute Windows path", () => {
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONSOLE.EXE" })).toBeInstanceOf(Uint8Array);
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONIN$-LOG.EXE" })).toBeInstanceOf(Uint8Array);
     expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONOUT$SAFE.EXE" })).toBeInstanceOf(Uint8Array);
+    // Only TRAILING spaces of the stem are dropped; an inner space keeps the
+    // name a name, and a padded non-device stem is still not a device.
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CON X.txt" })).toBeInstanceOf(Uint8Array);
+    expect(accepted({ ...GOOD, executable: "C:\\Windows\\CONSOLE .EXE" })).toBeInstanceOf(Uint8Array);
   });
 });
 

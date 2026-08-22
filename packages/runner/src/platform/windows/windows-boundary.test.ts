@@ -40,7 +40,7 @@ interface Recorder {
   readonly deps: WindowsBoundaryDeps;
   readonly providerStdout: PassThrough;
   emitStatus(bytes: Uint8Array): void;
-  exit(code: number | null): void;
+  exit(code: number | null, signal?: string | null): void;
   fail(error: Error): void;
 }
 
@@ -112,8 +112,8 @@ const recorder = (options: {
     emitStatus(bytes) {
       onStatus?.(bytes);
     },
-    exit(code) {
-      onExit?.(code, null);
+    exit(code, signal = null) {
+      onExit?.(code, signal);
     },
     fail(error) {
       onError?.(error);
@@ -365,6 +365,89 @@ describe("a launched run is driven to a terminal outcome", () => {
     expect(failure.code).toBe("PROCESS_BOUNDARY_EXIT_UNOBSERVED");
     expect(failure.layer).toBe("WINDOWS_PROCESS_TRANSPORT");
     expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
+  });
+
+  // main.rs exits EXIT_UNOBSERVED (21) for a run whose end it could not
+  // observe. When that exit reaches Node with no COMPLETED frame, the code is
+  // the only evidence, and it must not collapse into "the broker exited".
+  it("reads a frameless exit 21 after a started frame as the exact unobserved exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    await boundary.started;
+    fake.exit(21);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_EXIT_UNOBSERVED");
+    expect(failure.layer).toBe("WINDOWS_PROCESS_TRANSPORT");
+    expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
+    expect(failure.brokerReason).toBeNull();
+  });
+
+  it("keeps a frameless exit 21 with no started frame as a plain broker exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(21);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.identity).toBeNull();
+    expect(failure.message).toContain("exit 21");
+  });
+
+  // A descriptor refusal exits REFUSAL_BASE + ordinal BEFORE fd1 can carry a
+  // frame, so the exit code is its only wire. Ordinal 2 is CountExceedsBlock.
+  it("reads a frameless exit 12 with no frames as a BROKER_DESCRIPTOR refusal, reason 2", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(12);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_REFUSED");
+    expect(failure.layer).toBe("BROKER_DESCRIPTOR");
+    expect(failure.identity).toBeNull();
+    expect(failure.brokerReason).toEqual({ layer: "BROKER_DESCRIPTOR", reason: 2, code: 0 });
+    expect(Object.isFrozen(failure.brokerReason)).toBe(true);
+    expect(unknownOf(await boundary.started).code).toBe("PROCESS_BOUNDARY_BROKER_REFUSED");
+  });
+
+  // main.rs closes its descriptors LAST and exits the close's refusal code even
+  // after a COMPLETED frame on a READY run. The frame is the proof; the code
+  // that follows it must never rewrite that proof.
+  it("never lets a descriptor exit code override a received completed frame", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    fake.emitStatus(completedExited(0));
+    fake.exit(12);
+    const outcome = await boundary.completed;
+    expect(outcome.truthClass).toBe("PROVEN");
+    if (outcome.truthClass !== "PROVEN") return;
+    expect(outcome.exitCode).toBe(0);
+  });
+
+  it("keeps a descriptor-band exit after a started frame as a plain broker exit", async () => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.emitStatus(started());
+    fake.exit(12);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.identity).toEqual({ pid: 4242, creationTime: CREATION_TIME });
+    expect(failure.brokerReason).toBeNull();
+  });
+
+  // EXIT_LAUNCH_REFUSED (20) says only that nothing ran; the reason travelled
+  // as a REFUSED frame, and without one the code is not a descriptor ordinal.
+  it.each([
+    [20, null, "exit 20, signal none"],
+    [null, "SIGTERM", "exit none, signal SIGTERM"],
+  ])("names exit %s and signal %s in a plain broker exit", async (code, signal, expected) => {
+    const fake = recorder();
+    const boundary = open(fake);
+    fake.exit(code, signal);
+    const failure = unknownOf(await boundary.completed);
+    expect(failure.code).toBe("PROCESS_BOUNDARY_BROKER_EXITED");
+    expect(failure.layer).toBe("WINDOWS_PROCESS_TRANSPORT");
+    expect(failure.brokerReason).toBeNull();
+    expect(failure.message).toContain(expected);
   });
 
   it("carries a native refusal's layer and its layer-local ordinal across the wire", async () => {
