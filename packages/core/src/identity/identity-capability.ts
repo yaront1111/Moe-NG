@@ -111,25 +111,38 @@ function grantKey(grant: CapabilityGrant): string {
   ].join("|");
 }
 
+/** The matched identity alone: exactly the fields `matchCapability` compares. */
+function tupleKey(grant: CapabilityGrant): string {
+  return TUPLE_KEYS.map((key) => grant[key]).join("|");
+}
+
 /**
  * Validates and canonically orders a grant list.
  *
- * Exact duplicates collapse; a capabilityId reused with a different tuple is a
- * conflicting definition and rejects the whole list. Returns null on any
- * invalid grant so a partially trusted set can never be produced.
+ * Exact duplicates collapse. Two conflicts reject the whole list: a
+ * capabilityId reused with a different tuple, and a tuple granted twice under
+ * different capabilityIds or step-up requirements. The second matters because
+ * matching is by tuple, so two grants on one tuple would leave the step-up
+ * decision to whichever capabilityId happens to sort first. Returns null on
+ * any invalid grant so a partially trusted set can never be produced.
  */
 export function canonicalizeCapabilities(value: unknown): readonly CapabilityGrant[] | null {
   const entries = snapshotGrantEntries(value);
   if (entries === null) return null;
   const byKey = new Map<string, CapabilityGrant>();
   const byId = new Map<string, string>();
+  const byTuple = new Map<string, string>();
   for (const entry of entries) {
     const grant = readGrant(entry);
     if (grant === null) return null;
     const key = grantKey(grant);
     const seenKey = byId.get(grant.capabilityId);
     if (seenKey !== undefined && seenKey !== key) return null;
+    const tuple = tupleKey(grant);
+    const seenTuple = byTuple.get(tuple);
+    if (seenTuple !== undefined && seenTuple !== key) return null;
     byId.set(grant.capabilityId, key);
+    byTuple.set(tuple, key);
     byKey.set(key, grant);
   }
   const sorted = [...byKey.values()].sort((left, right) =>
@@ -138,17 +151,25 @@ export function canonicalizeCapabilities(value: unknown): readonly CapabilityGra
   return Object.freeze(sorted);
 }
 
-/** Returns the single grant matching the full tuple, or null. */
+/**
+ * Returns the single grant matching the full tuple, or null.
+ *
+ * A canonical list holds at most one grant per tuple; a list that was not
+ * canonicalized might not. Two distinct grants on the queried tuple is an
+ * ambiguity, and an ambiguous grant is no grant: the list order must never
+ * decide whether step-up is required.
+ */
 export function matchCapability(
   grants: readonly CapabilityGrant[],
   query: CapabilityQuery,
 ): CapabilityGrant | null {
+  let matched: CapabilityGrant | null = null;
   for (const grant of grants) {
-    if (TUPLE_KEYS.every((key) => grant[key] === query[key])) {
-      return grant;
-    }
+    if (!TUPLE_KEYS.every((key) => grant[key] === query[key])) continue;
+    if (matched !== null && grantKey(matched) !== grantKey(grant)) return null;
+    matched = grant;
   }
-  return null;
+  return matched;
 }
 
 /** Recovery refs from grants matching every non-recovery scope field. */
