@@ -343,4 +343,38 @@ describe("reconciliation inventory keyboard walks the supplied rows", () => {
     expect(focused).toEqual([RECORD_A, RECORD_B, RECORD_B, RECORD_A]);
     expect(opened).toEqual([RECORD_A]);
   });
+
+  it("leaves Enter on a decision button to the button, opening no row", async () => {
+    const opened: string[] = [];
+    const seen: NextAllowedCommand[] = [];
+    renderInventory({
+      onOpenRow: (recordId) => opened.push(recordId),
+      onRequestConfirmation: (command) => seen.push(command),
+    });
+    const button = within(row(RECORD_B)).getByTestId("cr.action.reconciliation-decide.accept");
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(seen).toEqual([commandById("cmd-b-accept")]);
+    expect(opened).toEqual([]);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("walks from the row focus actually sits on, not from the remembered cursor", async () => {
+    const focused: string[] = [];
+    const opened: string[] = [];
+    renderInventory({
+      onFocusRow: (recordId) => focused.push(recordId),
+      onOpenRow: (recordId) => opened.push(recordId),
+    });
+    row(RECORD_B).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual([RECORD_B]);
+    expect(document.activeElement).toBe(row(RECORD_B));
+    cleanup();
+    renderInventory({ onFocusRow: (recordId) => focused.push(recordId) });
+    row(RECORD_B).focus();
+    await userEvent.keyboard("j");
+    expect(document.activeElement).toBe(row(RECORD_B));
+    expect(focused).toEqual([RECORD_B]);
+  });
 });

@@ -195,6 +195,19 @@ function stepIndex(key: string, current: number): number {
   return current;
 }
 
+/**
+ * The key's own target, only when it is the list or one of its check rows. A key that
+ * reaches a truth chip inside a row belongs to the chip: the walk may not swallow it,
+ * because cancelling Enter there cancels the chip's own activation and opens whichever
+ * check the cursor last rested on instead.
+ */
+function checkTarget(event: KeyboardEvent<HTMLUListElement>): HTMLElement | null {
+  const { target } = event;
+  if (!(target instanceof HTMLElement)) return null;
+  if (target !== event.currentTarget && !target.hasAttribute("data-check-row")) return null;
+  return target;
+}
+
 export function DoctorConsole(props: DoctorConsoleProps): JSX.Element {
   const {
     checks, degraded, freshnessLabel, loading, offlineReport, onFocusCheck, onOpenCheck,
@@ -205,12 +218,18 @@ export function DoctorConsole(props: DoctorConsoleProps): JSX.Element {
   const handleKey = (event: KeyboardEvent<HTMLUListElement>): void => {
     const { key } = event;
     if (key !== "j" && key !== "k" && key !== "Enter") return;
+    const target = checkTarget(event);
+    if (target === null) return;
     event.preventDefault();
-    const index = Math.min(Math.max(stepIndex(key, focusIndex), 0), checks.length - 1);
+    // A row reached by Tab or by pointer is the check the key is about, whatever the
+    // cursor remembered; the cursor stands in only while the list itself holds focus.
+    const rowNodes = [...event.currentTarget.querySelectorAll<HTMLElement>("[data-check-row]")];
+    const origin = target === event.currentTarget ? focusIndex : rowNodes.indexOf(target);
+    const index = Math.min(Math.max(stepIndex(key, origin), 0), checks.length - 1);
     const check = checks[index];
     if (check === undefined) return;
     setFocusIndex(index);
-    event.currentTarget.querySelectorAll<HTMLElement>("[data-check-row]")[index]?.focus();
+    rowNodes[index]?.focus();
     if (key === "Enter") onOpenCheck?.(check.checkId);
     else onFocusCheck?.(check.checkId);
   };

@@ -268,6 +268,41 @@ describe("doctor console keyboard walks the supplied checks", () => {
     ]);
     expect(opened).toEqual(["moe.doctor.integrity"]);
   });
+
+  it("leaves Enter on a chip inside a check to the chip, opening no check", async () => {
+    const opened: string[] = [];
+    const seen: string[] = [];
+    renderConsole({
+      onOpenCheck: (checkId) => opened.push(checkId),
+      onProvenance: (factId) => seen.push(factId),
+    });
+    const chip = within(
+      screen.getByTestId("cr.fact.health.check.moe.doctor.integrity.severity"),
+    ).getByTestId(/^cr\.chip\./u);
+    expect(checkRow("moe.doctor.integrity").contains(chip)).toBe(true);
+    chip.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(seen).toEqual(["health.check.moe.doctor.integrity.severity"]);
+    expect(opened).toEqual([]);
+    expect(document.activeElement).toBe(chip);
+  });
+
+  it("walks from the check focus actually sits on, not from the remembered cursor", async () => {
+    const focused: string[] = [];
+    const opened: string[] = [];
+    renderConsole({
+      onFocusCheck: (checkId) => focused.push(checkId),
+      onOpenCheck: (checkId) => opened.push(checkId),
+    });
+    checkRow("moe.doctor.integrity").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual(["moe.doctor.integrity"]);
+    expect(document.activeElement).toBe(checkRow("moe.doctor.integrity"));
+    checkRow("moe.doctor.engine").focus();
+    await userEvent.keyboard("j");
+    expect(document.activeElement).toBe(checkRow("moe.doctor.schema"));
+    expect(focused).toEqual(["moe.doctor.schema"]);
+  });
 });
 
 describe("doctor console stays honest while loading and degraded", () => {

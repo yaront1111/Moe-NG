@@ -146,6 +146,22 @@ function stepIndex(key: string, current: number): number {
   return current;
 }
 
+/**
+ * The key's own target, only when it is the list or one of its rows. A key that reaches
+ * a chip or a `RecoveryActions` button inside a row belongs to that control: the walk
+ * may not swallow it, because cancelling Enter on the button is the one way to keep a
+ * decision from ever reaching `onRequestConfirmation`, while opening whichever row the
+ * cursor last rested on instead.
+ */
+function rowTarget(event: KeyboardEvent<HTMLUListElement>): HTMLElement | null {
+  const { target } = event;
+  if (!(target instanceof HTMLElement)) return null;
+  if (target !== event.currentTarget && !target.hasAttribute("data-reconciliation-row")) {
+    return null;
+  }
+  return target;
+}
+
 export function ReconciliationInventory(props: ReconciliationInventoryProps): JSX.Element {
   const {
     authorityMode, coverageLimitation, disabledCopy, onFocusRow, onOpenRow, onProvenance,
@@ -156,13 +172,20 @@ export function ReconciliationInventory(props: ReconciliationInventoryProps): JS
   const handleKey = (event: KeyboardEvent<HTMLUListElement>): void => {
     const { key } = event;
     if (key !== "j" && key !== "k" && key !== "Enter") return;
+    const target = rowTarget(event);
+    if (target === null) return;
     event.preventDefault();
-    const index = Math.min(Math.max(stepIndex(key, focusIndex), 0), rows.length - 1);
+    // A row reached by Tab or by pointer is the row the key is about, whatever the
+    // cursor remembered; the cursor stands in only while the list itself holds focus.
+    const rowNodes = [
+      ...event.currentTarget.querySelectorAll<HTMLElement>("[data-reconciliation-row]"),
+    ];
+    const origin = target === event.currentTarget ? focusIndex : rowNodes.indexOf(target);
+    const index = Math.min(Math.max(stepIndex(key, origin), 0), rows.length - 1);
     const row = rows[index];
     if (row === undefined) return;
     setFocusIndex(index);
-    event.currentTarget
-      .querySelectorAll<HTMLElement>("[data-reconciliation-row]")[index]?.focus();
+    rowNodes[index]?.focus();
     if (key === "Enter") onOpenRow?.(row.recordId);
     else onFocusRow?.(row.recordId);
   };

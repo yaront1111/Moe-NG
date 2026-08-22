@@ -403,4 +403,47 @@ describe("board keyboard walks the supplied lanes in column-major order", () => 
     expect(cardIdsIn()).toEqual(["plan-doc", "same-spelled-a", "contradiction", "api-endpnt",
       "dup", "dup", "UNKNOWN", "ui-panel", "schema", "ghost"]);
   });
+
+  it("leaves Enter on a card's command button to the button, opening no card", async () => {
+    const activated: NextAllowedCommand[] = [];
+    const opened: string[] = [];
+    renderBoard(
+      { onActivateCommand: (cmd) => activated.push(cmd), onOpenCard: (id) => opened.push(id) },
+      affordance([BLOCKER_OPEN]),
+    );
+    const button = screen.getByTestId("cr.action.blocker-open");
+    expect(screen.getByTestId("cr.board.card.api-endpnt").contains(button)).toBe(true);
+    button.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(activated).toEqual([BLOCKER_OPEN]);
+    expect(opened).toEqual([]);
+    expect(document.activeElement).toBe(button);
+  });
+
+  it("leaves Enter on a chip inside a card to the chip", async () => {
+    const opened: string[] = [];
+    const seen: string[] = [];
+    renderBoard({ onOpenCard: (id) => opened.push(id), onProvenance: (id) => seen.push(id) });
+    const chip = chipOf("node.ui-panel.phase");
+    chip.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(seen).toEqual(["node.ui-panel.phase"]);
+    expect(opened).toEqual([]);
+  });
+
+  it("walks from the card focus actually sits on, not from the remembered cursor", async () => {
+    const opened: string[] = [];
+    renderBoard({ onOpenCard: (id) => opened.push(id) });
+    screen.getByTestId("cr.board.card.ui-panel").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual(["ui-panel"]);
+    expect(focused()).toBe("ui-panel");
+    cleanup();
+    renderBoard();
+    screen.getByTestId("cr.board.card.same-spelled-b").focus();
+    await userEvent.keyboard("k");
+    expect(focused()).toBe("ready-1");
+    await userEvent.keyboard("h");
+    expect(focused()).toBe("plan-doc");
+  });
 });
