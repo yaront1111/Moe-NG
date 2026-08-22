@@ -42,6 +42,7 @@ import {
 import { PROVIDER_RUN_RECORD_VERSION } from "../telemetry/provider-run-contracts.js";
 import type { ProviderRunRecord } from "../telemetry/provider-run-contracts.js";
 import { commitProviderRunRecord } from "../telemetry/provider-run-ledger.js";
+import { readCurrentProviderRun } from "../telemetry/provider-run-reader.js";
 import { readCurrentBudgetLedger } from "./budget-current-projection.js";
 import { BUDGET_LEDGER_COMMAND_KIND } from "./budget-ledger-contracts.js";
 import { applyProviderUsageToBudget } from "./budget-settlement-application.js";
@@ -364,10 +365,15 @@ function acceptedOf(outcome: unknown): Record<string, unknown> {
   return value;
 }
 
-function refusalOf(outcome: unknown): { code: unknown; layer: unknown; sourceCode: unknown } {
+function refusalOf(
+  outcome: unknown,
+): { code: unknown; layer: unknown; sourceCode: unknown; sourceLayer: unknown } {
   const value = outcome as Record<string, unknown>;
   if (value["ok"] === true) throw new Error("expected a refusal, received an accepted settlement");
-  return { code: value["code"], layer: value["layer"], sourceCode: value["sourceCode"] };
+  return {
+    code: value["code"], layer: value["layer"],
+    sourceCode: value["sourceCode"], sourceLayer: value["sourceLayer"],
+  };
 }
 
 /**
@@ -547,6 +553,60 @@ describe("provider usage applied to budget — UNKNOWN coverage", () => {
     expect(partialLine?.["disposition"]).toBe("LOWER_BOUND");
     expect(unknownLine?.["disposition"]).toBe("UNKNOWN_HELD");
     expect(partialLine?.["disposition"]).not.toBe(unknownLine?.["disposition"]);
+  });
+});
+
+/**
+ * A TRUNCATED RECEIPT MAY NOT BUY ANYTHING AS EXACT COVERAGE.
+ *
+ * This mapper is the only carrier of `truncated` from the durable provider run into the
+ * scheduler's measurement authority (budget-settlement-application.ts:126). Nothing else in the
+ * daemon reads that flag, so if this projection drops it the guard downstream can never fire and
+ * money is committed against a receipt that claims COMPLETE while admitting it is incomplete.
+ *
+ * THE HOSTILE PAIR CANNOT COME FROM `usageRows`, AND THAT IS THE WHOLE REASON THIS ARM EXISTS.
+ * `normalizeUsageMeasurement` REFUSES truncated+COMPLETE, and `usageRows` throws on refusal, so
+ * every fixture built the honest way carries `truncated: false` — which is exactly why a mutant
+ * hard-coding `false` survived the entire daemon suite. The pair is reachable in production
+ * because the flag comes from a PROVIDER RECEIPT, not from the authority: the durable codec
+ * (provider-run-codec.validation.ts:185) requires `truncated` as a boolean and nowhere forbids
+ * pairing it with COMPLETE. So the row here is normalized by the authority and then carries the
+ * provider's flag, and it reaches the store through the PRODUCTION writer.
+ */
+describe("provider usage applied to budget — a truncated receipt may not claim COMPLETE", () => {
+  it("forwards the measurement authority's TRUNCATED_COMPLETION_CLAIM and moves no money", () => {
+    const store = activatedStore("truncated-complete");
+    const held = heldOf(store);
+    const [meter] = held.meters;
+    if (meter === undefined) throw new Error("the reservation must hold a meter");
+    const measured = usageRows(held.attemptRef,
+      held.meters.map((entry) => ({ coverage: "COMPLETE", meter: entry, quantity: 1 } as const)));
+    commitRun(store, held.attemptRef, measured.map((row) => ({ ...row, truncated: true })));
+
+    // THE PRECONDITION IS READ BACK THROUGH PRODUCTION, not assumed from the seed. Without this
+    // the arm would pass identically if the writer had silently dropped the flag, and it would be
+    // asserting the refusal of something that never became durable.
+    const durable = readCurrentProviderRun(store, {
+      attemptRef: held.attemptRef, projectId: PROJECT_ID,
+    });
+    if (!("ok" in durable) || durable.ok !== true) throw new Error("the provider run must read back");
+    const [row] = durable.record.usage as unknown as readonly Record<string, unknown>[];
+    expect(row?.["truncated"]).toBe(true);
+    expect((row?.["measurement"] as Record<string, unknown>)?.["coverage"]).toBe("COMPLETE");
+    const before = ledgerHeadOf(store);
+
+    const refusal = refusalOf(apply(store, held.attemptRef));
+
+    // The authority's own code and layer, forwarded UNRESTAMPED — the daemon names the
+    // transition it could not make, and the SOURCE half still says who actually refused.
+    expect(refusal.sourceCode).toBe("BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM");
+    expect(refusal.sourceLayer).toBe("BUDGET_MEASUREMENT");
+    expect(refusal.code).toBe("BUDGET_LEDGER_TRANSITION_REFUSED");
+    expect(refusal.layer).toBe("BUDGET_LEDGER");
+    // AND THE MONEY DID NOT MOVE. The head is the conservation check; the settled count is the
+    // one that would have caught a commit that refused loudly and wrote anyway.
+    expect(ledgerHeadOf(store)).toBe(before);
+    expect(settledCountOf(store, meter)).toBe(0);
   });
 });
 
