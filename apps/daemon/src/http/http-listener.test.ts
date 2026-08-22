@@ -284,10 +284,13 @@ it("never puts a credential in a URL or a log line", async () => {
   );
 });
 
-it.each(["/events/read", "/events/ack", "/affordances/read"])(
+it.each(["/events/read", "/events/ack", "/affordances/read", "/graph/get"])(
   "authenticates %s before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {
+      // No route port is wired and the body is not JSON: a route that checked
+      // availability or decoded first would answer with a listener code here,
+      // so the 401 proves authenticate ran ahead of both.
       const reply = await send(listener, {
         body: "{not json",
         credential: null,
@@ -304,7 +307,7 @@ it.each(["/events/read", "/events/ack", "/affordances/read"])(
   },
 );
 
-it.each(["/events/read", "/events/ack", "/affordances/read"])(
+it.each(["/events/read", "/events/ack", "/affordances/read", "/graph/get"])(
   "checks %s protocol compatibility before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {

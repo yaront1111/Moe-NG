@@ -8,7 +8,7 @@ import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
 import type { CommandAdapterDeps, HttpCommandResult } from "./http-contract.js";
-import { answerGraphQuery } from "../planning/graph-query.js";
+import { answerGatedGraphQuery, gateGraphQuery } from "../planning/graph-query.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -196,11 +196,15 @@ function serveAffordances(
 }
 
 /**
- * THIN BY DESIGN. Authentication, capability, availability and the project
- * derivation all live in `answerGraphQuery`, shared with the MCP transport; a
- * second copy of that sequence here is exactly the divergence that lets one
- * transport's guard order drift from the other's while both stay green. This
- * function decodes bytes and replies, and does nothing else.
+ * GATE FIRST, DECODE SECOND. `gateGraphQuery` is the one authenticate ->
+ * compatibility -> capability sequence the MCP transport also clears, and it
+ * runs here before a single body byte is parsed: decoding ahead of it would
+ * hand an unidentified caller a 400 verdict and a full-size `JSON.parse` per
+ * request, which every other read route on this socket refuses to do.
+ * Availability, the project derivation and the read stay in
+ * `answerGatedGraphQuery`, shared with MCP, so neither transport can grow a
+ * guard order of its own while both stay green. This function gates, decodes
+ * bytes and replies, and decides nothing else.
  */
 function serveGraphQuery(
   response: ServerResponse,
@@ -208,6 +212,19 @@ function serveGraphQuery(
   options: StartListenerOptions,
   body: Uint8Array,
 ): void {
+  const gated = gateGraphQuery(
+    options.deps.authenticator,
+    credentialOf(request),
+    protocolVersionOf(request),
+  );
+  // An AUTHENTICATE or COMPATIBILITY refusal keeps the status the adapter chose,
+  // as every other route does. Everything else replies 200: the frame IS the
+  // answer and carries its own outcome, code and layer, and minting an HTTP
+  // status per frame would be the translation table this seam may not hold.
+  if (!gated.ok) {
+    reply(response, "outcome" in gated ? gated.httpStatus : 200, gated);
+    return;
+  }
   // An empty body is a request that names no project, which is the normal call.
   // Bytes that are not JSON are a decode fault of THIS transport, so they carry
   // the listener's own code exactly as a malformed stream request does.
@@ -220,22 +237,7 @@ function serveGraphQuery(
       return;
     }
   }
-  const answer = answerGraphQuery({
-    authenticator: options.deps.authenticator,
-    body: parsed,
-    credential: credentialOf(request),
-    port: options.graph,
-    protocolVersion: protocolVersionOf(request),
-  });
-  // An AUTHENTICATE or COMPATIBILITY refusal keeps the status the adapter chose,
-  // as every other route does. Everything else replies 200: the frame IS the
-  // answer and carries its own outcome, code and layer, and minting an HTTP
-  // status per frame would be the translation table this seam may not hold.
-  if (!answer.ok && "outcome" in answer) {
-    reply(response, answer.httpStatus, answer);
-    return;
-  }
-  reply(response, 200, answer);
+  reply(response, 200, answerGatedGraphQuery(gated.principal, options.graph, parsed));
 }
 
 function serveDocumentDossier(

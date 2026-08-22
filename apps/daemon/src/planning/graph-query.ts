@@ -2,11 +2,12 @@
  * "What is the current active graph?" — the one authenticated answer, shared by
  * both transports.
  *
- * ONE GUARD SEQUENCE, TWO ENTRIES. HTTP and MCP both call `answerGraphQuery`,
- * which calls the SAME `authenticateHttpRequest` the command path uses, so the
- * committed order (authenticate -> compatibility) is shared rather than copied.
- * A second copy in a transport is exactly how one seam's guard order drifts from
- * the other's while both stay green.
+ * ONE GUARD SEQUENCE, TWO ENTRIES. MCP calls `answerGraphQuery`; HTTP calls
+ * `gateGraphQuery` before it decodes a byte and `answerGatedGraphQuery` after.
+ * Both paths run the SAME `authenticateHttpRequest` the command path uses, so
+ * the committed order (authenticate -> compatibility -> capability) is shared
+ * rather than copied. A second copy in a transport is exactly how one seam's
+ * guard order drifts from the other's while both stay green.
  *
  * THE PROJECT IS A SERVER FACT, NEVER A REQUEST FIELD. It comes from
  * `principal.projectId` and is cross-checked against the port's `boundProjectId`.
@@ -105,9 +106,8 @@ export interface GraphQueryRequest {
   /**
    * Absent when the daemon was composed without graph support. It is checked
    * INSIDE this sequence, after authentication, rather than in each transport:
-   * an unauthenticated or unauthorized caller must not learn how this daemon is
-   * composed, and two transports each checking it would be two orders to keep
-   * in step.
+   * an unauthenticated or unauthorized caller must not learn how this daemon
+   * is composed, and two transports each checking it would be two orders.
    */
   readonly port: GraphQueryPort | undefined;
   readonly protocolVersion: unknown;
@@ -176,8 +176,8 @@ export type GraphQueryGateResult =
  * caller the daemon has not identified. Both graph queries clear exactly this
  * much; only what follows differs, and keeping the order in one place is what
  * stops the two entries drifting into two different security postures. Exported
- * for the preview sibling only — the file split is a line-budget move, not a
- * second security posture.
+ * for the preview sibling and for the HTTP listener, which must clear it before
+ * its own decode; neither export is a second security posture.
  */
 export function gateGraphQuery(
   authenticator: Authenticator, credential: string | null, protocolVersion: unknown,
@@ -197,8 +197,17 @@ export function gateGraphQuery(
 export function answerGraphQuery(request: GraphQueryRequest): GraphQueryResult {
   const gated = gateGraphQuery(request.authenticator, request.credential, request.protocolVersion);
   if (!gated.ok) return gated;
-  const { principal } = gated;
-  const { port } = request;
+  return answerGatedGraphQuery(gated.principal, request.port, request.body);
+}
+
+/**
+ * Everything AFTER the gate: availability, project, body, read. Takes the
+ * PRINCIPAL the gate minted, never a credential, so no transport reaches the
+ * port or the body without clearing `gateGraphQuery`, exactly once.
+ */
+export function answerGatedGraphQuery(
+  principal: AuthenticatedPrincipal, port: GraphQueryPort | undefined, body: unknown,
+): GraphQueryResult {
   if (port === undefined) return refuse("GRAPH_QUERY_UNAVAILABLE");
   // The principal must belong to the project this daemon serves. Without this,
   // a principal authenticated for another project would be answered from THIS
@@ -206,7 +215,7 @@ export function answerGraphQuery(request: GraphQueryRequest): GraphQueryResult {
   if (principal.projectId !== port.boundProjectId) {
     return refuse("GRAPH_QUERY_PROJECT_MISMATCH");
   }
-  const requested = readRequestedProject(request.body);
+  const requested = readRequestedProject(body);
   if (requested === INVALID) return refuse("GRAPH_QUERY_REQUEST_INVALID");
   if (requested !== null && requested !== principal.projectId) {
     return refuse("GRAPH_QUERY_PROJECT_MISMATCH");
