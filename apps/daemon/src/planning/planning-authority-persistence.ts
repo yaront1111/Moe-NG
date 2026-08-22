@@ -102,8 +102,12 @@ const own = (value: unknown, key: string): unknown => {
 /**
  * Length-framed concatenation, the repository's collision discipline: without the frames a byte
  * moved from the end of one body to the start of the other would leave the digest unchanged.
+ *
+ * EXPORTED for the read side (`planning-authority-reader.ts`, task-47b2dbc6), which recomputes
+ * this digest over the bytes it finds on disk. A second copy of the algorithm there would be a
+ * fork: the two could drift apart and the reader would certify bodies this writer never sealed.
  */
-function bodiesDigestOf(planBytes: Uint8Array, contractBytes: Uint8Array): string {
+export function bodiesDigestOf(planBytes: Uint8Array, contractBytes: Uint8Array): string {
   return createHash("sha256")
     .update(`${planBytes.length}:`, "utf8").update(planBytes)
     .update(`${contractBytes.length}:`, "utf8").update(contractBytes)
