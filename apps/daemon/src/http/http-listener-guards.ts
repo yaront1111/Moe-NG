@@ -45,6 +45,10 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_HOST_INVALID",
   "LISTENER_NON_LOOPBACK_BIND",
   "LISTENER_ORIGIN_INVALID",
+  // The pending-plan read route's transport faults, mirroring the dossier pair: a malformed or
+  // non-POST `{runId}` request, and a daemon composed without the read port.
+  "LISTENER_PLANNING_RUN_REQUEST_INVALID",
+  "LISTENER_PLANNING_RUN_UNAVAILABLE",
   // The runtime credential handshake, all under this same layer so no new
   // boundary constant enters the security roster. `/bootstrap` and `/session/pair`
   // share UNAVAILABLE (the handshake is not configured on this daemon - no asset
@@ -138,6 +142,8 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DOCUMENT_DOSSIER_UNAVAILABLE") return 503;
   if (code === "LISTENER_GRAPH_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   // The handshake statuses. UNAVAILABLE is 503 like the other absent ports;
   // METHOD_INVALID 405 and PROTOCOL_UNSUPPORTED / REQUEST_INVALID 400 are client
   // faults. TOKEN_REJECTED is 401 - a rejected credential attempt, uniform across

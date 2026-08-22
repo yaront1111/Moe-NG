@@ -4,6 +4,8 @@ import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-c
 import type { AffordancePort } from "./affordance-contract.js";
 import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./document-dossier-read.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
+import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
+import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
 import { authenticateHttpRequest, handleAsyncCommandRequest } from "./http-adapter.js";
@@ -105,6 +107,8 @@ export interface StartListenerOptions {
    * refuses `LISTENER_PAIRING_UNAVAILABLE` - there is nothing to pair against.
    */
   readonly pairingToken?: string;
+  /** Absent means the pending-plan read route refuses rather than inventing a run. */
+  readonly planningRuns?: PlanningRunReadPort;
   readonly port?: number;
   /** Absent means the stream route refuses rather than inventing an empty page. */
   readonly subscriptions?: SubscriptionPort;
@@ -139,6 +143,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   EVENT_ACKNOWLEDGE_PATH,
   EVENT_PAGE_PATH,
   GRAPH_GET_PATH,
+  PLANNING_RUN_READ_PATH,
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
@@ -323,6 +328,27 @@ function serveDocumentDossier(
   const result = handleDocumentDossierReadRequest({
     authenticator: options.deps.authenticator,
     documentDossiers: options.documentDossiers,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function servePlanningRun(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handlePlanningRunReadRequest({
+    authenticator: options.deps.authenticator,
+    planningRuns: options.planningRuns,
   }, {
     body,
     credential: credentialOf(request),
@@ -560,6 +586,10 @@ async function serve(
     refuseRequest(response, "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID");
     return;
   }
+  if (path === PLANNING_RUN_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PLANNING_RUN_REQUEST_INVALID");
+    return;
+  }
   const body = await readBoundedBody(request);
   if (body === null) {
     refuseRequest(response, "LISTENER_BODY_TOO_LARGE");
@@ -571,6 +601,7 @@ async function serve(
   else if (path === EVENT_ACKNOWLEDGE_PATH) serveEventAcknowledge(response, request, options, body);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
+  else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);
 }
 
