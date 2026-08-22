@@ -98,25 +98,6 @@ function activationBytes(slug: string, dimension = "default"): Uint8Array {
         lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: `wrapper-${slug}`,
       },
-      budget: {
-        admission: {
-          admissionRef: `adm-${slug}`,
-          amounts: [
-            { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-            { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-            { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-            { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-            { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-          ],
-          expectedVersion: 2,
-        },
-        gate: { allowance: { decisionRef: `dec-${slug}`, outcome: "ALLOW" }, approval: null },
-        view: {
-          accountId: `acct-${slug}`,
-          meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-          state: "OPEN", version: 2,
-        },
-      },
       effect: {
         command: { kind: "claim" },
         intent: {

@@ -104,28 +104,6 @@ const RESOURCE_ROW = {
   state: "ACTIVE",
 } as const;
 
-/** Caller-supplied and NOT authority: the durable goal's own account is what gets held. */
-const BUDGET_VIEW = {
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN",
-  version: 2,
-} as const;
-
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
-
 const EFFECT_INTENT = {
   aggregateId: "agg-1",
   desiredState: "ACTIVE",
@@ -174,7 +152,6 @@ const AGGREGATE_ID = deriveActivationAggregateId(
 function activationPayload(): Record<string, unknown> {
   return structuredClone({
     activation: ACTIVATION_SECTION,
-    budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
     liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
