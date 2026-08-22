@@ -620,6 +620,53 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
     });
   });
 
+  // The attribution index folds a declared directory to the STRONGEST class in
+  // its subtree, and DIRTY (rank 4) and UNTRACKED (rank 2) both outrank IGNORED
+  // (rank 5). A sibling write therefore hides the ignored file from the
+  // canonical entry; the refusal has to come from the ignored-path bucket, or
+  // ignore-ruled bytes seal as authored results whenever anything else changed.
+  it("refuses an ignored file under the scope even when a dirty sibling masks it in the fold", () => {
+    const fixture = seedWorkspace({ ...SEED, ".gitignore": "work/logs/\n" });
+    const proof = provenProof(fixture);
+    mkdirSync(join(fixture.root, "work", "logs"), { recursive: true });
+    writeFileSync(join(fixture.root, "work", "logs", "run.log"), "log\n");
+    writeFileSync(join(fixture.root, "work", "alpha.txt"), "rewritten beside an ignored file\n");
+    expect(capture(fixture, proof)).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/logs/run.log",
+    });
+  });
+
+  it("refuses an ignored file under the scope even when an untracked sibling masks it in the fold", () => {
+    const fixture = seedWorkspace({ ...SEED, ".gitignore": "work/logs/\n" });
+    const proof = provenProof(fixture);
+    mkdirSync(join(fixture.root, "work", "logs"), { recursive: true });
+    writeFileSync(join(fixture.root, "work", "logs", "run.log"), "log\n");
+    writeFileSync(join(fixture.root, "work", "created.txt"), "created beside an ignored file\n");
+    expect(capture(fixture, proof)).toMatchObject({
+      ok: false,
+      code: "RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE",
+      layer: "RUNNER_WORKSPACE_CAPTURE",
+      path: "work/logs/run.log",
+    });
+  });
+
+  it("does not refuse an ignored file that lies outside every declared scope", () => {
+    // The ignored bucket is repo-wide; only containment in a declaration makes
+    // an ignored path the attempt's problem.
+    const fixture = seedWorkspace({ ...SEED, ".gitignore": "outside/logs/\n" });
+    const proof = provenProof(fixture);
+    mkdirSync(join(fixture.root, "outside", "logs"), { recursive: true });
+    writeFileSync(join(fixture.root, "outside", "logs", "host.log"), "log\n");
+    writeFileSync(join(fixture.root, "work", "created.txt"), "created\n");
+    const result = capture(fixture, proof);
+    expect(result).toMatchObject({ ok: true });
+    if (!result.ok) return;
+    expect(result.core.authoredPaths).toEqual(["work/created.txt"]);
+  });
+
   it("forwards a scope-observer refusal under the observer's own layer and code", () => {
     const fixture = seedWorkspace();
     const proof = provenProof(fixture);

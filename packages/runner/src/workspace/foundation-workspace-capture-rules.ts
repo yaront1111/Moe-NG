@@ -99,12 +99,17 @@ export function outOfScopeRejection(
  * dirty or untracked in-scope path is NOT refused: that is precisely what an
  * attempt that did work looks like.
  *
- * The first three read the PATH buckets rather than the per-scope attribution
- * on purpose. `buildAttributionIndex` folds a declared directory to the
- * strongest class in its subtree, so one new file (UNTRACKED, rank 2) would
- * mask a staged sibling (rank 3) and a staged result would sail through. The
- * ignored check is the opposite case: it is a property of the DECLARATION, and
- * an untracked-ignored path never reaches the changed-path buckets at all.
+ * All four read the PATH buckets rather than the per-scope attribution on
+ * purpose. `buildAttributionIndex` folds a declared directory to the strongest
+ * class in its subtree, which masks every class weaker than the strongest: one
+ * new file (UNTRACKED, rank 2) hides a staged sibling (rank 3), and a dirty or
+ * untracked sibling (ranks 4 and 2) hides an IGNORED file (rank 5), so a fold
+ * reader's verdict on ignore-ruled bytes would depend on unrelated writes. The
+ * ignored bucket is repo-wide, so only a path CONTAINED by a declaration
+ * counts; an out-of-scope ignored tree is not the attempt's doing. The
+ * declaration-level IGNORED read stays ahead of the bucket scan for the one
+ * case the scan cannot see: a declaration that is itself inside an ignored
+ * directory lists no file of its own.
  */
 export function gitStateRejection(observation: ScopeObservation): FoundationCaptureFailure | null {
   const attribution = observation.gitAttribution;
@@ -130,6 +135,15 @@ export function gitStateRejection(observation: ScopeObservation): FoundationCapt
   const ignored = observation.canonicalEntries.find((entry) => entry.attribution === "IGNORED");
   if (ignored !== undefined) {
     return refuse("RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE", `declared scope ${JSON.stringify(ignored.path)} is ignored: ${ignored.attributionReason}`, ignored.path);
+  }
+  // A porcelain `!` record names an ignored directory with a trailing slash;
+  // containment is decided on the directory itself.
+  const declared = observation.canonicalEntries.map((entry) => entry.path);
+  const ignoredInScope = attribution.ignoredPaths
+    .map((path) => (path.endsWith("/") ? path.slice(0, -1) : path))
+    .find((path) => declared.some((scope) => isContainedBy(scope, path)));
+  if (ignoredInScope !== undefined) {
+    return refuse("RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE", `path ${JSON.stringify(ignoredInScope)} under a declared scope is ignored; its bytes cannot be attributed`, ignoredInScope);
   }
   return null;
 }
