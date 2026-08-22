@@ -570,7 +570,10 @@ describe("the canonical record codec", () => {
       expect(resealed.digest).toBe(sealed.digest);
 
       const body = frameBody(sealed.bytes);
-      const foreign = reseal("moe-budget-ledger/2", body);
+      // Version 1 is the RETIRED spelling: the clean break refuses it with the
+      // exact code rather than keeping a second decoder arm alive (no durable
+      // v1 record exists anywhere for it to strand).
+      const foreign = reseal("moe-budget-ledger/1", body);
       const refusedVersion = decodeBudgetLedgerRecord(foreign);
       expect(refusedVersion.ok).toBe(false);
       if (refusedVersion.ok) throw new Error("version drift accepted");
@@ -597,7 +600,7 @@ describe("the canonical record codec", () => {
       // exists to prove the RE-ENCODE comparison is what catches it, not the seal.
       const smuggled = `{"sequence":9,${frameBody(sealed.bytes).slice(1)}`;
 
-      const result = decodeBudgetLedgerRecord(reseal("moe-budget-ledger/1", smuggled));
+      const result = decodeBudgetLedgerRecord(reseal("moe-budget-ledger/2", smuggled));
 
       expect(result.ok).toBe(false);
       if (result.ok) throw new Error("duplicate key accepted");

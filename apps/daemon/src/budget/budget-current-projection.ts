@@ -35,7 +35,9 @@ import {
   budgetProjectionRefusal,
   deriveBudgetAggregateId,
 } from "./budget-ledger-contracts.js";
-import type { BudgetDurableBinding, BudgetLedgerRecord, BudgetRefusal } from "./budget-ledger-contracts.js";
+import type {
+  BudgetDurableBinding, BudgetLedgerRecord, BudgetRefusal, SettledMeterSummary,
+} from "./budget-ledger-contracts.js";
 
 export interface BudgetMeterProjection {
   readonly meter: string;
@@ -62,6 +64,7 @@ export interface BudgetCurrentProjection {
   readonly headVersion: number;
   readonly meters: readonly BudgetMeterProjection[];
   readonly reservations: readonly ReservationRecord[];
+  readonly settledMeters: readonly SettledMeterSummary[];
   readonly settlements: readonly SettlementRecord[];
   readonly views: readonly BudgetAvailableView[];
 }
@@ -148,10 +151,17 @@ function rollUp(
  * is UNKNOWN. A lower bound or a written-off hold is PARTIAL: it is evidence, but not the whole
  * of it. Only a meter whose every hold resolved exactly is COMPLETE, and only COMPLETE states a
  * refundable number.
+ *
+ * PRUNED EVIDENCE COUNTS THROUGH THE SUMMARY. A SETTLED pair leaves the head
+ * record at its terminal commit, and its measured lines survive only as the
+ * record's `settledMeters` fold — added to `measuredCount` here. The verdict
+ * triggers read the SURVIVING rows alone, which is exactly right: only SETTLED
+ * pairs prune, and a SETTLED settlement can carry no UNKNOWN_HELD, LOWER_BOUND
+ * or CONSERVATIVE_WRITE_OFF line, so nothing verdict-bearing ever leaves.
  */
 function coverageOf(
   meter: string, reservations: readonly ReservationRecord[], settlements: readonly SettlementRecord[],
-  buckets: BudgetMeterBuckets,
+  settledMeters: readonly SettledMeterSummary[], buckets: BudgetMeterBuckets,
 ): BudgetMeterProjection {
   const settled = new Set(settlements.map((entry) => entry.reservationId));
   const openHoldCount = reservations.filter((entry) =>
@@ -159,7 +169,8 @@ function coverageOf(
     && !settled.has(entry.reservationId)
     && entry.lines.some((line) => line.meter === meter)).length;
   const lines = settlements.flatMap((entry) => entry.lines.filter((line) => line.meter === meter));
-  const measuredCount = lines.filter((line) =>
+  const prunedMeasured = settledMeters.find((entry) => entry.meter === meter)?.measuredLineCount ?? 0;
+  const measuredCount = prunedMeasured + lines.filter((line) =>
     line.disposition !== "UNKNOWN_HELD" && line.identity !== null).length;
   const coverage = lines.some((line) => line.disposition === "UNKNOWN_HELD") || openHoldCount > 0
     ? "UNKNOWN" as const
@@ -208,9 +219,11 @@ export function readCurrentBudgetLedger(
     head,
     headVersion: events.length,
     meters: [...totals.keys()].sort().map((meter) =>
-      coverageOf(meter, head.reservations, head.settlements, totals.get(meter) as BudgetMeterBuckets)),
+      coverageOf(meter, head.reservations, head.settlements, head.settledMeters,
+        totals.get(meter) as BudgetMeterBuckets)),
     ok: true as const,
     reservations: head.reservations,
+    settledMeters: head.settledMeters,
     settlements: head.settlements,
     views: head.views,
   });

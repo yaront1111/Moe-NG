@@ -40,7 +40,19 @@ import type { DurableStoreErrorCode } from "@moe/store";
 
 import type { ActiveGraphRefusal } from "../planning/active-graph-projection.js";
 
-export const BUDGET_LEDGER_RECORD_VERSION = "moe-budget-ledger/1" as const;
+/**
+ * Version 2: terminal (reservation, settlement) pairs are PRUNED from the head
+ * record at their SETTLED commit and their measured evidence folds into the
+ * bounded `settledMeters` summary — version 1 re-embedded the full history in
+ * every record, growing without bound toward the codec's 4MiB cap, after which
+ * the aggregate was permanently unwritable. The bump is a clean break: no
+ * durable v1 record exists anywhere (no production ingress writes this ledger
+ * yet), so v1 bytes refuse through the existing VERSION_UNSUPPORTED arm rather
+ * than keeping a second key roster, validator, and canonical encoder alive to
+ * protect nothing — the same single-version-plus-typed-refusal shape every
+ * shipped record codec in this repository uses.
+ */
+export const BUDGET_LEDGER_RECORD_VERSION = "moe-budget-ledger/2" as const;
 
 /** The one event type this ledger writes and the only one its reader accepts. */
 export const BUDGET_LEDGER_EVENT_TYPE = "BudgetLedgerTransitionCommitted" as const;
@@ -172,6 +184,20 @@ export interface BudgetDurableBinding {
  * the writer claimed. `views` is the HOLD position, which the account fold does not model: a
  * reservation moves units between buckets of one account without appending a movement entry.
  */
+/**
+ * The bounded fold of PRUNED settlement evidence, one row per meter, sorted
+ * ascending by meter and merged monotonically at every prune. It carries
+ * exactly what `coverageOf` counts from a resolved line — measured means
+ * disposition other than UNKNOWN_HELD with a non-null identity — and nothing
+ * else, because only SETTLED pairs prune and a SETTLED settlement provably
+ * holds no UNKNOWN_HELD, LOWER_BOUND, or CONSERVATIVE_WRITE_OFF line: the
+ * verdict-bearing rows (QUARANTINED, WRITTEN_OFF) survive in the record.
+ */
+export interface SettledMeterSummary {
+  readonly measuredLineCount: number;
+  readonly meter: string;
+}
+
 export interface BudgetLedgerRecord {
   readonly recordVersion: typeof BUDGET_LEDGER_RECORD_VERSION;
   readonly accounts: readonly BudgetAccountRecord[];
@@ -182,6 +208,7 @@ export interface BudgetLedgerRecord {
   readonly requestDigest: string;
   readonly reservations: readonly ReservationRecord[];
   readonly sequence: number;
+  readonly settledMeters: readonly SettledMeterSummary[];
   readonly settlements: readonly SettlementRecord[];
   readonly transition: BudgetTransition;
   readonly views: readonly BudgetAvailableView[];
@@ -190,7 +217,7 @@ export interface BudgetLedgerRecord {
 /** The record's own key set, so a sweep over "every field" is bounded by the record itself. */
 export const BUDGET_LEDGER_RECORD_KEYS = Object.freeze([
   "accounts", "appended", "authorization", "binding", "recordVersion", "requestDigest",
-  "reservations", "sequence", "settlements", "transition", "views",
+  "reservations", "sequence", "settledMeters", "settlements", "transition", "views",
 ] as const);
 
 export function budgetLedgerRefusal(
@@ -214,7 +241,11 @@ export function budgetProjectionRefusal(
   });
 }
 
-const AGGREGATE_NAMESPACE = `${BUDGET_LEDGER_RECORD_VERSION}|aggregate|`;
+// The namespace is an ID SCHEME, not a record format: it is pinned to the
+// historical spelling and NEVER moves with the record version, because a
+// namespace that tracked the version would silently rederive every existing
+// aggregate id on a format bump and orphan the streams committed under it.
+const AGGREGATE_NAMESPACE = "moe-budget-ledger/1|aggregate|";
 const MAX_STORE_IDENTIFIER_UTF8_BYTES = 512;
 
 /**

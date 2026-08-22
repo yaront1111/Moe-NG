@@ -25,7 +25,7 @@ import type { BudgetAvailableView, NormalizedMeasurement, ReservationRecord, Set
 import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
-import { canonicalBudgetJson } from "./budget-ledger-codec.js";
+import { canonicalBudgetJson, encodeBudgetLedgerRecord } from "./budget-ledger-codec.js";
 import {
   activateBudgetReservation,
   reconcileBudgetSettlement,
@@ -63,6 +63,20 @@ function currentReservation(store: SqliteEventStore): ReservationRecord {
   const [reservation] = currentLedger(store).reservations;
   if (reservation === undefined) throw new Error("no durable reservation");
   return reservation;
+}
+
+/** The bounded fold the prune leaves behind: measured lines per meter, sorted. */
+function summaryOf(
+  lines: readonly SettlementRecord["lines"][number][],
+): readonly { measuredLineCount: number; meter: string }[] {
+  const counts = new Map<string, number>();
+  for (const line of lines) {
+    if (line.disposition !== "UNKNOWN_HELD" && line.identity !== null) {
+      counts.set(line.meter, (counts.get(line.meter) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].sort(([left], [right]) => (left < right ? -1 : 1))
+    .map(([meter, measuredLineCount]) => ({ measuredLineCount, meter }));
 }
 
 function currentSettlement(store: SqliteEventStore): SettlementRecord {
@@ -159,7 +173,14 @@ describe("holds delegate to the reservation and settlement reducers", () => {
       );
       expect(reducer.ok).toBe(true);
       if (!reducer.ok) throw new Error("reducer refused");
-      expect(canonicalBudgetJson(result.record.settlements[0])).toBe(canonicalBudgetJson(reducer.settlement));
+      // A SETTLED pair is TERMINAL evidence: it leaves the head record at this
+      // very commit, and only the bounded per-meter fold of its measured lines
+      // survives — the successor is still the reducer's own (the view proves
+      // it); what changed is that the record no longer re-embeds history.
+      expect(reducer.settlement?.state).toBe("SETTLED");
+      expect(result.record.settlements).toEqual([]);
+      expect(result.record.reservations).toEqual([]);
+      expect(result.record.settledMeters).toEqual(summaryOf(reducer.settlement?.lines ?? []));
       expect(canonicalBudgetJson(viewOf(store, CHILD))).toBe(canonicalBudgetJson(reducer.view));
       expect(result.record.transition).toBe("SETTLED");
     });
@@ -208,7 +229,13 @@ describe("holds delegate to the reservation and settlement reducers", () => {
       );
       expect(reducer.ok).toBe(true);
       if (!reducer.ok) throw new Error("reducer refused");
-      expect(canonicalBudgetJson(result.record.settlements[0])).toBe(canonicalBudgetJson(reducer.settlement));
+      // Reconciling the quarantine to SETTLED makes the pair terminal in the
+      // same breath: it prunes at THIS commit, its measured lines fold into
+      // the summary, and the reducer's view successor still lands verbatim.
+      expect(reducer.settlement?.state).toBe("SETTLED");
+      expect(result.record.settlements).toEqual([]);
+      expect(result.record.reservations).toEqual([]);
+      expect(result.record.settledMeters).toEqual(summaryOf(reducer.settlement?.lines ?? []));
       expect(canonicalBudgetJson(viewOf(store, CHILD))).toBe(canonicalBudgetJson(reducer.view));
       expect(result.record.transition).toBe("RECONCILED");
     });
@@ -306,6 +333,68 @@ describe("a declared list field cannot reach a hold reducer as a non-array", () 
       expect(result.code).not.toBe("BUDGET_LEDGER_INPUT_MALFORMED");
       expect(result.layer).toBe("BUDGET_LEDGER");
       expect(rawCounts(store, AGGREGATE).events).toBe(before.events);
+    });
+  });
+});
+
+/**
+ * THE GROWTH STOPPER. Version 1 re-embedded every reservation and settlement in
+ * every later record, so the head grew without bound toward the codec's frame
+ * cap and the aggregate went permanently unwritable after a few thousand
+ * cycles. These arms pin the v2 contract: a SETTLED pair leaves the record at
+ * its own commit, evidence accumulates only in the bounded summary, and six
+ * full cycles leave the head no bigger than one.
+ */
+describe("the head record stays bounded across settle cycles", () => {
+  it("prunes every settled pair, folds the evidence, and six cycles do not grow the record", () => {
+    withBudgetStore("bounded-cycles", (store) => {
+      seedFundedChild(store);
+      let perCycle = 0;
+      for (let cycle = 0; cycle < 6; cycle += 1) {
+        accepted(reserveBudgetForAdmission(store, {
+          accountId: CHILD, admissionRef: `admission-cycle-${cycle}`, amounts: HOLD,
+          context: context(`cmd-cycle-reserve-${cycle}`), gate: GATE, goalRef: GOAL_ID,
+          projectId: PROJECT_ID,
+        }));
+        const reservation = currentReservation(store);
+        accepted(activateBudgetReservation(store, {
+          attemptRef: `attempt-cycle-${cycle}`, context: context(`cmd-cycle-activate-${cycle}`),
+          goalRef: GOAL_ID, projectId: PROJECT_ID, reservationId: reservation.reservationId,
+        }));
+        const settledRecord = accepted(settleBudgetReservation(store, {
+          context: context(`cmd-cycle-settle-${cycle}`), goalRef: GOAL_ID,
+          // Correlated to THIS cycle's attempt: the measurement authority
+          // refuses a receipt whose provider run is not the hold's own.
+          observations: [observation({ providerRunRef: `attempt-cycle-${cycle}` })],
+          projectId: PROJECT_ID,
+          reservationId: reservation.reservationId,
+        })).record;
+        // The pair is gone at ITS OWN commit — no terminal row ever survives
+        // into the next cycle's record.
+        expect(settledRecord.reservations).toEqual([]);
+        expect(settledRecord.settlements).toEqual([]);
+        if (cycle === 0) {
+          perCycle = settledRecord.settledMeters[0]?.measuredLineCount ?? 0;
+          expect(perCycle).toBeGreaterThan(0);
+        }
+      }
+      const current = currentLedger(store);
+      // Monotone fold: six identical cycles, one bounded row, six times the count.
+      expect(current.settledMeters).toEqual([
+        { measuredLineCount: perCycle * 6, meter: "tokens" },
+      ]);
+      const sealed = encodeBudgetLedgerRecord(current.head);
+      expect(sealed.ok, sealed.ok ? "" : sealed.code).toBe(true);
+      if (!sealed.ok) throw new Error(sealed.code);
+      // The regression bound: a head that carried history grew past this within
+      // a handful of cycles; the pruned head must not.
+      expect(sealed.bytes.byteLength).toBeLessThan(4096);
+      // Coverage still reads COMPLETE through the summary, and only COMPLETE
+      // states a refundable number.
+      const meter = current.meters.find((entry) => entry.meter === "tokens");
+      expect(meter?.coverage).toBe("COMPLETE");
+      expect(meter?.measuredCount).toBe(perCycle * 6);
+      expect(meter?.refundable).toBe(meter?.buckets.available);
     });
   });
 });

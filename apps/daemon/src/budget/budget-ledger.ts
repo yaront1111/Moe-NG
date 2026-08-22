@@ -115,7 +115,7 @@ export function authorizeBudgetRoot(
     expectedVersion: 0,
     record: budgetRecordOf({
       accounts: opened.state.accounts, appended: opened.state.entries, authorization, binding,
-      requestDigest, reservations: [], sequence: 0, settlements: [],
+      requestDigest, reservations: [], sequence: 0, settledMeters: [], settlements: [],
       transition: "ROOT_AUTHORIZED", views: [],
     }),
   });
@@ -256,6 +256,7 @@ function applyMovement(
       appended: moved.state.entries.slice(current.entries.length),
       authorization: current.authorization, binding, requestDigest,
       reservations: current.reservations, sequence: current.headVersion,
+      settledMeters: current.settledMeters,
       settlements: current.settlements, transition, views,
     }),
   });

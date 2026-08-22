@@ -38,7 +38,9 @@ import {
 } from "./budget-ledger-commit.js";
 import type { BudgetCommitPort } from "./budget-ledger-commit.js";
 import { budgetLedgerRefusal } from "./budget-ledger-contracts.js";
-import type { BudgetLedgerRefusal, BudgetTransition } from "./budget-ledger-contracts.js";
+import type {
+  BudgetLedgerRefusal, BudgetTransition, SettledMeterSummary,
+} from "./budget-ledger-contracts.js";
 import {
   BUDGET_ACTIVATE_INPUT_KEYS, BUDGET_AMOUNTS_SHAPE, BUDGET_NO_LIST_SHAPE, BUDGET_RECONCILE_INPUT_KEYS,
   BUDGET_RECONCILE_SHAPE, BUDGET_RESERVE_INPUT_KEYS, BUDGET_SETTLE_INPUT_KEYS, BUDGET_SETTLE_SHAPE,
@@ -147,20 +149,77 @@ interface Successor {
   readonly views: readonly BudgetAvailableView[];
 }
 
+interface PrunedLists {
+  readonly reservations: readonly ReservationRecord[];
+  readonly settledMeters: readonly SettledMeterSummary[];
+  readonly settlements: readonly SettlementRecord[];
+}
+
+/**
+ * THE PRUNE. A settlement that reached state SETTLED is terminal evidence: every
+ * one of its lines is resolved without quarantine, so the pair — the settlement
+ * and the reservation it settled — leaves the head record here, at the commit
+ * that made it terminal, and its measured lines fold into the bounded
+ * `settledMeters` summary. Without this, every record re-embedded the full
+ * history and the aggregate went permanently unwritable at the codec's frame
+ * cap after a few thousand reserve/settle cycles.
+ *
+ * ONLY SETTLED PRUNES. A QUARANTINED row is the reconcile path's own target and
+ * the drain's refusal evidence; a WRITTEN_OFF row is the sole carrier of
+ * `unknownExternalLiability` and of the CONSERVATIVE_WRITE_OFF lines that hold
+ * `coverageOf`'s PARTIAL floor — both survive in the record, and both are
+ * bounded by human acknowledgements rather than by cycle count. The pair is
+ * removed ATOMICALLY: dropping the settlement while its reservation survived
+ * would resurrect the hold as open and flip the meter's coverage to UNKNOWN.
+ */
+function pruneSettledPairs(
+  reservations: readonly ReservationRecord[],
+  settlements: readonly SettlementRecord[],
+  carried: readonly SettledMeterSummary[],
+): PrunedLists {
+  const reservationIds = new Set(reservations.map((entry) => entry.reservationId));
+  const pruned = settlements.filter((entry) =>
+    entry.state === "SETTLED" && reservationIds.has(entry.reservationId));
+  if (pruned.length === 0) return { reservations, settledMeters: carried, settlements };
+  const prunedIds = new Set(pruned.map((entry) => entry.reservationId));
+  const counts = new Map(carried.map((entry) => [entry.meter, entry.measuredLineCount]));
+  for (const settlement of pruned) {
+    for (const line of settlement.lines) {
+      // EXACTLY coverageOf's measured rule: a line counts when it was disposed
+      // beyond UNKNOWN_HELD and carries a measurement identity.
+      if (line.disposition !== "UNKNOWN_HELD" && line.identity !== null) {
+        counts.set(line.meter, (counts.get(line.meter) ?? 0) + 1);
+      }
+    }
+  }
+  return {
+    reservations: reservations.filter((entry) => !prunedIds.has(entry.reservationId)),
+    settledMeters: [...counts.entries()].sort(([left], [right]) => (left < right ? -1 : 1))
+      .map(([meter, measuredLineCount]) => Object.freeze({ measuredLineCount, meter })),
+    settlements: settlements.filter((entry) => !prunedIds.has(entry.reservationId)),
+  };
+}
+
 function commitHold(
   commit: BudgetCommitPort, input: BudgetIdentityInput, opened: Opened,
   transition: BudgetTransition, successor: Successor,
 ): BudgetWriteResult {
   const { current, requestDigest } = opened;
+  const lists = pruneSettledPairs(
+    successor.reservations ?? current.reservations,
+    successor.settlements ?? current.settlements,
+    current.settledMeters,
+  );
   return commitBudgetTransition(commit, input.context, input.projectId, {
     aggregateId: current.aggregateId,
     expectedVersion: current.headVersion,
     record: budgetRecordOf({
       accounts: current.accounts, appended: [], authorization: current.authorization,
       binding: current.binding, requestDigest,
-      reservations: successor.reservations ?? current.reservations,
+      reservations: lists.reservations,
       sequence: current.headVersion,
-      settlements: successor.settlements ?? current.settlements,
+      settledMeters: lists.settledMeters,
+      settlements: lists.settlements,
       transition, views: successor.views,
     }),
   });

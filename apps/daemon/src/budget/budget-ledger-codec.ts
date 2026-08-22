@@ -84,6 +84,29 @@ function hasExactKeys(value: unknown): value is Record<string, unknown> {
   return keys.every((key) => (BUDGET_LEDGER_RECORD_KEYS as readonly string[]).includes(key));
 }
 
+/**
+ * The pruned-evidence summary is this codec's OWN literal to pin: exactly two
+ * keys per row, a meter that names something, a count that could have been
+ * counted, and strict ascending meter order — sorted rows are what make two
+ * writers reaching the same fold byte-identical, and a duplicate meter would
+ * let one meter's count be stated twice and read once.
+ */
+function validSettledMeters(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  let previous = "";
+  for (const entry of value) {
+    if (!isPlainObject(entry)) return false;
+    const keys = Object.keys(entry);
+    if (keys.length !== 2 || !("measuredLineCount" in entry) || !("meter" in entry)) return false;
+    const meter = entry["meter"];
+    if (typeof meter !== "string" || meter.length === 0) return false;
+    if (!isCount(entry["measuredLineCount"])) return false;
+    if (previous !== "" && meter <= previous) return false;
+    previous = meter;
+  }
+  return true;
+}
+
 function validate(value: Record<string, unknown>): BudgetLedgerRecord | "VERSION" | "FIELD" {
   if (value["recordVersion"] !== BUDGET_LEDGER_RECORD_VERSION) return "VERSION";
   if (!(BUDGET_TRANSITIONS as readonly string[]).includes(value["transition"] as string)) return "FIELD";
@@ -92,6 +115,7 @@ function validate(value: Record<string, unknown>): BudgetLedgerRecord | "VERSION
   if (typeof digest !== "string" || !HEX64.test(digest)) return "FIELD";
   const lists = ["accounts", "appended", "reservations", "settlements", "views"];
   if (!lists.every((key) => Array.isArray(value[key]))) return "FIELD";
+  if (!validSettledMeters(value["settledMeters"])) return "FIELD";
   if (!isPlainObject(value["authorization"]) || !isPlainObject(value["binding"])) return "FIELD";
   const binding = value["binding"] as Record<string, unknown>;
   const refs = ["budgetAccountRef", "goalRef", "graphRevisionRef", "ownerRef", "projectId"];
