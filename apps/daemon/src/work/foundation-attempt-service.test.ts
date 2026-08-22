@@ -1217,14 +1217,18 @@ describe("foundation attempt dispatch — commit failures never launch", () => {
 
   it("aborts the reservation commit after a committed activation and still launches nothing", async () => {
     const real = readyStore("abort-reservation");
-    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch now commits, in
-    // order: (1) the activation ledger record, (2) the durable attempt-resource
-    // set bound by `activation-resource-binding.ts`, (3) THIS reservation. Abort
-    // on 2 and the resource bind absorbs it while the reservation succeeds, so
-    // the refusal arrives from a later layer and this case silently stops testing
-    // the reservation. If you add a commit to `runEffectActivateCommand`, count
-    // again here and in the sibling Windows conformance case.
-    const injected = abortingStore(real, 3);
+    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved again.
+    // task-03049148 added the RESERVED -> ACTIVATED budget bind
+    // (`activation-budget-binding.ts`), which commits inside
+    // `runEffectActivateCommand` BEFORE the resource bind. One dispatch now
+    // commits, in order: (1) the activation ledger record, (2) THE BUDGET BIND,
+    // (3) the durable attempt-resource set bound by
+    // `activation-resource-binding.ts`, (4) THIS reservation. Abort on 2 or 3 and
+    // that bind absorbs it while the reservation succeeds, so the refusal arrives
+    // from a later layer and this case silently stops testing the reservation. If
+    // you add a commit to `runEffectActivateCommand`, count again here and in the
+    // sibling Windows conformance case.
+    const injected = abortingStore(real, 4);
     const run = harness(injected.store, { platform: "win32" });
 
     const outcome = await run.service.dispatch(dispatchRequest());
@@ -1855,13 +1859,14 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
 
   it("keeps the provider ledger's own refusal when the provider commit aborts", async () => {
     const real = readyStore("provider-commit-abort");
-    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved. One
-    // dispatch commits, in order: (1) the activation ledger record, (2) the
-    // durable attempt-resource set, (3) the Foundation reservation, (4) the
-    // prelaunch CAPTURE CONTEXT, (5) THIS provider-run commit. Aborting 4 now
-    // hits the capture ledger and this case would stop testing the provider one,
-    // so the number is 5. Count again rather than trusting it.
-    const injected = abortingStore(real, 5);
+    // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved again.
+    // One dispatch commits, in order: (1) the activation ledger record, (2) the
+    // BUDGET BIND added by task-03049148, (3) the durable attempt-resource set,
+    // (4) the Foundation reservation, (5) the prelaunch CAPTURE CONTEXT, (6) THIS
+    // provider-run commit. Aborting 5 now hits the capture ledger and this case
+    // would stop testing the provider one, so the number is 6. Count again rather
+    // than trusting it.
+    const injected = abortingStore(real, 6);
     const run = harness(injected.store);
 
     const outcome = await run.service.dispatch(dispatchRequest());

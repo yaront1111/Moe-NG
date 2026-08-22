@@ -8,13 +8,26 @@
  * below refuses on a domain fact — so the file above stays exactly "the ordered sequence of
  * judgements" and this one is "what is written once they all pass".
  *
- * THE RESERVED -> ACTIVATED BUDGET TRANSITION IS DEFERRED, AND THAT IS FORCED, NOT PREFERRED.
- * `decision-ledger-legs.ts` refuses a duplicate aggregateId across legs, so the budget
- * aggregate may appear EXACTLY ONCE in one legs commit — and `reserveForAdmission` is the
- * transition that MOVES units, while `activateReservation` binds an attempt and moves none.
- * Deferring costs no money-safety: the attempt binding still lands durably on the ACTIVATION
- * aggregate, and `settleBudgetReservation` locates its target from the open reservations by
- * reservationId without ever requiring an ACTIVATED record.
+ * THE RESERVED -> ACTIVATED BUDGET TRANSITION DOES NOT RIDE THIS COMMIT, AND THAT IS FORCED BY
+ * THREE INDEPENDENT FACTS — not one. It lands in a SUBSEQUENT decision keyed
+ * `${commandId}:BUDGET_ACTIVATE` under this ledger's own commandKind, committed by
+ * `activation-budget-binding.ts` (J2) immediately after this commit succeeds:
+ *   1. `packages/store/src/decision-ledger-legs.ts` refuses a duplicate aggregateId ACROSS LEGS
+ *      of one decision, and unit-MOVING `reserveForAdmission` already spends the budget
+ *      aggregate's single slot here. That fence is per DECISION, which is exactly why a
+ *      separate decision is available.
+ *   2. ORDERING: the attempt ref does not exist yet. `durableBudgetStage` seals the budget
+ *      leg's bytes before `activateEffect` mints `commit.attempt.attemptId`.
+ *   3. `captureBudgetLeg` destructures `const [only] = captured`, so a second captured commit
+ *      is silently DROPPED, and every hold writer folds from the DURABLE head — before this
+ *      decision commits there is no reservation to locate.
+ *
+ * DEFERRING IS NOT FREE, AND THE EARLIER CLAIM THAT IT WAS COST A ROW. `settleReservation`
+ * refuses BUDGET_SETTLEMENT_NOT_ACTIVATED while `state !== "ACTIVATED" || !isRef(attemptRef)`
+ * (`packages/scheduler/src/budget/budget-settlement.ts`), so an unbound hold can never settle:
+ * a comment here once asserted the opposite, and settlement stayed unreachable behind it until
+ * task-03049148 measured it. The reservation SNAPSHOT this commit writes stays RESERVED
+ * forever; the durable ledger HEAD is what advances to ACTIVATED.
  */
 
 import { SUPERVISOR_ACTIVATION_VERSION } from "@moe/runner";

@@ -9,6 +9,8 @@ import {
 } from "../work/work-claim.js";
 import type { BudgetLeg, ClaimPrefix } from "../work/work-claim.js";
 import type { ClaimSuccessors, WorkResult } from "../work/work-kernel.js";
+import { bindActivationBudget } from "./activation-budget-binding.js";
+import type { ActivationBudgetAuthority } from "./activation-budget-derivation.js";
 import { runActivationBudgetStage } from "./activation-budget-stage.js";
 import { readActivationEmbargo } from "./activation-embargo.js";
 import {
@@ -152,7 +154,11 @@ function claimPrefixStage(
  */
 function durableBudgetStage(
   store: SqliteEventStore, request: ActivationIngressRequest, nodeKey: string | undefined,
-): Stage<{ readonly budget: BudgetLeg; readonly leg: ExpectedVersionDecisionLeg }> {
+): Stage<{
+  readonly authority: ActivationBudgetAuthority;
+  readonly budget: BudgetLeg;
+  readonly leg: ExpectedVersionDecisionLeg;
+}> {
   const outcome = runActivationBudgetStage(
     nodeKey === undefined ? { request, store } : { nodeKey, request, store },
   );
@@ -160,7 +166,10 @@ function durableBudgetStage(
   if (!outcome.ok) {
     return activationIngressRefusal({ code: outcome.code, refusedBy: outcome.layer });
   }
-  return { value: { budget: outcome.budget, leg: outcome.leg } };
+  // THE AUTHORITY IS CARRIED, NOT RE-DERIVED. (J2) binds against this stage's own goalRef and
+  // the reservation it actually minted; reading either back off the caller's payload would let
+  // a request name a hold it does not own.
+  return { value: { authority: outcome.authority, budget: outcome.budget, leg: outcome.leg } };
 }
 
 /** (C3) The effect leg, and the whole successor closure or none of it. */
@@ -294,6 +303,24 @@ export function runEffectActivateCommand(
   // which grants no terminal authority and therefore BLOCKS a consumer's release
   // instead of permitting one. That is why the bind outcome is discarded, and the
   // full reasoning lives with the call in `activation-resource-binding.ts`.
-  if (committed.ok) bindActivationResources(store, request, record);
+  if (committed.ok) {
+    // (J2) THE MONEY BINDING GOES FIRST. Its absence is the one that breaks settlement
+    // silently: an unbound hold refuses BUDGET_SETTLEMENT_NOT_ACTIVATED forever, so every
+    // COMPLETE and PARTIAL settlement outcome downstream becomes unreachable while UNKNOWN
+    // still passes. The resource bind below fails visibly by comparison.
+    //
+    // A REFUSED BIND IS NOT REPORTED AS AN ACTIVATION REFUSAL, for (J)'s reason: the decision
+    // above is already durable. It is not silent either — the observable is the reservation
+    // staying RESERVED with `attemptRef: null` and no `:BUDGET_ACTIVATE` decision in the
+    // table, which BLOCKS settlement rather than permitting a wrong one.
+    bindActivationBudget({
+      attemptRef,
+      goalRef: budget.value.authority.goalRef,
+      request,
+      reservationId: budget.value.budget.reservation.reservationId,
+      store,
+    });
+    bindActivationResources(store, request, record);
+  }
   return committed;
 }

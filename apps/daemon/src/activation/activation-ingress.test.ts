@@ -330,9 +330,11 @@ describe("effect.activate ingress — the accepted path", () => {
     expect(record.budgetReservation).toMatchObject({
       accountId: after.binding.budgetAccountRef,
       admissionRef: "activation:cmd-activate-1",
-      // RESERVED, never ACTIVATED: one legs commit may name the budget aggregate EXACTLY once,
-      // so the unit-MOVING transition rides it and the attempt binding is deferred to
-      // settlement. `settleBudgetReservation` locates its target by reservationId regardless.
+      // RESERVED AT COMMIT TIME, and that is a snapshot rather than the end state. One legs
+      // commit may name the budget aggregate EXACTLY once, so the unit-MOVING transition rides
+      // it and the attempt binding lands in a SUBSEQUENT decision (task-03049148). This record
+      // holds what `reserveForAdmission` returned, so it stays RESERVED forever; the LEDGER
+      // head is what advances to ACTIVATED. Both are asserted below.
       attemptRef: null,
       state: "RESERVED",
     });
@@ -340,16 +342,28 @@ describe("effect.activate ingress — the accepted path", () => {
     expect(record.budgetReservation.admissionRef).not.toBe(ADMISSION.admissionRef);
     expect(record.budgetReservation.lines.map((line) => line.meter)).not.toContain("usd");
 
-    // ANTI-TAUTOLOGY: the expected operand is the LEDGER MODULE'S OWN committed output read
-    // back out of the durable aggregate, never a literal this suite chose. A hand-built
-    // expectation here would agree with itself no matter what was written.
-    expect(record.budgetReservation).toStrictEqual(after.reservations.find(
-      (entry) => entry.admissionRef === "activation:cmd-activate-1"));
+    // THE SNAPSHOT AND THE HEAD NOW DIVERGE, and the divergence is the point (task-03049148).
+    // Until that row the record's reservation was byte-equal to the ledger head; the binding
+    // decision that follows this commit moves the head to ACTIVATED and binds the attempt,
+    // while this record keeps the RESERVED bytes it committed. Asserting equality again would
+    // reject a correctly bound reservation.
+    const head = after.reservations.find(
+      (entry) => entry.admissionRef === "activation:cmd-activate-1");
+    expect(head).toMatchObject({ attemptRef: record.attempt.attemptId, state: "ACTIVATED" });
+    // ANTI-TAUTOLOGY: everything the binding does NOT touch is still the ledger module's own
+    // committed output, read back out of the durable aggregate rather than hand-built here.
+    expect(head).toMatchObject({
+      accountId: record.budgetReservation.accountId,
+      admissionRef: record.budgetReservation.admissionRef,
+      lines: record.budgetReservation.lines,
+      reservationId: record.budgetReservation.reservationId,
+    });
     expect(record.budgetView).toStrictEqual(after.views.find(
       (entry) => entry.accountId === after.binding.budgetAccountRef));
-    // BOTH aggregates moved, in the SAME decision: exactly one activation event and exactly
-    // one new budget event. A second movement, or none, fails here.
-    expect(after.headVersion).toBe(before.headVersion + 1);
+    // BOTH aggregates moved in the activation decision (one activation event, one budget
+    // event), and the binding decision appends ONE more budget event after it. A third
+    // movement, or a missing binding, fails here.
+    expect(after.headVersion).toBe(before.headVersion + 2);
     expect(record.predecessorIntentVersion).toBe(PREDECESSOR_INTENT_VERSION);
     expect(record.predecessorAttemptVersion).toBe(PREDECESSOR_ATTEMPT_VERSION);
     expect(record.effectIntent.version).toBe(record.predecessorIntentVersion + 1);

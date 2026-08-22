@@ -495,12 +495,16 @@ describe("foundation attempt dispatch — real Windows conformance", () => {
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
       lifecycle: lifecycleFor(fixture.store),
-      // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED. One dispatch commits, in
-      // order: (1) the activation ledger record, (2) the durable attempt-resource
-      // set bound by `activation-resource-binding.ts`, (3) THIS reservation.
-      // Aborting 2 lets the reservation succeed and the refusal then arrives from
-      // a later layer, so this case would stop testing reservation failure.
-      store: abortingStore(fixture.store, 3),
+      // ORDINAL, AND IT MOVES WHEN A COMMIT IS ADDED — and it just moved again.
+      // task-03049148 added the RESERVED -> ACTIVATED budget bind, which commits
+      // inside `runEffectActivateCommand` before the resource bind. One dispatch
+      // commits, in order: (1) the activation ledger record, (2) THE BUDGET BIND,
+      // (3) the durable attempt-resource set bound by
+      // `activation-resource-binding.ts`, (4) THIS reservation. Aborting 2 or 3
+      // lets the reservation succeed and the refusal then arrives from a later
+      // layer, so this case would stop testing reservation failure. This is the
+      // sibling case the service suite's ordinal comment tells you to count.
+      store: abortingStore(fixture.store, 4),
     });
 
     const outcome = await service.dispatch(fixture.request);

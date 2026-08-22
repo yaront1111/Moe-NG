@@ -112,7 +112,13 @@ export interface ActivationLedgerRecord {
   readonly lease: LeaseRecord;
   /** Dimension- and attempt-bound, state ACTIVE. */
   readonly providerSlot: ProviderSlotReservation;
-  /** State ACTIVATED, attempt-bound; moves no units. */
+  /**
+   * `reserveForAdmission`'s own output, snapshotted at commit time: state RESERVED with
+   * `attemptRef: null`, and it stays that way. The attempt binding lands AFTER this decision,
+   * in the `${commandId}:BUDGET_ACTIVATE` transition (task-03049148), so it moves the durable
+   * ledger head to ACTIVATED and never this record. Reading ACTIVATED off here would be
+   * reading the wrong surface.
+   */
   readonly budgetReservation: ReservationRecord;
   /** `reserveForAdmission`'s own post-reservation view, never recomputed. */
   readonly budgetView: BudgetAvailableView;
