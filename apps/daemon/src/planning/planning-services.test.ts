@@ -28,6 +28,8 @@ import {
   openStore,
   planningActivation,
   planningChain,
+  SEALED_SUBMISSION_HASH,
+  sealedPlanningChain,
   send,
   sendReviewed,
 } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -177,8 +179,11 @@ function expectUnstatedPolicy(): void {
 
 function proposeGatedWork(store: SqliteEventStore): void {
   driveThrough(store, "plan.propose");
+  // SEALED since task-16a6a2b1: an authority-less terminal is refused PLANNING_AUTHORITY_REQUIRED
+  // at the persistence layer, so the legacy chain can no longer seed ANY of these arms. Their
+  // subject — the gate, the fold, the policy — is untouched by the swap.
   const outcome = send(store, envelope("plan.propose", 0, {
-    commands: planningChain(),
+    commands: sealedPlanningChain(),
     humanAuthorityGate: HUMAN_GATE,
     runId: RUN_ID,
   }));
@@ -206,15 +211,20 @@ function proposeGrantedWork(store: SqliteEventStore): void {
 }
 
 /**
- * The approval for a run THIS SUITE proposed, which is the authority-LESS world: the arms below
- * send a legacy `planningChain()` rather than the shipped `sealedPlanningChain()`, so the run's
- * submission hash is the spelled `SUBMISSION_HASH`. An approval naming the SEALED hash is refused
- * BOOTSTRAP_REVISION_HASH_MISMATCH before it ever reaches the human-authority gate these arms are
- * about (task-074e6d2e), which would answer the refusal at the wrong layer while staying red-free
- * elsewhere. Keeping them legacy also keeps live consumers of the ABSENT arm inside this suite.
+ * The approval for a run THIS SUITE proposed, naming the hash that run ACTUALLY carries.
+ *
+ * THE TRAP THIS GUARDS, and it is why the hash is read rather than spelled: an approval naming
+ * the wrong hash is refused BOOTSTRAP_REVISION_HASH_MISMATCH @ DAEMON_PREREQUISITE, ABOVE the
+ * human-authority gate these arms are about — the suite would stay red-free while every arm below
+ * exercised the wrong layer (task-074e6d2e). Until task-16a6a2b1 the suite dodged that by
+ * proposing the authority-LESS `planningChain()`, whose terminal spells `SUBMISSION_HASH`; that
+ * chain is now REFUSED at the propose seam, so the arms seed the shipped `sealedPlanningChain()`
+ * and this approval names the hash THAT chain spells. The two cannot drift: both read the one
+ * exported `SEALED_SUBMISSION_HASH`, so a change to the chain's submission moves the approval
+ * with it instead of silently re-routing every arm below to DAEMON_PREREQUISITE.
  */
-const legacyApprovalPayload = (): Record<string, unknown> =>
-  approvalPayload({ record: approvalRecord(SUBMISSION_HASH) });
+const seededApprovalPayload = (): Record<string, unknown> =>
+  approvalPayload({ record: approvalRecord(SEALED_SUBMISSION_HASH) });
 
 afterEach(closeStores);
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -227,56 +237,58 @@ describe("planning service surface", () => {
 });
 
 describe("plan propose", () => {
-  it("keeps the human authority gate on work identity across lifecycle transitions", () => {
+  /**
+   * REPLACED by task-16a6a2b1, and the narrowing is declared rather than hidden.
+   *
+   * This arm used to drive `propose -> planning.release -> planning.claim -> RE-PROPOSE` on ONE
+   * run and assert the gate survived all of it. The re-propose is now unrepresentable: the core
+   * reducer opens a run exactly once (`planning-run-reducer.ts:178` refuses `create_draft` on a
+   * live run) and a re-plan is a NEW run of `runKind: "REVISION"`, so a second `plan.propose` on
+   * the same run seals authority twice and dies `DURABLE_ID_CONFLICT`. Governor ruling
+   * msg-b51ee31d: same-run re-proposal is not a capability the flip removed — it is a shape the
+   * retired ABSENT leg was accidentally admitting.
+   *
+   * WHAT IS LOST, said plainly: a chain must TERMINATE in a propose (`classifyPlanningChain`), so
+   * a release/reclaim round trip cannot be driven without one. The gate's survival across THOSE
+   * two transitions is therefore no longer observable through production at all, and this arm no
+   * longer claims it. What remains observable — and is asserted below — is the gate surviving the
+   * transitions the propose chain itself performs, plus the refusal that retires the old world.
+   */
+  it("keeps the human authority gate on work identity across the propose chain", () => {
     const store = openStore();
     proposeGatedWork(store);
 
+    // create_draft -> ready -> claim -> propose, all folded in one chain: the gate is carried on
+    // work identity and is still there after the terminal seals.
     expect(planningRunRow(store)?.state?.lifecycle).toBe("PLANNING");
     expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(HUMAN_GATE);
+  });
 
-    const reproposed = send(store, envelope("plan.propose", 1, {
-      commands: [
-        {
-          commandId: "chain-release",
-          expectedVersion: 4,
-          kind: "planning.release",
-          witness: {
-            attemptTerminalRef: "attempt-1-released",
-            handoffRef: "handoff-1",
-            truthClass: "DAEMON_VERIFIED",
-          },
-        },
-        {
-          commandId: "chain-reclaim",
-          expectedVersion: 5,
-          kind: "planning.claim",
-          resumeProof: {
-            handoffKind: "SAFE_RELEASE_HANDOFF",
-            handoffRef: "handoff-1",
-            priorAttemptTerminalRef: "attempt-1-released",
-            truthClass: "DAEMON_VERIFIED",
-          },
-          witness: {
-            attemptRef: "attempt-2",
-            contextRef: "context-2",
-            leaseRef: "lease-2",
-            providerSlotRef: "slot-2",
-            truthClass: "DAEMON_VERIFIED",
-          },
-        },
-        {
-          ...planningChain()[3],
-          commandId: "chain-repropose",
-          expectedVersion: 6,
-        },
-      ],
+  it("refuses a SECOND propose on the same run, which is what retired the old round trip", () => {
+    // The retirement, asserted rather than assumed. If a same-run re-proposal ever became
+    // possible again, the arm above would be under-testing its subject and this reds to say so.
+    const store = openStore();
+    proposeGatedWork(store);
+    const decisions = decisionCount(store);
+
+    const repropose = (): unknown => send(store, envelope("plan.propose", 1, {
+      commands: [{ ...sealedPlanningChain()[3], commandId: "chain-repropose", expectedVersion: 4 }],
       humanAuthorityGate: null,
       runId: RUN_ID,
     }, "cmd-plan-repropose"));
 
-    expect(reproposed.ok, reproposed.ok ? "" : reproposed.code).toBe(true);
-    expect(planningRunRow(store)?.state?.lifecycle).toBe("PLANNING");
+    // ⚠️ IT THROWS. IT DOES NOT REFUSE — and this arm pins the behaviour production actually has
+    // rather than the one it ought to have. The authority event id is derived from the run id
+    // alone (`planning-authority-persistence.ts:243`), so the second seal collides in the STORE
+    // and a DurableIdConflictError escapes as an unhandled exception instead of a stable reason
+    // code at a named layer. A crash is not a refusal. That is a real fail-closed gap, it is
+    // DISCLOSED by task-16a6a2b1 rather than fixed here (the ruling that retired this world also
+    // ruled that nobody widens that id), and if it is ever closed this assertion is what tells
+    // the next author the shape changed.
+    expect(repropose).toThrow(/DURABLE_ID_CONFLICT/u);
+    // Nothing was written: the gate stands and the run did not advance.
     expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(HUMAN_GATE);
+    expect(decisionCount(store)).toBe(decisions);
   });
 
   it("refuses rather than recreating a run whose durable state is unreadable", () => {
@@ -317,7 +329,7 @@ describe("plan propose", () => {
     const before = decisionCount(store);
 
     const outcome = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       runId: RUN_ID,
     }));
 
@@ -325,8 +337,11 @@ describe("plan propose", () => {
     if (!outcome.ok) throw new Error("expected acceptance");
     expect(decisionCount(store)).toBe(before + 1);
     const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+    // SEALED_SUBMISSION_HASH since task-16a6a2b1: the chain this arm folds is the sealed one,
+    // and its terminal spells that hash. Named explicitly rather than read back, so the arm still
+    // pins WHICH submission the fold committed instead of agreeing with whatever it wrote.
     expect((run?.result as { submissionHash?: string } | undefined)?.submissionHash)
-      .toBe(SUBMISSION_HASH);
+      .toBe(SEALED_SUBMISSION_HASH);
   });
 
   it("refuses a chain whose last command is not plan.propose, at the ingress layer", () => {
@@ -390,7 +405,7 @@ describe("approval decide", () => {
       proposeGatedWork(store);
       const before = decisionCount(store);
 
-      const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload(),
+      const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload(),
         `cmd-gated-${String(index)}`));
 
       expect(outcome.ok, why).toBe(false);
@@ -409,7 +424,7 @@ describe("approval decide", () => {
     const store = openStore();
     driveThrough(store, "plan.propose");
     const proposed = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       humanAuthorityGate: null,
       runId: RUN_ID,
     }));
@@ -418,7 +433,7 @@ describe("approval decide", () => {
     // Under the most permissive settings the file can express, so the gate is what answers.
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected unreadable-gate refusal");
@@ -432,7 +447,7 @@ describe("approval decide", () => {
     const store = openStore();
     driveThrough(store, "plan.propose");
     const proposed = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       humanAuthorityGate: {
         gateId: HUMAN_GATE.gateId,
         grant: {
@@ -450,7 +465,7 @@ describe("approval decide", () => {
     const before = decisionCount(store);
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, legacyApprovalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected forged-grant refusal");
@@ -630,7 +645,7 @@ describe("approval decide", () => {
     proposeGatedWork(store);
     const before = decisionCount(store);
 
-    const outcome = sendReviewed(store, envelope("approval.decide", 0, legacyApprovalPayload()));
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, seededApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected the unsatisfied gate to stand");

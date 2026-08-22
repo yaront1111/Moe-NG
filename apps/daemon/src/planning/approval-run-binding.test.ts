@@ -2,7 +2,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
-import { authorityLessProposedStore, driveTo, finalizeRequestIndex } from "../bootstrap/bootstrap-journey-fixtures.js";
+import { driveTo, finalizeRequestIndex, legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
 import {
   GOAL_ID,
   GRAPH_REVISION_REF,
@@ -121,6 +121,22 @@ const refusalOf = (outcome: unknown): Refusal => ({
   layer: String(own(outcome, "refusedBy")),
 });
 
+/**
+ * The submission hash the run ACTUALLY carries, read off its durable record instead of spelled.
+ *
+ * Since task-16a6a2b1 the unsealed worlds below are PLANTED from the shipped chain, so they carry
+ * the shipped submission rather than the legacy `SUBMISSION_HASH` literal. An approval naming the
+ * wrong hash is refused BOOTSTRAP_REVISION_HASH_MISMATCH @ DAEMON_PREREQUISITE — a real refusal,
+ * at a layer ABOVE the one these arms exist to exercise, which would leave the run-binding checks
+ * unexercised while the suite stayed green. Reading it keeps the operand and the assertion from
+ * drifting apart the next time the chain moves.
+ */
+function submissionHashOf(store: SqliteEventStore): string {
+  const hash = own(own(runRecord(store), "state"), "submissionHash");
+  if (typeof hash !== "string") throw new Error("the run record carries no submission hash");
+  return hash;
+}
+
 /** Sends the shipped approval, optionally overriding one payload field. */
 function approve(
   store: SqliteEventStore, overrides: Record<string, unknown> = {},
@@ -136,13 +152,19 @@ function approve(
  * not-reviewable refusal and would never exercise its own check.
  */
 function finalizedButUnsealedStore(): SqliteEventStore {
-  const store = authorityLessProposedStore();
+  // PLANTED since task-16a6a2b1: `authorityLessProposedStore()` drives production, and production
+  // now refuses an authority-less terminal, so the unsealed world is only reachable as pre-flip
+  // durable history. The finalize below still runs through PRODUCTION — only the proposal it
+  // finalizes is planted, which is the minimum needed to keep this arm's subject intact.
+  const store = legacyProposedStore();
   const finalize = finalizeChain()[0];
   if (finalize === undefined) throw new Error("finalizeChain() is empty");
-  const revision = { ...(finalize["revision"] as Record<string, unknown>) };
-  revision["planHash"] = SUBMISSION_HASH;
+  // The hash is no longer overwritten with the spelled SUBMISSION_HASH: the planted proposal
+  // replays the shipped chain's own submission, so the shipped finalize already names it. A
+  // spelled hash here would be refused BOOTSTRAP_REVISION_HASH_MISMATCH and this arm would then
+  // be exercising the wrong layer while still looking red-free.
   const outcome = send(store, envelope("plan.propose", 0, {
-    commands: [{ ...finalize, revision }], runId: RUN_ID,
+    commands: [finalize], runId: RUN_ID,
   }, "cmd-finalize"));
   if (!outcome.ok) throw new Error(`unsealed finalize refused: ${String(own(outcome, "code"))}`);
   return store;
@@ -190,8 +212,10 @@ describe("the durable activation witness binds the approved run identity", () =>
 
 describe("an approval that cannot be bound to a reviewable sealed run refuses", () => {
   it("refuses a run that never finalized, naming the run-binding layer", () => {
-    const store = authorityLessProposedStore();
-    const outcome = approve(store, { record: approvalRecord(SUBMISSION_HASH) });
+    // PLANTED since task-16a6a2b1 — the subject here is NOT-FINALIZED, unchanged; only the way
+    // its operand is built moved, because production refuses an authority-less propose now.
+    const store = legacyProposedStore();
+    const outcome = approve(store, { record: approvalRecord(submissionHashOf(store)) });
 
     expect(outcome.ok).toBe(false);
     expect(refusalOf(outcome))
@@ -206,7 +230,7 @@ describe("an approval that cannot be bound to a reviewable sealed run refuses", 
     expect(own(own(runRecord(store), "state"), "lifecycle")).toBe("PLAN_REVIEW");
     expect(store.readEvents(planningAuthorityAggregateId(RUN_ID))).toEqual([]);
 
-    const outcome = approve(store, { record: approvalRecord(SUBMISSION_HASH) });
+    const outcome = approve(store, { record: approvalRecord(submissionHashOf(store)) });
 
     expect(outcome.ok).toBe(false);
     expect(refusalOf(outcome))

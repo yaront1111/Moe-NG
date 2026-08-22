@@ -30,8 +30,9 @@ import { FINALIZE_COMMAND_KIND } from "../planning/planning-authority-finalize-i
 import { planningAuthorityAggregateId } from "../planning/planning-authority-persistence.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
 import {
-  authorityLessProposedStore,
+  driveTo,
   finalizeRequestIndex,
+  legacyProposedStore,
   proposedNotFinalizedStore,
 } from "./bootstrap-journey-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
@@ -347,16 +348,39 @@ describe("the shipped journey seals planning authority", () => {
    * Without this, a world that reached sealed-looking fields by any other route would satisfy
    * every assertion above identically.
    */
-  it("reaches the ABSENT shape when the propose terminal carries no authority member", () => {
-    const store = authorityLessProposedStore();
+  it("carries none of the sealed fields on a LEGACY run proposed without an authority member",
+    () => {
+      // RE-GRADED by task-16a6a2b1, which retired the ABSENT shape this arm was named for: the
+      // propose seam now REFUSES an authority-less terminal, so `authorityLessProposedStore()`
+      // no longer yields a proposed run at all. The negative control it provides is unchanged in
+      // PURPOSE — binding the three arms above to the mechanism rather than to their fixture —
+      // so the same world is PLANTED as pre-flip durable history instead of driven.
+      const store = legacyProposedStore();
 
-    expect(authorityEvents(store)).toEqual([]);
-    const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
-    if (run === undefined) throw new Error(`the proposal wrote no durable decision for ${RUN_ID}`);
-    expect(own(run.result, "authorityRef")).toBeUndefined();
-    expect(own(run.result, "envelopeDigest")).toBeUndefined();
-    expect(own(run.result, "bodiesDigest")).toBeUndefined();
-  });
+      expect(authorityEvents(store)).toEqual([]);
+      const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+      if (run === undefined) throw new Error(`the plant wrote no durable decision for ${RUN_ID}`);
+      expect(own(run.result, "authorityRef")).toBeUndefined();
+      expect(own(run.result, "envelopeDigest")).toBeUndefined();
+      expect(own(run.result, "bodiesDigest")).toBeUndefined();
+    });
+
+  it("REFUSES that terminal at the propose seam, which is why the world above must be planted",
+    () => {
+      // The other half of the same re-grade, and the arm that keeps the plant honest: if the
+      // propose seam ever started accepting an authority-less terminal again, the planted world
+      // would silently stop being the only way to reach it and this arm reds.
+      const store = openStore();
+      driveTo(store, finalizeRequestIndex() - 1);
+
+      const outcome = send(store, envelope("plan.propose", 0, {
+        commands: planningChain(), runId: RUN_ID,
+      }));
+
+      expect(outcome.ok).toBe(false);
+      if (outcome.ok) return;
+      expect(outcome.code).toBe("PLANNING_AUTHORITY_REQUIRED");
+    });
 });
 
 /**
@@ -377,9 +401,12 @@ describe("the shipped journey seals planning authority", () => {
  */
 describe("all three deliberate negative worlds still exist", () => {
   it("AUTHORITY axis (task-074e6d2e): a proposed run whose authority aggregate is EMPTY", () => {
-    // Protects the ABSENT branch at planning-authority-persistence.ts:189, the legacy pin at
-    // planning-authority-persistence.test.ts:257-274, and task-2cc6c59d's INCONSISTENCY refusal.
-    const store = authorityLessProposedStore();
+    // Protects task-2cc6c59d's INCONSISTENCY refusal and the finalize seam's authority-absent
+    // arm. The branch it used to protect first — the ABSENT leg of `buildPlanningAuthorityLeg` —
+    // was RETIRED by task-16a6a2b1, which is also why the world is now PLANTED rather than
+    // proposed: production refuses that terminal, so only pre-flip durable history reaches here.
+    // The world itself is unchanged and the roster still fails if someone tidies it away.
+    const store = legacyProposedStore();
     expect(store.readEvents(planningAuthorityAggregateId(RUN_ID))).toEqual([]);
     expect(store.getAggregateVersion(planningAuthorityAggregateId(RUN_ID))).toBe(0);
   });

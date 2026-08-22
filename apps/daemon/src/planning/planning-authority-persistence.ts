@@ -51,6 +51,7 @@ export type PlanningAuthorityRefusalLayer =
 
 export const PLANNING_AUTHORITY_PERSISTENCE_CODES = Object.freeze([
   "PLANNING_AUTHORITY_MALFORMED",
+  "PLANNING_AUTHORITY_REQUIRED",
   "PLANNING_AUTHORITY_STATE_UNSEALED",
   "PLANNING_AUTHORITY_SUBMISSION_HASH_MISMATCH",
 ] as const);
@@ -73,8 +74,16 @@ export interface PlanningAuthorityLegInput {
   readonly store: SqliteEventStore;
 }
 
+/**
+ * RETIRED MEMBER, recorded rather than dropped: `{ kind: "ABSENT" }`. Its world was "the propose
+ * terminal carries no authority member", which until task-16a6a2b1 committed the run on a single
+ * aggregate — D1's optional-at-the-edge legacy arm. The flip below refuses that terminal, so the
+ * member became UNRETURNABLE rather than merely unused. Safe by measurement: one production
+ * caller (`planning-services.ts`), one producer — the line the flip replaces.
+ * NOT `planning-authority-finalize.ts`'s `{ kind: "ABSENT" }`, a different type on a different
+ * seam (the ENVELOPE is absent: not in PLAN_REVIEW, or no record). That one stays.
+ */
 export type PlanningAuthorityLegResult =
-  | { readonly kind: "ABSENT" }
   | {
     readonly code: string; readonly kind: "REFUSED";
     readonly layer: PlanningAuthorityRefusalLayer;
@@ -119,7 +128,9 @@ const base64 = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base6
 /**
  * A plain data read. The member has already survived the core fold, which refuses an accessor or
  * proxy shell outright (`planAuthorityCarry` reads the descriptor and refuses a getter), so a
- * hostile shape cannot arrive here green; this read only has to be exact about ABSENT.
+ * hostile shape cannot arrive here green; this read only has to be exact about PRESENCE. An
+ * `undefined` member is no longer a shape this seam interprets — the caller refuses it with
+ * PLANNING_AUTHORITY_REQUIRED before any of the reads below run (task-16a6a2b1).
  */
 function authorityOf(lastCommand: unknown): Readonly<Record<string, unknown>> | null | undefined {
   const member = own(lastCommand, AUTHORITY_MEMBER);
@@ -190,7 +201,9 @@ export function buildPlanningAuthorityLeg(
   input: PlanningAuthorityLegInput,
 ): PlanningAuthorityLegResult {
   const authority = authorityOf(input.lastCommand);
-  if (authority === undefined) return Object.freeze({ kind: "ABSENT" as const });
+  // D1 IS CLOSED AT THE EDGE (task-16a6a2b1). A terminal with no authority member used to
+  // return the ABSENT leg and commit the run anyway; there is no legacy path to fall back on.
+  if (authority === undefined) return refused("PLANNING_AUTHORITY_REQUIRED", LAYER);
   if (authority === null) return refused("PLANNING_AUTHORITY_MALFORMED", LAYER);
   const submissionHash = own(input.state, "submissionHash");
   const goalRef = own(input.state, "goalRef");

@@ -8,7 +8,9 @@
  */
 import type { SqliteEventStore } from "@moe/store";
 
+import { readDurableLedger } from "./bootstrap-ledger.js";
 import {
+  PROJECT_ID,
   RUN_ID,
   bootstrapSequence,
   envelope,
@@ -16,6 +18,9 @@ import {
   planningChain,
   send,
 } from "./bootstrap-test-fixtures.js";
+
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 
 /**
  * A run that has PROPOSED but DELIBERATELY NOT FINALIZED, on the LIFECYCLE axis.
@@ -73,6 +78,93 @@ export function authorityLessProposedStore(): SqliteEventStore {
     throw new Error(`authority-less proposal refused: ${outcome.code}`);
   }
   return store;
+}
+
+/**
+ * THE SAME WORLD, PLANTED — a run PROPOSED WITHOUT AUTHORITY BODIES as a PRE-FLIP daemon wrote it.
+ *
+ * `authorityLessProposedStore()` above can no longer produce this world: since task-16a6a2b1 the
+ * propose seam REFUSES an authority-less terminal (PLANNING_AUTHORITY_REQUIRED), so that seeder's
+ * meaning has changed from "the authority-less world" to "the refusal control's operand", and it
+ * is kept for exactly that. Every consumer that needs the WORLD rather than the REFUSAL comes
+ * here instead.
+ *
+ * WHY THIS IS NOT A FIXTURE PRETENDING PRODUCTION REACHES IT. Runs proposed before the flip are
+ * real durable history: they exist in any store written by an earlier daemon, and the guards that
+ * refuse them (task-2cc6c59d's INCONSISTENCY arm, the finalize seam's authority-absent arm,
+ * task-074e6d2e's EMPTY-aggregate axis) must keep working against those bytes. Per the
+ * task-93e8aab3 retirement ruling: a guard production can no longer trigger is fine to keep; a
+ * TEST claiming production still reaches it is not. Every arm seeded from here says so.
+ *
+ * CAPTURED, NOT REIMPLEMENTED. The run events are read back out of a store driven by PRODUCTION
+ * through the shipped sequence, then replayed onto a fresh store with the `authority` member
+ * stripped from the sealed submission — which is precisely the one thing a pre-flip propose left
+ * out. Nothing here hand-builds a planning event, so a change to what `plan.propose` writes moves
+ * this world with it instead of silently freezing a stale shape. (Same technique as
+ * `planning-authority-reader-test-fixtures.ts`'s `replicaStore`, and for the same reason.)
+ */
+export function legacyProposedStore(): SqliteEventStore {
+  const store = openStore();
+  driveTo(store, finalizeRequestIndex() - 1);
+  const carried = store.readEvents(RUN_ID).length;
+
+  const source = openStore();
+  driveTo(source, finalizeRequestIndex());
+  const proposed = source.readEvents(RUN_ID).slice(carried);
+  if (proposed.length === 0) throw new Error("the shipped propose wrote no run event to replay");
+  const sealed = readDurableLedger(source, PROJECT_ID).aggregates.get(RUN_ID);
+  if (sealed === undefined) throw new Error("the shipped propose wrote no durable decision");
+
+  // A DECISION, not a bare event append: the consumers read `aggregates.get(RUN_ID).result`, and
+  // a store carrying events with no decision row is a shape no daemon has ever written.
+  const payload = { commands: planningChain(), runId: RUN_ID };
+  store.commitExpectedVersionDecision({
+    commandKind: PROPOSE_KIND,
+    committedResultBytes: encoder.encode(JSON.stringify(withoutSealedFields(sealed.result))),
+    correlationId: "corr-1",
+    decidedAt: "2026-08-08T00:00:00.000Z",
+    events: proposed.map((event) => ({
+      eventId: `legacy-${event.eventId}`,
+      eventType: event.eventType,
+      payload: encoder.encode(JSON.stringify(withoutAuthority(
+        JSON.parse(decoder.decode(event.payload)) as unknown,
+      ))),
+    })),
+    expectedVersion: store.getAggregateVersion(RUN_ID),
+    key: { commandId: "cmd-legacy-propose", principalId: "principal-1", projectId: PROJECT_ID },
+    requestBytes: encoder.encode(JSON.stringify({ kind: PROPOSE_KIND, payload })),
+    targetAggregateId: RUN_ID,
+  });
+  return store;
+}
+
+const PROPOSE_KIND = "plan.propose";
+
+/**
+ * The three fields the authority leg contributes to the propose result. A pre-flip propose
+ * carried `{}` where the binding now goes, so a legacy result has none of them — which is the
+ * property `bootstrap-finalize-journey`'s negative control reads.
+ */
+const SEALED_RESULT_FIELDS = Object.freeze(["authorityRef", "bodiesDigest", "envelopeDigest"]);
+
+function withoutSealedFields(result: unknown): unknown {
+  if (result === null || typeof result !== "object") return result;
+  const stripped: Record<string, unknown> = { ...(result as Record<string, unknown>) };
+  for (const field of SEALED_RESULT_FIELDS) delete stripped[field];
+  return stripped;
+}
+
+/**
+ * Drops the `authority` member wherever the sealed submission carries it. A pre-flip propose
+ * never wrote one — that absence IS the world, and it is what the legacy pin asserted before
+ * task-16a6a2b1 re-graded it into a refusal control.
+ */
+function withoutAuthority(payload: unknown): unknown {
+  if (Array.isArray(payload)) return payload.map((entry) => withoutAuthority(entry));
+  if (payload === null || typeof payload !== "object") return payload;
+  const stripped: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+  delete stripped["authority"];
+  return stripped;
 }
 
 /**

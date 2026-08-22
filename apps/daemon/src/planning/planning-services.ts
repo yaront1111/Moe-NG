@@ -10,7 +10,6 @@ import type {
 } from "@moe/core";
 
 import {
-  commitAccepted,
   commitAcceptedLegs,
   payloadObject,
   payloadRef,
@@ -132,13 +131,15 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
   if (!folded.ok) return folded.outcome;
   if (terminal.kind === "FINALIZE") return commitFinalizedSubmission(context, runId, prior, folded);
 
-  // Built BEFORE any durable write, so a refusal leaves no event and no decision behind. An
-  // ABSENT member is the legacy arm and keeps the single-aggregate seam byte-identical.
+  // Built BEFORE any durable write, so a refusal leaves no event and no decision behind. Every
+  // accepted propose now carries the authority leg: the single-aggregate legacy path is retired
+  // by task-16a6a2b1, which closed D1's optional-at-the-edge decision, so a terminal without an
+  // authority member is refused here rather than committed on one aggregate.
   const authority = buildPlanningAuthorityLeg({
     lastCommand: commands[commands.length - 1], request, runId, state: folded.state, store,
   });
   if (authority.kind === "REFUSED") return refuse(request.kind, authority.code, authority.layer);
-  const carried = authority.kind === "LEG" ? authority.binding : {};
+  const carried = authority.binding;
   const result = persistApprovalGate({
     ...carried,
     state: folded.state as unknown as JsonValue,
@@ -153,9 +154,7 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
     expectedVersion: versionOf(ledger, runId),
     result,
   };
-  return authority.kind === "LEG"
-    ? commitAcceptedLegs(store, request, plan, [authority.leg])
-    : commitAccepted(store, request, plan);
+  return commitAcceptedLegs(store, request, plan, [authority.leg]);
 };
 
 interface DurableRun {

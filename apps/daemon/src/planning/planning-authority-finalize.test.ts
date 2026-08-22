@@ -19,13 +19,13 @@ import { createAcceptanceContract, createPlanRevision, encodePlanRevision } from
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import type { ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
   PROJECT_ID,
   RUN_ID,
-  SUBMISSION_HASH,
   closeStores,
   decisionCount,
   driveThrough,
@@ -270,25 +270,39 @@ describe("daemon finalize seam — the accepted control", () => {
   });
 });
 
+/**
+ * THE AUTHORITY-ABSENT ARM, re-graded by task-16a6a2b1. Production can no longer PROPOSE without
+ * an authority member (PLANNING_AUTHORITY_REQUIRED), so this seam's authority-absent world is now
+ * reachable only as pre-flip durable history and is PLANTED rather than driven. The finalize
+ * itself still runs through production — only its operand moved. Per the task-93e8aab3
+ * retirement ruling: a guard production can no longer trigger is fine to keep; a test implying
+ * production still reaches it is not.
+ */
 describe("daemon finalize seam — the authority-absent arm", () => {
   it("commits the fold exactly and seals no envelope", () => {
-    const store = proposedStore(planningChain() as readonly Json[]);
-    const outcome = finalize(store, { planHash: SUBMISSION_HASH });
+    const store = legacyProposedStore();
+    const outcome = finalize(store);
     expect(outcome.ok).toBe(true);
     expect(store.readEvents(AUTHORITY_AGGREGATE)).toEqual([]);
     expect(store.getAggregateVersion(AUTHORITY_AGGREGATE)).toBe(0);
   });
 
   it("writes byte-stable finalize events and no envelope binding in the result", () => {
-    const store = proposedStore(planningChain() as readonly Json[]);
-    const result = resultOf(finalize(store, { planHash: SUBMISSION_HASH }));
+    const store = legacyProposedStore();
+    const result = resultOf(finalize(store));
     expect(Object.keys(result)).not.toContain("authorityRef");
     expect(Object.keys(result)).not.toContain("envelopeDigest");
+    // `planHash` is READ off the finalize command this suite sends rather than spelled: since
+    // task-16a6a2b1 the operand is a PLANTED run carrying the shipped chain's submission, not the
+    // legacy SUBMISSION_HASH literal. Every other field stays byte-pinned, which is what the arm
+    // is for — a spelled hash here would pin the FIXTURE's identity instead of the seam's output.
+    const planHash = (finalizeCommand()["revision"] as Json)["planHash"];
+    expect(typeof planHash).toBe("string");
     expect(eventPayload(store, RUN_ID, FINALIZE_EVENT)).toEqual([{
       commandId: "chain-finalize", graphRevisionRef: GRAPH_REVISION_REF,
       hashes: {
         dependencyHash: hex64("d1"), graphContentHash: GRAPH_CONTENT_HASH,
-        planHash: SUBMISSION_HASH, qualityHash: hex64("dd"),
+        planHash, qualityHash: hex64("dd"),
       },
       kind: "PlanRevisionCreated", version: 5,
     }]);
@@ -377,7 +391,9 @@ describe("daemon finalize seam — the record is the only body source", () => {
    */
   it("composes from a planted durable record on an authority-less proposal", () => {
     const donor = eventPayload(proposedStore(), AUTHORITY_AGGREGATE, BODIES_EVENT);
-    const store = proposedStore(planningChain() as readonly Json[]);
+    // PLANTED since task-16a6a2b1 — see the authority-absent describe above. The bodies record
+    // this arm plants on top is unchanged; what moved is how its authority-less proposal is built.
+    const store = legacyProposedStore();
     store.commit({
       aggregateId: AUTHORITY_AGGREGATE,
       commandBytes: encoder.encode("planted-bodies"),

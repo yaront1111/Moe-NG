@@ -26,6 +26,7 @@ import {
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
@@ -41,6 +42,7 @@ import {
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
+  PLANNING_AUTHORITY_PERSISTENCE_CODES,
   buildPlanningAuthorityLeg,
   planningAuthorityAggregateId,
 } from "./planning-authority-persistence.js";
@@ -254,23 +256,114 @@ describe("plan.propose authority persistence — replay and the ledger blind spo
   });
 });
 
-describe("plan.propose authority persistence — the legacy arm stays byte-identical", () => {
-  it("commits an authority-less proposal exactly as before, with no authority aggregate", () => {
+/**
+ * THE HOME ARM of task-16a6a2b1 (D1's mandatory-authority flip). Until this row the
+ * propose seam answered an authority-less terminal with the ABSENT leg and committed
+ * the run anyway — the "legacy arm" the describe below pinned byte-identical. D1 is
+ * now closed at the edge: a `plan.propose` whose terminal carries no authority member
+ * is REFUSED, and no legacy path remains for a caller to fall back onto.
+ */
+describe("plan.propose authority persistence — an authority-less proposal is refused", () => {
+  it("refuses with PLANNING_AUTHORITY_REQUIRED at the persistence layer", () => {
     const store = readyStore();
+
     const outcome = propose(store, planningChain() as readonly Json[]);
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    // BOTH, per the reason-code rail: more than one seam can refuse a propose, and an
+    // arm pinning only "refused" would stay green if the core started answering first.
+    expect(outcome.code).toBe("PLANNING_AUTHORITY_REQUIRED");
+    expect(outcome.refusedBy).toBe(PERSISTENCE_LAYER);
+  });
+
+  it("leaves zero residue — no run event, no authority aggregate, no committed decision", () => {
+    const store = readyStore();
+    const runVersion = store.getAggregateVersion(RUN_ID);
+    const decisions = decisionCount(store);
+
+    expect(propose(store, planningChain() as readonly Json[]).ok).toBe(false);
+
+    // Asserted against the STORE, never the handler's return value: a refusal that had
+    // already written its first leg returns exactly the same shape as one that wrote
+    // nothing, so only the store can tell the two apart.
+    expect(store.getAggregateVersion(RUN_ID)).toBe(runVersion);
+    expect(store.readEvents(AUTHORITY_AGGREGATE)).toEqual([]);
+    expect(store.getAggregateVersion(AUTHORITY_AGGREGATE)).toBe(0);
+    expect(decisionCount(store)).toBe(decisions);
+  });
+
+  it("still accepts the same seam when the terminal carries its authority", () => {
+    // THE POSITIVE CONTROL, and it is what makes the refusal above mean something: the
+    // seam, the chain and the store are identical, and only the authority member differs.
+    // Without it, a propose broken for any other reason would satisfy the arms above.
+    const store = readyStore();
+
+    const outcome = propose(store, authorityChain());
+
     expect(outcome.ok).toBe(true);
+    expect(store.readEvents(AUTHORITY_AGGREGATE)).toHaveLength(1);
+  });
+
+  it("carries the new code in the module's own refusal roster", () => {
+    // Roster membership is DoD 1's second clause, and THIS ASSERTION IS THE ONLY THING
+    // ENFORCING IT — measured, not assumed. The plan expected the compiler to catch a code
+    // emitted outside the roster (SERVICE_REFUSED_BY is typed from it), so step 5's drill 2
+    // dropped the member while the refusal kept emitting it: `pnpm --filter @moe/daemon
+    // typecheck` stayed GREEN and only this arm reddened. `refused()` takes a bare `string`,
+    // so nothing upstream of it is typed against the roster. Delete this arm and a refusal
+    // code can leave the roster silently.
+    expect(PLANNING_AUTHORITY_PERSISTENCE_CODES).toContain("PLANNING_AUTHORITY_REQUIRED");
+  });
+});
+
+/**
+ * WAS "the legacy arm stays byte-identical" (task-074e6d2e). RE-GRADED, NOT DELETED, by
+ * task-16a6a2b1: 074e6d2e pinned that an authority-less proposal committed EXACTLY as it did
+ * before authority bodies shipped, so the new member could not disturb the old path. **That
+ * clause is DISCHARGED — the flip retires the old path rather than preserving it**, and the
+ * same world is now this suite's evidence that it is gone. The world is untouched
+ * (`planningChain()`, the shared authority-less builder); only the expected outcome moved.
+ */
+describe("plan.propose authority persistence — the retired legacy arm", () => {
+  it("no longer commits an authority-less proposal, and creates no authority aggregate", () => {
+    const store = readyStore();
+
+    const outcome = propose(store, planningChain() as readonly Json[]);
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) return;
+    expect(outcome.code).toBe("PLANNING_AUTHORITY_REQUIRED");
     expect(store.readEvents(AUTHORITY_AGGREGATE)).toEqual([]);
     expect(store.getAggregateVersion(AUTHORITY_AGGREGATE)).toBe(0);
   });
 
-  it("seals no authority member on the legacy run event", () => {
+  it("seals no run event at all, where it once sealed one without an authority member", () => {
+    // 074e6d2e's original assertion was that the sealed submission carried NO `authority` key.
+    // Asserting that again would be free: there is no sealed submission now. What survives is
+    // the stronger property — the whole event is absent — read off the store rather than the
+    // handler, so a refusal that had already written its leg would fail here.
     const store = readyStore();
-    expect(propose(store, planningChain() as readonly Json[]).ok).toBe(true);
+    expect(propose(store, planningChain() as readonly Json[]).ok).toBe(false);
+    const sealed = eventsOf(store, RUN_ID)
+      .flatMap((payload) => (Array.isArray(payload) ? payload : [payload]))
+      .find((event) => (event as Json)["kind"] === "PlanningSubmissionSealed");
+    expect(sealed).toBeUndefined();
+  });
+
+  it("still describes a LEGACY durable run with no authority member — planted, not proposed", () => {
+    // The world 074e6d2e pinned is real durable history and the guards that read it must keep
+    // working, so it survives as a PLANTED store. Production cannot construct it since
+    // task-16a6a2b1; per the task-93e8aab3 retirement ruling a guard production can no longer
+    // trigger is fine to keep, and this arm says so rather than implying the propose path
+    // still reaches it.
+    const store = legacyProposedStore();
     const sealed = eventsOf(store, RUN_ID)
       .flatMap((payload) => (Array.isArray(payload) ? payload : [payload]))
       .find((event) => (event as Json)["kind"] === "PlanningSubmissionSealed");
     expect(sealed).toBeDefined();
     expect(Object.keys(sealed as Json)).not.toContain("authority");
+    expect(store.readEvents(AUTHORITY_AGGREGATE)).toEqual([]);
   });
 });
 
@@ -327,14 +420,21 @@ describe("plan.propose authority persistence — the builder refuses before any 
     });
   });
 
-  it("reads an absent authority member as the legacy arm", () => {
+  it("refuses an absent authority member where it once read the legacy arm", () => {
+    // RE-GRADED by task-16a6a2b1: this was `toEqual({ kind: "ABSENT" })`. That member is now
+    // RETIRED from PlanningAuthorityLegResult — unreturnable, not merely unused — so the
+    // builder's answer to a missing member is a refusal in its own vocabulary. Asserted at the
+    // BUILDER surface, which is what makes this arm distinct from the service-level arms above:
+    // it pins where the refusal is MINTED, not merely where it is carried.
     const store = readyStore();
     const result = buildPlanningAuthorityLeg({
       lastCommand: { kind: "plan.propose", submissionHash: hex64("dec0de") },
       request: { principalId: "principal-1", projectId: PROJECT_ID },
       runId: RUN_ID, state: sealedState(), store,
     });
-    expect(result).toEqual({ kind: "ABSENT" });
+    expect(result).toEqual({
+      code: "PLANNING_AUTHORITY_REQUIRED", kind: "REFUSED", layer: PERSISTENCE_LAYER,
+    });
   });
 
   it("shapes the leg as one authority event on the run's own aggregate", () => {
