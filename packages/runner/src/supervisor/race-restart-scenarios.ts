@@ -10,6 +10,7 @@ import {
 } from "./effect-test-fixtures.js";
 import {
   disposition,
+  FOREIGN_REGISTRATION,
   RECONCILED,
   REGISTRATION,
   type Scenario,
@@ -84,6 +85,11 @@ export function restartInput(overrides: Overrides = {}): unknown {
 export const RESTART_SCENARIOS: readonly Scenario[] = Object.freeze([
   { id: "adopted-running", input: restartInput() },
   { id: "unreadable-lock", input: restartInput({ lockState: "UNKNOWN" }) },
+  { id: "foreign-registration", input: restartInput({ registration: FOREIGN_REGISTRATION }) },
+  {
+    id: "claim-bound-elsewhere",
+    input: restartInput({ claim: makeClaim({ intentId: "intent-other" }) }),
+  },
   {
     id: "observation-without-registration",
     input: restartInput({ ...GONE, observation: { kind: "EXITED", code: 0 } }),

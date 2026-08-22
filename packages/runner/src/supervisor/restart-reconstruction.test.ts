@@ -186,12 +186,22 @@ const SEEDS: ReadonlyArray<readonly [string, unknown, string]> = [
     seed({ claim: null, grant: null, registration: null, lockState: "RELEASED" }),
     "post:UNKNOWN",
   ],
+  [
+    "a held lock whose registration belongs to another wrapper",
+    seed({ registration: { ...REGISTRATION, wrapperIdentity: "wrapper-other" } }),
+    "post:SUSPECT",
+  ],
+  [
+    "a claim written for another effect intent",
+    seed({ claim: makeClaim({ intentId: "intent-other" }) }),
+    "refused:RESTART_RECORDS_INCOHERENT",
+  ],
 ];
 
 describe("restart reconstruction lands on exactly one legal state", () => {
   it("seeds a non-zero, fully labelled set of pre-crash record shapes", () => {
     expect(SEEDS.length).toBeGreaterThan(0);
-    expect(SEEDS.length).toBe(14);
+    expect(SEEDS.length).toBe(16);
     expect(new Set(SEEDS.map(([label]) => label)).size).toBe(SEEDS.length);
   });
 
@@ -270,6 +280,67 @@ describe("RELEASED without a handoff is its own refusal, not generic incoherence
     const failure = failureOf(reconstructAfterRestart(seed(releasing)));
     expect(failure.code).not.toBe("RESTART_RECORDS_INCOHERENT");
     expect(failure.layer).not.toBe("DRAIN");
+  });
+});
+
+/**
+ * The restart reader and `resolveDuplicateDelivery` read the same claim and
+ * registration. Each clause below is isolated so one identity field decides it;
+ * the control at the end proves the bound shape is still adopted, so a refusal
+ * above cannot be a broken fixture.
+ */
+describe("a claim, grant and registration that disagree about identity never adopt", () => {
+  it("lands on SUSPECT when the registration names another wrapper", () => {
+    const outcome = reconstructAfterRestart(
+      seed({ registration: { ...REGISTRATION, wrapperIdentity: "wrapper-other" } }),
+    );
+    expect(labelOf(outcome)).toBe("post:SUSPECT");
+    expect(outcome.kind === "RECONSTRUCTED" && outcome.capacityHeld).toBe(false);
+  });
+
+  it("lands on SUSPECT when the registration names another lock", () => {
+    const outcome = reconstructAfterRestart(
+      seed({ registration: { ...REGISTRATION, lockIdentity: "lock-other" } }),
+    );
+    expect(labelOf(outcome)).toBe("post:SUSPECT");
+  });
+
+  it("refuses a claim bound to another intent as incoherent at the RESTART layer", () => {
+    const failure = failureOf(
+      reconstructAfterRestart(seed({ claim: makeClaim({ intentId: "intent-other" }) })),
+    );
+    expect([failure.code, failure.layer]).toEqual(["RESTART_RECORDS_INCOHERENT", "RESTART"]);
+    expect(failure.message).toBe("the claim is not bound to this effect intent");
+  });
+
+  it("refuses a grant minted to a wrapper other than the claimant", () => {
+    // The registration follows the claim so the binding clause stays satisfied
+    // and only the grant's wrapper decides.
+    const failure = failureOf(
+      reconstructAfterRestart(
+        seed({
+          claim: makeClaim({ wrapperIdentity: "wrapper-other" }),
+          registration: { ...REGISTRATION, wrapperIdentity: "wrapper-other" },
+        }),
+      ),
+    );
+    expect([failure.code, failure.layer]).toEqual(["RESTART_RECORDS_INCOHERENT", "RESTART"]);
+    expect(failure.message).toBe("the grant was issued to a wrapper other than the claimant");
+  });
+
+  it("does not let a lock the reader cannot see pre-empt an identity refusal", () => {
+    const failure = failureOf(
+      reconstructAfterRestart(
+        seed({ claim: makeClaim({ intentId: "intent-other" }), lockState: "UNKNOWN" }),
+      ),
+    );
+    expect(failure.code).toBe("RESTART_RECORDS_INCOHERENT");
+  });
+
+  it("still adopts the bound shape, so the refusals above are not fixture breakage", () => {
+    const outcome = reconstructAfterRestart(seed());
+    expect(labelOf(outcome)).toBe("post:ACTIVE_ADOPTED");
+    expect(outcome.kind === "RECONSTRUCTED" && outcome.capacityHeld).toBe(true);
   });
 });
 
