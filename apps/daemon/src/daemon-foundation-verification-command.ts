@@ -14,9 +14,11 @@ import type { DurableDecision } from "./http/http-contract.js";
  * a new export may not be added there.
  *
  * THE TRANSPORT SHAPE. Unlike `foundation.dispatch`, every field of the request is a plain
- * string identity, so nothing is materialized here: the five values cross the wire as they
- * are and `service.verify` -- which takes `unknown` -- stays the single authority on what a
- * valid request is. This module names no code of its own for a malformed request.
+ * string -- four identities and the candidate root -- so nothing is materialized here: the
+ * five values cross the wire as they are and `service.verify` -- which takes `unknown` --
+ * stays the single authority on what a valid request is, including the proof that the root
+ * holds the record's sealed input tree. This module names no code of its own for a
+ * malformed request.
  *
  * NO SYNCHRONOUS HANDLER LIVES HERE. The registry registers the kind-agnostic
  * `foundationSyncHandler`, which already refuses an async-only entry under the seam's own

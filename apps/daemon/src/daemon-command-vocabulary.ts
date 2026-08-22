@@ -72,8 +72,11 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   // Verifying an attempt is work authority for the same reason: every input the verifier
   // trusts is server-side sealed state -- the recipe, the activation, the attempt record --
-  // and the payload only NAMES which verification. The human gate here is recipe sealing,
-  // not a wider capability, so ADMIN would fence reach without fencing anything real.
+  // and the payload names which verification plus WHERE the candidate tree sits. That root
+  // is bound byte for byte to the record's sealed input manifest before anything activates
+  // (`bindCandidateTree`), so a WORK caller can name a location but never choose the tree
+  // a verdict is minted over. The human gate here is recipe sealing, not a wider
+  // capability, so ADMIN would fence reach without fencing anything real.
   if (kind === FOUNDATION_VERIFICATION_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
   // Resuming an interrupted attempt is work authority, not admin: the human-only
   // gate on this path is the runner's boundary admission, not a wider capability.

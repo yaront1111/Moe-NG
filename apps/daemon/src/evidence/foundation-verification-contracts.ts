@@ -48,6 +48,12 @@ export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS
  * code for two opposite durable states tells a reviewer nothing, so each keeps
  * its own — the same reason ACTIVATION_UNCOMMITTED is not folded in either.
  *
+ * CANDIDATE_STALE and CANDIDATE_TREE_MISMATCH are two different facts about the
+ * caller's request: the first says the caller's belief about WHICH record is
+ * out of date, the second says the root it named does not hold the tree that
+ * record sealed. Both answer before activation and write no row, so neither is
+ * an UNKNOWN: the candidate was never run.
+ *
  * Deliberately absent: spawn, timeout, output-overflow, receipt-binding,
  * truncated-capture, unverified-execution and candidate-changed codes. The
  * wrapper refuses the moment a stream passes its bound and only ever answers
@@ -63,6 +69,7 @@ export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_RECIPE_UNRESOLVED",
   "FOUNDATION_VERIFICATION_RECIPE_SEAL_INVALID",
   "FOUNDATION_VERIFICATION_CANDIDATE_STALE",
+  "FOUNDATION_VERIFICATION_CANDIDATE_TREE_MISMATCH",
   "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
   "FOUNDATION_VERIFICATION_REPLAY_CONFLICT",
   "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED",
@@ -139,11 +146,18 @@ export function carryEvidenceRefusal(
 }
 
 /**
- * IDENTITIES ONLY, and that is the whole point of this type. No field for an
- * input manifest, result manifest, runtime observation, recipe body or receipt:
- * a substitute for durable state is UNREPRESENTABLE rather than validated away,
- * so no later refactor can stop calling the check. `expectedRecordDigest` is the
- * caller's belief about WHICH record it verifies, never a replacement. */
+ * Four identities and one location. No field for an input manifest, result
+ * manifest, runtime observation, recipe body or receipt: a substitute for
+ * durable state is UNREPRESENTABLE here rather than validated away, so no later
+ * refactor can stop calling the check. `expectedRecordDigest` is the caller's
+ * belief about WHICH record it verifies, never a replacement.
+ *
+ * `candidateRoot` is the exception that proves why the rest are identities: it
+ * is WHERE the recipe runs, and a location is the one thing durable state
+ * cannot supply. It is therefore the one field that IS validated, bound byte
+ * for byte to the record's sealed input manifest before activation, by
+ * `bindCandidateTree`, because a root that is merely named is a tree the
+ * caller chose, and a verdict over a caller-chosen tree binds to nothing. */
 export interface FoundationVerificationRequest {
   readonly attemptAggregateId: string;
   readonly candidateRoot: string;

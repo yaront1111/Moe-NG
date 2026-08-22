@@ -1,4 +1,5 @@
-/** Durable verification: identities -> sealed recipe -> activation -> run -> receipt. */
+/** Durable verification: identities -> sealed recipe -> bound candidate tree ->
+ *  activation -> run -> receipt. */
 
 import {
   buildEvidenceReceipt, buildVerificationRecipe, createNodeProcessLauncher,
@@ -10,6 +11,7 @@ import type {
 import type { SqliteEventStore } from "@moe/store";
 
 import { exactKeys } from "../work/foundation-attempt-codec.js";
+import { bindCandidateTree } from "./foundation-verification-candidate.js";
 import {
   FOUNDATION_VERIFICATION_REQUEST_KEYS, carryEvidenceRefusal, carryWrapperRefusal,
   refuseVerification, verificationReceiptBody, verificationRefusalBody,
@@ -123,6 +125,17 @@ export function createFoundationVerificationService(deps: FoundationVerification
         : refuseVerification(
           "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
     }
+    // BEFORE activation, so a root that is not the durable tree leaves no row at
+    // all: nothing was activated, nothing ran, and there is no UNKNOWN to record.
+    // The base identity handed to the wrapper below is the one git read FROM
+    // THE TREE: feeding it the manifest's own field would compare that field
+    // against itself and make the wrapper's base gate unreachable.
+    const candidate = bindCandidateTree({
+      baseEnvironment: deps.baseEnvironment ?? process.env,
+      candidateRoot: request["candidateRoot"] as string, inputManifest: loaded.inputManifest,
+      observedAt: clock.now(),
+    });
+    if ("ok" in candidate) return candidate;
     if (!commitPhase(store, who, aggregate, "ACTIVATED", {
       attemptAggregateId: request["attemptAggregateId"],
       recipeSha256: sealed.recipe.sha256, verificationId,
@@ -136,7 +149,7 @@ export function createFoundationVerificationService(deps: FoundationVerification
         intent: loaded.activation.effectIntent,
       },
       baseEnvironment: hermeticVerifierEnvironment(deps.baseEnvironment ?? process.env),
-      candidateBaseIdentity: loaded.inputManifest.baseIdentity,
+      candidateBaseIdentity: candidate.baseIdentity,
       candidateRoot: request["candidateRoot"] as string, clock,
       inputManifest: loaded.inputManifest, launcher, outputs: [],
       ...(deps.reapGraceMs === undefined ? {} : { reapGraceMs: deps.reapGraceMs }),

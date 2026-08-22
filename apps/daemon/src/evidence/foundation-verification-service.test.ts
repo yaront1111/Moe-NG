@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 
@@ -46,6 +46,11 @@ import type {
 import {
   createFoundationVerificationService, deriveRecipeAggregateId, deriveVerificationAggregateId,
 } from "./foundation-verification-service.js";
+import {
+  CANDIDATE_TREE_BASE_PATH, candidateTreeEntries, materializeCandidateTree, moveCandidateHead,
+  runCandidateGit,
+} from "./foundation-verification-tree-fixtures.js";
+import type { CandidateTree } from "./foundation-verification-tree-fixtures.js";
 
 /**
  * Durable verification receipt dispatch over a REAL SqliteEventStore, the REAL
@@ -65,6 +70,11 @@ import {
  * Each case derives its own effect intent from its label. `runVerifierProcess`
  * keeps a module-level run registry keyed by grantId, so two cases sharing an
  * intent would share a grant and the second would adopt the first one's run.
+ *
+ * Every ground owns a REAL repository holding exactly its sealed input tree:
+ * the service binds the caller's candidate root to the durable input manifest
+ * through git and a byte-for-byte walk before it activates anything, so a
+ * fixture manifest over invented digests could never be verified at all.
  */
 
 const encoder = new TextEncoder();
@@ -74,14 +84,17 @@ afterEach(cleanupRestoreHarnesses);
 afterAll(() => {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    // 20x250ms: these roots hold real Git repositories, and a trailing handle
+    // under fleet load turns 5x100ms into a leaked directory.
+    if (root !== undefined) {
+      rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
+    }
   }
 });
 
 const DIGEST = "a".repeat(64);
 const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64), DIGEST_C = "4".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
-const HEAD = "0".repeat(40);
 const NODE_KEY = "dev-done";
 const SESSION_ID = "session-1";
 
@@ -130,9 +143,14 @@ const REGISTRATION = Object.freeze({
   bootstrapCredentialDigest: DIGEST_B, lockIdentity: "lock-1", processIdentity: "windows:4242:99",
   registeredAt: "2026-08-15T00:00:01.000Z", wrapperIdentity: "wrapper-1",
 });
-const INPUT_ENTRIES = Object.freeze([
-  { byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A },
-]);
+const BASE_PATH = CANDIDATE_TREE_BASE_PATH;
+
+/** A real repository holding exactly the sealed input tree, registered for cleanup. */
+function candidateTree(label: string): CandidateTree {
+  const tree = materializeCandidateTree(label);
+  scratchRoots.push(tree.root);
+  return tree;
+}
 
 /** Opened inside a case, never in a describe body: a held handle kills the worker. */
 function readyStore(label: string): SqliteEventStore {
@@ -191,16 +209,18 @@ function activationBytes(label: string): Uint8Array {
   }));
 }
 
-function fakeGit(): GitObserver {
+/** The attempt-side observation is a fixture over the tree's REAL head; the
+ *  verification-side one is taken by production over the real repository. */
+function fakeGit(head: string): GitObserver {
   return {
-    headCommit: () => HEAD, lsFilesIgnored: () => [], lsFilesTracked: () => [],
-    statusPorcelainV2: () => encoder.encode(`# branch.oid ${HEAD}\0`), submodulePaths: () => [],
+    headCommit: () => head, lsFilesIgnored: () => [], lsFilesTracked: () => [],
+    statusPorcelainV2: () => encoder.encode(`# branch.oid ${head}\0`), submodulePaths: () => [],
   };
 }
 
-function scopeObservation(): ScopeObservation {
+function scopeObservation(head: string): ScopeObservation {
   const observed = observeScope({
-    baseIdentity: HEAD, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(),
+    baseIdentity: head, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(head),
     observedAt: "2026-08-15T00:00:02Z", observerVersion: "moe-runner-scope-observer/1",
     pathObserver: { exists: () => false, realpath: (path: string) => path },
     worktreeRoot: "fixture-root",
@@ -209,26 +229,28 @@ function scopeObservation(): ScopeObservation {
   return observed.observation;
 }
 
-function captureAnswer(): Record<string, unknown> {
+function captureAnswer(tree: CandidateTree): Record<string, unknown> {
   return {
     authoredPaths: ["pkg/src/authored.ts"],
     declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
     resultTreeEntries: [
       {
-        byteLength: 10, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
-        sha256: DIGEST_A,
+        byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: BASE_PATH,
+        sha256: tree.sha256,
       },
       {
         byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts",
         sha256: DIGEST_B,
       },
     ],
-    scopeObservation: scopeObservation(),
+    scopeObservation: scopeObservation(tree.head),
   };
 }
 
-function sealedInput(): Record<string, unknown> {
-  const built = buildInputManifest({ baseIdentity: HEAD, entries: INPUT_ENTRIES as never });
+function sealedInput(tree: CandidateTree): Record<string, unknown> {
+  const built = buildInputManifest({
+    baseIdentity: tree.head, entries: candidateTreeEntries(tree) as never,
+  });
   if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
   return built.manifest as unknown as Record<string, unknown>;
 }
@@ -251,8 +273,11 @@ function runtimeQuote(): ProviderRuntimeObservation {
 interface Ground {
   readonly attemptAggregateId: string;
   readonly bound: FoundationAttemptBound;
+  /** The real repository whose bytes the durable input manifest seals. */
+  readonly candidateRoot: string;
   readonly recordDigest: string;
   readonly store: SqliteEventStore;
+  readonly tree: CandidateTree;
 }
 
 /**
@@ -260,9 +285,13 @@ interface Ground {
  * ingress -> launcher authority GRANT_CONSUMED/PREFLIGHT/PROCESS_OBSERVED ->
  * `readDurableFoundationObservation` -> `recordProvenFoundationAttempt`. The
  * observation/registration pair is whatever production validated, never a copy.
- * `answer` decides whether the durable record lands PROVEN or UNKNOWN.
+ * `answer` decides whether the durable record lands PROVEN or UNKNOWN, and the
+ * input manifest it seals names the REAL tree's head and bytes.
  */
-function ground(label: string, answer: Record<string, unknown>): Ground {
+function ground(
+  label: string, answer: (tree: CandidateTree) => Record<string, unknown>,
+): Ground {
+  const tree = candidateTree(label);
   const store = readyStore(label);
   const activationAggregate = deriveActivationAggregateId(`agg-${label}`, `idem-${label}`);
   const activated = runEffectActivateCommand(store, activationBytes(label));
@@ -325,20 +354,23 @@ function ground(label: string, answer: Record<string, unknown>): Ground {
   if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     throw new Error("reservation fixture was not committed");
   }
-  recordProvenFoundationAttempt(store, bound, record, sealedInput(), {
-    answer, observation: observed[0], registration: observed[1],
+  recordProvenFoundationAttempt(store, bound, record, sealedInput(tree), {
+    answer: answer(tree), observation: observed[0], registration: observed[1],
   });
   // The digest always comes from the RE-DECODED durable record, never from the
   // writer's return value: the UNKNOWN ground's writer answers with a refusal.
   const stored = readFoundationAttemptRecord(store, activationAggregate);
   if (!stored.ok) throw new Error(`record fixture unreadable: ${stored.code}`);
-  return { attemptAggregateId: activationAggregate, bound, recordDigest: stored.digest, store };
+  return {
+    attemptAggregateId: activationAggregate, bound, candidateRoot: tree.root,
+    recordDigest: stored.digest, store, tree,
+  };
 }
 
 /** A PROVEN durable record: the capture answer is the shape the result builder
  *  accepts, so the record carries a real result manifest. */
 function provenGround(label: string): Ground {
-  return ground(label, captureAnswer());
+  return ground(label, captureAnswer);
 }
 
 /**
@@ -348,7 +380,7 @@ function provenGround(label: string): Ground {
  * is a real durable state, not a hand-written one.
  */
 function unprovenGround(label: string): Ground {
-  return ground(label, { authoredPaths: ["pkg/src/authored.ts"] });
+  return ground(label, () => ({ authoredPaths: ["pkg/src/authored.ts"] }));
 }
 
 interface Recorder {
@@ -451,12 +483,17 @@ function realService(store: SqliteEventStore, timeoutMs?: number): Service {
   });
 }
 
-/** cwd for the child, so a spawn failure can never be mistaken for a verdict. */
-function candidateDir(label: string): string {
-  const root = mkdtempSync(join(tmpdir(), `moe-candidate-${label}-`));
+/** A FOREIGN root: an empty directory that is no repository and holds none of
+ *  the sealed bytes -- the tree a caller would name to mint a green receipt. */
+function foreignDir(label: string): string {
+  const root = mkdtempSync(join(tmpdir(), `moe-foreign-${label}-`));
   scratchRoots.push(root);
   return root;
 }
+
+/** An absolute path no executable lives at, so the WRAPPER refuses at SPAWN:
+ *  the one refusal that is certain to happen after activation. */
+const MISSING_VERIFIER = Object.freeze([`${process.execPath}.moe-missing-verifier`]);
 
 /** The real launcher, with a concurrent writer firing at the exact moment the
  *  child starts. The process is genuine; only the timing is arranged. */
@@ -607,7 +644,7 @@ describe("foundation verification — identity loading refuses before any proces
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-1",
       verificationId: "verify-1",
       // A payload the caller may not present: durable state is never replaceable.
-      inputManifest: sealedInput(),
+      inputManifest: sealedInput(ground.tree),
     });
 
     expectDaemonRefusal(
@@ -715,22 +752,23 @@ describe("foundation verification — identity loading refuses before any proces
 describe("foundation verification — the activation is committed before the run", () => {
   it("never leaves a run with no activation when the wrapper refuses", async () => {
     const ground = provenGround("activation-first");
-    const recorder = recordingLauncher();
-    const svc = service(ground.store, recorder.launcher);
-    expect(svc.sealRecipe(registration("recipe-order", VERIFIER_ARGV)).ok).toBe(true);
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-order", MISSING_VERIFIER)).ok).toBe(true);
 
-    // A relative candidate root is refused by the WRAPPER's launch gate, not by
-    // this service — so the refusal necessarily happens after activation, which
-    // is the ordering this case exists to pin.
+    // The candidate root binds, so this service has nothing left to refuse; the
+    // executable does not exist, so the WRAPPER refuses at SPAWN -- which is
+    // necessarily after activation, the ordering this case exists to pin. (A
+    // relative root no longer reaches the wrapper: the binding refuses it
+    // before activation, which the binding suite pins separately.)
     const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: "relative/candidate",
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-order",
       verificationId: "verify-order",
     });
 
     // The wrapper's own code and layer, carried through unrestamped.
     expect(outcome).toMatchObject({
-      code: "VERIFIER_PROCESS_WORKSPACE_INVALID", layer: "LAUNCH_GATE", ok: false,
+      code: "VERIFIER_PROCESS_SPAWN_FAILED", layer: "SPAWN", ok: false,
       source: "VERIFIER_PROCESS",
     });
     const types = eventTypes(ground.store, deriveVerificationAggregateId("verify-order"));
@@ -738,6 +776,122 @@ describe("foundation verification — the activation is committed before the run
     // activation is an effect nothing authorised.
     expect(types).toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.ACTIVATED);
     expect(types).not.toContain(FOUNDATION_VERIFICATION_EVENT_TYPES.RECEIPTED);
+  });
+});
+
+/**
+ * The candidate root is the one request field that is not an identity, and
+ * before this binding it was the one place a WORK caller could substitute for
+ * durable state: name a trivially green tree, mint PASSED for an attempt whose
+ * real tree fails, and closure would trust the verdict. Every arm below names a
+ * root that is NOT the record's sealed input tree and asserts the same three
+ * facts: the daemon's own code, no process, and NO durable row of any kind --
+ * not even an UNKNOWN, because nothing was activated and nothing ran.
+ */
+describe("foundation verification -- the candidate root is bound to the durable input tree", () => {
+  async function expectUnbound(ground: Ground, candidateRoot: string, label: string): Promise<void> {
+    const recorder = recordingLauncher();
+    const svc = service(ground.store, recorder.launcher);
+    expect(svc.sealRecipe(registration(`recipe-${label}`, EXIT_ZERO)).ok).toBe(true);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: `recipe-${label}`,
+      verificationId: `verify-${label}`,
+    });
+
+    expectDaemonRefusal(
+      outcome, "FOUNDATION_VERIFICATION_CANDIDATE_TREE_MISMATCH", "DAEMON_VERIFICATION_IDENTITY");
+    expect(recorder.launches).toHaveLength(0);
+    expect(eventTypes(ground.store, deriveVerificationAggregateId(`verify-${label}`)))
+      .toHaveLength(0);
+    expectDaemonRefusal(
+      svc.readReceipt(`verify-${label}`), "FOUNDATION_VERIFICATION_RECEIPT_ABSENT",
+      "DAEMON_VERIFICATION_RECEIPT");
+  }
+
+  it("refuses a foreign root that holds none of the sealed bytes", async () => {
+    const ground = provenGround("foreign");
+    // The exact shape of the attack: an empty directory the caller controls,
+    // where any verifier that merely starts would exit green.
+    await expectUnbound(ground, foreignDir("foreign"), "foreign");
+  });
+
+  it("refuses a relative root before anything is activated", async () => {
+    const ground = provenGround("relative");
+    await expectUnbound(ground, "relative/candidate", "relative");
+  });
+
+  it("refuses the sealed tree once a file the manifest does not list is added", async () => {
+    const ground = provenGround("extra");
+    // An untracked config at the root is how a verifier gets steered: the
+    // sealed entry is still there, byte for byte, and HEAD is still the base.
+    writeFileSync(join(ground.candidateRoot, "vitest.config.ts"), "export default {};\n");
+    await expectUnbound(ground, ground.candidateRoot, "extra");
+  });
+
+  it("refuses an extra file even when git has been told to ignore it", async () => {
+    const ground = provenGround("excluded");
+    // Hidden from `status` through the repository's own exclude file, which
+    // lives under `.git` and is never walked: the binding must not take git's
+    // opinion of what is in the tree for the tree itself.
+    mkdirSync(join(ground.candidateRoot, ".git", "info"), { recursive: true });
+    writeFileSync(join(ground.candidateRoot, ".git", "info", "exclude"), "package.json\n");
+    writeFileSync(join(ground.candidateRoot, "package.json"), "{\"scripts\":{\"test\":\"exit 0\"}}\n");
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    await expectUnbound(ground, ground.candidateRoot, "excluded");
+  });
+
+  it("refuses the sealed path once its bytes differ, at the same HEAD and length", async () => {
+    const ground = provenGround("rewritten");
+    const rewritten = Buffer.from("BASE-BYTES", "utf8");
+    expect(rewritten.byteLength).toBe(ground.tree.byteLength);
+    writeFileSync(join(ground.candidateRoot, BASE_PATH), rewritten);
+    await expectUnbound(ground, ground.candidateRoot, "rewritten");
+  });
+
+  it("refuses rewritten bytes even when git has been told the path is unchanged", async () => {
+    const ground = provenGround("assumed");
+    // `--assume-unchanged` makes `status` report a clean tree over rewritten
+    // bytes, so HEAD and git's attribution both still agree with the manifest.
+    // Only the byte-for-byte walk can answer, which is why it is not optional.
+    runCandidateGit(ground.candidateRoot, ["update-index", "--assume-unchanged", "--", BASE_PATH]);
+    writeFileSync(join(ground.candidateRoot, BASE_PATH), Buffer.from("base-byteS", "utf8"));
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    expect(runCandidateGit(ground.candidateRoot, ["rev-parse", "HEAD"])).toBe(ground.tree.head);
+    await expectUnbound(ground, ground.candidateRoot, "assumed");
+  });
+
+  it("refuses a tree at another HEAD even when every sealed byte is present", async () => {
+    const ground = provenGround("moved-head");
+    // The bytes are exactly the manifest's; only the commit the tree sits at
+    // moved. HEAD is read FROM THE TREE, so this is the arm that proves the
+    // base identity is no longer the manifest compared against itself.
+    expect(moveCandidateHead(ground.candidateRoot)).not.toBe(ground.tree.head);
+    expect(runCandidateGit(ground.candidateRoot, ["status", "--porcelain"])).toBe("");
+    await expectUnbound(ground, ground.candidateRoot, "moved-head");
+  });
+
+  it("binds a second tree of the same bytes at the same HEAD, and records it", async () => {
+    const ground = provenGround("rebound");
+    const svc = realService(ground.store);
+    expect(svc.sealRecipe(registration("recipe-rebound", EXIT_ZERO)).ok).toBe(true);
+    // The positive control for every arm above: a root that IS the sealed tree
+    // -- not the ground's own directory, a second materialization of the same
+    // bytes -- binds, runs, and is the root the durable receipt names.
+    const other = candidateTree("rebound-other");
+    expect(other.head).toBe(ground.tree.head);
+
+    const outcome = await svc.verify({
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: other.root,
+      expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-rebound",
+      verificationId: "verify-rebound",
+    });
+
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.verdict).toBe("PASSED");
+    expect(outcome.row["candidateRoot"]).toBe(other.root);
   });
 });
 
@@ -749,7 +903,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-green", EXIT_ZERO)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("green"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-green",
         verificationId: "verify-green",
       });
@@ -802,7 +956,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-failed", EXIT_THREE)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("failed"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-failed",
         verificationId: "verify-failed",
       });
@@ -831,7 +985,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-flood", FLOOD)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("truncated"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-flood",
         verificationId: "verify-truncated",
       });
@@ -860,7 +1014,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
 
     const started = Date.now();
     const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("timeout"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-hang",
       verificationId: "verify-timeout",
     });
@@ -887,7 +1041,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration("recipe-changed", EXIT_ZERO)).ok).toBe(true);
 
       const outcome = await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("changed"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-changed",
         verificationId: "verify-changed",
       });
@@ -921,7 +1075,7 @@ describe("foundation verification — PROVEN evidence, and the FAILED/UNKNOWN di
       expect(svc.sealRecipe(registration(`recipe-${scenario.label}`, scenario.argv)).ok).toBe(true);
       const outcome = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir(scenario.label), expectedRecordDigest: ground.recordDigest,
+        candidateRoot: ground.candidateRoot, expectedRecordDigest: ground.recordDigest,
         recipeAggregateId: `recipe-${scenario.label}`, verificationId: scenario.label,
       });
 
@@ -955,7 +1109,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-replay", EXIT_ZERO)).ok).toBe(true);
     const request = {
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("replay-once"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-replay",
       verificationId: "verify-replay",
     };
@@ -988,7 +1142,7 @@ describe("foundation verification — replay leaves one run, and the read model 
       expect(svc.sealRecipe(registration("recipe-other", EXIT_THREE)).ok).toBe(true);
       const first = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir("replay-conflict"),
+        candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-first",
         verificationId: "verify-conflict",
       });
@@ -998,7 +1152,7 @@ describe("foundation verification — replay leaves one run, and the read model 
 
       const second = await svc.verify({
         attemptAggregateId: ground.attemptAggregateId,
-        candidateRoot: candidateDir("replay-conflict-2"),
+        candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-other",
         verificationId: "verify-conflict",
       });
@@ -1027,12 +1181,16 @@ describe("foundation verification — replay leaves one run, and the read model 
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-root",
       verificationId: "verify-root",
     };
-    const first = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-a") });
+    const first = await svc.verify({ ...fixed, candidateRoot: ground.candidateRoot });
     expect(first.ok).toBe(true);
     const aggregate = deriveVerificationAggregateId("verify-root");
     const before = receiptBytes(ground.store, aggregate);
 
-    const second = await svc.verify({ ...fixed, candidateRoot: candidateDir("replay-root-b") });
+    // A SECOND tree of the same bytes at the same HEAD: it would bind, so the
+    // only thing that can answer is the durable root the receipt recorded.
+    const other = candidateTree("replay-root-b");
+    expect(other.head).toBe(ground.tree.head);
+    const second = await svc.verify({ ...fixed, candidateRoot: other.root });
 
     expectDaemonRefusal(
       second, "FOUNDATION_VERIFICATION_REPLAY_CONFLICT", "DAEMON_VERIFICATION_RECEIPT");
@@ -1057,7 +1215,7 @@ describe("foundation verification — replay leaves one run, and the read model 
 
     const outcome = await svc.verify({
       attemptAggregateId: ground.attemptAggregateId,
-      candidateRoot: candidateDir("receipt-uncommitted"),
+      candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-uncommitted",
       verificationId: "verify-uncommitted",
     });
@@ -1077,7 +1235,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-read", EXIT_ZERO)).ok).toBe(true);
     const written = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("read-bytes"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-read",
       verificationId: "verify-read",
     });
@@ -1106,7 +1264,7 @@ describe("foundation verification — replay leaves one run, and the read model 
       const svc = realService(ground.store);
       expect(svc.sealRecipe(registration("recipe-unreadable", EXIT_ZERO)).ok).toBe(true);
       expect((await svc.verify({
-        attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("unreadable"),
+        attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
         expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-unreadable",
         verificationId: "verify-unreadable",
       })).ok).toBe(true);
@@ -1125,7 +1283,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     const svc = realService(ground.store);
     expect(svc.sealRecipe(registration("recipe-drift", EXIT_ZERO)).ok).toBe(true);
     expect((await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("drifted"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-drift",
       verificationId: "verify-drift",
     })).ok).toBe(true);
@@ -1159,7 +1317,7 @@ describe("foundation verification — replay leaves one run, and the read model 
     burnEventId(ground.store, `${deriveVerificationAggregateId("verify-noact")}:ACTIVATED`);
 
     const outcome = await svc.verify({
-      attemptAggregateId: ground.attemptAggregateId, candidateRoot: candidateDir("no-activation"),
+      attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
       expectedRecordDigest: ground.recordDigest, recipeAggregateId: "recipe-noact",
       verificationId: "verify-noact",
     });
