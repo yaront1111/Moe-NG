@@ -72,6 +72,18 @@ function refusalFrom(response: unknown): DocumentDossierErrorState | null {
     && typeof service.code === "string" && typeof service.layer === "string") {
     return errorState(service.code, service.layer);
   }
+  // The authenticator's PORT_REFUSED frame (a revoked/expired credential at read
+  // time): a distinct key set and outcome from the adapter's REFUSED, so without
+  // this branch a live auth refusal flattens to a generic invalid response.
+  const port = exactDataRecord(response, ["httpStatus", "ok", "outcome", "refusal", "stage"]);
+  if (port !== null && port.ok === false && port.outcome === "PORT_REFUSED"
+    && typeof port.stage === "string") {
+    const portCode = typeof port.refusal === "object" && port.refusal !== null
+      ? Object.getOwnPropertyDescriptor(port.refusal, "code") : undefined;
+    if (portCode !== undefined && "value" in portCode && typeof portCode.value === "string") {
+      return errorState(portCode.value, port.stage);
+    }
+  }
   const http = exactDataRecord(response, [
     "error", "httpStatus", "ok", "outcome", "stage",
   ]);
