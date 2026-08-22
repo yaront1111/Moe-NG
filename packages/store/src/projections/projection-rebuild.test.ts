@@ -1,3 +1,5 @@
+import type { DatabaseSync } from "node:sqlite";
+
 import { describe, expect, it } from "vitest";
 
 import type { ProjectionReducer, ProjectionState } from "./projection-fold.js";
@@ -9,7 +11,7 @@ import {
 } from "./projection-drill-test-helpers.js";
 import { rebuildProjection } from "./projection-rebuild.js";
 import type {
-  ProjectionRebuildRefused, ProjectionRebuildResult, ProjectionRebuilt,
+  ProjectionLedgerSource, ProjectionRebuildRefused, ProjectionRebuildResult, ProjectionRebuilt,
 } from "./projection-rebuild.js";
 
 /**
@@ -27,6 +29,8 @@ interface RebuildOptions {
   readonly name?: string;
   readonly pageLimit?: number;
   readonly reducers?: Readonly<Record<string, ProjectionReducer>>;
+  /** Wraps the opened store so a test can act between the walk's page reads. */
+  readonly source?: (store: ProjectionLedgerSource) => ProjectionLedgerSource;
   readonly state?: ProjectionState;
   readonly upcaster?: StoredEventUpcaster;
 }
@@ -42,10 +46,35 @@ function rebuild(path: string, options: RebuildOptions = {}): ProjectionRebuildR
       name: options.name ?? DRILL_PROJECTION,
       pageLimit: options.pageLimit ?? 100,
       reducers: options.reducers ?? DRILL_REDUCERS,
-      source: store,
+      source: options.source?.(store) ?? store,
       state: options.state ?? DRILL_ORIGIN_STATE,
       upcaster: options.upcaster ?? DRILL_UPCASTER,
     })));
+}
+
+/** A ledger source that runs `onFirstPage` on its OWN connection inside the first page read:
+ *  the only window between the walk's opening read of the durable row and its first
+ *  compare-and-set, which is where a concurrent relay's row can appear unseen. */
+function interposedSource(
+  path: string, store: ProjectionLedgerSource, onFirstPage: (database: DatabaseSync) => void,
+): ProjectionLedgerSource {
+  let pages = 0;
+  return {
+    readEventsAfter(afterGlobalPosition, limit) {
+      pages += 1;
+      if (pages === 1) {
+        withDrillDatabase(path, onFirstPage);
+      }
+      return store.readEventsAfter(afterGlobalPosition, limit);
+    },
+  };
+}
+
+function plant(database: DatabaseSync, position: string, digest: string | null): void {
+  database
+    .prepare("INSERT INTO projections (projection_name, last_applied_position, state_digest) " +
+      "VALUES (?, ?, ?)")
+    .run(DRILL_PROJECTION, position, digest);
 }
 
 function rebuilt(result: ProjectionRebuildResult): ProjectionRebuilt {
@@ -191,6 +220,36 @@ describe("rebuildProjection", () => {
       expect(result.state["count"]).toBe(5);
       expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
         .toStrictEqual({ digest: result.stateDigest, position: 5n });
+    });
+  });
+
+  it("loses the compare-and-set to a row that appeared after the walk started", () => {
+    withDrillDirectory((path) => {
+      withDrillStore(path, (store) => {
+        for (let index = 0; index < 5; index += 1) {
+          store.commit(drillCommitInput(crashCommit(index), index));
+        }
+      });
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database))).toBeNull();
+
+      // No row exists when the walk reads the checkpoint, so the walk verifies nothing and
+      // folds the whole ledger in one page. The row planted during that page read sits
+      // BELOW the rebuilt position with a digest the ledger never rebuilds to, so neither
+      // in-transaction guard can fire: only a compare-and-set based on what the walk read
+      // at its start, not on whatever row it finds at write time, refuses here.
+      const result = refused(rebuild(path, {
+        pageLimit: 100,
+        source: (store) => interposedSource(path, store, (database) => {
+          plant(database, "2", FOREIGN_DIGEST);
+        }),
+      }));
+
+      expect(result.code).toBe("PROJECTION_REBUILD_STATE_CONFLICT");
+      expect(result.layer).toBe("STATE");
+      expect(result.fold).toBeNull();
+      expect(result.detail).toContain("lost its compare-and-set");
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
+        .toStrictEqual({ digest: FOREIGN_DIGEST, position: 2n });
     });
   });
 

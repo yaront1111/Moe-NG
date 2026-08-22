@@ -127,17 +127,18 @@ function rollbackQuietly(database: DatabaseSync): void {
 /**
  * One BEGIN IMMEDIATE that reads the durable row and compare-and-sets it in the same
  * snapshot, so no decision is ever made from state that could have moved in between.
- * `expected` is the rebuild's OWN last written value, which is what makes a foreign advance
- * between pages lose the compare-and-set rather than get overwritten.
+ * `expected` is the rebuild's OWN last written value (before its first write, the row the
+ * walk read at its start), which is what makes a foreign advance between pages, or a row
+ * that appeared after the walk began, lose the compare-and-set rather than get overwritten.
+ * The row observed here is never adopted as the base: it only feeds the two refusals below.
  */
 function persist(
-  database: DatabaseSync, plan: RebuildPlan, expected: Expectation | null,
+  database: DatabaseSync, plan: RebuildPlan, expected: Expectation,
   position: bigint, digest: string,
 ): Expectation {
   database.exec("BEGIN IMMEDIATE");
   try {
     const observed = readDurable(database, plan.name);
-    const base = expected ?? observed ?? ORIGIN_EXPECTATION;
     if (observed !== null && observed.position > position) {
       deny("PROJECTION_REBUILD_STATE_CONFLICT", "STATE",
         `durable checkpoint ${observed.position} runs ahead of the rebuilt position ${position}`);
@@ -147,7 +148,7 @@ function persist(
         `durable digest at position ${position} is not what the ledger rebuilds to`);
     }
     const changes = Number(database.prepare(PROJECTION_UPSERT).run(
-      plan.name, String(position), digest, String(base.position), base.digest,
+      plan.name, String(position), digest, String(expected.position), expected.digest,
     ).changes);
     if (changes !== 1) {
       deny("PROJECTION_REBUILD_STATE_CONFLICT", "STATE",
@@ -196,11 +197,14 @@ function foldPage(plan: RebuildPlan, carried: Progress, events: readonly StoredE
 }
 
 function walk(database: DatabaseSync, plan: RebuildPlan): ProjectionRebuildResult {
-  const verifyAt = readDurable(database, plan.name)?.position ?? 0n;
+  // The row read here is BOTH the checkpoint the walk must land on and the base of its
+  // first compare-and-set: an absent row expects to INSERT, so a row that appears between
+  // this read and the first write is a lost race, not a base to build on.
+  let expected: Expectation = readDurable(database, plan.name) ?? ORIGIN_EXPECTATION;
+  const verifyAt = expected.position;
   let carried: Progress = {
     digest: plan.originDigest, pages: 0, position: 0n, state: plan.originState,
   };
-  let expected: Expectation | null = null;
   let persisted = false;
   for (;;) {
     const page = plan.source.readEventsAfter(carried.position, plan.pageLimit);
