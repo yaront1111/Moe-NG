@@ -11,6 +11,7 @@ import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
 import { LiveGoalsHome } from "./goals/live-goals.js";
+import { LiveWorkBoard } from "./goals/live-work-board.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import type { NavId } from "./shell/shell-model.js";
@@ -156,16 +157,22 @@ export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
 
   let body: JSX.Element;
   if (open !== null) {
-    body = readRun === null
+    body = readRun === null || attached === null
       ? <BoardStub goalId={open.goalId} onBack={back} title={open.title} />
       : (
-        <ApprovePlan
-          goalId={open.goalId}
-          onBack={back}
-          read={readRun}
-          runId={LIVE_RUN_SUBJECT}
-          title={open.title}
-        />
+        // The opened goal shows the plan to APPROVE (UI-6) stacked over the live
+        // WORK BOARD (UI-5) so the operator sees the plan and the current work
+        // steps in one body. Both are read-only over the same attached session.
+        <>
+          <ApprovePlan
+            goalId={open.goalId}
+            onBack={back}
+            read={readRun}
+            runId={LIVE_RUN_SUBJECT}
+            title={open.title}
+          />
+          <LiveWorkBoard headers={attached.headers} />
+        </>
       );
   } else if (fixtures) {
     body = <GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={fixturesCreateGoal} onOpenBoard={openBoard} />;

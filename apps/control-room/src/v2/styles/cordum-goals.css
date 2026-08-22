@@ -688,6 +688,144 @@
   color: var(--cr-ink-soft);
 }
 
+/* -------------------------------------------------------------- work board --- */
+
+.cr2-board {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 24px 4px;
+}
+
+.cr2-board-state {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-board-count {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink);
+  font-weight: 600;
+}
+
+.cr2-board-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  width: 100%;
+}
+
+.cr2-board-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--cr-line);
+  border-radius: 8px;
+  background: var(--cr-wash);
+}
+
+.cr2-board-column-head {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-board-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr2-board-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--cr-line);
+  border-radius: 8px;
+  background: var(--cr-surface);
+}
+
+.cr2-board-card-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.cr2-board-kind {
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--cr-ink);
+  font-weight: 500;
+}
+
+.cr2-board-mono {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+  word-break: break-all;
+}
+
+.cr2-board-claim {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-agent, var(--cr-ink-soft));
+}
+
+.cr2-board-missing {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-danger, var(--cr-ink-soft));
+}
+
+.cr2-board-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--cr-ink-soft);
+}
+
+.cr2-board-comingonline {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed var(--cr-line-strong, var(--cr-line));
+  border-radius: 8px;
+  background: var(--cr-wash);
+}
+
+.cr2-board-comingonline-head {
+  margin: 0;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-board-comingonline-body {
+  margin: 0;
+  max-width: 640px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--cr-ink-soft);
+}
+
 /* ------------------------------------------------------------------ motion --- */
 /*
  * The shell's universal reset (cordum-shell.css) already neutralises motion for
