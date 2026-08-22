@@ -1080,7 +1080,7 @@ describe("daemon package-root Foundation ingress closure", () => {
       .toEqualTypeOf<FoundationVerificationAnswer | FoundationVerificationRefused>();
     expectTypeOf<FoundationVerificationAnswer["verdict"]>()
       .toEqualTypeOf<FoundationVerificationVerdict>();
-    // Five producers can refuse here, so WHICH layer refused is part of the
+    // Six producers can refuse here, so WHICH layer refused is part of the
     // published closure, not an internal detail.
     expectTypeOf<FoundationVerificationRefused["source"]>()
       .toEqualTypeOf<FoundationVerificationRefusalSource>();
