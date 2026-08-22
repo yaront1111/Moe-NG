@@ -276,22 +276,6 @@ const RESOURCE_ROW = {
   capacityUnits: 1, effectIntentRef: "intent-ref-1", epoch: 1, external: false, fenceable: true,
   resourceId: "res-1", state: "ACTIVE",
 } as const;
-const BUDGET_VIEW = {
-  accountId: "acct-1", meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN", version: 2,
-} as const;
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
 const EFFECT_INTENT = {
   aggregateId: "agg-1", desiredState: "ACTIVE", expectedGraphEpoch: 4, idempotencyKey: "idem-1",
   inputBinding: DIGEST, intentId: "intent-1", leaseBinding: LEASE_RECORD,
@@ -318,7 +302,7 @@ function activationBytes(commandId = "cmd-dispatch-1"): Uint8Array {
     commandId, correlationId: "corr-dispatch", decidedAt: DECIDED_AT, expectedVersion: 0,
     kind: EFFECT_ACTIVATE_COMMAND_KIND,
     payload: structuredClone({
-      activation: ACTIVATION_SECTION, budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
+      activation: ACTIVATION_SECTION,
       effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
       lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
       liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -477,7 +461,6 @@ function secondActivationBytes(): Uint8Array {
         },
         leaseProof: SECOND_LEASE_PROOF, lockIdentity: "lock-2", wrapperIdentity: "wrapper-2",
       },
-      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
       effect: { command: { kind: "claim" }, intent: SECOND_INTENT },
       lease: { proof: SECOND_LEASE_PROOF, record: SECOND_LEASE_RECORD },
       liveClaims: [{ dimension: "default", slotRef: "held-1", state: "RESERVED" }],

@@ -340,13 +340,19 @@ const RESOURCE_ROW = {
   resourceId: "res-1", state: "ACTIVE",
 } as const;
 
-const BUDGET_VIEW = {
+/**
+ * work.claim's OWN caller budget section. `effect.activate` stopped sending one with the
+ * fence-narrowing chain (task-553b2165), but `claimWork` still reads `sections.budget`
+ * (`work-claim.ts:240`) over a CLOSED key set, so the claim payload below supplies it directly
+ * instead of inheriting it from the activation envelope.
+ */
+const CLAIM_BUDGET_VIEW = {
   accountId: "acct-1",
   meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
   state: "OPEN", version: 2,
 } as const;
 
-const ADMISSION = {
+const CLAIM_ADMISSION = {
   admissionRef: "adm-1",
   amounts: [
     { meter: "usd", purpose: "EXECUTION", quantity: 10 },
@@ -358,7 +364,9 @@ const ADMISSION = {
   expectedVersion: 2,
 } as const;
 
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
+const CLAIM_GATE = {
+  allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null,
+} as const;
 
 const EFFECT_INTENT = {
   aggregateId: "agg-1", desiredState: "ACTIVE", expectedGraphEpoch: 4, idempotencyKey: "idem-1",
@@ -385,7 +393,6 @@ const ACTIVATION_SECTION = {
 export function activationPayload(): Record<string, unknown> {
   return structuredClone({
     activation: ACTIVATION_SECTION,
-    budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
     liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -494,6 +501,12 @@ function smuggledSectionBytes(): Uint8Array {
 function claimPayload(): Record<string, unknown> {
   const payload = activationPayload();
   delete payload["activation"];
+  // The claim's key set still HOLDS `budget`; only the activation envelope dropped it. Without
+  // this the outer mirror reads null and every case below refuses WORK_PAYLOAD_MALFORMED before
+  // its named leg runs — measured, task-553b2165.
+  payload["budget"] = structuredClone({
+    admission: CLAIM_ADMISSION, gate: CLAIM_GATE, view: CLAIM_BUDGET_VIEW,
+  });
   return payload;
 }
 
@@ -646,7 +659,6 @@ function slotActivateBytes(slug: string): Uint8Array {
         lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: `wrapper-${slug}`,
       },
-      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
       effect: {
         command: { kind: "claim" },
         intent: {

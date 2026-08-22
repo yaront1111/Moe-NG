@@ -227,16 +227,6 @@ const RESOURCE_ROW = {
   capacityUnits: 1, effectIntentRef: "intent-ref-1", epoch: 1, external: false, fenceable: true,
   resourceId: "res-1", state: "ACTIVE",
 } as const;
-const BUDGET_VIEW = {
-  accountId: "acct-1", meters: [{ available: 100, committed: 0, meter: "usd",
-    quarantined: 0, reserved: 0 }], state: "OPEN", version: 2,
-} as const;
-const ADMISSION = {
-  admissionRef: "adm-1", expectedVersion: 2,
-  amounts: ["EXECUTION", "VERIFICATION", "INDEPENDENT_REVIEW", "FINAL_ACCEPTANCE", "CONTINGENCY"]
-    .map((purpose) => ({ meter: "usd", purpose, quantity: purpose === "EXECUTION" ? 10 : 5 })),
-} as const;
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
 
 function activationBytes(runtimeDigest: string): Uint8Array {
   const intent = {
@@ -260,7 +250,6 @@ function activationBytes(runtimeDigest: string): Uint8Array {
         lockIdentity: "lock-1", observedGraphEpoch: 4, observedRuntimeDigest: runtimeDigest,
         tombstone: null, wrapperIdentity: "wrapper-1",
       },
-      budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
       effect: { command: { kind: "claim" }, intent }, lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
       liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
       slot: { dimension: "default", requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1" },
