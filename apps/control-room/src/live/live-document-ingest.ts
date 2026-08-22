@@ -106,10 +106,11 @@ function exactDataRecord(
 }
 
 /**
- * Recognises the four refusal envelopes the ingest route can emit and carries
+ * Recognises the five refusal envelopes the ingest route can emit and carries
  * each out at its OWN layer: the listener's two-key { code, layer }, the route's
  * own three-key { code, layer, outcome } (DOCUMENT_INGEST_CAPABILITY_DENIED and
  * DOCUMENT_INGEST_PROJECT_MISMATCH reply 200 with exactly this shape), the
+ * authenticator's PORT_REFUSED frame (a revoked/expired credential), the
  * service's six-key advisory frame, and the adapter's { error, stage } frame.
  * Any other answer is not a refusal this reader can vouch for and returns null.
  */
@@ -134,6 +135,18 @@ function refusalFrom(response: unknown): DocumentIngestOutcome | null {
     && service.ok === false && service.outcome === "REFUSED"
     && typeof service.code === "string" && typeof service.layer === "string") {
     return refused(service.code, service.layer);
+  }
+  // The authenticator's PORT_REFUSED frame (a revoked/expired credential at read
+  // time): a distinct key set and outcome from the adapter's REFUSED, so without
+  // this branch a live auth refusal flattens to a generic INVALID.
+  const port = exactDataRecord(response, ["httpStatus", "ok", "outcome", "refusal", "stage"]);
+  if (port !== null && port.ok === false && port.outcome === "PORT_REFUSED"
+    && typeof port.stage === "string") {
+    const portCode = typeof port.refusal === "object" && port.refusal !== null
+      ? Object.getOwnPropertyDescriptor(port.refusal, "code") : undefined;
+    if (portCode !== undefined && "value" in portCode && typeof portCode.value === "string") {
+      return refused(portCode.value, port.stage);
+    }
   }
   const http = exactDataRecord(response, [
     "error", "httpStatus", "ok", "outcome", "stage",

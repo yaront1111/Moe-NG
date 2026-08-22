@@ -99,6 +99,20 @@ describe("mapIngestAnswer shapes the ingest route's answer", () => {
     });
   });
 
+  it("carries the authenticator's PORT_REFUSED frame out at its stage layer", () => {
+    expect(mapIngestAnswer(401, {
+      httpStatus: 401,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: { code: "SESSION_CREDENTIAL_REVOKED" },
+      stage: "AUTHENTICATE",
+    })).toStrictEqual({
+      code: "SESSION_CREDENTIAL_REVOKED",
+      layer: "AUTHENTICATE",
+      status: "REFUSED",
+    });
+  });
+
   it("errors on a non-200 answer that is not a refusal", () => {
     expect(mapIngestAnswer(500, { ok: true })).toStrictEqual({
       code: "DOCUMENT_INGEST_RESPONSE_INVALID",
