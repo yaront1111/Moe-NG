@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { JSX } from "react";
 
+import "./cordum-fonts.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
 import { resolveLiveSetupFromHandshake } from "../live/live-handshake.js";
 import type { LiveSetupResult } from "../live/live-config.js";
@@ -37,30 +38,6 @@ const FIXTURE_BADGES: Partial<Record<NavId, NavBadge>> = Object.freeze({
  * this is the one run POST /planning/run/read can answer for in the dev lane.
  */
 const LIVE_RUN_SUBJECT = "run-live-1" as const;
-
-/**
- * Google Fonts via <link>, injected here because this app cannot edit index.html.
- * On the Vite dev path this loads; on the daemon-hosted path the default-src self
- * CSP blocks it (a leftover: the faces need self-hosting or a CSP allowance). The
- * token stacks fall back to Segoe UI / system fonts, so the shell stays legible
- * either way.
- */
-function ensureCordumFonts(): void {
-  if (typeof document === "undefined") return;
-  const head = document.head;
-  if (head === null || document.getElementById("cr2-fonts") !== null) return;
-  const preconnect = document.createElement("link");
-  preconnect.rel = "preconnect";
-  preconnect.href = "https://fonts.gstatic.com";
-  preconnect.crossOrigin = "anonymous";
-  const sheet = document.createElement("link");
-  sheet.id = "cr2-fonts";
-  sheet.rel = "stylesheet";
-  sheet.href = "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600"
-    + "&family=IBM+Plex+Sans:wght@400;500;600;700"
-    + "&family=Space+Grotesk:wght@400;500;600;700&display=swap";
-  head.append(preconnect, sheet);
-}
 
 /**
  * The create action in fixtures mode: no daemon is attached, so it authors
@@ -134,7 +111,6 @@ interface OpenBoard {
 }
 
 export function CordumApp({ search = "" }: CordumAppProps): JSX.Element {
-  useEffect(() => { ensureCordumFonts(); }, []);
   const fixtures = new URLSearchParams(search).get("fixtures") === "1";
   // The live path acquires its credential at RUNTIME through the daemon handshake;
   // in fixtures mode the handshake is disabled and nothing reads its result.
