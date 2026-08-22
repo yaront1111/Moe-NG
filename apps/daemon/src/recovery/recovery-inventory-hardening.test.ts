@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MAX_RECOVERY_RECONCILIATION_BYTES,
+  MAX_RECOVERY_RECONCILIATION_ITEMS,
+  MAX_RECOVERY_RECONCILIATION_TEXT_CHARS,
   RECOVERY_INVENTORY_LAYER,
   RECOVERY_INVENTORY_POPULATIONS,
   RECOVERY_PROOF_CLASSES,
@@ -349,6 +352,81 @@ describe("decoder re-derives the item-to-proof provenance link", () => {
     if (decoded.ok) throw new Error("unreachable");
     expect(decoded.upstream).toEqual({
       code: "RECOVERY_INVENTORY_RECORD_NONCANONICAL",
+      layer: "RECOVERY_INVENTORY",
+    });
+  });
+});
+
+/**
+ * ADOPTED subjects at the text cap carry the two longest item fields (identity
+ * and restored intent ref), so they are the densest bytes per item the builder
+ * admits. Identities are unique by a zero-padded index so ordering is stable
+ * and every item encodes to exactly the same width.
+ */
+const widestSubjects = (count: number): RecoveryReconciliationBuildInput["subjects"] => {
+  const width = MAX_RECOVERY_RECONCILIATION_TEXT_CHARS;
+  const population = "RESOURCE";
+  return Array.from({ length: count }, (_, index) => {
+    const identity = `${String(index).padStart(6, "0")}-`.padEnd(width, "i");
+    return {
+      class: recoveryPopulationClass(population) as string,
+      evidence: {
+        externalIdentity: identity,
+        incarnationRef: SELECTED.incarnationRef,
+        intentDigest: hex("d0e5"),
+        intentRef: `intent-${String(index).padStart(6, "0")}-`.padEnd(width, "r"),
+        keyEpochRef: SELECTED.keyEpochRef,
+        kind: "RESTORED_INTENT" as const,
+      },
+      identity,
+      population,
+      sourceProofDigest: classDigest(population),
+    };
+  });
+};
+
+const encodedLength = (count: number): number =>
+  encodeRecoveryReconciliationRecord(reconciled({ ...baseInput(), subjects: widestSubjects(count) }))
+    .length;
+
+/** The largest item count whose record still encodes at or under the byte cap. */
+const countJustUnderCap = (): { readonly count: number; readonly perItem: number } => {
+  const one = encodedLength(1);
+  const perItem = encodedLength(2) - one;
+  expect(perItem).toBeGreaterThan(2 * MAX_RECOVERY_RECONCILIATION_TEXT_CHARS);
+  return { count: 1 + Math.floor((MAX_RECOVERY_RECONCILIATION_BYTES - one) / perItem), perItem };
+};
+
+describe("the byte cap is a builder refusal, not only a decoder one", () => {
+  it("refuses the item cap at the text cap, which encodes past the byte cap", () => {
+    // The per-field caps multiply to well over the byte cap: before this guard
+    // the builder handed back a record the ledger would commit as RECORDED and
+    // the decoder would then refuse under its own digest forever.
+    expect(refused({
+      ...baseInput(),
+      subjects: widestSubjects(MAX_RECOVERY_RECONCILIATION_ITEMS),
+    })).toEqual({ code: "RECOVERY_INVENTORY_RECORD_OVERSIZED", layer: "RECOVERY_INVENTORY" });
+  });
+
+  it("refuses at the first item that crosses the cap and builds the one before it", () => {
+    const { count, perItem } = countJustUnderCap();
+    expect(count).toBeLessThan(MAX_RECOVERY_RECONCILIATION_ITEMS);
+    const fitting = reconciled({ ...baseInput(), subjects: widestSubjects(count) });
+    const bytes = encodeRecoveryReconciliationRecord(fitting);
+    // Near the ceiling on purpose: within one item of the cap, not merely under it.
+    expect(bytes.length).toBeLessThanOrEqual(MAX_RECOVERY_RECONCILIATION_BYTES);
+    expect(bytes.length).toBeGreaterThan(MAX_RECOVERY_RECONCILIATION_BYTES - perItem);
+    expect(fitting.items).toHaveLength(count);
+    expect(fitting.truth).toBe("COMPLETE");
+    // What the builder admits, the decoder reads back: the cap is ONE number on
+    // both sides of the durable boundary.
+    const decoded = decodeRecoveryReconciliationRecord(bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) throw new Error("unreachable");
+    expect(decoded.record.recordDigest).toBe(fitting.recordDigest);
+
+    expect(refused({ ...baseInput(), subjects: widestSubjects(count + 1) })).toEqual({
+      code: "RECOVERY_INVENTORY_RECORD_OVERSIZED",
       layer: "RECOVERY_INVENTORY",
     });
   });

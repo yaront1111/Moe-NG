@@ -10,6 +10,9 @@ import { createRecoveryIncarnationService } from "./recovery-incarnation.js";
 import type { RestoreIncarnationBinding } from "./recovery-incarnation-contract.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
+  MAX_RECOVERY_RECONCILIATION_BYTES,
+  MAX_RECOVERY_RECONCILIATION_ITEMS,
+  MAX_RECOVERY_RECONCILIATION_TEXT_CHARS,
   RECOVERY_INVENTORY_POPULATIONS,
   RECOVERY_PROOF_CLASSES,
   RECOVERY_RECONCILIATION_COMMAND_KIND,
@@ -587,5 +590,109 @@ describe("selected-authority binding", () => {
       swept += 1;
     }
     expect(swept).toBe(2);
+  });
+});
+
+/**
+ * ADOPTED subjects at the text cap are the widest items the builder admits:
+ * identity AND restored intent ref both at full width, adopted under the
+ * store-selected refs so nothing is quarantined or left UNKNOWN.
+ */
+const widestSubjects = (
+  binding: RestoreIncarnationBinding,
+  count: number,
+): RecoveryReconciliationExternalFacts["subjects"] => {
+  const width = MAX_RECOVERY_RECONCILIATION_TEXT_CHARS;
+  const population = "RESOURCE";
+  const proofClass = recoveryPopulationClass(population) as RecoveryProofClass;
+  return Array.from({ length: count }, (_, index) => {
+    const identity = `${String(index).padStart(6, "0")}-`.padEnd(width, "i");
+    return {
+      class: proofClass as string,
+      evidence: {
+        externalIdentity: identity,
+        incarnationRef: binding.incarnationRef,
+        intentDigest: hex("d0e5"),
+        intentRef: `intent-${String(index).padStart(6, "0")}-`.padEnd(width, "r"),
+        keyEpochRef: binding.keyEpochRef,
+        kind: "RESTORED_INTENT" as const,
+      },
+      identity,
+      population,
+      sourceProofDigest: hex(`c${RECOVERY_PROOF_CLASSES.indexOf(proofClass)}`),
+    };
+  });
+};
+
+describe("byte cap at the writer", () => {
+  it("refuses the item cap at the text cap before any write lands", async () => {
+    const { binding, store } = await prepare();
+    const horizon = store.readEventHorizon();
+    const refused = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest, {
+        subjects: widestSubjects(binding, MAX_RECOVERY_RECONCILIATION_ITEMS),
+      }),
+    );
+    expect(refused.ok).toBe(false);
+    if (refused.ok) throw new Error("unreachable");
+    expect(refused.upstream).toEqual({
+      code: "RECOVERY_INVENTORY_RECORD_OVERSIZED",
+      layer: "RECOVERY_INVENTORY",
+    });
+    expect(refused.code).toBe("UNKNOWN_TRUTH");
+    expect(refused.authority).toBe("NONE");
+    // Nothing reached the store: the refusal is a decision BEFORE the commit,
+    // not a commit that was later judged unreadable.
+    expect(store.readEventHorizon()).toBe(horizon);
+  });
+
+  it("round-trips a record within one item of the cap through the durable read", async () => {
+    const { binding, store } = await prepare();
+    const measure = (count: number): number => {
+      const built = recordRecoveryReconciliation(
+        store,
+        { ...writeRequest, correlationId: `measure-${count}` },
+        facts(binding.backupGenerationDigest, { subjects: widestSubjects(binding, count) }),
+      );
+      if (!built.ok) throw new Error(`measurement write refused: ${built.upstream.code}`);
+      return encodeRecoveryReconciliationRecord(built.record).length;
+    };
+    const one = measure(1);
+    const perItem = measure(2) - one;
+    const count = 1 + Math.floor((MAX_RECOVERY_RECONCILIATION_BYTES - one) / perItem);
+    expect(count).toBeLessThan(MAX_RECOVERY_RECONCILIATION_ITEMS);
+
+    const written = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest, { subjects: widestSubjects(binding, count) }),
+    );
+    expect(written.ok).toBe(true);
+    if (!written.ok) throw new Error("unreachable");
+    const bytes = encodeRecoveryReconciliationRecord(written.record);
+    expect(bytes.length).toBeLessThanOrEqual(MAX_RECOVERY_RECONCILIATION_BYTES);
+    expect(bytes.length).toBeGreaterThan(MAX_RECOVERY_RECONCILIATION_BYTES - perItem);
+    expect(written.record.items).toHaveLength(count);
+
+    const read = readRecoveryReconciliation(store, PROJECT_ID, written.recordDigest);
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error("unreachable");
+    expect(read.record.recordDigest).toBe(written.recordDigest);
+    expect(read.record.items).toHaveLength(count);
+    // Byte identity through a native compare: a deep matcher walks 4 MiB of
+    // elements one at a time and times the test out before it can answer.
+    expect(Buffer.from(encodeRecoveryReconciliationRecord(read.record)).equals(bytes)).toBe(true);
+
+    // One more item crosses the cap and is refused by the same writer.
+    const over = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest, { subjects: widestSubjects(binding, count + 1) }),
+    );
+    expect(over.ok).toBe(false);
+    if (over.ok) throw new Error("unreachable");
+    expect(over.upstream.code).toBe("RECOVERY_INVENTORY_RECORD_OVERSIZED");
   });
 });

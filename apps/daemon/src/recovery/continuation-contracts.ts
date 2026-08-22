@@ -157,7 +157,7 @@ export const UNCLASSIFIED = gateRefusal(
 export const BINDING_CONFLICT = gateRefusal(
   "CONFLICT",
   "CONTINUATION_BINDING_CONFLICT",
-  "The continuation binding was not appended; a binding for this successor already exists.",
+  "The continuation binding was not appended; this attempt or this successor is already bound.",
 );
 
 /** Carries the runner's refusal out unchanged: its code, its layer, its message. */
