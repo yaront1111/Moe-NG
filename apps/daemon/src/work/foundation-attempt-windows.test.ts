@@ -236,11 +236,43 @@ const CATALOG = Object.freeze({
   }],
 });
 
+/**
+ * A worktree parent of THIS arm's own, and the target derived from it.
+ *
+ * The module-level `DERIVED_WORKTREE` is shared, and the retention arm above deliberately LEAVES
+ * its tree behind. An arm that then materializes over that leftover has another arm's cleanup in
+ * its preconditions: the materializer refuses a target that already exists, the dispatch refuses
+ * before the gate under test is ever reached, and the arm reds on its own precondition rather
+ * than on the property it names. Observed exactly that way at 19:18 local.
+ */
+function isolatedTarget(label: string): { readonly parent: string; readonly worktreePath: string } {
+  const parent = scratch(label);
+  const derived = deriveWorktreeTarget({
+    attemptId: "attempt-1", baseIdentity: HEAD, projectId: PROJECT_ID,
+    sourceRepositoryRoot: REPOSITORY.root, worktreeParent: parent,
+  });
+  if (!derived.ok) throw new Error(`worktree target refused: ${derived.code}`);
+  return { parent, worktreePath: derived.target.worktreePath };
+}
+
 /** The REAL lifecycle over the real repository. */
 function lifecycleFor(store: SqliteEventStore): FoundationCaptureLifecycle {
   return createFoundationCaptureLifecycle({
     captureFs: createNodeFoundationCaptureFs(),
     catalogSource: (): unknown => CATALOG,
+    clock: () => DECIDED_AT,
+    materializer: createNodeWorktreeMaterializer(process.env),
+    store,
+  });
+}
+
+/** `lifecycleFor`, but rooted at a parent only one arm uses. */
+function isolatedLifecycleFor(store: SqliteEventStore, parent: string): FoundationCaptureLifecycle {
+  return createFoundationCaptureLifecycle({
+    captureFs: createNodeFoundationCaptureFs(),
+    catalogSource: (): unknown => ({
+      ...CATALOG, entries: [{ ...CATALOG.entries[0], worktreeParent: parent }],
+    }),
     clock: () => DECIDED_AT,
     materializer: createNodeWorktreeMaterializer(process.env),
     store,
@@ -854,6 +886,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     if (!found.ok) return assertRuntimeAbsent(found.refusal);
     const { installedRoot, observation } = found;
     const root = scratch("terminal-gate");
+    const isolated = isolatedTarget("terminal-gate-trees");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\\Windows";
     const pinRoot = join(root, "pins");
@@ -864,7 +897,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       inputManifest: structuredClone(INPUT_MANIFEST),
       launchTemplate: {
         argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+        bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
         environment: {
           COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
           PATH: process.env["Path"] ?? join(systemRoot, "System32"),
@@ -877,7 +910,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     };
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
-      lifecycle: lifecycleFor(store), store,
+      lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
 
     try {
@@ -948,6 +981,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     if (!found.ok) return assertRuntimeAbsent(found.refusal);
     const { installedRoot, observation } = found;
     const root = scratch("settlement-key");
+    const isolated = isolatedTarget("settlement-key-trees");
     const store = readyStore(root);
     const systemRoot = process.env["SystemRoot"] ?? "C:\Windows";
     const request = {
@@ -957,7 +991,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       inputManifest: structuredClone(INPUT_MANIFEST),
       launchTemplate: {
         argv: ["--version", "--model", "claude-opus-5", "--effort", "high"],
-        bootstrapCredentialDigest: DIGEST_B, cwd: DERIVED_WORKTREE,
+        bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
         environment: {
           COMSPEC: process.env["ComSpec"] ?? join(systemRoot, "System32", "cmd.exe"),
           PATH: process.env["Path"] ?? join(systemRoot, "System32"),
@@ -970,7 +1004,7 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     };
     const service = createFoundationAttemptService({
       captureResult: captureAnswer, launchOptions: { platform: "win32" },
-      lifecycle: lifecycleFor(store), store,
+      lifecycle: isolatedLifecycleFor(store, isolated.parent), store,
     });
     terminalProbe.forceOk = true;
 
