@@ -80,5 +80,6 @@ to your task and preserve all foreign work, including untracked files. Never edi
 
 - Authoritative design (read-only; never edit from implementation tasks):
   `D:/projexts/moes/docs/plans/2026-08-05-moe-rebuild-design.md`
+- Product vision, human gates, and staged roadmap (human-stated 2026-08-22): `docs/VISION.md`
 - Contribution conventions: `CONTRIBUTING.md`
 - Approved implementation plans: `docs/plans/`

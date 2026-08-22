@@ -1,6 +1,12 @@
 # Moe Next
 
-Moe Next is a greenfield, local-first orchestration control plane for reliable multi-agent software work.
+Moe is a trustworthy autonomous software company: give it a PRD, and it
+designs, builds, verifies, deploys, and improves the product — from PRD to
+production, with a trace that survives an adversary. The local-first
+orchestration control plane, the authority system, and the evidence model in
+this repository are the engine that makes that promise provable; they are not
+the promise. The vision, the human gates, and the staged roadmap live in
+[docs/VISION.md](./docs/VISION.md).
 
 This repository is independent from legacy Moe. Legacy implementation code is not copied or imported.
 
@@ -76,6 +82,8 @@ it runs a shell recipe from an agent-modifiable workspace under the wrapper's OS
 account; for v0.1 it ships as a documented trusted-workspace limitation (human
 decision 2026-08-18), and a hermetic verifier is v0.2. The missing artifact and
 the unproven canary remain release blockers, not operator configuration issues.
+The next major milestone is Stage 1 of the vision — a small but real PRD taken
+to a proof-carrying, verified pull request (see [docs/VISION.md](./docs/VISION.md)).
 
 ## Commands
 
