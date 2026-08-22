@@ -8,6 +8,7 @@ import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
 import { resolveShellMode } from "./shell-mode.js";
 import { ShellModeRoot } from "./shell-mode-view.js";
+import { CordumApp } from "./v2/cordum-app.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
@@ -42,8 +43,15 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
  * each arm paints.
  */
 function chooseRoot(): JSX.Element {
+  const search = globalThis.location?.search ?? "";
+  // The v2 Cordum rebuild lives alongside v1 behind an explicit ?v2=1, so the
+  // existing LIVE / FIXTURES / CONFIG_NOTICE arms (and the e2e board-chain guard)
+  // are untouched. This branch is orthogonal to the shell-mode tri-state.
+  if (new URLSearchParams(search).get("v2") === "1") {
+    return <CordumApp search={search} />;
+  }
   const setup = resolveLiveSetupFromBuild();
-  const mode = resolveShellMode(globalThis.location?.search ?? "", setup);
+  const mode = resolveShellMode(search, setup);
   return <ShellModeRoot mode={mode} setup={setup} />;
 }
 

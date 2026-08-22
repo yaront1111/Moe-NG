@@ -1,0 +1,178 @@
+/*
+ * Cordum design tokens (UI-1) - the single source of truth every v2 surface imports.
+ *
+ * Values are lifted verbatim from the product owner's design export
+ * ("Moe Control Room.dc.html"): accent teal, cream grounds, ink scale, the five
+ * truth-class chip colours, and the Space Grotesk / IBM Plex Sans / IBM Plex Mono
+ * type roles. Every colour a v2 component paints must travel through one of these
+ * custom properties - no raw hex in a component.
+ *
+ * Light is defined on bare :root. Dark is a DERIVED Cordum (see the media block):
+ * a deep teal-tinted charcoal ground, a brightened teal reserved for text/borders
+ * so the accent stays legible, and connection/truth text colours lifted for the
+ * dark ground rather than naively inverted. Truth-CHIP fills stay identical across
+ * themes because each is a self-contained badge (white glyph on a solid tone).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Brand accent */
+  --cr-accent: #0f7f7a;            /* teal fill for buttons + the wordmark */
+  --cr-accent-deep: #0a5f5b;       /* hover / pressed teal */
+  --cr-accent-text: #0f7f7a;       /* teal used AS text/border on a ground */
+  --cr-on-accent: #fffaf2;         /* text/glyph on an accent fill */
+
+  /* Ink scale */
+  --cr-ink: #1f2a2e;
+  --cr-ink-soft: #5a6a70;
+  --cr-faint: #9aa8ac;
+
+  /* Grounds + surfaces */
+  --cr-cream: #f5efe6;
+  --cr-surface: #fffaf2;           /* frosted panel base */
+  --cr-surface-solid: #ffffff;     /* opaque input fields */
+  --cr-wash: #eef4f1;              /* chip / inset wash */
+  --cr-nav-bg: rgba(255, 252, 245, 0.7);
+  --cr-header-bg: rgba(255, 252, 245, 0.55);
+  --cr-panel-bg: rgba(255, 252, 245, 0.9);
+  --cr-drawer-bg: rgba(255, 252, 245, 0.94);
+  --cr-footer-bg: rgba(255, 252, 245, 0.7);
+  --cr-toast-bg: #1f2a2e;
+  --cr-toast-ink: #f5efe6;
+
+  /* The page ground: a soft radial + linear cream gradient, from the .dc.html. */
+  --cr-bg-base: #f5efe6;
+  --cr-bg: radial-gradient(900px circle at 8% -12%, rgba(15, 127, 122, 0.18), transparent 55%),
+    radial-gradient(700px circle at 92% -4%, rgba(212, 131, 58, 0.16), transparent 45%),
+    linear-gradient(120deg, #f6f1e8 0%, #eef3f1 55%, #f5efe5 100%);
+
+  /* Hairlines + dividers (ink at low alpha) */
+  --cr-hairline: rgba(25, 36, 40, 0.08);
+  --cr-line: rgba(25, 36, 40, 0.12);
+  --cr-line-strong: rgba(25, 36, 40, 0.22);
+
+  /* Status + intent */
+  --cr-danger: #b83a3a;
+  --cr-scrim: rgba(18, 25, 28, 0.45);    /* modal backdrop */
+
+  /* Truth-class chip fills (white glyph rides on each). Identical in dark. */
+  --cr-chip-ink: #ffffff;                 /* glyph + short label on a chip fill */
+  --cr-chip-edge: rgba(255, 255, 255, 0.55);
+  --cr-truth-observed: #5a6a70;
+  --cr-truth-agent: #c58a1c;
+  --cr-truth-verified: #1f7a57;
+  --cr-truth-human: #3b82f6;
+  --cr-truth-human-deep: #2563eb;  /* deeper HUM, e.g. a badge on a wash */
+  --cr-truth-unknown: #7c3aed;
+
+  /* Connection-state text colours (the wash + border are color-mixed from these) */
+  --cr-conn-connected: #1f7a57;
+  --cr-conn-lagging: #c58a1c;
+  --cr-conn-disconnected: #b83a3a;
+  --cr-conn-historical: #7c3aed;
+  --cr-conn-offline: #5a6a70;      /* "coming online" - no relay attached yet */
+
+  /* Type roles */
+  --cr-font-display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --cr-font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --cr-font-mono: "IBM Plex Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  /* Type scale (px, tuned to the 13px body of the design) */
+  --cr-fs-micro: 9px;
+  --cr-fs-mono: 9.5px;
+  --cr-fs-caption: 10.5px;
+  --cr-fs-sm: 11.5px;
+  --cr-fs-body: 12.5px;
+  --cr-fs-base: 13px;
+  --cr-fs-md: 14.5px;
+  --cr-fs-lg: 16px;
+  --cr-fs-title: 19px;
+  --cr-fs-display: 24px;
+  --cr-track-mono: 0.16em;         /* eyebrow / label tracking */
+  --cr-track-wide: 0.18em;
+  --cr-track-tight: -0.01em;       /* display headings */
+
+  /* Radii */
+  --cr-radius-chip: 5px;
+  --cr-radius-xs: 8px;
+  --cr-radius-sm: 10px;
+  --cr-radius-md: 14px;
+  --cr-radius-lg: 16px;
+  --cr-radius-xl: 20px;
+  --cr-radius-2xl: 22px;
+  --cr-radius-pill: 9999px;
+
+  /* Shadows */
+  --cr-shadow-xs: 0 1px 3px rgba(18, 25, 28, 0.06);
+  --cr-shadow-card: 0 1px 3px rgba(18, 25, 28, 0.06), 0 6px 16px rgba(18, 25, 28, 0.08);
+  --cr-shadow-float: 0 12px 30px rgba(18, 25, 28, 0.08);
+  --cr-shadow-hover: 0 16px 40px rgba(18, 25, 28, 0.1);
+  --cr-shadow-drawer: -18px 0 35px rgba(18, 25, 28, 0.12);
+  --cr-shadow-toast: 0 18px 35px rgba(18, 25, 28, 0.24);
+  --cr-glow-accent: 0 0 20px rgba(15, 127, 122, 0.12);
+
+  /* Motion */
+  --cr-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --cr-dur: 200ms;
+  --cr-dur-fast: 150ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    /* A brighter teal for text/borders keeps the accent legible on the dark
+     * ground; the fill teal stays deep because cream text rides on it. */
+    --cr-accent: #12908a;
+    --cr-accent-deep: #0f7f7a;
+    --cr-accent-text: #35b3aa;
+    --cr-on-accent: #fffaf2;
+
+    --cr-ink: #eef3f1;
+    --cr-ink-soft: #9fb0b3;
+    --cr-faint: #6b7d80;
+
+    --cr-cream: #0e1618;
+    --cr-surface: #16211f;
+    --cr-surface-solid: #1b2624;
+    --cr-wash: #1b2926;
+    --cr-nav-bg: rgba(18, 28, 27, 0.72);
+    --cr-header-bg: rgba(18, 28, 27, 0.55);
+    --cr-panel-bg: rgba(22, 33, 31, 0.9);
+    --cr-drawer-bg: rgba(20, 31, 29, 0.94);
+    --cr-footer-bg: rgba(18, 28, 27, 0.72);
+    --cr-toast-bg: #0b1214;
+    --cr-toast-ink: #eef3f1;
+
+    --cr-bg-base: #0e1618;
+    --cr-bg: radial-gradient(900px circle at 8% -12%, rgba(15, 127, 122, 0.24), transparent 55%),
+      radial-gradient(700px circle at 92% -4%, rgba(212, 131, 58, 0.1), transparent 45%),
+      linear-gradient(120deg, #0f1a1b 0%, #0d1618 55%, #10171a 100%);
+
+    --cr-hairline: rgba(224, 236, 233, 0.08);
+    --cr-line: rgba(224, 236, 233, 0.14);
+    --cr-line-strong: rgba(224, 236, 233, 0.26);
+
+    --cr-danger: #f08a8a;
+    --cr-scrim: rgba(0, 0, 0, 0.6);
+
+    /* Truth-chip fills unchanged (self-contained badges); the deep HUM used as
+     * text-on-wash is lifted for the dark ground. */
+    --cr-truth-human-deep: #7ba3ff;
+
+    --cr-conn-connected: #4fd0a0;
+    --cr-conn-lagging: #e0a94a;
+    --cr-conn-disconnected: #f08a8a;
+    --cr-conn-historical: #b98bff;
+    --cr-conn-offline: #9fb0b3;
+
+    --cr-shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.32);
+    --cr-shadow-card: 0 1px 3px rgba(0, 0, 0, 0.32), 0 8px 22px rgba(0, 0, 0, 0.28);
+    --cr-shadow-float: 0 12px 30px rgba(0, 0, 0, 0.34);
+    --cr-shadow-hover: 0 18px 42px rgba(0, 0, 0, 0.42);
+    --cr-shadow-drawer: -18px 0 35px rgba(0, 0, 0, 0.44);
+    --cr-shadow-toast: 0 18px 35px rgba(0, 0, 0, 0.5);
+    --cr-glow-accent: 0 0 22px rgba(53, 179, 170, 0.18);
+  }
+}
