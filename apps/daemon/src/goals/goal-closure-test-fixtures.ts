@@ -101,21 +101,6 @@ function leaseProof(label: string): Record<string, unknown> {
   };
 }
 
-const BUDGET_VIEW = Object.freeze({
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN", version: 2,
-});
-const ADMISSION_AMOUNTS = Object.freeze([
-  { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-  { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-  { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-  { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-  { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-]);
-const GATE = Object.freeze({
-  allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null,
-});
 const VERIFIER_IDENTITY = Object.freeze({
   capabilitySchemaDigest: DIGEST_B, verifierId: "moe-verifier", verifierVersion: "1.0.0",
 });
@@ -143,12 +128,6 @@ function activationBytes(label: string): Uint8Array {
         dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: proof,
         lockIdentity: `lock-${label}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: `wrapper-${label}`,
-      },
-      budget: {
-        admission: {
-          admissionRef: `adm-${label}`, amounts: ADMISSION_AMOUNTS, expectedVersion: 2,
-        },
-        gate: GATE, view: BUDGET_VIEW,
       },
       effect: {
         command: { kind: "claim" },

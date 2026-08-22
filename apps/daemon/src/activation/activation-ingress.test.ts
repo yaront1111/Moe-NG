@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { NODE_ADMISSION_METERS } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -113,27 +114,6 @@ const RESOURCE_ROW = {
   state: "ACTIVE",
 } as const;
 
-const BUDGET_VIEW = {
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN",
-  version: 2,
-} as const;
-
-const ADMISSION = {
-  admissionRef: "adm-1",
-  amounts: [
-    { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-    { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-    { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-    { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-    { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-  ],
-  expectedVersion: 2,
-} as const;
-
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
-
 /** PENDING v0. The chain bumps it: claim -> CLAIMED v1, arm -> ARMED v2, activate -> ACTIVE v3. */
 const EFFECT_INTENT = {
   aggregateId: "agg-1",
@@ -188,7 +168,6 @@ const PREDECESSOR_ATTEMPT_VERSION = 0;
 function activationPayload(): Record<string, unknown> {
   return structuredClone({
     activation: ACTIVATION_SECTION,
-    budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
     liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -321,10 +300,12 @@ describe("effect.activate ingress — the accepted path", () => {
     expect(record.grant).toMatchObject({ intentId: "intent-1", state: "UNUSED" });
     expect(record.lease).toMatchObject({ leaseId: "lease-1", state: "ACTIVE" });
 
-    // THE CALLER'S BUDGET SECTION IS NOT AUTHORITY. It names account "acct-1", admission
-    // "adm-1", meter "usd" and 100 available; none of that reaches the durable record. The
-    // account is the DURABLE goal's own `budgetAccountRef`, the admission identity is the
-    // AUTHENTICATED commandId, and the meter is the node definition's.
+    // THE BUDGET IS DERIVED, NOT RECEIVED. This sender no longer carries a caller budget
+    // section at all (task-671585ec, link 2 of the fence-narrowing chain), so every value
+    // below comes from durable authority: the account is the goal's own `budgetAccountRef`,
+    // the admission identity is the AUTHENTICATED commandId, and the meters are the node
+    // definition's. That a HOSTILE section changes none of it is proven where the section is
+    // still sent on purpose — `activation-ingress-dead-input.test.ts`, through production.
     const after = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
     if (!after.ok) throw new Error(`the durable ledger must read back: ${after.code}`);
     expect(record.budgetReservation).toMatchObject({
@@ -338,9 +319,13 @@ describe("effect.activate ingress — the accepted path", () => {
       attemptRef: null,
       state: "RESERVED",
     });
-    expect(record.budgetReservation.accountId).not.toBe(BUDGET_VIEW.accountId);
-    expect(record.budgetReservation.admissionRef).not.toBe(ADMISSION.admissionRef);
-    expect(record.budgetReservation.lines.map((line) => line.meter)).not.toContain("usd");
+    // The account and admission identities are pinned POSITIVELY in the record above. The
+    // meters had no positive counterpart — they were pinned only as "not the caller's `usd`",
+    // an operand this sender no longer supplies — so they are re-pointed at the production
+    // vocabulary the derivation draws from. `usd` is not a member, so the old claim survives.
+    const durableMeters = record.budgetReservation.lines.map((line) => line.meter);
+    expect(durableMeters.length).toBeGreaterThan(0);
+    for (const meter of durableMeters) expect(NODE_ADMISSION_METERS).toContain(meter);
 
     // THE SNAPSHOT AND THE HEAD NOW DIVERGE, and the divergence is the point (task-03049148).
     // Until that row the record's reservation was byte-equal to the ledger head; the binding
@@ -595,7 +580,6 @@ function slugActivateBytes(slug: string, liveClaims: readonly unknown[]): Uint8A
         lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: `wrapper-${slug}`,
       },
-      budget: { ...activationPayload()["budget"] as Record<string, unknown> },
       effect: {
         command: { kind: "claim" },
         intent: {
