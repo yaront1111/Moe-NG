@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { ScopeObserverError, type GitRefListing } from "./scope-contract.js";
+import { isUnresolvedHeadFailure } from "./scope-git-classify.js";
 import {
   MAX_SCOPE_OBSERVATION_BYTES,
   createNodeGitObserver,
@@ -67,6 +68,30 @@ function temporaryRepository(): string {
   return root;
 }
 
+/**
+ * A repository whose HEAD points at a branch that was never born, which is the
+ * state `checkout --orphan` leaves behind and the only one where git can resolve
+ * the question and answer "nothing". Created for real because the exit status is
+ * exactly the part a fake observer could not produce honestly.
+ */
+function unbornHeadRepository(): string {
+  const root = temporaryRepository();
+  execFileSync("git", ["symbolic-ref", "HEAD", "refs/heads/nothing"], {
+    cwd: root,
+    shell: false,
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  return root;
+}
+
+/** A directory that is not a repository at all: git answers 128, not exit 1. */
+function nonRepositoryDirectory(): string {
+  const root = mkdtempSync(join(tmpdir(), "moe-runner-head-plain-"));
+  repositories.push(root);
+  return root;
+}
+
 function observe(root: string): GitRefListing {
   const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
   if (observer.listRefs === undefined) throw new Error("listRefs is not implemented");
@@ -122,6 +147,45 @@ describe("createNodeGitObserver().listRefs — real git", { timeout: 30_000 }, (
     const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
     expect(observer.headCommit()).toMatch(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/u);
     expect(observer.lsFilesTracked()).toEqual(["seed.txt"]);
+  });
+});
+
+/**
+ * headCommit fails for two unrelated reasons that runGit gives one code, so the
+ * exit status the spawn preserved is the only place they stay apart. Both sides
+ * are read from real git: an asserted status nothing produces would pin a shape
+ * the observer never sees.
+ */
+describe("createNodeGitObserver().headCommit against real git", { timeout: 30_000 }, () => {
+  function refusalFrom(root: string): unknown {
+    const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
+    try {
+      observer.headCommit();
+    } catch (error) {
+      return error;
+    }
+    throw new Error(`headCommit answered for ${root} instead of refusing`);
+  }
+
+  function statusOf(thrown: unknown): unknown {
+    return (thrown as { cause?: { status?: unknown } }).cause?.status;
+  }
+
+  it("reports an unborn HEAD as git's silent exit 1", () => {
+    const thrown = refusalFrom(unbornHeadRepository());
+    expect(thrown).toBeInstanceOf(ScopeObserverError);
+    expect((thrown as ScopeObserverError).code).toBe("RUNNER_SCOPE_OBSERVATION_FAILED");
+    // Bare `--verify` exits 128 here, which is also what an unopenable repository
+    // reports: --quiet is what makes the two distinguishable at all.
+    expect(statusOf(thrown)).toBe(1);
+    expect(isUnresolvedHeadFailure(thrown)).toBe(true);
+  });
+
+  it("keeps a directory holding no repository a fatal rather than an observed absence", () => {
+    const thrown = refusalFrom(nonRepositoryDirectory());
+    expect((thrown as ScopeObserverError).code).toBe("RUNNER_SCOPE_OBSERVATION_FAILED");
+    expect(statusOf(thrown)).toBe(128);
+    expect(isUnresolvedHeadFailure(thrown)).toBe(false);
   });
 });
 

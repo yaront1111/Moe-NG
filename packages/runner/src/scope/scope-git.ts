@@ -167,7 +167,16 @@ export function createNodeGitObserver(
     runGit(repository, environment, args, label);
   return Object.freeze({
     headCommit(): string {
-      const text = decodeUtf8(git(["rev-parse", "--verify", "HEAD"], "rev-parse"), "rev-parse");
+      // --quiet so the ONE HEAD that does not resolve exits 1 in silence.
+      // Without it an unborn HEAD is a 128 fatal, which is also what a directory
+      // holding no repository reports, and runGit codes every non-overflow spawn
+      // fault RUNNER_SCOPE_OBSERVATION_FAILED: the exit status on the preserved
+      // cause is then the only thing separating "no commit yet" from "the
+      // question was never answered".
+      const text = decodeUtf8(
+        git(["rev-parse", "--verify", "--quiet", "HEAD"], "rev-parse"),
+        "rev-parse",
+      );
       const head = text.trimEnd();
       if (!isCommitIdentity(head)) {
         throw new ScopeObserverError(
