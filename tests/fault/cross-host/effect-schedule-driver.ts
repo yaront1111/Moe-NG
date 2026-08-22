@@ -165,7 +165,7 @@ export async function runHostSchedules(slot: CrossHostSlot): Promise<HostSchedul
     const began = Date.now();
     const outcome =
       schedule === "CRASH_BEFORE_ACTIVATION"
-        ? runTombstoneSchedule()
+        ? await runTombstoneSchedule(base)
         : schedule === "CANCELLATION"
           ? await runVerifierSchedule(base, SCRIPT_LIVE, true, CANCELLATION_REFUSAL)
           : await runVerifierSchedule(base, SCRIPT_CRASH, false, CRASH_REFUSAL);

@@ -14,13 +14,16 @@ import {
   buildFoundationManifest,
   evaluateAbsenceProbe,
   identifyFoundationFixture,
+  passExpected,
 } from "./foundation-outcomes-fixtures.js";
 import {
   FOUNDATION_ABSENCE_PROBES,
+  FOUNDATION_EVIDENCE_CORPORA,
   FOUNDATION_MANIFEST,
   FOUNDATION_PARTITION_COUNTS,
   FOUNDATION_SCHEDULES,
   foundationPartition,
+  resolveEvidenceOutcome,
 } from "./foundation-fault-schedule.js";
 import { FOUNDATION_FAKE_KIND } from "./foundation-fakes.js";
 import { J1_MODEL_KIND, evaluateJ1Journey } from "./foundation-model-j1.js";
@@ -195,6 +198,36 @@ describe("foundation absence probes", () => {
     for (const probe of FOUNDATION_ABSENCE_PROBES) {
       expect(evaluateAbsenceProbe(probe, decoys)).toEqual({ absent: true });
     }
+  });
+});
+
+describe("foundation evidence corpora", () => {
+  it("registers a second, independent statement for every HONEST_UNKNOWN entry", () => {
+    const claimed: string[] = [];
+    for (const entry of FOUNDATION_MANIFEST.entries) {
+      if (entry.outcome.kind !== "HONEST_UNKNOWN") continue;
+      const corpus = FOUNDATION_EVIDENCE_CORPORA[entry.entryId];
+      expect(corpus).toBeDefined();
+      // The two statements are written independently on purpose: this is the
+      // comparison an executor makes instead of echoing the entry back at itself.
+      expect(corpus?.missingEvidence).toBe(entry.outcome.missingEvidence);
+      expect(corpus?.evidenceRefs).toEqual([]);
+      claimed.push(entry.entryId);
+    }
+    // A registry with an entry nobody declares is as wrong as a missing one.
+    expect(claimed.sort()).toEqual(Object.keys(FOUNDATION_EVIDENCE_CORPORA).sort());
+    expect(claimed.length).toBeGreaterThan(0);
+  });
+
+  it("reports the pass the moment a corpus exists, and the unknown while it does not", () => {
+    const statement = "no corpus is registered for this schedule";
+    expect(resolveEvidenceOutcome([], statement)).toEqual({
+      kind: "HONEST_UNKNOWN", missingEvidence: statement,
+    });
+    // The live branch: a landed corpus must stop reporting an unknown, which is
+    // what forces the manifest row to retire the claim instead of rotting.
+    expect(resolveEvidenceOutcome(["evidence/measured-overhead"], statement))
+      .toEqual(passExpected());
   });
 });
 

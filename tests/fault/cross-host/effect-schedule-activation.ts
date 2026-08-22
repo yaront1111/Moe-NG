@@ -15,7 +15,10 @@ import {
   buildVerificationRecipe,
   createNodeProcessLauncher,
   runVerifierProcess,
+  type ActivationGrant,
+  type AttemptSlice,
   type ClaudeProcessExit,
+  type EffectIntent,
   type ProcessLauncher,
 } from "@moe/runner";
 
@@ -26,6 +29,8 @@ const AT = "2026-08-08T00:00:00.000Z";
 const DIGEST = Object.freeze({
   input: "a1".repeat(32), runtime: "b2".repeat(32),
   authority: "d4".repeat(32), witness: "29".repeat(32),
+  /** Well-formed and bound to nothing: no activation ever derived this id. */
+  forgedGrant: "ef".repeat(32),
 });
 
 function collectorRefusal(
@@ -113,6 +118,20 @@ export interface ScheduleOutcome {
 export const CRASH_REFUSAL = "VERIFIER_PROCESS_EXIT_AMBIGUOUS/CAPTURE";
 export const CANCELLATION_REFUSAL = "VERIFIER_PROCESS_CANCELLED/CAPTURE";
 
+const RECIPE_OR_MANIFEST_REFUSED = "the verification recipe or manifest was refused";
+
+/** The two sealed inputs every launch below is gated on. Neither is judged here. */
+function launchInputs(context: Omit<FactContext, "records">, seed: string, script: string) {
+  const recipe = buildVerificationRecipe({
+    argv: [process.execPath, "-e", script], declaredInputs: [], declaredOutputPaths: [],
+    verifierIdentity: { verifierId: `verifier-${seed}`, verifierVersion: "1.0.0", capabilitySchemaDigest: "ab".repeat(32) },
+  });
+  const manifest = buildInputManifest({ baseIdentity: context.headSha, entries: [] });
+  return recipe.ok === true && manifest.ok === true
+    ? { recipe: recipe.recipe, inputManifest: manifest.manifest }
+    : null;
+}
+
 export async function runVerifierSchedule(
   context: Omit<FactContext, "records">,
   script: string,
@@ -125,13 +144,9 @@ export async function runVerifierSchedule(
   if (activated.kind !== "ACTIVATED") {
     return collectorRefusal("CROSS_HOST_SCHEDULE_INCOMPLETE", null, `activation refused: ${activated.failure.code}`);
   }
-  const recipe = buildVerificationRecipe({
-    argv: [process.execPath, "-e", script], declaredInputs: [], declaredOutputPaths: [],
-    verifierIdentity: { verifierId: `verifier-${seed}`, verifierVersion: "1.0.0", capabilitySchemaDigest: "ab".repeat(32) },
-  });
-  const manifest = buildInputManifest({ baseIdentity: context.headSha, entries: [] });
-  if (recipe.ok !== true || manifest.ok !== true) {
-    return collectorRefusal("CROSS_HOST_SCHEDULE_INCOMPLETE", null, "the verification recipe or manifest was refused");
+  const inputs = launchInputs(context, seed, script);
+  if (inputs === null) {
+    return collectorRefusal("CROSS_HOST_SCHEDULE_INCOMPLETE", null, RECIPE_OR_MANIFEST_REFUSED);
   }
   const controller = new AbortController();
   let pid: number | null = null;
@@ -142,7 +157,7 @@ export async function runVerifierSchedule(
     }
   });
   const result = await runVerifierProcess({
-    recipe: recipe.recipe, inputManifest: manifest.manifest, candidateBaseIdentity: context.headSha,
+    ...inputs, candidateBaseIdentity: context.headSha,
     activation: { intent: activated.commit.intent, attempt: activated.commit.attempt, grant: activated.commit.grant },
     wrapperIdentity: `wrapper-${seed}`, candidateRoot: context.repoRoot, runtimeObservation: context.runtime,
     outputs: [], launcher: counted.launcher,
@@ -188,8 +203,78 @@ export async function runVerifierSchedule(
   };
 }
 
-/** The pre-activation schedule: a tombstone dominates, so nothing may start. */
-export function runTombstoneSchedule(): ScheduleOutcome | CrossHostFailure {
+/**
+ * The refusal the launch gate owes a wrapper that ignored the tombstone.
+ *
+ * Nothing after a tombstoned activation is activated: no grant was minted, so
+ * the only grant such a wrapper can present is one it made up. The supervisor
+ * must answer the whole record set at its own layer; any other answer means the
+ * probe below measured some earlier gate instead of the one it names, and a
+ * launch count of zero would then say nothing about the activation invariant.
+ */
+const UNACTIVATED_REFUSAL = "ACTIVATION_COMMIT_INCOHERENT/ACTIVATION";
+const SCRIPT_NOOP = "process.exit(0);";
+
+/**
+ * Carries the refused activation's own records into the REAL launch gate.
+ *
+ * This is what makes "nothing started" a measurement rather than a literal: a
+ * counting launcher wrapping the real node launcher is handed to production, and
+ * the count and pid returned are whatever that attempt physically produced. The
+ * grant id is fabricated because no real one exists; that is the probe, not a
+ * shortcut. A grant left absent would stop at kernel shape validation and never
+ * reach the commit-coherence invariant that keeps an unactivated effect off the
+ * host.
+ */
+async function measureUnactivatedLaunch(
+  context: Omit<FactContext, "records">, seed: string, request: Record<string, unknown>,
+): Promise<{ readonly launches: number; readonly pid: number | null } | CrossHostFailure> {
+  const inputs = launchInputs(context, seed, SCRIPT_NOOP);
+  if (inputs === null) {
+    return collectorRefusal("CROSS_HOST_SCHEDULE_INCOMPLETE", null, RECIPE_OR_MANIFEST_REFUSED);
+  }
+  let pid: number | null = null;
+  const counted = countingLauncher(createNodeProcessLauncher(), (started) => {
+    pid = started;
+  });
+  const result = await runVerifierProcess({
+    ...inputs, candidateBaseIdentity: context.headSha,
+    activation: {
+      intent: request["intent"] as EffectIntent,
+      attempt: request["attempt"] as AttemptSlice,
+      grant: {
+        grantId: DIGEST.forgedGrant, intentId: `intent-${seed}`,
+        wrapperIdentity: `wrapper-${seed}`, state: "UNUSED", version: 0,
+      } satisfies ActivationGrant,
+    },
+    wrapperIdentity: `wrapper-${seed}`, candidateRoot: context.repoRoot,
+    runtimeObservation: context.runtime, outputs: [], launcher: counted.launcher,
+    clock: { now: () => new Date().toISOString(), monotonicMs: () => Math.round(performance.now()) },
+    baseEnvironment: process.env,
+  });
+  const answered = result.ok || result.source !== "SUPERVISOR"
+    ? null
+    : `${result.failure.code}/${result.failure.layer}`;
+  if (answered !== UNACTIVATED_REFUSAL) {
+    return collectorRefusal(
+      "CROSS_HOST_SCHEDULE_INCOMPLETE", null,
+      `an unactivated launch was answered ${answered ?? "outside the supervisor"} after ${counted.launches()} launch(es)`,
+    );
+  }
+  return { launches: counted.launches(), pid };
+}
+
+/**
+ * The pre-activation schedule: a tombstone dominates, so nothing may start.
+ *
+ * "Nothing started" is measured, not declared. The activation refusal below is
+ * the schedule's defining fact; the launch counted afterwards is the evidence
+ * that the refusal actually kept a child off this host, which a returned zero
+ * could never be.
+ */
+export async function runTombstoneSchedule(
+  context: Omit<FactContext, "records">,
+): Promise<ScheduleOutcome | CrossHostFailure> {
   const seed = nextSeed();
   const { request } = activationRecordSet(seed);
   const tombstone = { intentId: `intent-${seed}`, reason: "GOAL_CANCEL", terminalizedAt: AT };
@@ -206,8 +291,13 @@ export function runTombstoneSchedule(): ScheduleOutcome | CrossHostFailure {
       "a tombstoned activation did not refuse as EFFECT_TOMBSTONED/ACTIVATION at the tombstoneWitness leg",
     );
   }
+  const measured = await measureUnactivatedLaunch(context, seed, request);
+  if ("ok" in measured) {
+    return measured;
+  }
   return {
-    launches: 0, launchedPid: null, processExit: { kind: "UNOBSERVED" }, cancelRequested: false,
+    launches: measured.launches, launchedPid: measured.pid,
+    processExit: { kind: "UNOBSERVED" }, cancelRequested: false,
     capturedStdout: new Uint8Array(), records: null, refusal: "EFFECT_TOMBSTONED/ACTIVATION",
   };
 }

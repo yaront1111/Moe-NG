@@ -199,3 +199,39 @@ export function resolveEvidenceOutcome(
 ): FoundationOutcome {
   return evidenceRefs.length === 0 ? honestUnknown(missingEvidence) : passExpected();
 }
+
+export interface FoundationEvidenceCorpus {
+  readonly evidenceRefs: readonly string[];
+  readonly missingEvidence: string;
+}
+
+/**
+ * The corpus each HONEST_UNKNOWN schedule is waiting for, keyed by entry id.
+ *
+ * `missingEvidence` here is a SECOND, INDEPENDENTLY WRITTEN statement of the one
+ * the catalogue row above declares, and the duplication is the mechanism, not an
+ * oversight: a fault executor resolves its outcome through this record rather
+ * than through the entry it is being compared against, so a manifest statement
+ * edited on its own reddens its row instead of reproducing itself.
+ *
+ * `evidenceRefs` is the same ratchet the absence probes carry. It is empty only
+ * while no corpus exists; registering one here makes the schedule report
+ * PASS_EXPECTED against its declared HONEST_UNKNOWN and forces the manifest row
+ * to retire the claim rather than letting the unknown rot into false evidence.
+ */
+export const FOUNDATION_EVIDENCE_CORPORA: Readonly<
+  Record<string, FoundationEvidenceCorpus>
+> = Object.freeze({
+  "schedule:j1-control-plane-overhead": Object.freeze({
+    evidenceRefs: Object.freeze([]),
+    missingEvidence: "no measured control-plane overhead corpus exists at Foundation Preview",
+  }),
+  "schedule:j3-total-storage-loss-rpo": Object.freeze({
+    evidenceRefs: Object.freeze([]),
+    missingEvidence: "no restore-generation corpus exists at Foundation Preview",
+  }),
+  "schedule:j4-review-round-corpus": Object.freeze({
+    evidenceRefs: Object.freeze([]),
+    missingEvidence: "no reviewer-calibration corpus is owned at Foundation Preview",
+  }),
+});
