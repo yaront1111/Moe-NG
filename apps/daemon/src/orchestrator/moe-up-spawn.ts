@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 
 /**
@@ -60,6 +61,38 @@ export function launchEntryPaths(repoRoot: string): LaunchEntryPaths {
     dependencies: join(daemonSrc, "daemon-store-dependencies.ts"),
     wrapperEntry: join(daemonSrc, "orchestrator", "agent-wrapper-main.ts"),
   });
+}
+
+/**
+ * Where a BUILT control room lives, when one does, in the order they are tried:
+ * the checkout's own Vite output, then the packaged artifact's copy of it
+ * (`tools/packaging/pack-windows.ts` stages `apps/control-room/dist` as
+ * `<root>/control-room`). The two never coexist in one tree, so the order is a
+ * statement of which layout this file is written against rather than a tie-break.
+ */
+export const CONTROL_ROOM_BUNDLE_CANDIDATES: readonly (readonly string[])[] = Object.freeze([
+  Object.freeze(["apps", "control-room", "dist"]),
+  Object.freeze(["control-room"]),
+]);
+
+/**
+ * The asset root the launcher hands the daemon, or `null` when no bundle is
+ * built - the ordinary development state, in which the launcher passes no flag,
+ * the daemon hosts nothing, and the two-process recipe is printed instead.
+ * Proven by the one file the daemon's static host demands of a bundle, an
+ * `index.html` that is a regular file directly under the root, so the launcher
+ * never hands over a directory the daemon would refuse to start on.
+ */
+export function controlRoomAssetRoot(repoRoot: string): string | null {
+  for (const segments of CONTROL_ROOM_BUNDLE_CANDIDATES) {
+    const candidate = join(repoRoot, ...segments);
+    try {
+      if (statSync(join(candidate, "index.html")).isFile()) return candidate;
+    } catch {
+      // Absent is the ordinary case, not a fault: a source checkout with no build.
+    }
+  }
+  return null;
 }
 
 /**

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { describeLaunchVariables, resolveLaunchEnv } from "./moe-up-env.js";
 import {
-  NODE_TRANSFORM_TYPES_FLAG, createProcessSpawn, launchEntryPaths,
+  NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot, createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchEntryPaths, LaunchSpawn } from "./moe-up-spawn.js";
 
@@ -127,12 +127,20 @@ function createFleet(onStop: () => void): Fleet {
 function startDaemonChild(
   options: MoeUpOptions, paths: LaunchEntryPaths,
   childEnv: Readonly<Record<string, string | undefined>>, watch: OriginWatch,
+  assetRoot: string | null,
 ): LaunchChildProcess {
   // No --port: `daemon-main` deliberately binds an ephemeral port, and a fixed
   // one is exactly how a second stack collides with a live transport.
+  // `--asset-root` ONLY when a built bundle was found: absent, the daemon hosts
+  // nothing and behaves exactly as it did before the static host existed. The
+  // daemon still proves the root itself (a bundle, and no baked-in secret) and
+  // refuses to start otherwise; this launcher only decides whether to ask.
   const child = options.spawn(
     process.execPath,
-    [NODE_TRANSFORM_TYPES_FLAG, paths.daemonEntry, `--dependencies=${paths.dependencies}`],
+    [
+      NODE_TRANSFORM_TYPES_FLAG, paths.daemonEntry, `--dependencies=${paths.dependencies}`,
+      ...(assetRoot === null ? [] : [`--asset-root=${assetRoot}`]),
+    ],
     { cwd: options.repoRoot, env: childEnv },
   );
   // Accumulated, not matched per chunk: a pipe may split the announcement line
@@ -151,10 +159,22 @@ function startDaemonChild(
   return child;
 }
 
-function announce(origin: string, log: (line: string) => void): void {
+/**
+ * The first line is read by the packaged smoke (`tools/packaging/
+ * smoke-windows-artifact.ps1`) and its wording is fixed. After it, ONE story:
+ * with a hosted bundle the operator opens the daemon's own origin - the literal
+ * loopback IP the daemon printed, because its Host check refuses `localhost` -
+ * and nothing else runs; without one, the two-process recipe as before.
+ */
+function announce(origin: string, assetRoot: string | null, log: (line: string) => void): void {
   log(`moe up: daemon listening on ${origin}`);
-  log(`moe up: control room -> cd apps/control-room && MOE_DAEMON_ORIGIN=${origin} pnpm dev`);
-  log("moe up: then open http://localhost:5173/?live=1 — ctrl-c here stops both children");
+  if (assetRoot === null) {
+    log(`moe up: control room -> cd apps/control-room && MOE_DAEMON_ORIGIN=${origin} pnpm dev`);
+    log("moe up: then open http://localhost:5173/?live=1 - ctrl-c here stops both children");
+    return;
+  }
+  log(`moe up: control room -> open ${origin}/ (hosted by the daemon from ${assetRoot})`);
+  log("moe up: ctrl-c here stops both children");
 }
 
 export async function runMoeUp(options: MoeUpOptions): Promise<number> {
@@ -182,12 +202,15 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
   }
 
   const paths = launchEntryPaths(options.repoRoot);
+  // Decided ONCE, here, so the argv the daemon gets and the lines the operator
+  // reads cannot disagree about whether a bundle is hosted.
+  const assetRoot = controlRoomAssetRoot(options.repoRoot);
   const childEnv = { ...options.env, ...resolution.env };
   const watch = watchForOrigin();
   const fleet = createFleet(() => { watch.settle(null); });
   options.onSignal(() => { fleet.stopEverything(); });
 
-  const daemonExit = fleet.track(startDaemonChild(options, paths, childEnv, watch));
+  const daemonExit = fleet.track(startDaemonChild(options, paths, childEnv, watch, assetRoot));
   const timeoutMs = options.originTimeoutMs ?? DEFAULT_ORIGIN_TIMEOUT_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timedOut = new Promise<null>((resolve) => {
@@ -207,7 +230,7 @@ export async function runMoeUp(options: MoeUpOptions): Promise<number> {
     return fleet.firstFailure() ?? 1;
   }
 
-  announce(origin, options.log);
+  announce(origin, assetRoot, options.log);
   let wrapper: LaunchChildProcess;
   try {
     wrapper = options.spawn(process.execPath, [NODE_TRANSFORM_TYPES_FLAG, paths.wrapperEntry], {

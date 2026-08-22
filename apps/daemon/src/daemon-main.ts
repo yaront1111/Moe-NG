@@ -121,16 +121,36 @@ export async function runDaemonMain(
   // the value is never logged and never travels on a URL. Absent, the daemon
   // mints a random in-process token exactly as before.
   const csrfToken = flag(argv, "csrf-token");
+  // The built control room, hosted on the daemon's OWN origin so `moe start`
+  // prints one URL and the operator opens it. Taken the same way `--port` and
+  // `--csrf-token` are, with an environment fallback for a supervisor that has
+  // no argv to edit. RESOLVED against the process cwd exactly as
+  // `--dependencies` is, because the listener admits an absolute root only.
+  // Empty means unsupplied, so `--asset-root=` hosts nothing rather than
+  // refusing the start.
+  const env = options.env ?? process.env;
+  const suppliedAssetRoot = flag(argv, "asset-root") ?? env["MOE_CONTROL_ROOM_ASSET_ROOT"] ?? "";
+  // The credential the shipped provider authenticates with, read from the SAME
+  // variable it reads, so the static host can refuse to start over a bundle that
+  // has it baked in. It travels in process only: the listener compares bytes and
+  // names a file, never the value.
+  const daemonCredential = env["MOE_DAEMON_CREDENTIAL"] ?? "";
   const started = await startDaemon({
     dependencies: provider,
     log,
+    ...(suppliedAssetRoot === "" ? {} : {
+      assetRoot: resolve(suppliedAssetRoot),
+      assetSecrets: daemonCredential === "" ? [] : [daemonCredential],
+    }),
     ...(csrfToken === null ? {} : { csrfToken }),
     ...(host === null ? {} : { host }),
     ...(port === undefined ? {} : { port }),
   });
   if (!started.ok) {
-    // Copied verbatim, whichever layer refused.
-    log(`${started.code} ${started.layer}`);
+    // Copied verbatim, whichever layer refused. A start refusal's detail is the
+    // operator's fix (a path), so it is printed; no layer puts a secret in one.
+    const detail = "detail" in started && typeof started.detail === "string" ? ` ${started.detail}` : "";
+    log(`${started.code} ${started.layer}${detail}`);
     return 1;
   }
 

@@ -101,6 +101,21 @@ export type DaemonStartResult =
   | BootReconciliationRefused | DaemonEntryRefused | ListenerRefused | StartedDaemon;
 
 export interface DaemonStartOptions {
+  /**
+   * An ABSOLUTE directory of built control-room assets to host on the daemon's
+   * own origin. Absent, nothing is hosted and the transport is exactly what it
+   * was: the listener owns the resolution and the refusal, so this entry adds no
+   * second opinion about what a servable root is.
+   */
+  readonly assetRoot?: string;
+  /**
+   * In-process secrets no hosted asset may contain - the daemon credential the
+   * process was started with. Forwarded to the listener, which adds its own
+   * CSRF token and refuses to START hosting a root whose servable files carry
+   * any of them (`LISTENER_ASSET_ROOT_LEAKS_SECRET`). Meaningless without
+   * `assetRoot`, and never logged or echoed by any layer below.
+   */
+  readonly assetSecrets?: readonly string[];
   readonly csrfToken?: string;
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
@@ -214,6 +229,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
+    ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
+    ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
     ...(options.port === undefined ? {} : { port: options.port }),

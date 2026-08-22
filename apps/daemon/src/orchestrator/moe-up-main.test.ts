@@ -13,7 +13,8 @@ import {
   runMoeUp,
 } from "./moe-up-main.js";
 import {
-  NODE_TRANSFORM_TYPES_FLAG, createProcessSpawn, launchEntryPaths,
+  CONTROL_ROOM_BUNDLE_CANDIDATES, NODE_TRANSFORM_TYPES_FLAG, controlRoomAssetRoot,
+  createProcessSpawn, launchEntryPaths,
 } from "./moe-up-spawn.js";
 import type { LaunchChildProcess, LaunchSpawn } from "./moe-up-spawn.js";
 
@@ -96,9 +97,30 @@ interface Harness {
 
 const tempRoots: string[] = [];
 
+/**
+ * A repo root with NO built control room, so a case that pins the no-hosting
+ * shape cannot flip on whether this checkout happens to have run a Vite build
+ * (`apps/control-room/dist` is gitignored and present on a developer machine).
+ */
+function bareRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), "moe-up-bare-"));
+  tempRoots.push(root);
+  return root;
+}
+
+/** A repo root laid out like the packaged artifact: `<root>/control-room/index.html`. */
+function hostedRoot(): { readonly bundle: string; readonly root: string } {
+  const root = mkdtempSync(join(tmpdir(), "moe-up-hosted-"));
+  tempRoots.push(root);
+  const bundle = join(root, "control-room");
+  mkdirSync(bundle, { recursive: true });
+  writeFileSync(join(bundle, "index.html"), "<!doctype html><title>moe</title>\n");
+  return { bundle, root };
+}
+
 function start(
   env: Readonly<Record<string, string | undefined>>,
-  extra: { readonly originTimeoutMs?: number } = {},
+  extra: { readonly originTimeoutMs?: number; readonly repoRoot?: string } = {},
 ): Harness {
   const { calls, spawn } = recordingSpawn();
   const lines: string[] = [];
@@ -144,12 +166,30 @@ describe("runMoeUp daemon argv", () => {
   });
 
   it("passes NO --port, so the daemon keeps its deliberate ephemeral bind", async () => {
-    const harness = start(GOOD_ENV);
+    const harness = start(GOOD_ENV, { repoRoot: bareRoot() });
     await settle();
     expect(harness.calls[0]?.argv.filter((entry) => entry.startsWith("--port"))).toEqual([]);
     expect(harness.calls[0]?.argv).toHaveLength(3);
     harness.calls[0]?.child.exit(0);
     await harness.result;
+  });
+
+  it("passes --asset-root ONLY when a built control room is present, proven by its index.html", async () => {
+    const { bundle, root } = hostedRoot();
+    const hosted = start(GOOD_ENV, { repoRoot: root });
+    await settle();
+    // The daemon's own flag, the bundle directory itself, and nothing else new:
+    // the daemon still proves the root before it binds.
+    expect(hosted.calls[0]?.argv).toHaveLength(4);
+    expect(hosted.calls[0]?.argv[3]).toBe(`--asset-root=${bundle}`);
+    hosted.calls[0]?.child.exit(0);
+    await hosted.result;
+
+    const bare = start(GOOD_ENV, { repoRoot: bareRoot() });
+    await settle();
+    expect(bare.calls[0]?.argv.filter((entry) => entry.startsWith("--asset-root"))).toEqual([]);
+    bare.calls[0]?.child.exit(0);
+    await bare.result;
   });
 
   it("hands the child the resolved store trio", async () => {
@@ -165,8 +205,8 @@ describe("runMoeUp daemon argv", () => {
 });
 
 describe("runMoeUp origin handshake", () => {
-  it("prints the bound origin and the control-room hint, then starts the wrapper", async () => {
-    const harness = start(GOOD_ENV);
+  it("prints the bound origin and the two-process recipe when nothing is hosted, then starts the wrapper", async () => {
+    const harness = start(GOOD_ENV, { repoRoot: bareRoot() });
     await settle();
     expect(harness.calls).toHaveLength(1);
 
@@ -181,9 +221,33 @@ describe("runMoeUp origin handshake", () => {
     expect(harness.calls[1]?.argv).toHaveLength(2);
 
     const printed = harness.lines.join("\n");
-    expect(printed).toContain(ORIGIN);
-    // The hint names the override the control room's vite config actually reads.
+    // The line the packaged smoke reads, verbatim.
+    expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
+    // The hint names the override the control room's vite config actually reads,
+    // and says nothing about a hosted board because there is none.
     expect(printed).toContain("MOE_DAEMON_ORIGIN");
+    expect(printed).not.toContain("hosted by the daemon");
+
+    harness.calls[0]?.child.exit(0);
+    await harness.result;
+  });
+
+  it("prints ONE URL to open and no dev-server recipe when the daemon hosts the bundle", async () => {
+    const { bundle, root } = hostedRoot();
+    const harness = start(GOOD_ENV, { repoRoot: root });
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    const printed = harness.lines.join("\n");
+    expect(harness.lines).toContain(`moe up: daemon listening on ${ORIGIN}`);
+    // The daemon's own origin - the literal loopback IP it printed, which is the
+    // only Host its static route accepts - and the bundle it was handed.
+    expect(printed).toContain(`open ${ORIGIN}/`);
+    expect(printed).toContain(bundle);
+    expect(printed).not.toContain("MOE_DAEMON_ORIGIN");
+    expect(printed).not.toContain("pnpm dev");
+    expect(printed).not.toContain("localhost");
 
     harness.calls[0]?.child.exit(0);
     await harness.result;
@@ -241,6 +305,34 @@ describe("runMoeUp teardown", () => {
     // Exactly once each: the second interrupt must find the latch already thrown.
     expect(harness.calls[0]?.child.killCount).toBe(1);
     expect(harness.calls[1]?.child.killCount).toBe(1);
+  });
+});
+
+describe("moe up control-room bundle discovery", () => {
+  it("tries the checkout's Vite output, then the packaged layout, and nothing else", () => {
+    expect(CONTROL_ROOM_BUNDLE_CANDIDATES.map((segments) => segments.join("/")))
+      .toEqual(["apps/control-room/dist", "control-room"]);
+  });
+
+  it("finds a bundle in either layout, proven by a regular index.html, and null otherwise", () => {
+    const dev = mkdtempSync(join(tmpdir(), "moe-up-dev-"));
+    tempRoots.push(dev);
+    mkdirSync(join(dev, "apps", "control-room", "dist"), { recursive: true });
+    writeFileSync(join(dev, "apps", "control-room", "dist", "index.html"), "<!doctype html>\n");
+    expect(controlRoomAssetRoot(dev)).toBe(join(dev, "apps", "control-room", "dist"));
+
+    const packaged = hostedRoot();
+    expect(controlRoomAssetRoot(packaged.root)).toBe(packaged.bundle);
+
+    // No bundle, the ordinary development state: null, never a guessed directory.
+    expect(controlRoomAssetRoot(bareRoot())).toBeNull();
+
+    // A directory named index.html is not a bundle; neither is a dist directory
+    // without one. The daemon would refuse both, so the launcher does not ask.
+    const hollow = bareRoot();
+    mkdirSync(join(hollow, "apps", "control-room", "dist", "index.html"), { recursive: true });
+    mkdirSync(join(hollow, "control-room"), { recursive: true });
+    expect(controlRoomAssetRoot(hollow)).toBeNull();
   });
 });
 

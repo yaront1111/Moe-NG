@@ -55,9 +55,11 @@ yourself is equivalent.
 
 ## Control room
 
-The built control-room bundle is in \`control-room\\\`. Serve that directory with
-any static file server and point it at the origin \`moe start\` printed. v0.1
-does not host it from the daemon.
+The built control-room bundle is in \`control-room\\\`. \`moe start\` finds it
+there and the daemon hosts it on its own origin, so the line it prints -
+\`moe up: control room -> open http://127.0.0.1:<port>/\` - is the ONE URL to
+open; nothing else needs serving. If that directory is absent the daemon hosts
+nothing and \`moe start\` prints the two-process recipe instead.
 
 ## What this build is NOT
 

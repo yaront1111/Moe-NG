@@ -19,6 +19,23 @@ export const CONTROL_ROOM_LISTENER_LAYER = "CONTROL_ROOM_LISTENER" as const;
 export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_AFFORDANCE_REQUEST_INVALID",
   "LISTENER_AFFORDANCES_UNAVAILABLE",
+  // The static host's eleven, each naming ONE way a path stops being an asset
+  // under the root. They are separate codes because an operator fixes a
+  // misspelled root, a missing file and an attempted escape differently. Two of
+  // them refuse the START rather than a request: ROOT_INVALID (no such
+  // directory, or one that is not a bundle) and ROOT_LEAKS_SECRET (a servable
+  // file carries this daemon's credential or CSRF token).
+  "LISTENER_ASSET_ENCODING_INVALID",
+  "LISTENER_ASSET_METHOD_INVALID",
+  "LISTENER_ASSET_NOT_FOUND",
+  "LISTENER_ASSET_OUTSIDE_ROOT",
+  "LISTENER_ASSET_PATH_TRAVERSAL",
+  "LISTENER_ASSET_READ_FAILED",
+  "LISTENER_ASSET_ROOT_INVALID",
+  "LISTENER_ASSET_ROOT_LEAKS_SECRET",
+  "LISTENER_ASSET_SEGMENT_INVALID",
+  "LISTENER_ASSET_TOO_LARGE",
+  "LISTENER_ASSET_TYPE_UNKNOWN",
   "LISTENER_BODY_TOO_LARGE",
   "LISTENER_CSRF_INVALID",
   "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID",
@@ -38,6 +55,13 @@ export type ListenerRefusalCode = (typeof LISTENER_REFUSAL_CODES)[number];
 
 export interface ListenerRefused {
   readonly code: ListenerRefusalCode;
+  /**
+   * A START refusal's operator-facing reason, carried IN PROCESS to the entry's
+   * log line: the path the static host could not prove, never a secret. Absent
+   * on every request refusal - `refuseRequest` writes code and layer only - so
+   * this field never reaches the wire.
+   */
+  readonly detail?: string;
   readonly layer: typeof CONTROL_ROOM_LISTENER_LAYER;
   readonly ok: false;
 }
@@ -68,13 +92,32 @@ export function originOf(host: string, port: number): string {
   return `http://${authorityOf(host, port)}`;
 }
 
-export function refuse(code: ListenerRefusalCode): ListenerRefused {
-  return Object.freeze({ code, layer: CONTROL_ROOM_LISTENER_LAYER, ok: false } as const);
+export function refuse(code: ListenerRefusalCode, detail?: string): ListenerRefused {
+  return Object.freeze({
+    code,
+    ...(detail === undefined ? {} : { detail }),
+    layer: CONTROL_ROOM_LISTENER_LAYER,
+    ok: false,
+  } as const);
 }
 
 export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_AFFORDANCE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_AFFORDANCES_UNAVAILABLE") return 503;
+  if (code === "LISTENER_ASSET_ENCODING_INVALID") return 400;
+  if (code === "LISTENER_ASSET_METHOD_INVALID") return 405;
+  if (code === "LISTENER_ASSET_NOT_FOUND") return 404;
+  if (code === "LISTENER_ASSET_READ_FAILED") return 500;
+  // Named rather than defaulted so the ceiling is visible here: the file exists,
+  // is under the root and is the type it claims, and this host still refuses to
+  // publish it. A 403 because that is a refusal to publish, not a missing file
+  // and not a client fault to retry.
+  if (code === "LISTENER_ASSET_TOO_LARGE") return 403;
+  if (code === "LISTENER_ASSET_TYPE_UNKNOWN") return 415;
+  // The remaining asset codes - OUTSIDE_ROOT, PATH_TRAVERSAL, SEGMENT_INVALID,
+  // ROOT_INVALID and ROOT_LEAKS_SECRET - take the 403 default deliberately: each
+  // one is a request for something outside what this host may publish, and 404
+  // would turn the status itself into an oracle for what exists beyond the root.
   if (code === "LISTENER_BODY_TOO_LARGE") return 413;
   if (code === "LISTENER_DOCUMENT_DOSSIER_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DOCUMENT_DOSSIER_UNAVAILABLE") return 503;

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -178,6 +178,61 @@ it("passes --csrf-token through to the listener gate", async () => {
   });
   expect(withoutToken.status).toBe(403);
   expect(await withoutToken.json()).toMatchObject({ code: "LISTENER_CSRF_INVALID" });
+});
+
+/**
+ * The bin's `--asset-root` reaches the static host WITH the credential the
+ * shipped provider authenticates by (`MOE_DAEMON_CREDENTIAL`), so a bundle that
+ * has that credential baked in refuses the start by name - the path printed,
+ * the value not - and a clean bundle is hosted on the daemon's own origin with
+ * the policy headers on.
+ */
+it("hands the daemon credential to the static host's secret scan and hosts a clean bundle", async () => {
+  const temp = await scratch("asset-root");
+  const providerPath = join(temp, "provider.mjs");
+  await writeFile(providerPath, PROVIDER_SOURCE, "utf8");
+  const credential = "baked-daemon-credential-0123456789abcdef";
+
+  const leaking = join(temp, "leaking");
+  await mkdir(join(leaking, "assets"), { recursive: true });
+  await writeFile(join(leaking, "index.html"), "<!doctype html><title>moe</title>\n", "utf8");
+  await writeFile(
+    join(leaking, "assets", "index-abc.js"), `export const c = "${credential}";\n`, "utf8",
+  );
+  const refusedLines: string[] = [];
+  const refused = await runDaemonMain(
+    [`--dependencies=${providerPath}`, "--port=0", `--asset-root=${leaking}`],
+    { env: { MOE_DAEMON_CREDENTIAL: credential }, log: (line) => refusedLines.push(line) },
+  );
+  expect(refused).toBe(1);
+  const refusal = refusedLines.find((line) => line.startsWith("LISTENER_ASSET_ROOT_LEAKS_SECRET"));
+  expect(refusal).toContain("LISTENER_ASSET_ROOT_LEAKS_SECRET CONTROL_ROOM_LISTENER");
+  expect(refusal).toContain("/assets/index-abc.js");
+  expect(refusedLines.join("\n")).not.toContain(credential);
+
+  const clean = join(temp, "clean");
+  await mkdir(clean, { recursive: true });
+  await writeFile(join(clean, "index.html"), "<!doctype html><title>moe</title>\n", "utf8");
+  let origin = "";
+  let shutdown: ((trigger?: string) => Promise<unknown>) | undefined;
+  const code = await runDaemonMain(
+    [`--dependencies=${providerPath}`, "--port=0", `--asset-root=${clean}`],
+    {
+      env: { MOE_DAEMON_CREDENTIAL: credential },
+      log: (line) => {
+        const match = /listening on (http:\/\/127\.0\.0\.1:\d+)/u.exec(line);
+        if (match?.[1] !== undefined) origin = match[1];
+      },
+      onStarted: (stop) => { shutdown = stop; },
+    },
+  );
+  cleanups.push(async () => shutdown?.());
+  expect(code).toBe(0);
+  const page = await fetch(`${origin}/`);
+  expect(page.status).toBe(200);
+  expect(page.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  expect(page.headers.get("x-frame-options")).toBe("DENY");
+  expect(await page.text()).toContain("<title>moe</title>");
 });
 
 it("publishes readiness after the sweep and one shutdown receipt on the drain", async () => {
