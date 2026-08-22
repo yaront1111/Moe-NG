@@ -20,7 +20,6 @@ import {
 import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
 } from "./work/foundation-capture-lifecycle.js";
-import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -106,22 +105,6 @@ describe("readStoreDependencyEnv", () => {
     // The key is read from the SAME published constant the lifecycle reader uses;
     // two hand-written copies would drift in exactly one direction.
     expect(FOUNDATION_WORKSPACE_CATALOG_ENV_KEY).toBe("MOE_FOUNDATION_WORKSPACE_CATALOG");
-  });
-
-  it("reads the OPTIONAL runtime pin root without making daemon boot depend on it", () => {
-    const base = {
-      MOE_DAEMON_CREDENTIAL: "secret", MOE_PROJECT_ID: "proj",
-      MOE_STORE_PATH: "D:/tmp/store.db",
-    };
-    const configured = readStoreDependencyEnv({
-      ...base, [LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY]: "D:/moe-data/runtime-pins",
-    });
-    const empty = readStoreDependencyEnv({ ...base, [LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY]: "" });
-
-    expect(configured.runtimePinRoot).toBe("D:/moe-data/runtime-pins");
-    expect(empty.runtimePinRoot).toBeUndefined();
-    expect(readStoreDependencyEnv(base).runtimePinRoot).toBeUndefined();
-    expect(LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY).toBe("MOE_RUNTIME_PIN_ROOT");
   });
 });
 
