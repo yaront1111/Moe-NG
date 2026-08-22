@@ -9,6 +9,7 @@ import type { VerifierRunCapture } from "./node-verifier.js";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const DEFAULT_OUTPUT_TAIL_BYTES = 262_144;
 const DEFAULT_KILL_GRACE_MS = 5_000;
+const DEFAULT_DRAIN_GRACE_MS = 5_000;
 
 const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
   "COMSPEC", "LANG", "LC_ALL", "LC_CTYPE", "PATH", "PATHEXT", "SYSTEMROOT",
@@ -20,6 +21,13 @@ type SpawnProcess = (
 ) => ChildProcess;
 
 export interface VerifierProcessRunnerOptions {
+  /**
+   * How long stdio may stay open after the recipe's exit is observed before
+   * the capture settles on that exit anyway. A recipe that backgrounds a
+   * server inherits the pipes into a grandchild; without this bound its exit
+   * would never become a close and a passing run would time out instead.
+   */
+  readonly drainGraceMs?: number;
   readonly environment?: NodeJS.ProcessEnv;
   readonly killGraceMs?: number;
   readonly killProcessGroup?: (pid: number, signal: NodeJS.Signals) => void;
@@ -72,6 +80,7 @@ export function createVerifierProcessRunner(
 ): VerifierProcessRunner {
   const sourceEnvironment = options.environment ?? process.env;
   const environment = runtimeEnvironment(sourceEnvironment);
+  const drainGraceMs = options.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS;
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   const outputTailBytes = options.outputTailBytes ?? DEFAULT_OUTPUT_TAIL_BYTES;
@@ -100,14 +109,18 @@ export function createVerifierProcessRunner(
       let outputTail: Buffer = Buffer.alloc(0);
       let settled = false;
       let childClosed = false;
+      let childExited = false;
+      let exitStatus: number | null = null;
       let treeKillConfirmed = false;
       let killHelper: ChildProcess | undefined;
       let termination: "CANCEL" | "PROCESS_ERROR" | "TIMEOUT" | null = null;
+      let drainTimer: ReturnType<typeof setTimeout> | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
 
       const cleanup = (): void => {
         if (timer !== undefined) clearTimeout(timer);
+        if (drainTimer !== undefined) clearTimeout(drainTimer);
         if (killTimer !== undefined) clearTimeout(killTimer);
         if (killHelper !== undefined) {
           try { killHelper.kill("SIGKILL"); } catch { /* already gone */ }
@@ -175,10 +188,47 @@ export function createVerifierProcessRunner(
         if (termination === "CANCEL") finishCancellation();
         else finish(null);
       };
+      const releaseStdio = (): void => {
+        for (const stream of [child.stdout, child.stderr]) {
+          try { stream?.destroy(); } catch { /* already released */ }
+        }
+      };
+      // A best-effort signal, not containment: the recipe's verdict has
+      // already landed, so a straggler the group signal cannot reach (ESRCH, a
+      // grandchild that left the group) is a leak for the hermetic-verifier
+      // release work, never a reason to fail the runner closed. Windows has no
+      // group to signal and the observed pid is stale, so nothing is killed.
+      const killStragglersBestEffort = (): void => {
+        if (platform === "win32" || child.pid === undefined) return;
+        try { killProcessGroup(-child.pid, "SIGKILL"); } catch { /* group already gone */ }
+      };
+      // Settles a recipe whose exit was observed while stdio never closed.
+      // Destroying our pipe ends makes the real close arrive afterwards; the
+      // settled guard in every finisher keeps it from settling twice.
+      const settleExited = (): void => {
+        if (settled || childClosed) return;
+        if (termination === null) killStragglersBestEffort();
+        releaseStdio();
+        childClosed = true;
+        if (termination === null) finish(exitStatus);
+        else maybeFinishTermination();
+      };
       child.on("close", (code) => {
         childClosed = true;
         if (termination === null) finish(code);
         else maybeFinishTermination();
+      });
+      // close needs every stdio pipe released, and a grandchild that inherited
+      // them (a backgrounded server) keeps the pipes open long after the recipe
+      // exits. Grading on close alone would turn that passing run into a
+      // timeout; exit fixes the status, and the drain grace bounds the wait.
+      child.on("exit", (code) => {
+        if (childExited) return;
+        childExited = true;
+        exitStatus = code;
+        if (settled || childClosed) return;
+        drainTimer = setTimeout(settleExited, drainGraceMs);
+        if (typeof drainTimer.unref === "function") drainTimer.unref();
       });
       // Keep this listener after settlement: a late/repeated EventEmitter
       // `error` must remain contained instead of becoming an uncaught throw.
@@ -204,6 +254,14 @@ export function createVerifierProcessRunner(
           return;
         }
         if (platform === "win32") {
+          if (childExited) {
+            // The pid is stale once exit is observed: taskkill could only
+            // report the tree gone (128) or, worse, target whatever reused the
+            // pid. The observed exit is the proof containment exists to reach.
+            treeKillConfirmed = true;
+            maybeFinishTermination();
+            return;
+          }
           const root = systemRoot();
           if (root === null) {
             killDirectBestEffort();
@@ -231,10 +289,11 @@ export function createVerifierProcessRunner(
               killerSettled = true;
               // 128 is taskkill's "no running instance": the tree is ALREADY
               // dead, which is the outcome containment exists to reach, not an
-              // escape from it. A closed direct child is the same proof for any
-              // other nonzero exit — a recipe that dies in the same instant the
-              // killer lands must not shut the whole runner down.
-              if (code !== 0 && code !== 128 && !childClosed) {
+              // escape from it. A direct child whose exit or close landed is
+              // the same proof for any other nonzero exit: a recipe that dies
+              // in the same instant the killer lands must not shut the whole
+              // runner down.
+              if (code !== 0 && code !== 128 && !childClosed && !childExited) {
                 killDirectBestEffort();
                 failContainment("TREE_KILL_FAILED");
                 return;
@@ -268,8 +327,28 @@ export function createVerifierProcessRunner(
 
       const beginTermination = (reason: "CANCEL" | "PROCESS_ERROR" | "TIMEOUT"): void => {
         if (settled || termination !== null) return;
+        if (childExited) {
+          // The leader is already dead and only a straggler can still pin the
+          // pipes. Cancellation outranks the recorded exit and still signals
+          // the group with containment semantics; a deadline or error reaching
+          // a dead leader merely cuts the drain short, since the exit it would
+          // overwrite with a kill outcome landed inside the deadline.
+          if (reason === "CANCEL") {
+            termination = reason;
+            killTree();
+          }
+          settleExited();
+          return;
+        }
         termination = reason;
         killTimer = setTimeout(() => {
+          // CLOSE_NOT_OBSERVED names a live leader that survived SIGKILL. One
+          // whose exit landed is dead; a pipe still pinned by a straggler that
+          // escaped the group is released so the kill outcome can settle.
+          if (childExited && treeKillConfirmed) {
+            settleExited();
+            return;
+          }
           failContainment(treeKillConfirmed ? "CLOSE_NOT_OBSERVED" : "TREE_KILL_FAILED");
         }, killGraceMs);
         if (typeof killTimer.unref === "function") killTimer.unref();
