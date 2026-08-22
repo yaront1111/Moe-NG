@@ -147,6 +147,24 @@ it("keeps decision decode and its receipt tail check on one snapshot", () => {
   }
 });
 
+it("runs the startup validation sweep on one snapshot across a concurrent commit", () => {
+  const h = harness("startup");
+  try {
+    const decided = h.writer.commitExpectedVersionDecision(proposedDecision());
+    expect(decided.disposition).toBe("DECIDED");
+    // The decision sweep re-proves the receipt's aggregate tail; a writer
+    // landing between its head and tail reads must not fail open() with a
+    // permanent STORE_CORRUPT verdict on a healthy database.
+    h.onTailScan(() => commitEvent(h.writer, "goal-1", 2, 1));
+    expect(() => h.reader.validateStartup()).not.toThrow();
+    // Fresh call, fresh snapshot: proves the interleaved commit landed inside
+    // the sweep, so the assertion above measured isolation, not an idle hook.
+    expect(h.reader.getAggregateVersion("goal-1")).toBe(2);
+  } finally {
+    h.cleanup();
+  }
+});
+
 it("preflights an expected-version decision without a false corruption verdict", () => {
   const h = harness("preflight");
   try {

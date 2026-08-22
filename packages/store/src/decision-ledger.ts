@@ -34,13 +34,19 @@ class DecisionLedgerStore extends RecoveryInitialInstallStore {
   }
 
   public validateStartup(): void {
-    // The receipt sweep memoizes each receipt it proves so the decision sweep
-    // reuses that materialization instead of re-reading and re-hashing the
-    // same rows; the memo lives exactly as long as this call.
-    this.withStartupReceiptMemo(() => {
-      this.validateAllReceipts();
-      this.validateAllCommandDecisions();
-      this.validateReservedDecisionNamespace();
+    // One read snapshot for all three sweeps: assertAggregateTail issues two
+    // SELECTs (head, then tail), and in autocommit a writer committing between
+    // them would surface as a false STORE_CORRUPT on a healthy store — the
+    // same hazard the public read paths already close with snapshot reads.
+    this.readSnapshotOperation("startup validation", () => {
+      // The receipt sweep memoizes each receipt it proves so the decision sweep
+      // reuses that materialization instead of re-reading and re-hashing the
+      // same rows; the memo lives exactly as long as this call.
+      this.withStartupReceiptMemo(() => {
+        this.validateAllReceipts();
+        this.validateAllCommandDecisions();
+        this.validateReservedDecisionNamespace();
+      });
     });
   }
 }
