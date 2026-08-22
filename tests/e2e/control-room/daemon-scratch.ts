@@ -76,29 +76,57 @@ export function createLaneScratch(): LaneScratch {
 }
 
 /**
- * The daemon's environment. `MOE_APPROVAL_MODE`/`MOE_SPEED_MODE_DELAY_MS` are
- * daemon-side approval policy the seed cannot supply — the delay must be exactly
- * 0 or `approval.decide` answers APPROVAL_HUMAN_REVIEW_REQUIRED — and the daemon
- * needs the SAME spec directory as the seed or it publishes no `node.deliver`.
+ * Which approval path the daemon runs under. Stated by the lane, never inherited.
+ *
+ * SPEED is the daemon's ONE ungated path and needs both settings: the delay must
+ * be exactly 0 or `approval.decide` answers APPROVAL_HUMAN_REVIEW_REQUIRED.
+ *
+ * HUMAN states NEITHER setting rather than spelling a mode of its own, because
+ * `approval-policy-settings.ts` matches SPEED exactly and returns REQUIRE_HUMAN
+ * for every other input including an absent one - a "HUMAN" literal would read
+ * as a mode the daemon knows while taking the identical absent-setting branch.
+ * A HUMAN lane still commits `approval.decide` from the board: the operator
+ * credential is the human seat, and the daemon mints the human-review witness at
+ * the authenticated seam (`daemon-command-registry.ts`).
  */
-export function daemonEnv(scratch: LaneScratch): Readonly<Record<string, string | undefined>> {
+export type LaneApprovalMode = "HUMAN" | "SPEED";
+
+/**
+ * The daemon's environment. `MOE_APPROVAL_MODE`/`MOE_SPEED_MODE_DELAY_MS` are
+ * daemon-side approval policy the seed cannot supply, and the daemon needs the
+ * SAME spec directory as the seed or it publishes no `node.deliver`.
+ *
+ * The two approval keys are set to `undefined` rather than omitted under HUMAN:
+ * `process.env` is spread above, so a host that already exports either one would
+ * otherwise hand a HUMAN lane the speed path. `spawn` drops an undefined value
+ * instead of writing the string "undefined", which is what makes the absent
+ * setting actually absent in the child.
+ */
+export function daemonEnv(
+  scratch: LaneScratch, approval: LaneApprovalMode = "SPEED",
+): Readonly<Record<string, string | undefined>> {
+  const speed = approval === "SPEED";
   return Object.freeze({
     ...process.env,
-    MOE_APPROVAL_MODE: "SPEED",
+    MOE_APPROVAL_MODE: speed ? "SPEED" : undefined,
     MOE_DAEMON_CREDENTIAL: LANE_CREDENTIAL,
     MOE_NODE_SPECS_DIR: scratch.nodeSpecsDir,
     MOE_PROJECT_ID: scratch.projectId,
-    MOE_SPEED_MODE_DELAY_MS: "0",
+    MOE_SPEED_MODE_DELAY_MS: speed ? "0" : undefined,
     MOE_STORE_PATH: scratch.storePath,
   });
 }
 
-/** The seed reads four variables of its own and refuses each missing one by name. */
+/**
+ * The seed reads four variables of its own and refuses each missing one by name.
+ * It inherits the lane's approval mode so the two children cannot disagree about
+ * a policy only one of them can observe.
+ */
 export function seedEnv(
-  scratch: LaneScratch, daemonOrigin: string,
+  scratch: LaneScratch, daemonOrigin: string, approval: LaneApprovalMode = "SPEED",
 ): Readonly<Record<string, string | undefined>> {
   return Object.freeze({
-    ...daemonEnv(scratch),
+    ...daemonEnv(scratch, approval),
     MOE_CSRF_TOKEN: LANE_CSRF_TOKEN,
     MOE_DAEMON_ORIGIN: daemonOrigin,
   });

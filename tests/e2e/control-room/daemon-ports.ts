@@ -11,6 +11,12 @@
  * shipped seed and the daemon is the shipped daemon, so what the browser reads is
  * the daemon's own answer and not a fixture standing in for one.
  *
+ * THE SEED IS THE ONE OPTIONAL CHILD (`DaemonLaneOptions.seed`). A lane that
+ * skips it opens the browser onto an EMPTY store, which is the only arrangement
+ * in which the operator's own clicks are what drive the chain - a seeded lane
+ * asserts over a chain the seed already completed server-side, and cannot see a
+ * board-driven move break. Everything else is identical, spec directory included.
+ *
  * REASON CODES ARE THIS MODULE'S OWN, mirroring `harness.ts`'s frozen tuple. A
  * child that never announces itself fails with a code naming WHICH child, because
  * "the journey timed out" is the one report an operator cannot act on. Process
@@ -23,7 +29,7 @@ import { freePort, killTree, spawnNode, survivingChildren } from "./daemon-child
 import {
   LANE_CREDENTIAL, LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv, serverEnv,
 } from "./daemon-scratch.js";
-import type { LaneScratch, LiveCredentialMode } from "./daemon-scratch.js";
+import type { LaneApprovalMode, LaneScratch, LiveCredentialMode } from "./daemon-scratch.js";
 
 export { survivingPids } from "./daemon-children.js";
 
@@ -58,8 +64,12 @@ export interface DaemonLane {
    * The seed child's pid, for the run's evidence line ONLY. It has already exited
    * by the time `body` runs, so the number may name some other process by now and
    * is never probed; see `lanePids`.
+   *
+   * NULL when the lane ran with `seed: "NONE"`. There was no seed child at all,
+   * and any number here would name a stranger - a lane that reports a pid it
+   * never spawned is the one evidence line an operator cannot check.
    */
-  readonly seedPid: number;
+  readonly seedPid: number | null;
   readonly serverPid: number;
 }
 
@@ -85,7 +95,7 @@ interface StartedChild {
 }
 
 async function startDaemon(
-  root: string, scratch: LaneScratch, tracked: ChildProcess[],
+  root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
 ): Promise<LaneRefused | StartedChild> {
   const watched = spawnNode([
     "--experimental-transform-types",
@@ -95,7 +105,7 @@ async function startDaemon(
     // dev daemon, and the origin is read back rather than assumed.
     "--port=0",
     `--csrf-token=${LANE_CSRF_TOKEN}`,
-  ], root, daemonEnv(scratch));
+  ], root, daemonEnv(scratch, approval));
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
   const failure: { message: string | null } = { message: null };
@@ -114,12 +124,13 @@ async function startDaemon(
 }
 
 async function runSeed(
-  root: string, scratch: LaneScratch, origin: string, tracked: ChildProcess[],
+  root: string, scratch: LaneScratch, origin: string,
+  approval: LaneApprovalMode, tracked: ChildProcess[],
 ): Promise<LaneRefused | number> {
   const watched = spawnNode([
     "--experimental-transform-types",
     `${root}/apps/daemon/src/orchestrator/demo-seed-main.ts`,
-  ], root, seedEnv(scratch, origin));
+  ], root, seedEnv(scratch, origin, approval));
   // Tracked even though it exits on its own: a seed that HANGS hits its budget
   // below and would otherwise outlive the lane, since teardown only kills what
   // it was told about. A seed that exited is left alone by the same teardown,
@@ -160,9 +171,30 @@ async function startServer(
   return { announced, pid };
 }
 
+/**
+ * Whether the shipped demo seed runs between the daemon and the dev server.
+ *
+ * SHIPPED is the seeded journey: `demo-seed-main.ts` drives the whole J1
+ * bootstrap chain SERVER-SIDE, so the browser opens onto a board the seed
+ * already finished. NONE leaves the store empty and hands the browser the
+ * chain's FIRST move - the only lane in which a board click is what commits,
+ * and therefore the only lane in which a daemon-side gate change can be caught
+ * by clicking. The scratch node spec is written either way, so `node.deliver`
+ * still appears once approval lands, however the approval got there.
+ */
+export type LaneSeedMode = "NONE" | "SHIPPED";
+
 export interface DaemonLaneOptions {
+  /**
+   * The daemon's approval policy. Omitted is SPEED, which is what every seeded
+   * caller has always run under; see `LaneApprovalMode` for why HUMAN states no
+   * mode at all rather than a literal of its own.
+   */
+  readonly approval?: LaneApprovalMode;
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
+  /** Omitted is SHIPPED: today's behaviour, unchanged for every existing caller. */
+  readonly seed?: LaneSeedMode;
 }
 
 async function openLane<T>(
@@ -170,11 +202,16 @@ async function openLane<T>(
   body: (lane: DaemonLane) => Promise<T>,
 ): Promise<LaneOutcome<T>> {
   const scratch = createLaneScratch();
+  const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
-  const daemon = await startDaemon(root, scratch, tracked);
+  const daemon = await startDaemon(root, scratch, approval, tracked);
   if ("ok" in daemon) return daemon;
-  const seeded = await runSeed(root, scratch, daemon.announced, tracked);
-  if (typeof seeded !== "number") return seeded;
+  // NULL is "no seed child was ever spawned", which is a different fact from
+  // "the seed ran": only a number reaching `seedPid` may be read as a pid.
+  const seeded = (options.seed ?? "SHIPPED") === "NONE"
+    ? null
+    : await runSeed(root, scratch, daemon.announced, approval, tracked);
+  if (seeded !== null && typeof seeded !== "number") return seeded;
   const served = await startServer(root, daemon.announced, options.liveCredentials, tracked);
   if ("ok" in served) return served;
   return Object.freeze({
@@ -242,6 +279,7 @@ export async function withDaemonBackedControlRoom<T>(
  * exited 0, so by the time any caller probes, its number is a reaped process's
  * number and can only ever name a stranger. A seed that hangs never reaches
  * `body` at all; it is refused as E2E_SEED_REFUSED and killed through its handle.
+ * Under `seed: "NONE"` there is no third process to account for either way.
  */
 export const lanePids = (lane: DaemonLane): readonly number[] =>
   Object.freeze([lane.daemonPid, lane.serverPid]);

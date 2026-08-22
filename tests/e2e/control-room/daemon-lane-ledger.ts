@@ -12,12 +12,18 @@ import { DAEMON_LANE_OWNER } from "./journey-coverage.js";
  */
 
 /**
- * The one journey the lane drives, recorded with its bar AND its limits.
+ * The READING journey, recorded with its bar AND its limits.
  *
  * `journeyTitle` is checked against the spec file's own `test("...")` opener by
  * `daemon-lane-ledger.test.ts`, so this record cannot outlive the journey it
  * claims: delete or rename the test and the ledger goes RED instead of continuing
  * to advertise a lane nothing drives.
+ *
+ * IT IS NO LONGER THE LANE'S ONLY JOURNEY, and `doesNotProve` below is therefore
+ * a statement about THIS journey and not about the lane: `board-chain.spec.ts`
+ * opens an unseeded lane and clicks the whole bootstrap chain. That journey holds
+ * no record here, so nothing pins its title the way this one is pinned - see the
+ * note in that file about which regression class it exists to catch.
  */
 export const DAEMON_LANE_RECORD = Object.freeze({
   doesNotProve:
