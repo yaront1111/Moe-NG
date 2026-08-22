@@ -214,7 +214,10 @@ function scopeObservation(head: string): ScopeObservation {
 function captureAnswer(tree: CandidateTree): Record<string, unknown> {
   return {
     authoredPaths: ["pkg/src/authored.ts"],
-    declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
+    // EMPTY, matching the runner's production pin at
+    // `foundation-workspace-capture.ts:221`; a caller-supplied roster is
+    // refused on the Foundation lane (task-4a318d03 condition 2).
+    declaredArtifactRefs: [],
     resultTreeEntries: [
       {
         byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: BASE_PATH,

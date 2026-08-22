@@ -527,7 +527,10 @@ function scopeObservation(): ScopeObservation {
 
 function captureAnswer(): Record<string, unknown> {
   return {
-    authoredPaths: ["pkg/src/authored.ts"], declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
+    // `declaredArtifactRefs` EMPTY, matching the runner's production pin at
+    // `foundation-workspace-capture.ts:221`; the Foundation artifact seal
+    // refuses a caller-supplied roster (task-4a318d03 condition 2).
+    authoredPaths: ["pkg/src/authored.ts"], declaredArtifactRefs: [],
     resultTreeEntries: [
       { byteLength: 10, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts", sha256: DIGEST_A },
       { byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts", sha256: DIGEST_B },

@@ -26,6 +26,7 @@ import { encodeFoundationPayload } from "../work/foundation-attempt-codec.js";
 import {
   FOUNDATION_RESERVATION_VERSION, deriveDispatchAggregateId,
 } from "../work/foundation-attempt-contracts.js";
+import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import type { FoundationAttemptBound } from "../work/foundation-attempt-contracts.js";
 import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationAttemptRecord,
@@ -177,7 +178,12 @@ function captureAnswer(tree: CandidateTree): Record<string, unknown> {
   if (!observed.ok) throw new Error(`scope fixture failed: ${observed.code}`);
   return {
     authoredPaths: ["pkg/src/authored.ts"],
-    declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
+    // EMPTY, matching what the runner's production capture actually pins
+    // (`foundation-workspace-capture.ts:221`) and what
+    // `foundation-capture-producer.test.ts:240` asserts the producer yields.
+    // A fabricated ref here would hand the Foundation lane a roster no capture
+    // can produce, and the seal refuses exactly that (task-4a318d03 condition 2).
+    declaredArtifactRefs: [],
     resultTreeEntries: [
       {
         byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
@@ -229,9 +235,40 @@ function nested(value: Record<string, unknown>, key: string): Record<string, unk
 
 export interface SeededAttempt {
   readonly attemptAggregateId: string;
+  /** `record.attempt.attemptId`, the ref downstream ledgers bind their rows to. */
+  readonly attemptRef: string;
+  readonly bound: FoundationAttemptBound;
   /** The real tree the attempt's input manifest was sealed over; verify against THIS root. */
   readonly candidateRoot: string;
+  /** `bound.target` — the aggregate carrying RESERVED/RECORDED for this attempt. */
+  readonly dispatchAggregateId: string;
+  readonly record: ActivationLedgerRecord;
   readonly recordDigest: string;
+}
+
+export interface SeedProvenAttemptOptions {
+  /**
+   * REPLACES THE CAPTURE ANSWER, so a caller can drive the SAME production chain
+   * into `FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN` (`foundation-attempt-store.ts:215-217`)
+   * without duplicating sixty lines of it. The chain is unchanged — only what the
+   * capture reported differs — so an arm using this is still testing production.
+   */
+  readonly answer?: Record<string, unknown>;
+  /**
+   * Overrides exactly ONE key of the REAL capture answer. Everything else stays
+   * what the production capture reported, so an arm offering a hostile roster is
+   * still driving a valid attempt rather than a hand-built one.
+   */
+  readonly declaredArtifactRefs?: unknown;
+}
+
+function seededAnswer(
+  tree: CandidateTree, options: SeedProvenAttemptOptions,
+): Record<string, unknown> {
+  if (options.answer !== undefined) return options.answer;
+  const real = captureAnswer(tree);
+  return options.declaredArtifactRefs === undefined
+    ? real : { ...real, declaredArtifactRefs: options.declaredArtifactRefs };
 }
 
 /**
@@ -242,6 +279,7 @@ export interface SeededAttempt {
  */
 export function seedProvenAttempt(
   store: SqliteEventStore, nodeRef: string, label: string = nextLabel(nodeRef),
+  options: SeedProvenAttemptOptions = {},
 ): SeededAttempt {
   // The activation below is the exact call whose authority moves from the caller's budget
   // section to the durable ACTIVE graph (task-e194c5f6 step 6). Enriching the world here is a
@@ -319,13 +357,16 @@ export function seedProvenAttempt(
     throw new Error("reservation fixture was not committed");
   }
   recordProvenFoundationAttempt(store, bound, record, sealedInput(tree), {
-    answer: captureAnswer(tree), observation: observed[0], registration: observed[1],
+    answer: seededAnswer(tree, options),
+    observation: observed[0], registration: observed[1],
   });
   // The digest always comes from the RE-DECODED durable record, never from the writer's answer.
   const stored = readFoundationAttemptRecord(store, activationAggregate);
   if (!stored.ok) throw new Error(`record fixture unreadable: ${stored.code}`);
   return {
-    attemptAggregateId: activationAggregate, candidateRoot: tree.root, recordDigest: stored.digest,
+    attemptAggregateId: activationAggregate, attemptRef: record.attempt.attemptId, bound,
+    candidateRoot: tree.root, dispatchAggregateId: bound.target, record,
+    recordDigest: stored.digest,
   };
 }
 

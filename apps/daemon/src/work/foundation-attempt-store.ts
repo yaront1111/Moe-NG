@@ -4,6 +4,7 @@ import {
 import type { WorkspaceInputManifest } from "@moe/runner";
 import type { CommandDecisionResponse, SqliteEventStore, StoredEvent } from "@moe/store";
 
+import { sealFoundationArtifactRoster } from "./foundation-artifact-ledger.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { snapshotFoundationRecord } from "../activation/foundation-activation-transition.js";
@@ -227,6 +228,20 @@ export function recordProvenFoundationAttempt(
     scopeObservation: answer["scopeObservation"] as never,
   });
   if (!built.ok) return advisory(built.code, RUNNER_WORKSPACE_LAYER);
+  // SEALED BEFORE THE PROVEN RECORD SETTLES, and the ordering is the requirement:
+  // a seal landing after the settle is observable-too-late by definition, and the
+  // receipt consumer (task-a20e8ef6) must not be able to see a PROVEN attempt whose
+  // artifactDigest has no producer. A REFUSED seal therefore never settles PROVEN —
+  // it takes the same advisory UNKNOWN treatment :229 already gives a refused
+  // result manifest, carrying the seal's own code and layer.
+  const sealed = sealFoundationArtifactRoster(store, {
+    attemptAggregateId: bound.target, attemptRef: record.attempt.attemptId,
+    commandId: bound.commandId, correlationId: bound.correlationId,
+    declaredArtifactRefs: answer["declaredArtifactRefs"],
+    inputManifestSha256: input["sha256"] as string, principalId: bound.principalId,
+    projectId: bound.projectId, resultManifestSha256: built.manifest.sha256,
+  });
+  if (!sealed.ok) return advisory(sealed.code, sealed.layer);
   return settleFoundationAttempt(store, bound, record, input, {
     observation: capture.observation, reasonCode: null, reasonLayer: null,
     registration: capture.registration,
