@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 
 import { canonicalProjectionState } from "../outbox-relay/outbox-relay-digests.js";
-import { MAX_PAGE_SIZE } from "../store-contracts.js";
+import { DurableStoreError, MAX_PAGE_SIZE } from "../store-contracts.js";
 import type { StoredEvent } from "../store-contracts.js";
 import { requireIdentifier } from "../store-input-primitives.js";
 import { foldProjection } from "./projection-fold.js";
@@ -48,6 +48,8 @@ interface Progress {
 }
 
 const ORIGIN_EXPECTATION: Expectation = Object.freeze({ digest: null, position: 0n });
+const OUTCOME_UNKNOWN_DETAIL =
+  "projection rebuild write outcome could not be proven; reopen and verify the projections row";
 
 class RebuildRefusal extends Error {
   public readonly result: ProjectionRebuildRefused;
@@ -116,11 +118,19 @@ function readDurable(database: DatabaseSync, name: string): Expectation | null {
   });
 }
 
-function rollbackQuietly(database: DatabaseSync): void {
+/** A transaction that already ended has nothing to roll back; one that is still open and
+ *  cannot be rolled back leaves the write's fate unprovable, which is never a clean refusal. */
+function rollback(database: DatabaseSync, cause: unknown): void {
+  if (!database.isTransaction) {
+    return;
+  }
   try {
     database.exec("ROLLBACK");
-  } catch {
-    // The transaction is already closed; the refusal below is the reportable outcome.
+  } catch (rollbackError) {
+    throw new DurableStoreError(
+      "OUTCOME_UNKNOWN", OUTCOME_UNKNOWN_DETAIL,
+      { cause: new AggregateError([cause, rollbackError]) },
+    );
   }
 }
 
@@ -131,12 +141,16 @@ function rollbackQuietly(database: DatabaseSync): void {
  * walk read at its start), which is what makes a foreign advance between pages, or a row
  * that appeared after the walk began, lose the compare-and-set rather than get overwritten.
  * The row observed here is never adopted as the base: it only feeds the two refusals below.
+ * A COMMIT that throws after the transaction already ended may have durably landed, so it
+ * surfaces as OUTCOME_UNKNOWN rather than as a was-not-advanced refusal for a write that
+ * may have advanced the row.
  */
 function persist(
   database: DatabaseSync, plan: RebuildPlan, expected: Expectation,
   position: bigint, digest: string,
 ): Expectation {
   database.exec("BEGIN IMMEDIATE");
+  let commitAttempted = false;
   try {
     const observed = readDurable(database, plan.name);
     if (observed !== null && observed.position > position) {
@@ -155,9 +169,13 @@ function persist(
         `the rebuild lost its compare-and-set on ${JSON.stringify(plan.name)}: ` +
         `SQLite changed ${changes} rows`);
     }
+    commitAttempted = true;
     database.exec("COMMIT");
   } catch (error) {
-    rollbackQuietly(database);
+    if (commitAttempted && !database.isTransaction) {
+      throw new DurableStoreError("OUTCOME_UNKNOWN", OUTCOME_UNKNOWN_DETAIL, { cause: error });
+    }
+    rollback(database, error);
     if (error instanceof RebuildRefusal) {
       throw error;
     }

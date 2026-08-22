@@ -1,7 +1,8 @@
-import type { DatabaseSync } from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 
 import { describe, expect, it } from "vitest";
 
+import { DurableStoreError } from "../store-contracts.js";
 import type { ProjectionReducer, ProjectionState } from "./projection-fold.js";
 import type { StoredEventUpcaster } from "./projection-upcast.js";
 import {
@@ -29,6 +30,13 @@ interface RebuildOptions {
   readonly name?: string;
   readonly pageLimit?: number;
   readonly reducers?: Readonly<Record<string, ProjectionReducer>>;
+  /**
+   * Reaches the rebuild's OWN connection before it is handed over, so a fault can be
+   * installed on that instance alone. A fault on `DatabaseSync.prototype` would also land
+   * on the store's connection, whose snapshot reads commit too, and the store would answer
+   * for it long before the rebuild reached its write.
+   */
+  readonly onDatabase?: (database: DatabaseSync) => void;
   /** Wraps the opened store so a test can act between the walk's page reads. */
   readonly source?: (store: ProjectionLedgerSource) => ProjectionLedgerSource;
   readonly state?: ProjectionState;
@@ -41,15 +49,17 @@ function show(value: unknown): string {
 }
 
 function rebuild(path: string, options: RebuildOptions = {}): ProjectionRebuildResult {
-  return withDrillStore(path, (store) => withDrillDatabase(path, (database) =>
-    rebuildProjection(database, {
+  return withDrillStore(path, (store) => withDrillDatabase(path, (database) => {
+    options.onDatabase?.(database);
+    return rebuildProjection(database, {
       name: options.name ?? DRILL_PROJECTION,
       pageLimit: options.pageLimit ?? 100,
       reducers: options.reducers ?? DRILL_REDUCERS,
       source: options.source?.(store) ?? store,
       state: options.state ?? DRILL_ORIGIN_STATE,
       upcaster: options.upcaster ?? DRILL_UPCASTER,
-    })));
+    });
+  }));
 }
 
 /** A ledger source that runs `onFirstPage` on its OWN connection inside the first page read:
@@ -68,6 +78,63 @@ function interposedSource(
       return store.readEventsAfter(afterGlobalPosition, limit);
     },
   };
+}
+
+/**
+ * Faults exactly one COMMIT on ONE connection, by shadowing `exec` as an own property of
+ * that instance: the store holds its own connection whose snapshot reads commit too, and a
+ * fault on the shared prototype is answered by the store as STORE_UNAVAILABLE before the
+ * rebuild ever reaches its write.
+ *
+ * `LOST_ACKNOWLEDGEMENT` runs the COMMIT and then throws, modelling the frame reaching the
+ * WAL with its acknowledgement lost; `REJECTED` throws before it runs, leaving the
+ * transaction open and the write provably absent.
+ */
+function faultCommit(
+  fault: "LOST_ACKNOWLEDGEMENT" | "REJECTED",
+): (database: DatabaseSync) => void {
+  let pending = true;
+  return (database) => {
+    const original = database.exec.bind(database);
+    Object.defineProperty(database, "exec", {
+      configurable: true,
+      value: (sql: string): void => {
+        if (pending && sql.trim() === "COMMIT") {
+          pending = false;
+          if (fault === "REJECTED") {
+            throw new Error("simulated COMMIT rejection before execution");
+          }
+          original(sql);
+          throw new Error("simulated lost COMMIT acknowledgement");
+        }
+        original(sql);
+      },
+    });
+  };
+}
+
+function captureStoreError(action: () => unknown): DurableStoreError {
+  let captured: unknown;
+  try {
+    action();
+  } catch (error) {
+    captured = error;
+  }
+  expect(captured).toBeInstanceOf(DurableStoreError);
+  return captured as DurableStoreError;
+}
+
+/** Two commits relayed, three more only committed: a rebuild must ADVANCE the durable row
+ *  from 2 to 5, so whether its write landed is visible in the row and not just in the verdict. */
+function seedAdvancingLedger(path: string): void {
+  withDrillStore(path, (store) => {
+    relayHistory(store, [crashCommit(0), crashCommit(1)]);
+    for (let index = 2; index < 5; index += 1) {
+      store.commit(drillCommitInput(crashCommit(index), index));
+    }
+  });
+  expect(withDrillDatabase(path, (database) => readDurableProjection(database)?.position))
+    .toBe(2n);
 }
 
 function plant(database: DatabaseSync, position: string, digest: string | null): void {
@@ -250,6 +317,46 @@ describe("rebuildProjection", () => {
       expect(result.detail).toContain("lost its compare-and-set");
       expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
         .toStrictEqual({ digest: FOREIGN_DIGEST, position: 2n });
+    });
+  });
+
+  it("raises OUTCOME_UNKNOWN when its COMMIT lands without acknowledgement", () => {
+    withDrillDirectory((path) => {
+      seedAdvancingLedger(path);
+
+      // The frame is durable and the transaction has ended when COMMIT throws, so a
+      // was-not-advanced refusal here would describe a write that in fact advanced the row.
+      const error = captureStoreError(() =>
+        rebuild(path, { onDatabase: faultCommit("LOST_ACKNOWLEDGEMENT"), pageLimit: 100 }));
+
+      expect(error.code).toBe("OUTCOME_UNKNOWN");
+      expect(error.message).toContain("reopen and verify");
+      expect(error.cause).toBeInstanceOf(Error);
+      expect((error.cause as Error).message).toBe("simulated lost COMMIT acknowledgement");
+      // Reopen and verify, as the error instructs: the row DID advance to the ledger's end.
+      const reopened = rebuilt(rebuild(path, { pageLimit: 100 }));
+      expect(reopened.checkpoint.globalPosition).toBe(5n);
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
+        .toStrictEqual({ digest: reopened.stateDigest, position: 5n });
+    });
+  });
+
+  it("still refuses cleanly when its COMMIT is rejected before it runs", () => {
+    withDrillDirectory((path) => {
+      seedAdvancingLedger(path);
+      const before = withDrillDatabase(path, (database) => readDurableProjection(database));
+
+      // The transaction is still open when COMMIT throws, so the write provably did not
+      // land: this is the one COMMIT failure that IS a clean refusal, not an unknown outcome.
+      const result = refused(
+        rebuild(path, { onDatabase: faultCommit("REJECTED"), pageLimit: 100 }));
+
+      expect(result.code).toBe("PROJECTION_REBUILD_WRITE_FAILED");
+      expect(result.layer).toBe("STATE");
+      expect(result.detail).toContain("was not advanced");
+      expect(result.detail).toContain("simulated COMMIT rejection");
+      expect(withDrillDatabase(path, (database) => readDurableProjection(database)))
+        .toStrictEqual(before);
     });
   });
 
