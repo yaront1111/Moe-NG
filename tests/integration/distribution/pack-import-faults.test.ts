@@ -6,7 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { collectImportFaults } from "../../../tools/packaging/pack-imports.js";
 import {
-  pruneTestArtifacts, removeEmptyDirectories, walkFiles,
+  collectClosure, pruneTestArtifacts, removeEmptyDirectories, walkFiles,
 } from "../../../tools/packaging/pack-staging.js";
 
 /**
@@ -155,5 +155,53 @@ describe("removeEmptyDirectories, the other half of a prune", () => {
     const root = tree("populated", { "packages/a/src/keep.ts": "export const x = 1;\n" });
     expect(removeEmptyDirectories(root)).toEqual([]);
     expect(walkFiles(root)).toEqual(["packages/a/src/keep.ts"]);
+  });
+});
+
+describe("collectClosure over a hoisted deploy that nested on a version conflict", () => {
+  const manifest = (name: string, version: string): string =>
+    `${JSON.stringify({ name, version })}\n`;
+
+  it("discloses the nested version, once, beside the hoisted one", () => {
+    const root = tree("nested-closure", {
+      "node_modules/body-parser/node_modules/content-type/package.json":
+        manifest("content-type", "2.0.0"),
+      "node_modules/body-parser/package.json": manifest("body-parser", "2.3.0"),
+      "node_modules/content-type/package.json": manifest("content-type", "1.0.5"),
+      "node_modules/express/node_modules/content-type/package.json":
+        manifest("content-type", "2.0.0"),
+      "node_modules/express/package.json": manifest("express", "5.1.0"),
+    });
+    expect(collectClosure(join(root, "node_modules"))).toEqual([
+      { name: "body-parser", version: "2.3.0" },
+      { name: "content-type", version: "1.0.5" },
+      { name: "content-type", version: "2.0.0" },
+      { name: "express", version: "5.1.0" },
+    ]);
+  });
+
+  it("follows a nesting under a scoped package, and one nested two levels deep", () => {
+    const root = tree("deep-closure", {
+      "node_modules/@scope/sdk/node_modules/inner/node_modules/leaf/package.json":
+        manifest("leaf", "3.0.0"),
+      "node_modules/@scope/sdk/node_modules/inner/package.json": manifest("inner", "0.2.0"),
+      "node_modules/@scope/sdk/package.json": manifest("@scope/sdk", "1.4.0"),
+    });
+    expect(collectClosure(join(root, "node_modules"))).toEqual([
+      { name: "@scope/sdk", version: "1.4.0" },
+      { name: "inner", version: "0.2.0" },
+      { name: "leaf", version: "3.0.0" },
+    ]);
+  });
+
+  it("skips a nested .bin and a nested directory that is not a package", () => {
+    const root = tree("junk-closure", {
+      "node_modules/a/node_modules/.bin/tool.cmd": "@echo off\n",
+      "node_modules/a/node_modules/not-a-package/index.js": "module.exports = 1;\n",
+      "node_modules/a/package.json": manifest("a", "1.0.0"),
+    });
+    expect(collectClosure(join(root, "node_modules"))).toEqual([
+      { name: "a", version: "1.0.0" },
+    ]);
   });
 });

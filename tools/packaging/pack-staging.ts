@@ -143,10 +143,17 @@ export interface ClosureEntry {
  * The external closure, read out of the staged tree itself. `MANIFEST-CLOSURE.txt`
  * exists so the audit surface travels WITH the artifact: a reviewer should read
  * the dependency list, not discover it.
+ *
+ * A hoisted `pnpm deploy` still NESTS on a version conflict: `body-parser` wants
+ * `content-type@2` while `express` wants `content-type@1`, so one of them lives in
+ * a package's own `node_modules`, never the root's. The walk follows every such
+ * nesting, because a list read off the root alone omits exactly the versions the
+ * conflict exists to keep. Keyed on `name@version`: one version nested under two
+ * parents is one disclosure, two versions of one name are two.
  */
 export function collectClosure(nodeModules: string): readonly ClosureEntry[] {
   if (!existsSync(nodeModules)) return Object.freeze([]);
-  const entries: ClosureEntry[] = [];
+  const entries = new Map<string, ClosureEntry>();
   const visit = (directory: string, scope: string | null): void => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
@@ -156,16 +163,20 @@ export function collectClosure(nodeModules: string): readonly ClosureEntry[] {
       }
       const name = scope === null ? entry.name : `${scope}/${entry.name}`;
       if (name.startsWith("@moe/")) continue;
-      const manifest = join(directory, entry.name, "package.json");
+      const packageDir = join(directory, entry.name);
+      const manifest = join(packageDir, "package.json");
       if (!existsSync(manifest)) continue;
       const parsed = JSON.parse(readFileSync(manifest, "utf8")) as { version?: unknown };
-      entries.push({
-        name, version: typeof parsed.version === "string" ? parsed.version : "unknown",
-      });
+      const version = typeof parsed.version === "string" ? parsed.version : "unknown";
+      entries.set(`${name}@${version}`, { name, version });
+      const nested = join(packageDir, "node_modules");
+      if (existsSync(nested)) visit(nested, null);
     }
   };
   visit(nodeModules, null);
-  return Object.freeze(entries.sort((a, b) => (a.name < b.name ? -1 : 1)));
+  return Object.freeze([...entries.values()].sort((a, b) => (
+    a.name === b.name ? (a.version < b.version ? -1 : 1) : (a.name < b.name ? -1 : 1)
+  )));
 }
 
 /** Empties a directory without following into it, so a re-pack starts clean. */
