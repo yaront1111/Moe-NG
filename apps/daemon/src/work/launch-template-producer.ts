@@ -46,8 +46,12 @@ import {
   CODING_BUILTIN_TOOLS,
   CODING_TOOLS,
 } from "../orchestrator/agent-spawn-environment.js";
+import type { RenderedContext } from "@moe/context";
+
 import { hasExactKeys } from "../provider-profile/provider-profile-fields.js";
-import { admitCapabilities, boundedText, isRefusal, refuse } from "./launch-template-authority.js";
+import {
+  admitCapabilities, admitRenderedContext, boundedText, isOwnRefusal, isRefusal, refuse,
+} from "./launch-template-authority.js";
 
 export {
   LAUNCH_TEMPLATE_PRODUCER_CODES,
@@ -65,6 +69,8 @@ export interface LaunchTemplateFields {
   readonly launchSelection: ClaudeLaunchSelection;
   readonly limits: ClaudeLaunchLimits;
   readonly ok: true;
+  /** CALLER-SUPPLIED and admitted, never composed here: this producer is the carrier. */
+  readonly renderedContext: RenderedContext;
 }
 
 export type LaunchTemplateResult =
@@ -74,11 +80,17 @@ export type LaunchTemplateResult =
 export interface LaunchTemplateInput {
   readonly capabilities: unknown;
   readonly mission: unknown;
+  /**
+   * The TYPED, NAMED context slot. `unknown` here is not laxity — `admitRenderedContext` is what
+   * types it, exactly as `capabilities` and `runtimeObservation` are typed by their admissions.
+   * Naming the key is how this contract widens; the exact-keys gate below is never loosened.
+   */
+  readonly renderedContext: unknown;
   readonly runtimeObservation: unknown;
 }
 
 const INPUT_KEYS: readonly string[] = Object.freeze([
-  "capabilities", "mission", "runtimeObservation",
+  "capabilities", "mission", "renderedContext", "runtimeObservation",
 ]);
 const MISSION_KEYS: readonly string[] = Object.freeze([
   "instructions", "test", "title", "workspace",
@@ -123,8 +135,16 @@ function compose(input: LaunchTemplateInput): LaunchTemplateResult {
   const admitted = admitCapabilities(input.capabilities);
   if (isRefusal(admitted)) return admitted;
   const { capabilitySchemaDigest, limits, selection } = admitted;
-  const mission = admitMission(input.mission);
-  if ("ok" in mission) return mission as LaunchTemplateResult;
+  const admittedMission = admitMission(input.mission);
+  if (isOwnRefusal(admittedMission)) return admittedMission as LaunchTemplateResult;
+  // `isOwnRefusal` is a predicate over the refusal, so the negative branch is still a union;
+  // `admitMission` has already proven the exact four text keys by the time we reach here.
+  const mission = admittedMission as Record<string, unknown>;
+  // The ONLY route context takes into a launch. `mission.instructions` is admitted as text and
+  // stays text: nothing below reads it as context, so a caller that serialises a render into it
+  // has written a long instruction, not supplied a context.
+  const renderedContext = admitRenderedContext(input.renderedContext);
+  if (isOwnRefusal(renderedContext)) return renderedContext;
   if (!hasExactKeys(input.runtimeObservation, RUNTIME_FACTS_KEYS)) {
     return refuse("LAUNCH_TEMPLATE_RUNTIME_UNOBSERVED", "the runtime was not observed");
   }
@@ -158,8 +178,10 @@ function compose(input: LaunchTemplateInput): LaunchTemplateResult {
     [CLAUDE_LAUNCH_SELECTION_ENV.model]: selection.selectedModelId,
     [CLAUDE_LAUNCH_SELECTION_ENV.effort]: selection.reasoningEffort,
   });
+  // `renderedContext` is carried VERBATIM, not rebuilt: the renderer sealed the bytes to the
+  // binding, and a copy assembled here would be a second derivation of the same fact.
   return Object.freeze({ argv, environment, launchSelection: selection,
-    limits: admittedLimits.limits, ok: true as const });
+    limits: admittedLimits.limits, ok: true as const, renderedContext });
 }
 
 export function produceLaunchTemplateFields(input: LaunchTemplateInput): LaunchTemplateResult {

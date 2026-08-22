@@ -10,7 +10,11 @@
  * a missing field, and never restamps another authority's code as this layer's.
  */
 
+import { CONTEXT_MANIFEST_VERSION, digestContextManifest } from "@moe/context";
+import type { ContextDigestBinding, RenderedContext } from "@moe/context";
 import type { ClaudeLaunchSelection } from "@moe/runner";
+
+import { hasExactKeys } from "../provider-profile/provider-profile-fields.js";
 
 export const LAUNCH_TEMPLATE_PRODUCER_CODES = Object.freeze([
   "LAUNCH_TEMPLATE_INPUT_INEXACT",
@@ -23,6 +27,8 @@ export const LAUNCH_TEMPLATE_PRODUCER_CODES = Object.freeze([
   "LAUNCH_TEMPLATE_ARGV_RESUMES",
   "LAUNCH_TEMPLATE_ARGV_UNSAFE",
   "LAUNCH_TEMPLATE_LIMITS_INADMISSIBLE",
+  "LAUNCH_TEMPLATE_CONTEXT_INVALID",
+  "LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED",
 ] as const);
 
 /**
@@ -59,6 +65,16 @@ const SELECTION_TEXT_FIELDS = Object.freeze([
   "profileRevisionId", "selectedModelId",
 ] as const);
 
+const RENDERED_CONTEXT_KEYS: readonly string[] = Object.freeze(["bytes", "manifest"]);
+const CONTEXT_MANIFEST_KEYS: readonly string[] = Object.freeze([
+  "binding", "digest", "version",
+]);
+/** The renderer's seven bound fields, named here so a manifest missing one cannot admit. */
+const CONTEXT_BINDING_KEYS: readonly string[] = Object.freeze([
+  "exactBytes", "exclusions", "journalCountLimit", "journalTextLimit", "optionalSelection",
+  "ordering", "rendererVersion",
+]);
+
 export function refuse(code: LaunchTemplateProducerCode, detail: string,
   upstream: LaunchTemplateUpstream | null = null): LaunchTemplateRefused {
   return Object.freeze({ code, detail, layer: PRODUCER_LAYER, ok: false as const, upstream });
@@ -75,6 +91,20 @@ export function isRefusal(
   value: AdmittedCapabilities | LaunchTemplateRefused,
 ): value is LaunchTemplateRefused {
   return "ok" in value && value.ok === false;
+}
+
+/**
+ * OWN property, never `in`. Every admission in this seam returns EITHER a refusal this module
+ * built or the CALLER'S OWN OBJECT, and `in` walks the prototype chain: a caller that plants
+ * `ok` on a prototype passes `hasExactKeys` untouched — `Object.keys` reports own enumerable
+ * keys only — and then answers `"ok" in value` with true. The composer would read that as "this
+ * is a refusal, return it", and hand the caller's object back as the RESULT: `ok: true` and an
+ * `argv` of its choosing, with argv composition, limits validation and the durable selection
+ * all skipped. That is precisely the caller-proposed field this producer exists to refuse, so
+ * the discriminator has to be one a prototype cannot reach.
+ */
+export function isOwnRefusal(value: object): value is LaunchTemplateRefused {
+  return Object.prototype.hasOwnProperty.call(value, "ok");
 }
 
 /**
@@ -134,4 +164,72 @@ export function admitCapabilities(
     selectedModelId: record["selectedModelId"],
   }) as unknown as ClaudeLaunchSelection;
   return { capabilitySchemaDigest: digest, limits: record["limits"], selection };
+}
+
+/** Element-wise: both sides are `readonly number[]`, and `===` would pass a substituted copy. */
+function sameBytes(left: unknown, right: readonly number[]): boolean {
+  if (!Array.isArray(left) || left.length !== right.length) return false;
+  return right.every((byte, index) => left[index] === byte);
+}
+
+/**
+ * The one place rendered Foundation context is admitted into a launch.
+ *
+ * WHY A DIGEST RECOMPUTE AND NOT A SHAPE CHECK. `digestContextManifest` is the package's own
+ * sealing function, and it is the only thing that can put a matching digest on a binding. A
+ * context record this daemon hand-built, re-derived, or edited after the fact cannot carry a
+ * digest that recomputes, so "the bytes came from the renderer" stops being a promise the
+ * caller makes and becomes a property this function checks. That is what DoD-3 asks for, and
+ * it is why the recompute imports from the BARE `@moe/context` rather than reimplementing a
+ * sha256 here: a local copy of the derivation would be this seam re-deriving the authority it
+ * is supposed to be checking against, and would keep matching after the package changed.
+ *
+ * WHAT IT DOES NOT PROVE, stated so no caller reads more into an acceptance than is there. The
+ * recompute proves the value passed through the package's sealer. It does NOT prove the
+ * SELECTION behind it was the attempt's own — a caller holding `@moe/context` can render a
+ * selection it invented and seal that honestly. Binding a launch to a selection the store
+ * actually recorded needs a persisted context manifest, which is task-203a5ca7's deliverable
+ * and does not exist yet. Until it does, this admission is a forgery check, not a provenance
+ * one, and `LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED` names exactly that boundary.
+ *
+ * The bytes are compared against `binding.exactBytes` SEPARATELY from the recompute, because
+ * the two catch different attacks and neither implies the other: editing the binding breaks
+ * the digest, while swapping only `bytes` leaves the digest matching and is caught solely by
+ * this comparison.
+ *
+ * AN EMPTY RENDER ADMITS, and that is a decision rather than an oversight. Emptiness is the
+ * RENDERER's verdict: a selection with no mandatory and no optional items is still something
+ * `renderContext` sealed, and its digest recomputes like any other. Refusing it here would
+ * invent a policy `@moe/context` does not have and would fail a launch whose attempt honestly
+ * has no context to send. A caller that needs non-empty context must assert that where the
+ * selection is made, not here.
+ */
+export function admitRenderedContext(
+  value: unknown,
+): RenderedContext | LaunchTemplateRefused {
+  if (!hasExactKeys(value, RENDERED_CONTEXT_KEYS)) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_INVALID", "renderedContext is not a rendered record");
+  }
+  if (!hasExactKeys(value["manifest"], CONTEXT_MANIFEST_KEYS)) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_INVALID", "the context manifest is not the exact record");
+  }
+  const manifest = value["manifest"] as Record<string, unknown>;
+  if (!hasExactKeys(manifest["binding"], CONTEXT_BINDING_KEYS)) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_INVALID", "the context binding is not the bound fields");
+  }
+  // Checked before the digest, and separately, because `digestContextManifest` seals the
+  // CONSTANT version rather than the manifest's own field: a bumped version still recomputes to
+  // the stored digest, so the recompute can never answer for it.
+  if (manifest["version"] !== CONTEXT_MANIFEST_VERSION) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_INVALID", "the context manifest names another version");
+  }
+  const binding = manifest["binding"] as unknown as ContextDigestBinding;
+  if (typeof manifest["digest"] !== "string"
+    || digestContextManifest(binding) !== manifest["digest"]) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED", "the context digest does not recompute");
+  }
+  if (!sameBytes(value["bytes"], binding.exactBytes)) {
+    return refuse("LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED", "the context bytes are not the bound bytes");
+  }
+  return value as unknown as RenderedContext;
 }

@@ -16,6 +16,16 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
 import type { ProjectConfigurationLimitKey } from "@moe/contracts";
+// The BARE specifier, deliberately: the rendered value this suite passes must be the one the
+// package's own renderer produced, and a relative import into packages/ would prove nothing
+// about what `@moe/context` resolves to from inside apps/daemon.
+import {
+  CONTEXT_MANIFEST_VERSION,
+  DEFAULT_CONTEXT_BYTE_BUDGET,
+  renderContext,
+  selectContext,
+} from "@moe/context";
+import type { RenderedContext } from "@moe/context";
 import {
   createProjectConfigurationManifest,
   encodeProjectConfigurationManifest,
@@ -55,6 +65,48 @@ const MISSION = Object.freeze({
   title: "launch template",
   workspace: "D:\\projexts\\moe-next",
 });
+
+/**
+ * A rendered context the REAL renderer produced, never a literal.
+ *
+ * `renderContext` is the only thing that can mint one: it derives `binding.exactBytes` from the
+ * same wire encoding it returns as `bytes`, and seals the pair under `digestContextManifest`. A
+ * fixture shaped by this file would satisfy every structural check and prove nothing, which is
+ * exactly what DoD-3 forbids — so the selection goes through the production `selectContext` and
+ * the render through the production `renderContext`, and this suite only ever reads the result.
+ *
+ * `note` varies the mandatory item's content so two calls give genuinely different bytes; the
+ * byte-substitution arm needs a second rendered value that is real rather than hand-edited.
+ */
+function rendered(note = "the attempt brief"): RenderedContext {
+  const selected = selectContext({
+    byteBudget: DEFAULT_CONTEXT_BYTE_BUDGET,
+    exclusions: [{ itemId: "journal-9", reason: "beyond the journal entry limit" }],
+    mandatory: [{ content: note, id: "mission-1", kind: "MANDATORY", section: "mission" }],
+    optional: [
+      { content: "a prior dead end", id: "journal-1", kind: "OPTIONAL", priority: 2,
+        section: "journal" },
+    ],
+  });
+  if (selected.kind !== "ADMITTED") {
+    throw new Error(`fixture selection refused: ${selected.code}`);
+  }
+  return renderContext(selected.selection);
+}
+
+const RENDERED = rendered();
+
+/** A structural copy the tests may edit; the renderer's own answer is deep-frozen. */
+function thawed(value: RenderedContext): Record<string, unknown> {
+  return {
+    bytes: [...value.bytes],
+    manifest: {
+      binding: { ...value.manifest.binding, exactBytes: [...value.manifest.binding.exactBytes] },
+      digest: value.manifest.digest,
+      version: value.manifest.version,
+    },
+  };
+}
 
 const SELECTION = Object.freeze({
   modelRef: "model-ref-1",
@@ -185,6 +237,7 @@ function produced(options: SeedOptions = {}): Record<string, unknown> {
   const result = produceLaunchTemplateFields({
     capabilities: capabilities(options),
     mission: MISSION,
+    renderedContext: RENDERED,
     runtimeObservation: RUNTIME_FACTS,
   });
   return result as unknown as Record<string, unknown>;
@@ -291,6 +344,7 @@ describe("produceLaunchTemplateFields — the caller cannot reach a produced fie
       const refusal = produceLaunchTemplateFields({
         capabilities: capabilities(),
         mission: MISSION,
+        renderedContext: RENDERED,
         runtimeObservation: RUNTIME_FACTS,
         [field]: contradiction[field],
       } as never) as unknown as Record<string, unknown>;
@@ -381,6 +435,7 @@ describe("produceLaunchTemplateFields — fails closed", () => {
     const refusal = produceLaunchTemplateFields({
       capabilities: capabilities(),
       mission: { instructions: "x", title: "t", workspace: "w" },
+      renderedContext: RENDERED,
       runtimeObservation: RUNTIME_FACTS,
     }) as unknown as Record<string, unknown>;
     expectRefusal(refusal, "LAUNCH_TEMPLATE_MISSION_INVALID");
@@ -390,6 +445,7 @@ describe("produceLaunchTemplateFields — fails closed", () => {
     const refusal = produceLaunchTemplateFields({
       capabilities: capabilities(),
       mission: MISSION,
+      renderedContext: RENDERED,
       runtimeObservation: { platformIdentity: "win32-x64", reportedVersion: "2.0.30" },
     }) as unknown as Record<string, unknown>;
     expectRefusal(refusal, "LAUNCH_TEMPLATE_RUNTIME_UNOBSERVED");
@@ -399,6 +455,7 @@ describe("produceLaunchTemplateFields — fails closed", () => {
     const refusal = produceLaunchTemplateFields({
       capabilities: capabilities(),
       mission: MISSION,
+      renderedContext: RENDERED,
       runtimeObservation: { ...RUNTIME_FACTS, adapterCapabilitySchemaDigest: hex64("d1ff") },
     }) as unknown as Record<string, unknown>;
     expectRefusal(refusal, "LAUNCH_TEMPLATE_RUNTIME_UNBOUND");
@@ -409,10 +466,12 @@ describe("produceLaunchTemplateFields — byte stability", () => {
   it("produces the same bytes twice from the same durable identity", () => {
     const read = capabilities();
     const first = produceLaunchTemplateFields({
-      capabilities: read, mission: MISSION, runtimeObservation: RUNTIME_FACTS,
+      capabilities: read, mission: MISSION, renderedContext: RENDERED,
+    runtimeObservation: RUNTIME_FACTS,
     });
     const second = produceLaunchTemplateFields({
-      capabilities: read, mission: MISSION, runtimeObservation: RUNTIME_FACTS,
+      capabilities: read, mission: MISSION, renderedContext: RENDERED,
+    runtimeObservation: RUNTIME_FACTS,
     });
     expect(JSON.stringify(first)).toBe(JSON.stringify(second));
   });
@@ -441,7 +500,8 @@ function tampered(overrides: Record<string, unknown>): Record<string, unknown> {
 
 function producedFrom(read: unknown): Record<string, unknown> {
   return produceLaunchTemplateFields({
-    capabilities: read, mission: MISSION, runtimeObservation: RUNTIME_FACTS,
+    capabilities: read, mission: MISSION, renderedContext: RENDERED,
+    runtimeObservation: RUNTIME_FACTS,
   }) as unknown as Record<string, unknown>;
 }
 
@@ -723,6 +783,7 @@ describe("produceLaunchTemplateFields — hostile operands answer, never crash",
     const refusal = produceLaunchTemplateFields({
       capabilities: capabilities(),
       mission: { instructions: "x", test: "t", title: "t", workspace: 7 },
+      renderedContext: RENDERED,
       runtimeObservation: RUNTIME_FACTS,
     }) as unknown as Record<string, unknown>;
     expectRefusal(refusal, "LAUNCH_TEMPLATE_MISSION_INVALID");
@@ -735,5 +796,272 @@ describe("produceLaunchTemplateFields — hostile operands answer, never crash",
     expect(fields.ok).toBe(true);
     expect(fields.argv).not.toContain("claude-sonnet-5");
     expect(fields.argv).toEqual(produced().argv);
+  });
+});
+
+/**
+ * The typed context-insertion slot (task-ee5a385b).
+ *
+ * The task id is in every title deliberately: on a shared branch a failing line then attributes
+ * itself to this row rather than to whoever else is mid-TDD in this file.
+ *
+ * The ACCEPTED arm is first and is load-bearing. A suite of refusals alone is answerable by a
+ * guard that rejects everything, so without a proof that a REAL rendered context reaches the
+ * produced fields, every arm below would still pass against a bare `return refuse(...)`.
+ */
+describe("produceLaunchTemplateFields - the context slot (task-ee5a385b)", () => {
+  function withContext(value: unknown): Record<string, unknown> {
+    return produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: MISSION,
+      renderedContext: value,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+  }
+
+  it("ACCEPTS a context the real renderer produced and carries it through verbatim", () => {
+    const fields = withContext(RENDERED);
+    expect(fields.ok).toBe(true);
+    // Deep-equal against the RENDERER'S OWN OUTPUT OBJECT, never against a literal: a literal
+    // here would be this file re-deriving what the package is supposed to be the authority on.
+    expect(fields.renderedContext).toEqual(RENDERED);
+    expect(Object.isFrozen(fields)).toBe(true);
+  });
+
+  it("carries the renderer's exact bytes, not a re-encoding of the same selection", () => {
+    const fields = withContext(RENDERED);
+    const carried = fields.renderedContext as RenderedContext;
+    expect([...carried.bytes]).toEqual([...RENDERED.bytes]);
+    expect(carried.manifest.digest).toBe(RENDERED.manifest.digest);
+  });
+
+  it("still refuses an unknown extra key rather than widening to tolerate it", () => {
+    const refusal = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: MISSION,
+      renderedContext: RENDERED,
+      runtimeObservation: RUNTIME_FACTS,
+      contextDigest: RENDERED.manifest.digest,
+    } as never) as unknown as Record<string, unknown>;
+    expectRefusal(refusal, "LAUNCH_TEMPLATE_INPUT_INEXACT");
+    expect(refusal.detail).toContain("contextDigest");
+  });
+
+  // The two "absent" shapes refuse with DIFFERENT codes, and that difference IS the assertion:
+  // omitting the key never reaches the context admission at all, so an arm that only tested the
+  // omitted case would be graded by the exact-keys gate and would stay green with
+  // `admitRenderedContext` deleted outright.
+  it("refuses an input that OMITS the slot at the exact-keys gate, not at the admission", () => {
+    const refusal = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: MISSION,
+      runtimeObservation: RUNTIME_FACTS,
+    } as never) as unknown as Record<string, unknown>;
+    expectRefusal(refusal, "LAUNCH_TEMPLATE_INPUT_INEXACT");
+    expect(refusal.detail).toContain("renderedContext");
+  });
+
+  it("refuses a slot that is present but carries nothing, at the context admission", () => {
+    for (const empty of [undefined, null, "", 0]) {
+      expectRefusal(withContext(empty), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+    }
+  });
+
+  it("refuses a slot that is not the exact {bytes, manifest} record", () => {
+    const full = thawed(RENDERED);
+    expectRefusal(withContext({ bytes: full.bytes }), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+    expectRefusal(withContext({ manifest: full.manifest }), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+    expectRefusal(
+      withContext({ ...full, ordering: RENDERED.manifest.binding.ordering }),
+      "LAUNCH_TEMPLATE_CONTEXT_INVALID",
+    );
+  });
+
+  it("refuses a manifest that is not the exact {version, binding, digest} record", () => {
+    const value = thawed(RENDERED);
+    const manifest = value.manifest as Record<string, unknown>;
+    delete manifest.digest;
+    expectRefusal(withContext(value), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+  });
+
+  it("refuses a binding that is not the renderer's exact seven bound fields", () => {
+    const value = thawed(RENDERED);
+    const manifest = value.manifest as Record<string, unknown>;
+    const binding = manifest.binding as Record<string, unknown>;
+    delete binding.exclusions;
+    expectRefusal(withContext(value), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+  });
+
+  it("refuses a manifest version this daemon does not know", () => {
+    const value = thawed(RENDERED);
+    const manifest = value.manifest as Record<string, unknown>;
+    // Derived FROM the constant so the arm keeps meaning "not the admitted version" after a
+    // version bump, instead of pinning a spelling that quietly becomes a second unknown one.
+    manifest.version = `${CONTEXT_MANIFEST_VERSION}-unknown`;
+    // Not an UNVERIFIED: `digestContextManifest` seals the CONSTANT version, not the manifest's
+    // own field, so a bumped version still recomputes to the stored digest. The version gate is
+    // the only thing that can answer here, which is why it has to be its own check.
+    expect(manifest.digest).toBe(RENDERED.manifest.digest);
+    expectRefusal(withContext(value), "LAUNCH_TEMPLATE_CONTEXT_INVALID");
+  });
+
+  it("refuses a binding edited under a digest that was not recomputed", () => {
+    const value = thawed(RENDERED);
+    const manifest = value.manifest as Record<string, unknown>;
+    const binding = manifest.binding as Record<string, unknown>;
+    binding.journalTextLimit = (binding.journalTextLimit as number) + 1;
+    expectRefusal(withContext(value), "LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED");
+  });
+
+  it("refuses bytes swapped under an untouched manifest", () => {
+    // The anti-forgery pair. `binding` is left ENTIRELY intact, so the digest recompute still
+    // matches and only the bytes/exactBytes comparison can answer. The substituted bytes come
+    // from a second REAL render, so this is a genuine payload pointing at another selection.
+    const value = thawed(RENDERED);
+    const other = rendered("a different attempt brief");
+    expect([...other.bytes]).not.toEqual([...RENDERED.bytes]);
+    value.bytes = [...other.bytes];
+    expect((value.manifest as Record<string, unknown>).digest).toBe(RENDERED.manifest.digest);
+    expectRefusal(withContext(value), "LAUNCH_TEMPLATE_CONTEXT_UNVERIFIED");
+  });
+
+  it("ADMITS an empty render: a selection with nothing in it is still a real render", () => {
+    // The decision, made here rather than left to the first caller who renders an empty
+    // selection: emptiness is the RENDERER's verdict, not this seam's. If `renderContext`
+    // sealed it and the digest recomputes, the producer carries it. Refusing would invent a
+    // policy the context package does not have, and would break a launch whose attempt
+    // legitimately has no optional context to send.
+    const selected = selectContext({
+      byteBudget: DEFAULT_CONTEXT_BYTE_BUDGET,
+      exclusions: [],
+      mandatory: [],
+      optional: [],
+    });
+    if (selected.kind !== "ADMITTED") {
+      throw new Error(`fixture selection refused: ${selected.code}`);
+    }
+    const empty = renderContext(selected.selection);
+    expect(empty.manifest.binding.optionalSelection).toEqual([]);
+    expect(empty.manifest.binding.exclusions).toEqual([]);
+
+    const fields = withContext(empty);
+    expect(fields.ok).toBe(true);
+    expect(fields.renderedContext).toEqual(empty);
+  });
+
+  it("admits a foreign attempt's context as ITS OWN value, never as this one's", () => {
+    // Self-consistent and real, but a different render: the carried value must be the one that
+    // was supplied, so the acceptance arm cannot be satisfied by just any rendered context.
+    const foreign = rendered("a foreign attempt brief");
+    const fields = withContext(foreign);
+    expect(fields.ok).toBe(true);
+    expect(fields.renderedContext).not.toEqual(RENDERED);
+    expect(fields.renderedContext).toEqual(foreign);
+  });
+
+  it("does not read context out of mission.instructions, and mission stays the exact brief", () => {
+    const smuggled = { ...MISSION, instructions: JSON.stringify(thawed(RENDERED)) };
+    const fields = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: smuggled,
+      renderedContext: RENDERED,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+    expect(fields.ok).toBe(true);
+    // The slot is the ONLY route: the produced value is the slot's, and the smuggled text
+    // reaches neither argv nor the environment.
+    expect(fields.renderedContext).toEqual(RENDERED);
+    expect(JSON.stringify(fields.argv)).not.toContain("exactBytes");
+    expect(JSON.stringify(fields.environment)).not.toContain("exactBytes");
+  });
+
+  it("refuses a mission carrying context as a FIFTH key rather than admitting it", () => {
+    const refusal = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: { ...MISSION, renderedContext: RENDERED },
+      renderedContext: RENDERED,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+    expectRefusal(refusal, "LAUNCH_TEMPLATE_MISSION_INVALID");
+  });
+
+  it("answers a hostile slot at the TOTAL boundary, not at the exact-keys gate", () => {
+    // The code is pinned, not merely `ok: false`. The outer input here is exactly the four
+    // named keys, so the exact-keys gate has nothing to say and the throwing getter must be
+    // what answers; asserting only "refused" would let this arm be graded by INPUT_INEXACT
+    // and stay green with the slot never read at all.
+    const hostile = {
+      get bytes(): never { throw new Error("hostile read"); },
+      manifest: RENDERED.manifest,
+    };
+    let result: Record<string, unknown> = {};
+    expect(() => {
+      result = withContext(hostile);
+    }).not.toThrow();
+    expectRefusal(result, "LAUNCH_TEMPLATE_INPUT_HOSTILE");
+  });
+});
+
+/**
+ * The prototype-planted refusal marker (task-ee5a385b, found in adversarial review).
+ *
+ * `hasExactKeys` reads `Object.keys`, which reports OWN ENUMERABLE keys only, so a record whose
+ * `ok` lives on its PROTOTYPE is admitted with the exact key set intact. If the composer then
+ * discriminates with `"ok" in value`, which walks the prototype chain, it reads the admitted
+ * value as a refusal and RETURNS IT — handing the caller its own object back as the result,
+ * `ok: true` and an `argv` of its choosing, with argv composition, limits validation and the
+ * durable selection all skipped. That is exactly the caller-proposed field this module exists
+ * to refuse, reached without ever failing a check.
+ */
+describe("produceLaunchTemplateFields - a planted prototype cannot forge a result", () => {
+  function plantedOn(base: object): object {
+    const forged = Object.create({ argv: ["--pwned"], limits: {}, ok: true });
+    return Object.assign(forged, base);
+  }
+
+  it("does not return a CONTEXT whose `ok` is inherited, as if it were the produced fields", () => {
+    // Everything the admission checks is genuine — the bytes and the digest are the real
+    // renderer's — so the value passes every gate and only the discriminator can stop it.
+    const forged = plantedOn(thawed(RENDERED));
+    expect(Object.keys(forged).sort()).toEqual(["bytes", "manifest"]);
+    expect("ok" in forged).toBe(true);
+    expect(Object.prototype.hasOwnProperty.call(forged, "ok")).toBe(false);
+
+    const fields = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: MISSION,
+      renderedContext: forged,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+
+    // The produced argv is the SERVER's, never the planted one, and the result is this
+    // module's frozen record rather than the caller's object.
+    expect(fields.ok).toBe(true);
+    expect(fields.argv).not.toContain("--pwned");
+    expect(fields.argv).toEqual(produced().argv);
+    expect(fields).not.toBe(forged);
+    expect(fields.launchSelection).toBeDefined();
+    expect(fields.limits).toBeDefined();
+  });
+
+  it("does not return a MISSION whose `ok` is inherited, as if it were the produced fields", () => {
+    // The same hole one admission earlier: `admitMission` also returns the caller's object.
+    const forged = plantedOn({ ...MISSION });
+    expect(Object.keys(forged).sort())
+      .toEqual(["instructions", "test", "title", "workspace"]);
+    expect("ok" in forged).toBe(true);
+
+    const fields = produceLaunchTemplateFields({
+      capabilities: capabilities(),
+      mission: forged,
+      renderedContext: RENDERED,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+
+    expect(fields.ok).toBe(true);
+    expect(fields.argv).not.toContain("--pwned");
+    expect(fields.argv).toEqual(produced().argv);
+    expect(fields).not.toBe(forged);
+    expect(fields.renderedContext).toEqual(RENDERED);
   });
 });

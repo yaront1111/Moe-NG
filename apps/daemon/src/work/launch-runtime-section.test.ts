@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import { DEFAULT_CONTEXT_BYTE_BUDGET, renderContext, selectContext } from "@moe/context";
 import { buildProviderRuntimeObservation } from "@moe/runner";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -417,8 +418,34 @@ describe("produceLaunchRuntimeSection input fence", () => {
   });
 });
 
+/**
+ * Forced by task-ee5a385b: `renderedContext` is now a named key on the producer's frozen
+ * INPUT_KEYS, so a three-key input refuses LAUNCH_TEMPLATE_INPUT_INEXACT and this file's
+ * arithmetic proof could not run at all. Built through the PRODUCTION `selectContext` and
+ * `renderContext` rather than as a literal, because the producer recomputes the manifest
+ * digest and a hand-built value is refused by design.
+ *
+ * It does NOT enter the composed launchTemplate below: `composedTemplate` names each of the
+ * seven keys individually and never spreads `fields`, so the producer's fifth field stays out
+ * of the template and FOUNDATION_ATTEMPT_TEMPLATE_KEYS arithmetic is unchanged.
+ */
+function renderedContextFixture(): ReturnType<typeof renderContext> {
+  const selected = selectContext({
+    byteBudget: DEFAULT_CONTEXT_BYTE_BUDGET,
+    exclusions: [],
+    mandatory: [{ content: "prove the launch template arithmetic", id: "mission-1",
+      kind: "MANDATORY", section: "mission" }],
+    optional: [],
+  });
+  if (selected.kind !== "ADMITTED") {
+    throw new Error(`fixture selection refused: ${selected.code}`);
+  }
+  return renderContext(selected.selection);
+}
+
 function launchFields(observation: ReturnType<typeof durableObservation>) {
   return produceLaunchTemplateFields({
+    renderedContext: renderedContextFixture(),
     capabilities: {
       authority: "DAEMON_VERIFIED",
       capabilitySchemaDigest: observation.adapterCapabilitySchemaDigest,
