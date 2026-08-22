@@ -35,6 +35,7 @@ import {
   planningChain,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { journeyAuthority } from "./journey-authority-bodies.js";
 import { decodePlanningAuthorityEnvelopeBytes } from "./planning-authority-envelope.js";
 import { PLANNING_AUTHORITY_FINALIZE_CODES } from "./planning-authority-finalize-ingress.js";
 import { planningAuthorityAggregateId } from "./planning-authority-persistence.js";
@@ -49,8 +50,28 @@ const ENVELOPE_EVENT = "PlanningAuthorityEnvelopeSealed";
 const FINALIZE_EVENT = "PlanningSubmissionFinalized";
 const ENVELOPE_LAYER = "PLANNING_AUTHORITY_ENVELOPE";
 const GRAPH_REVISION_REF = "graph-revision-authority";
-const GRAPH_CONTENT_HASH = hex64("c0ffee");
 const CRITERION_IDS = Object.freeze(["criterion-a", "criterion-b"]);
+/**
+ * MIGRATED, not re-pointed, by task-c96ef2d1 - the subject was never the placeholder.
+ *
+ * This suite's bodies are its OWN (`architect-finalize`, `revision-finalize`,
+ * `contract-finalize`), because several arms assert on those ids and on core's refusal codes for
+ * them. Only the GRAPH they bind to comes from the shipped producer, which is the one fact this
+ * suite cannot mint for itself: `graphContentBytesBase64` is mandatory at propose, and the
+ * ingress RECOMPUTES the hash from those bytes, so a body stating the retired placeholder is
+ * refused PLANNING_GRAPH_CONTENT_HASH_MISMATCH before any finalize assertion is reached. Taking
+ * the hash and the bytes from one `journeyAuthority` result is what keeps every negative world
+ * below refusing for ITS OWN reason instead of for a missing graph.
+ */
+const JOURNEY_GRAPH = journeyAuthority({
+  authorRef: "architect-finalize",
+  criterionIds: [...CRITERION_IDS],
+  graphRevisionRef: GRAPH_REVISION_REF,
+  idPrefix: "finalize-graph",
+  nodeIds: ["node-a"],
+  stepDescription: "Land the finalize seam.",
+});
+const GRAPH_CONTENT_HASH = JOURNEY_GRAPH.graphContentHash;
 const TRUTH = "DAEMON_VERIFIED";
 
 afterEach(() => {
@@ -105,6 +126,9 @@ function authorityChain(): readonly Json[] {
   chain[chain.length - 1] = {
     ...last,
     authority: { acceptanceContract: acceptanceContract(), planRevision: planRevision() },
+    // A SIBLING of `authority` and mandatory since task-c96ef2d1. The bytes are the producer's,
+    // so the hash the ingress recomputes IS the one both bodies above state.
+    graphContentBytesBase64: JOURNEY_GRAPH.graphContentBytesBase64,
     submissionHash: PLAN_HASH,
   };
   return chain;

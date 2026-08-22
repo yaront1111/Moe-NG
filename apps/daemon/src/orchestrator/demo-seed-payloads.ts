@@ -34,7 +34,6 @@ function sealedAuthority(input: DemoSeedInput): JourneyAuthority {
   return journeyAuthority({
     authorRef: input.principalId,
     criterionIds: [`${input.goalId}-criterion`],
-    graphContentHash: hex64("c0ffee"),
     graphRevisionRef: `${input.runId}-graph-revision`,
     idPrefix: input.runId,
     nodeIds: [input.node.nodeRef],
@@ -284,6 +283,9 @@ export function planningChain(input: DemoSeedInput): readonly Record<string, unk
     {
       authority: sealed.authority,
       commandId: `${input.runId}-propose`,
+      // A SIBLING of `authority`, never inside it (that member is exact-keyed to two names), and
+      // never on the finalize terminal (FORBIDDEN_BODY_KEYS). Mandatory since task-c96ef2d1.
+      graphContentBytesBase64: sealed.graphContentBytesBase64,
       effectTerminalProof: {
         effectTerminalRef: `${input.runId}-effect-terminal`,
         resourcesTerminalRef: `${input.runId}-resources-terminal`,
@@ -310,6 +312,9 @@ export function planningChain(input: DemoSeedInput): readonly Record<string, unk
  * `planningChain()` a fifth element.
  */
 export function finalizeChain(input: DemoSeedInput): readonly Record<string, unknown>[] {
+  // ONE build, read twice. `sealedAuthority` now encodes a whole graph, so a call per field meant
+  // two full builds here; it is deterministic, so this changes cost and not a single byte.
+  const sealed = sealedAuthority(input);
   return [
     {
       commandId: `${input.runId}-finalize`,
@@ -317,11 +322,14 @@ export function finalizeChain(input: DemoSeedInput): readonly Record<string, unk
       kind: "planning.finalize_submission",
       revision: {
         dependencyHash: hex64("d1"),
-        graphContentHash: hex64("c0ffee"),
+        // The producer's RECOMPUTED graph hash, not a placeholder: the envelope cross-checks it
+        // against the sealed plan revision's own binding and refuses the finalize outright on
+        // disagreement (PLANNING_AUTHORITY_GRAPH_CONTENT_MISMATCH).
+        graphContentHash: sealed.graphContentHash,
         graphRevisionRef: `${input.runId}-graph-revision`,
         // The run's sealed plan hash, not a constant: the propose terminal sealed the plan body
         // whose own `planHash` this is, and the finalize is judged against that folded state.
-        planHash: sealedAuthority(input).submissionHash,
+        planHash: sealed.submissionHash,
         qualityHash: hex64("dd"),
       },
       witness: {

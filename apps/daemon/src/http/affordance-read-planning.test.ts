@@ -70,7 +70,6 @@ function step(kind: string) {
 const sealed = journeyAuthority({
   authorRef: "operator-local",
   criterionIds: [`${DEFAULT_GOAL_SUBJECT}-criterion`],
-  graphContentHash: "c0ffee".padEnd(64, "0"),
   graphRevisionRef: "graph-revision-1",
   idPrefix: DEFAULT_RUN_SUBJECT,
   nodeIds: ["node-code-1"],
@@ -130,6 +129,7 @@ describe("plan.propose on the surface", () => {
         },
         {
           authority: sealed.authority,
+          graphContentBytesBase64: sealed.graphContentBytesBase64,
           commandId: "live-propose",
           effectTerminalProof: {
             effectTerminalRef: "effect-terminal-1",
@@ -169,7 +169,12 @@ describe("plan.propose on the surface", () => {
           commandId: "live-finalize", expectedVersion: 4,
           kind: "planning.finalize_submission",
           revision: {
-            dependencyHash: "d1".padEnd(64, "0"), graphContentHash: "c0ffee".padEnd(64, "0"),
+            dependencyHash: "d1".padEnd(64, "0"),
+            // BIN A: the world moved, the subject did not. This suite is about the SURFACE
+            // offering plan.propose then approval.decide; it never asserted on the graph hash.
+            // The placeholder is retired because the envelope cross-checks this against the
+            // sealed revision's own binding (PLANNING_AUTHORITY_GRAPH_CONTENT_MISMATCH).
+            graphContentHash: sealed.graphContentHash,
             graphRevisionRef: "graph-revision-1", planHash: sealed.submissionHash,
             qualityHash: "dd".padEnd(64, "0"),
           },

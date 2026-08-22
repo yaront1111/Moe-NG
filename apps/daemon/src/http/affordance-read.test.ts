@@ -222,7 +222,6 @@ describe("code node steps", () => {
     const sealed = journeyAuthority({
       authorRef: "architect-1",
       criterionIds: ["criterion-a"],
-      graphContentHash: "c0ffee".padEnd(64, "0"),
       graphRevisionRef: "graph-revision-1",
       idPrefix: "run-n1",
       nodeIds: ["node-code-1"],
@@ -252,6 +251,7 @@ describe("code node steps", () => {
         {
           authority: sealed.authority,
           commandId: "n-propose",
+          graphContentBytesBase64: sealed.graphContentBytesBase64,
           effectTerminalProof: {
             effectTerminalRef: "effect-terminal-1",
             resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
@@ -274,7 +274,11 @@ describe("code node steps", () => {
           commandId: "n-finalize", expectedVersion: 4,
           kind: "planning.finalize_submission",
           revision: {
-            dependencyHash: "d1".padEnd(64, "0"), graphContentHash: "c0ffee".padEnd(64, "0"),
+            dependencyHash: "d1".padEnd(64, "0"),
+            // BIN A: the world moved, the subject did not. This arm is about the code-node
+            // affordance after a REVIEWABLE, SEALED run; the graph hash was only ever scenery,
+            // and it now has to be the producer's or the envelope refuses the finalize.
+            graphContentHash: sealed.graphContentHash,
             graphRevisionRef: "graph-revision-1", planHash: submissionHash,
             qualityHash: "dd".padEnd(64, "0"),
           },

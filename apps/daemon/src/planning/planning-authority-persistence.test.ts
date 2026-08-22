@@ -23,16 +23,21 @@ import {
   decodeAcceptanceContractBytes,
   decodePlanRevisionBytes,
 } from "@moe/core";
-import { GRAPH_CONTENT_ISSUE_CODES, GRAPH_CONTENT_LAYERS } from "@moe/scheduler";
+import {
+  GRAPH_CONTENT_ISSUE_CODES, GRAPH_CONTENT_LAYERS, encodeGraphContent,
+} from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { legacyProposedStore } from "../bootstrap/bootstrap-journey-fixtures.js";
+import {
+  driveTo, finalizeRequestIndex, legacyProposedStore,
+} from "../bootstrap/bootstrap-journey-fixtures.js";
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
   PROJECT_ID,
   RUN_ID,
+  bootstrapSequence,
   closeStores,
   decisionCount,
   driveThrough,
@@ -47,6 +52,7 @@ import {
   buildPlanningAuthorityLeg,
   planningAuthorityAggregateId,
 } from "./planning-authority-persistence.js";
+import { PLANNING_GRAPH_CONTENT_CODES } from "./planning-graph-content-ingress.js";
 import { graphBodyAggregateId, readGraphBody } from "./graph-body-record.js";
 import { PRIMARY, SECONDARY } from "./graph-query-test-fixtures.js";
 
@@ -57,6 +63,21 @@ const PERSISTENCE_LAYER = "PLANNING_AUTHORITY_PERSISTENCE";
 const AUTHORITY_EVENT = "PlanningAuthorityBodiesSealed";
 const GRAPH_REVISION_REF = "graph-revision-authority";
 const CRITERION_IDS = Object.freeze(["criterion-a", "criterion-b"]);
+
+/**
+ * THE REAL GRAPH THIS SUITE'S BODIES BIND TO (task-c96ef2d1).
+ *
+ * Hoisted above the body builders because they now state `CONTENT_HASH` rather than
+ * the retired placeholder: since the propose seam made `graphContentBytesBase64` MANDATORY, a body
+ * stating a hash no bytes recompute to is refused `PLANNING_GRAPH_CONTENT_HASH_MISMATCH` before
+ * any authority assertion is reached. The placeholder is retired here for the same reason it is
+ * retired in the shipped journeys: nothing may state a graph hash it cannot produce the graph for.
+ */
+const CONTENT = PRIMARY;
+const OTHER_CONTENT = SECONDARY;
+const CONTENT_HASH = PRIMARY.graphContentHash;
+const CONTENT_MEMBER = "graphContentBytesBase64";
+const base64Of = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 
 afterEach(() => {
   closeStores();
@@ -70,7 +91,7 @@ function planRevision(patch: Json = {}): Json {
     affectedNodeIds: ["node-a"],
     approvalState: "PENDING_APPROVAL",
     authorRef: "architect-authority",
-    graphBinding: { graphContentHash: hex64("c0ffee"), graphRevisionRef: GRAPH_REVISION_REF },
+    graphBinding: { graphContentHash: CONTENT_HASH, graphRevisionRef: GRAPH_REVISION_REF },
     parentRevisionId: null,
     rejectionRef: null,
     revisionId: "revision-authority",
@@ -85,7 +106,7 @@ function planRevision(patch: Json = {}): Json {
 function acceptanceContract(patch: Json = {}): Json {
   const built = createAcceptanceContract({
     applicability: {
-      graphContentHash: hex64("c0ffee"), graphRevisionRef: GRAPH_REVISION_REF,
+      graphContentHash: CONTENT_HASH, graphRevisionRef: GRAPH_REVISION_REF,
       nodeIds: ["node-a"], nodeKind: "LEAF",
     },
     authorRef: "architect-authority",
@@ -112,6 +133,10 @@ function authorityChain(overrides: Json = {}): readonly Json[] {
   const last = chain[chain.length - 1] as Json;
   chain[chain.length - 1] = {
     ...last, authority,
+    // The body its plan revision NAMES. Mandatory since task-c96ef2d1: a propose whose terminal
+    // omits it is refused at the ingress, so every authority arm below would refuse for the
+    // wrong reason without this. The WORLD gained a member; no arm's subject moved.
+    [CONTENT_MEMBER]: base64Of(CONTENT.bytes),
     submissionHash: (authority.planRevision as Json)["planHash"], ...overrides,
   };
   return chain;
@@ -372,7 +397,10 @@ describe("plan.propose authority persistence — the retired legacy arm", () => 
 
 describe("plan.propose authority persistence — the builder refuses before any write", () => {
   const legInput = (state: Json, authority: Json, store: SqliteEventStore) => ({
-    lastCommand: { authority, kind: "plan.propose", submissionHash: state["submissionHash"] },
+    lastCommand: {
+      authority, [CONTENT_MEMBER]: base64Of(CONTENT.bytes),
+      kind: "plan.propose", submissionHash: state["submissionHash"],
+    },
     request: { principalId: "principal-1", projectId: PROJECT_ID },
     runId: RUN_ID,
     state,
@@ -483,18 +511,12 @@ describe("plan.propose authority persistence — the builder refuses before any 
 // so the hash a body is stored under is one only the codec could have produced.
 // ---------------------------------------------------------------------------------------
 
-const CONTENT = PRIMARY;
-const OTHER_CONTENT = SECONDARY;
-const CONTENT_HASH = PRIMARY.graphContentHash;
 const BODY_AGGREGATE = graphBodyAggregateId(PROJECT_ID, CONTENT_HASH);
 const INGRESS_LAYER = "PLANNING_GRAPH_CONTENT_INGRESS";
-const CONTENT_MEMBER = "graphContentBytesBase64";
 const SECOND_RUN_ID = "run-2";
 /** Four bytes whose canonical base64 is "+//+AQ==" — it exercises BOTH non-standard alphabet
  *  characters and padding, neither of which the real body's encoding happens to contain. */
 const ALPHABET_SAMPLE = Buffer.from(Uint8Array.from([251, 255, 254, 1])).toString("base64");
-
-const base64Of = (bytes: Uint8Array): string => Buffer.from(bytes).toString("base64");
 
 /** Both bodies must state the SAME graph hash: core refuses PLAN_AUTHORITY_GRAPH_CONTENT_MISMATCH. */
 function boundChain(statedHash: string, overrides: Json = {}): readonly Json[] {
@@ -733,22 +755,136 @@ describe("plan.propose graph content — a codec refusal travels unrestamped", (
   });
 });
 
-describe("plan.propose graph content — the seam is TOLERANT until task-c96ef2d1", () => {
-  it("admits today's propose with no member and writes no body row", () => {
+/**
+ * RE-POINTED, NOT DELETED, by task-c96ef2d1. This was "the seam is TOLERANT until task-c96ef2d1":
+ * a propose with no `graphContentBytesBase64` was ADMITTED and simply wrote no body row, and that
+ * tolerance was the stated reason the shipped journeys could keep sealing hex64("c0ffee"). The
+ * WORLD is unchanged — an otherwise complete propose with the member subtracted — and only
+ * the expected outcome moved, because every shipped sender now carries the bytes.
+ */
+describe("plan.propose graph content — the member is MANDATORY (task-c96ef2d1)", () => {
+  it("refuses PLANNING_GRAPH_CONTENT_REQUIRED at the ingress when the terminal omits it", () => {
+    const store = readyStore();
+    const chain = [...contentChain()] as Json[];
+    const last = { ...(chain[chain.length - 1] as Json) };
+    // Subtracted from the ACCEPTED world, and the subtraction is ASSERTED. Without this line a
+    // rename of CONTENT_MEMBER would silently turn the arm into "a chain that never carried
+    // bytes is refused", which is true of a chain this suite never builds.
+    expect(typeof last[CONTENT_MEMBER]).toBe("string");
+    delete last[CONTENT_MEMBER];
+    chain[chain.length - 1] = last;
+    const before = decisionCount(store);
+
+    // BOTH halves, per the reason-code rail: more than one layer can refuse a propose, and an
+    // arm pinning only "refused" stays green if the codec or the core starts answering first.
+    expect(refusalOf(propose(store, chain))).toEqual({
+      code: "PLANNING_GRAPH_CONTENT_REQUIRED",
+      refusedBy: INGRESS_LAYER,
+    });
+
+    // Read the STORE, never the returned refusal: a seam that refused AFTER committing its first
+    // leg hands back the same shape as one that wrote nothing. The second body aggregate is the
+    // load-bearing half the tolerant arm already argued for — a seam that invented a row would
+    // file it under the STATED hash, and a drill emitting an empty-bytes leg survives a check
+    // that only looks at BODY_AGGREGATE. Measured then: it did.
+    expect(residueOf(store)).toEqual({ authorityEvents: 0, bodyEvents: 0, runEvents: 0 });
+    expect(store.readEvents(graphBodyAggregateId(PROJECT_ID, hex64("c0ffee"))).length).toBe(0);
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("admits the IDENTICAL chain WITH the member — the refusal is about ABSENCE", () => {
+    // The positive control. Without it the arm above is equally satisfied by a seam that refuses
+    // every propose, which is the opposite of what this row landed.
     const store = readyStore();
 
-    // task-c96ef2d1fbb9420c9034ecea62d4eecd flips the member MANDATORY and re-points THIS arm.
-    // Until it lands, absent = exactly today's behaviour, and that tolerance is the reason the
-    // shipped journeys still seal hex64("c0ffee").
-    acceptedOf(propose(store, authorityChain()));
+    acceptedOf(propose(store, contentChain()));
 
-    // BOTH aggregates, and the second one is the load-bearing half. `authorityChain()` states
-    // hex64("c0ffee"), so a seam that invented a row would file it under THAT hash, not under
-    // the real content's — checking only BODY_AGGREGATE looks at an aggregate the absent path
-    // could never touch, and a drill that emits an empty-bytes leg survives it. Measured: it did.
-    expect(store.readEvents(BODY_AGGREGATE).length).toBe(0);
+    expect(store.readEvents(BODY_AGGREGATE).length).toBe(1);
+  });
+
+  it("carries the new code in the ingress module's own refusal roster", () => {
+    // The roster is what SERVICE_REFUSED_BY is typed from, but `refused()` takes a bare union
+    // member, so a code emitted outside the roster left typecheck GREEN when task-16a6a2b1
+    // measured the same shape one layer over. This assertion is the enforcement.
+    expect(PLANNING_GRAPH_CONTENT_CODES).toContain("PLANNING_GRAPH_CONTENT_REQUIRED");
+  });
+});
+
+/**
+ * THE SHIPPED JOURNEY'S OWN BODY (task-c96ef2d1 DoD-3).
+ *
+ * Every arm above builds its own chain. This one drives the SEQUENCE THE PRODUCT SHIPS —
+ * `bootstrapSequence()`, whose propose terminal is `sealedPlanningChain()` and whose finalize is
+ * `finalizeChain()` — then asks the store for the body behind the hash that journey SEALED.
+ * A hand-built control cannot answer that question: it proves the seam works, not that anything
+ * production runs ever reaches it. That gap is exactly what left the accepted path producerless.
+ */
+describe("the SHIPPED journey seals a recomputed hash and stores its body", () => {
+  /** Drives the shipped sequence through its finalize terminal and returns that outcome. */
+  function shippedThroughFinalize(): {
+    readonly finalized: ReturnType<typeof propose>;
+    readonly store: SqliteEventStore;
+  } {
+    const store = openStore();
+    const index = finalizeRequestIndex();
+    driveTo(store, index);
+    const request = bootstrapSequence()[index];
+    if (request === undefined) throw new Error("the shipped sequence issues no finalize request");
+    return { finalized: send(store, request), store };
+  }
+
+  function sealedGraphHash(finalized: ReturnType<typeof propose>): string {
+    if (!finalized.ok) {
+      throw new Error(`shipped finalize refused: ${finalized.code}@${finalized.refusedBy}`);
+    }
+    const result = JSON.parse(decoder.decode(finalized.decision.resultBytes)) as Json;
+    const sealed = (result["state"] as Json)["sealedHashes"] as Json;
+    return String(sealed["graphContentHash"]);
+  }
+
+  it("serves the SEALED hash back as a decoded body from the store", () => {
+    const { finalized, store } = shippedThroughFinalize();
+
+    const hash = sealedGraphHash(finalized);
+    const body = readGraphBody(store, PROJECT_ID, hash);
+
+    if (!body.ok) throw new Error(`shipped body refused: ${body.code}@${body.layer}`);
+    // Nonempty is asserted separately from equality: a seam that stored zero bytes under a real
+    // hash would satisfy a byte-comparison against another empty array.
+    expect(body.bytes.length).toBeGreaterThan(0);
+    expect(body.content.snapshot.nodes.length).toBeGreaterThan(0);
+    expect(body.graphContentHash).toBe(hash);
+  });
+
+  it("seals the hash PUBLIC encodeGraphContent recomputes over that same content", () => {
+    const { finalized, store } = shippedThroughFinalize();
+    const hash = sealedGraphHash(finalized);
+    const body = readGraphBody(store, PROJECT_ID, hash);
+    if (!body.ok) throw new Error(`shipped body refused: ${body.code}`);
+
+    // Re-run the PUBLIC codec over the decoded content. This is the assertion that reds if the
+    // journey ever seals a hash it did not compute from the graph it stored.
+    const reencoded = encodeGraphContent(body.content);
+
+    if (!reencoded.ok) throw new Error(`re-encode refused: ${reencoded.issues[0]?.code ?? "?"}`);
+    expect(reencoded.value.graphContentHash).toBe(hash);
+    expect(Array.from(reencoded.value.bytes)).toEqual(Array.from(body.bytes));
+    // dec-64b2391c OPTION A, at the SHIPPED seal rather than at a fixture: the structural
+    // identity is a different fact, and binding it as content authority is the trap a
+    // name-grep cannot see. This reds if a producer ever substitutes one for the other.
+    expect(reencoded.value.snapshotIdentity).not.toBe(hash);
+    expect(body.snapshotIdentity).not.toBe(hash);
+  });
+
+  it("no longer seals the retired c0ffee placeholder, and files no body under it", () => {
+    const { finalized, store } = shippedThroughFinalize();
+
+    const hash = sealedGraphHash(finalized);
+
+    expect(hash).not.toBe(hex64("c0ffee"));
+    // The placeholder names no body either, so a sender that half-retired it — real bytes,
+    // stale stated hash — cannot pass by leaving a row under the old key.
     expect(store.readEvents(graphBodyAggregateId(PROJECT_ID, hex64("c0ffee"))).length).toBe(0);
-    expect(store.readEvents(AUTHORITY_AGGREGATE).length).toBe(1);
   });
 });
 

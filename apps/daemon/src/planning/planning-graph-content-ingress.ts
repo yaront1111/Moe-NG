@@ -6,6 +6,15 @@
  * body arrives as a SIBLING of `authority` on the propose terminal — core's authority member is
  * exact-keyed to two names and refuses a third, so the body could not travel inside it.
  *
+ * MANDATORY SINCE task-c96ef2d1, and the ordering was a safety constraint rather than tidiness.
+ * cd1784ce landed this seam TOLERANT — an absent member meant "no body row, carry on" — because
+ * every shipped sender still sealed a placeholder hash naming a graph nothing could produce, so
+ * the ACCEPTED path had no production producer and only tests ever exercised it. Now that
+ * `journeyAuthority` mints a real graph and all three senders carry its bytes, an absent member
+ * is a caller bug rather than a legacy shape, and it is refused with this module's own
+ * `PLANNING_GRAPH_CONTENT_REQUIRED` before any leg is composed. Flipping this before the senders
+ * carried bytes would have stranded production, which is why it is the LAST change of the row.
+ *
  * THE CALLER STATES NOTHING THIS MODULE TRUSTS. `decodeGraphContent` re-derives the node-authority
  * set and re-checks the digest, so the hash a body is stored under is the codec's verdict, never
  * the caller's claim; a body whose recompute disagrees with the revision's stated hash is refused.
@@ -36,6 +45,7 @@ export type PlanningGraphContentLayer = typeof LAYER;
 export const PLANNING_GRAPH_CONTENT_CODES = Object.freeze([
   "PLANNING_GRAPH_CONTENT_HASH_MISMATCH",
   "PLANNING_GRAPH_CONTENT_MALFORMED",
+  "PLANNING_GRAPH_CONTENT_REQUIRED",
 ] as const);
 export type PlanningGraphContentCode = (typeof PLANNING_GRAPH_CONTENT_CODES)[number];
 
@@ -44,7 +54,6 @@ export type PlanningGraphContentRefusalLayer =
   | GraphContentIssue["layer"] | PlanningGraphContentLayer;
 
 export type ProposedGraphContent =
-  | { readonly kind: "ABSENT" }
   | { readonly kind: "PRESENT" }
   | { readonly kind: "LEG"; readonly leg: ExpectedVersionDecisionLeg }
   | {
@@ -101,7 +110,7 @@ export function admitProposedGraphContent(
   input: ProposedGraphContentInput,
 ): ProposedGraphContent {
   const member = ownValue(input.lastCommand, CONTENT_MEMBER);
-  if (member === undefined) return Object.freeze({ kind: "ABSENT" as const });
+  if (member === undefined) return refused("PLANNING_GRAPH_CONTENT_REQUIRED", LAYER);
   const bytes = canonicalBytes(member);
   if (bytes === null) return malformed();
   const decoded = decodeGraphContent(bytes);

@@ -69,7 +69,6 @@ export const SUBMISSION_HASH = hex64("dec0de");
 const JOURNEY_AUTHORITY = journeyAuthority({
   authorRef: "architect-1",
   criterionIds: ["criterion-a", "criterion-b"],
-  graphContentHash: hex64("c0ffee"),
   graphRevisionRef: GRAPH_REVISION_REF,
   idPrefix: RUN_ID,
   nodeIds: ["node-a"],
@@ -78,6 +77,15 @@ const JOURNEY_AUTHORITY = journeyAuthority({
 
 export const AUTHORITY_MEMBER = JOURNEY_AUTHORITY.authority;
 export const SEALED_SUBMISSION_HASH = JOURNEY_AUTHORITY.submissionHash;
+/**
+ * The graph the shipped journey seals, RECOMPUTED by the producer (task-c96ef2d1). Both were
+ * a fixed placeholder until this row: a hash naming a graph nothing could produce, which is why
+ * the propose seam's accepted-body path had no production producer. The daemon recomputes the
+ * hash from the bytes and refuses PLANNING_GRAPH_CONTENT_HASH_MISMATCH on disagreement, so
+ * neither of these gains authority by being exported.
+ */
+export const SEALED_GRAPH_CONTENT_HASH = JOURNEY_AUTHORITY.graphContentHash;
+export const SEALED_GRAPH_CONTENT_BYTES = JOURNEY_AUTHORITY.graphContentBytesBase64;
 
 export function openStore(): SqliteEventStore {
   const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
@@ -322,6 +330,10 @@ export function sealedPlanningChain(): readonly Record<string, unknown>[] {
   chain[chain.length - 1] = {
     ...propose,
     authority: AUTHORITY_MEMBER,
+    // A SIBLING of `authority`, never inside it: `authorityOf` is exact-keyed to two names and
+    // refuses a third (PLANNING_AUTHORITY_MALFORMED). Mandatory since task-c96ef2d1, so a
+    // journey that stopped carrying it would be refused rather than silently body-less.
+    graphContentBytesBase64: SEALED_GRAPH_CONTENT_BYTES,
     submissionHash: SEALED_SUBMISSION_HASH,
   };
   return chain;
@@ -342,7 +354,10 @@ export function finalizeChain(): readonly Record<string, unknown>[] {
       kind: "planning.finalize_submission",
       revision: {
         dependencyHash: hex64("d1"),
-        graphContentHash: hex64("c0ffee"),
+        // The producer's RECOMPUTED hash. `planning-authority-envelope.ts:104` cross-checks this
+        // against the sealed plan revision's own `graphBinding.graphContentHash`, so a stale
+        // literal here refuses the whole finalize with PLANNING_AUTHORITY_GRAPH_CONTENT_MISMATCH.
+        graphContentHash: SEALED_GRAPH_CONTENT_HASH,
         graphRevisionRef: GRAPH_REVISION_REF,
         // The run's SEALED plan hash: the propose terminal sealed the plan body whose own
         // `planHash` this is, and the finalize is judged against that folded state.
