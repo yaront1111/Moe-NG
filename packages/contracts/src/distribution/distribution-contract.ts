@@ -114,6 +114,12 @@ export function distributionRefusal(
 }
 
 export const MAX_LOGICAL_PATH_CHARS = 320;
+/**
+ * C0 controls and DEL are never part of a logical path. The aggregate digest frames each
+ * (path, digest) pair with LF, so a path that may carry LF could spell another pair's
+ * framing and two different asset sets would share one aggregate.
+ */
+export const LOGICAL_PATH_CONTROL_PATTERN = /[\u0000-\u001f\u007f]/u;
 export const SIGNATURE_PATTERN = /^[0-9a-f]{128}$/u;
 export const SKILL_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u;
 export const BASE64_PATTERN =
@@ -130,12 +136,15 @@ export function isCanonicalText(value: unknown): value is string {
 /**
  * A safe relative logical path, or `undefined`. Only a single leading `./` is stripped;
  * every other traversal, root, drive or device spelling is refused outright, so two hosts
- * cannot canonicalize the same tree into different bytes.
+ * cannot canonicalize the same tree into different bytes. Control characters are refused
+ * as well: the aggregate digest's LF framing is injective only over paths that cannot
+ * contain the framing byte.
  */
 export function normalizeLogicalPath(value: unknown): string | undefined {
   if (!isCanonicalText(value) || value.length > MAX_LOGICAL_PATH_CHARS) return undefined;
   const path = value.startsWith("./") ? value.slice(2) : value;
   if (path.length === 0 || path.includes("\\") || path.includes(":")) return undefined;
+  if (LOGICAL_PATH_CONTROL_PATTERN.test(path)) return undefined;
   if (path.startsWith("/")) return undefined;
   for (const segment of path.split("/")) {
     if (segment.length === 0 || segment === "." || segment === "..") return undefined;

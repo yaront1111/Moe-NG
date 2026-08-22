@@ -9,6 +9,7 @@ import {
   DISTRIBUTION_SIGNATURE_ALGORITHM,
   canonicalContainerBytes,
   canonicalUnsignedManifestBytes,
+  normalizeLogicalPath,
 } from "./distribution-contract.js";
 import type {
   DistributionManifest,
@@ -111,6 +112,32 @@ describe("distribution vocabulary is closed and frozen", () => {
     expect(DISTRIBUTION_REFUSAL_REASONS.length).toBeGreaterThan(0);
     expect(new Set(DISTRIBUTION_REFUSAL_REASONS).size).toBe(DISTRIBUTION_REFUSAL_REASONS.length);
     expect(Object.isFrozen(DISTRIBUTION_REFUSAL_REASONS)).toBe(true);
+  });
+});
+
+describe("logical path charset", () => {
+  test("an ordinary relative path normalizes to itself", () => {
+    // Positive control: without it every refusal below would also pass against a
+    // normalizer that had degenerated into refusing everything.
+    expect(normalizeLogicalPath("src/index.ts")).toBe("src/index.ts");
+    expect(normalizeLogicalPath("./src/index.ts")).toBe("src/index.ts");
+  });
+
+  test("a control character anywhere in the path is refused", () => {
+    // The aggregate digest frames (path, digest) pairs with LF. A path that can carry LF
+    // can spell a neighbouring pair's framing, so "a\n<digest>\nb" and the set {a, b}
+    // would share one aggregate. NUL and DEL are refused by the same rule.
+    const probes: ReadonlyArray<readonly [string, string]> = [
+      ["LF", `a\n${HEX_A}\nb`],
+      ["NUL", "src/\u0000index.ts"],
+      ["DEL", "src/index\u007f.ts"],
+      ["leading LF", "\nsrc/index.ts"],
+      ["trailing TAB", "src/index.ts\t"],
+    ];
+    expect(probes.length).toBe(5);
+    for (const [label, path] of probes) {
+      expect(normalizeLogicalPath(path), `${label} must be refused`).toBeUndefined();
+    }
   });
 });
 
@@ -240,6 +267,12 @@ describe("manifest parsing fails closed with a stable reason and layer", () => {
     ["ASSET_PATH_INVALID", manifestInput({
       assets: [{ path: "src/cafe\u0301.ts", sha256: HEX_A, byteLength: 1 }],
     })],
+    ["ASSET_PATH_INVALID", manifestInput({
+      assets: [{ path: `a\n${HEX_A}\nb`, sha256: HEX_B, byteLength: 1 }],
+    })],
+    ["ASSET_PATH_INVALID", manifestInput({
+      assets: [{ path: "src/\u0000index.ts", sha256: HEX_A, byteLength: 1 }],
+    })],
     ["ASSET_PATH_DUPLICATE", manifestInput({
       assets: [
         { path: "src/a.ts", sha256: HEX_A, byteLength: 1 },
@@ -276,7 +309,7 @@ describe("manifest parsing fails closed with a stable reason and layer", () => {
   ];
 
   test("the refusal table was actually generated", () => {
-    expect(cases.length).toBe(24);
+    expect(cases.length).toBe(26);
   });
 
   for (const [index, entry] of cases.entries()) {

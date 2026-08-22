@@ -356,6 +356,36 @@ describe("deterministic packaging", () => {
     expect(dotted.containerBytes).toEqual(baseline.containerBytes);
   });
 
+  test("an asset path spelling another pair's digest framing is refused, not aggregated", () => {
+    // aggregateDigestHex frames each sorted (path, digest) pair as path LF digest LF. The
+    // honest two-asset set {a, b} and the single asset "a\n<digest of a>\nb" frame to the
+    // same bytes, so without a charset rule the two manifests would share one aggregate
+    // digest and a signature over one would vouch for the other.
+    const bytesA = new TextEncoder().encode("alpha");
+    const bytesB = new TextEncoder().encode("beta");
+    const honest = buildDistributionContainer(
+      buildInput({
+        assets: [{ bytes: bytesA, path: "a" }, { bytes: bytesB, path: "b" }],
+        componentId: "framing-fixture",
+        componentKind: "DAEMON",
+      }),
+      privateKey,
+    );
+    expect(honest.ok).toBe(true);
+    if (!honest.ok) return;
+    expect(honest.manifest.assets.map((asset) => asset.path)).toEqual(["a", "b"]);
+    const colliding = buildDistributionContainer(
+      buildInput({
+        assets: [{ bytes: bytesB, path: `a\n${sha256(bytesA)}\nb` }],
+        componentId: "framing-fixture",
+        componentKind: "DAEMON",
+      }),
+      privateKey,
+    );
+    expectRefusal(colliding, "ASSET_PATH_INVALID");
+    expect(colliding).toMatchObject({ refusedBy: "DISTRIBUTION_PACKAGER" });
+  });
+
   test("build input keys are exact: an undeclared skill payload is refused", () => {
     const hostile = { ...buildInput(), runtimeSkills: [skillManifestBytes("rogue", "1.0.0")] };
     expectRefusal(

@@ -104,8 +104,11 @@ function isBuildInput(value: unknown): value is DistributionBuildInput {
 
 /**
  * One digest over the whole asset set. Built from the SORTED (path, digest) pairs with
- * explicit LF framing, so neither enumeration order nor a path that happens to contain
- * another path's prefix can produce two different sets with the same aggregate.
+ * explicit LF framing, so enumeration order cannot change the aggregate. The framing is
+ * injective only because every path here has passed `normalizeLogicalPath`, which refuses
+ * control characters: a path free of LF cannot spell another pair's framing, and a digest
+ * is fixed-width hex. Without that charset rule, "a\n<digest>\nb" and the two-asset set
+ * {a, b} would frame to identical bytes.
  */
 function aggregateDigestHex(assets: ReadonlyArray<{ path: string; sha256: string }>): string {
   const hash = createHash("sha256");
