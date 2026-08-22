@@ -17,6 +17,7 @@ import {
   refuseLocal, textOf,
 } from "./foundation-attempt-contracts.js";
 import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
+import { applyProviderUsageToBudget } from "../budget/budget-settlement-application.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
 import type { FoundationCaptureLifecycle, PreparedCapture } from "./foundation-capture-lifecycle.js";
 import { recordTerminalEffect } from "./effect-terminal-ledger.js";
@@ -155,9 +156,33 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     // BEFORE the advisory release, which now DERIVES its terminality from this very ledger —
     // load-bearing order, not incidental. Refusals are still not consumed: no terminal proven
     // must not stop an attempt that ran, and the release says so by draining, not releasing.
-    recordTerminalEffect(store, {
+    const terminal = recordTerminalEffect(store, {
       attemptRef: record.attempt.attemptId, projectId: bound.projectId,
     });
+    // THE BUDGET SETTLES ONLY AFTER THE TERMINAL IS DURABLE, AND ON ITS OWN DECISION.
+    //
+    // `recordTerminalEffect` refuses EFFECT_TERMINAL_EVIDENCE_ABSENT unless the provider run is
+    // already committed for this attempt, so gating on its ok is what makes telemetry durability
+    // a PRECONDITION of settlement rather than a coincidence: wired any earlier, every settlement
+    // would read UNKNOWN forever while its own UNKNOWN arm passed.
+    //
+    // It rides a SEPARATE decision rather than a leg of the terminal's: that path commits a
+    // single-target decision, and converting it to the legs API would change a landed replay
+    // identity on a surface this change does not own. A settlement refusal is ADVISORY here for
+    // the same reason the terminal's own refusal is — an attempt that ran is not unmade by a
+    // ledger that could not be read, and the refusal carries its own code and layer for a reader.
+    if (terminal.ok) {
+      applyProviderUsageToBudget(store, {
+        attemptRef: record.attempt.attemptId,
+        context: {
+          commandId: `settle-${record.attempt.attemptId}`,
+          correlationId: `budget-settlement-${record.attempt.attemptId}`,
+          decidedAt: new Date(0).toISOString(),
+          principalId: bound.projectId,
+        },
+        projectId: bound.projectId,
+      });
+    }
     const settled = noteRelease(bound, record, recordProvenFoundationAttempt(
       store, bound, record, prepared.inputManifest as unknown as Record<string, unknown>,
       { answer, observation, registration }));
