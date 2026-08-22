@@ -80,11 +80,14 @@ const allowingSlice = (sliceRef: string): JsonObject => ({
 /**
  * The evaluation input, tuned ONLY where the decision demands it.
  *
- * `facts` carries the single tier-bearing entry and `sliceChain` the opt-in slice. Everything
- * else stays at the bootstrap fixture's own values so a world seeded here differs from the
- * shipped journey in exactly the two places the outcome depends on.
+ * `facts` carries the single tier-bearing entry; the OPT-IN now rides the INSTALLED slice alone.
+ * Before task-eb6a1fa6 this record also re-sent `sliceChain`, duplicating a fact
+ * `drivePolicyDecision` had already written to the store - so the allow/hold distinction was
+ * asserted twice and the caller's copy was the one core read. `validatePolicy` now composes the
+ * chain from the installed bytes and refuses a caller that supplies one, which is why this
+ * function no longer needs to know whether the world opted in.
  */
-const evaluationFor = (sliceRef: string, optedIn: boolean): JsonObject => ({
+const evaluationFor = (sliceRef: string): JsonObject => ({
   action: POLICY_ACTION,
   actor: "principal-1",
   callerRiskHint: null,
@@ -96,10 +99,6 @@ const evaluationFor = (sliceRef: string, optedIn: boolean): JsonObject => ({
   policyRevisionRef: sliceRef,
   requiredFactIds: [],
   scope: [],
-  sliceChain: [optedIn
-    ? allowingSlice(sliceRef)
-    : ({ autoApprovalOptIns: [], rules: [], sliceRef } as unknown as JsonObject)],
-  waivers: [],
 } as unknown as JsonObject);
 
 /**
@@ -126,7 +125,7 @@ function drivePolicyDecision(store: SqliteEventStore, optedIn: boolean): void {
   // The version is READ AGAIN: `policy.install` just moved the aggregate, and a value captured
   // before it would refuse `BOOTSTRAP_EXPECTED_VERSION_STALE`.
   const validated = send(store, envelope("policy.validate", policyVersion(store), {
-    input: evaluationFor(sliceRef, optedIn),
+    input: evaluationFor(sliceRef),
   }, commandIdFor("policy.validate", optedIn)));
   if (!validated.ok) throw new Error(`witness fixture policy.validate refused: ${validated.code}`);
 }

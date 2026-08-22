@@ -387,8 +387,9 @@ const ACCEPTED_EVALUATION_INPUT: JsonObject = Object.freeze({
   policyRevisionRef: POLICY_REF,
   requiredFactIds: [],
   scope: [],
-  sliceChain: [HEX_POLICY_SLICE],
-  waivers: [],
+  // `sliceChain` and `waivers` are SERVER-SOURCED as of task-eb6a1fa6: `validatePolicy` refuses
+  // a caller that supplies either and composes them from the installed slice bytes instead, so
+  // an input carrying them is now refused before it reaches core.
 });
 
 /**

@@ -238,8 +238,6 @@ export function evaluationInput(policyRevisionRef: string): Record<string, unkno
     policyRevisionRef,
     requiredFactIds: [],
     scope: [],
-    sliceChain: [POLICY_SLICE],
-    waivers: [],
   };
 }
 
