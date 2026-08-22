@@ -14,6 +14,7 @@ import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, createFoundationCaptureLifecycle,
   readFoundationCatalogConfig,
 } from "./work/foundation-capture-lifecycle.js";
+import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import type { DaemonDependencyProvider } from "./daemon-entry.js";
 import { ensureGenesisRecoveryBinding } from "./identity/genesis-recovery-binding.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
@@ -44,6 +45,8 @@ export interface StoreDependencyConfig {
   readonly nodeSpecsDir?: string | undefined;
   readonly principalId: string;
   readonly projectId: string;
+  /** OPTIONAL. Absent is a valid boot state: runtime dispatch refuses when it needs a pin root. */
+  readonly runtimePinRoot?: string | undefined;
   readonly storePath: string;
   /** OPTIONAL. Absent is a valid state: Foundation preparation then refuses at
    *  dispatch time and the daemon still boots and serves every other kind. */
@@ -66,11 +69,13 @@ export function readStoreDependencyEnv(
   const principalId = env.MOE_PRINCIPAL_ID;
   const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
   const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
+  const runtimePinRoot = env[LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
     principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
     projectId: env.MOE_PROJECT_ID as string,
+    runtimePinRoot: runtimePinRoot === "" ? undefined : runtimePinRoot,
     storePath: env.MOE_STORE_PATH as string,
     workspaceCatalogPath: catalogPath === "" ? undefined : catalogPath,
   });
@@ -126,6 +131,7 @@ export function createStoreDependencies(
   // capture-time lifecycle so both resolve the same repository scope authority.
   const foundationCatalogSource = readFoundationCatalogConfig({
     [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
+    [LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY]: config.runtimePinRoot,
   });
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
