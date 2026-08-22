@@ -33,26 +33,23 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
 });
 
 /**
- * The daemon is the DEFAULT: a credentialed build attaches to it with no flag at
- * all. Frozen fixtures are behind an explicit `?fixtures=1` and render under a
- * banner saying so, and a build with no credentials gets a notice naming what is
- * missing — never fixtures standing in silently for live data.
+ * The Cordum v2 rebuild is the DEFAULT front door: it acquires its credential at
+ * RUNTIME through the daemon handshake (no baked secret), and `?fixtures=1` renders
+ * its frozen design view under a banner. The legacy v1 shell-mode board is demoted
+ * behind an explicit `?v1=1`, kept so its build-time LIVE / FIXTURES / CONFIG_NOTICE
+ * arms and the daemon e2e lane still have a home while the rebuild finishes.
  *
- * No URL flag carries a secret; credentials arrive via Vite env into headers
- * only. See `shell-mode.ts` for the decision and `shell-mode-view.tsx` for what
- * each arm paints.
+ * No URL flag carries a secret; v2 credentials arrive via the handshake and v1's
+ * via Vite env into headers only. See `shell-mode.ts` for the v1 decision.
  */
 function chooseRoot(): JSX.Element {
   const search = globalThis.location?.search ?? "";
-  // The v2 Cordum rebuild lives alongside v1 behind an explicit ?v2=1, so the
-  // existing LIVE / FIXTURES / CONFIG_NOTICE arms (and the e2e board-chain guard)
-  // are untouched. This branch is orthogonal to the shell-mode tri-state.
-  if (new URLSearchParams(search).get("v2") === "1") {
-    return <CordumApp search={search} />;
+  if (new URLSearchParams(search).get("v1") === "1") {
+    const setup = resolveLiveSetupFromBuild();
+    const mode = resolveShellMode(search, setup);
+    return <ShellModeRoot mode={mode} setup={setup} />;
   }
-  const setup = resolveLiveSetupFromBuild();
-  const mode = resolveShellMode(search, setup);
-  return <ShellModeRoot mode={mode} setup={setup} />;
+  return <CordumApp search={search} />;
 }
 
 /** Mounts the application into a caller-supplied container and returns its root. */

@@ -52,8 +52,9 @@ async function mountEntryPointAt(search: string): Promise<HTMLElement> {
 
 describe("control-room scaffold mounts", () => {
   it("mounts through the production entry point, not just its exported helper", async () => {
-    // Fixtures are behind an EXPLICIT request now; the bare URL is the live board.
-    const container = await mountEntryPointAt("/?fixtures=1");
+    // The v1 shell is behind ?v1=1 now (v2 Cordum is the default entry); ?fixtures=1
+    // selects v1's frozen fixture board under it.
+    const container = await mountEntryPointAt("/?v1=1&fixtures=1");
     try {
       expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
@@ -67,11 +68,24 @@ describe("control-room scaffold mounts", () => {
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);
 
-  it("refuses closed at the real entry point when the build carries no credentials", async () => {
-    // DoD 1's fail-closed clause, asserted at the composition root rather than at
-    // the component: this build has no VITE_MOE_LIVE_* values, and the default URL
-    // must therefore produce a NOTICE — not the frozen fixtures below it.
+  it("mounts the v2 Cordum shell by default at the bare URL", async () => {
+    // The swap: no flag now selects the v2 rebuild, which acquires its credential
+    // at runtime through the handshake rather than a baked secret.
     const container = await mountEntryPointAt("/");
+    try {
+      expect(within(container).getByTestId("cr2.shell.root")).toBeTruthy();
+      // The legacy v1 shell is no longer the default entry.
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("refuses closed at the real entry point when the build carries no credentials", async () => {
+    // DoD 1's fail-closed clause for the v1 entry (now behind ?v1=1), asserted at
+    // the composition root rather than the component: this build has no
+    // VITE_MOE_LIVE_* values, so v1 must produce a NOTICE, not the frozen fixtures.
+    const container = await mountEntryPointAt("/?v1=1");
     try {
       const notice = within(container).getByTestId("cr.config.notice");
       expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
