@@ -118,6 +118,46 @@ describe("what the board may hand back", () => {
   });
 });
 
+describe("plan.propose is two commits on one card", () => {
+  const chainOf = (version: number | null): readonly Record<string, unknown>[] => {
+    const payload = payloadFor("plan.propose", "run-live-1", version);
+    if (payload === null) throw new Error("plan.propose has no payload");
+    return payload["commands"] as readonly Record<string, unknown>[];
+  };
+
+  it("dispatches the sealing planning chain at version 0 and the finalize after it", () => {
+    const planning = chainOf(0);
+    expect(planning.map((command) => command["kind"])).toEqual([
+      "planning.create_draft", "planning.ready", "planning.claim", "plan.propose",
+    ]);
+    // The propose terminal seals authority bodies; a bare proposal never reaches PLAN_REVIEW.
+    const propose = planning[planning.length - 1];
+    expect(propose?.["authority"]).toMatchObject({
+      acceptanceContract: expect.anything(), planRevision: expect.anything(),
+    });
+    expect(chainOf(null)).toEqual(planning);
+
+    const finalize = chainOf(1);
+    expect(finalize.map((command) => command["kind"])).toEqual(["planning.finalize_submission"]);
+    // The finalize is judged against the sealed plan's own hash, and approval against the same.
+    const revision = finalize[0]?.["revision"] as Record<string, unknown>;
+    expect(revision["planHash"]).toBe(propose?.["submissionHash"]);
+    const approval = payloadFor("approval.decide", "run-live-1", 2) as Record<string, unknown>;
+    expect((approval["record"] as Record<string, unknown>)["exactRevisionHash"])
+      .toBe(propose?.["submissionHash"]);
+    expect(approval["graphRevisionRef"]).toBe(revision["graphRevisionRef"]);
+  });
+
+  it("keeps the card dispatchable at both versions, through the production predicate", () => {
+    for (const version of [0, 1]) {
+      expect(boardMayDispatch({
+        aggregateId: "run-live-1", claim: null, kind: "plan.propose", missing: [],
+        status: "READY", version,
+      }), `version ${String(version)}`).toBe(true);
+    }
+  });
+});
+
 describe("the board renders one control per authorable READY step", () => {
   it("renders a dispatch control for every payload kind and none for the agent's step", () => {
     const { container } = render(

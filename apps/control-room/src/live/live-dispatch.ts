@@ -29,7 +29,64 @@ const hex64 = (seed: string): string =>
 const GOAL_ID = "goal-live-1";
 const RUN_ID = "run-live-1";
 const POLICY_REF = hex64("a1b2c3");
-const SUBMISSION_HASH = hex64("dec0de");
+const GRAPH_REVISION_REF = "graph-revision-1";
+const GRAPH_CONTENT_HASH = hex64("c0ffee");
+/** The demo code node every shipped journey names; the finalize witness must name one. */
+const DEMO_NODE_REF = "node-code-1";
+
+/**
+ * THE SEALED PLANNING AUTHORITY, spelled as the bytes the daemon's own journey
+ * producer mints for these dev subjects (apps/daemon/src/planning/
+ * journey-authority-bodies.ts, inputs: authorRef operator-local, criterion
+ * goal-live-1-criterion, graph c0ffee / graph-revision-1, idPrefix run-live-1,
+ * node node-code-1). The daemon re-encodes both bodies through @moe/core's
+ * codecs and re-derives their digests, so a body edited by hand here stops the
+ * chain at plan.propose with the codec's code rather than sealing differently.
+ * SUBMISSION_HASH is the plan body's own planHash - approval.decide's
+ * exactRevisionHash and the finalize's planHash are judged against it.
+ * tests/integration/control-room/dev-payload-parity.test.ts pins these bytes
+ * to the producer.
+ */
+const SUBMISSION_HASH = "a7fe31e1bd59e0b5b56ece2e8c9e39a3f9f1a714fcd0933fb630ad9c1ba827c3";
+const SEALED_AUTHORITY: JsonObject = {
+  acceptanceContract: {
+    applicability: {
+      graphContentHash: GRAPH_CONTENT_HASH, graphRevisionRef: GRAPH_REVISION_REF,
+      nodeIds: [DEMO_NODE_REF], nodeKind: "LEAF",
+    },
+    authorRef: "operator-local",
+    contractId: `${RUN_ID}-contract`,
+    obligations: [
+      {
+        criterionId: `${GOAL_ID}-criterion`,
+        evidenceRequirements: [
+          {
+            evidenceRef: `${GOAL_ID}-criterion-evidence`, kind: "VERIFICATION_RECEIPT",
+            requirementId: `${GOAL_ID}-criterion-requirement`,
+          },
+        ],
+        statement: `the run satisfies ${GOAL_ID}-criterion`,
+        verificationRecipeRefs: [`${GOAL_ID}-criterion-recipe`],
+      },
+    ],
+    criteriaDigest: "5ef65c9b22ecca41ce67884ee50b4c4e6861e78e97eebda17c2191da8ea4740d",
+    version: "moe-acceptance-contract/1",
+  },
+  planRevision: {
+    affectedCriterionIds: [`${GOAL_ID}-criterion`],
+    affectedNodeIds: [DEMO_NODE_REF],
+    approvalState: "PENDING_APPROVAL",
+    authorRef: "operator-local",
+    graphBinding: { graphContentHash: GRAPH_CONTENT_HASH, graphRevisionRef: GRAPH_REVISION_REF },
+    parentRevisionId: null,
+    planHash: SUBMISSION_HASH,
+    rejectionRef: null,
+    revisionId: `${RUN_ID}-revision`,
+    steps: [{ description: "Land the live board's demo node.", kind: "ANALYSIS", stepId: "step-00001" }],
+    verificationRecipeRefs: [`${RUN_ID}-recipe`],
+    version: "moe-plan-revision/1",
+  },
+};
 
 const PLANNING_CHAIN: readonly JsonObject[] = [
   {
@@ -51,6 +108,7 @@ const PLANNING_CHAIN: readonly JsonObject[] = [
     },
   },
   {
+    authority: SEALED_AUTHORITY,
     commandId: "chain-propose",
     effectTerminalProof: {
       effectTerminalRef: "effect-terminal-1", resourcesTerminalRef: "resources-terminal-1",
@@ -60,6 +118,29 @@ const PLANNING_CHAIN: readonly JsonObject[] = [
     submissionHash: SUBMISSION_HASH,
     witness: {
       attemptRef: "attempt-1", submissionRef: "submission-1", truthClass: "DAEMON_VERIFIED",
+    },
+  },
+];
+
+/**
+ * The finalize terminal rides a request of its OWN: the daemon refuses a chain
+ * holding both terminals (PLANNING_FINALIZE_CHAIN_MIXED), so the board's
+ * plan.propose card dispatches TWICE - the planning chain at step version 0,
+ * this chain once the first commit advanced it. Only the finalize moves the run
+ * to PLAN_REVIEW, which approval.decide demands (APPROVAL_RUN_NOT_REVIEWABLE).
+ */
+const FINALIZE_CHAIN: readonly JsonObject[] = [
+  {
+    commandId: "chain-finalize", expectedVersion: 4, kind: "planning.finalize_submission",
+    revision: {
+      dependencyHash: hex64("d1"), graphContentHash: GRAPH_CONTENT_HASH,
+      graphRevisionRef: GRAPH_REVISION_REF, planHash: SUBMISSION_HASH, qualityHash: hex64("dd"),
+    },
+    witness: {
+      attemptTerminalRef: "attempt-terminal-1", effectTerminalRef: "effect-terminal-1",
+      nodeSummaries: [{ executionBearing: true, nodeKey: DEMO_NODE_REF }],
+      providerSlotTerminalRef: "slot-terminal-1", resourcesTerminalRef: "resources-terminal-1",
+      truthClass: "DAEMON_VERIFIED",
     },
   },
 ];
@@ -75,7 +156,7 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
       decision: "APPROVE", decisionReason: "reason-1", kind: "approval.decide",
       stepUpAuthRef: "stepup-1",
     },
-    graphRevisionRef: "graph-revision-1",
+    graphRevisionRef: GRAPH_REVISION_REF,
     record: {
       actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
       approvalRef: "approval-1", approvedNodeScope: ["node-1"], budgetRef: hex64("bb"),
@@ -102,6 +183,8 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     budgetAccountRef: "budget-account-1", goalId: GOAL_ID, planningRunRef: RUN_ID,
     witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
   },
+  // The first commit's chain; `payloadFor` swaps in FINALIZE_CHAIN once the
+  // surface reports the card past version 0.
   "plan.propose": { commands: PLANNING_CHAIN, runId: RUN_ID },
   "policy.install": {
     slice: { autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF },
@@ -194,8 +277,18 @@ function reviewPayloadFor(kind: string, subjectRef: string): JsonObject | null {
 /** The one session the board may operate: its own dev subject, never an agent's. */
 const DEV_SESSION_ID = "sess-ui-1";
 
-/** session.close / session.renew derive their payload from the step's aggregate. */
-export function payloadFor(kind: string, aggregateId: string | null): JsonObject | null {
+/**
+ * session.close / session.renew derive their payload from the step's
+ * aggregate; plan.propose derives its chain from the step's VERSION, because
+ * the same card is dispatched twice (propose, then finalize) and only the
+ * surface's version says which commit the daemon is waiting for.
+ */
+export function payloadFor(
+  kind: string, aggregateId: string | null, version: number | null = null,
+): JsonObject | null {
+  if (kind === "plan.propose" && (version ?? 0) > 0) {
+    return { commands: FINALIZE_CHAIN, runId: RUN_ID };
+  }
   if (kind === "session.close" || kind === "session.renew") {
     const sessionId = aggregateId?.startsWith("session/") === true
       ? aggregateId.slice("session/".length)
@@ -254,6 +347,8 @@ export interface DispatchInput {
   readonly kind: string;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
+  /** The step's surface version; absent reads as the first commit. */
+  readonly version?: number | null | undefined;
 }
 
 export async function dispatchAffordance(input: DispatchInput): Promise<DispatchReport> {
@@ -263,7 +358,7 @@ export async function dispatchAffordance(input: DispatchInput): Promise<Dispatch
   recordDispatchEffort({
     affordance: input.affordance, aggregateId: input.aggregateId, commandKind: input.kind,
   });
-  const payload = payloadFor(input.kind, input.aggregateId);
+  const payload = payloadFor(input.kind, input.aggregateId, input.version ?? null);
   if (payload === null) {
     return { detail: "no development payload for this kind", ok: false, stage: "BUILD_REFUSED" };
   }

@@ -57,7 +57,7 @@ const COLUMNS = [
  * (`node.deliver`) gets no control at all.
  */
 export function boardMayDispatch(step: SurfaceStep): boolean {
-  return step.status === "READY" && payloadFor(step.kind, step.aggregateId) !== null;
+  return step.status === "READY" && payloadFor(step.kind, step.aggregateId, step.version) !== null;
 }
 
 function stepIdentity(step: SurfaceStep): string {
@@ -126,7 +126,7 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
     }));
     const report = await dispatchAffordance({
       affordance, aggregateId: step.aggregateId, client, kind: step.kind,
-      sessionCredential, transport,
+      sessionCredential, transport, version: step.version,
     }).catch(() => ({
       detail: "TRANSPORT_REQUEST_FAILED", ok: false as const, stage: "UNDELIVERED" as const,
     }));

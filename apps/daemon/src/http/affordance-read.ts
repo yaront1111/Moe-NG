@@ -4,7 +4,9 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_SCHEMA_VERSION } from "../bootstrap/bootstrap-contracts.js";
 import type { BootstrapCommandKind } from "../bootstrap/bootstrap-contracts.js";
-import { missingPrerequisites, readDurableLedger, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import {
+  missingPrerequisites, readDurableLedger, stateOf, versionOf,
+} from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
@@ -55,6 +57,42 @@ export const DEFAULT_SUBJECTS: Readonly<Partial<Record<BootstrapCommandKind, str
   });
 
 export const DEFAULT_SESSION_SUBJECT = "sess-ui-1";
+
+/** The run lifecycle approval demands; anything short of it is still planning. */
+const REVIEWABLE_LIFECYCLE = "PLAN_REVIEW";
+
+/**
+ * A plan.propose commit is not one thing. The planning chain seals the plan
+ * (lifecycle PLANNING) and a SECOND plan.propose request carries the finalize
+ * terminal that moves the run to PLAN_REVIEW - the daemon refuses both in one
+ * chain. The ledger's committed KINDS cannot tell the two apart, so a surface
+ * keyed on kinds alone called a half-proposed run COMMITTED and offered
+ * approval.decide against it, where the daemon refuses
+ * APPROVAL_RUN_NOT_REVIEWABLE: a truthful-but-futile card. The run's own
+ * durable lifecycle is the fact that answers, read off the same ledger.
+ */
+function planReviewable(ledger: DurableLedger, runAggregateId: string): boolean {
+  const run = stateOf(ledger, runAggregateId);
+  if (run === undefined || run === null || typeof run !== "object" || Array.isArray(run)) {
+    return false;
+  }
+  const state = (run as Record<string, unknown>)["state"];
+  if (state === null || typeof state !== "object" || Array.isArray(state)) return false;
+  return (state as Record<string, unknown>)["lifecycle"] === REVIEWABLE_LIFECYCLE;
+}
+
+/**
+ * The ledger as the bootstrap prerequisites should read it: plan.propose counts
+ * as committed only once the run is reviewable. Until then the card stays
+ * READY at its advanced version (the board dispatches the finalize against
+ * that version) and approval.decide stays BLOCKED on it.
+ */
+function effectiveLedger(ledger: DurableLedger, runAggregateId: string): DurableLedger {
+  if (!ledger.kinds.has("plan.propose") || planReviewable(ledger, runAggregateId)) return ledger;
+  const kinds = new Set(ledger.kinds);
+  kinds.delete("plan.propose");
+  return Object.freeze({ aggregates: ledger.aggregates, decisionCount: ledger.decisionCount, kinds });
+}
 
 /** The finding rule the daemon's verifier records when a node's test run fails. */
 export const VERIFIER_FAILURE_RULE = "verifier-test-failed";
@@ -115,31 +153,35 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
   });
 
   const bootstrapSteps = (
-    ledger: DurableLedger, offers: NextAllowedCommand[],
+    durable: DurableLedger, offers: NextAllowedCommand[],
     claims: WorkClaimLedger, now: string,
-  ): ChainStep[] => BOOTSTRAP_COMMAND_KINDS.map((kind) => {
-    const aggregateId = bootstrapAggregateId(kind, config.projectId);
-    if (ledger.kinds.has(kind)) {
+  ): ChainStep[] => {
+    const ledger = effectiveLedger(
+      durable, bootstrapAggregateId("plan.propose", config.projectId));
+    return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
+      const aggregateId = bootstrapAggregateId(kind, config.projectId);
+      if (ledger.kinds.has(kind)) {
+        return Object.freeze({
+          aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
+          missing: [], status: "COMMITTED" as const,
+          version: versionOf(ledger, aggregateId),
+        });
+      }
+      const missing = missingPrerequisites(ledger, kind);
+      if (missing.length > 0) {
+        return Object.freeze({
+          aggregateId: null, ...claimFields(claims, kind, null, now), kind,
+          missing, status: "BLOCKED" as const, version: null,
+        });
+      }
+      const version = versionOf(ledger, aggregateId);
+      offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       return Object.freeze({
         aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
-        missing: [], status: "COMMITTED" as const,
-        version: versionOf(ledger, aggregateId),
+        missing: [], status: "READY" as const, version,
       });
-    }
-    const missing = missingPrerequisites(ledger, kind);
-    if (missing.length > 0) {
-      return Object.freeze({
-        aggregateId: null, ...claimFields(claims, kind, null, now), kind,
-        missing, status: "BLOCKED" as const, version: null,
-      });
-    }
-    const version = versionOf(ledger, aggregateId);
-    offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
-    return Object.freeze({
-      aggregateId, ...claimFields(claims, kind, aggregateId, now), kind,
-      missing: [], status: "READY" as const, version,
     });
-  });
+  };
 
   const readSurface = (): AffordanceSurfaceResult => {
     const offers: NextAllowedCommand[] = [];
