@@ -10,6 +10,7 @@
  * built its own would drift away from the exact-key admission it is supposed to be exercising.
  */
 
+import { encodeProviderRunRef } from "@moe/scheduler";
 import type { AdmissionAmount, AdmissionGate, BudgetMeterAmount } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -26,6 +27,14 @@ export const CHILD = "child-account-a";
 export const CHILD_OWNER = "graph-node:dev-a";
 export const ADMISSION = "admission-1";
 export const ATTEMPT = "attempt-1";
+/**
+ * THE DISPATCH REF IS NOT THE ATTEMPT REF. Until task-763c24cf `observation()` set
+ * `providerRunRef` to the bare `ATTEMPT` — the same literal `seedActivatedHold` binds as the
+ * reservation's `attemptRef` — so every settlement in every suite here correlated by fixture
+ * construction and the PRODUCTION shapes had never once been compared. `providerRunRef` is now
+ * the real flattened composite the runner emits, with `ATTEMPT` as its attempt SEGMENT.
+ */
+export const DISPATCH_REF = "dispatch:aggregate:1";
 
 export const AUTHORIZED: readonly BudgetMeterAmount[] = [
   { meter: "tokens", amount: 1_000 },
@@ -61,7 +70,9 @@ export function observation(overrides: Record<string, unknown> = {}): unknown {
     measurement: {
       coverage: "COMPLETE", meter: "tokens",
       observedInterval: { endRef: "interval-end-1", startRef: "interval-start-1" },
-      providerRunRef: ATTEMPT, quantity: 60, rawReceiptDigest: digest64("ab"), sequence: 0,
+      providerRunRef: encodeProviderRunRef(
+        { attemptRef: ATTEMPT, epoch: 1, provider: "claude", runRef: DISPATCH_REF }),
+      quantity: 60, rawReceiptDigest: digest64("ab"), sequence: 0,
       source: "PROVIDER_REPORTED_COMPLETE", sourceParserVersion: 1, ...overrides,
     },
     pricebookBinding: null,

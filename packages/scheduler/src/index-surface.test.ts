@@ -189,10 +189,11 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["closeSettledView", "function"], ["conservativeSettle", "function"],
   ["createNodeDefinition", "function"], ["createTraversalCounter", "function"],
   ["decodeGraphContent", "function"], ["decodeNodeDefinitionBytes", "function"],
+  ["decodeProviderRunRefAttempt", "function"],
   ["deriveExpansionEvidence", "function"], ["deriveNodeAuthoritySet", "function"],
   ["deriveReservationId", "function"], ["deriveSettlementId", "function"],
   ["deriveSubtreeTotals", "function"], ["encodeGraphContent", "function"],
-  ["encodeNodeDefinition", "function"], ["fenceAuthority", "function"],
+  ["encodeNodeDefinition", "function"], ["encodeProviderRunRef", "function"], ["fenceAuthority", "function"],
   ["grantSuccessorCapacity", "function"],
   ["isFairnessIdentity", "function"], ["normalizeUsageMeasurement", "function"],
   ["openBudgetRoot", "function"],
@@ -216,7 +217,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(133);
+  expect(EXPECTED_EXPORTS.length).toBe(135);
 });
 
 /**

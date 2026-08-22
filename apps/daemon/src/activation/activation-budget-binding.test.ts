@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { encodeProviderRunRef } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 
@@ -335,21 +336,16 @@ const decisionKey = (commandId: string): { commandId: string; principalId: strin
   ({ commandId, principalId: PRINCIPAL_ID, projectId: PROJECT_ID });
 
 /**
- * A DELIBERATE MIRROR of `runRefOf`, which production does not export
- * (packages/runner/src/providers/telemetry/provider-usage-normalization.ts:61-64, reached from
- * the exported `normalizeProviderUsage` at :199). Reproducing the format here is the only way
- * to state the finding without spawning a real provider run: `runRefOf` is module-private and
- * the only path to it is `launchClaudeWithTelemetry`, which shells out.
- *
- * THE MIRROR CANNOT SILENTLY DRIFT INTO AGREEMENT. What the arms below need is not this exact
- * string but the fact that production's `providerRunRef` is a COMPOSITE and settlement compares
- * it to `record.attemptRef` by whole-string equality — so they assert the structural tie
- * (contains the length-prefixed attemptRef, is not equal to it) rather than the literal. If the
- * format changes, those assertions still hold; if production ever emitted the bare ref, they
- * fail, which is the direction that matters.
+ * RETIRED MIRROR, REPLACED BY THE PRODUCTION ENCODER (task-763c24cf). This helper used to
+ * reproduce `runRefOf`'s format by hand because production did not export it. That format is now
+ * a published contract — `encodeProviderRunRef` in `@moe/scheduler` — which the runner encodes
+ * through and the settlement reducer decodes through, so asserting against a hand-written mirror
+ * would be exactly the "property asserted against a test helper that reimplements it" the project
+ * rail forbids.
  */
+const DISPATCH_REF = "dispatch-1";
 const productionRunRef = (attemptRef: string): string =>
-  `claude:${"dispatch-1".length}:dispatch-1:${attemptRef.length}:${attemptRef}:3`;
+  encodeProviderRunRef({ attemptRef, epoch: 3, provider: "claude", runRef: DISPATCH_REF });
 
 describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
   it("binds the attempt's OWN ref to the durable reservation and moves it to ACTIVATED", () => {
@@ -370,7 +366,9 @@ describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
     runEffectActivateCommand(store, activateBytes());
 
     const { reservation } = ledgerOf(store);
-    const settled = settle(store, reservation, committedAttemptRef(store));
+    // The reading carries the PRODUCTION composite (task-763c24cf); a bare attempt id is not a
+    // shape any real measurement has, and since that row it fails the correlation gate closed.
+    const settled = settle(store, reservation, productionRunRef(committedAttemptRef(store)));
 
     // ASSERT THE POSITIVE. "does not refuse NOT_ACTIVATED" is free against a call that refused
     // for some other reason, so the arm pins the accept itself.
@@ -486,7 +484,7 @@ describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
     expect(store.getCommandDecision(decisionKey(`${COMMAND_ID}:BUDGET_ACTIVATE`))).toBeNull();
   });
 
-  it("DISCLOSED NEXT WALL — a production-shaped providerRunRef refuses UNCORRELATED, not NOT_ACTIVATED", () => {
+  it("RE-POINTED — a production-shaped providerRunRef now CORRELATES and settles", () => {
     const store = readyStore("uncorrelated");
     runEffectActivateCommand(store, activateBytes());
 
@@ -494,32 +492,43 @@ describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
     const attemptRef = committedAttemptRef(store);
     const composite = productionRunRef(attemptRef);
 
-    // THE MIRROR IS DECLARED, AND IT IS STRUCTURALLY TIED to the ref it must not equal: the
-    // composite CONTAINS the bound attemptRef length-prefixed, and settlement compares whole
-    // strings. Any composite at all therefore fails the correlation gate.
+    // THE SHAPES ARE STILL ASYMMETRIC — the reading carries a COMPOSITE, the reservation a BARE
+    // attempt id — and that asymmetry is exactly what used to refuse. task-763c24cf made the
+    // reducer decode the attempt segment instead of comparing whole strings, so the disclosure
+    // this arm was written to record is now the ACCEPTED path. RE-POINTED rather than deleted:
+    // the world is unchanged, only the expected outcome moved.
     expect(composite).toContain(`${attemptRef.length}:${attemptRef}`);
     expect(composite).not.toBe(attemptRef);
 
-    const settled = settle(store, reservation, composite);
+    expect(settle(store, reservation, composite).ok).toBe(true);
+  });
+
+  it("and a FOREIGN attempt inside a well-formed composite is still refused", () => {
+    const store = readyStore("foreign-attempt");
+    runEffectActivateCommand(store, activateBytes());
+
+    const { reservation } = ledgerOf(store);
+    // The anti-relaxation sibling: same production shape, same dispatch ref, different attempt.
+    // A fix that made the gate pass for everything would satisfy the arm above and fail here.
+    const settled = settle(store, reservation, productionRunRef("attempt-someone-else"));
     expect(settled.ok).toBe(false);
-    if (settled.ok) throw new Error("unreachable: the disclosed wall asserted a refusal");
-    // NOT_ACTIVATED IS GONE AND A DIFFERENT GATE ANSWERS. Both codes live in the same firstOf
-    // table with NOT_ACTIVATED ordered ABOVE this one, so reaching UNCORRELATED is positive
-    // proof that the binding cleared the first gate — it is not the absence of a string.
+    if (settled.ok) throw new Error("unreachable: the foreign attempt asserted a refusal");
     expect(settled.sourceCode).toBe("BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT");
     expect(settled.sourceLayer).toBe("BUDGET_SETTLEMENT");
   });
 
-  it("and the SAME world settles once the measurement names the bound attemptRef", () => {
+  it("RE-POINTED — the composite settles and the BARE ref now fails closed", () => {
     const store = readyStore("correlated");
     runEffectActivateCommand(store, activateBytes());
 
     const { reservation } = ledgerOf(store);
     const attemptRef = committedAttemptRef(store);
 
-    // Same store, same reservation, same observation shape — only the run identity differs
-    // from the arm above. That difference is the whole of the disclosed finding.
-    expect(settle(store, reservation, productionRunRef(attemptRef)).ok).toBe(false);
-    expect(settle(store, reservation, attemptRef).ok).toBe(true);
+    // Same store, same reservation, same observation shape — only the run IDENTITY differs.
+    // Before task-763c24cf the composite refused and only a bare ref settled; now the composite
+    // is what production actually emits and settles, and the BARE ref fails closed, because the
+    // decoder answers null for anything that is not a well-formed composite.
+    expect(settle(store, reservation, productionRunRef(attemptRef)).ok).toBe(true);
+    expect(settle(store, reservation, attemptRef).ok).toBe(false);
   });
 });

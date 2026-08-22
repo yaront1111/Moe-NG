@@ -21,6 +21,7 @@ import {
   reserveForAdmission,
   settleReservation,
 } from "@moe/scheduler";
+import { encodeProviderRunRef } from "@moe/scheduler";
 import type { BudgetAvailableView, NormalizedMeasurement, ReservationRecord, SettlementRecord } from "@moe/scheduler";
 import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
@@ -45,6 +46,7 @@ import {
   authorizeInput,
   context,
   currentLedger,
+  DISPATCH_REF,
   observation,
   refused,
   reserveInput,
@@ -364,8 +366,12 @@ describe("the head record stays bounded across settle cycles", () => {
         const settledRecord = accepted(settleBudgetReservation(store, {
           context: context(`cmd-cycle-settle-${cycle}`), goalRef: GOAL_ID,
           // Correlated to THIS cycle's attempt: the measurement authority
-          // refuses a receipt whose provider run is not the hold's own.
-          observations: [observation({ providerRunRef: `attempt-cycle-${cycle}` })],
+          // refuses a receipt whose provider run is not the hold's own. The ref is the REAL
+          // flattened composite (task-763c24cf) — a bare attempt id no longer correlates, and
+          // this call site carried its OWN same-literal override, not the fixture's default.
+          observations: [observation({ providerRunRef: encodeProviderRunRef({
+            attemptRef: `attempt-cycle-${cycle}`, epoch: 1, provider: "claude", runRef: DISPATCH_REF,
+          }) })],
           projectId: PROJECT_ID,
           reservationId: reservation.reservationId,
         })).record;

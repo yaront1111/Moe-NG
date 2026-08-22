@@ -14,6 +14,7 @@ import { MAX_BUDGET_VERSION } from "./budget-account.js";
 import { BUDGET_ACCOUNT_STATES, BUDGET_MEASUREMENT_COVERAGES, type BudgetAccountState, type BudgetMeterBuckets } from "./budget-contract.js";
 import { deriveReservationId, type BudgetAvailableView, type ReservationRecord } from "./budget-reservation.js";
 import type { NormalizedMeasurement } from "./budget-measurement.js";
+import { decodeProviderRunRefAttempt } from "./budget-run-ref.js";
 
 export const BUDGET_SETTLEMENT_ISSUE_CODES = Object.freeze([
   "BUDGET_SETTLEMENT_ACKNOWLEDGEMENT_MISSING", "BUDGET_SETTLEMENT_ALREADY_SETTLED", "BUDGET_SETTLEMENT_COUNTER_EXHAUSTED",
@@ -161,7 +162,8 @@ export function settleReservation(view: BudgetAvailableView, reservation: Reserv
       "BUDGET_SETTLEMENT_IDENTITY_MISMATCH"],
     [record.state !== "ACTIVATED" || !isRef(record.attemptRef), "BUDGET_SETTLEMENT_NOT_ACTIVATED"],
     ...fence(view, record.version, cmd.expectedViewVersion, cmd.expectedReservationVersion),
-    [readings.some((r) => r.run !== record.attemptRef), "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
+    [readings.some((r) => decodeProviderRunRefAttempt(r.run) !== record.attemptRef),
+      "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
     [new Set(readings.map((r) => r.meter)).size !== readings.length, "BUDGET_SETTLEMENT_DUPLICATE_METER"],
     [readings.some((r) => !held.has(r.meter)), "BUDGET_SETTLEMENT_UNKNOWN_METER"],
     [[...held].some(([m, q]) => (bucketOf(view, m)?.reserved ?? -1) < q), "BUDGET_SETTLEMENT_INSUFFICIENT_RESERVED"]]);
@@ -208,7 +210,7 @@ export function reconcileSettlement(view: BudgetAvailableView, settlement: Settl
   const readings = parsed !== null && parsed.length > 0 ? parsed : null, at = (r: SettlementRecord, m: string): SettlementLine | undefined => r.lines.find((l) => l.meter === m);
   const opened = openQuarantine(view, settlement, readRecord(command, FENCE_KEYS), (r) => [
     [(readings === null) === (proof === null), "BUDGET_SETTLEMENT_EVIDENCE_AMBIGUOUS"],
-    [some((x) => x.run !== r.attemptRef), "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
+    [some((x) => decodeProviderRunRefAttempt(x.run) !== r.attemptRef), "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
     [readings !== null && new Set(readings.map((x) => x.meter)).size !== readings.length, "BUDGET_SETTLEMENT_DUPLICATE_METER"],
     [some((x) => { const l = at(r, x.meter); return l === undefined || RESOLVED.includes(l.disposition); }),
       "BUDGET_SETTLEMENT_UNKNOWN_METER"],

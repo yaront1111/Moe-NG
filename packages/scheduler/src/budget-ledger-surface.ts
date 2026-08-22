@@ -120,3 +120,11 @@ export type {
   SettlementRecord,
   SettlementState,
 } from "./budget/budget-settlement.js";
+
+/**
+ * THE PROVIDER-RUN WIRE IDENTITY. The runner ENCODES every measurement's `providerRunRef` through
+ * `encodeProviderRunRef`; the settlement reducer DECODES the attempt segment back out to correlate
+ * a reading against a reservation. Published because the producer lives in another package.
+ */
+export { decodeProviderRunRefAttempt, encodeProviderRunRef } from "./budget/budget-run-ref.js";
+export type { ProviderRunIdentity } from "./budget/budget-run-ref.js";
