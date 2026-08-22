@@ -309,6 +309,63 @@ describe("resource.reconcile — the authenticated ingress", () => {
     expect(resourceEventCount(target)).toBe(1);
   });
 
+  it("refuses a CONFIRM that ALSO carries a disposition, and writes nothing", () => {
+    const target = world("incoherent-confirm-key");
+
+    // `disposition` IS in RESOURCE_RECONCILE_PAYLOAD_KEYS, so `checkPayload` admits the key and
+    // the refusal can only come from `reportOf`'s coherence branch. An INPUT_INVALID / 400 here
+    // would mean this arm had re-tested the allow-list (see the smuggled-STATE arm below) rather
+    // than the rule that one request must not carry two readings of itself.
+    const answered = send(target, "cmd-malformed-3", {
+      ...confirm("res-1"), disposition: "FAILED",
+    });
+
+    expect(refusalOf(answered)).toMatchObject({
+      code: "RESOURCE_RECONCILE_REQUEST_MALFORMED", layer: DAEMON_RESOURCE_RECONCILE,
+    });
+    expect(resourceEventCount(target)).toBe(1);
+  });
+
+  // The epoch is an acquisition COUNTER and the reducer compares it for EQUALITY, so a number
+  // that is not a count must be refused rather than coerced to a neighbouring one. Both cases
+  // reach `reportOf`: `epoch` is in the allow-list, so `checkPayload` admits the key, and both
+  // values survive the bounded decode unchanged. An unsafe integer does NOT reach it — the arm
+  // below this one records which layer answers that instead.
+  it.each<readonly [string, number]>([
+    ["fractional", 1.5],
+    ["negative", -1],
+  ])("refuses a %s epoch, and writes nothing", (label, epoch) => {
+    const target = world(`bad-epoch-${label.replaceAll(" ", "-")}`);
+
+    const answered = send(target, `cmd-epoch-${label.replaceAll(" ", "-")}`, {
+      ...confirm("res-1", epoch),
+    });
+
+    expect(refusalOf(answered)).toMatchObject({
+      code: "RESOURCE_RECONCILE_REQUEST_MALFORMED", layer: DAEMON_RESOURCE_RECONCILE,
+    });
+    expect(resourceEventCount(target)).toBe(1);
+  });
+
+  it("refuses an epoch beyond the safe-integer range EARLIER, at the bounded decode", () => {
+    const target = world("unsafe-epoch");
+
+    // MEASURED, and recorded so nobody folds this case into the it.each above and reads its
+    // green as coverage of `isEpoch`: 9007199254740992 (MAX_SAFE_INTEGER + 1) never reaches
+    // `reportOf` at all. The bounded decode refuses it first, one layer up, with a different
+    // shape entirely — `error` + `stage`, not the `refusal` the reconcile seam emits.
+    const answered = send(target, "cmd-epoch-unsafe", {
+      ...confirm("res-1", Number.MAX_SAFE_INTEGER + 1),
+    });
+
+    expect(refusalOf(answered)).toBeUndefined();
+    expect(answered).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false,
+      outcome: "REFUSED", stage: "DECODE",
+    });
+    expect(resourceEventCount(target)).toBe(1);
+  });
+
   it("cannot be told a STATE: the exact allow-list refuses it before dispatch", () => {
     const target = world("smuggled-state");
 
