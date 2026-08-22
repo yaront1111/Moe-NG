@@ -5,6 +5,8 @@ import { cleanup, render, screen, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { CORE_SURFACE_FIXTURES } from "../a11y/ui-wide-core-fixtures.js";
+import type { SurfaceFixture } from "../a11y/ui-wide-core-fixtures.js";
 import { CONTROL_ROOM_FIXTURES, MUTATION_BLOCK_ISOLATION } from "../fixtures.js";
 import type {
   FixtureAffordanceSnapshot, FixtureConnectionState, FixtureFact, FixtureSurfaceId,
@@ -62,6 +64,23 @@ function renderFrame(affordance: FixtureAffordanceSnapshot): void {
       <ActionBar />
     </ShellFrame>,
   );
+}
+
+function surfaceFixture(id: string): SurfaceFixture {
+  const fixture = CORE_SURFACE_FIXTURES.find((candidate) => candidate.id === id);
+  if (fixture === undefined) throw new Error(`no ${id} surface fixture`);
+  return fixture;
+}
+
+/** Connected, mutations enabled, and carrying exactly the surface's own commands. */
+function affordanceWith(commands: FixtureAffordanceSnapshot["nextAllowedCommands"]):
+FixtureAffordanceSnapshot {
+  return {
+    ...affordanceFor("CONNECTED"),
+    mutationsEnabled: true,
+    nextAllowedCommands: commands,
+    requiresAffordanceRefresh: false,
+  };
 }
 
 /** Every snapshot the shell can be handed, canonical states plus the isolation legs. */
@@ -264,6 +283,35 @@ describe("keyboard reachability and provenance drill-down", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByTestId("cr.shell.help")).toBeNull();
     expect(document.activeElement).toBe(invoker);
+  });
+
+  it("holds every global shortcut while a portaled approval dialog is modal", async () => {
+    // ReasonModal portals to document.body, outside the shell root, so a modal check
+    // scoped to the root would see no dialog and let a, ? and g t escape it.
+    const user = userEvent.setup();
+    const plan = surfaceFixture("approval-detail-plan");
+    render(
+      <ShellFrame affordance={affordanceWith(plan.commands)}>
+        {plan.render()}
+      </ShellFrame>,
+    );
+    await user.click(screen.getByRole("button", { name: /^Reject plan/u }));
+    const dialog = screen.getByTestId("cr.approvals.reasonmodal");
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    expect(screen.getByTestId("cr.shell.root").contains(dialog)).toBe(false);
+    await user.tab({ shift: true });
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(document.activeElement).toBe(cancel);
+
+    await user.keyboard("a");
+    await user.keyboard("?");
+    await user.keyboard("gt");
+
+    expect(screen.getByTestId("cr.approvals.reasonmodal")).toBe(dialog);
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    expect(screen.queryByTestId("cr.shell.help")).toBeNull();
+    expect(screen.getByTestId("cr.shell.tab.timeline").getAttribute("aria-pressed"))
+      .not.toBe("true");
   });
 
   it("reaches every action by tabbing in DOM order", async () => {

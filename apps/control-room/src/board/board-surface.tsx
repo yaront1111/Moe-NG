@@ -204,6 +204,18 @@ export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
     if (open) onOpenCard?.(card.nodeId);
   };
 
+  /**
+   * The nearest lane in the direction of travel that holds a card, or null at the edge.
+   * A drawn lane without cards is skipped rather than landed on: it has no card to take
+   * focus, so stopping there would strand the walk short of every lane beyond it.
+   */
+  const nextPopulated = (from: number, step: number): number | null => {
+    for (let next = from + step; next >= 0 && next < lanes.length; next += step) {
+      if ((lanes[next]?.length ?? 0) > 0) return next;
+    }
+    return null;
+  };
+
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>): void => {
     const move = KEY_MOVES[event.key];
     if (move === undefined) return;
@@ -214,7 +226,8 @@ export function BoardSurface(props: BoardSurfaceProps): JSX.Element {
     // cursor remembered; the cursor stands in only while the grid itself holds focus.
     const origin = target === event.currentTarget ? cursor : cardCursor(target, visible) ?? cursor;
     const [columnDelta, rowDelta, open] = move;
-    const column = clamp(origin.column + columnDelta, visible.length - 1);
+    const column = columnDelta === 0 ? origin.column : nextPopulated(origin.column, columnDelta);
+    if (column === null) return;
     const lane = lanes[column] ?? [];
     moveTo(column, clamp(rowDelta === 0 ? origin.row : origin.row + rowDelta, lane.length - 1),
       open);

@@ -392,6 +392,24 @@ describe("board keyboard walks the supplied lanes in column-major order", () => 
     expect(focused()).toBe("same-spelled-a");
   });
 
+  it("steps h/l past a drawn lane that holds no card instead of dead-ending on it", async () => {
+    // Ready and Executing are drawn (nobody reported them empty) yet hold nothing, so a
+    // walk that clamps into them has no card to land on and Review becomes unreachable.
+    renderBoard({ cards: CARDS.filter((card) => card.placement === "plan"
+      || card.placement === "review") });
+    expect(screen.getByTestId("cr.board.empty.ready")).toBeTruthy();
+    expect(screen.getByTestId("cr.board.empty.executing")).toBeTruthy();
+    screen.getByTestId("cr.board.card.plan-doc").focus();
+    await userEvent.keyboard("l");
+    expect(focused()).toBe("ui-panel");
+    await userEvent.keyboard("l");
+    expect(focused()).toBe("ui-panel");
+    await userEvent.keyboard("h");
+    expect(focused()).toBe("plan-doc");
+    await userEvent.keyboard("{ArrowRight}");
+    expect(focused()).toBe("ui-panel");
+  });
+
   it("jumps to a visible column's first card and keeps unequal lanes column-major", async () => {
     renderBoard({ cards: CARDS.filter((card) => card.placement !== "ready"),
       loadedEmptyColumns: ["ready"] });
