@@ -517,18 +517,37 @@ describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
     expect(settled.sourceLayer).toBe("BUDGET_SETTLEMENT");
   });
 
-  it("RE-POINTED — the composite settles and the BARE ref now fails closed", () => {
+  it("RE-POINTED — the composite is what settles now, where only the bare ref used to", () => {
     const store = readyStore("correlated");
     runEffectActivateCommand(store, activateBytes());
 
     const { reservation } = ledgerOf(store);
-    const attemptRef = committedAttemptRef(store);
 
-    // Same store, same reservation, same observation shape — only the run IDENTITY differs.
-    // Before task-763c24cf the composite refused and only a bare ref settled; now the composite
-    // is what production actually emits and settles, and the BARE ref fails closed, because the
-    // decoder answers null for anything that is not a well-formed composite.
-    expect(settle(store, reservation, productionRunRef(attemptRef)).ok).toBe(true);
-    expect(settle(store, reservation, attemptRef).ok).toBe(false);
+    // Same reservation, same observation shape — only the run IDENTITY differs. Before
+    // task-763c24cf the composite refused and only a bare ref settled; the composite is what
+    // production actually emits, and it is now the shape that commits.
+    expect(settle(store, reservation, productionRunRef(committedAttemptRef(store))).ok).toBe(true);
+  });
+
+  it("and the BARE attempt ref now fails closed AT THE CORRELATION GATE", () => {
+    // A FRESH store, not the arm above's: two settles on one store cannot measure this. The
+    // helper's commandId is fixed, so a second call replays into BUDGET_LEDGER_IDEMPOTENCY_CONFLICT
+    // at the daemon's ledger; and even under a distinct commandId the reservation is SETTLED by
+    // then, and NOT_ACTIVATED is decided BEFORE the correlation gate (budget-settlement.ts:163
+    // precedes :165). Either way the gate this arm is about is never reached.
+    const store = readyStore("bare-fails-closed");
+    runEffectActivateCommand(store, activateBytes());
+
+    const { reservation } = ledgerOf(store);
+    const settled = settle(store, reservation, committedAttemptRef(store));
+
+    expect(settled.ok).toBe(false);
+    if (settled.ok) throw new Error("unreachable: the bare ref asserted a refusal");
+    // WHICH LAYER ANSWERED, and on WHICH code: the scheduler's correlation gate, because the
+    // decoder answers null for anything that is not a well-formed composite. A daemon-side code
+    // here would mean some other layer refused first and the decoder was never consulted.
+    expect(settled.code).toBe("BUDGET_LEDGER_TRANSITION_REFUSED");
+    expect(settled.sourceCode).toBe("BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT");
+    expect(settled.sourceLayer).toBe("BUDGET_SETTLEMENT");
   });
 });
