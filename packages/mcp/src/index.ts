@@ -12,9 +12,12 @@ export type { StdioAuthOutcome, StdioDispatchPort } from "./stdio/stdio-dispatch
 export {
   ADAPTER_SUPPLIED_COMMAND_FIELDS,
   ADAPTER_SUPPLIED_QUERY_FIELDS,
+  MCP_TOOL_ALLOWLIST_EMPTY,
+  MCP_TOOL_ALLOWLIST_UNKNOWN_KIND,
   STDIO_TOOL_ENTRIES,
   STDIO_TOOL_INDEX,
   STDIO_TOOL_LABEL_PATTERN,
+  allowlistedToolEntries,
   generateStdioToolEntries,
   toolLabelForKind,
 } from "./stdio/stdio-tool-schemas.js";

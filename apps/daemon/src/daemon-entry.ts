@@ -101,10 +101,32 @@ export type DaemonStartResult =
   | BootReconciliationRefused | DaemonEntryRefused | ListenerRefused | StartedDaemon;
 
 export interface DaemonStartOptions {
+  /**
+   * An ABSOLUTE directory of built control-room assets to host on the daemon's
+   * own origin. Absent, nothing is hosted and the transport is exactly what it
+   * was: the listener owns the resolution and the refusal, so this entry adds no
+   * second opinion about what a servable root is.
+   */
+  readonly assetRoot?: string;
+  /**
+   * In-process secrets no hosted asset may contain - the daemon credential the
+   * process was started with. Forwarded to the listener, which adds its own
+   * CSRF token and refuses to START hosting a root whose servable files carry
+   * any of them (`LISTENER_ASSET_ROOT_LEAKS_SECRET`). Meaningless without
+   * `assetRoot`, and never logged or echoed by any layer below.
+   */
+  readonly assetSecrets?: readonly string[];
   readonly csrfToken?: string;
   readonly dependencies?: DaemonDependencyProvider | null;
   readonly host?: string;
   readonly log?: (line: string) => void;
+  /**
+   * The one-time pairing token that unlocks `POST /session/pair`, minted by the
+   * process wrapper when hosting is on and forwarded to the listener untouched.
+   * Absent (hosting off) means the pair route refuses: there is nothing to pair
+   * against. Never logged and never placed on a URL by this layer.
+   */
+  readonly pairingToken?: string;
   readonly port?: number;
 }
 
@@ -214,12 +236,22 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
   const started = await startControlRoomListener({
     csrfToken,
     deps: resolved.deps,
+    ...(options.assetRoot === undefined ? {} : { assetRoot: options.assetRoot }),
+    ...(options.assetSecrets === undefined ? {} : { assetSecrets: options.assetSecrets }),
     ...(options.host === undefined ? {} : { host: options.host }),
     ...(options.log === undefined ? {} : { log: options.log }),
+    ...(options.pairingToken === undefined ? {} : { pairingToken: options.pairingToken }),
     ...(options.port === undefined ? {} : { port: options.port }),
     ...(resolved.affordances === undefined ? {} : { affordances: resolved.affordances }),
     ...(resolved.documentDossiers === undefined
       ? {} : { documentDossiers: resolved.documentDossiers }),
+    ...(resolved.documentIngest === undefined
+      ? {} : { documentIngest: resolved.documentIngest }),
+    ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+    ...(resolved.planningRuns === undefined
+      ? {} : { planningRuns: resolved.planningRuns }),
+    ...(resolved.sessionHandshake === undefined
+      ? {} : { pairing: resolved.sessionHandshake }),
     ...(resolved.subscriptions === undefined ? {} : { subscriptions: resolved.subscriptions }),
   });
   if (!started.ok) return started;

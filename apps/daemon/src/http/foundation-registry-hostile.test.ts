@@ -145,6 +145,18 @@ const PAYLOAD_CASES = [
     payload: { ...dispatchPayload(), binding: "not-an-object" }, stage: "DISPATCH" },
   { code: "INPUT_INVALID", layer: null, name: "an unlisted key is smuggled in",
     payload: { ...dispatchPayload(), smuggled: 1 }, stage: "PAYLOAD_SHAPE" },
+  // THE NARROWED ALLOW-LIST this task lands: the graph snapshot and the input manifest are
+  // derived server-side, so a payload carrying either KEY is REFUSED at the seam rather than
+  // overwritten downstream. A silently-ignored spoof is indistinguishable from an honoured
+  // one at the call site, which is why this is an allow-list refusal and not a precedence rule.
+  { code: "INPUT_INVALID", layer: null, name: "a caller-supplied graphSnapshot is refused",
+    payload: { ...dispatchPayload(),
+      graphSnapshot: { completionNodeKey: "dev-c", edges: [], nodes: [] } },
+    stage: "PAYLOAD_SHAPE" },
+  { code: "INPUT_INVALID", layer: null, name: "a caller-supplied inputManifest is refused",
+    payload: { ...dispatchPayload(),
+      inputManifest: { baseIdentity: "0".repeat(64), entries: [] } },
+    stage: "PAYLOAD_SHAPE" },
   { code: "INPUT_INVALID", layer: null, name: "the unlisted key is __proto__",
     payload: { ...dispatchPayload(), ["__proto__"]: { polluted: true } },
     stage: "PAYLOAD_SHAPE" },
@@ -290,6 +302,35 @@ it("refuses an async entry on the sync entry WITHOUT calling its handler at all"
     expect(await handleAsyncCommandRequest(
       depsWith(harness, answering), commandRequest({ commandId: "cmd-guard-2", payload: {} }),
     )).toMatchObject({ decision: { resultCode: "ASYNC" }, ok: true, outcome: "ACCEPTED" });
+  } finally {
+    harness.close();
+  }
+}, 30_000);
+
+/**
+ * The derivation's OWN refusal arm, driven through the real seam. Without a seeded ACTIVE
+ * revision there is no graph to derive, and the point of the case is twofold: the refusal
+ * carries the PROJECTION's code and layer rather than a flattened dispatch code, and a
+ * returned refusal is not evidence that nothing was written — the store is read back.
+ */
+it("refuses a dispatch whose ACTIVE graph is absent, unrestamped, and writes nothing", async () => {
+  const harness = seamHarness("graph-absent", { seedGraph: false });
+  try {
+    const before = countsOf(harness.storePath);
+
+    const answer = await handleAsyncCommandRequest(harness.deps, commandRequest({
+      commandId: "cmd-graph-absent", payload: dispatchPayload(),
+    }));
+
+    expect(answer.ok).toBe(false);
+    if (answer.ok) return;
+    expect(answer.outcome).toBe("PORT_REFUSED");
+    if (answer.outcome !== "PORT_REFUSED") return;
+    expect(answer.refusal).toMatchObject({
+      code: "ACTIVE_GRAPH_ABSENT", layer: "ACTIVE_GRAPH_PROJECTION",
+    });
+    // Zero residue: no partial activation, dispatch or decision from a refused derivation.
+    expect(countsOf(harness.storePath)).toStrictEqual(before);
   } finally {
     harness.close();
   }

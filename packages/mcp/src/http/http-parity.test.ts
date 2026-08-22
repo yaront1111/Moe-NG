@@ -32,6 +32,11 @@ import type {
   RecordingDispatchPort,
 } from "../dispatch-conformance.js";
 import { createStdioMcpServer } from "../stdio/stdio-server.js";
+import {
+  MCP_TOOL_ALLOWLIST_UNKNOWN_KIND,
+  STDIO_TOOL_ENTRIES,
+  toolLabelForKind,
+} from "../stdio/stdio-tool-schemas.js";
 import { createHttpMcpAdapter } from "./http-server.js";
 import { MCP_SESSION_ID_HEADER } from "./http-session.js";
 import type { HttpAuthVerdict, HttpSessionPort } from "./http-session.js";
@@ -284,5 +289,87 @@ describe("the body bound holds through the whole http stack", () => {
     expect(response.status).toBe(413);
     const error = (await readPayload(response))["error"] as { data?: { code?: string } };
     expect(error.data?.code).toBe("INPUT_LIMIT_EXCEEDED");
+  });
+});
+
+const LIST_BODY = JSON.stringify({ id: 3, jsonrpc: "2.0", method: "tools/list", params: {} });
+
+async function listedOverHttp(allowlist?: readonly string[]): Promise<readonly string[]> {
+  const adapter = createHttpMcpAdapter({
+    dispatchPort: createRecordingPort(),
+    enableJsonResponse: true,
+    sessionPort: SESSION_PORT,
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
+  try {
+    const initialized = await adapter.handleRequest(httpRequest(INITIALIZE_BODY));
+    const sessionId = initialized.headers.get(MCP_SESSION_ID_HEADER) ?? "";
+    await initialized.text();
+    const payload = await readPayload(
+      await adapter.handleRequest(httpRequest(LIST_BODY, sessionId)),
+    );
+    const result = payload["result"] as { tools?: readonly { name: string }[] } | undefined;
+    return (result?.tools ?? []).map((tool) => tool.name);
+  } finally {
+    await adapter.close();
+  }
+}
+
+async function listedOverStdio(allowlist?: readonly string[]): Promise<readonly string[]> {
+  const server = createStdioMcpServer({
+    credential: PARITY_CREDENTIAL,
+    port: createRecordingPort(),
+    ...(allowlist === undefined ? {} : { toolAllowlist: allowlist }),
+  });
+  const client = new Client({ name: "parity-list-client", version: "0.0.0" });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  try {
+    return (await client.listTools()).tools.map((tool) => tool.name);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+}
+
+describe("tool allowlist parity", () => {
+  const WIRED = Object.freeze(["project.register", "goal.create", "events.read"]);
+
+  it("advertises the same allowlisted names on HTTP as on stdio", async () => {
+    const [overHttp, overStdio] = await Promise.all([
+      listedOverHttp(WIRED),
+      listedOverStdio(WIRED),
+    ]);
+
+    expect(overHttp).toEqual(WIRED.map(toolLabelForKind));
+    expect(overHttp).toEqual(overStdio);
+  });
+
+  it("advertises the full generated set on both transports without an allowlist", async () => {
+    const [overHttp, overStdio] = await Promise.all([listedOverHttp(), listedOverStdio()]);
+    const generated = STDIO_TOOL_ENTRIES.map((entry) => entry.tool.name);
+
+    expect(overHttp).toEqual(generated);
+    expect(overStdio).toEqual(generated);
+    expect(overHttp.length).toBeGreaterThan(WIRED.length);
+  });
+
+  it("refuses an unknown allowlisted kind at adapter construction, with the stable code", () => {
+    let message = "";
+    let created = false;
+    try {
+      createHttpMcpAdapter({
+        dispatchPort: createRecordingPort(),
+        sessionPort: SESSION_PORT,
+        toolAllowlist: ["goal.create", "http.not_a_kind"],
+      });
+      created = true;
+    } catch (error) {
+      message = error instanceof Error ? error.message : "";
+    }
+
+    expect(created).toBe(false);
+    expect(message).toContain(MCP_TOOL_ALLOWLIST_UNKNOWN_KIND);
+    expect(message).toContain("http.not_a_kind");
   });
 });

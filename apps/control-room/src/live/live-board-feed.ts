@@ -8,8 +8,19 @@
  * so a dispatch later presents the daemon's own identity back to it untouched.
  */
 
+/**
+ * An active durable claim on a step, copied verbatim off the wire. The board
+ * renders it as the fact it is: an agent (or another operator) is holding this
+ * work right now, and a dispatch would race that holder.
+ */
+export interface SurfaceStepClaim {
+  readonly claimedBy: string;
+  readonly expiresAt: string;
+}
+
 export interface SurfaceStep {
   readonly aggregateId: string | null;
+  readonly claim: SurfaceStepClaim | null;
   readonly kind: string;
   readonly missing: readonly string[];
   readonly status: "BLOCKED" | "COMMITTED" | "READY";
@@ -30,6 +41,16 @@ export interface BoardFeedOptions {
   readonly intervalMs: number;
   readonly onFrame: (frame: SurfaceFrame) => void;
   readonly post?: ((body: string) => Promise<Response>) | undefined;
+  /**
+   * Upper bound in milliseconds on one poll's round trip (default 15_000).
+   * Consulted only by the DEFAULT post — an injected `post` owns its own
+   * deadline. Without one, a daemon that accepts the connection and never
+   * answers parks the loop forever: no rejection, so no frame and no
+   * reschedule, and the board freezes on its last CONNECTED frame. The
+   * deadline turns that hang into the rejection this loop already maps to
+   * DISCONNECTED / TRANSPORT_REQUEST_FAILED, and the loop re-arms.
+   */
+  readonly requestTimeoutMs?: number | undefined;
   readonly schedule?: ((run: () => void, delayMs: number) => () => void) | undefined;
 }
 
@@ -44,6 +65,21 @@ function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+/**
+ * A claim must NAME its holder and its expiry to be rendered as one; anything
+ * else — absent, null, or a shape this reader cannot vouch for — carries as
+ * null rather than as a half-claim, and never fails the whole frame: a board
+ * that goes UNREADABLE because one claim field drifted would hide the chain
+ * behind the least important thing on it.
+ */
+function claimOf(value: unknown): SurfaceStepClaim | null {
+  if (!isRecord(value)) return null;
+  const claimedBy = text(value["claimedBy"]);
+  const expiresAt = text(value["expiresAt"]);
+  if (claimedBy === "" || expiresAt === "") return null;
+  return Object.freeze({ claimedBy, expiresAt });
 }
 
 function stepOf(value: unknown): SurfaceStep | null {
@@ -61,6 +97,7 @@ function stepOf(value: unknown): SurfaceStep | null {
     && (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0)) return null;
   return Object.freeze({
     aggregateId,
+    claim: claimOf(value["claim"]),
     kind,
     missing: Object.freeze([...missing]) as readonly string[],
     status,
@@ -122,6 +159,7 @@ export function createBoardFeed(options: BoardFeedOptions): BoardFeed {
   const post = options.post
     ?? ((body: string): Promise<Response> => fetch("/affordances/read", {
       body, headers: options.headers, method: "POST",
+      signal: AbortSignal.timeout(options.requestTimeoutMs ?? 15_000),
     }));
   const schedule = options.schedule
     ?? ((run: () => void, delayMs: number): (() => void) => {

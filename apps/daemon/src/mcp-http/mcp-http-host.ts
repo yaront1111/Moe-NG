@@ -8,6 +8,8 @@ import type { AffordancePort } from "../http/affordance-contract.js";
 import type { SubscriptionPort } from "../http/event-stream-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
+import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
+import type { GraphQueryPort } from "../planning/graph-query.js";
 import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
 import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
@@ -29,6 +31,8 @@ import { createMcpHttpSessionPort } from "./mcp-http-session-port.js";
 
 export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
+  /** The current-active-graph reader; absent means graph.get refuses. */
+  readonly graph?: GraphQueryPort | undefined;
   readonly deps: CommandAdapterDeps;
   /** JSON bodies instead of SSE frames. Deterministic; the parity fixtures use it. */
   readonly enableJsonResponse?: boolean;
@@ -126,6 +130,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
       dispatchPort: createMcpDispatchPort({
         affordances: options.affordances,
         deps: options.deps,
+        graph: options.graph,
         subscriptions: options.subscriptions,
       }),
       ...(options.enableJsonResponse === undefined
@@ -133,6 +138,8 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         : { enableJsonResponse: options.enableJsonResponse }),
       sessionPort: createMcpHttpSessionPort(options.deps.authenticator),
       serverName: "moe-next",
+      // Same roster as the stdio entry, from the same derivation.
+      toolAllowlist: wiredMcpToolKinds(),
     });
     return adapter;
   };
@@ -164,8 +171,21 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
     let bound: Server | null = null;
     try {
       bound = createServer((incoming, outgoing) => {
+        // THE DISCONNECT LIFELINE, wired here because only the host holds the node pair. The
+        // response 'close' event is the one signal that fires when the peer terminates the
+        // connection prematurely — since Node 16 the request's own 'close' means "message
+        // complete", which for a bodiless SSE GET is immediately — and `writableFinished`
+        // separates that termination from a normally finished exchange, where aborting would
+        // be noise. The bridge threads the signal into the Request and cancels its own reader
+        // on the same event, so both the adapter and the pump observe the drop.
+        const lifeline = new AbortController();
+        outgoing.on("close", () => {
+          if (!outgoing.writableFinished) lifeline.abort();
+        });
         void (async (): Promise<void> => {
-          const response = await handleRequest(await webRequestFrom(incoming, origin));
+          const response = await handleRequest(
+            await webRequestFrom(incoming, origin, lifeline.signal),
+          );
           await writeWebResponse(response, outgoing);
         })().catch((error: unknown) => {
           // A throw must still answer and must still leave the listener closable; it may never

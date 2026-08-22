@@ -217,32 +217,50 @@ export function closeBudgetAccount(state: BudgetLedgerState, command: BudgetClos
 
 /** Folds canonical entries through the SAME transition core as live application, so replay cannot
  * drift from it. Versions come from the state being rebuilt, not from the entries, because a
- * version is a consequence of the fold rather than an independent fact. */
+ * version is a consequence of the fold rather than an independent fact.
+ *
+ * Entries arrive GROUPED BY COMMAND — one inner list per applied command — because the grouping
+ * is not recoverable from a flat stream: two consecutive single-meter movements to the same
+ * existing child are entry-identical to one two-meter command, yet they advance versions
+ * differently. Each movement group folds as ONE multi-amount command, so the rebuilt versions
+ * and ownerRef stamps are the ones live application produced. An empty group is a transition
+ * that moved no units between accounts and folds to nothing; a group mixing kinds or account
+ * refs is not one command's balanced double entry and is refused rather than reinterpreted. */
 export function replayBudgetLedger(
-  authorization: BudgetAuthorization, entries: readonly BudgetLedgerEntry[],
+  authorization: BudgetAuthorization, commands: readonly (readonly BudgetLedgerEntry[])[],
 ): BudgetLedgerResult {
   const opened = openBudgetRoot(authorization);
   if (!opened.ok) return opened;
   let state = opened.state;
-  for (const entry of entries) {
-    if (entry.kind === "ROOT_OPENED") continue;
-    if (entry.kind === "CLOSED") {
-      const id = entry.fromRef ?? "";
-      const closed = closeBudgetAccount(state, { accountId: id, expectedVersion: find(state, id)?.version ?? -1 });
-      if (!closed.ok) return closed;
-      state = closed.state;
+  for (const group of commands) {
+    const first = group[0];
+    if (first === undefined) continue;
+    if (group.some((entry) => entry.kind !== first.kind)) {
+      return fail(state, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "replay group mixes entry kinds");
+    }
+    if (first.kind === "ROOT_OPENED") continue;
+    if (first.kind === "CLOSED") {
+      for (const entry of group) {
+        const id = entry.fromRef ?? "";
+        const closed = closeBudgetAccount(state, { accountId: id, expectedVersion: find(state, id)?.version ?? -1 });
+        if (!closed.ok) return closed;
+        state = closed.state;
+      }
       continue;
     }
-    const allocating = entry.kind === "ALLOCATED";
-    const pid = (allocating ? entry.fromRef : entry.toRef) ?? "";
-    const cid = (allocating ? entry.toRef : entry.fromRef) ?? "";
+    if (group.some((entry) => entry.fromRef !== first.fromRef || entry.toRef !== first.toRef)) {
+      return fail(state, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "replay group spans more than one movement");
+    }
+    const allocating = first.kind === "ALLOCATED";
+    const pid = (allocating ? first.fromRef : first.toRef) ?? "";
+    const cid = (allocating ? first.toRef : first.fromRef) ?? "";
     const child = find(state, cid);
     const applied = applyMovement(state, {
-      parentAccountId: pid, childAccountId: cid, childOwnerRef: entry.ownerRef ?? child?.ownerRef ?? "",
+      parentAccountId: pid, childAccountId: cid, childOwnerRef: first.ownerRef ?? child?.ownerRef ?? "",
       expectedParentVersion: find(state, pid)?.version ?? -1,
       expectedChildVersion: child?.version ?? null,
-      amounts: [{ meter: entry.meter, amount: entry.amount }],
-    }, entry.kind);
+      amounts: group.map((entry) => ({ meter: entry.meter, amount: entry.amount })),
+    }, first.kind);
     if (!applied.ok) return applied;
     state = applied.state;
   }

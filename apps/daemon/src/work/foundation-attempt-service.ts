@@ -1,54 +1,56 @@
-/** Durable single-node dispatch. Binding -> activation -> reservation -> launch -> advisory. */
-
 import { buildInputManifest, createClaudeRuntimePinRequest } from "@moe/runner";
-import type { ClaudeLaunchOptions } from "@moe/runner";
+import type { ClaudeBoundLaunchResult, ClaudeLaunchOptions } from "@moe/runner";
 import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { decodeActivationRequestBytes } from "../activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
-import { createFoundationClaudeLauncher } from "../activation/foundation-launch-authority.js";
+import { commitActivationProviderRun } from "../activation/activation-run-commit.js";
+import { launchActivationProviderRun } from "../activation/activation-telemetry-launch.js";
+import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT,
-  FOUNDATION_RESERVATION_VERSION, RUNNER_WORKSPACE_LAYER,
-  admitSingleExecutionNode, decodeFoundationAttemptRequest,
-  deriveDispatchAggregateId, encodeFoundationPayload,
-  exactKeys, foundationAttemptRefusal, identifyFoundationDispatch, isRecord,
-  launchRequestBody, preActivationBindingMatches, refuseLocal, textOf,
+  CLAIM_KEYS, DAEMON_FOUNDATION_ATTEMPT, FOUNDATION_RESERVATION_VERSION,
+  RUNNER_WORKSPACE_LAYER, admitSingleExecutionNode, decodeFoundationAttemptRequest,
+  deriveDispatchAggregateId, encodeFoundationPayload, exactKeys, foundationAttemptRefusal,
+  identifyFoundationDispatch, isRecord, launchRequestBody, preActivationBindingMatches,
+  refuseLocal, textOf,
 } from "./foundation-attempt-contracts.js";
-import type {
-  FoundationAttemptBound, FoundationAttemptRefused,
-} from "./foundation-attempt-contracts.js";
+import type { FoundationAttemptBound, FoundationAttemptRefused } from "./foundation-attempt-contracts.js";
+import { applyProviderUsageToBudget } from "../budget/budget-settlement-application.js";
 import { recordAttemptRelease } from "./attempt-release-disposition.js";
+import type { FoundationCaptureLifecycle, PreparedCapture } from "./foundation-capture-lifecycle.js";
+import { recordTerminalEffect } from "./effect-terminal-ledger.js";
 import { snapshotFoundationValue } from "./foundation-attempt-codec.js";
 import {
-  commitFoundationPhase, readDurableFoundationObservation,
-  readFoundationReservationDigest, readStoredFoundationAttempt,
-  recordProvenFoundationAttempt, settleFoundationAttempt,
+  commitFoundationPhase, readDurableFoundationObservation, readFoundationReservationDigest,
+  readStoredFoundationAttempt, recordProvenFoundationAttempt, settleFoundationAttempt,
 } from "./foundation-attempt-store.js";
 import type { FoundationAttemptOutcome } from "./foundation-attempt-store.js";
 export { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
-export type {
-  FoundationAttemptOutcome, FoundationAttemptRecordAnswer,
-} from "./foundation-attempt-store.js";
+export type { FoundationAttemptOutcome, FoundationAttemptRecordAnswer } from "./foundation-attempt-store.js";
 
-/** Only post-launch workspace observation is supplied by composition. The runtime
- * filesystem, host observer and clock are NOT dependencies: @moe/runner mints them
- * from the request's three plain data fields, so no caller — test or transport —
- * can hand pinning a runtime nobody observed. The shipped launcher and its physical
- * boundary are not replaceable through this service either. */
+/**
+ * Composition supplies post-launch capture and the prepare-before-launch
+ * workspace lifecycle; callers cannot replace the runtime observer, launcher,
+ * physical boundary, or clock.
+ *
+ * `lifecycle` is REQUIRED rather than optional on purpose: an omitted workspace
+ * authority would let a dispatch launch into whatever directory a caller named,
+ * and "the port was not wired" is a mistake a type can make unrepresentable
+ * instead of a runtime branch nobody exercises.
+ */
 export interface FoundationAttemptDeps {
   captureResult(input: Record<string, unknown>): unknown;
   readonly launchOptions?: { readonly platform?: string; readonly signal?: AbortSignal };
+  readonly lifecycle: FoundationCaptureLifecycle;
   readonly store: SqliteEventStore;
 }
 
 const isRefusal = (value: object): value is FoundationAttemptRefused =>
   "ok" in value && (value as { readonly ok: unknown }).ok === false;
 
-/** The activation this dispatch binds to, read back FROM THE STORE — never from
- *  the caller's copy and never from the command result the caller received. */
+/** Read the bound activation from durable history, never from the caller's copy. */
 function durableActivation(
   store: SqliteEventStore, bound: FoundationAttemptBound,
 ): ActivationLedgerRecord | FoundationAttemptRefused {
@@ -71,18 +73,19 @@ function durableActivation(
     ? record : refuseLocal("FOUNDATION_ATTEMPT_BINDING_MISMATCH");
 }
 
-/**
- * Invocation AND interpretation share one containment. A thenable that is not a
- * NATIVE promise is never awaited — awaiting it would hand control to whoever
- * wrote `then`. The launch port must answer with a promise; the capture port may
- * answer synchronously, and a plain record is the only sync answer taken.
- */
-async function contained(call: () => unknown, requirePromise: boolean): Promise<unknown> {
+/** Snapshot capture answers without awaiting untrusted non-native thenables. */
+async function contained(call: () => unknown): Promise<unknown> {
   try {
     const pending = call();
-    if (pending instanceof Promise) return snapshotFoundationValue(await pending);
-    return requirePromise ? null : snapshotFoundationValue(pending);
+    return snapshotFoundationValue(pending instanceof Promise ? await pending : pending);
   } catch { return null; }
+}
+
+/** Preserve the exact runner-bound result/handoff pair; never snapshot or rebuild it. */
+async function boundLaunch(
+  call: () => Promise<ClaudeBoundLaunchResult>,
+): Promise<ClaudeBoundLaunchResult | null> {
+  try { return await call(); } catch { return null; }
 }
 
 function narrowLaunchOptions(
@@ -95,62 +98,116 @@ function narrowLaunchOptions(
   });
 }
 
-/** The drain REASON this settle earned, and nothing else. Design 765 makes only an
- * unchanged strongest `WORK_RELEASE_OR_PAUSE` resumable, so a settle that did not
- * prove its result is a cancellation and may not present as one. `releaseWork`
- * composes the disposition from this reason alone: a disposition literal owned here
- * would be a second copy of the drain table, and the two would drift. */
-const SETTLE_REASONS =
-  Object.freeze({ PROVEN: "WORK_RELEASE_OR_PAUSE", UNPROVEN: "WORK_CANCEL" } as const);
+/** Only a proven settle earns the unchanged resumable release reason. */
+const SETTLE_REASONS = Object.freeze({
+  PROVEN: "WORK_RELEASE_OR_PAUSE", UNPROVEN: "WORK_CANCEL",
+} as const);
 
 export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
   dispatch(input: unknown): Promise<FoundationAttemptOutcome>;
 } {
   const { store } = deps;
 
-  /** The attempt's release disposition, durable beside the dispatch record and
-   *  derived from what the settle ACTUALLY answered. Facts only: a release row that
-   *  cannot be written changes no dispatch answer and grants no authority, so its
-   *  own refusal is deliberately not folded into the outcome.
-   *
-   *  THE THREE BOUNDARY FLAGS AND THE HANDOFF ARE PASS-THROUGH INPUTS WITH NO
-   *  PRODUCER YET — never read them as proven facts. `safeBoundaryObserved` is
-   *  task-ded026d6; `effectsTerminal`/`resourcesTerminal` are task-6d400781; the
-   *  handoff is task-af9454f4. None has landed, so this reports what it actually
-   *  observed — nothing — and `releaseWork` refuses instead of releasing. A flag
-   *  defaulted to true, or five minted handoff digests, would manufacture the safe
-   *  boundary the epic exists to prove. `intentRefs` is the one honest value: the
-   *  durable effect intent's own id. */
+  /** NONE of the three settle facts is ours to report any more, so none is here:
+   *  `safeBoundaryObserved` comes from the durable provider-run record
+   *  (task-ded026d6) and the terminality pair from the terminal ledger and the
+   *  resource authority (task-6d400781); a request carrying any key is refused,
+   *  not obeyed. Only `handoff` is still a relay, pending task-af9454f4. */
   function noteRelease(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     settled: FoundationAttemptOutcome,
   ): FoundationAttemptOutcome {
     recordAttemptRelease(store, bound, record, {
-      disposition: null, effectsTerminal: false, handoff: null,
+      disposition: null, handoff: null,
       intentRefs: [record.effectIntent.intentId],
       reason: settled.ok ? SETTLE_REASONS.PROVEN : SETTLE_REASONS.UNPROVEN,
-      resourcesTerminal: false, safeBoundaryObserved: false,
     });
     return settled;
   }
 
-  /** PROVEN launch only. The capture port's answer is CONTAINED here and handed
-   *  on raw: the store owns fencing its shape, building the result manifest over
-   *  the input manifest THIS service sealed, and persisting the record. */
+  /** Only a proven physical observation reaches result capture. The captureRef
+   *  travels here lexically, from the preparation this very dispatch made, and so
+   *  does `decidedAt`: it is the ACTIVATION's own decided-at, the single durable
+   *  stamp this dispatch was decided under. No daemon clock exists to read one
+   *  from, and a stamp invented here would be a durable audit field asserting a
+   *  time nothing observed. */
   async function capture(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, observation: unknown, registration: unknown,
+    prepared: PreparedCapture, decidedAt: string,
   ): Promise<FoundationAttemptOutcome> {
     const answer = await contained(() => deps.captureResult({
       attemptId: record.attempt.attemptId, baseIdentity: input["baseIdentity"] as string,
-      nodeKey: bound.nodeKey, observation, sessionId: bound.sessionId,
-    }), false);
-    return noteRelease(bound, record, recordProvenFoundationAttempt(
-      store, bound, record, input, { answer, observation, registration }));
+      captureRef: prepared.captureRef, nodeKey: bound.nodeKey, observation,
+      // THE PROOF TRAVELS LEXICALLY TOO, and it has to: it is not a field of the
+      // durable record, re-deriving one after a launch refuses a tree the attempt
+      // legitimately changed, and `sealPrelaunchProof` is withheld from
+      // `@moe/runner` so no consumer may mint one. Like `captureRef` it comes from
+      // the preparation THIS dispatch made, never from anything a caller sent.
+      proof: prepared.proof, sessionId: bound.sessionId,
+    }));
+    // THE AUTHORITY'S SEALED INPUT, not the caller's proposal. `input` here is
+    // `buildInputManifest` over the entries the REQUEST proposed, and a request
+    // may lawfully propose a subset — `entriesAgree` checks each proposed entry
+    // against the hydrated bytes and admits a partial (even empty) list. Sealing
+    // the result against that subset makes the proposal decide which paths are
+    // attributable: every honestly captured in-scope path the caller did not
+    // name comes back RUNNER_WORKSPACE_PATH_UNDECLARED. Measured, not feared —
+    // that is exactly how the first real producer answer refused. The workspace
+    // the answer describes was hydrated from the AUTHORITATIVE declared scope,
+    // so that is the input it must be sealed against.
+    // THE DURABLE TERMINAL, derived by the runner from already-committed evidence and recorded
+    // BEFORE the advisory release, which now DERIVES its terminality from this very ledger —
+    // load-bearing order, not incidental. Refusals are still not consumed: no terminal proven
+    // must not stop an attempt that ran, and the release says so by draining, not releasing.
+    const terminal = recordTerminalEffect(store, {
+      attemptRef: record.attempt.attemptId, projectId: bound.projectId,
+    });
+    // THE BUDGET SETTLES ONLY AFTER THE TERMINAL IS DURABLE, AND ON ITS OWN DECISION.
+    //
+    // `recordTerminalEffect` refuses EFFECT_TERMINAL_EVIDENCE_ABSENT unless the provider run is
+    // already committed for this attempt, so gating on its ok is what makes telemetry durability
+    // a PRECONDITION of settlement rather than a coincidence: wired any earlier, every settlement
+    // would read UNKNOWN forever while its own UNKNOWN arm passed.
+    //
+    // It rides a SEPARATE decision rather than a leg of the terminal's: that path commits a
+    // single-target decision, and converting it to the legs API would change a landed replay
+    // identity on a surface this change does not own. A settlement refusal is ADVISORY here for
+    // the same reason the terminal's own refusal is — an attempt that ran is not unmade by a
+    // ledger that could not be read, and the refusal carries its own code and layer for a reader.
+    //
+    // THE DECISION KEY IS THE DURABLE TRUTH, NOT A CONVENIENCE. `decidedAt` is written straight
+    // onto the durable decision as its own `decidedAt` (and onto the rejection audit as
+    // `committedAt`), and `principalId` is a third of `budgetDecisionKey` — together they are the
+    // row a recovery reads to answer WHO decided this settlement and WHEN.
+    // Both therefore come from durable facts this dispatch already holds: the activation's own
+    // decided-at, and the lease owner session the provider-run commit below is keyed by too.
+    // Neither is a daemon clock reading and neither is the project — a project decides nothing.
+    if (terminal.ok) {
+      applyProviderUsageToBudget(store, {
+        attemptRef: record.attempt.attemptId,
+        context: {
+          commandId: `settle-${record.attempt.attemptId}`,
+          correlationId: `budget-settlement-${record.attempt.attemptId}`,
+          decidedAt, principalId: record.lease.ownerSessionRef,
+        },
+        projectId: bound.projectId,
+      });
+    }
+    const settled = noteRelease(bound, record, recordProvenFoundationAttempt(
+      store, bound, record, prepared.inputManifest as unknown as Record<string, unknown>,
+      { answer, observation, registration }));
+    // ONLY a proven durable result may release its tree. An unproven or uncertain
+    // settlement retains the bytes: they are the only evidence of what ran.
+    if (settled.ok) {
+      deps.lifecycle.releaseWorktree({
+        assignment: prepared.assignment, callerIntent: "ATTEMPT_TERMINAL",
+      });
+    }
+    return settled;
   }
 
-  /** Not PROVEN: persist the honest advisory fact under the runner's own code and
-   *  layer, then refuse with the same pair. No result manifest is ever built. */
+  /** Persist unproven advisory truth under the upstream code/layer. */
   function unproven(
     bound: FoundationAttemptBound, record: ActivationLedgerRecord,
     input: Record<string, unknown>, result: Record<string, unknown> | null,
@@ -175,8 +232,7 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       entries: request.inputManifest.entries as never,
     });
     if (!sealed.ok) return foundationAttemptRefusal(sealed.code, RUNNER_WORKSPACE_LAYER);
-    // The runner mints the runtime closure from the request's three data fields
-    // and keeps its OWN refusal code and RUNTIME layer. Nothing is written yet.
+    // The runner mints the runtime closure and keeps its own refusal authority.
     const runtime = createClaudeRuntimePinRequest(request.launchTemplate.runtime);
     if ("ok" in runtime) return foundationAttemptRefusal(runtime.code, runtime.layer);
     const envelope = decodeActivationRequestBytes(request.activationRequestBytes);
@@ -195,7 +251,11 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
     if (priorDigest !== null && priorDigest !== identity.digest) {
       return refuseLocal("FOUNDATION_ATTEMPT_REPLAY_MISMATCH");
     }
-    const activation = runEffectActivateCommand(store, request.activationRequestBytes);
+    // DOOR 1: the key validated at `admitSingleExecutionNode` above, handed over as a
+    // daemon-internal argument. The derivation re-verifies it against the durable graph rather
+    // than trusting it — this caller is inside the trust boundary, its input is not.
+    const activation = runEffectActivateCommand(
+      store, request.activationRequestBytes, nodeKey);
     if (!activation.ok) return foundationAttemptRefusal(activation.code, activation.refusedBy);
     const { commandId, correlationId, principalId, projectId } = envelope.request;
     const bound: FoundationAttemptBound = Object.freeze({
@@ -221,27 +281,71 @@ export function createFoundationAttemptService(deps: FoundationAttemptDeps): {
       }
       return refuseLocal("FOUNDATION_ATTEMPT_RESERVATION_UNAVAILABLE");
     }
-    // A REPLAYED reservation NEVER launches. It adopts the durable final record
-    // or says the dispatch is still in flight; a missing record is not an
-    // invitation to start a second process.
+    // Replay adopts durable output or remains in flight; it never launches again.
     if (reserved.disposition === "REPLAYED") {
       const adopted = readStoredFoundationAttempt(store, bound.target);
       return adopted.ok || adopted.code !== "FOUNDATION_ATTEMPT_RECORD_ABSENT" ? adopted
         : refuseLocal("FOUNDATION_ATTEMPT_DISPATCH_IN_PROGRESS");
     }
-    const launch = createFoundationClaudeLauncher({
-      aggregateId: bound.aggregateId, correlationId, key: { commandId, principalId, projectId },
-      projectId, store,
-    });
-    const result = await contained(
-      () => launch(launchRequestBody(record, bound, request.launchTemplate, runtime),
-        narrowLaunchOptions(deps.launchOptions)),
-      true);
     const manifest = sealed.manifest as unknown as Record<string, unknown>;
-    if (!isRecord(result)) return unproven(bound, record, manifest, null);
-    const observed = readDurableFoundationObservation(store, bound, record, result);
-    if (observed === null) return unproven(bound, record, manifest, result);
-    return await capture(bound, record, manifest, observed[0], observed[1]);
+    // PREPARE-BEFORE-LAUNCH. After replay discrimination and before any physical
+    // boundary exists: the workspace this attempt will run in is resolved,
+    // materialized, hydrated and durably sealed, or the attempt refuses here.
+    const prepared = await deps.lifecycle.prepareCapture({
+      attemptAggregateId: bound.aggregateId, attemptId: record.attempt.attemptId,
+      nodeKey: bound.nodeKey, projectId: bound.projectId,
+      proposedBaseIdentity: request.inputManifest.baseIdentity,
+      proposedCwd: request.launchTemplate.cwd,
+      proposedEntries: request.inputManifest.entries,
+      requestDigest: identity.digest, reservationDigest: reservation.digest,
+      sessionId: bound.sessionId,
+    });
+    if (!prepared.ok) {
+      return unproven(bound, record, manifest, prepared as unknown as Record<string, unknown>);
+    }
+    // The only physical boundary, composed beside its persistence configuration.
+    const authority = createFoundationLauncherAuthority({
+      aggregateId: bound.aggregateId, correlationId: bound.correlationId,
+      key: activation.decision.key, projectId: activation.decision.key.projectId, store,
+    });
+    // Server-owned, every field: the caller identifies no run, epoch or effect.
+    const providerCommandId = `${bound.target}:provider-run`;
+    const options = narrowLaunchOptions(deps.launchOptions);
+    const launched = await boundLaunch(() => launchActivationProviderRun(authority, {
+      providerRun: {
+        attemptRef: record.attempt.attemptId, effectIntentId: record.effectIntent.intentId,
+        epoch: record.lease.epoch, provider: "claude", runRef: bound.target,
+      },
+      // THE ASSIGNMENT IS THE ROOT. `launchTemplate.cwd` reached the preparation
+      // as a proposal and could only have refused there; it never selects.
+      request: launchRequestBody(
+        record, bound,
+        { ...request.launchTemplate, cwd: prepared.assignment.realWorktreePath }, runtime),
+      ...(options === undefined ? {} : { options }),
+    }));
+    if (launched === null) return unproven(bound, record, manifest, null);
+    // Commit the exact bound pair for the durable lease owner; no daemon clock exists.
+    const committed = commitActivationProviderRun(store, {
+      clock: { observedEnd: null, observedStart: null },
+      correlationId: providerCommandId, decidedAt: activation.decision.decidedAt,
+      key: {
+        commandId: providerCommandId, principalId: record.lease.ownerSessionRef,
+        projectId: activation.decision.key.projectId,
+      },
+      launch: launched, requestBytes: identity.bytes,
+    });
+    // Whichever authority refused keeps its own code and layer.
+    if (!committed.ok || !launched.ok) {
+      return unproven(bound, record, manifest, committed as unknown as Record<string, unknown>);
+    }
+    // Settlement consumes the launcher's own untouched result.
+    const observed = readDurableFoundationObservation(store, bound, record, launched.result);
+    if (observed === null) {
+      return unproven(bound, record, manifest, launched.result as unknown as Record<string, unknown>);
+    }
+    return await capture(
+      bound, record, manifest, observed[0], observed[1], prepared,
+      activation.decision.decidedAt);
   }
 
   return Object.freeze({ dispatch });

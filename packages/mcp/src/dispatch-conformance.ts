@@ -210,6 +210,35 @@ function registerSequenceObligation(subject: ConformanceSubject): void {
       expect(outcome.mcpCode).toBe(EXPECTED_MCP_CODE_BY_ERROR_CODE.AUTHENTICATION_FAILED);
     }
   });
+
+  it("contains a throwing authenticate as UNKNOWN_ERROR with zero dispatch calls", async () => {
+    // A credential store that throws (busy, closed) has rendered no verdict. The containment
+    // proof is the registry error in `data`: an uncontained throw reaches the client as the
+    // SDK's own internal error, which carries the throw's message and NO data at all.
+    const secret = "STORE_BUSY: credential store at /var/lib/moe/sessions.db is locked";
+    const dispatched: string[] = [];
+    const port: ConformanceDispatchPort = {
+      authenticate(): never {
+        throw new Error(secret);
+      },
+      dispatchCommandBytes(): Uint8Array {
+        dispatched.push("dispatchCommandBytes");
+        return CONFORMANCE_COMMAND_RESPONSE_BYTES;
+      },
+      dispatchQueryBytes(): Uint8Array {
+        dispatched.push("dispatchQueryBytes");
+        return CONFORMANCE_QUERY_RESPONSE_BYTES;
+      },
+    };
+    const outcome = await subject.invoke(port, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS);
+    expect(dispatched).toEqual([]);
+    expect(outcome.kind).toBe("error");
+    if (outcome.kind === "error") {
+      expect(outcome.mcpCode).toBe(EXPECTED_MCP_CODE_BY_ERROR_CODE.UNKNOWN_ERROR);
+      expect(outcome.data).toMatchObject({ code: "UNKNOWN_ERROR" });
+      expect(JSON.stringify(outcome.data)).not.toContain(secret);
+    }
+  });
 }
 
 function registerByteFidelity(subject: ConformanceSubject): void {

@@ -229,20 +229,25 @@ export function createRecoveryKeyProvider(
 
     const established = await establish(store, request);
     if (!("successor" in established)) return established;
-    const advanced = writeKeyEpochPointer(store, request, {
-      generation: established.generation,
-      headIncarnationRef: established.successor.binding.incarnationRef,
-      originIncarnationRef: established.originIncarnationRef,
-      restoreCommandId: request.restoreCommandId,
-      schemaVersion: RECOVERY_KEY_EPOCH_SCHEMA_VERSION,
-    });
-    if (!advanced) {
-      discard(crypto, established.successor.keyHandle);
-      return SUCCESSION_ALREADY_RECORDED;
+    // The same keep/finally shape `succeedFrom` uses: the minted handle leaves
+    // this scope ONLY inside an OPENED epoch. A refused advance, a drifted
+    // pointer and a store that throws mid-write all destroy it on the way out.
+    let keep = false;
+    try {
+      const advanced = writeKeyEpochPointer(store, request, {
+        generation: established.generation,
+        headIncarnationRef: established.successor.binding.incarnationRef,
+        originIncarnationRef: established.originIncarnationRef,
+        restoreCommandId: request.restoreCommandId,
+        schemaVersion: RECOVERY_KEY_EPOCH_SCHEMA_VERSION,
+      });
+      if (!advanced) return SUCCESSION_ALREADY_RECORDED;
+      const epoch = finish(store, request, protection, established);
+      keep = epoch.ok;
+      return epoch;
+    } finally {
+      if (!keep) discard(crypto, established.successor.keyHandle);
     }
-    const epoch = finish(store, request, protection, established);
-    if (!epoch.ok) discard(crypto, established.successor.keyHandle);
-    return epoch;
   };
 
   return Object.freeze({ open });

@@ -192,3 +192,94 @@ describe("runWorkClaimCommand", () => {
     });
   });
 });
+
+/**
+ * A replay must PROVE same bytes before it echoes the stored decision. The
+ * decision key is {commandId, principalId, projectId} — covering neither the
+ * kind nor the payload — and `replayOf` answers before any store write, so
+ * without a byte compare a resubmit under the same kind with DIFFERENT bytes
+ * would be handed the earlier result as "ok, REPLAYED": authority for a command
+ * never decided with those bytes, invisible to the store's own conflict arm.
+ */
+describe("runWorkClaimCommand replay proves same bytes", () => {
+  it("refuses a claim resubmit whose bytes diverge, with zero business-state change", () => {
+    const item = "goal.close@goal-bytes-1";
+    const divergent = "goal.close@goal-bytes-2";
+    const first = run(
+      "work.claim", "agent-a", { expiresAt: LATER, workItemId: item },
+      0, "2026-08-09T12:00:00.000Z", "cmd-bytes-claim",
+    );
+    expect(first).toMatchObject({ disposition: "DECIDED", ok: true });
+
+    const conflicting = run(
+      "work.claim", "agent-a", { expiresAt: LATER, workItemId: divergent },
+      0, "2026-08-09T12:00:00.000Z", "cmd-bytes-claim",
+    );
+
+    expect(conflicting).toMatchObject({
+      code: "WORK_CLAIM_COMMAND_BYTES_CONFLICT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(store.readEvents(aggregateIdFor(divergent))).toHaveLength(0);
+    expect(readWorkClaimLedger(store, PROJECT).claims.get(divergent)).toBeUndefined();
+    expect(store.readEvents(aggregateIdFor(item))).toHaveLength(1);
+  });
+
+  it("refuses a divergent release resubmit instead of echoing the stored release", () => {
+    const item = "goal.close@goal-bytes-3";
+    const divergent = "goal.close@goal-bytes-4";
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: item }))
+      .toMatchObject({ ok: true });
+    expect(run(
+      "work.release", "agent-a", { workItemId: item },
+      1, "2026-08-09T12:00:00.000Z", "cmd-bytes-release",
+    )).toMatchObject({ disposition: "DECIDED", ok: true });
+
+    const conflicting = run(
+      "work.release", "agent-a", { workItemId: divergent },
+      1, "2026-08-09T12:00:00.000Z", "cmd-bytes-release",
+    );
+
+    expect(conflicting).toMatchObject({
+      code: "WORK_CLAIM_COMMAND_BYTES_CONFLICT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(store.readEvents(aggregateIdFor(divergent))).toHaveLength(0);
+  });
+
+  it("still replays a byte-identical resubmit after the aggregate has advanced", () => {
+    const item = "goal.close@goal-bytes-5";
+    expect(run(
+      "work.claim", "agent-a", { expiresAt: LATER, workItemId: item },
+      0, "2026-08-09T12:00:00.000Z", "cmd-bytes-advance",
+    )).toMatchObject({ ok: true });
+    expect(run("work.renew", "agent-a", {
+      expiresAt: "2026-08-09T14:00:00.000Z", workItemId: item,
+    }, 1)).toMatchObject({ ok: true });
+
+    // The stored fence, not the live version, feeds the digest — an honest
+    // retry of the original claim must still read as a replay at version 2.
+    const replay = run(
+      "work.claim", "agent-a", { expiresAt: LATER, workItemId: item },
+      0, "2026-08-09T12:00:00.000Z", "cmd-bytes-advance",
+    );
+    expect(replay).toMatchObject({ disposition: "REPLAYED", ok: true });
+    expect(store.readEvents(aggregateIdFor(item))).toHaveLength(2);
+  });
+
+  it("still answers WORK_CLAIM_COMMAND_ID_REUSED when the reused id changes kind", () => {
+    const item = "goal.close@goal-bytes-6";
+    expect(run(
+      "work.claim", "agent-a", { expiresAt: LATER, workItemId: item },
+      0, "2026-08-09T12:00:00.000Z", "cmd-bytes-kind",
+    )).toMatchObject({ ok: true });
+
+    // Different kind AND different bytes: if the byte compare were ordered
+    // first it would answer here and the kind guard would go silent.
+    const reused = run(
+      "work.release", "agent-a", { workItemId: item },
+      1, "2026-08-09T12:00:00.000Z", "cmd-bytes-kind",
+    );
+    expect(reused).toMatchObject({
+      code: "WORK_CLAIM_COMMAND_ID_REUSED", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    });
+  });
+});

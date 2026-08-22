@@ -214,6 +214,10 @@ export function decodeStoredCommandDecision(
       previousVersion,
       receiptCommandId,
       recordVersion,
+      // Read straight off the re-proven receipt: `loadReceipt` re-derives its effect digest from
+      // its own rows and the branch above pins that digest to this decision, so this value is
+      // durable evidence rather than an unverified column.
+      replayRequestSha256: receipt.requestSha256,
       requestIdentityVersion,
       requestSha256,
       resultBytes,
@@ -299,6 +303,10 @@ export function decodeStoredCommandDecision(
       previousVersion: null,
       receiptCommandId,
       recordVersion,
+      // The receipt on this branch commits the rejection audit payload, so it carries no
+      // evidence about the request bytes. Offering its digest here would let a refusal answer a
+      // same-bytes question it never decided.
+      replayRequestSha256: null,
       requestIdentityVersion,
       requestSha256,
       resultBytes,

@@ -309,10 +309,18 @@ writeFileSync(join(installRoot, "CONTROL_ROOM.json"), JSON.stringify(manifest("C
 writeFileSync(join(installRoot, "DAEMON.json"), JSON.stringify(manifest("DAEMON")));
 
 const openedTargets = [];
+// A command that cannot launch ANYWHERE, so the dead-endpoint arm below
+// refuses for the same stated reason on every host. Pointing this at the real
+// bin shim made the arm platform-dependent: on Windows node refuses to spawn a
+// .CMD without a shell, which is a launch REFUSAL, while on linux and macOS the
+// shim launches fine, nothing ever confirms listening, and the arm degrades to
+// LAUNCHED_UNCONFIRMED -> DAEMON_START_UNVERIFIED. It also left a detached
+// daemon behind on those runners. Only this dead host ever launches: every
+// other arm reconnects to the live listener or refuses at distribution.
+const absentDaemon = join(directory, "absent-daemon");
 const base = { apiCompatibilityRange: range, controlRoomAssetPath: assetPath,
   controlRoomOpenTimeoutMs: 4000, daemonArgs: [],
-  daemonCommand: join(process.cwd(), "node_modules", ".bin",
-    process.platform === "win32" ? "moe-daemon.CMD" : "moe-daemon"),
+  daemonCommand: absentDaemon,
   endpoint: "http://127.0.0.1:" + livePort, installRoot,
   opener: async (target) => { openedTargets.push(target); },
   probeTimeoutMs: 3000, startConfirmIntervalMs: 100, startConfirmTimeoutMs: 1200 };

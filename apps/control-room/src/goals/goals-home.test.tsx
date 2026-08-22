@@ -264,6 +264,39 @@ describe("goals home keeps filter, search, and row keyboard control with its cal
     expect(focused).toEqual(["g-payments", "g-embed", "g-payments"]);
     expect(opened).toEqual(["g-payments"]);
   });
+
+  it("leaves Enter on a row's own link to the link, opening no goal", async () => {
+    const opened: string[] = [];
+    const followed: string[] = [];
+    renderHome({ onOpenGoal: (goalId) => opened.push(goalId) });
+    const link = screen.getByTestId(`cr.goals.link.${CLOSING_GOAL_ID}`);
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      followed.push(link.getAttribute("href") ?? "");
+    });
+    link.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(followed).toEqual(["/goal/g%2Fclosing%20goal/board"]);
+    expect(opened).toEqual([]);
+    expect(document.activeElement).toBe(link);
+  });
+
+  it("walks from the row focus actually sits on, not from the remembered cursor", async () => {
+    const focused: string[] = [];
+    const opened: string[] = [];
+    renderHome({
+      onFocusRow: (goalId) => focused.push(goalId),
+      onOpenGoal: (goalId) => opened.push(goalId),
+    });
+    rowOf(CLOSING_GOAL_ID).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(opened).toEqual([CLOSING_GOAL_ID]);
+    expect(document.activeElement).toBe(rowOf(CLOSING_GOAL_ID));
+    rowOf("g-payments").focus();
+    await userEvent.keyboard("j");
+    expect(document.activeElement).toBe(rowOf("g-embed"));
+    expect(focused).toEqual(["g-embed"]);
+  });
 });
 
 describe("goals home is honest while loading, empty, and degraded", () => {

@@ -208,3 +208,38 @@ export const STDIO_TOOL_ENTRIES: readonly StdioToolEntry[] = generateStdioToolEn
 export const STDIO_TOOL_INDEX: ReadonlyMap<string, StdioToolEntry> = new Map(
   STDIO_TOOL_ENTRIES.map((entry) => [entry.tool.name, entry]),
 );
+
+/** An allowlisted kind that no generated entry answers: a construction-time refusal. */
+export const MCP_TOOL_ALLOWLIST_UNKNOWN_KIND = "MCP_TOOL_ALLOWLIST_UNKNOWN_KIND" as const;
+
+/** Advertising nothing is a misconfiguration, not a choice, so it refuses on its own code. */
+export const MCP_TOOL_ALLOWLIST_EMPTY = "MCP_TOOL_ALLOWLIST_EMPTY" as const;
+
+const ENTRY_BY_KIND: ReadonlyMap<string, StdioToolEntry> = new Map(
+  STDIO_TOOL_ENTRIES.map((entry) => [entry.kind, entry]),
+);
+
+/**
+ * Selects the generated entries an allowlist names, in the allowlist's own order.
+ *
+ * It REFUSES rather than dropping: a name the generator never produced means the caller's
+ * roster and this package's vocabulary have drifted, and silently advertising a shorter
+ * list would hide that until an agent called a tool that was never there. Repeats collapse,
+ * because two entries sharing a tool name is a client-visible defect, not a caller intent.
+ */
+export function allowlistedToolEntries(
+  allowlist: readonly string[],
+): readonly StdioToolEntry[] {
+  if (allowlist.length === 0) {
+    throw new Error(`${MCP_TOOL_ALLOWLIST_EMPTY}: an MCP server must advertise at least one tool`);
+  }
+  const selected = new Map<string, StdioToolEntry>();
+  for (const kind of allowlist) {
+    const entry = ENTRY_BY_KIND.get(kind);
+    if (entry === undefined) {
+      throw new Error(`${MCP_TOOL_ALLOWLIST_UNKNOWN_KIND}: ${kind} has no generated tool`);
+    }
+    selected.set(kind, entry);
+  }
+  return Object.freeze([...selected.values()]);
+}

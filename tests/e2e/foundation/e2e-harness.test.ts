@@ -30,7 +30,6 @@ import { KILL_TARGETS, killAtDeclaredBoundary, spawnHarnessProcess } from "./e2e
 import {
   SEEDED_LOW_RISK_TASK,
   createScratchProjectRepository,
-  pinnedClaudeRuntimeObservation,
 } from "./foundation-fixtures.js";
 
 const repositoryRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -253,13 +252,9 @@ describe("seeded inputs", () => {
     expect(Object.isFrozen(SEEDED_LOW_RISK_TASK)).toBe(true);
   });
 
-  it("builds the pinned Claude observation through the production builder, PROVEN and stable", () => {
-    const first = pinnedClaudeRuntimeObservation();
-    const second = pinnedClaudeRuntimeObservation();
-    expect(first.providerId).toBe("claude");
-    expect(first.truthClass).toBe("PROVEN");
-    expect(first.pinningMethod).toBe("CONTENT_ADDRESSED_COPY");
-    expect(first.observationDigest).toBe(second.observationDigest);
-    expect(first.freshness.observedAt).toBe("2026-01-01T00:00:00.000Z");
-  });
+  // The pinned-observation fixture this file used to assert is gone: a literal
+  // `C:/pinned/claude/claude.exe` with placeholder digests is not host evidence,
+  // and the canary's self-host claim rests on the runtime this machine really
+  // has. Its replacement — production discovery plus the acceptance gate — is
+  // asserted in `foundation-fixtures.test.ts`, against this host.
 });

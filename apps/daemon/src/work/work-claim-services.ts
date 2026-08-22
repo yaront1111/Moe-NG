@@ -1,4 +1,5 @@
 import type { JsonValue, RuntimeError } from "@moe/contracts";
+import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionKey, CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import {
@@ -74,6 +75,16 @@ function decisionKey(request: WorkClaimRequest): CommandDecisionKey {
 
 const encoder = new TextEncoder();
 
+/**
+ * The canonical request bytes of a command: the exact preimage `commitAccepted`
+ * writes and the exact preimage the replay proof re-derives. ONE function on
+ * purpose — two copies of a byte construction drift silently, and a drifted
+ * copy here would refuse honest replays.
+ */
+function requestBytesOf(request: WorkClaimRequest): Uint8Array {
+  return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
+}
+
 function commitAccepted(
   store: SqliteEventStore,
   request: WorkClaimRequest,
@@ -94,7 +105,7 @@ function commitAccepted(
     }],
     expectedVersion,
     key: decisionKey(request),
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
     targetAggregateId: aggregateId,
   });
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
@@ -113,7 +124,21 @@ function replayOf(store: SqliteEventStore, request: WorkClaimRequest): WorkClaim
   if (existing.commandKind !== request.kind) {
     return refuse(request.kind, "WORK_CLAIM_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
+  // A refused decision carries no same-bytes evidence (`replayRequestSha256` is
+  // null), so nothing could prove the resubmit is the command that was decided;
+  // it is decided again from scratch. Must stay AHEAD of the byte compare below.
   if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // The decision key covers neither the kind (guarded above) nor the payload,
+  // so reusing a commandId with DIFFERENT bytes would otherwise be handed the
+  // stored result as an accepted replay — authority for a command never decided
+  // with those bytes — and the store's own conflict arm never sees it, because
+  // this short-circuit answers before any store write. Recomputed from the
+  // STORED decision's own fence, so the resubmitted bytes are the only free
+  // variable and a match is byte equality; an honest replay still matches after
+  // its aggregate has advanced.
+  if (identifyReplayRequest(existing, requestBytesOf(request)) !== existing.replayRequestSha256) {
+    return refuse(request.kind, "WORK_CLAIM_COMMAND_BYTES_CONFLICT", "DAEMON_PREREQUISITE");
+  }
   return Object.freeze({
     advisoryOnly: false as const, authority: "DURABLE_DECISION" as const,
     decision: existing, disposition: "REPLAYED" as const,

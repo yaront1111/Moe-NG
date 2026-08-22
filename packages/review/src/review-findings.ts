@@ -116,14 +116,17 @@ function lineageAttested(lineage: ReviewLineage): boolean {
 /**
  * Copies a caller's finding into inert data, reading each field exactly once. An accessor that
  * answered differently on a later read would otherwise let a stored record drift away from the
- * fingerprint that was computed from it.
+ * fingerprint that was computed from it, which is why the fingerprint is taken from this copy
+ * and never from the caller's object. `subject` is read once too, so its kind and locator
+ * always come from the same reading.
  */
 function inertFinding(finding: ReviewFinding): ReviewFinding {
+  const subject = finding.subject;
   return {
     detail: finding.detail,
     ruleId: finding.ruleId,
     severity: finding.severity,
-    subject: { kind: finding.subject.kind, locator: finding.subject.locator },
+    subject: { kind: subject.kind, locator: subject.locator },
   };
 }
 
@@ -155,11 +158,10 @@ export function recordReviewRound(
   // equal round can never be replayed after an acceptance.
   if (round.round <= lineage.highestRound) return refuse("FINDING_LINEAGE_APPEND_ONLY");
   const seen = new Set(lineage.records.map((record) => record.fingerprint));
-  const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => ({
-    finding: inertFinding(finding),
-    fingerprint: findingFingerprint(finding),
-    round: round.round,
-  }));
+  const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => {
+    const inert = inertFinding(finding);
+    return { finding: inert, fingerprint: findingFingerprint(inert), round: round.round };
+  });
   const repeatFingerprints = [
     ...new Set(added.map((record) => record.fingerprint).filter((entry) => seen.has(entry))),
   ].sort();

@@ -97,7 +97,7 @@ function ProposalMetadata({ proposal }: { readonly proposal: DocumentWorkProposa
         ["context", "Context manifest", proposal.contextManifestDigest],
       ] as const).map(([key, label, value]) => (
         <div data-testid={`cr.preview.dossier.meta.${key}`} key={key}>
-          <dt>{label}</dt><dd><code className="cr-dossier-token">{value}</code></dd>
+          <dt>{label}</dt><dd><code className="cr-dossier-token" title={value}>{value}</code></dd>
         </div>
       ))}
     </dl>

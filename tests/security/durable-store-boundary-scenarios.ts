@@ -24,6 +24,11 @@ import { inspectRecoveryAnchor, prepareRecoveryAnchor } from "../../packages/sto
 import { decodeRecoveryBinding } from "../../packages/store/src/recovery-install-codec.js";
 import { hostileRoot } from "./hostile-harness.js";
 import {
+  SAFE_BOUNDARY_OBSERVATION_LAYER,
+  safeBoundaryAfter,
+  safeBoundaryBefore,
+} from "./safe-boundary-observation-scenarios.js";
+import {
   IMPORT_SHADOW_READ_LAYER,
   SEEDED_IMPORT_ROWS,
   importShadowClosedStore,
@@ -48,6 +53,7 @@ export const DURABLE_BOUNDARY_NAMES = Object.freeze([
   "RECOVERY_BINDING_CODEC_LAYER",
   "RECOVERY_INSTALL_LAYERS",
   "RECOVERY_INSTALL_TRANSACTION_LAYER",
+  "SAFE_BOUNDARY_OBSERVATION_LAYER",
 ] as const);
 
 export type DurableBoundaryName = (typeof DURABLE_BOUNDARY_NAMES)[number];
@@ -124,6 +130,16 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
         code: phase === "BEFORE" ? "RECOVERY_INSTALL_SCOPE_REQUIRED" : "RECOVERY_INSTALL_INCARNATION_CONFLICT",
         layer: "RECOVERY_INSTALL_TRANSACTION",
       };
+    // BEFORE refuses the caller's own boundary CLAIM before any durable authority is read;
+    // AFTER reads back a real committed observation from a rival project, so every earlier
+    // layer admitted and only the read-side project check can answer. Two branches, two
+    // codes -- one code across both phases would be green whichever one ran. The layer comes
+    // off the boundary's OWN exported constant rather than a literal nobody rechecks.
+    case "SAFE_BOUNDARY_OBSERVATION_LAYER":
+      return {
+        code: phase === "BEFORE" ? "SAFE_BOUNDARY_INPUT_MALFORMED" : "SAFE_BOUNDARY_OBSERVATION_ABSENT",
+        layer: SAFE_BOUNDARY_OBSERVATION_LAYER,
+      };
   }
 };
 
@@ -143,6 +159,7 @@ const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>
   RECOVERY_BINDING_CODEC_LAYER: ["unknown codec bytes are refused", "stale codec bytes remain unreadable"],
   RECOVERY_INSTALL_LAYERS: ["malformed binding input is refused", "malformed replacement cannot overwrite"],
   RECOVERY_INSTALL_TRANSACTION_LAYER: ["unscoped install is refused", "one incarnation cannot occupy two slots"],
+  SAFE_BOUNDARY_OBSERVATION_LAYER: ["an agent cannot declare its own boundary observed", "a committed observation is not another project's evidence"],
 });
 
 /**
@@ -152,6 +169,9 @@ const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>
  */
 const preexistingAfter = (boundary: DurableBoundaryName): number => {
   if (boundary === "RECOVERY_INSTALL_TRANSACTION_LAYER" || boundary === "RECOVERY_ANCHOR_LAYER") return 1;
+  // The observation production committed on the way in. It is still durable: the rival
+  // project was refused the READ, and a refused read must not delete what it could not have.
+  if (boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") return 1;
   // The two claims the import corpus seeds through `commitLegacyImport`, both still durable:
   // the row the reader never saw was hidden by the narrowing port, not removed from the store.
   if (boundary === "IMPORT_SHADOW_READ_LAYER") return SEEDED_IMPORT_ROWS;
@@ -188,26 +208,45 @@ export interface RaceCase {
 }
 
 /**
- * Every boundary but one races two hostile WRITERS for a single durable version. The
- * import-shadow read owns no writer at all, so its race is the one a pure reader can
- * actually lose: a commit landing between the horizon it opened on and the horizon it
- * closed on. Different question, different answering code, and `expectedDurableEvents`
- * says so out loud rather than letting a shared literal hide it.
+ * Most boundaries race two hostile WRITERS for a single durable version; two do not, and
+ * each says why out loud rather than letting a shared literal hide it.
+ *
+ * The import-shadow read owns no writer at all, so its race is the one a pure READER can
+ * lose: a commit landing between the horizon it opened on and the horizon it closed on.
+ *
+ * The safe-boundary observation owns a writer, but it never surfaces the store's conflict:
+ * it CATCHES that conflict and answers with its own code, so a case expecting
+ * `EXPECTED_VERSION_CONFLICT` would be asserting the store's vocabulary about a layer that
+ * deliberately does not speak it. Exactly one side commits, so its durable count is one
+ * observation, and unlike the generic race that one admission is legitimate.
  */
-export const hostileRaceCases: readonly RaceCase[] = Object.freeze(
-  DURABLE_BOUNDARY_NAMES.map((boundary) => (boundary === "IMPORT_SHADOW_READ_LAYER"
-    ? {
+function raceFor(boundary: DurableBoundaryName): RaceCase {
+  if (boundary === "IMPORT_SHADOW_READ_LAYER") {
+    return {
       boundary,
       expected: { code: "IMPORT_SHADOW_HORIZON_DRIFT", layer: IMPORT_SHADOW_READ_LAYER },
       expectedDurableEvents: SEEDED_IMPORT_ROWS + 1,
       question: `a commit landing mid-read cannot be projected into one ${boundary} answer`,
-    }
-    : {
+    };
+  }
+  if (boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") {
+    return {
       boundary,
-      expected: { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" },
+      expected: { code: "SAFE_BOUNDARY_COMMIT_CONFLICT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER },
       expectedDurableEvents: 1,
-      question: `two ${boundary} callers cannot both claim one durable version`,
-    })),
+      question: `two ${boundary} writers derive one identity and only one may commit it`,
+    };
+  }
+  return {
+    boundary,
+    expected: { code: "EXPECTED_VERSION_CONFLICT", layer: "DURABLE_STORE" },
+    expectedDurableEvents: 1,
+    question: `two ${boundary} callers cannot both claim one durable version`,
+  };
+}
+
+export const hostileRaceCases: readonly RaceCase[] = Object.freeze(
+  DURABLE_BOUNDARY_NAMES.map(raceFor),
 );
 
 const digest = (character: string): string => character.repeat(64);
@@ -348,6 +387,18 @@ async function boundaryRefusal(
 }
 
 export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalCaseResult> {
+  // Delegated whole, exactly as the import-shadow arms are: this boundary seeds a durable
+  // provider-run through the real activation ingress and commits through production, so it
+  // owns its store rather than borrowing the generic one opened below.
+  if (hostileCase.boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER") {
+    const outcome = hostileCase.phase === "BEFORE" ? safeBoundaryBefore() : safeBoundaryAfter();
+    return {
+      ...recordProperties(outcome.refusal),
+      durableComplete: outcome.durableComplete,
+      durableRecords: outcome.durableRecords,
+      refusal: outcome.refusal,
+    };
+  }
   if (hostileCase.boundary === "IMPORT_SHADOW_READ_LAYER") {
     const root = importShadowRoot(hostileCase.phase.toLowerCase());
     const outcome = hostileCase.phase === "BEFORE"

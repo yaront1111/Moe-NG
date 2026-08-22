@@ -19,6 +19,18 @@ body {
   overflow: hidden;
 }
 
+/* The mount point owns the viewport: banners the shell modes stack ABOVE the
+ * shell (the fixture banner) share one 100dvh column with it instead of pushing
+ * the status strip past an unscrollable body's bottom edge. Content taller than
+ * the viewport (the config notice) scrolls here, because body deliberately
+ * cannot. */
+#root {
+  block-size: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
 button,
 input,
 select,

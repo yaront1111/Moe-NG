@@ -103,10 +103,18 @@ describe("integrity axis versus the declared-boundary roster", () => {
   it("reads a positive number of integrity entries off the roster", () => {
     // A silently-zero parse would make every set assertion below pass vacuously.
     expect(ROSTER_INTEGRITY.length).toBeGreaterThan(0);
-    // 13 -> 14 for GRAPH_CONTENT_LAYERS (task-66004424), whose BEFORE/AFTER/RACE arms land
-    // with this bump. The pin is the true roster count, never the covered count: raising it
+    // 14 -> 15 for ACCEPTANCE_CONTRACT_LAYERS (task-2ce5411e), whose three arms land with
+    // this bump. The pin is the true roster count, never the covered count: raising it
     // without the arms would redden the three-armed assertion instead of hiding anything.
-    expect(ROSTER_INTEGRITY).toHaveLength(14);
+    // 15 -> 16 for PLAN_REVISION_LAYERS (producer task-9fe1a0e0, governor entry), whose
+    // three arms land with this bump for the same reason.
+    // 16 -> 17 for FOUNDATION_REPOSITORY_SCOPE_LAYERS (producer task-4af0e3dc), the
+    // daemon-startup repository/scope catalog, whose three arms land with this bump.
+    // 17 -> 19 for NODE_AUTHORITY_LAYERS and NODE_AUTHORITY_RECURSION_LAYERS
+    // (task-515d2f90, cashing producer task-210efa47's deferral), the canonical node-body
+    // codec and the recursion digest that feed GraphRevisionContent v3. Axis by human REPL
+    // ruling, comment-2a7c5a33; both boundaries' three arms land with this bump.
+    expect(ROSTER_INTEGRITY).toHaveLength(19);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -139,18 +147,50 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // reddens here rather than shrinking the slice in silence.
     expect(resealed.length).toBeGreaterThan(0);
     expect([...new Set(resealed)].sort()).toEqual([
+      "ACCEPTANCE_CONTRACT_LAYERS",
       "APPROVAL_AUTHORITY_LAYERS",
       "DISTRIBUTION_REFUSAL_LAYERS",
       "DOCUMENT_WORK_PROPOSAL_LAYERS",
+      // Added with the FOUNDATION_REPOSITORY_SCOPE_LAYERS arms (producer task-4af0e3dc):
+      // the catalog is digest-sealed over its own admitted fields, so it owes a forgery.
+      "FOUNDATION_REPOSITORY_SCOPE_LAYERS",
       // Added by task-66004424 with the GRAPH_CONTENT_LAYERS arms. This literal is TIGHTENED,
       // not loosened: the graph-content codec is digest-bearing, so it owes a forgery here,
       // and omitting it would let the new `forged` arm redden a passing assertion.
       "GRAPH_CONTENT_LAYERS",
+      // Added with the NODE_AUTHORITY arms (task-515d2f90). Both are digest-bearing and so
+      // owe a forgery: the node-body codec seals a `bodyContentDigest` over the admitted
+      // body, and a hard-edge dependency contract is sealed to ONE graph structure by its
+      // `graphBindingDigest`. Each forgery re-passes its own production seal before the
+      // refusal is asserted, so neither can degrade into a plain stale-digest probe.
+      "NODE_AUTHORITY_LAYERS",
+      "NODE_AUTHORITY_RECURSION_LAYERS",
+      // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
+      // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
+      "PLAN_REVISION_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
       "REVIEW_DECISION_LAYERS",
       "SESSION_AUTH_LAYERS",
     ]);
+  });
+
+  it("pins both exact refusal tuples on the AcceptanceContract race", () => {
+    const races = INTEGRITY_HOSTILE_CASES.filter(
+      (entry): entry is Extract<HostileCase, { arm: "RACE" }> =>
+        entry.arm === "RACE" && entry.constant === "ACCEPTANCE_CONTRACT_LAYERS",
+    );
+    expect(races).toHaveLength(1);
+    expect(races.map((entry) => ({ left: entry.expectLeft, right: entry.expectRight }))).toEqual([{
+      left: {
+        code: "ACCEPTANCE_CONTRACT_NONCANONICAL",
+        layer: "ACCEPTANCE_CONTRACT_CANONICALIZATION",
+      },
+      right: {
+        code: "ACCEPTANCE_CONTRACT_DUPLICATE_KEY",
+        layer: "ACCEPTANCE_CONTRACT_CODEC",
+      },
+    }]);
   });
 });
 
@@ -197,6 +237,12 @@ describe("hostile race arms", () => {
       // which leg won. A case that only passed when one side won would be a flake, and the
       // usual "fix" — pinning the order — destroys the property under test.
       expect(["left", "right"]).toContain(outcome.firstSettled);
+      if (entry.expectLeft !== undefined || entry.expectRight !== undefined) {
+        expect(entry.expectLeft).toBeDefined();
+        expect(entry.expectRight).toBeDefined();
+        assertRefusedWith(left, entry.expectLeft!);
+        assertRefusedWith(right, entry.expectRight!);
+      }
       // Per side, not on an aggregate: an aggregate can hide a double-admit, which is the one
       // defect a race case exists to find. Both legs here are hostile, so at most one side
       // could ever be admitted and in fact neither may be.

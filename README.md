@@ -1,6 +1,12 @@
 # Moe Next
 
-Moe Next is a greenfield, local-first orchestration control plane for reliable multi-agent software work.
+Moe is a trustworthy autonomous software company: give it a PRD, and it
+designs, builds, verifies, deploys, and improves the product — from PRD to
+production, with a trace that survives an adversary. The local-first
+orchestration control plane, the authority system, and the evidence model in
+this repository are the engine that makes that promise provable; they are not
+the promise. The vision, the human gates, and the staged roadmap live in
+[docs/VISION.md](./docs/VISION.md).
 
 This repository is independent from legacy Moe. Legacy implementation code is not copied or imported.
 
@@ -8,8 +14,10 @@ Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRI
 
 ## What runs today
 
-The full agent loop runs on the durable pipeline and is live-proven end to end
-(see [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
+The full agent loop runs on the durable pipeline; it was live-proven end to end
+on 2026-08-09/10 — operational evidence from that dated run, not a release or
+security-boundary claim (see
+[docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
 entry points, environment, and knobs):
 
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`,
@@ -25,16 +33,22 @@ entry points, environment, and knobs):
   READY, unclaimed non-human steps with a scoped agent session and a real
   `claude -p` process; human approval and goal closure are never delegated. A
   daemon-side development verifier reruns a node test before acceptance.
-- **Control room** (`apps/control-room`): the truth-preserving board; `?live=1`
-  over the Vite proxy renders the daemon's own offer surface and dispatches
-  offers back verbatim.
+- **Control room** (`apps/control-room`): the truth-preserving board and the
+  operating surface. It renders the daemon's own offer surface by DEFAULT over
+  the Vite proxy, and every step the daemon marks READY dispatches from its
+  card — the daemon's own gates answer each click, refusals render verbatim,
+  and cards move only when the ledger does. Frozen development
+  fixtures live behind `?fixtures=1` and render under a banner saying so; a build
+  with no credentials shows a configuration notice, never fixtures in their place.
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
   decision storage, subscriptions, snapshots, recovery), `runner`,
   `coordination`, `review`, `context`, `mcp`, `import` (deterministic read-only
   legacy import), `control-room-client` / `control-room-model`, `skills`,
-  `testkit` (DEVELOPMENT_ONLY / NOT_CONFIRMATORY references). Adapters under
-  `adapters/` (IDE contract, JetBrains) are integration boundaries.
+  `benchmark` (DEVELOPMENT_ONLY, parked to v0.2), `testkit` (DEVELOPMENT_ONLY /
+  NOT_CONFIRMATORY references). Adapters under `adapters/` (IDE contract,
+  JetBrains) are integration boundaries; IDE/portability work is parked to v0.2
+  under the 2026-08-18 scope freeze.
 
 Authority, persistence, provider effects, and presentation stay separated;
 missing or unverifiable evidence is `UNKNOWN` and gains no authority.
@@ -54,10 +68,22 @@ returns an authoritative `decision: GO`, `status: VERIFIED`, or freeze-decision
 bytes; a non-caller-mintable trust boundary is still required before any
 authoritative decision can exist.
 
-The current verifier is not an adversarial trust boundary: it runs a shell
-recipe from an agent-modifiable workspace under the wrapper's OS account. The
-release inventory records source subjects rather than runnable daemon/control-room
-artifacts. These are release blockers, not operator configuration issues.
+This repository is stamped `0.1.0` under the MIT [LICENSE](./LICENSE), and every
+workspace package stays `private: true`. The version marks the scope-frozen v0.1
+line (Windows + Claude + linear execution + local single node); it is not a
+published release. Measured at this commit, v0.1 does not yet ship an
+installable artifact or a `moe` CLI: the only `bin` entries in the workspace are
+`apps/daemon`'s `moe-daemon` / `moe-mcp-http` / `moe-mcp-stdio`, which point at
+TypeScript sources inside a `private` package, so nothing installs a `moe`
+command; and the release inventory records source subjects rather than runnable
+daemon/control-room artifacts. The self-host canary is not green either — its
+chain is still open. The current verifier is not an adversarial trust boundary:
+it runs a shell recipe from an agent-modifiable workspace under the wrapper's OS
+account; for v0.1 it ships as a documented trusted-workspace limitation (human
+decision 2026-08-18), and a hermetic verifier is v0.2. The missing artifact and
+the unproven canary remain release blockers, not operator configuration issues.
+The next major milestone is Stage 1 of the vision — a small but real PRD taken
+to a proof-carrying, verified pull request (see [docs/VISION.md](./docs/VISION.md)).
 
 ## Commands
 

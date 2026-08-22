@@ -102,6 +102,17 @@
   padding: 0.42rem 0.65rem;
 }
 
+/* The prefix above also matches a banner's own labelled children
+ * (cr.banner.fixture.text, cr.banner.circuitbreaker.actions, …); an inline
+ * child re-boxed by it draws a fragmented border around every wrapped line.
+ * One box per banner: descendants stay plain. */
+[data-testid^="cr.banner."] [data-testid^="cr.banner."] {
+  background: none;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+}
+
 [data-testid="cr.shell.statusstrip"] {
   align-items: center;
   background: var(--cr-rail);

@@ -28,9 +28,9 @@
  * owner rather than papered over. Its `runtime-provider-*-cases.ts` modules export SUITE
  * BUILDERS (`describe*(ledger, spec)`), and coverage is written into an in-memory `Ledger`
  * while the cases execute; with `pool: "forks"` and `isolate: true` that ledger cannot cross
- * a file boundary. `RUNTIME_PROVIDER_PARTITION` lists the 24 names with no arms, so reading
+ * a file boundary. `RUNTIME_PROVIDER_PARTITION` lists the 25 names with no arms, so reading
  * it would be precisely the static list this file forbids. The axis is NOT short of coverage
- * — its own slices assert `assertSweepsExactly` and `assertPositiveCounts` over all 24 × 3 —
+ * — its own slices assert `assertSweepsExactly` and `assertPositiveCounts` over all 25 × 3 —
  * so it is resolved from the axis's committed bytes: its LEDGER WRITE SITES. Deleting a case
  * deletes its write site, which is what keeps this real. Exporting a `{boundary, arm}` table
  * from that axis would let `runtimeProviderPairs` be deleted outright.
@@ -56,6 +56,10 @@ import {
   SCHEDULER_DECISION_CASES,
   SCHEDULER_DECISION_RACES,
 } from "./scheduler-activation-hostile-cases.js";
+import {
+  FOUNDATION_DISPATCH_CASES,
+  FOUNDATION_DISPATCH_RACES,
+} from "./foundation-dispatch-hostile-cases.js";
 import {
   PLANNING_GRAPH_CASES,
   PLANNING_GRAPH_RACES,
@@ -112,22 +116,27 @@ const durableStorePairs = (): readonly CoveredPair[] => [
   ...hostileRaceCases.map((entry) => [entry.boundary, "RACE"] as const),
 ];
 
-/** Eight tables: four carrying `arm`, four race tables carrying none. The planning-graph
- *  pair is a sibling MODULE rather than a fourth export of the hostile-cases file, so it
- *  must be named here: this builder enumerates tables, and a table it does not import is
- *  read as an uncovered roster row rather than as a missing registration (task-c5be7926). */
+/** Ten tables: five carrying `arm`, five race tables carrying none. The planning-graph and
+ *  foundation-dispatch pairs are sibling MODULES rather than further exports of the
+ *  hostile-cases file, so they must be named here: this builder enumerates tables, and a
+ *  table it does not import is read as an uncovered roster row rather than as a missing
+ *  registration (task-c5be7926, then task-120403f7). Registering a TABLE is not the literal
+ *  covered-constant list this file forbids — no constant is named here, and a table whose
+ *  cases are deleted still reports its rows as uncovered. */
 const schedulerActivationPairs = (): readonly CoveredPair[] => [
   ...[
     ...ACTIVATION_ADMISSION_CASES,
     ...EXPANSION_SUPERSESSION_CASES,
     ...SCHEDULER_DECISION_CASES,
     ...PLANNING_GRAPH_CASES,
+    ...FOUNDATION_DISPATCH_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
     ...EXPANSION_SUPERSESSION_RACES,
     ...SCHEDULER_DECISION_RACES,
     ...PLANNING_GRAPH_RACES,
+    ...FOUNDATION_DISPATCH_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 

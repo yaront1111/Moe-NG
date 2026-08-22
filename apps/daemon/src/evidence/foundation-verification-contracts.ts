@@ -2,9 +2,10 @@
  * Durable verification receipt dispatch: this service's own vocabulary, the
  * identities a caller may name, and the shape of the one durable receipt row.
  * Every code below is raised by THIS service and by nothing else. A refusal from
- * the attempt store, the verifier process wrapper, its supervisor or the evidence
- * builder travels through `carry*Refusal` with ITS OWN code and layer intact:
- * restamping would make a spawn failure indistinguishable from a stale candidate.
+ * the attempt store, the verifier process wrapper, its supervisor, the evidence
+ * builder or the durable store travels through `carry*Refusal` with ITS OWN code
+ * and layer intact: restamping would make a spawn failure indistinguishable from
+ * a stale candidate, and a commit the store could not prove from one it refused.
  */
 
 import type {
@@ -12,6 +13,7 @@ import type {
   RunVerifierProcessRefused, RunnerEvidenceErrorCode, VerifierCapture, VerifierIdentity,
   VerifierProcessErrorCode, VerifierProcessLayer,
 } from "@moe/runner";
+import type { DurableStoreError, DurableStoreErrorCode } from "@moe/store";
 
 import type { FoundationAttemptRefused } from "../work/foundation-attempt-contracts.js";
 
@@ -43,26 +45,45 @@ export const FOUNDATION_VERIFICATION_LAYERS = Object.freeze([
 export type FoundationVerificationLayer = (typeof FOUNDATION_VERIFICATION_LAYERS)[number];
 
 /**
- * Closed, and every member has exactly one producer. RECEIPT_UNCOMMITTED means
- * ZERO rows were written and RECEIPT_AMBIGUOUS means MORE THAN ONE exists: one
- * code for two opposite durable states tells a reviewer nothing, so each keeps
- * its own — the same reason ACTIVATION_UNCOMMITTED is not folded in either.
+ * Closed, and every member has exactly one producer. The three *_UNCOMMITTED
+ * codes mean ZERO rows were written AND THE STORE SAID SO: they answer only a
+ * NO_BUSINESS_EFFECT decision, the store's returned expected-version rejection.
+ * A store that THROWS is not that fact. OUTCOME_UNKNOWN may have landed the row,
+ * STORE_BUSY may not have reached it, and the codes are the store's to name, so
+ * a thrown fault travels under the DURABLE_STORE source with the store's own
+ * code rather than being folded into "nothing was written". RECEIPT_AMBIGUOUS
+ * means MORE THAN ONE row exists: one code for two opposite durable states tells
+ * a reviewer nothing, so each keeps its own.
+ *
+ * RECIPE_CONFLICT and RECIPE_UNCOMMITTED are the two ways a recipe fails to
+ * seal. A second registration under an already-sealed identity is answered from
+ * the DURABLE recipe: the same sha256 is a replay and the first bytes answer,
+ * a different one is a conflict and the first bytes stay. Neither writes a row.
+ *
+ * CANDIDATE_STALE and CANDIDATE_TREE_MISMATCH are two different facts about the
+ * caller's request: the first says the caller's belief about WHICH record is
+ * out of date, the second says the root it named does not hold the tree that
+ * record sealed. Both answer before activation and write no row, so neither is
+ * an UNKNOWN: the candidate was never run.
  *
  * Deliberately absent: spawn, timeout, output-overflow, receipt-binding,
- * truncated-capture, unverified-execution and candidate-changed codes. The
- * wrapper refuses the moment a stream passes its bound and only ever answers
- * `ok` with disposition COMPLETED or FAILED, and a durable attempt record is
- * IMMUTABLE, a second RECORDED event making the STORE refuse under ITS code, so
- * each would be an orphan. DoD 3 is met by carrying the producer's refusal,
- * recording truncation on the UNKNOWN row, and asserting no-authoritative-pass
- * as a property.
+ * truncated-capture, unverified-execution, candidate-changed and store-fault
+ * codes. The wrapper refuses the moment a stream passes its bound and only ever
+ * answers `ok` with disposition COMPLETED or FAILED, a durable attempt record is
+ * IMMUTABLE, a second RECORDED event making the STORE refuse under ITS code, and
+ * a store that cannot read or commit already names why, so each would be an
+ * orphan. DoD 3 is met by carrying the producer's refusal, recording truncation
+ * on the UNKNOWN row, and asserting no-authoritative-pass as a property.
  */
 export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
   "FOUNDATION_VERIFICATION_REQUEST_MALFORMED",
   "FOUNDATION_VERIFICATION_ATTEMPT_UNPROVEN",
   "FOUNDATION_VERIFICATION_RECIPE_UNRESOLVED",
   "FOUNDATION_VERIFICATION_RECIPE_SEAL_INVALID",
+  "FOUNDATION_VERIFICATION_RECIPE_CONFLICT",
+  "FOUNDATION_VERIFICATION_RECIPE_UNCOMMITTED",
   "FOUNDATION_VERIFICATION_CANDIDATE_STALE",
+  "FOUNDATION_VERIFICATION_CANDIDATE_TREE_MISMATCH",
   "FOUNDATION_VERIFICATION_ACTIVATION_UNCOMMITTED",
   "FOUNDATION_VERIFICATION_REPLAY_CONFLICT",
   "FOUNDATION_VERIFICATION_RECEIPT_UNCOMMITTED",
@@ -72,13 +93,16 @@ export const FOUNDATION_VERIFICATION_CODES = Object.freeze([
 ] as const);
 export type FoundationVerificationCode = (typeof FOUNDATION_VERIFICATION_CODES)[number];
 
-/** WHICH AUTHORITY refused, so a pass-through is provable rather than asserted. */
+/** WHICH AUTHORITY refused, so a pass-through is provable rather than asserted.
+ *  DURABLE_STORE is the store itself: a read or commit it THREW on, carried with
+ *  the store's code, under the layer name the command seam already gives it. */
 export const FOUNDATION_VERIFICATION_REFUSAL_SOURCES = Object.freeze([
   "DAEMON_VERIFICATION",
   "FOUNDATION_ATTEMPT",
   "VERIFIER_PROCESS",
   "RUNNER_SUPERVISOR",
   "RUNNER_EVIDENCE",
+  "DURABLE_STORE",
 ] as const);
 export type FoundationVerificationRefusalSource =
   (typeof FOUNDATION_VERIFICATION_REFUSAL_SOURCES)[number];
@@ -92,12 +116,25 @@ export type FoundationVerificationRefused =
   | RefusalOf<"FOUNDATION_ATTEMPT", string, string>
   | RefusalOf<"VERIFIER_PROCESS", VerifierProcessErrorCode, VerifierProcessLayer>
   | RefusalOf<"RUNNER_SUPERVISOR", string, string>
-  | RefusalOf<"RUNNER_EVIDENCE", RunnerEvidenceErrorCode, EvidenceRefusalLayer>;
+  | RefusalOf<"RUNNER_EVIDENCE", RunnerEvidenceErrorCode, EvidenceRefusalLayer>
+  | RefusalOf<"DURABLE_STORE", DurableStoreErrorCode, "DURABLE_STORE">;
 
 export function refuseVerification(
   code: FoundationVerificationCode, layer: FoundationVerificationLayer,
 ): FoundationVerificationRefused {
   return Object.freeze({ code, layer, ok: false as const, source: "DAEMON_VERIFICATION" as const });
+}
+
+/** A thrown store fault, verbatim. Whether the rows landed is the STORE's
+ *  knowledge: OUTCOME_UNKNOWN says it cannot tell, and this service may not
+ *  answer "nothing was written" on its behalf. The layer is the store's, spelled
+ *  as the command seam and the session store already spell it, and is not a
+ *  boundary constant of this module: the store, not this service, owns it. */
+export function carryStoreRefusal(error: DurableStoreError): FoundationVerificationRefused {
+  return Object.freeze({
+    code: error.code, layer: "DURABLE_STORE" as const, ok: false as const,
+    source: "DURABLE_STORE" as const,
+  });
 }
 
 /** The store spells its layer `refusedBy`; the name changes, the value does not. */
@@ -139,11 +176,18 @@ export function carryEvidenceRefusal(
 }
 
 /**
- * IDENTITIES ONLY, and that is the whole point of this type. No field for an
- * input manifest, result manifest, runtime observation, recipe body or receipt:
- * a substitute for durable state is UNREPRESENTABLE rather than validated away,
- * so no later refactor can stop calling the check. `expectedRecordDigest` is the
- * caller's belief about WHICH record it verifies, never a replacement. */
+ * Four identities and one location. No field for an input manifest, result
+ * manifest, runtime observation, recipe body or receipt: a substitute for
+ * durable state is UNREPRESENTABLE here rather than validated away, so no later
+ * refactor can stop calling the check. `expectedRecordDigest` is the caller's
+ * belief about WHICH record it verifies, never a replacement.
+ *
+ * `candidateRoot` is the exception that proves why the rest are identities: it
+ * is WHERE the recipe runs, and a location is the one thing durable state
+ * cannot supply. It is therefore the one field that IS validated, bound byte
+ * for byte to the record's sealed input manifest before activation, by
+ * `bindCandidateTree`, because a root that is merely named is a tree the
+ * caller chose, and a verdict over a caller-chosen tree binds to nothing. */
 export interface FoundationVerificationRequest {
   readonly attemptAggregateId: string;
   readonly candidateRoot: string;

@@ -1,4 +1,5 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import type { JSX } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { LIVE_TIMING_PREFIX } from "./live-command-timing.js";
@@ -31,17 +32,29 @@ const COMMAND_ID = "cmd-open-1";
 const LEDGER_CLOCK = "STORE_COMMIT_CLOCK";
 const WALL_CLOCK = "DAEMON_WALL_CLOCK";
 
+interface ScriptedClock extends Clock {
+  /** Moves every reading after the first; the feed's arrival reading is already taken. */
+  readonly advanceTo: (value: number) => void;
+}
+
 /**
  * The first reading is the feed's, taken when the poll's answer lands; every later
  * reading is a render's. The 30 ms gap is therefore a span production observed between
  * two moments, not a number this test handed it — which is what the step-7 drill checks.
+ *
+ * The later reading holds at 1_030 only until the test moves it. A clock whose later
+ * reading never moved could not tell a render reading bound to the frame from one
+ * re-taken on every repaint: both would say 30 forever, and the drift the repaint test
+ * below exists to catch would stay invisible.
  */
-function scriptedClock(): Clock {
+function scriptedClock(): ScriptedClock {
   let calls = 0;
+  let later = 1_030;
   return {
+    advanceTo: (value: number): void => { later = value; },
     now: (): number => {
       calls += 1;
-      return calls === 1 ? 1_000 : 1_030;
+      return calls === 1 ? 1_000 : later;
     },
   };
 }
@@ -119,14 +132,27 @@ function phaseId(name: string): string {
   return `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.evt-1.phase.${name}`;
 }
 
-/** Drives the real application through one poll and returns when the receipt is painted. */
-async function liveReceipt(row: unknown, clock: Clock | null = scriptedClock()): Promise<void> {
+/**
+ * Drives the real application through one poll and returns, once the receipt is painted,
+ * a repaint of the same application over the same setup. The repaint builds a FRESH
+ * element each time: React bails out of a subtree handed the identical element object,
+ * and a repaint that never reached the surface would prove nothing about it.
+ */
+async function liveReceipt(
+  row: unknown,
+  clock: Clock | null = scriptedClock(),
+): Promise<() => void> {
   stubBoardFetch();
-  const surface = <LiveControlRoom setup={setupWith(row)} />;
-  render(clock === null ? surface : <ClockProvider clock={clock}>{surface}</ClockProvider>);
+  const setup = setupWith(row);
+  const tree = (): JSX.Element => {
+    const surface = <LiveControlRoom setup={setup} />;
+    return clock === null ? surface : <ClockProvider clock={clock}>{surface}</ClockProvider>;
+  };
+  const { rerender } = render(tree());
   await waitFor(() => {
     expect(screen.getByTestId(phaseId("render"))).toBeTruthy();
   });
+  return (): void => { rerender(tree()); };
 }
 
 function phase(name: string): HTMLElement {
@@ -162,6 +188,21 @@ describe("the live application renders a receipt it computed itself", () => {
     expect(screen.getByTestId(
       `${LIVE_TIMING_PREFIX}.${COMMAND_ID}.evt-1.${COMMAND_ID}`,
     ).dataset["state"]).toBe("CONFIRMED");
+  });
+
+  /**
+   * The arrival reading is stamped once per poll, but the board and document feeds
+   * repaint this whole application every interval with the SAME frame. The render
+   * reading belongs to the frame's paint; a repaint must not move it, or the phase would
+   * report time-since-arrival at the latest repaint and call it paint latency.
+   */
+  it("holds the render reading when the same frame is repainted later", async () => {
+    const clock = scriptedClock();
+    const repaint = await liveReceipt(eventRow(), clock);
+    expect(phase("render").dataset["durationMs"]).toBe("30");
+    clock.advanceTo(1_999);
+    repaint();
+    expect(phase("render").dataset["durationMs"]).toBe("30");
   });
 });
 

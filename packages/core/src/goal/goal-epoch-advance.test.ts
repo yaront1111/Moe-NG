@@ -83,6 +83,13 @@ describe("goal graph epoch advance", () => {
     expect(current).toEqual(state());
   });
 
+  it("refuses a self-succession naming the active revision as its own successor", () => {
+    expectRefusal(
+      reduceGoal(state(), advance({ successorGraphRevisionRef: ACTIVE_REF })),
+      "ILLEGAL_TRANSITION",
+    );
+  });
+
   const invalidEpochs = [
     { graphEpoch: 0, name: "stale", reasonCode: "ILLEGAL_TRANSITION" },
     { graphEpoch: 1, name: "equal", reasonCode: "ILLEGAL_TRANSITION" },

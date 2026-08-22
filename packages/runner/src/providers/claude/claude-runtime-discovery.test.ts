@@ -11,6 +11,7 @@
  * home directory) rather than any parameter, because that is the only lever a
  * caller has left. Refusing ambiguity is what makes that lever useless.
  */
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { arch, release, tmpdir } from "node:os";
@@ -135,7 +136,12 @@ it("answers the same runtime whether or not a caller passes a steering argument"
       (path: string) => Promise<DiscoverInstalledClaudeRuntimeResult>
   )(steer);
   expect(answerOf(steered)).toEqual(answerOf(plain));
-});
+  // 30s: this is the only case here that searches the REAL host PATH, twice,
+  // and each pass spawns a subprocess and stats every entry. It exceeded the 5s
+  // default on a loaded Windows box (repo gate 2026-08-19) while the neighbours,
+  // which search a controlled stand-in directory, stayed fast. A ceiling on
+  // process work, not a wait - the file already pins its two heavy cases.
+}, 30_000);
 
 it("refuses a host on which no claude runtime resolves, with CLAUDE_RUNTIME_PATH_MISSING at RUNTIME", async () => {
   hostSearchPath([temporaryDirectory("no-runtime")]);
@@ -148,7 +154,16 @@ it("refuses a host on which no claude runtime resolves, with CLAUDE_RUNTIME_PATH
 });
 
 it("refuses more than one resolved candidate rather than picking one, with CLAUDE_RUNTIME_PATH_DUPLICATE at RUNTIME", async () => {
-  hostSearchPath([standInDirectory("first"), standInDirectory("second")]);
+  // `standInDirectory` copies a real Windows binary, so off-Windows it is the
+  // fixture that fails rather than the capability: discovery refuses
+  // PLATFORM_UNSUPPORTED before it ever looks at a search entry, and a copy of
+  // `where.exe` cannot exist there to be looked at. Same ternary as every other
+  // host-configuring case in this file.
+  hostSearchPath(
+    ON_WINDOWS
+      ? [standInDirectory("first"), standInDirectory("second")]
+      : [temporaryDirectory("first"), temporaryDirectory("second")],
+  );
   const refusal = refusalOf(await discoverInstalledClaudeRuntime());
   expect({ code: refusal.code, layer: refusal.layer, truthClass: refusal.truthClass }).toEqual(
     ON_WINDOWS
@@ -214,7 +229,34 @@ function comparedFacts(observation: ProviderRuntimeObservation): Record<string, 
   };
 }
 
-it("reaches a PROVEN pin against the really installed runtime through discovery alone", async () => {
+/** The same host probe the sibling runtime suites use: a real .exe on the PATH. */
+function installedClaudeExecutable(): string | null {
+  if (!ON_WINDOWS) return null;
+  try {
+    const found = execFileSync("where.exe", ["claude.exe"], { encoding: "utf8" })
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter((line) => line.toLowerCase().endsWith(".exe"));
+    return found.length === 0 ? null : (found[0] as string);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The 2026-08-16 02:10Z option-(a) ruling made this arm HARD-FAIL when no Claude
+ * CLI is installed, so a developer box could never quietly stop certifying the
+ * real runtime. A GitHub runner has no Claude CLI at all, so that same rule
+ * turned the Windows lane permanently red. Governor ruling 2026-08-19 (request
+ * msg-0bf62be7 -> reply msg-44487079) amends it to exactly this narrowing: skip
+ * ONLY on a CI host that has no claude.exe. A developer box without one still
+ * hard-fails, which is the case the original ruling protects.
+ */
+const CI_WITHOUT_INSTALLED_CLAUDE =
+  ON_WINDOWS && process.env.CI === "true" && installedClaudeExecutable() === null;
+
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "reaches a PROVEN pin against the really installed runtime through discovery alone", async () => {
   const discovered = await discoverInstalledClaudeRuntime();
   if (!ON_WINDOWS) {
     expect(refusalOf(discovered).code).toBe("CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED");

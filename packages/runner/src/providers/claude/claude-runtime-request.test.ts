@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join as nativeJoin } from "node:path";
+import { dirname, join as nativeJoin, win32 } from "node:path";
 
 import { afterAll, expect, it } from "vitest";
 
@@ -417,9 +417,14 @@ function armOf(result: unknown): { readonly code: unknown; readonly layer: unkno
  * flattened the layer, disagrees with the observer here and reddens.
  */
 it("carries every host-observation arm out of the port with its own code and layer", async () => {
+  // `win32.join`, not the native one: the factory only accepts an absolute
+  // local-drive Windows path, and off-Windows a posix join turns the absent
+  // root into `C:\moe-absent-root/pins`, which the SHAPE guard refuses before
+  // the host-observation arm this case exists to assert is ever reached. On
+  // win32 the two joins are the same function, so nothing changes there.
   const root = WIN ? fixtureRoot("moe-request-arms-") : "C:\\moe-absent-root";
-  const absent = nativeJoin(root, "claude.exe");
-  const notAnImage = nativeJoin(root, "not-an-image.exe");
+  const absent = win32.join(root, "claude.exe");
+  const notAnImage = win32.join(root, "not-an-image.exe");
   if (WIN) writeFileSync(notAnImage, "not a portable executable");
 
   const cases = [
@@ -429,7 +434,7 @@ it("carries every host-observation arm out of the port with its own code and lay
   let asserted = 0;
   for (const testCase of cases) {
     const quote = quoteOf([entry("EXECUTABLE", testCase.executable, DIGEST_A)]);
-    const request = requestFor(quote, root, nativeJoin(root, "pins"));
+    const request = requestFor(quote, root, win32.join(root, "pins"));
     const port = request["facts"] as { readonly observe: () => Promise<unknown> };
     const thrown = await port.observe().then(
       () => null,
@@ -444,6 +449,10 @@ it("carries every host-observation arm out of the port with its own code and lay
     expect({ code: carried?.["code"], layer: carried?.["layer"] }, `${testCase.name} lost its arm`)
       .toEqual(oracle);
     expect(carried?.["truthClass"], `${testCase.name} upgraded an UNKNOWN`).toBe("UNKNOWN");
+    // Disclosed rather than hidden: off Windows the observer's platform guard
+    // answers first, so both cases collapse onto the same arm. The oracle is
+    // still production's own answer for the same input, so a factory that
+    // restamped the code or flattened the layer reddens on every host.
     const message = (thrown as Error).message;
     expect(PATH_SHAPED.test(message), `${testCase.name}: the throw echoes a path: ${message}`)
       .toBe(false);
@@ -454,16 +463,24 @@ it("carries every host-observation arm out of the port with its own code and lay
 }, HOST_CASE_TIMEOUT_MS);
 
 it("leaves the runtime UNKNOWN when the host observation refuses", async () => {
+  // `win32.join` for the same reason as the arm sweep above: a posix join here
+  // reddens on the request SHAPE guard, never reaching the host observation
+  // whose UNKNOWN this case is about.
   const root = WIN ? fixtureRoot("moe-request-unknown-") : "C:\\moe-absent-root";
-  const quote = quoteOf([entry("EXECUTABLE", nativeJoin(root, "claude.exe"), DIGEST_A)]);
+  const quote = quoteOf([entry("EXECUTABLE", win32.join(root, "claude.exe"), DIGEST_A)]);
   const prepared = await prepareClaudeRuntimePin(
-    requestFor(quote, root, nativeJoin(root, "pins")) as never,
+    requestFor(quote, root, win32.join(root, "pins")) as never,
   );
   expect(prepared.ok).toBe(false);
   const failure = prepared as unknown as Record<string, unknown>;
   expect(failure["layer"]).toBe(RUNTIME_LAYER);
   expect(failure["truthClass"]).toBe("UNKNOWN");
-  expect(CLAUDE_RUNTIME_PIN_ERROR_CODES).toContain(failure["code"]);
+  // WHICH authority answered is pinned, not merely "some published code". Off
+  // Windows the pin's own platform guard refuses BEFORE any host observation
+  // runs, so accepting the whole roster there would let this case read as "the
+  // observation refused" on a host where the observation never happened.
+  if (WIN) expect(CLAUDE_RUNTIME_PIN_ERROR_CODES).toContain(failure["code"]);
+  else expect(failure["code"]).toBe("CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED");
 }, HOST_CASE_TIMEOUT_MS);
 
 /**
@@ -472,7 +489,20 @@ it("leaves the runtime UNKNOWN when the host observation refuses", async () => {
  * re-observed, and one that differed in every field would mean the quote was
  * ignored. The quoted digest must match and the pinned binding must not.
  */
-it("pins the really installed runtime, or refuses with the host's own stable code", async () => {
+/**
+ * The 2026-08-16 02:10Z option-(a) ruling made these arms HARD-FAIL when no
+ * Claude CLI is installed, so a developer box could never quietly stop
+ * certifying the real runtime. A GitHub runner has no Claude CLI at all, so that
+ * same rule turned the Windows lane permanently red. Governor ruling 2026-08-19
+ * (request msg-0bf62be7 -> reply msg-44487079) amends it to exactly this
+ * narrowing: skip ONLY on a CI host that has no claude.exe. A developer box
+ * without one still hard-fails, which is the case the original ruling protects.
+ */
+const CI_WITHOUT_INSTALLED_CLAUDE =
+  WIN && process.env.CI === "true" && installedClaudeExecutable() === null;
+
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "pins the really installed runtime, or refuses with the host's own stable code", async () => {
   if (!WIN) {
     // Not skipped: a leg that generates zero cases passes while proving nothing.
     const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
@@ -518,7 +548,8 @@ it("pins the really installed runtime, or refuses with the host's own stable cod
  * the fresh observation have agreed, so an untouched pin root is evidence that
  * nothing a launcher could use was ever produced.
  */
-it("refuses byte, version, capability and platform drift before anything is pinned", async () => {
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
+  "refuses byte, version, capability and platform drift before anything is pinned", async () => {
   if (!WIN) {
     const quote = quoteOf([entry("EXECUTABLE", EXECUTABLE, DIGEST_A)]);
     const prepared = await prepareClaudeRuntimePin(

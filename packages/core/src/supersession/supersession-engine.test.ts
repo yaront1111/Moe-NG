@@ -82,10 +82,15 @@ describe("supersession accepted decision", () => {
     expect(SUPERSESSION_KERNEL_LAYER).toBe("SUPERSESSION_KERNEL");
     // 61 + the 8 expansion preparation/approval values published by task-a1e7f75e
     // + the 6 project-configuration codec values published by task-bcea7056
-    // + the 5 approval policy/human-authority values published by task-5d8f11c8.
+    // + the 5 approval policy/human-authority values published by task-5d8f11c8
+    // + snapshotProjectState, published by task-4af0e3dc so the daemon can
+    // re-validate raw ledger bytes instead of casting them.
+    // + the 20 planning-authority record values published by task-dc21cb4a: each
+    // record's version and code/layer rosters, both encoders, both decoders, and
+    // the four digest/content derivations with their four domain constants.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(84);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(105);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

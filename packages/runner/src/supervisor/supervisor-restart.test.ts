@@ -2,11 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   makeAttempt,
+  makeClaim,
   makeGrant,
   makeIntent,
   makeTombstone,
 } from "./effect-test-fixtures.js";
-import { RECONCILED, REGISTRATION } from "./race-scenarios.js";
+import { FOREIGN_REGISTRATION, RECONCILED, REGISTRATION } from "./race-scenarios.js";
 import {
   GONE,
   labelOf,
@@ -101,6 +102,16 @@ const CRASH_POINTS: readonly CrashPoint[] = [
     "a whole commit whose lock cannot be read",
     restartInput({ lockState: "UNKNOWN" }),
     "post:SUSPECT",
+  ],
+  [
+    "a whole commit whose held lock is registered to another wrapper",
+    restartInput({ registration: FOREIGN_REGISTRATION }),
+    "post:SUSPECT",
+  ],
+  [
+    "a whole commit whose claim was written for another intent",
+    restartInput({ claim: makeClaim({ intentId: "intent-other" }) }),
+    "refused:RESTART_RECORDS_INCOHERENT",
   ],
   [
     "a process observation with no registration to identify it",
@@ -207,7 +218,7 @@ const EXPECTED_ANSWERS: readonly string[] = [
 
 describe("every crash point lands in exactly one legal post state", () => {
   it("seeds a non-zero, uniquely labelled crash-point table", () => {
-    expect(CRASH_POINTS.length).toBe(19);
+    expect(CRASH_POINTS.length).toBe(21);
     expect(new Set(CRASH_POINTS.map(([label]) => label)).size).toBe(CRASH_POINTS.length);
   });
 

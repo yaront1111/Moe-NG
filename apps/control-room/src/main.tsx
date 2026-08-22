@@ -3,10 +3,12 @@ import type { JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
-import { ControlRoomScaffold } from "./kernel.js";
-import { LiveControlRoom, resolveLiveSetupFromBuild } from "./live/live-app.js";
+import { resolveLiveSetupFromBuild } from "./live/live-app.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
+import { resolveShellMode } from "./shell-mode.js";
+import { ShellModeRoot } from "./shell-mode-view.js";
+import { CordumApp } from "./v2/cordum-app.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
@@ -31,13 +33,23 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
 });
 
 /**
- * `?live=1` mounts the DEVELOPMENT-ONLY live attachment (see live/live-app.tsx);
- * the flag carries no secret — credentials arrive via Vite env into headers only.
- * Anything else mounts the fixture experience.
+ * The Cordum v2 rebuild is the DEFAULT front door: it acquires its credential at
+ * RUNTIME through the daemon handshake (no baked secret), and `?fixtures=1` renders
+ * its frozen design view under a banner. The legacy v1 shell-mode board is demoted
+ * behind an explicit `?v1=1`, kept so its build-time LIVE / FIXTURES / CONFIG_NOTICE
+ * arms and the daemon e2e lane still have a home while the rebuild finishes.
+ *
+ * No URL flag carries a secret; v2 credentials arrive via the handshake and v1's
+ * via Vite env into headers only. See `shell-mode.ts` for the v1 decision.
  */
 function chooseRoot(): JSX.Element {
-  const live = new URLSearchParams(globalThis.location?.search ?? "").get("live") === "1";
-  return live ? <LiveControlRoom setup={resolveLiveSetupFromBuild()} /> : <ControlRoomScaffold />;
+  const search = globalThis.location?.search ?? "";
+  if (new URLSearchParams(search).get("v1") === "1") {
+    const setup = resolveLiveSetupFromBuild();
+    const mode = resolveShellMode(search, setup);
+    return <ShellModeRoot mode={mode} setup={setup} />;
+  }
+  return <CordumApp search={search} />;
 }
 
 /** Mounts the application into a caller-supplied container and returns its root. */

@@ -14,7 +14,6 @@ import { describe, expect, it } from "vitest";
 import {
   FOUNDATION_PARTITION_COUNTS,
   foundationPartition,
-  resolveEvidenceOutcome,
 } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
 import {
   J3_CRASH_BOUNDARIES,
@@ -31,10 +30,10 @@ import {
   assertPartitionOwnership,
   executorFor,
   fixturePayload,
-  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
+  produceEvidenceOutcome,
   store,
 } from "./foundation-harness.js";
 import type { FoundationExecutors } from "./foundation-harness.js";
@@ -169,8 +168,7 @@ const EXECUTORS: FoundationExecutors = {
   "incident:release-handoff-atomicity": (entry) => produceAbsenceOutcome(entry),
   "incident:timer-callback-reentrancy": (entry) => produceAbsenceOutcome(entry),
 
-  "schedule:j3-total-storage-loss-rpo": (entry) =>
-    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
+  "schedule:j3-total-storage-loss-rpo": (entry) => produceEvidenceOutcome(entry),
 };
 
 describe("J3 crash recovery fault schedules", () => {

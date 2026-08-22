@@ -9,7 +9,7 @@ import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import {
   GOAL_ID,
   PROJECT_ID,
-  SUBMISSION_HASH,
+  SEALED_SUBMISSION_HASH,
   approvalRecord,
   closeStores,
   decisionCount,
@@ -684,7 +684,7 @@ describe("goal closure qualification — the accepted value", () => {
     const second = await seedVerifiedNode(store, "node-2");
     const seeded = [first, second];
     const before = snapshot(store);
-    const approvalRef = String(approvalRecord(SUBMISSION_HASH)["approvalRef"]);
+    const approvalRef = String(approvalRecord(SEALED_SUBMISSION_HASH)["approvalRef"]);
     const activations = store
       .readEventsByTypeAfter(ACTIVATION_LEDGER_EVENT_TYPE, 0n, 200).items.length;
     expect(activations).toBe(2);

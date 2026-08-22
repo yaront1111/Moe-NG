@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ScopeObserverError } from "./scope-contract.js";
-import { classifyRefFailure } from "./scope-git-classify.js";
+import { classifyRefFailure, isUnresolvedHeadFailure } from "./scope-git-classify.js";
 
 /**
  * The classification listRefs applies to a spawn failure, driven directly.
@@ -21,6 +21,15 @@ import { classifyRefFailure } from "./scope-git-classify.js";
 /** Mirrors how runGit attaches the spawn fault, which is a bare assignment. */
 const withCause = (error: ScopeObserverError, cause: unknown): ScopeObserverError =>
   Object.assign(error, { cause });
+
+/** Shared: neither classifier may trust a throw no observer boundary authored. */
+const FOREIGN_THROWS: readonly (readonly [string, unknown])[] = Object.freeze([
+  ["a plain Error", new Error("spawn EACCES")],
+  ["a thrown string", "spawn EACCES"],
+  ["undefined", undefined],
+  ["null", null],
+  ["a coded object that is not a ScopeObserverError", { code: "ENOBUFS" }],
+]);
 
 describe("classifyRefFailure", () => {
   it("keeps an already-overflowed refusal at the overflow code and the observer layer", () => {
@@ -79,14 +88,6 @@ describe("classifyRefFailure", () => {
     expect(classified.message).toBe("git for-each-ref failed");
   });
 
-  const FOREIGN_THROWS: readonly (readonly [string, unknown])[] = Object.freeze([
-    ["a plain Error", new Error("spawn EACCES")],
-    ["a thrown string", "spawn EACCES"],
-    ["undefined", undefined],
-    ["null", null],
-    ["a coded object that is not a ScopeObserverError", { code: "ENOBUFS" }],
-  ]);
-
   it("generated a non-zero number of foreign-throw cases", () => {
     expect(FOREIGN_THROWS.length).toBeGreaterThan(0);
     expect(FOREIGN_THROWS.length).toBe(5);
@@ -101,5 +102,58 @@ describe("classifyRefFailure", () => {
     // A foreign throw carries no message worth trusting, so the fallback names
     // the operation instead. Pinned because nothing else asserts this constant.
     expect(classified.message).toBe("git for-each-ref failed");
+  });
+});
+
+/**
+ * The exit status headCommit hangs its one observed absence on.
+ *
+ * Driven directly for the same reason classifyRefFailure is: the spawn is not
+ * injectable, so the reading of the fault is the part a test can hold. Both
+ * sides matter here and each has its own case, because a predicate that answers
+ * true for every failure and a predicate that answers false for every failure
+ * are both wrong in a way no single-sided table would name.
+ */
+describe("isUnresolvedHeadFailure", () => {
+  const failure = (): ScopeObserverError =>
+    new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_FAILED", "git rev-parse failed");
+
+  it("accepts git's silent exit 1, which is the whole unborn-HEAD signal", () => {
+    expect(isUnresolvedHeadFailure(withCause(failure(), { status: 1, signal: null }))).toBe(true);
+  });
+
+  /** Every shape execFileSync really produces for a HEAD that was never read. */
+  const UNREAD: readonly (readonly [string, unknown])[] = Object.freeze([
+    ["a timeout kill", { status: null, signal: "SIGTERM", code: "ETIMEDOUT" }],
+    ["an EAGAIN spawn fault", { status: null, signal: null, code: "EAGAIN" }],
+    ["an ENOMEM spawn fault", { status: null, signal: null, code: "ENOMEM" }],
+    // 128 is what bare `rev-parse --verify` reports for an unborn HEAD, and what
+    // a directory holding no repository reports whatever the flags are.
+    ["a git fatal", { status: 128, signal: null }],
+    ["a status that is a string rather than an exit code", { status: "1" }],
+    ["no cause at all", undefined],
+  ]);
+
+  it("generated a non-zero, exact number of unread causes", () => {
+    expect(UNREAD.length).toBeGreaterThan(0);
+    expect(UNREAD.length).toBe(6);
+    expect(new Set(UNREAD.map((entry) => entry[0])).size).toBe(UNREAD.length);
+  });
+
+  it.each(UNREAD)("rejects %s", (_label, cause) => {
+    expect(isUnresolvedHeadFailure(withCause(failure(), cause))).toBe(false);
+  });
+
+  it("rejects an exit 1 attributed to a layer that was not reading HEAD", () => {
+    // The code is the layer's own statement of what happened; a status attached
+    // under any other one says nothing about whether HEAD resolved.
+    const malformed = new ScopeObserverError("RUNNER_SCOPE_STATUS_MALFORMED", "not a commit digest");
+    expect(isUnresolvedHeadFailure(withCause(malformed, { status: 1 }))).toBe(false);
+    const overflow = new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_OVERFLOW", "over 8MiB");
+    expect(isUnresolvedHeadFailure(withCause(overflow, { status: 1 }))).toBe(false);
+  });
+
+  it.each(FOREIGN_THROWS)("rejects %s, which no observer boundary authored", (_label, thrown) => {
+    expect(isUnresolvedHeadFailure(thrown)).toBe(false);
   });
 });

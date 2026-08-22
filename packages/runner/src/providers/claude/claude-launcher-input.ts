@@ -1,7 +1,8 @@
 import { deepFreeze, isPlainRecord } from "../../canonical.js";
 import { snapshotExactRecord } from "../../platform/platform-contract.js";
 import { type ClaudeRuntimePinRequest } from "./claude-runtime-pin.js";
-import { type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
+import { type ClaudeLaunchLimits,
+  type ClaudeLaunchRequest } from "./claude-launcher-contract.js";
 import { isHostileObject, snapshotLaunchSelection,
   type ClaudeLaunchSelection } from "./claude-launch-selection.js";
 
@@ -28,7 +29,79 @@ export type RequestKeyIsDeclared<
 export type DeclaredFieldHasKey<
   _F extends never = Exclude<keyof ClaudeLaunchRequest, (typeof REQUEST_KEYS)[number]>,
 > = true;
-const LIMIT_KEYS = ["stdoutBytes", "stderrBytes", "tailBytes", "timeoutMs"] as const;
+/**
+ * The launch-LIMIT admission vocabulary, PUBLIC because a producer of launch
+ * requests has to know the bounds before it builds one, published from the
+ * module that ENFORCES them so exactly one production authority exists: the
+ * request snapshot below delegates to the validator, and a second ceiling
+ * literal anywhere would be a silent fork of this table.
+ */
+export const CLAUDE_LAUNCH_LIMIT_FIELDS = Object.freeze(
+  ["stdoutBytes", "stderrBytes", "tailBytes", "timeoutMs"] as const);
+export const CLAUDE_LAUNCH_LIMIT_CEILINGS = Object.freeze({ stdoutBytes: 1_048_576,
+  stderrBytes: 1_048_576, tailBytes: 65_536, timeoutMs: 600_000 } as const);
+export const CLAUDE_LAUNCH_LIMIT_ISSUE_CODES = Object.freeze(["CLAUDE_LAUNCH_LIMITS_MALFORMED",
+  "CLAUDE_LAUNCH_LIMIT_INVALID", "CLAUDE_LAUNCH_LIMIT_EXCEEDED"] as const);
+/**
+ * Module-PRIVATE stamp: the security roster claims every column-zero
+ * `export const *_LAYER|*_LAYERS|*_BOUNDARIES` as a registered public boundary,
+ * which this implementation detail is not. The closed vocabulary is published
+ * in full anyway — as the exported type, and as the literal on every refusal.
+ */
+const LAUNCH_LIMITS_LAYER = "LAUNCH_LIMITS";
+export type ClaudeLaunchLimitField = (typeof CLAUDE_LAUNCH_LIMIT_FIELDS)[number];
+export type ClaudeLaunchLimitIssueCode = (typeof CLAUDE_LAUNCH_LIMIT_ISSUE_CODES)[number];
+export type ClaudeLaunchLimitLayer = "LAUNCH_LIMITS";
+export interface ClaudeLaunchLimitIssue {
+  readonly code: ClaudeLaunchLimitIssueCode;
+  readonly layer: ClaudeLaunchLimitLayer;
+  /** The offending field, or null when the whole record was unreadable. */
+  readonly field: ClaudeLaunchLimitField | null;
+}
+export type ClaudeLaunchLimitsResult =
+  | { readonly ok: true; readonly limits: ClaudeLaunchLimits }
+  | { readonly ok: false; readonly issue: ClaudeLaunchLimitIssue };
+
+const refuseLimits = (
+  code: ClaudeLaunchLimitIssueCode, field: ClaudeLaunchLimitField | null,
+): ClaudeLaunchLimitsResult => Object.freeze({ ok: false as const,
+  issue: Object.freeze({ code, layer: LAUNCH_LIMITS_LAYER, field }) });
+
+/**
+ * TOTAL: every arm answers with a verdict, hostile inputs included, so a caller
+ * holding this function alone is defended exactly as well as the launcher.
+ *
+ * Order is load-bearing twice. The hostile check precedes any reflection,
+ * because reflection is what runs a trap and a trap that has run has already had
+ * its effect. Fields are then decided in declaration order, so the field named
+ * back is deterministic when more than one is bad.
+ */
+export function validateClaudeLaunchLimits(value: unknown): ClaudeLaunchLimitsResult {
+  if (isHostileObject(value)) return refuseLimits("CLAUDE_LAUNCH_LIMITS_MALFORMED", null);
+  const raw = snapshotExactRecord(value, CLAUDE_LAUNCH_LIMIT_FIELDS);
+  if (raw === null) return refuseLimits("CLAUDE_LAUNCH_LIMITS_MALFORMED", null);
+  const bounds: Partial<Record<ClaudeLaunchLimitField, number>> = {};
+  for (const field of CLAUDE_LAUNCH_LIMIT_FIELDS) {
+    const bound = raw[field];
+    if (typeof bound !== "number" || !Number.isSafeInteger(bound) || bound <= 0) {
+      return refuseLimits("CLAUDE_LAUNCH_LIMIT_INVALID", field);
+    }
+    if (bound > CLAUDE_LAUNCH_LIMIT_CEILINGS[field]) {
+      return refuseLimits("CLAUDE_LAUNCH_LIMIT_EXCEEDED", field);
+    }
+    bounds[field] = bound;
+  }
+  const { stdoutBytes, stderrBytes, tailBytes, timeoutMs } = bounds;
+  // Fail-closed if the loop above ever stops covering a field: an admitted
+  // record may never carry a bound nothing proved.
+  if (stdoutBytes === undefined || stderrBytes === undefined ||
+    tailBytes === undefined || timeoutMs === undefined) return refuseLimits(
+      "CLAUDE_LAUNCH_LIMITS_MALFORMED", null);
+  // Freshly constructed, never the caller's record: echoing it would let a
+  // later write change what was admitted.
+  return Object.freeze({ ok: true as const,
+    limits: Object.freeze({ stdoutBytes, stderrBytes, tailBytes, timeoutMs }) });
+}
 const RUNTIME_KEYS = ["quotedObservation", "installedRoot", "pinRoot", "fs", "facts", "clock"] as const;
 const AUTHORITY_KEYS = ["duplicateDelivery", "effect", "attempt", "grant", "claim",
   "priorRegistration", "reconciliation"] as const;
@@ -163,19 +236,15 @@ export function snapshotClaudeLaunchRequest(value: unknown): LaunchRequestSnapsh
     if (copied === INVALID) return null;
     authority[key] = copied;
   }
-  if (isHostileObject(raw["limits"])) return null;
-  const limits = snapshotExactRecord(raw["limits"], LIMIT_KEYS);
-  const numbers = limits === null ? [] : LIMIT_KEYS.map((key) => limits[key]);
+  // Every limit decision — hostile shape, wrong key set, non-positive bound,
+  // ceiling — belongs to the validator above, so this path holds no ceiling of
+  // its own. The OUTER contract is unchanged: a refusal is still the bare null
+  // the launcher restamps CLAUDE_LAUNCH_REQUEST_MALFORMED at LAUNCHER.
+  const limits = validateClaudeLaunchLimits(raw["limits"]);
   const launchSelection = snapshotLaunchSelection(raw["launchSelection"]);
-  if (argv === null || environment === null || runtime === null || limits === null ||
-    numbers.some((item) => !Number.isSafeInteger(item) || (item as number) <= 0) ||
-    (limits["stdoutBytes"] as number) > 1_048_576 || (limits["stderrBytes"] as number) > 1_048_576 ||
-    (limits["tailBytes"] as number) > 65_536 || (limits["timeoutMs"] as number) > 600_000 ||
+  if (argv === null || environment === null || runtime === null || !limits.ok ||
     typeof raw["cwd"] !== "string" || raw["cwd"].length > 32_767 || raw["cwd"].includes("\0") ||
     typeof raw["wrapperIdentity"] !== "string" || !/^[0-9a-f]{64}$/u.test(String(raw["bootstrapCredentialDigest"]))) return null;
   return Object.freeze({ ...raw, ...authority, runtime, argv, environment, launchSelection,
-    limits: Object.freeze({
-    stdoutBytes: limits["stdoutBytes"], stderrBytes: limits["stderrBytes"],
-    tailBytes: limits["tailBytes"], timeoutMs: limits["timeoutMs"],
-  }) }) as unknown as ClaudeLaunchSnapshot;
+    limits: limits.limits }) as unknown as ClaudeLaunchSnapshot;
 }

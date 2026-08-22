@@ -118,16 +118,32 @@ export function releaseManifestDigestInput(
   };
 }
 
-/** Every journey in the design's exit set must carry a well-formed digest. */
+/**
+ * Every journey in the design's exit set must carry exactly ONE well-formed digest.
+ *
+ * Duplicates are refused before the missing check, and by the entries rather than by a
+ * set of their journeys: a set collapses a second J1 row carrying a conflicting digest
+ * into the first, so a manifest that named one journey twice would bind two digests to
+ * one claim and still read as complete.
+ */
 function evidenceRefusal(
   evidence: readonly JourneyEvidence[],
 ): ReleaseManifestResult | null {
-  const present = new Set(evidence.map((entry) => entry.journey));
-  const missing = FOUNDATION_EXIT_SET.filter((journey) => !present.has(journey));
-  if (missing.length > 0 || present.size !== FOUNDATION_EXIT_SET.length) {
+  const seen = new Set<FoundationExitItem>();
+  for (const entry of evidence) {
+    if (seen.has(entry.journey)) {
+      return refuse(
+        "RELEASE_MANIFEST_EVIDENCE_INCOMPLETE",
+        `evidence names ${entry.journey} more than once`,
+      );
+    }
+    seen.add(entry.journey);
+  }
+  const missing = FOUNDATION_EXIT_SET.filter((journey) => !seen.has(journey));
+  if (missing.length > 0 || evidence.length !== FOUNDATION_EXIT_SET.length) {
     return refuse(
       "RELEASE_MANIFEST_EVIDENCE_INCOMPLETE",
-      `evidence is missing for ${missing.join(", ") || "a duplicated journey"}`,
+      `evidence is missing for ${missing.join(", ") || "a journey outside the exit set"}`,
     );
   }
   const malformed = evidence.filter((entry) => !isHex64(entry.evidenceDigest));

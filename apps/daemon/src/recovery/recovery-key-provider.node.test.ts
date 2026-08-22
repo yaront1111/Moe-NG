@@ -7,7 +7,10 @@ import { promisify } from "node:util";
 
 import { afterEach, describe, expect, it } from "vitest";
 
+import { SqliteEventStore } from "@moe/store";
+
 import {
+  RECOVERY_KEY_PROVIDER_ERROR_CODES,
   RECOVERY_KEY_PROTECTION_MECHANISMS,
   RECOVERY_KEY_PROVIDER_LAYER,
 } from "./recovery-key-provider-contract.js";
@@ -156,6 +159,67 @@ async function runChild(root: string, label: string): Promise<ChildReport> {
   return JSON.parse(stdout) as ChildReport;
 }
 
+/**
+ * A capability refusal must carry one of the two PROTECTION codes, not merely
+ * some member of the provider roster: `RECOVERY_KEY_EPOCH_INPUT_INVALID` and
+ * `RECOVERY_KEY_EPOCH_POINTER_UNREADABLE` sit in the same frozen array, so a
+ * roster-membership check alone would let a refusal for an unrelated fault pass
+ * as host honesty. WHICH of the two a host yields is host shape - no mechanism
+ * at all (UNAVAILABLE) versus applied-but-unproven on read-back (UNVERIFIABLE) -
+ * so the exact code is observed rather than hard-coded, and the subset is the
+ * invariant this asserts.
+ */
+function expectProtectionCode(code: string): void {
+  expect(RECOVERY_KEY_PROVIDER_ERROR_CODES as readonly string[]).toContain(code);
+  expect(code).toMatch(/^RECOVERY_KEY_PROTECTION_/u);
+}
+
+/**
+ * The capability-absent expectation, DERIVED from this host by running the
+ * production port rather than guessed from a literal.
+ *
+ * Probed on a FRESH directory, never on the case's own root. `protect` MUTATES -
+ * the win32 branch runs `icacls /inheritance:r /grant:r` before its read-back -
+ * so re-probing a root the children already protected can answer differently
+ * from the answer under test, or even succeed, reddening the honest branch for a
+ * reason that has nothing to do with the host's capability.
+ */
+async function protectionRefusal() {
+  const result = await createNodeRecoveryKeyProviderPort().protect(temporaryRoot());
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("the host protection capability changed during the case");
+  expectProtectionCode(result.code);
+  return {
+    code: result.code,
+    layer: RECOVERY_KEY_PROVIDER_LAYER,
+    outcome: "REFUSED",
+    truth: "UNKNOWN",
+  } as const;
+}
+
+async function expectProtectionRefusals(
+  root: string,
+  reports: readonly ChildReport[],
+): Promise<boolean> {
+  if (reports[0]?.outcome !== "REFUSED") return false;
+  // task-4db73e90: this host cannot prove its named key-protection capability;
+  // assert the typed UNKNOWN instead of deleting the process-death coverage.
+  expect(reports.map((report) => report.outcome))
+    .toEqual(reports.map(() => "REFUSED"));
+  const expected = await protectionRefusal();
+  for (const report of reports) {
+    expect(report).toEqual(expected);
+    expect(JSON.stringify(report)).not.toMatch(/keyHandle|privateKey/u);
+  }
+  const store = SqliteEventStore.openForProject(join(root, "store.sqlite"), PROJECT_ID);
+  try {
+    expect(store.readEventsAfter(0n, 100).items).toEqual([]);
+  } finally {
+    store.close();
+  }
+  return true;
+}
+
 describe("the epoch survives a real process death and reopens under a new key", () => {
   it(
     "resolves one origin across two separate processes with different keys",
@@ -164,6 +228,8 @@ describe("the epoch survives a real process death and reopens under a new key", 
       const root = temporaryRoot();
       const first = await runChild(root, "first");
       const second = await runChild(root, "second");
+
+      if (await expectProtectionRefusals(root, [first, second])) return;
 
       // Fail loudly with the child's own message rather than on a later
       // undefined, so a broken child is never mistaken for a failed assertion.
@@ -195,6 +261,8 @@ describe("the epoch survives a real process death and reopens under a new key", 
       const first = await runChild(root, "first");
       const second = await runChild(root, "second");
       const third = await runChild(root, "third");
+
+      if (await expectProtectionRefusals(root, [first, second, third])) return;
 
       expect([first.outcome, second.outcome, third.outcome]).toEqual([
         "OPENED",
@@ -229,6 +297,23 @@ describe("the host protection mechanism is named, not assumed", () => {
       if (result.ok) throw new Error("unreachable");
       expect(result.layer).toBe(RECOVERY_KEY_PROVIDER_LAYER);
       expect(result.code).toBe("RECOVERY_KEY_PROTECTION_UNAVAILABLE");
+      return;
+    }
+    if (!result.ok) {
+      // task-4db73e90: the platform names a mechanism, but this host cannot prove
+      // it usable; assert the typed UNKNOWN instead of skipping the capability.
+      // Asserted on the refusal already observed. Re-running `protect` here to
+      // "derive" the expectation would compare a mutating call against itself:
+      // a tautology on the code, and a flake once the first call has changed
+      // the very directory the second one reads back.
+      expectProtectionCode(result.code);
+      expect([result.ok, result.mechanism, result.layer, result.truth]).toEqual([
+        false,
+        "UNKNOWN",
+        RECOVERY_KEY_PROVIDER_LAYER,
+        "UNKNOWN",
+      ]);
+      expect(result.platform).toBe(process.platform);
       return;
     }
     // Asserted against the frozen vocabulary AND against the one name this

@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { createCompatGate } from "./client-compat.js";
+import { admitByWireProtocol, createCompatGate } from "./client-compat.js";
 import type { DistributionCompatibilityReport } from "./client-compat.js";
 import {
   GENERATED_COMMAND_BUILDERS,
@@ -131,10 +131,43 @@ it("exports the gate and the transport from the package root, and nothing genera
   expect(Object.keys(packageRoot).sort()).toEqual([
     "CONTROL_ROOM_TRANSPORT_LAYER",
     "TRANSPORT_REFUSAL_CODES",
+    "admitByWireProtocol",
     "createCompatGate",
     "createControlRoomTransport",
   ]);
   for (const generated of ["GENERATED_COMMAND_BUILDERS", "GENERATED_WIRE_PROTOCOL_VERSION"]) {
     expect(Object.hasOwn(packageRoot, generated)).toBe(false);
   }
+});
+
+it("admits the exact generated wire protocol string and yields the full surface", () => {
+  const gate = admitByWireProtocol(GENERATED_WIRE_PROTOCOL_VERSION);
+  expect(gate.ok).toBe(true);
+  if (!gate.ok) return;
+  // The runtime pin yields the SAME frozen ADMITTED surface as the offline gate.
+  expect(gate.client.commands).toBe(GENERATED_COMMAND_BUILDERS);
+  expect(Object.hasOwn(gate.client.commands, "goal.create")).toBe(true);
+  expect(gate.client.wireProtocolVersion).toBe(GENERATED_WIRE_PROTOCOL_VERSION);
+  expect(Object.isFrozen(gate)).toBe(true);
+  expect(Object.isFrozen(gate.client)).toBe(true);
+});
+
+it("refuses a wire protocol string that has drifted from the generated pin", () => {
+  const gate = admitByWireProtocol(`${GENERATED_WIRE_PROTOCOL_VERSION}x`);
+  expect(gate.ok).toBe(false);
+  if (gate.ok) return;
+  expect(gate.error.code).toBe("DISTRIBUTION_MISMATCH");
+});
+
+it("refuses a non-string wire protocol value, whatever its runtime type", () => {
+  for (const value of [undefined, null, 7, {}, [GENERATED_WIRE_PROTOCOL_VERSION]]) {
+    const gate = admitByWireProtocol(value);
+    expect(gate.ok).toBe(false);
+    if (gate.ok) continue;
+    expect(gate.error.code).toBe("DISTRIBUTION_MISMATCH");
+  }
+});
+
+it("reuses the shared refusal identity for the runtime wire pin too", () => {
+  expect(admitByWireProtocol(undefined)).toBe(createCompatGate(undefined));
 });

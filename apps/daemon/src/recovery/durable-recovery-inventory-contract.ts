@@ -193,6 +193,10 @@ export const DURABLE_INVENTORY_REFUSALS = Object.freeze({
     adapter("RECOVERY_INVENTORY_RECORD_UNREADABLE"),
     "The durable bytes stored for this window do not verify as inventory rows.",
   ),
+  WINDOW_FULL: recoveryInventoryRefusal(
+    adapter("RECOVERY_INVENTORY_COVERAGE_UNKNOWN"),
+    "This window already holds its bounded row count and cannot cover another observation.",
+  ),
 });
 export type DurableInventoryRefusal = RecoveryInventoryRefusal;
 

@@ -9,6 +9,9 @@ import { DurableStoreError, IdempotencyConflictError, SqliteEventStore } from "@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
+import { foundationSyncHandler } from "./daemon-foundation-command.js";
+import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
@@ -51,7 +54,7 @@ const ROWS: readonly Row[] = [
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
     kind: "effect.activate", layer: INGRESS,
-    payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
+    payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["escalationRef", "subjectRef"] },
   // An empty payload carries no base64 blob, so the seam materializes no bytes and the
@@ -59,10 +62,23 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], asyncOnly: true, capability: WORK,
     code: "FOUNDATION_ATTEMPT_REQUEST_MALFORMED", kind: "foundation.dispatch",
     layer: "DAEMON_FOUNDATION_ATTEMPT",
+    // NARROWED: the graph snapshot and the input manifest are derived server-side, so
+    // a payload carrying either key is refused at the seam rather than admitted.
+    payloadKeys: ["activationRequestBytesBase64", "binding", "launchTemplate"] },
+  // An empty payload carries none of the five identities, so the verification service's
+  // OWN request authority answers — the seam mints no code of its own here either.
+  { agent: [WORK], asyncOnly: true, capability: WORK,
+    code: "FOUNDATION_VERIFICATION_REQUEST_MALFORMED", kind: "foundation.verification",
+    layer: "DAEMON_VERIFICATION_REQUEST",
     payloadKeys: [
-      "activationRequestBytesBase64", "binding", "graphSnapshot", "inputManifest",
-      "launchTemplate",
+      "attemptAggregateId", "candidateRoot", "expectedRecordDigest", "recipeAggregateId",
+      "verificationId",
     ] },
+  // An empty payload names no activation and no resource, so this ingress's own request
+  // shape answers before the resource authority is ever called.
+  { agent: [WORK], capability: WORK, code: "RESOURCE_RECONCILE_REQUEST_MALFORMED",
+    kind: "resource.reconcile", layer: "DAEMON_RESOURCE_RECONCILE",
+    payloadKeys: ["activationAggregateId", "disposition", "epoch", "kind", "resourceId"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
@@ -129,7 +145,8 @@ const ROWS: readonly Row[] = [
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
-  "foundation.dispatch", "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
+  "foundation.dispatch", "foundation.verification", "resource.reconcile",
+  "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
@@ -224,18 +241,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-five characterized kinds and nothing else", () => {
+  it("serves exactly the twenty-seven characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(25);
-    expect(deps.registry.size).toBe(25);
+    expect(ROWS).toHaveLength(27);
+    expect(deps.registry.size).toBe(27);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(25);
+    expect(REGISTRATION_ORDER).toHaveLength(27);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -525,10 +542,34 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(25);
+    expect(ports.registry.size).toBe(27);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
+  });
+
+  /**
+   * The workspace lifecycle is an OPTION, and an absent one must not silently
+   * remove a command kind — an unconfigured workspace authority refuses
+   * PREPARATION at dispatch time, which is a different thing from a registry
+   * that never offered the kind. Both rosters are compared whole, in order.
+   */
+  it("keeps the roster and its order identical with and without a supplied lifecycle", () => {
+    const supplied = createDaemonCommandPorts({
+      clock: CLOCK,
+      foundationLifecycle: createFoundationCaptureLifecycle({
+        catalogSource: (): unknown => undefined, store: portStore,
+      }),
+      operatorPrincipalId: "operator-local", projectId: PROJECT, store: portStore,
+    });
+
+    expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
+    expect(supplied.registry.size).toBe(27);
+    for (const roster of [ports.registry, supplied.registry]) {
+      const entry = roster.get(FOUNDATION_DISPATCH_KIND);
+      expect(entry?.asyncHandler).toBeDefined();
+      expect(entry?.handler).toBe(foundationSyncHandler);
+    }
   });
 
   it("refuses an operator id that collides with the reserved verifier service", () => {

@@ -34,6 +34,16 @@ export interface TransportOptions {
    */
   readonly fetch?: FetchLike | undefined;
   readonly origin: string;
+  /**
+   * Upper bound in milliseconds on one round trip (default 15_000). A daemon
+   * that accepts the connection and then never answers would otherwise leave
+   * the returned promise pending forever — no rejection, so no refusal, and
+   * every caller awaiting a result hangs with it. The deadline converts that
+   * hang into the one failure this layer already speaks: the aborted request
+   * rejects and is refused as TRANSPORT_REQUEST_FAILED like any other
+   * undelivered round trip. No new code — a hang is a request that failed slowly.
+   */
+  readonly requestTimeoutMs?: number | undefined;
   /** Sent in a header on every request, never on a URL (design 19.2). */
   readonly sessionCredential: string;
   /**
@@ -89,6 +99,9 @@ export interface ControlRoomTransport {
   sendCommand(envelope: RuntimeCommandEnvelope): Promise<SendResult>;
 }
 
+/** Default round-trip deadline; see `TransportOptions.requestTimeoutMs`. */
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+
 const COMMAND_PATH = "/command";
 const DOCUMENT_DOSSIER_PATH = "/documents/dossier/read";
 const EVENT_PAGE_PATH = "/events/read";
@@ -136,6 +149,7 @@ async function post(
       body: JSON.stringify(body),
       headers: headersFor(options),
       method: "POST",
+      signal: AbortSignal.timeout(options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS),
     });
   } catch {
     // Nothing was delivered, so no daemon field is invented for an answer that

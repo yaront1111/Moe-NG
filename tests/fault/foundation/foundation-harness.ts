@@ -23,7 +23,12 @@ import * as scheduler from "../../../packages/scheduler/src/index.js";
 import * as store from "../../../packages/store/src/index.js";
 import { exportNames } from "../../../packages/testkit/src/foundation/foundation-fakes.js";
 import { FOUNDATION_FIXTURES } from "../../../packages/testkit/src/foundation/foundation-journey-fixtures.js";
-import { FOUNDATION_ABSENCE_PROBES } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
+import {
+  FOUNDATION_ABSENCE_PROBES,
+  FOUNDATION_EVIDENCE_CORPORA,
+  resolveEvidenceOutcome,
+} from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
+import type { FoundationEvidenceCorpus } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
 import {
   evaluateAbsenceProbe,
   expectedRed,
@@ -117,17 +122,32 @@ export function produceAbsenceOutcome(entry: FoundationManifestEntry): Foundatio
     : passExpected();
 }
 
+export function evidenceCorpusOf(entryId: string): FoundationEvidenceCorpus {
+  const found = FOUNDATION_EVIDENCE_CORPORA[entryId];
+  if (found === undefined) {
+    throw new ReferenceError(`No foundation evidence corpus registered for ${entryId}`);
+  }
+  return found;
+}
+
 /**
- * The missing-evidence string of an entry that declared HONEST_UNKNOWN.
+ * Produce the outcome an HONEST_UNKNOWN entry deserves RIGHT NOW.
  *
- * Same discipline as `produceAbsenceOutcome`: routing an entry of any other
- * kind here is a bug in the executor map, not a reason to fall back to a pass.
+ * Same discipline as `produceAbsenceOutcome`, including the refusal to echo:
+ * the entry selects a registered corpus and nothing more, so BOTH operands of
+ * the resolution (the evidence refs and the statement of what is missing) come
+ * from that record rather than from the outcome being checked. An entry
+ * whose declared statement drifts from the registered one reddens its row, and
+ * a corpus that lands reports PASS_EXPECTED against the declared unknown.
+ * Routing an entry of any other kind here is a bug in the executor map, not a
+ * reason to fall back to a pass.
  */
-export function missingEvidenceOf(entry: FoundationManifestEntry): string {
+export function produceEvidenceOutcome(entry: FoundationManifestEntry): FoundationOutcome {
   if (entry.outcome.kind !== "HONEST_UNKNOWN") {
     throw new TypeError(`${entry.entryId} is ${entry.outcome.kind}, not an honest unknown`);
   }
-  return entry.outcome.missingEvidence;
+  const corpus = evidenceCorpusOf(entry.entryId);
+  return resolveEvidenceOutcome(corpus.evidenceRefs, corpus.missingEvidence);
 }
 
 /** Map a model verdict onto the outcome vocabulary. Refusals become EXPECTED_RED. */

@@ -209,3 +209,10 @@ export type {
   FairnessRotationSelection,
 } from "./fairness/fairness-rotation.js";
 export type { FairnessAgedStanding } from "./fairness/fairness-aging.js";
+/**
+ * The conserved account-ledger and settlement closure, forwarded from a sibling module for the
+ * same reason the root forwards this one: the curation lives in that module's specifiers, and
+ * neither this file nor the root may grow past the per-file size rule to carry it. The budget
+ * family lives on the execution-facing half, so the hook belongs here rather than in the root.
+ */
+export * from "./budget-ledger-surface.js";

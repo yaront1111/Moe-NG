@@ -17,7 +17,10 @@
  * them unfalsifiable: dropping one from the identity leaves its perturbation test green, because
  * perturbing it still moves the hash. So `bound` carries the hash ALONE, and the binding itself is
  * reached through `sources.supersession`, whose integrity the recomputed hash proves. The policy
- * evaluation input is stored the same way, with only the decided facts bound.
+ * evaluation input CANNOT lean on its decided facts the same way — `decisionDigest` is the
+ * caller's own passthrough, not a kernel computation — so `bind` hashes the canonical policy
+ * input bytes itself and carries that digest as `policyInputHash`, giving `sources.policy` the
+ * same recompute-and-compare integrity the supersession input gets from `authorityHash`.
  */
 import { createHash } from "node:crypto";
 
@@ -102,7 +105,8 @@ export interface ExpansionPreparedFacts {
   readonly admitted: ExpansionAdmittedFacts; readonly criteria: ExpansionApprovalCriteria;
   readonly deadlineEpochMs: number; readonly fence: ExpansionFenceFacts;
   readonly funding: ExpansionFundingFacts; readonly graphLifecycle: GraphRevisionLifecycle;
-  readonly policyDecision: ExpansionPolicyFacts; readonly supersessionAuthorityHash: string;
+  readonly policyDecision: ExpansionPolicyFacts; readonly policyInputHash: string;
+  readonly supersessionAuthorityHash: string;
 }
 /** Re-runnable evidence. Nothing here is bound directly; the bound digests prove it. */
 export interface ExpansionPreparationSources {
@@ -112,9 +116,9 @@ export interface ExpansionPreparation {
   readonly bound: ExpansionPreparedFacts; readonly identity: string;
   readonly sources: ExpansionPreparationSources;
 }
-/** The carried facts, minus the two the kernels DECIDE, plus the inputs those kernels take. */
+/** The carried facts, minus the three the preparation DECIDES, plus the inputs the kernels take. */
 export type ExpansionPreparationInput =
-  Omit<ExpansionPreparedFacts, "policyDecision" | "supersessionAuthorityHash">
+  Omit<ExpansionPreparedFacts, "policyDecision" | "policyInputHash" | "supersessionAuthorityHash">
   & ExpansionPreparationSources;
 export interface ExpansionPreparationRefusal {
   readonly code: ExpansionPreparationCode | SupersessionRefusal["code"];
@@ -269,10 +273,22 @@ export function canonicalBytes(value: unknown): string {
 }
 
 const IDENTITY_DOMAIN = "@moe/core.expansion.preparation/v1";
+const POLICY_INPUT_DOMAIN = "@moe/core.expansion.policy-input/v1";
 
 export function expansionIdentityOf(bound: ExpansionPreparedFacts): string {
   return createHash("sha256").update(IDENTITY_DOMAIN, "utf8").update(" ", "utf8")
     .update(canonicalBytes(bound), "utf8").digest("hex");
+}
+
+/**
+ * Domain-separated digest over the canonical policy input bytes. `decisionDigest` cannot serve
+ * here — it is the caller's passthrough, so it proves nothing about the input it rode in on;
+ * only a digest computed HERE lets a verifier prove the stored `sources.policy` is the exact
+ * input the bound decision was evaluated over.
+ */
+function policyInputHashOf(policy: unknown): string {
+  return createHash("sha256").update(POLICY_INPUT_DOMAIN, "utf8").update(" ", "utf8")
+    .update(canonicalBytes(policy), "utf8").digest("hex");
 }
 
 const SUPERSEDABLE: readonly string[] = GRAPH_REVISION_TRANSITIONS["graph.supersede"];
@@ -320,7 +336,8 @@ function bind(
     admitted: valid.admitted, criteria: valid.criteria,
     deadlineEpochMs: input["deadlineEpochMs"] as number, fence: valid.fence,
     funding: valid.funding, graphLifecycle: input["graphLifecycle"] as GraphRevisionLifecycle,
-    policyDecision: policy, supersessionAuthorityHash: decided.decision.authorityHash,
+    policyDecision: policy, policyInputHash: policyInputHashOf(input["policy"]),
+    supersessionAuthorityHash: decided.decision.authorityHash,
   };
   return deepFreeze({ ok: true as const, preparation: { bound,
     identity: expansionIdentityOf(bound),

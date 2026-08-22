@@ -15,7 +15,11 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { STDIO_TOOL_ENTRIES, STDIO_TOOL_INDEX } from "./stdio-tool-schemas.js";
+import {
+  STDIO_TOOL_ENTRIES,
+  STDIO_TOOL_INDEX,
+  allowlistedToolEntries,
+} from "./stdio-tool-schemas.js";
 import type { StdioToolEntry } from "./stdio-tool-schemas.js";
 import type { StdioDispatchPort } from "./stdio-dispatch-port.js";
 
@@ -26,6 +30,12 @@ export interface StdioServerOptions {
   readonly credential: string;
   readonly port: StdioDispatchPort;
   readonly serverName?: string;
+  /**
+   * Runtime KIND strings this server may advertise. Absent means the full generated
+   * set, byte for byte, so a consumer that never passes one sees no change. Kinds, not
+   * tool names: the caller never learns this package's name-mangling rule.
+   */
+  readonly toolAllowlist?: readonly string[];
 }
 
 const encoder = new TextEncoder();
@@ -120,32 +130,37 @@ function buildQueryEnvelopeBytes(
  * dispatch on the matching surface. A decode refusal performs zero port calls and an
  * authentication refusal performs zero dispatch calls. Exported so hostile bytes can be
  * driven straight at it, which no protocol roundtrip can express.
+ *
+ * Both port calls sit inside the same containment: a credential store that throws instead of
+ * returning a verdict is a broken daemon boundary like any other, so it becomes `UNKNOWN_ERROR`
+ * rather than a raw SDK internal error carrying the throw's message. A registry refusal the
+ * port RETURNS is already an `McpError` by the time the catch sees it and passes through intact.
  */
-export function decodeAndDispatch(
+export async function decodeAndDispatch(
   port: StdioDispatchPort,
   entry: StdioToolEntry,
   bytes: Uint8Array,
-): Uint8Array {
+): Promise<Uint8Array> {
   const isCommand = entry.surface === "command";
   const decoded = isCommand
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
     : decodeRuntimeQueryEnvelopeBytes(bytes);
   if (!decoded.ok) refuse(decoded.error);
-  const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
-  if (!auth.ok) refuse(auth.error);
   try {
-    return isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes);
+    const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
+    if (!auth.ok) refuse(auth.error);
+    return await (isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes));
   } catch (error) {
     if (error instanceof McpError) throw error;
     refuseUnknown();
   }
 }
 
-function callTool(
+async function callTool(
   options: StdioServerOptions,
   toolLabel: string,
   args: Readonly<Record<string, unknown>> | undefined,
-): string {
+): Promise<string> {
   const entry = STDIO_TOOL_INDEX.get(toolLabel);
   if (entry === undefined) refuseInvalidInput();
   const supplied = args ?? {};
@@ -153,7 +168,7 @@ function callTool(
     entry.surface === "command"
       ? buildCommandEnvelopeBytes(entry.kind, options.credential, supplied)
       : buildQueryEnvelopeBytes(entry.kind, options.credential, supplied);
-  const response = decodeAndDispatch(options.port, entry, bytes);
+  const response = await decodeAndDispatch(options.port, entry, bytes);
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(response);
   } catch {
@@ -166,20 +181,24 @@ function callTool(
  * mutable `Tool` shape, so this is a copy rather than the generated object itself; freezing
  * it keeps a single shared module-level value from being edited by any later consumer.
  */
-const LISTED_TOOLS = Object.freeze(
-  STDIO_TOOL_ENTRIES.map((entry) =>
-    Object.freeze({
-      description: entry.tool.description,
-      inputSchema: Object.freeze({
-        additionalProperties: entry.tool.inputSchema.additionalProperties,
-        properties: Object.freeze({ ...entry.tool.inputSchema.properties }),
-        required: Object.freeze([...entry.tool.inputSchema.required]),
-        type: entry.tool.inputSchema.type,
+const listedFrom = (entries: readonly StdioToolEntry[]) =>
+  Object.freeze(
+    entries.map((entry) =>
+      Object.freeze({
+        description: entry.tool.description,
+        inputSchema: Object.freeze({
+          additionalProperties: entry.tool.inputSchema.additionalProperties,
+          properties: Object.freeze({ ...entry.tool.inputSchema.properties }),
+          required: Object.freeze([...entry.tool.inputSchema.required]),
+          type: entry.tool.inputSchema.type,
+        }),
+        name: entry.tool.name,
       }),
-      name: entry.tool.name,
-    }),
-  ),
-);
+    ),
+  );
+
+/** The unfiltered advertisement, built once and shared by every allowlist-free server. */
+const LISTED_TOOLS = listedFrom(STDIO_TOOL_ENTRIES);
 
 /**
  * Low-level SDK `Server`, deliberately not `McpServer`: the high-level API accepts only a
@@ -210,12 +229,18 @@ export function createStdioMcpServer(options: StdioServerOptions): Server {
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: LISTED_TOOLS }));
+  // Filtered ONCE, at construction: an unknown or empty allowlist refuses here rather
+  // than at the first ListTools, so a misconfigured roster never reaches a client.
+  const tools = options.toolAllowlist === undefined
+    ? LISTED_TOOLS
+    : listedFrom(allowlistedToolEntries(options.toolAllowlist));
 
-  server.setRequestHandler(CallToolRequestSchema, (request) => ({
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools }));
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => ({
     content: [
       {
-        text: callTool(options, request.params.name, request.params.arguments),
+        text: await callTool(options, request.params.name, request.params.arguments),
         type: "text" as const,
       },
     ],

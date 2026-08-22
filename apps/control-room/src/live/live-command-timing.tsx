@@ -1,7 +1,9 @@
+import { memo, useMemo } from "react";
 import type { JSX } from "react";
 
 import { CommandLatency, useClock } from "../performance/command-latency.js";
 import { buildLiveTimingReceipt, readClientClock } from "../performance/wire-timing.js";
+import type { SurfaceTimingReceipt } from "../performance/timing.js";
 import type { LiveEventRow, LiveFrame } from "./live-event-feed.js";
 
 /**
@@ -11,7 +13,7 @@ import type { LiveEventRow, LiveFrame } from "./live-event-feed.js";
  * Every value that reaches the evaluator here was OBSERVED, not supplied. The two daemon
  * readings arrive on the row the daemon actually sent; the client-received reading was
  * taken by the feed the instant its answer landed; and the render reading is taken from
- * the injected clock during this render. Nothing is a fixture and nothing is a prop a
+ * the injected clock as the frame paints. Nothing is a fixture and nothing is a prop a
  * caller chose — which is the distinction that makes this an edge rather than a demo.
  *
  * A receipt is rendered only for a row carrying a command identity, and it is built from
@@ -31,6 +33,16 @@ import type { LiveEventRow, LiveFrame } from "./live-event-feed.js";
  * monotonic clock — both are cross-clock, so both refuse with a code instead of
  * publishing a plausible wrong number. `human` stays absent until an operator acts. That
  * is not a gap in the wiring; it is the wiring reporting what is actually comparable.
+ *
+ * THE RENDER READING BELONGS TO THE FRAME, not to the render. The arrival reading is
+ * stamped once per poll, but the application around this surface repaints far more often
+ * than it polls: the board and document feeds re-render the whole live surface every
+ * interval with the SAME frame. A reading re-taken on each of those repaints would move
+ * the render phase forward with every unrelated paint and publish time-since-arrival at
+ * the latest repaint under the name of paint latency, which is exactly the plausible wrong
+ * number the rest of this receipt refuses to show. So the reading is taken once per frame
+ * (frames are frozen and replaced per poll), and the surface is memoised on its frame so
+ * a repaint that changed nothing it reads does not reach it at all.
  */
 
 /** Namespace for the live timeline's latency receipts; one receipt per command. */
@@ -40,20 +52,39 @@ export interface LiveCommandTimingProps {
   readonly frame: LiveFrame;
 }
 
+interface RowReceipt {
+  readonly receipt: SurfaceTimingReceipt;
+  readonly row: LiveEventRow;
+}
+
 function identified(row: LiveEventRow): boolean {
   return row.identity !== null;
 }
 
-export function LiveCommandTiming({ frame }: LiveCommandTimingProps): JSX.Element {
-  // Read during render and never stored. Under StrictMode's double invocation this
-  // re-reads the same injected clock rather than replaying a start sampled into state,
-  // which is what would silently report the wrong span in development.
-  const rendered = readClientClock(useClock());
-  const rows = frame.events.filter(identified);
-  if (rows.length === 0) return <></>;
+function LiveCommandTimingSurface({ frame }: LiveCommandTimingProps): JSX.Element {
+  const clock = useClock();
+  // One render reading per frame, taken during the render that first paints it and
+  // reused by every later repaint of the same frame; a new frame is a new arrival and
+  // gets a new reading. Under StrictMode's double invocation the factory re-reads the
+  // same injected clock within the one render pass: nothing is sampled into state and
+  // replayed across a remount, which is what would silently report the wrong span in
+  // development.
+  const receipts = useMemo((): readonly RowReceipt[] => {
+    const rendered = readClientClock(clock);
+    return frame.events.filter(identified).map((row) => ({
+      receipt: buildLiveTimingReceipt({
+        ledger: row.ledgerObservation,
+        received: frame.receivedAt,
+        rendered,
+        seam: row.seamObservation,
+      }),
+      row,
+    }));
+  }, [clock, frame]);
+  if (receipts.length === 0) return <></>;
   return (
     <div data-testid={`${LIVE_TIMING_PREFIX}.receipts`}>
-      {rows.map((row) => {
+      {receipts.map(({ receipt, row }) => {
         const commandId = row.identity?.commandId ?? "";
         return (
           <CommandLatency
@@ -63,12 +94,7 @@ export function LiveCommandTiming({ frame }: LiveCommandTimingProps): JSX.Elemen
               state: "CONFIRMED",
             }}
             key={row.eventId}
-            receipt={buildLiveTimingReceipt({
-              ledger: row.ledgerObservation,
-              received: frame.receivedAt,
-              rendered,
-              seam: row.seamObservation,
-            })}
+            receipt={receipt}
             testIdPrefix={`${LIVE_TIMING_PREFIX}.${commandId}.${row.eventId}`}
           />
         );
@@ -76,3 +102,11 @@ export function LiveCommandTiming({ frame }: LiveCommandTimingProps): JSX.Elemen
     </div>
   );
 }
+
+/**
+ * Memoised on its only prop. The parent timeline re-renders on every board and document
+ * poll with the frame it already had; those repaints carry nothing this surface reads,
+ * so they stop here. A clock change still reaches it through context, as it must: a new
+ * clock is a new scale, and a reading on the old one would no longer be comparable.
+ */
+export const LiveCommandTiming = memo(LiveCommandTimingSurface);

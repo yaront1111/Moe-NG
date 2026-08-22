@@ -237,6 +237,64 @@ describe("createLiveEventFeed", () => {
   });
 });
 
+describe("the feed surfaces a refused acknowledgement instead of discarding it", () => {
+  // Every control room shares one durable subscriber id, so a rival instance can
+  // consume this one's cursor; the bounced ack is the only wire evidence of that.
+  async function framesAfterAck(ackResponse: unknown): Promise<LiveFrame[]> {
+    const frames: LiveFrame[] = [];
+    const feed = createLiveEventFeed({
+      clock: { now: () => 9_000 },
+      intervalMs: 1,
+      onFrame: (frame) => frames.push(frame),
+      projection: "moe.board",
+      schedule: immediateOnce(),
+      subscriberId: "control-room-1",
+      transport: {
+        acknowledgeEventPage: () => Promise.resolve({
+          delivered: true as const, response: ackResponse, status: 200,
+        }),
+        readEventPage: () => Promise.resolve({
+          delivered: true as const,
+          response: {
+            checkpoint: "3", events: [], hasMore: false,
+            nextCursor: { generation: 1, position: "3" }, outcome: "PAGE",
+          },
+          status: 200,
+        }),
+      },
+    });
+    feed.start();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    feed.stop();
+    return frames;
+  }
+
+  it("delivers the refusal as its own ACK_REFUSED frame with the daemon's code", async () => {
+    const frames = await framesAfterAck({
+      code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", layer: "STATE", outcome: "REFUSED",
+    });
+    expect(frames).toHaveLength(2);
+    // Still CONNECTED: the daemon answered, and its refusal IS the answer.
+    expect(frames[1]).toMatchObject({
+      checkpoint: null,
+      connection: "CONNECTED",
+      detail: "SUBSCRIPTION_CURSOR_NOT_ISSUED",
+      events: [],
+      outcome: "ACK_REFUSED",
+    });
+    const refusal = frames[1];
+    expect(refusal?.receivedAt.known ? refusal.receivedAt.value : null).toBe(9_000);
+  });
+
+  it("adds no extra frame when the acknowledgement is ACKNOWLEDGED", async () => {
+    const frames = await framesAfterAck({
+      cursor: { generation: 1, position: "3" }, outcome: "ACKNOWLEDGED",
+    });
+    expect(frames).toHaveLength(1);
+    expect(frames[0]).toMatchObject({ outcome: "PAGE" });
+  });
+});
+
 describe("resolveLiveSetup", () => {
   it("refuses without credentials, naming the stable code", () => {
     expect(resolveLiveSetup({}, null)).toMatchObject({ code: "LIVE_CONFIG_MISSING", ok: false });

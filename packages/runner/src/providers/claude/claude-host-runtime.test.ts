@@ -396,7 +396,19 @@ for (const [index, testCase] of CASES.entries()) {
  * (Governor ruling 2026-08-16 02:10Z on this task, option (a).)
  */
 
-it(
+/**
+ * The 2026-08-16 02:10Z option-(a) ruling made this arm HARD-FAIL when no Claude
+ * CLI is installed, so a developer box could never quietly stop certifying the
+ * real runtime. A GitHub runner has no Claude CLI at all, so that same rule
+ * turned the Windows lane permanently red. Governor ruling 2026-08-19 (request
+ * msg-0bf62be7 -> reply msg-44487079) amends it to exactly this narrowing: skip
+ * ONLY on a CI host that has no claude.exe. A developer box without one still
+ * hard-fails, which is the case the original ruling protects.
+ */
+const CI_WITHOUT_INSTALLED_CLAUDE =
+  WIN && process.env.CI === "true" && installedClaudeExecutable() === null;
+
+it.skipIf(CI_WITHOUT_INSTALLED_CLAUDE)(
   "observes the really installed runtime, or refuses with the host's own stable code",
   async () => {
     if (!WIN) {

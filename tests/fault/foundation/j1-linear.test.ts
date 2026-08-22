@@ -12,7 +12,6 @@ import { describe, expect, it } from "vitest";
 import {
   FOUNDATION_PARTITION_COUNTS,
   foundationPartition,
-  resolveEvidenceOutcome,
 } from "../../../packages/testkit/src/foundation/foundation-fault-schedule.js";
 import {
   J1_AGGREGATE_ONLY_ACTIVATION,
@@ -33,10 +32,10 @@ import {
   core,
   executorFor,
   fixturePayload,
-  missingEvidenceOf,
   outcomeFromVerdict,
   partitionRows,
   produceAbsenceOutcome,
+  produceEvidenceOutcome,
   refused,
 } from "./foundation-harness.js";
 import type { FoundationExecutors } from "./foundation-harness.js";
@@ -199,8 +198,7 @@ const EXECUTORS: FoundationExecutors = {
   "schedule:j1-execution-dispatch-composition": (entry) => produceAbsenceOutcome(entry),
   "incident:hot-claim-loop-on-gated-work": (entry) => produceAbsenceOutcome(entry),
 
-  "schedule:j1-control-plane-overhead": (entry) =>
-    resolveEvidenceOutcome([], missingEvidenceOf(entry)),
+  "schedule:j1-control-plane-overhead": (entry) => produceEvidenceOutcome(entry),
 };
 
 describe("J1 linear journey fault schedules", () => {

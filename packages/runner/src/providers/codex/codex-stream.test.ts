@@ -76,7 +76,13 @@ function goldenRecord(caseId: string) {
   return result.record;
 }
 
-describe("Codex structured/raw stream", () => {
+// 30s: two cases in here materialize MAX_FRAMED_LINES-sized inputs and parse
+// them, which is pure CPU volume rather than I/O. On a two-core GitHub Windows
+// runner sharing the box with the rest of the parallel suite that exceeded the
+// 5s default ("refuses an unbounded event count with its stable reason code",
+// run 32234030845) while passing everywhere with cores to spare. A ceiling, not
+// a delay: nothing here waits on a clock.
+describe("Codex structured/raw stream", { timeout: 30_000 }, () => {
   it("drives every pinned golden case to its exact typed outcome", () => {
     const expected = [
       ["complete", "COMPLETED", []],

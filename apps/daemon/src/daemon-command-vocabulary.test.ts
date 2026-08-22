@@ -44,7 +44,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "work.resume",
     payloadKeys: ["attemptRef", "successorRef"] },
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "effect.activate",
-    payloadKeys: ["activation", "budget", "effect", "lease", "liveClaims", "slot"] },
+    payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE", kind: "recovery.complete",
     payloadKeys: ["approval", "authentication", "command", "reconciliationDigest"] },
   // STANDALONE and WORK-capable: the agent holding the attempt's lease is exactly
@@ -55,10 +55,22 @@ const ROWS: readonly VocabularyRow[] = [
   // to no family map. The base64 field is named in the allow-list or the whole request is
   // refused: a payload key that is not listed is never trimmed.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "foundation.dispatch",
+    // NARROWED: the graph snapshot and the input manifest are derived server-side, so
+    // a payload carrying either key is refused at the seam rather than admitted.
+    payloadKeys: ["activationRequestBytesBase64", "binding", "launchTemplate"] },
+  // Also asynchronous, also STANDALONE, and WORK-only rather than operator-gated: every
+  // authority the verifier trusts is server-side sealed state and the payload only NAMES
+  // which verification, so the human gate on this path is recipe sealing.
+  { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "foundation.verification",
     payloadKeys: [
-      "activationRequestBytesBase64", "binding", "graphSnapshot", "inputManifest",
-      "launchTemplate",
+      "attemptAggregateId", "candidateRoot", "expectedRecordDigest", "recipeAggregateId",
+      "verificationId",
     ] },
+  // The attempt's OWN authority over its OWN resources, and STANDALONE for the same reason
+  // journal.append is: it belongs to no family map and is wired by the registry's own branch.
+  // The allow-list is identity plus one adapter observation -- no state, no terminal flag.
+  { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "resource.reconcile",
+    payloadKeys: ["activationAggregateId", "disposition", "epoch", "kind", "resourceId"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -114,11 +126,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the twenty-five wired kinds in their registration order", () => {
+  it("carries exactly the twenty-six wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(25);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(25);
+    expect(ROWS).toHaveLength(27);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(27);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 

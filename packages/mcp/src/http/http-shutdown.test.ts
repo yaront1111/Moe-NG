@@ -39,6 +39,11 @@ const DAEMON_DETAIL = "10.0.0.1:5432";
 
 function attachmentFor(sessionId: string, observed: string[]): ClosableSession {
   return {
+    latch: {
+      release(): void {
+        observed.push(`latch:${sessionId}`);
+      },
+    },
     server: {
       close(): void {
         observed.push(`server:${sessionId}`);
@@ -81,16 +86,19 @@ it("tears every session down and names the failure when one session's release th
   );
 
   // The whole ordered trace, not a membership check. It pins three separate things at once:
-  // the surviving session got ALL THREE of its teardown steps; the FAILING session still got
-  // its transport and server closed after its release threw; and the failing session did not
-  // push the survivor's work ahead of its own, which a per-entry `catch` around the whole
-  // entry would have done.
+  // the surviving session got ALL of its teardown steps; the FAILING session still got its
+  // transport closed, its latch released, and its server closed after its release threw; and
+  // the failing session did not push the survivor's work ahead of its own, which a per-entry
+  // `catch` around the whole entry would have done. The latch sits right after the transport
+  // close, because that close is what strands a JSON-mode response the latch must settle.
   expect(observed).toEqual([
     `close:${FAILING_SESSION}`,
     `transport:${FAILING_SESSION}`,
+    `latch:${FAILING_SESSION}`,
     `server:${FAILING_SESSION}`,
     `close:${SURVIVING_SESSION}`,
     `transport:${SURVIVING_SESSION}`,
+    `latch:${SURVIVING_SESSION}`,
     `server:${SURVIVING_SESSION}`,
   ]);
   // Unroute-then-notify: both entries left the registry even though one notification failed.

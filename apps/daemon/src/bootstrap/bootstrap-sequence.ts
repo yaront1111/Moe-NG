@@ -35,6 +35,16 @@ export const COMMAND_PREREQUISITES = Object.freeze({
 } as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>);
 
 /**
+ * The ONE stream `policy.install` and `policy.validate` commit to, named once.
+ *
+ * Exported because a READER now depends on it: `admission-gate-resolver.ts` resolves a
+ * POLICY_ALLOWANCE node's witness from the latest `PolicyEvaluated` on this aggregate, and a
+ * reader that restated the template literal would answer "no durable witness" forever if the
+ * writer's naming ever moved — a fail-closed refusal for a world that actually decided.
+ */
+export const policyAggregateId = (projectId: string): string => `${projectId}-policy`;
+
+/**
  * Aggregate stream per kind.
  *
  * Probe and policy get streams of their own so their events never bump the project's version
@@ -50,7 +60,7 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
       return `${request.projectId}-provider`;
     case "policy.install":
     case "policy.validate":
-      return `${request.projectId}-policy`;
+      return policyAggregateId(request.projectId);
     default:
       return subject ?? request.projectId;
   }

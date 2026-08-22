@@ -14,6 +14,7 @@ import type {
   PlanningExpansionHoldBinding,
   PlanningExpansionProposalIdentity,
 } from "./planning-command-contract.js";
+import { carriedAuthority, planAuthorityCarry } from "./planning-authority-submission.js";
 import {
   validExpansionHoldBinding,
   validExpansionProposeCommand,
@@ -43,10 +44,8 @@ import {
 } from "./planning-validation.js";
 
 function hashesOf(source: PlanRevisionHashes): PlanRevisionHashes {
-  return deepFreeze({
-    dependencyHash: source.dependencyHash, graphContentHash: source.graphContentHash,
-    planHash: source.planHash, qualityHash: source.qualityHash,
-  });
+  return deepFreeze({ dependencyHash: source.dependencyHash, graphContentHash: source.graphContentHash,
+    planHash: source.planHash, qualityHash: source.qualityHash });
 }
 
 type ExpansionProposeCommand = Extract<PlanProposeCommand, { readonly proposalKind: "EXPANSION" }>;
@@ -111,8 +110,9 @@ export function propose(
   state: PlanningRunState,
   command: PlanProposeCommand,
 ): PlanningRunReducerResult {
+  const carry = planAuthorityCarry(command, command.submissionHash);
   if (!validSubmission(command.witness) || !validHex64(command.submissionHash)
-    || !validRunKind(command.proposalKind)) {
+    || !validRunKind(command.proposalKind) || !carry.ok) {
     return illegal(state, command.kind);
   }
   if (command.proposalKind === "EXPANSION") return proposeExpansion(state, command);
@@ -124,8 +124,8 @@ export function propose(
   }
   const plan = sealPlan(state, command);
   if (plan === undefined) return illegal(state, command.kind);
-  return accepted(plan.next, [deepFreeze({ commandId: command.commandId,
-    draining: plan.draining, kind: "PlanningSubmissionSealed" as const,
+  return accepted(plan.next, [deepFreeze({ ...carriedAuthority(carry),
+    commandId: command.commandId, draining: plan.draining, kind: "PlanningSubmissionSealed" as const,
     submissionHash: command.submissionHash, version: plan.next.version })]);
 }
 

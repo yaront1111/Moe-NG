@@ -18,8 +18,16 @@ const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
   "SSL_CERT_DIR", "SSL_CERT_FILE", "SYSTEMROOT", "TEMP", "TERM", "TMP", "TMPDIR",
   "USERPROFILE", "WINDIR",
 ]);
+/**
+ * Sorted and CLOSED. `CODEX_` and `OPENAI_` carry the codex cli's auth surface,
+ * measured 2026-08-20 against codex-cli 0.147.0: CODEX_HOME (the state dir
+ * holding a ChatGPT subscription seat — `codex exec --help` says "auth still
+ * uses `CODEX_HOME`"), CODEX_ACCESS_TOKEN, OPENAI_API_KEY, CODEX_API_KEY. No
+ * `CHATGPT_` prefix is listed because the binary honors no such variable.
+ */
 const PROVIDER_ENVIRONMENT_PREFIXES = Object.freeze([
-  "ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "GOOGLE_", "VERTEX_",
+  "ANTHROPIC_", "AWS_", "AZURE_", "CLAUDE_", "CODEX_", "GOOGLE_", "OPENAI_",
+  "VERTEX_",
 ] as const);
 const LOOPBACK_NO_PROXY = Object.freeze(["127.0.0.1", "localhost", "::1"] as const);
 

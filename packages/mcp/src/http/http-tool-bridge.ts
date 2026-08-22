@@ -15,7 +15,11 @@ import {
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
 
-import { STDIO_TOOL_ENTRIES, STDIO_TOOL_INDEX } from "../stdio/stdio-tool-schemas.js";
+import {
+  STDIO_TOOL_ENTRIES,
+  STDIO_TOOL_INDEX,
+  allowlistedToolEntries,
+} from "../stdio/stdio-tool-schemas.js";
 import type { StdioToolEntry } from "../stdio/stdio-tool-schemas.js";
 
 /**
@@ -38,6 +42,19 @@ import type { StdioToolEntry } from "../stdio/stdio-tool-schemas.js";
 
 /** Exactly the generated stdio tool set. There is no HTTP-only tool, by construction. */
 export const HTTP_LISTED_TOOLS = Object.freeze(STDIO_TOOL_ENTRIES.map((entry) => entry.tool));
+
+/**
+ * The advertisement for one adapter. Absent allowlist returns the shared module-level
+ * value itself, so an existing consumer sees the identical object it always saw; a
+ * present one refuses here — at adapter construction, before any session opens — rather
+ * than at the first ListTools, which is what makes a bad roster a startup failure.
+ */
+export function httpListedTools(
+  allowlist: readonly string[] | undefined,
+): typeof HTTP_LISTED_TOOLS {
+  if (allowlist === undefined) return HTTP_LISTED_TOOLS;
+  return Object.freeze(allowlistedToolEntries(allowlist).map((entry) => entry.tool));
+}
 
 export type HttpAuthOutcome =
   | { readonly error: RuntimeError; readonly ok: false }
@@ -132,6 +149,11 @@ export function buildEnvelopeBytes(
  * Bounded decode, then authenticate with the VERBATIM dotted kind, then exactly one dispatch on
  * the matching surface. A decode refusal performs zero port calls and an authentication refusal
  * performs zero dispatch calls.
+ *
+ * Both port calls sit inside the same containment: a credential store that throws instead of
+ * returning a verdict is a broken daemon boundary like any other, so it becomes `UNKNOWN_ERROR`
+ * rather than a raw SDK internal error carrying the throw's message. A registry refusal the
+ * port RETURNS is already an `McpError` by the time the catch sees it and passes through intact.
  */
 export async function decodeAndDispatch(
   port: HttpDispatchPort,
@@ -144,13 +166,13 @@ export async function decodeAndDispatch(
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
     : decodeRuntimeQueryEnvelopeBytes(bytes);
   if (!decoded.ok) refuse(decoded.error);
-  const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
-  if (!auth.ok) refuse(auth.error);
   const context: HttpDispatchContext = {
     credential: decoded.envelope.sessionCredential,
     ...(signal === undefined ? {} : { signal }),
   };
   try {
+    const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
+    if (!auth.ok) refuse(auth.error);
     return await (isCommand
       ? port.dispatchCommandBytes(bytes, context)
       : port.dispatchQueryBytes(bytes, context));
@@ -194,12 +216,13 @@ async function callTool(
 export function createHttpMcpServer(
   port: HttpDispatchPort,
   serverName: string,
+  listedTools: typeof HTTP_LISTED_TOOLS = HTTP_LISTED_TOOLS,
 ): Server {
   const server = new Server(
     { name: serverName, version: "0.0.0" },
     { capabilities: { tools: {} } },
   );
-  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: HTTP_LISTED_TOOLS }));
+  server.setRequestHandler(ListToolsRequestSchema, () => ({ tools: listedTools }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const credential = extra.authInfo?.token;
     if (typeof credential !== "string" || credential.length === 0) refuseInvalidInput();

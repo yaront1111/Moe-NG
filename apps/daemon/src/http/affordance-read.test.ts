@@ -6,12 +6,14 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
+import { PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
   SPEED_APPROVAL_MODE,
   SPEED_MODE_DELAY_ENV_KEY,
 } from "../planning/approval-policy-settings.js";
+import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -187,11 +189,7 @@ describe("code node steps", () => {
   });
 
   it("offers only agent-authored review submission for an approved, unaccepted node", () => {
-    commitBootstrap("provider.probe", {
-      observation: {
-        providerMinimumProfileRef: "provider-profile-1", truthClass: "DAEMON_VERIFIED",
-      },
-    });
+    commitBootstrap("provider.probe", { observation: PROVIDER_OBSERVATION });
     // Reach approval.decide durably via the fixture-canonical chain remainder.
     // (bind + policy + activate + goal + plan + approve, exact payloads from
     // bootstrap-test-fixtures shapes.)
@@ -217,7 +215,19 @@ describe("code node steps", () => {
       budgetAccountRef: "budget-account-1", goalId: "goal-n1", planningRunRef: "run-n1",
       witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
     });
-    const submissionHash = "dec0de".padEnd(64, "0");
+    // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
+    // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
+    // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:
+    // the submission hash IS the sealed plan's own `planHash`, and the daemon re-derives it.
+    const sealed = journeyAuthority({
+      authorRef: "architect-1",
+      criterionIds: ["criterion-a"],
+      graphRevisionRef: "graph-revision-1",
+      idPrefix: "run-n1",
+      nodeIds: ["node-code-1"],
+      stepDescription: "Land the affordance node.",
+    });
+    const submissionHash = sealed.submissionHash;
     commitBootstrap("plan.propose", {
       commands: [
         {
@@ -239,7 +249,9 @@ describe("code node steps", () => {
           },
         },
         {
+          authority: sealed.authority,
           commandId: "n-propose",
+          graphContentBytesBase64: sealed.graphContentBytesBase64,
           effectTerminalProof: {
             effectTerminalRef: "effect-terminal-1",
             resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
@@ -249,6 +261,32 @@ describe("code node steps", () => {
           witness: {
             attemptRef: "attempt-1", submissionRef: "submission-1",
             truthClass: "DAEMON_VERIFIED",
+          },
+        },
+      ],
+      runId: "run-n1",
+    });
+    // The finalize terminal rides its OWN request: `classifyPlanningChain` refuses a chain
+    // holding both terminals with PLANNING_FINALIZE_CHAIN_MIXED.
+    commitBootstrap("plan.propose", {
+      commands: [
+        {
+          commandId: "n-finalize", expectedVersion: 4,
+          kind: "planning.finalize_submission",
+          revision: {
+            dependencyHash: "d1".padEnd(64, "0"),
+            // BIN A: the world moved, the subject did not. This arm is about the code-node
+            // affordance after a REVIEWABLE, SEALED run; the graph hash was only ever scenery,
+            // and it now has to be the producer's or the envelope refuses the finalize.
+            graphContentHash: sealed.graphContentHash,
+            graphRevisionRef: "graph-revision-1", planHash: submissionHash,
+            qualityHash: "dd".padEnd(64, "0"),
+          },
+          witness: {
+            attemptTerminalRef: "attempt-terminal-1", effectTerminalRef: "effect-terminal-1",
+            nodeSummaries: [{ executionBearing: true, nodeKey: "node-code-1" }],
+            providerSlotTerminalRef: "slot-terminal-1",
+            resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
           },
         },
       ],

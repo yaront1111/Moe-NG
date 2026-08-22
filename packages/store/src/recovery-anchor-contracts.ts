@@ -26,6 +26,14 @@ export const RECOVERY_ANCHOR_SLOT_MANIFEST_NAME = "slot-manifest.json" as const;
 export const RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION = "moe-recovery-slot/1" as const;
 
 export interface RecoveryAnchorSlotManifest {
+  /**
+   * Digest of the database file AS IT SITS IN THE SLOT, taken after the install
+   * transaction stamped it. This is deliberately not the anchor's
+   * `databaseDigest`, which describes the payload that was delivered: the
+   * stamp rewrites pages, so a proof over the delivered bytes would fail every
+   * honest slot and prove nothing about the file a reader actually opens.
+   */
+  readonly databaseDigest: string;
   readonly generationDigest: string;
   readonly incarnationRef: string;
   readonly keyEpochRef: string;

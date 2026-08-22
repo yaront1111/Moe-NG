@@ -333,6 +333,44 @@ describe("rejection lineage and repeat routing", () => {
     expect(outcome.lineage.records[0]?.finding.detail).toBe("first reading");
   });
 
+  it("fingerprints the stored copy, never a second reading of a shifty rule id", () => {
+    let reads = 0;
+    const shifty: ReviewFinding = {
+      detail: "stable prose",
+      get ruleId() {
+        reads += 1;
+        return reads === 1 ? "rule:oracle-adequacy" : "rule:scope-breach";
+      },
+      severity: "MAJOR",
+      subject: { kind: "NODE", locator: "node:one" },
+    };
+    const record = recorded(EMPTY_REVIEW_LINEAGE, 1, [shifty]).lineage.records[0];
+    if (record === undefined) throw new Error("expected a recorded finding");
+
+    expect(record.finding.ruleId).toBe("rule:oracle-adequacy");
+    expect(findingFingerprint(record.finding)).toBe(record.fingerprint);
+  });
+
+  it("reads a shifty subject once, so kind and locator come from the same reading", () => {
+    let reads = 0;
+    const shifty: ReviewFinding = {
+      detail: "stable prose",
+      ruleId: "rule:oracle-adequacy",
+      severity: "MAJOR",
+      get subject() {
+        reads += 1;
+        return reads === 1
+          ? { kind: "NODE" as const, locator: "node:one" }
+          : { kind: "ARTIFACT" as const, locator: "artifact:two" };
+      },
+    };
+    const record = recorded(EMPTY_REVIEW_LINEAGE, 1, [shifty]).lineage.records[0];
+    if (record === undefined) throw new Error("expected a recorded finding");
+
+    expect(record.finding.subject).toEqual({ kind: "NODE", locator: "node:one" });
+    expect(findingFingerprint(record.finding)).toBe(record.fingerprint);
+  });
+
   it("appends every recorded finding with its round and fingerprint", () => {
     const first = recorded(EMPTY_REVIEW_LINEAGE, 1, [MISSING_ORACLE]);
     const second = recorded(first.lineage, 2, [SAME_TEXT_OTHER_SUBJECT]);

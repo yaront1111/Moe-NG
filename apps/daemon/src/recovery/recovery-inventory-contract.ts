@@ -137,6 +137,7 @@ export const RECOVERY_INVENTORY_UPSTREAM_CODES = Object.freeze([
   "RECOVERY_INVENTORY_RECORD_NONCANONICAL",
   "RECOVERY_INVENTORY_RECORD_INCOHERENT",
   "RECOVERY_INVENTORY_RECORD_DIGEST_MISMATCH",
+  "RECOVERY_INVENTORY_RECORD_OVERSIZED",
   "RECOVERY_INVENTORY_COVERAGE_UNKNOWN",
   "RECORD_NOT_FOUND",
   "RECORD_UNREADABLE",
@@ -157,7 +158,12 @@ export interface RecoveryInventoryCoordinatorAnswer {
   readonly layer: typeof RECOVERY_INVENTORY_LAYER;
 }
 
-/** Bounds. Every one is a refusal threshold, never a silent truncation point. */
+/**
+ * Bounds. Every one is a refusal threshold, never a silent truncation point.
+ * The byte cap is enforced on BOTH sides of the durable boundary: the decoder
+ * refuses stored bytes above it, so the builder must refuse a record that would
+ * encode above it, or the ledger could commit a record that never reads back.
+ */
 export const MAX_RECOVERY_RECONCILIATION_ITEMS = 4096;
 export const MAX_RECOVERY_RECONCILIATION_TEXT_CHARS = 400;
 export const MAX_RECOVERY_RECONCILIATION_BYTES = 4 * 1_024 * 1_024;

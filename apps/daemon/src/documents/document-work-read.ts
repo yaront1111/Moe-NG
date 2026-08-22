@@ -9,6 +9,7 @@ import {
   OPAQUE_PAYLOAD_CODEC_VERSION,
 } from "@moe/store";
 
+import { readDocumentSourceView } from "./document-source-read.js";
 import { validateDocumentWorkDecision } from "./document-work-decision.js";
 import { documentWorkEffectSha256 } from "./document-work-effect.js";
 import {
@@ -200,13 +201,33 @@ function readStableDossier(
   return dossier(tail, decoded.proposal);
 }
 
-/** Reads a decision-backed, normalized, stable aggregate tail only. */
+/**
+ * Attaches the primary source's ingested text to a read dossier. The text lives on a sibling
+ * content-addressed aggregate keyed by `sources[0].contentSha256`; it is optional evidence, so
+ * absence returns the dossier unchanged and only stored-but-mismatched text fails closed.
+ */
+function attachSource(
+  store: DocumentWorkStorePort,
+  projectId: string,
+  base: DocumentWorkDossier,
+): ReadDocumentWorkDossierResult {
+  const primary = base.proposal.sources[0];
+  if (primary === undefined) return base;
+  const source = readDocumentSourceView(store, projectId, primary.contentSha256);
+  if (source.kind === "REFUSED") return source.refusal;
+  if (source.kind === "ABSENT") return base;
+  return Object.freeze({ ...base, source: source.view });
+}
+
+/** Reads a decision-backed, normalized, stable aggregate tail, then attaches its ingested
+ *  source text when an operator recorded it. */
 export function readLatestDocumentWorkDossier(
   store: DocumentWorkStorePort,
   projectId: string,
 ): ReadDocumentWorkDossierResult {
   try {
-    return readStableDossier(store, projectId);
+    const base = readStableDossier(store, projectId);
+    return base.ok ? attachSource(store, projectId, base) : base;
   } catch (error) {
     const mapped = durableStoreRefusal(error);
     if (mapped !== null) return mapped;

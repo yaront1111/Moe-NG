@@ -1,4 +1,5 @@
 import {
+  MAX_RECOVERY_RECONCILIATION_BYTES,
   RECOVERY_PROOF_CLASSES,
   RECOVERY_RECONCILIATION_SCHEMA_VERSION,
   exactDataRecord,
@@ -12,7 +13,10 @@ import type {
   RecoveryReconciliationRecord,
   RecoveryInventoryRefusal,
 } from "./recovery-inventory-contract.js";
-import { recoveryReconciliationDigest } from "./recovery-inventory-codec.js";
+import {
+  encodeRecoveryReconciliationRecord,
+  recoveryReconciliationDigest,
+} from "./recovery-inventory-codec.js";
 import {
   deriveRecoveryReconciliationTruth,
   orderRecoveryReconciliationItems,
@@ -76,6 +80,10 @@ const REFUSALS = Object.freeze({
   POPULATION_UNMAPPED: recoveryInventoryRefusal(
     local("RECOVERY_INVENTORY_POPULATION_UNMAPPED"),
     "A subject named a population its declared proof class does not cover.",
+  ),
+  RECORD_OVERSIZED: recoveryInventoryRefusal(
+    local("RECOVERY_INVENTORY_RECORD_OVERSIZED"),
+    "The reconciled record encodes above the byte cap the decoder would refuse it at.",
   ),
   SUBJECT_DUPLICATE: recoveryInventoryRefusal(
     local("RECOVERY_INVENTORY_SUBJECT_DUPLICATE"),
@@ -179,10 +187,20 @@ export function buildRecoveryReconciliationRecord(
     upstream,
   });
 
+  const record = Object.freeze({ ...body, recordDigest: recoveryReconciliationDigest(body) });
+  // The item and text caps bound each field, not their product: the maximum
+  // item count at the maximum text length encodes well past the byte cap the
+  // decoder refuses at. Measured on the canonical bytes the ledger would commit,
+  // so a record is refused HERE, before any write, rather than committed as
+  // RECORDED and then unreadable under its own digest forever.
+  if (encodeRecoveryReconciliationRecord(record).length > MAX_RECOVERY_RECONCILIATION_BYTES) {
+    return REFUSALS.RECORD_OVERSIZED;
+  }
+
   return Object.freeze({
     authority: "NONE" as const,
     ok: true as const,
     outcome: "RECONCILED" as const,
-    record: Object.freeze({ ...body, recordDigest: recoveryReconciliationDigest(body) }),
+    record,
   });
 }

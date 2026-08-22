@@ -34,6 +34,8 @@
   line-height: 0.98;
   margin: 0;
   max-inline-size: 18ch;
+  /* No one-word orphan lines under a display-sized headline. */
+  text-wrap: balance;
 }
 
 .cr-surface-lead > span {

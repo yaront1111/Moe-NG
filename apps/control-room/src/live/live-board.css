@@ -37,11 +37,6 @@
   padding: 0.7rem 0.8rem;
 }
 
-.cr-liveboard-card[draggable="true"] {
-  border-color: color-mix(in srgb, var(--cr-action) 45%, var(--cr-line));
-  cursor: grab;
-}
-
 .cr-liveboard-card header {
   display: flex;
   flex-wrap: wrap;
@@ -59,6 +54,13 @@
 .cr-liveboard-card small {
   color: var(--cr-ink-soft);
   font-size: 0.62rem;
+}
+
+/* A live holder on the step: attention-toned so it reads BEFORE the button —
+ * dispatching this card races whoever the claim names. */
+.cr-liveboard-card small.cr-liveboard-claim {
+  color: var(--cr-attention-text);
+  font-family: var(--cr-font-utility);
 }
 
 .cr-liveboard-card button {
@@ -90,13 +92,6 @@
   color: var(--cr-attention);
 }
 
-[data-testid="cr.liveboard.dropnote"] {
-  background: var(--cr-attention-wash);
-  border: 1px solid color-mix(in srgb, var(--cr-attention) 38%, var(--cr-line));
-  border-radius: var(--cr-radius-xs);
-  font-size: 0.72rem;
-  padding: 0.4rem 0.6rem;
-}
 
 @media (max-width: 959px) {
   .cr-liveboard-columns {

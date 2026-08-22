@@ -277,3 +277,83 @@ export {
   type WorkspaceTreeEntry,
 } from "./workspace/workspace-contract.js";
 export { buildInputManifest, buildResultManifest } from "./workspace/workspace-manifest.js";
+
+/**
+ * The physical workspace allocator. A consumer gets the request shape, the
+ * derivation, the frozen assignment, the release vocabulary and the Node
+ * adapter — enough to allocate, replay and release one attempt's tree. The
+ * failure CONSTRUCTOR and the state fence stay internal: publishing either
+ * would let a caller hand this package a fabricated refusal or a hand-built
+ * "verified" inspection, which is exactly the authority this seam withholds.
+ */
+export {
+  RUNNER_WORKTREE_LAYERS,
+  WORKTREE_ASSIGNMENT_VERSION,
+  WORKTREE_RELEASE_DISPOSITIONS,
+  WORKTREE_RELEASE_INTENTS,
+  deriveWorktreeTarget,
+  isWorktreeFailure,
+  type DeriveWorktreeTargetResult,
+  type RunnerWorktreeLayer,
+  type WorktreeAssignment,
+  type WorktreeFailure,
+  type WorktreeMaterializationRequest,
+  type WorktreeMaterializationResult,
+  type WorktreeMaterializer,
+  type WorktreeReleaseDisposition,
+  type WorktreeReleaseIntent,
+  type WorktreeReleaseRequest,
+  type WorktreeReleaseResult,
+  type WorktreeTarget,
+} from "./workspace/worktree-materializer-contract.js";
+export {
+  MAX_WORKTREE_COMMAND_BYTES,
+  WORKTREE_GIT_TIMEOUT_MS,
+  createNodeWorktreeMaterializer,
+} from "./workspace/worktree-materializer-node.js";
+
+/**
+ * The Foundation workspace CAPTURE seam: the pair that proves an assigned tree
+ * is its sealed input before a provider runs, and derives the advisory attempt
+ * core after it exits. Published are the two entry points, the shipped Node
+ * filesystem port, the closed refusal vocabulary, the three boundaries that can
+ * decide a refusal, the scanner's own budgets, and the two functions a verifier
+ * needs to recompute a prelaunch proof's digest.
+ *
+ * WITHHELD, on the same asymmetry the settlement seam publishes under:
+ * `sealPrelaunchProof` MINTS the proof, and `captureFailure` mints a refusal.
+ * A consumer able to call either could hand this package a fabricated
+ * "the tree was proven" or a fabricated reason — exactly the authority the
+ * prelaunch proof exists to establish. The pure decision rules and the raw
+ * enumerator stay internal too: the entry points apply them, a consumer never
+ * calls one itself.
+ */
+export {
+  DEFAULT_FOUNDATION_CAPTURE_LIMITS,
+  FOUNDATION_CAPTURE_CODES,
+  FOUNDATION_CAPTURE_LAYER_NAMES,
+  FOUNDATION_CAPTURE_VERSION,
+  MAX_FOUNDATION_CAPTURE_BYTES,
+  MAX_FOUNDATION_CAPTURE_ENTRIES,
+  isFoundationCaptureFailure,
+  prelaunchProofDigestInput,
+  prelaunchProofSealMatches,
+  type FoundationCaptureCode,
+  type FoundationCaptureCore,
+  type FoundationCaptureDirent,
+  type FoundationCaptureFailure,
+  type FoundationCaptureFsPort,
+  type FoundationCaptureInput,
+  type FoundationCaptureLayer,
+  type FoundationCaptureLimits,
+  type FoundationCaptureResult,
+  type FoundationCaptureStat,
+  type FoundationPrelaunchInput,
+  type FoundationPrelaunchProof,
+  type FoundationPrelaunchResult,
+} from "./workspace/foundation-workspace-capture-contract.js";
+export { createNodeFoundationCaptureFs } from "./workspace/foundation-workspace-capture-node.js";
+export {
+  captureFoundationWorkspaceDelta,
+  proveFoundationPrelaunchTree,
+} from "./workspace/foundation-workspace-capture.js";

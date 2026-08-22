@@ -172,6 +172,11 @@ function pendingStoredDecision(
     previousVersion: effect.previousVersion,
     receiptCommandId: identities.receiptCommandId,
     recordVersion: COMMAND_DECISION_RECORD_VERSION,
+    // The accepted branch's receipt commits the caller's request bytes under the primary leg's
+    // fence, so its request identity IS the replay proof. The rejected branch's receipt commits
+    // the audit payload instead, which proves nothing about the request, so it offers null.
+    replayRequestSha256:
+      effect.effectDisposition === "EFFECTS_COMMITTED" ? effect.receipt.requestSha256 : null,
     requestIdentityVersion: COMMAND_DECISION_REQUEST_IDENTITY_VERSION,
     requestSha256: identities.requestSha256,
     resultBytes: effect.resultBytes,

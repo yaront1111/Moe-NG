@@ -22,8 +22,33 @@ const temp = () => {
   return path;
 };
 
+/**
+ * A PER-SUITE EQUIVALENT of the hardened teardown, not an import: this file runs under
+ * `node --test` as `.mjs`, which cannot load the TypeScript helper the daemon tree shares.
+ * The reference implementation is `removeTemporaryRoots` in
+ * `tests/integration/release-archive-cleanup.test.ts`; the semantics are the same three —
+ * iterate a COPY, prune only after the removal SUCCEEDS, and report rather than abandon.
+ * The previous loop popped before removing, so one throw lost that dir and every dir behind it.
+ */
 afterEach(() => {
-  while (temporary.length > 0) rmSync(temporary.pop(), { force: true, recursive: true });
+  const failures = [];
+  for (const path of [...temporary]) {
+    let removed = false;
+    for (let attempt = 0; attempt < 2 && !removed; attempt += 1) {
+      try {
+        rmSync(path, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+        removed = true;
+      } catch (error) {
+        if (attempt === 1) failures.push(`${path}: ${String(error)}`);
+      }
+    }
+    if (!removed) continue;
+    const pruned = temporary.indexOf(path);
+    if (pruned >= 0) temporary.splice(pruned, 1);
+  }
+  if (failures.length > 0) {
+    throw new Error(`RELEASE_SUPPLY_CHAIN_TEARDOWN_LEAK: ${failures.join("; ")}`);
+  }
 });
 
 const loadSubject = () => import("../../scripts/release/release-subject.mjs");
@@ -863,6 +888,222 @@ describe("release CLI and filesystem boundary", () => {
     expectReleaseRefusal(await runSupply({ evidenceRoot }), "OUTPUT_PATH_INVALID");
     assert.deepEqual(readdirSync(outside), []);
   });
+
+  // The macOS $TMPDIR shape, made host-independent. On darwin runners /var is a symlink to
+  // /private/var, so EVERY temp evidence root carries a symlinked ancestor ABOVE it. A win32
+  // junction reproduces that exactly — lstatSync(junction).isSymbolicLink() is true here too —
+  // so these two accept cases pin the darwin behaviour on every host, no macOS lane required.
+  test("publishes through a symlinked ancestor above an existing evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const evidenceRoot = join(link, "root");
+    mkdirSync(evidenceRoot);
+    const result = await runSupply({ evidenceRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(JSON.parse(readFileSync(result.evidencePath, "utf8")).operation, "RECORDED");
+  });
+
+  // Production's own shape, and the reason the ceiling is the root's nearest EXISTING ancestor
+  // rather than the root itself: main() passes evidenceRoot = join(repositoryRoot, "dist",
+  // "release") and dist/ is gitignored, so on a clean checkout the root does not exist when the
+  // guard runs. A bound expressed as "stop when the cursor equals the root" can never fire there.
+  test("publishes through a symlinked ancestor above an absent evidence root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    mkdirSync(join(link, "repo"));
+    const result = await runSupply({ evidenceRoot: join(link, "repo", "dist", "release") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  // The fence at the exact boundary those two accept cases move: the ceiling is INCLUSIVE, so an
+  // evidence root that IS itself a junction to a real outside destination still refuses and writes
+  // nothing there. The archive call count pins WHICH layer refused — validInput returns
+  // OUTPUT_PATH_INVALID before any port runs, so two archive calls prove this one came from the
+  // publisher's path guard and not from input validation.
+  test("refuses an evidence root that is itself a junction to an outside destination", async () => {
+    const outside = temp();
+    const evidenceRoot = join(temp(), "asroot");
+    symlinkSync(outside, evidenceRoot, "junction");
+    const archiveSource = spy(async ({ destination }) => ({ destination, ok: true }));
+    expectReleaseRefusal(await runSupply({ evidenceRoot }, { archiveSource }), "OUTPUT_PATH_INVALID");
+    assert.equal(archiveSource.calls.length, 2);
+    assert.deepEqual(readdirSync(outside), []);
+  });
+
+  // A DANGLING junction — target removed after the link was made — reads as absent to existsSync
+  // while lstat still sees the reparse point, so the ascent to the deepest existing ancestor would
+  // step straight over it and the symlink walk above would never visit it. A planted redirect is a
+  // containment failure whichever way it points, so it must carry the containment code: without the
+  // ascent's own lstat the publish instead dies in the write half as EVIDENCE_WRITE_INTERRUPTED,
+  // which reports a containment violation as a disk mishap.
+  test("refuses a dangling junction in the target span with the containment code", async () => {
+    const evidenceRoot = temp();
+    const vanished = join(temp(), "vanished");
+    mkdirSync(vanished);
+    symlinkSync(vanished, join(evidenceRoot, SOURCE_SHA), "junction");
+    rmSync(vanished, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+    const result = await runSupply({ evidenceRoot });
+    assert.notEqual(result.reason, "EVIDENCE_WRITE_INTERRUPTED");
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+  });
+
+  // Mirror negative for that lstat: an ancestor chain that is merely ABSENT, with no link anywhere,
+  // must still publish. Every segment of this root is walked by the same ascent as the dangling
+  // case, so a probe that refused on absence rather than on a surviving reparse point reds here.
+  test("publishes into an evidence root whose ancestor chain does not exist yet", async () => {
+    const result = await runSupply({ evidenceRoot: join(temp(), "absent", "chain") });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+});
+
+describe("release evidence containment", () => {
+  test("escapesRoot refuses targets outside the root on every host", async () => {
+    const { escapesRoot } = await loadSupplyChain();
+    if (process.platform === "win32") {
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\corepack\\pnpm.js"), false);
+      assert.equal(escapesRoot("C:\\node", "C:\\node\\..\\outside"), true);
+      // win32 relative() across drives answers an ABSOLUTE path, which does not start with
+      // "..", so the classic startsWith probe alone silently passes a cross-drive redirect.
+      assert.equal(escapesRoot("C:\\node", "D:\\redirected\\pnpm.js"), true);
+    } else {
+      assert.equal(escapesRoot("/node", "/node/corepack/pnpm.js"), false);
+      assert.equal(escapesRoot("/node", "/outside/pnpm.js"), true);
+    }
+  });
+
+  test("both containment call sites consume the shared escape probe", () => {
+    const source = readFileSync(join(REPO_ROOT, "scripts/release/supply-chain.mjs"), "utf8");
+    assert.match(source, /escapesRoot\(nodeRoot, entry\)/u);
+    assert.match(source, /escapesRoot\(root, target\)/u);
+    assert.doesNotMatch(source, /relative\([^)]*\)\.startsWith\("\.\."\)/u);
+  });
+
+  // Production's exact shape: evidenceRoot is <repo>/dist/release, dist/ is gitignored and so
+  // plantable, and the junction's outside target really contains release/ — which pushes the
+  // nearest-existing ceiling BELOW the junction, so the walk breaks before ever lstat'ing dist.
+  // Raising the ceiling to the repository root (only when the evidence root sits inside it) puts
+  // the dist seam inside the walked span. Cross-repository roots keep the near bound, which the
+  // symlinked-ancestor accept cases above pin.
+  test("refuses a junction at the repository dist seam that resolves to a real outside tree", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const outside = temp();
+    mkdirSync(join(outside, "release"));
+    symlinkSync(outside, join(repositoryRoot, "dist"), "junction");
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.deepEqual(readdirSync(join(outside, "release")), []);
+  });
+
+  // Positive control for the raised ceiling: an honest repository-contained root, absent chain and
+  // no links anywhere, must still publish — including the post-write re-guard walking the
+  // directories the write itself just created under the FROZEN pre-write ceiling.
+  test("publishes into a repository-contained evidence root whose span is real", async () => {
+    const repositoryRoot = join(temp(), "repo");
+    mkdirSync(repositoryRoot);
+    const result = await runSupply({ evidenceRoot: join(repositoryRoot, "dist", "release"), repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+    assert.equal(result.reused, false);
+  });
+
+  test("repository ceiling does not inspect a symlink above the repository root", async () => {
+    const link = join(temp(), "ancestor");
+    symlinkSync(temp(), link, "junction");
+    const repositoryRoot = join(link, "repo");
+    mkdirSync(repositoryRoot);
+    const evidenceRoot = join(repositoryRoot, "dist", "release");
+    const result = await runSupply({ evidenceRoot, repositoryRoot });
+    assert.equal(result.reason, undefined);
+    assert.equal(result.ok, true);
+    assert.equal(existsSync(result.evidencePath), true);
+  });
+
+  test("re-guards with the pre-write ceiling after creating an absent root", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const base = temp();
+    const outside = temp();
+    const seam = join(base, "seam");
+    const evidenceRoot = join(seam, "release");
+    const bytes = new TextEncoder().encode("frozen-ceiling-drill");
+    const evidencePath = join(evidenceRoot, SOURCE_SHA, "digest", "evidence.json");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath, evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, seam, "junction");
+          planted.push(seam);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.deepEqual(planted, [seam]);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest")), true);
+    assert.equal(existsSync(join(outside, "release", SOURCE_SHA, "digest", "evidence.json")), false);
+  });
+
+  // The guard-to-write window is sub-millisecond, far below what any spawn-based race can hit, so
+  // the drill injects at the only in-window seam: the first mkdir runs strictly AFTER the pre-write
+  // guard passed. The write itself genuinely escapes through the junction — the trailing read-back
+  // proves the window is real — and the post-write re-guard refuses to ADOPT the escaped bytes.
+  test("re-guards after the write: a junction born in the guard-to-write window is refused", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("in-window-drill");
+    const planted = [];
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (planted.length === 0) {
+          symlinkSync(outside, shaDir, "junction");
+          planted.push(shaDir);
+        }
+        return mkdirSync(path, options);
+      },
+    });
+    assert.equal(planted.length, 1);
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    // The window was real — the write escaped through the junction — and the escaped bytes are
+    // OURS at this exit, so the refusal also unlinked them. The directory shell the rename created
+    // proves the escape happened before cleanup.
+    assert.equal(existsSync(join(outside, "digest")), true);
+    assert.equal(existsSync(join(outside, "digest", "evidence.json")), false);
+  });
+
+  // Same window, third ok-exit: rename onto the junction-backed existing digest directory throws
+  // EPERM, and the catch then reads the comparison bytes back THROUGH the junction — adopting
+  // foreign-redirected content as reused evidence with zero bytes written locally. The catch must
+  // re-guard before adopting.
+  test("the interrupted-write catch re-guards before adopting bytes read through a junction", async () => {
+    const { publishEvidence } = await loadSupplyChain();
+    const evidenceRoot = temp();
+    const outside = temp();
+    const shaDir = join(evidenceRoot, SOURCE_SHA);
+    const bytes = new TextEncoder().encode("catch-adoption-drill");
+    mkdirSync(join(outside, "digest"), { recursive: true });
+    writeFileSync(join(outside, "digest", "evidence.json"), bytes);
+    const result = publishEvidence({ bytes, evidencePath: join(shaDir, "digest", "evidence.json"), evidenceRoot }, {
+      mkdirSync: (path, options) => {
+        if (!existsSync(shaDir)) symlinkSync(outside, shaDir, "junction");
+        return mkdirSync(path, options);
+      },
+    });
+    expectReleaseRefusal(result, "OUTPUT_PATH_INVALID");
+    assert.equal(result.reused, undefined);
+    // Unlike the fresh-write exit, the catch must LEAVE the bytes: from inside the catch they are
+    // indistinguishable from a concurrent publisher's real evidence, and destroying that would
+    // turn a containment refusal into data loss.
+    assert.equal(readFileSync(join(outside, "digest", "evidence.json"), "utf8"), "catch-adoption-drill");
+  });
 });
 
 describe("release package command", () => {
@@ -905,11 +1146,17 @@ describe("release package command", () => {
   test("records truthful evidence through the actual package script", { timeout: 900_000 }, () => {
     const root = packageJson();
     assert.equal(typeof root.scripts["release:evidence"], "string");
-    const run = spawnSync(process.platform === "win32" ? "pnpm.exe" : "pnpm",
-      ["--silent", "release:evidence"], {
-        cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        timeout: 840_000, windowsHide: true,
-      });
+    // `pnpm/action-setup` puts a SHIM on PATH and never a `pnpm.exe`, so spawning that name
+    // is ENOENT on every runner while staying green on every dev box. Resolve the Corepack
+    // entry production itself spawns (supply-chain.mjs PNPM_ENTRY) so this case drives the
+    // same launcher on both host classes, and name a missing entry rather than letting the
+    // spawn answer with a bare ENOENT.
+    const pnpmEntry = join(dirname(process.execPath), "node_modules", "corepack", "dist", "pnpm.js");
+    assert.ok(existsSync(pnpmEntry), `pnpm entry missing: ${pnpmEntry}`);
+    const run = spawnSync(process.execPath, [pnpmEntry, "--silent", "release:evidence"], {
+      cwd: REPO_ROOT, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+      timeout: 840_000, windowsHide: true,
+    });
     assert.equal(run.error, undefined);
     const record = JSON.parse(run.stdout.trim().split(/\r?\n/u).at(-1));
     if (process.platform !== "win32") {

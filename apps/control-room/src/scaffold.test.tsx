@@ -31,20 +31,67 @@ afterEach(cleanup);
 const readOwnSource = (fileName: string): string =>
   readFileSync(fileURLToPath(new URL(fileName, import.meta.url)), "utf8");
 
+/**
+ * The entry point mounts on evaluation and reads `location.search` while it does,
+ * so each arm needs its own URL in place BEFORE the import and put back after.
+ */
+async function mountEntryPointAt(search: string): Promise<HTMLElement> {
+  const original = globalThis.location.href;
+  const container = document.createElement("div");
+  container.id = "root";
+  document.body.append(container);
+  globalThis.history.replaceState({}, "", search);
+  try {
+    vi.resetModules();
+    await act(async () => void (await import("./main.js")));
+  } finally {
+    globalThis.history.replaceState({}, "", original);
+  }
+  return container;
+}
+
 describe("control-room scaffold mounts", () => {
   it("mounts through the production entry point, not just its exported helper", async () => {
-    const container = document.createElement("div");
-    container.id = "root";
-    document.body.append(container);
+    // The v1 shell is behind ?v1=1 now (v2 Cordum is the default entry); ?fixtures=1
+    // selects v1's frozen fixture board under it.
+    const container = await mountEntryPointAt("/?v1=1&fixtures=1");
     try {
-      vi.resetModules();
-      await act(async () => void (await import("./main.js")));
+      expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.context.title").textContent)
         .toBe("Ship the J1 vertical slice");
       expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
       const main = await import("./main.js");
       expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("mounts the v2 Cordum shell by default at the bare URL", async () => {
+    // The swap: no flag now selects the v2 rebuild, which acquires its credential
+    // at runtime through the handshake rather than a baked secret.
+    const container = await mountEntryPointAt("/");
+    try {
+      expect(within(container).getByTestId("cr2.shell.root")).toBeTruthy();
+      // The legacy v1 shell is no longer the default entry.
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+    } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("refuses closed at the real entry point when the build carries no credentials", async () => {
+    // DoD 1's fail-closed clause for the v1 entry (now behind ?v1=1), asserted at
+    // the composition root rather than the component: this build has no
+    // VITE_MOE_LIVE_* values, so v1 must produce a NOTICE, not the frozen fixtures.
+    const container = await mountEntryPointAt("/?v1=1");
+    try {
+      const notice = within(container).getByTestId("cr.config.notice");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
+      expect(notice.textContent).toContain("VITE_MOE_LIVE_CSRF");
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
+      expect(container.textContent).not.toContain(CONTROL_ROOM_FIXTURE_KIND);
     } finally {
       container.remove();
     }

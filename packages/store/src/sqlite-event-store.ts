@@ -19,6 +19,7 @@ import type {
   StoreHealth,
 } from "./store-contracts.js";
 import { createDecisionLedgerCore } from "./decision-ledger.js";
+import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
 import type { DecisionLedgerCore } from "./decision-ledger.js";
 import type {
   RecoveryBindingReadResult,
@@ -37,6 +38,7 @@ import {
 } from "./sqlite-schema.js";
 
 export * from "./store-contracts.js";
+export * from "./decision-legs-contracts.js";
 export { RECEIPT_OUTBOX_QUERY } from "./event-ledger.js";
 export type { CommitApply, CommitApplyContext };
 
@@ -262,6 +264,12 @@ export class SqliteEventStore {
     input: CommitExpectedVersionDecisionInput,
   ): CommandDecisionResponse {
     return this.#core.commitExpectedVersionDecision(input);
+  }
+
+  public commitExpectedVersionDecisionLegs(
+    input: CommitExpectedVersionDecisionLegsInput,
+  ): CommandDecisionResponse {
+    return this.#core.commitExpectedVersionDecisionLegs(input);
   }
 
   public commitExpectedVersionDecisionWithApply(

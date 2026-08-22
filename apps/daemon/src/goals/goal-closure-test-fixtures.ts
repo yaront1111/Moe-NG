@@ -1,6 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { rmSync } from "node:fs";
 
 import * as daemon from "@moe/daemon";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
@@ -14,11 +12,13 @@ import {
   ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "../activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "../activation/activation-ingress.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
-  PROJECT_ID, SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope, send,
+  PROJECT_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope,
+  send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createFoundationVerificationService } from "../evidence/foundation-verification-service.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
@@ -31,6 +31,9 @@ import {
   commitFoundationPhase, readDurableFoundationObservation, readFoundationAttemptRecord,
   recordProvenFoundationAttempt,
 } from "../work/foundation-attempt-store.js";
+import {
+  candidateTreeEntries, materializeCandidateTree, type CandidateTree,
+} from "../evidence/foundation-verification-tree-fixtures.js";
 
 /**
  * Durable evidence for the goal-closure suites, seeded through PRODUCTION code only.
@@ -52,7 +55,6 @@ import {
 const encoder = new TextEncoder();
 const PRINCIPAL_ID = "principal-1";
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
-const HEAD = "0".repeat(40);
 const OPERATOR_CREDENTIAL = "j1-operator-credential";
 const OPERATOR_PRINCIPAL_ID = "j1-operator";
 
@@ -65,14 +67,8 @@ const scratchRoots: string[] = [];
 export function cleanupGoalClosureFixtures(): void {
   while (scratchRoots.length > 0) {
     const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    if (root !== undefined) rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
   }
-}
-
-function scratchDir(label: string): string {
-  const root = mkdtempSync(join(tmpdir(), `moe-closure-${label}-`));
-  scratchRoots.push(root);
-  return root;
 }
 
 let seedOrdinal = 0;
@@ -105,24 +101,6 @@ function leaseProof(label: string): Record<string, unknown> {
   };
 }
 
-const BUDGET_VIEW = Object.freeze({
-  accountId: "acct-1",
-  meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
-  state: "OPEN", version: 2,
-});
-const ADMISSION_AMOUNTS = Object.freeze([
-  { meter: "usd", purpose: "EXECUTION", quantity: 10 },
-  { meter: "usd", purpose: "VERIFICATION", quantity: 5 },
-  { meter: "usd", purpose: "INDEPENDENT_REVIEW", quantity: 5 },
-  { meter: "usd", purpose: "FINAL_ACCEPTANCE", quantity: 5 },
-  { meter: "usd", purpose: "CONTINGENCY", quantity: 5 },
-]);
-const GATE = Object.freeze({
-  allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null,
-});
-const INPUT_ENTRIES = Object.freeze([
-  { byteLength: 10, path: "pkg/src/base.ts", producer: { kind: "BASE" }, sha256: DIGEST_A },
-]);
 const VERIFIER_IDENTITY = Object.freeze({
   capabilitySchemaDigest: DIGEST_B, verifierId: "moe-verifier", verifierVersion: "1.0.0",
 });
@@ -151,12 +129,6 @@ function activationBytes(label: string): Uint8Array {
         lockIdentity: `lock-${label}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
         tombstone: null, wrapperIdentity: `wrapper-${label}`,
       },
-      budget: {
-        admission: {
-          admissionRef: `adm-${label}`, amounts: ADMISSION_AMOUNTS, expectedVersion: 2,
-        },
-        gate: GATE, view: BUDGET_VIEW,
-      },
       effect: {
         command: { kind: "claim" },
         intent: {
@@ -182,17 +154,22 @@ function activationBytes(label: string): Uint8Array {
   }));
 }
 
-function fakeGit(): GitObserver {
+function fakeGit(head: string): GitObserver {
   return {
-    headCommit: () => HEAD, lsFilesIgnored: () => [], lsFilesTracked: () => [],
-    statusPorcelainV2: () => encoder.encode(`# branch.oid ${HEAD}\0`), submodulePaths: () => [],
+    headCommit: () => head, lsFilesIgnored: () => [], lsFilesTracked: () => [],
+    statusPorcelainV2: () => encoder.encode(`# branch.oid ${head}\0`), submodulePaths: () => [],
   };
 }
 
-/** The workspace answer the runner's result-manifest builder accepts. */
-function captureAnswer(): Record<string, unknown> {
+/**
+ * The workspace answer the runner's result-manifest builder accepts. Its inherited entry
+ * names the REAL tree's bytes: the verification service binds a candidate root to the
+ * durable input manifest byte for byte before it activates anything, so the manifest
+ * and the tree it is later verified against must agree on HEAD and on every sealed byte.
+ */
+function captureAnswer(tree: CandidateTree): Record<string, unknown> {
   const observed = observeScope({
-    baseIdentity: HEAD, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(),
+    baseIdentity: tree.head, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(tree.head),
     observedAt: "2026-08-15T00:00:02Z", observerVersion: "moe-runner-scope-observer/1",
     pathObserver: { exists: () => false, realpath: (path: string) => path },
     worktreeRoot: "fixture-root",
@@ -203,8 +180,8 @@ function captureAnswer(): Record<string, unknown> {
     declaredArtifactRefs: [{ byteLength: 7, sha256: DIGEST_C }],
     resultTreeEntries: [
       {
-        byteLength: 10, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
-        sha256: DIGEST_A,
+        byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
+        sha256: tree.sha256,
       },
       {
         byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts",
@@ -215,8 +192,10 @@ function captureAnswer(): Record<string, unknown> {
   };
 }
 
-function sealedInput(): Record<string, unknown> {
-  const built = buildInputManifest({ baseIdentity: HEAD, entries: INPUT_ENTRIES as never });
+function sealedInput(tree: CandidateTree): Record<string, unknown> {
+  const built = buildInputManifest({
+    baseIdentity: tree.head, entries: candidateTreeEntries(tree) as never,
+  });
   if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
   return built.manifest as unknown as Record<string, unknown>;
 }
@@ -250,6 +229,8 @@ function nested(value: Record<string, unknown>, key: string): Record<string, unk
 
 export interface SeededAttempt {
   readonly attemptAggregateId: string;
+  /** The real tree the attempt's input manifest was sealed over; verify against THIS root. */
+  readonly candidateRoot: string;
   readonly recordDigest: string;
 }
 
@@ -262,6 +243,13 @@ export interface SeededAttempt {
 export function seedProvenAttempt(
   store: SqliteEventStore, nodeRef: string, label: string = nextLabel(nodeRef),
 ): SeededAttempt {
+  // The activation below is the exact call whose authority moves from the caller's budget
+  // section to the durable ACTIVE graph (task-e194c5f6 step 6). Enriching the world here is a
+  // strict no-op today and is what keeps this lineage off that wall; it is idempotent, so a
+  // caller that already drove the planning chain to an ACTIVE graph is left untouched.
+  seedActivationWorld(store);
+  const tree = materializeCandidateTree(label);
+  scratchRoots.push(tree.root);
   const activationAggregate = deriveActivationAggregateId(`agg-${label}`, `idem-${label}`);
   const activated = runEffectActivateCommand(store, activationBytes(label));
   if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
@@ -330,13 +318,15 @@ export function seedProvenAttempt(
   if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
     throw new Error("reservation fixture was not committed");
   }
-  recordProvenFoundationAttempt(store, bound, record, sealedInput(), {
-    answer: captureAnswer(), observation: observed[0], registration: observed[1],
+  recordProvenFoundationAttempt(store, bound, record, sealedInput(tree), {
+    answer: captureAnswer(tree), observation: observed[0], registration: observed[1],
   });
   // The digest always comes from the RE-DECODED durable record, never from the writer's answer.
   const stored = readFoundationAttemptRecord(store, activationAggregate);
   if (!stored.ok) throw new Error(`record fixture unreadable: ${stored.code}`);
-  return { attemptAggregateId: activationAggregate, recordDigest: stored.digest };
+  return {
+    attemptAggregateId: activationAggregate, candidateRoot: tree.root, recordDigest: stored.digest,
+  };
 }
 
 export interface SeededVerification {
@@ -379,7 +369,7 @@ export async function seedVerifiedNode(
   });
   if (!sealed.ok) throw new Error(`recipe seal fixture refused: ${sealed.code}`);
   const outcome = await service.verify({
-    attemptAggregateId: ground.attemptAggregateId, candidateRoot: scratchDir(label),
+    attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
     expectedRecordDigest: ground.recordDigest, recipeAggregateId: `recipe-${label}`,
     verificationId: `verify-${label}`,
   });
@@ -408,7 +398,11 @@ export async function seedVerifiedNode(
 export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): void {
   driveThrough(store, "approval.decide");
   const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
-    record: { ...approvalRecord(SUBMISSION_HASH), approvedNodeScope: [...nodeRefs] },
+    // The SEALED hash: `driveThrough` proposed through the shipped journey, whose propose
+    // terminal carries the authority member, so the run's submission hash is the sealed
+    // plan body's own `planHash` and an approval naming the legacy constant is refused
+    // BOOTSTRAP_REVISION_HASH_MISMATCH (task-074e6d2e).
+    record: { ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [...nodeRefs] },
   })));
   if (!outcome.ok) throw new Error(`approval setup failed: ${outcome.code}`);
 }

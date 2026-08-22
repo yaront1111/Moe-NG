@@ -1,8 +1,13 @@
+import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import { describe, expect, it, vi } from "vitest";
+import { SqliteEventStore } from "@moe/store";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { createAgentSessionFence } from "./agent-session-fence.js";
 import {
   createWrapperStopSignal,
   probeProcessAlive,
@@ -186,5 +191,90 @@ describe("wrapper binary staffing wiring", () => {
     probeProcessAlive(4242, (pid, signal) => { calls.push([pid, signal]); });
 
     expect(calls).toStrictEqual([[4242, 0]]);
+  });
+});
+
+/**
+ * The wrapper's ONE store handle serves BOTH the staffing fence and the node
+ * verifier (see the comment above the open site). Opened UNASSERTED, every
+ * durable write through it refuses PROJECT_SCOPE_REQUIRED, so a MOE_WRAPPER_ONCE
+ * pass ends `AGENT_STAFFING_RECORD_FAILED:PROJECT_SCOPE_REQUIRED` and no node can
+ * reach COMMITTED. These cases pin the ABSENCE of that code on the fixed handle
+ * — and, because an absence assertion is one layer away from vacuous, they pair
+ * it with the positive control (the code IS reachable on the old handle) and
+ * with the positive staffing row.
+ */
+describe("wrapper staffing handle is project-asserted", () => {
+  const PROJECT = "proj-wrapper-scope";
+  const ITEM = "work-item-scope-1";
+  const roots: string[] = [];
+  const stores: SqliteEventStore[] = [];
+
+  afterEach(() => {
+    while (stores.length > 0) stores.pop()?.close();
+    while (roots.length > 0) {
+      const root = roots.pop();
+      if (root !== undefined) rmSync(root, { force: true, maxRetries: 5, recursive: true });
+    }
+  });
+
+  /** Opened inside a case, never in a describe body: a held handle kills the worker. */
+  const scratchPath = (label: string): string => {
+    const root = mkdtempSync(join(tmpdir(), `moe-wrapper-scope-${label}-`));
+    roots.push(root);
+    return join(root, "project.db");
+  };
+
+  const track = (store: SqliteEventStore): SqliteEventStore => {
+    stores.push(store);
+    return store;
+  };
+
+  const recordThrough = (store: SqliteEventStore): readonly Error[] =>
+    createAgentSessionFence({
+      isProcessAlive: () => false, projectId: PROJECT, store,
+    }).recordLiveChild({
+      childPid: 4242, claimAggregateVersion: 0, sessionId: "sess-scope", workItemId: ITEM,
+    });
+
+  const staffingRows = (store: SqliteEventStore): readonly string[] => store
+    .readEvents(`wrapper-staffing/${createHash("sha256").update(ITEM, "utf8").digest("hex")}`)
+    .map((event) => event.eventType);
+
+  it("commits the staffing record with no PROJECT_SCOPE_REQUIRED on the fixed handle", () => {
+    const path = scratchPath("fixed");
+    const store = track(SqliteEventStore.openForProject(path, PROJECT));
+
+    const errors = recordThrough(store);
+
+    // Absence, then the positive row: without the second assertion a fence that
+    // silently wrote nothing would satisfy the first.
+    expect(errors.map((error) => error.message)).toStrictEqual([]);
+    expect(errors.some((error) => error.message.includes("PROJECT_SCOPE_REQUIRED"))).toBe(false);
+    expect(staffingRows(store)).toStrictEqual(["AgentStaffingAdmitted"]);
+  });
+
+  it("POSITIVE CONTROL: the unasserted handle the wrapper used to open still refuses", () => {
+    // `SqliteEventStore.open(config.storePath)` was the pre-fix call. If this
+    // arm ever goes green, the absence assertion above stopped meaning anything.
+    const path = scratchPath("unasserted");
+    const store = track(SqliteEventStore.open(path));
+
+    const errors = recordThrough(store);
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.message).toContain("AGENT_STAFFING_RECORD_FAILED");
+    expect(errors[0]?.message).toContain("PROJECT_SCOPE_REQUIRED");
+    expect(staffingRows(store)).toStrictEqual([]);
+  });
+
+  it("opens the binary's own handle project-asserted, not bare", () => {
+    // Behaviour above proves the FIX works; this pins that the BINARY uses it.
+    const source = readFileSync(new URL("./agent-wrapper-main.ts", import.meta.url), "utf8");
+
+    expect(source).toContain(
+      "SqliteEventStore.openForProject(config.storePath, config.projectId)",
+    );
+    expect(source).not.toContain("SqliteEventStore.open(config.storePath)");
   });
 });

@@ -34,6 +34,11 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { MAX_BOUND_MS, assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import {
+  FOUNDATION_DISPATCH_CASES,
+  FOUNDATION_DISPATCH_RACES,
+  closeFoundationDispatchStores,
+} from "./foundation-dispatch-hostile-cases.js";
+import {
   ACCEPTED_CONTROL_EXPECTATION,
   ACTIVE_GRAPH_PROJECTION_LAYER,
   BODY_CONTROL_EXPECTATION,
@@ -95,8 +100,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -139,6 +144,9 @@ afterAll(() => {
   // The planning-graph arms open their own file-backed stores, including a SECOND
   // connection per race; the same handles-before-roots ordering applies.
   closePlanningGraphStores();
+  // The foundation-dispatch arms open their own file-backed stores, including a SECOND
+  // connection for the race; the same handles-before-roots ordering applies.
+  closeFoundationDispatchStores();
   cleanupHostileRoots();
 });
 
@@ -148,9 +156,10 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     expect(ROSTER_AXIS.length).toBeGreaterThan(0);
     // 25 -> 26 on 2026-08-17: GOAL_PREREQUISITE_LAYER (task-a46d4f99). 26 -> 28 on
     // 2026-08-18: ACTIVE_GRAPH_PROJECTION_LAYER and GRAPH_BODY_RECORD_LAYER
-    // (task-c5be7926). Measured off the roster's committed bytes, not off this file's
-    // own case tables.
-    expect(ROSTER_AXIS).toHaveLength(28);
+    // (task-c5be7926). 28 -> 29 on 2026-08-20: FOUNDATION_DISPATCH_DERIVATION_LAYER
+    // (producer task-a9fd91c3, row and arms task-120403f7). Measured off the roster's
+    // committed bytes, not off this file's own case tables.
+    expect(ROSTER_AXIS).toHaveLength(29);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {

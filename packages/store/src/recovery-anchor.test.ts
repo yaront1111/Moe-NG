@@ -662,6 +662,10 @@ describe("recovery anchor root publication", () => {
   const PUBLISHED = [
     "RECOVERY_ANCHOR_ALLOWED_OPERATIONS",
     "RECOVERY_ANCHOR_CODEC_VERSION",
+    // Published by task-0c89476b (disaster restore proof, 4e0201a): the fault suite
+    // tests/fault/disaster-restore/anchor-boundary-crash.fault.ts sweeps every fault
+    // point off the root barrel; the producer moved the export but not this roster row.
+    "RECOVERY_ANCHOR_FAULT_POINTS",
     "RECOVERY_ANCHOR_LAYER",
     "RECOVERY_ANCHOR_REASON_CODES",
     "RECOVERY_ANCHOR_STATES",
@@ -677,7 +681,6 @@ describe("recovery anchor root publication", () => {
   // A consumer passes an anchorRoot and lets this module own the layout.
   const WITHHELD = [
     "RECOVERY_ANCHOR_DATABASE_NAME",
-    "RECOVERY_ANCHOR_FAULT_POINTS",
     "RECOVERY_ANCHOR_FILE_NAME",
     "RECOVERY_ANCHOR_SLOTS_DIR_NAME",
     "RECOVERY_ANCHOR_SLOT_MANIFEST_NAME",

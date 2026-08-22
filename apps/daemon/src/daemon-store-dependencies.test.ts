@@ -3,10 +3,11 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { documentWorkAggregateId } from "./documents/document-work-service.js";
@@ -16,6 +17,9 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "./daemon-store-dependencies.js";
+import {
+  FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
+} from "./work/foundation-capture-lifecycle.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -84,6 +88,57 @@ describe("readStoreDependencyEnv", () => {
     expect(config.principalId).toBe("operator-local");
     expect(config.nodeSpecsDir).toBeUndefined();
   });
+
+  it("reads the OPTIONAL Foundation workspace catalog path under the same rule", () => {
+    const base = {
+      MOE_DAEMON_CREDENTIAL: "secret", MOE_PROJECT_ID: "proj",
+      MOE_STORE_PATH: "D:/tmp/store.db",
+    };
+    const configured = readStoreDependencyEnv({
+      ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "D:/tmp/catalog.json",
+    });
+    const empty = readStoreDependencyEnv({ ...base, [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: "" });
+
+    expect(configured.workspaceCatalogPath).toBe("D:/tmp/catalog.json");
+    expect(empty.workspaceCatalogPath).toBeUndefined();
+    expect(readStoreDependencyEnv(base).workspaceCatalogPath).toBeUndefined();
+    // The key is read from the SAME published constant the lifecycle reader uses;
+    // two hand-written copies would drift in exactly one direction.
+    expect(FOUNDATION_WORKSPACE_CATALOG_ENV_KEY).toBe("MOE_FOUNDATION_WORKSPACE_CATALOG");
+  });
+});
+
+describe("the Foundation workspace catalog never gates daemon boot", () => {
+  /** A provider is opened per case here rather than reusing the module-level one:
+   *  the subject IS the boot, so it has to happen inside the case. */
+  function bootWith(label: string, catalogPath: string | undefined) {
+    const directory = mkdtempSync(join(tmpdir(), `moe-store-deps-catalog-${label}-`));
+    const path = join(directory, "store.db");
+    const built = createStoreDependencies({
+      clock: CLOCK, credential: CREDENTIAL, principalId: "operator-local",
+      projectId: `${PROJECT}-${label}`, storePath: path,
+      ...(catalogPath === undefined ? {} : { workspaceCatalogPath: catalogPath }),
+    });
+    return { built, directory };
+  }
+
+  it.each([
+    ["absent", undefined],
+    ["missing-file", join(tmpdir(), "moe-no-such-catalog-file.json")],
+  ] as readonly (readonly [string, string | undefined])[])(
+    "boots and serves every other command kind with a %s catalog", (label, catalogPath) => {
+      const { built, directory } = bootWith(label, catalogPath);
+      try {
+        const deps = built.provide();
+        // The registry is whole: an unconfigured workspace authority refuses
+        // Foundation PREPARATION at dispatch time, it does not remove a kind.
+        expect(deps.registry.get("foundation.dispatch")?.asyncHandler).toBeDefined();
+        expect([...deps.registry.keys()].length).toBeGreaterThan(0);
+      } finally {
+        built.close();
+        rmSync(directory, { force: true, recursive: true });
+      }
+    });
 });
 
 describe("createStoreDependencies", () => {
@@ -262,6 +317,162 @@ describe("createStoreDependencies", () => {
   });
 });
 
+describe("subscription port quarantine on OUTCOME_UNKNOWN", () => {
+  const READER = "control-room-1";
+  const quarantineDirectory = mkdtempSync(join(tmpdir(), "moe-store-deps-quarantine-"));
+  const quarantineProvider = createStoreDependencies({
+    clock: CLOCK,
+    credential: CREDENTIAL,
+    principalId: "operator-local",
+    projectId: "proj-quarantine",
+    storePath: join(quarantineDirectory, "store.db"),
+  });
+  const quarantineDeps = quarantineProvider.provide();
+  const portFactory = quarantineProvider.subscriptions;
+  if (portFactory === undefined) throw new Error("unreachable: subscriptions is always wired");
+  const port = portFactory();
+  /** The handle the ambiguous COMMIT ran on. Production deliberately leaves it to
+   *  GC; the TEST must close it or Windows keeps the store file locked at rmSync. */
+  let quarantinedHandle: DatabaseSync | null = null;
+
+  afterAll(() => {
+    quarantineProvider.close();
+    // Tolerated double close: without the quarantine the provider cache still IS
+    // this handle, and provider.close() above has already closed it.
+    try {
+      quarantinedHandle?.close();
+    } catch { /* already closed with the provider */ }
+    rmSync(quarantineDirectory, { force: true, recursive: true });
+  });
+
+  function dispatchQuarantine(envelope: Record<string, unknown>) {
+    return handleCommandRequest(quarantineDeps, {
+      body: bytes(envelope),
+      credential: CREDENTIAL,
+      protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+  }
+
+  /** The subscription-writes suite's fault-injection idiom: one call runs under a
+   *  patched prototype exec, and the original is restored whatever was thrown. */
+  function withPatchedExec<Result>(
+    patch: (original: typeof DatabaseSync.prototype.exec) => typeof DatabaseSync.prototype.exec,
+    run: () => Result,
+  ): Result {
+    const original = DatabaseSync.prototype.exec;
+    DatabaseSync.prototype.exec = patch(original);
+    try {
+      return run();
+    } finally {
+      DatabaseSync.prototype.exec = original;
+    }
+  }
+
+  function issuedCursor() {
+    const page = port.readPage({ projection: "moe.board", subscriberId: READER });
+    if (page.outcome !== "PAGE") throw new Error(`expected a PAGE, got ${page.outcome}`);
+    if (page.nextCursor === null) throw new Error("expected a durable page offer");
+    return page.nextCursor;
+  }
+
+  it("re-acquires a fresh handle after a lost COMMIT acknowledgement", () => {
+    const registered = dispatchQuarantine({
+      ...envelopeObject({
+        commandId: "cmd-quarantine-register",
+        commandKind: "project.register",
+        payload: { owner: "operator-local" },
+      }),
+      expectedVersion: 0,
+    });
+    expect(registered).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+    const cursor = issuedCursor();
+
+    // The store suite's lost-acknowledgement fault: COMMIT executes — the write
+    // durably LANDS — and only its acknowledgement is lost on the way back.
+    const caught = withPatchedExec(
+      (original) => function execWithLostAck(this: DatabaseSync, sql: string): void {
+        original.call(this, sql);
+        if (sql.trim() === "COMMIT") {
+          quarantinedHandle = this;
+          throw new Error("simulated lost COMMIT acknowledgement");
+        }
+      },
+      () => {
+        try {
+          port.acknowledge({ cursor, subscriberId: READER });
+          return null;
+        } catch (error) {
+          return error;
+        }
+      },
+    );
+    expect(caught).toBeInstanceOf(DurableStoreError);
+    expect((caught as DurableStoreError).code).toBe("OUTCOME_UNKNOWN");
+    expect(quarantinedHandle).not.toBeNull();
+
+    // The quarantine witness, and the arm that DISCRIMINATES against the old
+    // behavior: acquire() marks itself with the busy_timeout pragma, so the SAME
+    // port's next operation must run exactly one acquisition on an object that is
+    // not the quarantined handle. The stale-handle behavior it replaces reused
+    // the poisoned handle silently (zero acquisitions) and, because this fault
+    // leaves the connection healthy, would even have answered correctly here.
+    const acquired: unknown[] = [];
+    const healed = withPatchedExec(
+      (original) => function execRecordingAcquire(this: DatabaseSync, sql: string): void {
+        if (sql.startsWith("PRAGMA busy_timeout")) acquired.push(this);
+        original.call(this, sql);
+      },
+      () => port.readPage({ projection: "moe.board", subscriberId: READER }),
+    );
+    expect(acquired).toHaveLength(1);
+    expect(acquired[0]).not.toBe(quarantinedHandle);
+
+    // Durable truth, re-read through the fresh handle: the ambiguous COMMIT had
+    // landed, so the cursor is already consumed — the page is empty at head and a
+    // re-acknowledge of the consumed offer refuses instead of double-advancing.
+    expect(healed).toMatchObject({ events: [], nextCursor: null, outcome: "PAGE" });
+    expect(port.acknowledge({ cursor, subscriberId: READER })).toMatchObject({
+      code: "SUBSCRIPTION_CURSOR_NOT_ISSUED", layer: "STATE", outcome: "REFUSED",
+    });
+  });
+
+  it("keeps the cached handle across a clean acknowledge cycle", () => {
+    const opened = dispatchQuarantine({
+      ...envelopeObject({
+        commandId: "cmd-quarantine-session",
+        commandKind: "session.open",
+        payload: {
+          capabilities: ["goal.write"],
+          credentialSha256: createHash("sha256")
+            .update("quarantine-session-secret", "utf8").digest("hex"),
+          expiresAt: "2027-01-01T00:00:00.000Z",
+          sessionId: "sess-quarantine-1",
+        },
+      }),
+      expectedVersion: 0,
+    });
+    expect(opened).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+    const cursor = issuedCursor();
+
+    // Regression arm: two consecutive operations on a healthy port run ZERO
+    // acquisitions — the cached pair is reused, no handle is reopened.
+    const acquired: unknown[] = [];
+    const [acknowledged, page] = withPatchedExec(
+      (original) => function execRecordingAcquire(this: DatabaseSync, sql: string): void {
+        if (sql.startsWith("PRAGMA busy_timeout")) acquired.push(this);
+        original.call(this, sql);
+      },
+      () => [
+        port.acknowledge({ cursor, subscriberId: READER }),
+        port.readPage({ projection: "moe.board", subscriberId: READER }),
+      ] as const,
+    );
+    expect(acknowledged).toEqual({ cursor, outcome: "ACKNOWLEDGED" });
+    expect(page).toMatchObject({ events: [], nextCursor: null, outcome: "PAGE" });
+    expect(acquired).toHaveLength(0);
+  });
+});
+
 /**
  * vitest rewrites `./daemon-command-registry.js` back to the `.ts` module and `tsc`
  * never reads a bridge at all, so the extracted registry's runtime edge is invisible
@@ -365,8 +576,13 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         commandId: "cmd-child-register", disposition: "DECIDED",
         outcome: "ACCEPTED", resultCode: "EFFECTS_COMMITTED",
       },
+      // THE EXACT KEY SET, and `graph` is why it is exact. A port constructed by
+      // `createStoreDependencies` but absent from the shipped default object is
+      // unreachable from the real daemon while every direct-injection test stays
+      // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "documentDossiers", "provide", "reconciliation", "restore", "subscriptions",
+        "affordances", "documentDossiers", "graph", "provide", "reconciliation", "restore",
+        "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",
@@ -375,11 +591,13 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
         "approval.decide", "effect.activate", "escalation.decide", "foundation.dispatch",
+        "foundation.verification",
         "goal.close",
         "goal.create", "integration.accept_output", "journal.append",
         "plan.propose", "policy.install",
         "policy.validate", "project.activate", "project.bind_repository", "project.register",
-        "provider.probe", "qualification.replan", "recovery.complete", "review.submit",
+        "provider.probe", "qualification.replan", "recovery.complete", "resource.reconcile",
+        "review.submit",
         "session.close", "session.open", "session.renew", "work.claim", "work.release",
         "work.renew", "work.resume",
       ],

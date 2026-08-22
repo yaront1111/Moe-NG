@@ -33,11 +33,14 @@ import type {
 const PUBLISHED_STDIO_VALUES: readonly string[] = [
   "ADAPTER_SUPPLIED_COMMAND_FIELDS",
   "ADAPTER_SUPPLIED_QUERY_FIELDS",
+  "MCP_TOOL_ALLOWLIST_EMPTY",
+  "MCP_TOOL_ALLOWLIST_UNKNOWN_KIND",
   "MOE_MCP_PACKAGE_VERSION",
   "MOE_SESSION_CREDENTIAL_ENV",
   "STDIO_TOOL_ENTRIES",
   "STDIO_TOOL_INDEX",
   "STDIO_TOOL_LABEL_PATTERN",
+  "allowlistedToolEntries",
   "connectStdioTransport",
   "createStdioMcpServer",
   "decodeAndDispatch",
@@ -80,7 +83,7 @@ const publishedNames = (): readonly string[] =>
 it("publishes exactly the hand-written stdio and HTTP runtime names", () => {
   // Pinned counts first: an accidentally emptied expectation would otherwise make the
   // set comparison below trivially satisfiable from the other side.
-  expect(PUBLISHED_STDIO_VALUES).toHaveLength(13);
+  expect(PUBLISHED_STDIO_VALUES).toHaveLength(16);
   expect(PUBLISHED_HTTP_VALUES).toHaveLength(4);
 
   // Set equality, so this fails on a DROPPED name and on an ADDED one alike. Both surfaces

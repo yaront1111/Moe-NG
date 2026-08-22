@@ -1,8 +1,11 @@
 /* Shell geometry only. Width never changes truth, commands, or identity. */
 
 [data-testid="cr.shell.root"] {
-  block-size: 100vh;
+  /* Sized by the #root flex column, not the viewport: a banner mounted above
+   * the shell shrinks the shell instead of shoving the status strip off an
+   * unscrollable page. */
   display: grid;
+  flex: 1 1 auto;
   gap: 0;
   grid-template-areas:
     "skip skip skip"
@@ -11,7 +14,8 @@
     "nav status inspector";
   grid-template-columns: 4rem minmax(0, 1fr) minmax(22rem, 26rem);
   grid-template-rows: 0 4.75rem minmax(0, 1fr) 2rem;
-  inline-size: 100vw;
+  inline-size: 100%;
+  min-block-size: 0;
   overflow: clip;
 }
 

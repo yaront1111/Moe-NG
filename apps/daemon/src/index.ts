@@ -182,6 +182,16 @@ export {
   type ProjectConfigurationStore, type ReadCurrentProjectConfigurationResult,
   type SelectedProjectConfiguration, type SelectProjectConfigurationResult,
 } from "./configuration/project-configuration-selection.js";
+// The current-profile READER only. `admitProviderProfile` and the codec byte surface stay
+// unpublished: `provider.probe` is the single admission seam, and a second published entry
+// point would let a caller mint durable authority around it. Two codec TYPES travel because
+// a ProviderCapabilities consumer cannot name its closure without them.
+export {
+  PROVIDER_PROFILE_READER_CODES, resolveCurrentProviderProfile,
+  type ProviderCapabilities, type ProviderProfileReaderLayer,
+} from "./provider-profile/provider-profile-resolver.js";
+export { type ProviderProfileIssue, type ProviderProfileRevision }
+  from "./provider-profile/provider-profile-codec.js";
 // Relocated out of this barrel, re-exported under the original names so no
 // consumer's import path changed. See graph-preview-request.ts for why.
 export {

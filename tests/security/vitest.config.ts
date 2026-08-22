@@ -6,9 +6,10 @@
  * and the `*.fault.ts`/`*.test.ts`/`*.spec.ts` suffixes are excluded explicitly
  * so a file dropped into this tree cannot be executed by both lanes.
  *
- * Collecting this lane's cases confers NO security PASS of any kind. The lane's
- * only committed case today is the runner smoke, which certifies lane discovery,
- * typechecking and execution and nothing about the product.
+ * Collecting this lane's cases confers NO security PASS of any kind. The lane
+ * holds ten committed suites today (boundary roster, completeness ratchet,
+ * runtime-provider slices, transport/store/scheduler boundaries, and the lane
+ * smoke that certifies discovery, typechecking and execution).
  *
  * The settings mirror the fault lane on purpose: one file at a time, one case at
  * a time, no retries, no focused tests, no swallowed unhandled rejections, and a

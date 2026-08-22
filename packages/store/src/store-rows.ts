@@ -225,6 +225,7 @@ export function toCommandDecisionRecord(
       currentVersion: stored.currentVersion,
       effectDisposition: "EFFECTS_COMMITTED",
       previousVersion: stored.previousVersion,
+      replayRequestSha256: stored.replayRequestSha256,
       resultCode: "EFFECTS_COMMITTED",
     });
   }
@@ -236,6 +237,7 @@ export function toCommandDecisionRecord(
     effectDisposition: "NO_BUSINESS_EFFECT",
     outboxMessageIds: Object.freeze([]) as readonly [],
     previousVersion: null,
+    replayRequestSha256: null,
     resultCode: "EXPECTED_VERSION_CONFLICT",
   });
 }

@@ -123,6 +123,236 @@ describe("createVerifierProcessRunner", () => {
     });
   });
 
+  it("settles on the observed exit when a straggler keeps stdio open past the drain grace", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const kills: { pid: number; signal: NodeJS.Signals }[] = [];
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 30,
+      killProcessGroup: (pid, signal) => { kills.push({ pid, signal }); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+    try {
+      const done = runner(brief);
+      let settled = false;
+      void done.finally(() => { settled = true; }).catch(() => undefined);
+      fake.stdout.write("ok");
+      // "node server.js & npm run e2e": the shell exits 0 while the server
+      // it backgrounded still holds the inherited pipes, so close never comes.
+      fake.emitter.emit("exit", 0, null);
+      await vi.advanceTimersByTimeAsync(29);
+      expect(settled).toBe(false);
+      expect(kills).toEqual([]);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(kills).toEqual([{ pid: -4321, signal: "SIGKILL" }]);
+      expect(fake.stdout.destroyed).toBe(true);
+      expect(fake.stderr.destroyed).toBe(true);
+      await expect(done).resolves.toEqual({
+        byteCount: 2,
+        exitCode: 0,
+        output: "ok",
+        sha256: sha256("ok"),
+      });
+
+      // The real close arrives once the pipes are released; it cannot
+      // settle the capture a second time.
+      expect(() => fake.emitter.emit("close", 0, null)).not.toThrow();
+      expect(runner.activeCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("swallows an ESRCH straggler signal after exit: the verdict already landed", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 30,
+      killProcessGroup: () => {
+        throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+    try {
+      const done = runner(brief);
+      fake.emitter.emit("exit", 3, null);
+      await vi.advanceTimersByTimeAsync(30);
+      await expect(done).resolves.toMatchObject({ exitCode: 3 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("never runs taskkill against the stale pid of an exited Windows recipe", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(8765);
+    const calls: string[] = [];
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 30,
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      platform: "win32",
+      spawn: (file) => {
+        calls.push(file);
+        return fake.child;
+      },
+      timeoutMs: 10_000,
+    });
+    try {
+      const done = runner(brief);
+      fake.emitter.emit("exit", 0, null);
+      await vi.advanceTimersByTimeAsync(30);
+      await expect(done).resolves.toMatchObject({ exitCode: 0 });
+      expect(calls).toEqual([brief.test]);
+      expect(fake.kill).not.toHaveBeenCalled();
+      expect(fake.stdout.destroyed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("lets a close inside the drain grace settle the capture without a straggler signal", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const kills: number[] = [];
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 30,
+      killProcessGroup: (pid) => { kills.push(pid); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+    try {
+      const done = runner(brief);
+      fake.emitter.emit("exit", 2, null);
+      await vi.advanceTimersByTimeAsync(10);
+      fake.stdout.write("late");
+      fake.emitter.emit("close", 2, null);
+      await expect(done).resolves.toEqual({
+        byteCount: 4,
+        exitCode: 2,
+        output: "late",
+        sha256: sha256("late"),
+      });
+      await vi.advanceTimersByTimeAsync(100);
+      expect(kills).toEqual([]);
+      expect(fake.stdout.destroyed).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("records the observed exit when the deadline reaches a dead leader mid-drain", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const kills: number[] = [];
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 50,
+      killGraceMs: 30,
+      killProcessGroup: (pid) => { kills.push(pid); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(10);
+      fake.emitter.emit("exit", 0, null);
+      // The deadline lands before the drain grace: the recipe exited inside
+      // the deadline, so the capture keeps that exit rather than a kill's null.
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(done).resolves.toMatchObject({ exitCode: 0 });
+      expect(kills).toEqual([-4321]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels an exited-but-unclosed verifier immediately with a group signal", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const kills: number[] = [];
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 50,
+      killGraceMs: 30,
+      killProcessGroup: (pid) => { kills.push(pid); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+    try {
+      const running = runner(brief);
+      const cancelled = running.catch((error: unknown) => error);
+      fake.emitter.emit("exit", 0, null);
+      const closing = runner.close();
+      expect(kills).toEqual([-4321]);
+      expect(await cancelled).toMatchObject({ code: "VERIFIER_PROCESS_CANCELLED" });
+      await expect(closing).resolves.toBeUndefined();
+      expect(fake.stdout.destroyed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("surfaces a POSIX group-kill failure on cancel even after the leader exited", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 50,
+      killProcessGroup: () => { throw new Error("EPERM"); },
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 10_000,
+    });
+    try {
+      const running = runner(brief);
+      const rejected = running.catch((error: unknown) => error);
+      fake.emitter.emit("exit", 0, null);
+      const closing = runner.close().catch((error: unknown) => error);
+      expect(await rejected).toMatchObject({
+        code: "VERIFIER_PROCESS_CONTAINMENT_FAILED",
+        reason: "TREE_KILL_FAILED",
+      });
+      expect(await closing).toMatchObject({ reason: "TREE_KILL_FAILED" });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps CLOSE_NOT_OBSERVED for a live leader: an exit after SIGKILL settles the kill outcome", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const runner = createVerifierProcessRunner({
+      drainGraceMs: 100,
+      killGraceMs: 30,
+      killProcessGroup: () => undefined,
+      platform: "linux",
+      spawn: () => fake.child,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+      // The leader died under the group signal; a grandchild that left the
+      // group still pins the pipes, so close never arrives.
+      fake.emitter.emit("exit", null, "SIGKILL");
+      await vi.advanceTimersByTimeAsync(30);
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+      expect(fake.stdout.destroyed).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("waits for close after a POSIX timeout before returning a failed capture", async () => {
     vi.useFakeTimers();
     const fake = fakeChild(4321);
@@ -220,6 +450,92 @@ describe("createVerifierProcessRunner", () => {
     }
   });
 
+  it("treats taskkill's no-running-instance exit as confirmed containment, not an escape", async () => {
+    vi.useFakeTimers();
+    const testProcess = fakeChild(8765);
+    const taskkill = fakeChild(9876);
+    const followUp = fakeChild(7654);
+    let recipes = 0;
+    const spawn: NonNullable<VerifierProcessRunnerOptions["spawn"]> = (file) => {
+      if (file.endsWith("taskkill.exe")) return taskkill.child;
+      recipes += 1;
+      return recipes === 1 ? testProcess.child : followUp.child;
+    };
+    const runner = createVerifierProcessRunner({
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      killGraceMs: 30,
+      platform: "win32",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+
+      // The recipe exits in the same instant the killer lands, so taskkill
+      // finds no running instance and reports 128 instead of 0. An already-
+      // dead tree is the timed-out capture, not a containment failure.
+      taskkill.emitter.emit("close", 128, null);
+      testProcess.emitter.emit("close", null, "SIGKILL");
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats any nonzero taskkill exit as confirmed containment once the recipe provably closed", async () => {
+    vi.useFakeTimers();
+    const testProcess = fakeChild(8765);
+    const taskkill = fakeChild(9876);
+    const followUp = fakeChild(7654);
+    let recipes = 0;
+    const spawn: NonNullable<VerifierProcessRunnerOptions["spawn"]> = (file) => {
+      if (file.endsWith("taskkill.exe")) return taskkill.child;
+      recipes += 1;
+      return recipes === 1 ? testProcess.child : followUp.child;
+    };
+    const runner = createVerifierProcessRunner({
+      environment: { SYSTEMROOT: "C:\\Windows" },
+      killGraceMs: 30,
+      platform: "win32",
+      spawn,
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+
+      // Not the 128 arm: taskkill reports a garden-variety failure, but the
+      // recipe has already provably closed — the same proof of an already-
+      // dead tree. Only a LIVE recipe turns a failed killer fatal.
+      testProcess.emitter.emit("close", null, "SIGKILL");
+      taskkill.emitter.emit("close", 1, null);
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("surfaces a POSIX group-kill failure despite direct-child close", async () => {
     vi.useFakeTimers();
     const fake = fakeChild(4321);
@@ -239,6 +555,45 @@ describe("createVerifierProcessRunner", () => {
         code: "VERIFIER_PROCESS_CONTAINMENT_FAILED",
         reason: "TREE_KILL_FAILED",
       });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("treats an ESRCH group kill as an already-dead tree, not fatal containment", async () => {
+    vi.useFakeTimers();
+    const fake = fakeChild(4321);
+    const followUp = fakeChild(5678);
+    let spawned = 0;
+    const runner = createVerifierProcessRunner({
+      killGraceMs: 30,
+      // The group leader exited before the signal landed: the kernel reports
+      // ESRCH, which proves the tree is gone rather than out of reach.
+      killProcessGroup: () => {
+        throw Object.assign(new Error("kill ESRCH"), { code: "ESRCH" });
+      },
+      platform: "linux",
+      spawn: () => {
+        spawned += 1;
+        return spawned === 1 ? fake.child : followUp.child;
+      },
+      timeoutMs: 20,
+    });
+    try {
+      const done = runner(brief);
+      await vi.advanceTimersByTimeAsync(20);
+      fake.emitter.emit("close", null, "SIGKILL");
+      await expect(done).resolves.toEqual({
+        byteCount: 0,
+        exitCode: null,
+        output: "",
+        sha256: sha256(""),
+      });
+
+      // The runner stayed open: the next run is admitted, not refused closed.
+      const later = runner(brief);
+      followUp.emitter.emit("close", 0);
+      await expect(later).resolves.toMatchObject({ exitCode: 0 });
     } finally {
       vi.useRealTimers();
     }

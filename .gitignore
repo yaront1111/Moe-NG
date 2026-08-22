@@ -10,6 +10,13 @@ dist/
 .DS_Store
 Thumbs.db
 
+# Playwright output for the browser e2e lane
+/tests/e2e/control-room/test-results/
+
+# Fossil smoke-dir guard: the producer test now writes to os tmpdir
+# (index-surface.test.ts), but a stale checkout could still litter here.
+.project-configuration-smoke-*/
+
 # --- Transitional Moe runtime scaffolding -----------------------------------
 # Policy: docs/REPOSITORY_HYGIENE.md
 #
@@ -55,3 +62,6 @@ Thumbs.db
 /.moe/debug/
 /.moe/tmp/
 /.moe/scratch/
+
+# moe-up dev launcher scratch state (stores, credentials) - never commit
+.moe-dev/

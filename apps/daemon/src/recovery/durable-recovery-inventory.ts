@@ -8,6 +8,7 @@ import {
   DURABLE_INVENTORY_ROW_EVENT_TYPE,
   DURABLE_INVENTORY_SEAL_EVENT_TYPE,
   DURABLE_RECOVERY_INVENTORY_SCHEMA_VERSION,
+  MAX_DURABLE_INVENTORY_ROWS,
   durableInventoryDigest,
 } from "./durable-recovery-inventory-contract.js";
 import type {
@@ -143,6 +144,13 @@ function commit(
  *
  * `expectedVersion` is the version observed in the same pass, so an append that
  * races a seal loses the version conflict instead of landing behind it.
+ *
+ * The writer holds the reader's row bound from the other side. The reader
+ * refuses any window holding MORE than `MAX_DURABLE_INVENTORY_ROWS`, so a row
+ * past the bound that reached the store would leave the window unsealable and
+ * unenumerable for good; it is refused here instead, before the commit. A
+ * window holding exactly the bound is full, valid and sealable, and a replay of
+ * a row it already holds still answers above the bound.
  */
 export function appendDurableInventoryObservation(
   store: SqliteEventStore,
@@ -174,6 +182,7 @@ export function appendDurableInventoryObservation(
       outcome: "APPENDED" as const, row,
     });
   }
+  if (resolved.state.rows.length >= MAX_DURABLE_INVENTORY_ROWS) return R.WINDOW_FULL;
   const committed = commit(store, scoped, resolved.aggregateId, resolved.state.version, {
     bytes: encodeDurableRow(row),
     commandId: `durable-inventory-row:${row.rowDigest}`,

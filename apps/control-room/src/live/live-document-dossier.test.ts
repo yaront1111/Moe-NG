@@ -68,6 +68,24 @@ describe("live document dossier mapping", () => {
     });
   });
 
+  it("carries the authenticator's PORT_REFUSED frame out at its stage layer", () => {
+    // A credential valid at handshake time but later revoked/expired: the
+    // authenticator answers PORT_REFUSED, distinct in shape from the adapter REFUSED.
+    expect(mapDocumentDossierAnswer(delivered({
+      httpStatus: 401,
+      ok: false,
+      outcome: "PORT_REFUSED",
+      refusal: { code: "SESSION_CREDENTIAL_REVOKED" },
+      stage: "AUTHENTICATE",
+    }, 401))).toStrictEqual({
+      advisoryOnly: true,
+      authority: "NONE",
+      code: "SESSION_CREDENTIAL_REVOKED",
+      layer: "AUTHENTICATE",
+      status: "ERROR",
+    });
+  });
+
   it.each([
     ["wrong authority", { ...DOSSIER, authority: "TASK_WRITE" }],
     ["extra response field", { ...DOSSIER, extra: true }],

@@ -17,9 +17,21 @@
  * is the event list a caller already read.
  */
 
-import type { StoredEvent } from "@moe/store";
+import type {
+  CommandDecisionKey, CommandDecisionRecord, CommandReceipt, StoredEvent,
+} from "@moe/store";
 
 import { decodeFoundationContextManifestRecord } from "./foundation-context-manifest-codec.js";
+import { proveEventIdentity } from "./foundation-context-manifest-event-proofs.js";
+import {
+  deriveFoundationContextAggregateId,
+  deriveFoundationContextDecisionKey,
+} from "./foundation-context-manifest-identity.js";
+import type { FoundationContextSlotIdentity } from "./foundation-context-manifest-identity.js";
+import {
+  FOUNDATION_CONTEXT_PROOF_CODES, compareBinding, proveDecision, proveReceipt, selectionOf,
+} from "./foundation-context-manifest-proofs.js";
+import type { FoundationContextExpectedBinding } from "./foundation-context-manifest-proofs.js";
 import type {
   FoundationContextManifestCode,
   FoundationContextManifestRecord,
@@ -88,4 +100,150 @@ export function readFoundationContextManifestEvent(
   const decoded = decodeFoundationContextManifestRecord(event.payload);
   if (!decoded.ok) return refuse("FOUNDATION_CONTEXT_READER_UNREADABLE", decoded.code);
   return Object.freeze({ bytes: event.payload, ok: true as const, record: decoded.record });
+}
+
+// ============================================================================
+// THE STRICT READ (task-225d25f7). Everything above is the minimal event-level
+// reader task-22fa35a5 landed and the ledger re-exports; it is unchanged.
+// ============================================================================
+
+/**
+ * The strict reader's own roster. It is a SEPARATE constant rather than an
+ * extension of `FOUNDATION_CONTEXT_READER_CODES` on purpose: the ledger spreads
+ * that array into its own roster and documents it as "everything this module
+ * can answer with", and the ledger can only ever produce the minimal four. A
+ * kind it cannot answer must not appear on its advertised surface.
+ *
+ * The two halves are spread and nothing is spelled out twice: BINDING_MISMATCH
+ * and STALE were once ALSO literals here beside the proof roster that already
+ * carries them, making the array's own length a lie. The suite pins that this
+ * roster is duplicate-free and that every member is reachable.
+ */
+export const FOUNDATION_CONTEXT_STRICT_CODES = Object.freeze([
+  ...FOUNDATION_CONTEXT_READER_CODES,
+  ...FOUNDATION_CONTEXT_PROOF_CODES,
+] as const);
+
+export type FoundationContextStrictCode = (typeof FOUNDATION_CONTEXT_STRICT_CODES)[number];
+
+/**
+ * Like the landed refusal, but it CARRIES the store's own code. The minimal
+ * shape pins `storeCode: null` because it never touches a store; this one does,
+ * and flattening a store failure to null would lose the only evidence of why
+ * the read could not be answered.
+ */
+export interface FoundationContextStrictRefusal {
+  readonly code: FoundationContextStrictCode;
+  readonly codecCode: FoundationContextManifestCode | null;
+  readonly layer: typeof FOUNDATION_CONTEXT_READER;
+  readonly ok: false;
+  readonly storeCode: string | null;
+}
+
+export type FoundationContextStrictResult =
+  | FoundationContextReadRecord
+  | FoundationContextStrictRefusal;
+
+/**
+ * Three methods, none of which can write. Declared structurally so this module
+ * cannot reach a raw `DatabaseSync`, a commit, or an outbox even by accident —
+ * and so a caller cannot hand it a store handle and call that a read port.
+ */
+export interface FoundationContextReadPort {
+  getCommandDecision(key: CommandDecisionKey): CommandDecisionRecord | null;
+  getCommandReceipt(commandId: string): CommandReceipt | null;
+  readEvents(aggregateId: string): readonly StoredEvent[];
+}
+
+function strictRefuse(
+  code: FoundationContextStrictCode,
+  codecCode: FoundationContextManifestCode | null = null,
+  storeCode: string | null = null,
+): FoundationContextStrictRefusal {
+  return Object.freeze({
+    code, codecCode, layer: FOUNDATION_CONTEXT_READER, ok: false as const, storeCode,
+  });
+}
+
+/** A thrown store keeps its own code; anything else is an opaque failure. */
+function storeCodeOf(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) return null;
+  const code: unknown = (error as { code?: unknown }).code;
+  return typeof code === "string" ? code : null;
+}
+
+/**
+ * The sealed context manifest for one server-derived slot, or a refusal.
+ *
+ * THE ORDER IS THE POINT. Existence and type, then the codec's decode — which
+ * is also where canonical form is settled — then the durable proofs, then the
+ * binding. Each stage assumes only what the ones before it established, and no
+ * stage returns bytes: the single success return sits after every check.
+ *
+ * The stored `recordDigest` is never trusted, because it is a field IN the
+ * bytes being judged and a forged record would otherwise certify itself. The
+ * recomputation lives in the codec's decode (see the note below), not here.
+ *
+ * The aggregate id and the decision key are DERIVED from server identity via
+ * the shared identity module — never re-derived locally, never taken from the
+ * payload. Two derivations that agree today drift tomorrow. The decision key
+ * comes from the DURABLE record's own selection, never from the caller's
+ * expectation, or a binding disagreement would surface as a missing decision
+ * and the comparison at the end would be unreachable.
+ */
+export function readFoundationContextManifest(
+  port: FoundationContextReadPort,
+  identity: FoundationContextSlotIdentity,
+  expectedBinding: FoundationContextExpectedBinding,
+): FoundationContextStrictResult {
+  const aggregateId = deriveFoundationContextAggregateId(identity);
+  let events: readonly StoredEvent[];
+  try {
+    events = port.readEvents(aggregateId);
+  } catch (error) {
+    return strictRefuse("FOUNDATION_CONTEXT_READER_UNREADABLE", null, storeCodeOf(error));
+  }
+
+  // Existence and type are the landed reader's job, composed rather than
+  // restated so the two entries cannot disagree about what "one event" means.
+  const durable = readFoundationContextManifestEvent(events);
+  if (!durable.ok) return strictRefuse(durable.code, durable.codecCode);
+  const event = events[0];
+  if (event === undefined) return strictRefuse("FOUNDATION_CONTEXT_READER_ABSENT");
+
+  // NO SECOND RE-ENCODE HERE, deliberately: the codec's decode (codec :242-246)
+  // already re-encodes and byte-compares against the stored payload, answering
+  // FOUNDATION_CONTEXT_NONCANONICAL itself — the stored digest is never trusted,
+  // it is just not trusted HERE, and repeating the compare would be unreachable
+  // by construction. That refusal arrives above with the CODEC's own code intact
+  // in `codecCode`, which is what says the bytes, not the binding, were wrong.
+
+  // Everything below is derived from the record's OWN selection, so the row must
+  // be the one that selection names before any of it means anything: a port that
+  // returned another aggregate's event, or a row edited after sealing, derives a
+  // different id than the store wrote. It is also the only check that can see a
+  // port ignoring the aggregate id it was handed.
+  const selection = selectionOf(durable.record);
+  const eventFault = proveEventIdentity(event, selection);
+  if (eventFault !== null) return strictRefuse(eventFault);
+  let decision: CommandDecisionRecord | null;
+  let receipt: CommandReceipt | null;
+  try {
+    decision = port.getCommandDecision(deriveFoundationContextDecisionKey(selection));
+    // The receipt is keyed by the command the EVENT records, which is the
+    // durable link between the append and the command that made it.
+    receipt = decision === null ? null : port.getCommandReceipt(event.commandId);
+  } catch (error) {
+    return strictRefuse("FOUNDATION_CONTEXT_READER_UNREADABLE", null, storeCodeOf(error));
+  }
+  const decisionFault = proveDecision(decision, event);
+  if (decisionFault !== null || decision === null) {
+    return strictRefuse(decisionFault ?? "FOUNDATION_CONTEXT_READER_DECISION_MISSING");
+  }
+  const receiptFault = proveReceipt(receipt, decision, event);
+  if (receiptFault !== null) return strictRefuse(receiptFault);
+
+  const disagreement = compareBinding(durable.record, identity, expectedBinding);
+  if (disagreement !== null) return strictRefuse(disagreement);
+  return durable;
 }

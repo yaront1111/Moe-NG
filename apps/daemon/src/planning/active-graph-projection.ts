@@ -25,10 +25,12 @@
 import { CORE_GRAPH_REVISION_REPLAY, replayGraphRevisionEvents } from "@moe/core";
 import type { GraphRevisionReplayCode, GraphRevisionState } from "@moe/core";
 import type { GraphRevisionContent, GraphSnapshot } from "@moe/scheduler";
-import type { SqliteEventStore } from "@moe/store";
+import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import { GRAPH_BODY_RECORD_LAYER, readGraphBody } from "./graph-body-record.js";
 import type { GraphBodyRefusal } from "./graph-body-record.js";
+import { verifyGraphDecisionEvidence } from "./graph-decision-evidence.js";
+import type { GraphDecisionEvidenceCode } from "./graph-decision-evidence.js";
 
 /** Names the layer that answered the caller. */
 export const ACTIVE_GRAPH_PROJECTION_LAYER = "ACTIVE_GRAPH_PROJECTION" as const;
@@ -45,6 +47,7 @@ const ENUMERATION_PAGE = 200;
 export const ACTIVE_GRAPH_PROJECTION_CODES = Object.freeze([
   "ACTIVE_GRAPH_ABSENT",
   "ACTIVE_GRAPH_BODY_UNAVAILABLE",
+  "ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE",
   "ACTIVE_GRAPH_SPLIT_BRAIN",
 ] as const);
 
@@ -52,14 +55,15 @@ export type ActiveGraphProjectionCode = (typeof ACTIVE_GRAPH_PROJECTION_CODES)[n
 
 export type ActiveGraphSourceLayer =
   | typeof CORE_GRAPH_REVISION_REPLAY
-  | typeof GRAPH_BODY_RECORD_LAYER;
+  | typeof GRAPH_BODY_RECORD_LAYER
+  | "GRAPH_DECISION_EVIDENCE";
 
 export interface ActiveGraphRefusal {
   readonly code: ActiveGraphProjectionCode | GraphRevisionReplayCode;
   readonly layer: typeof ACTIVE_GRAPH_PROJECTION_LAYER;
   readonly ok: false;
   /** The underlying code when this module is wrapping another layer's refusal. */
-  readonly sourceCode: GraphBodyRefusal["code"] | null;
+  readonly sourceCode: GraphBodyRefusal["code"] | GraphDecisionEvidenceCode | null;
   /** The layer that actually refused, or `null` when this module did. */
   readonly sourceLayer: ActiveGraphSourceLayer | null;
 }
@@ -92,7 +96,7 @@ interface ActiveRevision {
 function refuse(
   code: ActiveGraphProjectionCode | GraphRevisionReplayCode,
   sourceLayer: ActiveGraphSourceLayer | null = null,
-  sourceCode: GraphBodyRefusal["code"] | null = null,
+  sourceCode: GraphBodyRefusal["code"] | GraphDecisionEvidenceCode | null = null,
 ): ActiveGraphRefusal {
   return Object.freeze({
     code,
@@ -143,9 +147,9 @@ function enumerateAggregateIds(store: SqliteEventStore, projectId: string): read
  * replay's own `EVENT_INVALID`/`HISTORY_INVALID` codes are the right answer, and
  * silently filtering it here would hide a corrupt row behind a shorter history.
  */
-function historyOf(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
+function historyOf(events: readonly StoredEvent[]): readonly unknown[] {
   const decoder = new TextDecoder("utf-8", { fatal: false });
-  return store.readEvents(aggregateId).map((event) => {
+  return events.map((event) => {
     try {
       return JSON.parse(decoder.decode(event.payload)) as unknown;
     } catch {
@@ -162,10 +166,16 @@ function historyOf(store: SqliteEventStore, aggregateId: string): readonly unkno
 function collectActive(
   store: SqliteEventStore,
   aggregateIds: readonly string[],
+  projectId: string,
 ): { readonly active: readonly ActiveRevision[] } | { readonly refusal: ActiveGraphRefusal } {
   const active: ActiveRevision[] = [];
   for (const aggregateId of aggregateIds) {
-    const replayed = replayGraphRevisionEvents(historyOf(store, aggregateId));
+    const events = store.readEvents(aggregateId);
+    const evidence = verifyGraphDecisionEvidence(store, events, projectId);
+    if (!evidence.ok) {
+      return { refusal: refuse("ACTIVE_GRAPH_EVIDENCE_UNAVAILABLE", evidence.layer, evidence.code) };
+    }
+    const replayed = replayGraphRevisionEvents(historyOf(events));
     if (!replayed.ok) {
       return { refusal: refuse(replayed.code, replayed.layer) };
     }
@@ -184,7 +194,7 @@ export function readCurrentActiveGraph(
   store: SqliteEventStore,
   projectId: string,
 ): ActiveGraphResult {
-  const collected = collectActive(store, enumerateAggregateIds(store, projectId));
+  const collected = collectActive(store, enumerateAggregateIds(store, projectId), projectId);
   if ("refusal" in collected) {
     return collected.refusal;
   }

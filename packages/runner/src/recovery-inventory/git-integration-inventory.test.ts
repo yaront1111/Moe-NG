@@ -136,6 +136,27 @@ function stubObserver(shape: StubShape): GitObserver {
   };
 }
 
+/** Mirrors how runGit preserves the spawn fault behind a refusal: a bare assignment. */
+function withCause(error: ScopeObserverError, cause: unknown): ScopeObserverError {
+  return Object.assign(error, { cause });
+}
+
+/**
+ * A repository whose refs read cleanly and whose HEAD refuses, carrying the exact
+ * cause the observer's execFileSync would have preserved for that fault.
+ */
+function headRefusal(cause: unknown): GitObserver {
+  return stubObserver({
+    listRefs: (): GitRefListing => listingOf([{ refName: "refs/heads/solo", targetCommit: FAKE_COMMIT }]),
+    headCommit: (): string => {
+      throw withCause(
+        new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_FAILED", "git rev-parse failed"),
+        cause,
+      );
+    },
+  });
+}
+
 /** The optional method really is absent: the key is never introduced at all. */
 function observerWithoutListRefs(): GitObserver {
   return {
@@ -213,7 +234,10 @@ function factsOf(report: RecoveryInventoryReport, path: string): Record<string, 
   return { ...found.facts };
 }
 
-describe("enumeration over a real repository", () => {
+// 30s on the three real-git suites: each builds repositories via git subprocesses
+// (~seconds each unloaded); the 5s default times out under full-fleet parallelism.
+// Same repair as daemon 03fd290.
+describe("enumeration over a real repository", { timeout: 30_000 }, () => {
   it("binds every ref and on-disk integration target to the class, an identity and a proof", async () => {
     const report = await collect(inputFor(createNodeGitObserver(populatedRepository(), ENV)));
     expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
@@ -264,7 +288,7 @@ describe("enumeration over a real repository", () => {
  * two of these collapse, "we looked and found nothing" later reads the same as
  * "we could not look".
  */
-describe("empty, absent and unreadable are three different answers", () => {
+describe("empty, absent and unreadable are three different answers", { timeout: 30_000 }, () => {
   it("answers ENUMERATOR_UNAVAILABLE for a path that holds no repository", async () => {
     const report = await collect(inputFor(createNodeGitObserver(directory("not-a-repo"), ENV)));
     expectUnknown(report, "ENUMERATOR_UNAVAILABLE");
@@ -336,7 +360,16 @@ describe("the optional ref capability", () => {
     // capability from a repository that answered with a failure.
     expect(enumerateGitIntegrationInventory(inputFor(observer), CONTEXT).refusal).toBeNull();
   });
+});
 
+/**
+ * HEAD is read through a spawn, and a spawn fails for reasons the repository knows
+ * nothing about. Only one of those failures, git resolving HEAD and answering
+ * "nothing", is a fact about the repository; the rest are the question going
+ * unanswered, and recording them as `head: null` mints a negative proof asserting
+ * a durable property nobody observed.
+ */
+describe("an unborn HEAD and an unread HEAD", { timeout: 30_000 }, () => {
   it("records an unborn HEAD as an observed fact instead of an unreadable repository", async () => {
     const repository = initRepository("unborn");
     git(repository, ["checkout", "-b", "solo"]);
@@ -346,13 +379,63 @@ describe("the optional ref capability", () => {
       "-c", "user.name=Moe", "-c", "user.email=moe@example.invalid",
       "commit", "-m", "solo",
     ]);
-    const observer = stubObserver({
-      listRefs: (): GitRefListing => listingOf([{ refName: "refs/heads/solo", targetCommit: FAKE_COMMIT }]),
-      headCommit: (): string => {
-        throw new ScopeObserverError("RUNNER_SCOPE_OBSERVATION_FAILED", "HEAD is unborn");
-      },
+    // Real git, real unborn HEAD, read through the shipped observer: refs/heads/solo
+    // stays observable while HEAD points at a branch that was never born, which is
+    // the state `checkout --orphan` leaves behind. Only `rev-parse --verify --quiet`
+    // reports that as a silent exit 1; bare --verify reports it as a 128 fatal,
+    // indistinguishable from a directory holding no repository at all.
+    git(repository, ["symbolic-ref", "HEAD", "refs/heads/nothing"]);
+    const report = await collect(inputFor(createNodeGitObserver(repository, ENV)));
+    expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
+    const solo = factsOf(report, "refs/heads/solo");
+    expect(solo).toEqual({
+      target: "REF",
+      refScope: "LOCAL",
+      targetCommit: solo["targetCommit"],
+      headObserved: false,
+      atHead: false,
     });
-    const report = await collect(inputFor(observer));
+    expect(String(solo["targetCommit"])).toMatch(/^[0-9a-f]{40}$/u);
+  });
+
+  /**
+   * Every one of these reaches the adapter as the same code and the same message
+   * as an unborn HEAD does. The preserved exit status is the only thing that
+   * separates them, so each case carries the shape execFileSync really produces.
+   */
+  const UNREAD_HEAD: readonly (readonly [string, unknown])[] = Object.freeze([
+    ["the 30s timeout kill", { status: null, signal: "SIGTERM", code: "ETIMEDOUT" }],
+    ["an EAGAIN spawn fault", { status: null, signal: null, code: "EAGAIN" }],
+    // The negative control for the status test itself: a git fatal is a number
+    // too, and a directory holding no repository answers with exactly this one.
+    ["a git fatal", { status: 128, signal: null }],
+    ["a refusal carrying no cause at all", undefined],
+  ]);
+
+  it("generated a non-zero, exact number of unread-HEAD causes", () => {
+    expect(UNREAD_HEAD.length).toBeGreaterThan(0);
+    expect(UNREAD_HEAD.length).toBe(4);
+    expect(new Set(UNREAD_HEAD.map((entry) => entry[0])).size).toBe(UNREAD_HEAD.length);
+  });
+
+  it.each(UNREAD_HEAD)("truncates instead of proving an absent HEAD after %s", async (_label, cause) => {
+    const observer = headRefusal(cause);
+    expectUnknown(await collect(inputFor(observer)), "RESULT_TRUNCATED");
+    const reading = enumerateGitIntegrationInventory(inputFor(observer), CONTEXT);
+    expect(reading.refusal).toEqual({ code: "RUNNER_SCOPE_OBSERVATION_FAILED", layer: null });
+    if (reading.reading.status !== "ENUMERATED") {
+      throw new Error(`expected an enumeration, got ${reading.reading.status}`);
+    }
+    // The two halves that make this a truncation rather than an observation: the
+    // refs that DID read are withheld, and no digest is minted over a null head.
+    expect(reading.reading.complete).toBe(false);
+    expect(reading.reading.negativeProofDigest).toBeNull();
+  });
+
+  it("still proves the unborn HEAD when the cause reports git's silent exit 1", async () => {
+    // The positive control for the same predicate, driven through the stub port
+    // so the only difference from the four cases above is the exit status.
+    const report = await collect(inputFor(headRefusal({ status: 1, signal: null })));
     expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
     expect(factsOf(report, "refs/heads/solo")).toEqual({
       target: "REF",
@@ -364,7 +447,7 @@ describe("the optional ref capability", () => {
   });
 });
 
-describe("silence, ceilings and rejected rows", () => {
+describe("silence, ceilings and rejected rows", { timeout: 30_000 }, () => {
   it("refuses NEGATIVE_PROOF_MISSING for an empty answer nothing can verify", async () => {
     // The answer this module must never produce, pinned against the class so a
     // regression that drops the proof is named rather than merely failing.
@@ -499,7 +582,7 @@ describe("deterministic order and digest", () => {
 
 describe("coverage sweep", () => {
   it("generated a non-zero, exact number of coverage cases for the git class", () => {
-    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(14);
+    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(19);
     expect(GENERATED.length).toBeGreaterThan(0);
   });
 });

@@ -1,10 +1,15 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue, RuntimeError } from "@moe/contracts";
-import { APPROVAL_AUTHORITY_LAYERS } from "@moe/core";
+import {
+  ACCEPTANCE_CONTRACT_LAYERS, APPROVAL_AUTHORITY_LAYERS, PLAN_REVISION_LAYERS,
+} from "@moe/core";
+import { GRAPH_CONTENT_LAYERS, NODE_AUTHORITY_RECURSION_LAYERS } from "@moe/scheduler";
+import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
   EventDraft,
+  ExpectedVersionDecisionLeg,
   SqliteEventStore,
 } from "@moe/store";
 
@@ -30,13 +35,49 @@ export {
  * durably recorded.
  */
 
-/** The layer that answered. Three layers can refuse, so evidence must name which one did. */
+/**
+ * The layer that answered. Several layers can refuse, so evidence must name which one did.
+ *
+ * A slice that owns a refusal vocabulary of its own contributes its layer here rather than
+ * hiding it inside a message, exactly as `@moe/core`'s approval-authority layers do. The
+ * provider-profile pair is spelled literally because the codec keeps its layer constants
+ * module-private: exporting them would declare a production boundary the security roster then
+ * demands a hostile trio for, and the compile-time check that keeps the two in agreement is
+ * `recordProbe` passing the codec's closed layer TYPE straight into `refuse`.
+ */
 export const SERVICE_REFUSED_BY = Object.freeze([
   "DAEMON_INGRESS",
   "DAEMON_PREREQUISITE",
   "CORE_REDUCER",
   "DURABLE_STORE",
+  "PROVIDER_PROFILE_CODEC",
+  "PROVIDER_PROFILE_REGISTRATION",
+  "PROVIDER_RUNTIME_OBSERVATION_CODEC",
+  // Spelled literally for the same reason as the provider pair: the planning-authority
+  // persistence module keeps its layer const private, and the compile-time agreement check is
+  // `proposePlan` passing that module's closed layer TYPE straight into `refuse`.
+  "PLANNING_AUTHORITY_PERSISTENCE",
+  // Same discipline one seam later: the planning-authority ENVELOPE codec keeps its layer const
+  // private too, and `proposePlan` passing the finalize module's closed layer TYPE into `refuse`
+  // is what makes this literal verified rather than merely asserted.
+  "PLANNING_AUTHORITY_ENVELOPE",
+  // Same discipline once more at the approval seam: `approval-run-binding.ts` keeps its layer
+  // const private and exports only the closed TYPE, and `decideApproval` passing that type
+  // straight into `refuse` is what makes this literal verified rather than merely asserted.
+  "APPROVAL_RUN_BINDING",
+  // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
+  // travels under the layer that produced it rather than under a daemon restatement.
+  // Same discipline at the graph-content ingress: its layer const stays private and `proposePlan`
+  // passing the closed TYPE into `refuse` is what makes this literal verified, not asserted.
+  "PLANNING_GRAPH_CONTENT_INGRESS",
+  ...ACCEPTANCE_CONTRACT_LAYERS,
   ...APPROVAL_AUTHORITY_LAYERS,
+  // BOTH scheduler rosters, spread rather than retyped. What a graph-content READER may observe
+  // is strictly wider than what that codec OWNS: `deriveNodeAuthoritySet`'s verdict travels out
+  // unrestamped, so a body refusal can arrive under any of the recursion's thirteen layers.
+  ...GRAPH_CONTENT_LAYERS,
+  ...NODE_AUTHORITY_RECURSION_LAYERS,
+  ...PLAN_REVISION_LAYERS,
 ] as const);
 
 export type ServiceRefusedBy = (typeof SERVICE_REFUSED_BY)[number];
@@ -49,6 +90,7 @@ export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "BOOTSTRAP_POLICY_UNKNOWN",
   "BOOTSTRAP_REVISION_HASH_MISMATCH",
   "BOOTSTRAP_COMMAND_ID_REUSED",
+  "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
 ] as const);
 
 export type PrerequisiteRefusalCode = (typeof PREREQUISITE_REFUSAL_CODES)[number];
@@ -85,7 +127,20 @@ export interface ServiceRefused {
 
 export type ServiceOutcome = ServiceAccepted | ServiceRefused;
 
+/**
+ * SERVER-ASSEMBLED evidence that a named human authenticated THIS request. Only
+ * the composition root may supply it — it knows the authenticated principal and
+ * the configured operator — and it is never decoded from request bytes, so no
+ * payload can present one. A handler holding this witness may treat the request
+ * itself as the human review the approval policy is waiting for; a handler
+ * without it must keep refusing exactly as before.
+ */
+export interface HumanReviewWitness {
+  readonly principalId: string;
+}
+
 export interface HandlerContext {
+  readonly humanReview?: HumanReviewWitness;
   readonly ledger: DurableLedger;
   readonly request: BootstrapRequest;
   readonly store: SqliteEventStore;
@@ -104,6 +159,15 @@ export function decisionKey(request: BootstrapRequest): CommandDecisionKey {
     principalId: request.principalId,
     projectId: request.projectId,
   };
+}
+
+/**
+ * The canonical request bytes of a command: the exact preimage every commit seam writes and the
+ * exact preimage the replay proof re-derives. It exists as ONE function because two copies of a
+ * byte construction drift silently — and a drifted copy here would refuse honest replays.
+ */
+function requestBytesOf(request: BootstrapRequest): Uint8Array {
+  return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
 }
 
 function decodeResult(bytes: Uint8Array): JsonValue {
@@ -187,6 +251,30 @@ export interface CommitPlan {
   readonly result: JsonValue;
 }
 
+/**
+ * The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row and
+ * reports the conflict in `resultCode`. Reporting that as an accepted decision would be a
+ * fail-open — authority claimed for a command that committed nothing — so the store's own code is
+ * surfaced under its own layer. Reachable when a concurrent writer moves the head between the
+ * ledger read and the commit, and on a MULTI-LEG decision when ANY leg's fence is stale.
+ */
+function decided(
+  request: BootstrapRequest,
+  response: { readonly decision: CommandDecisionRecord; readonly disposition: "DECIDED" | "REPLAYED" },
+): ServiceOutcome {
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+  }
+  return Object.freeze({
+    advisoryOnly: false as const,
+    authority: "DURABLE_DECISION" as const,
+    decision: response.decision,
+    disposition: response.disposition,
+    kind: request.kind,
+    ok: true as const,
+  });
+}
+
 function eventDraft(request: BootstrapRequest, plan: CommitPlan): EventDraft {
   return {
     eventId: `${request.commandId}-${plan.eventType}`,
@@ -213,25 +301,43 @@ export function commitAccepted(
     events: [eventDraft(request, plan)],
     expectedVersion: plan.expectedVersion,
     key: decisionKey(request),
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
     targetAggregateId: plan.aggregateId,
   });
-  // The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row
-  // and reports the conflict in `resultCode`. Reporting that as an accepted decision would be
-  // a fail-open — authority claimed for a command that committed nothing — so the store's own
-  // code is surfaced under its own layer. Reachable when a concurrent writer moves the head
-  // between the ledger read and this commit.
-  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
-  }
-  return Object.freeze({
-    advisoryOnly: false as const,
-    authority: "DURABLE_DECISION" as const,
-    decision: response.decision,
-    disposition: response.disposition,
-    kind: request.kind,
-    ok: true as const,
-  });
+  return decided(request, response);
+}
+
+/**
+ * The MULTI-LEG variant of the same seam, for a command whose business effect spans two
+ * aggregates. `legs[0]` is the primary and is built exactly as the single-aggregate path builds
+ * its only leg, so the decision record a reader sees is identical in shape either way; the extra
+ * legs are fenced and appended inside the SAME decision, which is what makes "one cannot survive
+ * without the other" a property of the store rather than of a call site.
+ *
+ * Existing single-aggregate callers are deliberately NOT rerouted through this: they have no
+ * second leg, and an empty `extraLegs` would only add a code path that never runs.
+ */
+export function commitAcceptedLegs(
+  store: SqliteEventStore,
+  request: BootstrapRequest,
+  plan: CommitPlan,
+  extraLegs: readonly ExpectedVersionDecisionLeg[],
+): ServiceOutcome {
+  return decided(request, store.commitExpectedVersionDecisionLegs({
+    commandKind: request.kind,
+    committedResultBytes: encoder.encode(JSON.stringify(plan.result)),
+    correlationId: request.correlationId,
+    decidedAt: request.decidedAt,
+    key: decisionKey(request),
+    legs: [
+      {
+        aggregateId: plan.aggregateId, events: [eventDraft(request, plan)],
+        expectedVersion: plan.expectedVersion,
+      },
+      ...extraLegs,
+    ],
+    requestBytes: requestBytesOf(request),
+  }));
 }
 
 /**
@@ -255,7 +361,21 @@ export function replayOf(
   if (existing.commandKind !== request.kind) {
     return refuse(request.kind, "BOOTSTRAP_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
+  // No same-bytes evidence, no replay: a refused decision's receipt commits the rejection audit
+  // payload, so its `replayRequestSha256` is null and nothing here could prove the resubmit is
+  // the command that was decided. Falling through is not a fail-open — the command is decided
+  // again from scratch — and it must stay AHEAD of the byte compare below, which reads a digest
+  // only an accepted decision carries.
   if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // The key does not cover the payload either, so a caller reusing a commandId under the SAME
+  // kind with DIFFERENT bytes would otherwise be handed the earlier result as an accepted
+  // replay: authority for a command never decided with those bytes. The store's own conflict arm
+  // cannot catch it, because this short-circuit answers before any store write. Recomputed from
+  // the STORED decision's own fence, so the resubmitted bytes are the only free variable and a
+  // match is byte equality — an honest replay still matches after its aggregates have advanced.
+  if (identifyReplayRequest(existing, requestBytesOf(request)) !== existing.replayRequestSha256) {
+    return refuse(request.kind, "BOOTSTRAP_COMMAND_BYTES_CONFLICT", "DAEMON_PREREQUISITE");
+  }
   return Object.freeze({
     advisoryOnly: false as const,
     authority: "DURABLE_DECISION" as const,

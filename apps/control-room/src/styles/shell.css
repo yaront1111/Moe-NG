@@ -125,7 +125,9 @@
 }
 
 .cr-shell-rail-signature {
-  color: #68758a;
+  /* 5.0:1 on the rail — the old #68758a sat at 3.66, under the 4.5 bar for
+   * text this small. */
+  color: #7f8ca1;
   display: grid;
   font-family: var(--cr-font-utility);
   font-size: 0.55rem;

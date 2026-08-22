@@ -10,11 +10,20 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { createFoundationDispatchHandler, foundationSyncHandler }
   from "./daemon-foundation-command.js";
+import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { createFoundationVerificationHandler }
+  from "./daemon-foundation-verification-command.js";
+import { FOUNDATION_VERIFICATION_COMMAND_KIND }
+  from "./evidence/foundation-verification-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
 import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
+import {
+  RESOURCE_RECONCILE_COMMAND_KIND, runResourceReconcileCommand,
+} from "./work/resource-reconcile-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -62,6 +71,14 @@ export { OPERATOR_CAPABILITIES, agentCapabilitiesFor } from "./daemon-command-vo
 
 export interface DaemonCommandPortOptions {
   readonly clock: () => string;
+  /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
+   *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
+   *  one with no configured catalog, so Foundation preparation refuses and no
+   *  provider process starts. */
+  /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
+   *  dispatch-time derivation resolves the SAME repository scope authority. */
+  readonly foundationCatalogSource?: () => unknown;
+  readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
   readonly projectId: string;
@@ -113,20 +130,35 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
-  const dispatchFoundationAttempt = createFoundationDispatchHandler({ store });
+  const foundationCatalogSource = options.foundationCatalogSource ?? ((): unknown => undefined);
+  const dispatchFoundationAttempt = createFoundationDispatchHandler({
+    catalogSource: foundationCatalogSource,
+    lifecycle: options.foundationLifecycle
+      ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
+    store,
+  });
+  const verifyFoundationAttempt = createFoundationVerificationHandler({ projectId, store });
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
-    // Answered first and returned whole: this kind's service is asynchronous, so it
-    // carries an async handler and none of the synchronous wiring below applies to it.
+    // Answered first and returned whole: these kinds' services are asynchronous, so each
+    // carries an async handler and none of the synchronous wiring below applies to it. The
+    // sync handler they share refuses; the seam refuses above it before it can be called.
     if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) {
       return Object.freeze({
         asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler, kind,
         payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
       });
     }
+    if (kind === FOUNDATION_VERIFICATION_COMMAND_KIND) {
+      return Object.freeze({
+        asyncHandler: verifyFoundationAttempt, handler: foundationSyncHandler, kind,
+        payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
+      });
+    }
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
     const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
+    const reconcile = kind === RESOURCE_RECONCILE_COMMAND_KIND;
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
@@ -170,6 +202,31 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           resultCode: outcome.resultCode,
         });
       }
+      // Its request is identity plus one adapter observation, assembled from the
+      // ENVELOPE and the AUTHENTICATED principal, so it is built at its own edge
+      // rather than materialized as request bytes like the codec-backed families.
+      if (reconcile) {
+        const outcome = runResourceReconcileCommand(store, {
+          commandId: envelope.commandId,
+          correlationId: envelope.correlationId,
+          payload: envelope.payload,
+          principalId: principal.principalId,
+          projectId,
+        });
+        if (!outcome.ok) {
+          throw new DomainRefusal(
+            outcome.code, outcome.refusedBy, outcome.upstreamCode ?? outcome.code,
+          );
+        }
+        return Object.freeze({
+          commandId: envelope.commandId,
+          disposition: "DECIDED" as const,
+          effectId: outcome.attemptRef,
+          // The ANSWER's own authority word, read off the durable reader's result:
+          // a literal here would be this seam restating what the record already says.
+          resultCode: outcome.authority,
+        });
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
@@ -186,14 +243,27 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));
-      return decisionOf(runBootstrapCommand(store, bytes, bootstrapTable));
+      // The human-review witness is minted HERE and only here, because this is
+      // the one seam that holds both the AUTHENTICATED principal and the
+      // configured operator. The operator credential is the human seat — the
+      // same identity OPERATOR_PRINCIPAL_KINDS reserves approval.decide for —
+      // so an operator-authenticated dispatch carries the witness and a scoped
+      // agent session never does, whatever its capabilities say.
+      return decisionOf(runBootstrapCommand(
+        store,
+        bytes,
+        bootstrapTable,
+        principal.principalId === operatorPrincipalId
+          ? Object.freeze({ principalId: principal.principalId })
+          : undefined,
+      ));
     };
     // ADMIN is the reach fence, NOT the human-only fence. `recovery.complete`
     // is human-only because its concrete session authority authenticates a
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation || journal
+    const requiredCapability = activation || continuation || journal || reconcile
       ? CAPABILITIES.WORK
       : recovery
         ? CAPABILITIES.ADMIN

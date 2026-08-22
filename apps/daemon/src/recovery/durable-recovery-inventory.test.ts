@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
+import { MAX_EVENTS_PER_COMMIT, RECOVERY_BINDING_CODEC_VERSION, SqliteEventStore } from "@moe/store";
 import { adapterConfirm, adapterFail, reserveAll } from "@moe/scheduler";
 import type { AcquisitionState, ResourceRow } from "@moe/scheduler";
 import { afterEach, describe, expect, it } from "vitest";
@@ -30,10 +30,14 @@ import {
   DURABLE_RESOURCE_STATES,
   DURABLE_INVENTORY_CODES_ARE_ADMITTED,
   DURABLE_RESOURCE_STATES_MATCH_SCHEDULER,
+  MAX_DURABLE_INVENTORY_ROWS,
   durableInventoryDigest,
   durableInventoryScopeDigest,
 } from "./durable-recovery-inventory-contract.js";
-import { durableResourceObservation } from "./durable-recovery-inventory-shape.js";
+import {
+  durableObservationIdentity,
+  durableResourceObservation,
+} from "./durable-recovery-inventory-shape.js";
 import type {
   DurableIntegrationObservation,
   DurableInventoryBasis,
@@ -44,6 +48,7 @@ import type {
   DurableResourceObservation,
 } from "./durable-recovery-inventory-contract.js";
 import {
+  durableRowBody,
   durableSealBody,
   encodeDurableRow,
   encodeDurableSeal,
@@ -779,6 +784,160 @@ describe("durable recovery inventory - seal completeness", () => {
     if (again.ok) throw new Error("unreachable");
     expect(again.upstream.code).toBe("RECORD_CONFLICT");
   });
+});
+
+// --------------------------------------------------------------------------
+// The row bound, at the ceiling on BOTH paths. The writer must refuse the row
+// that would take a window past MAX_DURABLE_INVENTORY_ROWS, because the reader
+// refuses any window holding more than that: a row past the bound that landed
+// would leave the window unsealable and unenumerable for good. A window holding
+// EXACTLY the bound is full, valid, sealable and enumerable.
+// --------------------------------------------------------------------------
+
+/** The i-th of up to MAX+1 distinct in-window integration attempts. */
+const boundObservation = (index: number): DurableIntegrationObservation =>
+  integration(`attempt-bound-${String(index)}`, "target-bound", "intent-bound", pos(70));
+
+/**
+ * Fills the window's own aggregate with honest rows in MAX_EVENTS_PER_COMMIT
+ * batches through the same public commit the writer uses, under the writer's
+ * own command kind so `isOwnEvent` admits every one. Only the count is at the
+ * ceiling: each row is byte-for-byte what `appendDurableInventoryObservation`
+ * would have written, so the reader decodes all of them.
+ */
+const fillWindow = (
+  store: SqliteEventStore,
+  resolved: DurableResolvedWindow,
+  count: number,
+): void => {
+  expect(resolved.state.version).toBe(0);
+  const rows: DurableInventoryRow[] = [];
+  for (let index = 0; index < count; index += 1) {
+    const observation = boundObservation(index);
+    const body = {
+      class: observation.class,
+      identity: durableObservationIdentity(observation),
+      observation,
+      scopeDigest: resolved.scopeDigest,
+    };
+    rows.push(Object.freeze({ ...body, rowDigest: durableInventoryDigest(durableRowBody(body)) }));
+  }
+  for (let start = 0; start < rows.length; start += MAX_EVENTS_PER_COMMIT) {
+    const batch = rows.slice(start, start + MAX_EVENTS_PER_COMMIT);
+    const commandId = `durable-inventory-fill:${resolved.scopeDigest}:${String(start)}`;
+    const response = store.commitExpectedVersionDecision({
+      commandKind: DURABLE_INVENTORY_COMMAND_KIND,
+      committedResultBytes: encoder.encode(commandId),
+      correlationId: writeRequest.correlationId,
+      decidedAt: writeRequest.decidedAt,
+      events: batch.map((row) => ({
+        domainSchemaVersion: DURABLE_RECOVERY_INVENTORY_SCHEMA_VERSION,
+        eventId: `durable-inventory-row:${row.rowDigest}:${DURABLE_INVENTORY_ROW_EVENT_TYPE}`,
+        eventType: DURABLE_INVENTORY_ROW_EVENT_TYPE,
+        payload: encodeDurableRow(row),
+      })),
+      expectedVersion: start,
+      key: { commandId, principalId: writeRequest.principalId, projectId: PROJECT_ID },
+      requestBytes: encoder.encode(commandId),
+      targetAggregateId: resolved.aggregateId,
+    });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+      throw new Error(`fill batch not applied: ${response.decision.effectDisposition}`);
+    }
+  }
+};
+
+/** RESOURCE stays empty under a negative proof; every filled row is an integration. */
+const BOUND_COVERAGE: readonly [DurableInventoryClassCoverage, DurableInventoryClassCoverage] =
+  Object.freeze([
+    Object.freeze({ ...COVERAGE[0], negativeProofDigest: NEGATIVE_PROOF }),
+    COVERAGE[1],
+  ]);
+
+describe("durable recovery inventory - row bound", () => {
+  it("accepts the row that fills the window, refuses the next, and still seals and reads",
+    async () => {
+      const { binding, store } = await prepare();
+      const basis = basisFor(binding);
+      fillWindow(store, resolveFor(store, basis), MAX_DURABLE_INVENTORY_ROWS - 1);
+      expect(resolveFor(store, basis).state.rows).toHaveLength(MAX_DURABLE_INVENTORY_ROWS - 1);
+
+      // The row that takes the window to EXACTLY the bound is a decided append.
+      const filling = appendDurableInventoryObservation(
+        store, writeRequest, basis, WINDOW, boundObservation(MAX_DURABLE_INVENTORY_ROWS - 1),
+      );
+      expect(filling.ok).toBe(true);
+      if (!filling.ok) throw new Error(`filling append refused: ${filling.upstream.code}`);
+      expect(filling.disposition).toBe("DECIDED");
+
+      // The row past the bound is refused BEFORE the seal, so the refusal is the
+      // bound's and not the sealed window's, and it writes nothing.
+      const overflow = appendDurableInventoryObservation(
+        store, writeRequest, basis, WINDOW, boundObservation(MAX_DURABLE_INVENTORY_ROWS),
+      );
+      expect(overflow.ok).toBe(false);
+      if (overflow.ok) throw new Error("unreachable");
+      expect(overflow.upstream.code).toBe("RECOVERY_INVENTORY_COVERAGE_UNKNOWN");
+      expect(overflow.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+      expect(overflow.truth).toBe("UNKNOWN");
+      expect(overflow.authority).toBe("NONE");
+      const full = resolveFor(store, basis);
+      expect(full.state.rows).toHaveLength(MAX_DURABLE_INVENTORY_ROWS);
+      expect(full.state.version).toBe(MAX_DURABLE_INVENTORY_ROWS);
+      expect(full.state.sealed).toBe(false);
+
+      // A replay of a row the full window already holds still answers: the
+      // bound refuses NEW rows, never the identity it already stored.
+      const replay = appendDurableInventoryObservation(
+        store, writeRequest, basis, WINDOW, boundObservation(0),
+      );
+      expect(replay.ok).toBe(true);
+      if (!replay.ok) throw new Error("unreachable");
+      expect(replay.disposition).toBe("REPLAYED");
+
+      const sealed = sealDurableInventoryWindow(store, writeRequest, basis, WINDOW, BOUND_COVERAGE);
+      expect(sealed.ok).toBe(true);
+      if (!sealed.ok) throw new Error(`seal refused: ${sealed.upstream.code}`);
+      const integrations = sealed.seal.classes.find((entry) => entry.class === "INTEGRATION_TARGET");
+      expect(integrations?.itemCount).toBe(MAX_DURABLE_INVENTORY_ROWS);
+
+      const read = readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW);
+      expect(read.ok).toBe(true);
+      if (!read.ok) throw new Error(`read refused: ${read.upstream.code}`);
+      expect(read.observations).toHaveLength(MAX_DURABLE_INVENTORY_ROWS);
+      expect(new Set(read.observations.map((row) =>
+        (row as DurableIntegrationObservation).attemptRef)).size).toBe(MAX_DURABLE_INVENTORY_ROWS);
+      expect(read.sealDigest).toBe(sealed.sealDigest);
+    },
+    30_000,
+  );
+
+  /**
+   * Negative control for the reader's side of the bound: a window holding one
+   * row MORE than the bound, filled behind the writer's back, is the conflict
+   * the writer exists to prevent. It proves the reader's bound sits at exactly
+   * MAX and not one past it, so the writer's `>=` is the right complement.
+   */
+  it("refuses to resolve a window already holding one row past the bound", async () => {
+    const { binding, store } = await prepare();
+    const basis = basisFor(binding);
+    fillWindow(store, resolveFor(store, basis), MAX_DURABLE_INVENTORY_ROWS + 1);
+    const resolved = resolveDurableWindow(store, PROJECT_ID, basis, WINDOW);
+    expect(isDurableRefusal(resolved)).toBe(true);
+    if (!isDurableRefusal(resolved)) throw new Error("unreachable");
+    expect(resolved.upstream.code).toBe("RECORD_CONFLICT");
+    expect(resolved.upstream.layer).toBe(DURABLE_INVENTORY_ADAPTER_LAYER);
+    // Every entry point resolves first, so the overfull window is unsealable
+    // and unenumerable: the permanent state the writer's bound keeps unreachable.
+    const sealed = sealDurableInventoryWindow(store, writeRequest, basis, WINDOW, BOUND_COVERAGE);
+    expect(sealed.ok).toBe(false);
+    if (sealed.ok) throw new Error("unreachable");
+    expect(sealed.upstream.code).toBe("RECORD_CONFLICT");
+    const read = readDurableRecoveryInventory(store, PROJECT_ID, basis, WINDOW);
+    expect(read.ok).toBe(false);
+    if (read.ok) throw new Error("unreachable");
+    expect(read.upstream.code).toBe("RECORD_CONFLICT");
+  }, 30_000);
 });
 
 describe("durable recovery inventory - tampered durable records", () => {

@@ -69,6 +69,12 @@ import {
 } from "../../apps/daemon/src/work/foundation-attempt-contracts.js";
 import type { FoundationAttemptDispatchRequest } from "../../apps/daemon/src/work/foundation-attempt-contracts.js";
 import { claimWork } from "../../apps/daemon/src/work/work-claim.js";
+import {
+  ACTIVATION_WORLD_METER,
+} from "../../apps/daemon/src/activation/activation-world-fixtures.js";
+import { readCurrentBudgetLedger } from "../../apps/daemon/src/budget/budget-current-projection.js";
+import { reserveBudgetForAdmission } from "../../apps/daemon/src/budget/budget-ledger-holds.js";
+import { ADMISSION_PURPOSES } from "../../packages/scheduler/src/index.js";
 import { WORK_LAYERS } from "../../apps/daemon/src/work/work-kernel.js";
 
 import { EXPANSION_APPROVAL_LAYERS, approveExpansionManually } from "../../packages/core/src/expansion/expansion-approval.js";
@@ -126,6 +132,10 @@ import {
 } from "../../apps/daemon/src/goals/goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "../../apps/daemon/src/goals/goal-qualification.js";
 import { hostileRoot } from "./hostile-harness.js";
+// ONE authority for the readback, not two. The control lives beside the other seeded
+// security lane (task-64a72f8d owns both files); a second copy here would be a second
+// definition of "correctly seeded" and the two would drift apart silently.
+import { assertActivationWorldSeeded } from "./safe-boundary-observation-scenarios.js";
 import type { RefusalExpectation } from "./hostile-harness.js";
 
 export type HostileArm = "BEFORE" | "AFTER" | "RACE";
@@ -285,6 +295,12 @@ export function openHostileStore(label: string): SqliteEventStore {
   const store = openHarnessStore(`${hostileRoot(label)}/store.sqlite`);
   openStores.push(store);
   seedReadyProject(store);
+  // task-64a72f8d: `seedReadyProject` gained the durable ACTIVE graph + authorized budget
+  // root in task-acc1a3b4, and it is a STRICT NO-OP today -- nothing reads either record
+  // until effect.activate moves onto durable authority. So this lane going green proves
+  // nothing about the world it was handed, and a HOSTILE suite built on a silently-wrong
+  // world would be arranging a deficiency it never declared. Read it back instead.
+  assertActivationWorldSeeded(store);
   return store;
 }
 
@@ -324,13 +340,19 @@ const RESOURCE_ROW = {
   resourceId: "res-1", state: "ACTIVE",
 } as const;
 
-const BUDGET_VIEW = {
+/**
+ * work.claim's OWN caller budget section. `effect.activate` stopped sending one with the
+ * fence-narrowing chain (task-553b2165), but `claimWork` still reads `sections.budget`
+ * (`work-claim.ts:240`) over a CLOSED key set, so the claim payload below supplies it directly
+ * instead of inheriting it from the activation envelope.
+ */
+const CLAIM_BUDGET_VIEW = {
   accountId: "acct-1",
   meters: [{ available: 100, committed: 0, meter: "usd", quarantined: 0, reserved: 0 }],
   state: "OPEN", version: 2,
 } as const;
 
-const ADMISSION = {
+const CLAIM_ADMISSION = {
   admissionRef: "adm-1",
   amounts: [
     { meter: "usd", purpose: "EXECUTION", quantity: 10 },
@@ -342,7 +364,9 @@ const ADMISSION = {
   expectedVersion: 2,
 } as const;
 
-const GATE = { allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null } as const;
+const CLAIM_GATE = {
+  allowance: { decisionRef: "dec-1", outcome: "ALLOW" }, approval: null,
+} as const;
 
 const EFFECT_INTENT = {
   aggregateId: "agg-1", desiredState: "ACTIVE", expectedGraphEpoch: 4, idempotencyKey: "idem-1",
@@ -369,7 +393,6 @@ const ACTIVATION_SECTION = {
 export function activationPayload(): Record<string, unknown> {
   return structuredClone({
     activation: ACTIVATION_SECTION,
-    budget: { admission: ADMISSION, gate: GATE, view: BUDGET_VIEW },
     effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
     lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
     liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
@@ -407,17 +430,57 @@ function inactiveSlotPayload(): Record<string, unknown> {
 }
 
 /** An admission asking for more than the view holds: the budget leg's own refusal. */
-function overdrawnBudgetPayload(): Record<string, unknown> {
-  const payload = activationPayload();
-  payload["budget"] = {
-    admission: {
-      ...ADMISSION,
-      amounts: ADMISSION.amounts.map((amount) => ({ ...amount, quantity: 10_000 })),
+/**
+ * Arranges a DURABLE overdraw: a real hold through the production writer that leaves the
+ * account short of what the node's own `admissionAmounts` require.
+ *
+ * WHY THIS REPLACED `overdrawnBudgetPayload`, and it is a correction rather than a
+ * relaxation. That fixture inflated the CALLER's admission quantities to 10_000 and relied on
+ * `claimBudget` refusing them. Since task-e194c5f6 the authenticated `effect.activate` route
+ * derives its amounts, its account and its fence from durable project/goal/graph/node facts
+ * and never reads the caller's admission at all, so an inflated caller payload is now simply
+ * IGNORED — the activation is admitted, and an arm asserting a refusal would be asserting a
+ * premise that no longer exists. The hostile INTENT is unchanged and now lands where the
+ * decision actually is: the durable account cannot cover the admission.
+ *
+ * Nothing is reimplemented here. The drain runs through `reserveBudgetForAdmission`, and the
+ * refusal that follows is `reserveForAdmission`'s own
+ * `BUDGET_RESERVATION_INSUFFICIENT_AVAILABLE`, which the durable writer forwards as
+ * `BUDGET_LEDGER_TRANSITION_REFUSED` at `BUDGET_LEDGER` with the scheduler's code preserved
+ * in `sourceCode`.
+ */
+function drainDurableBudget(store: SqliteEventStore, label: string): void {
+  const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
+  if (!ledger.ok) throw new Error(`hostile drain could not read the ledger: ${ledger.code}`);
+  const available = ledger.meters.find(
+    (entry) => entry.meter === ACTIVATION_WORLD_METER)?.buckets.available;
+  if (available === undefined) throw new Error("hostile drain found no durable meter position");
+  const purposes = [...ADMISSION_PURPOSES].sort();
+  // Leaves 14 units against the seeded node's 15 (1+2+3+4+5), so the shortfall is exactly one
+  // unit: the arm proves the ceiling, not that the account was emptied.
+  const head = available - 14 - (purposes.length - 1);
+  if (head <= 0) throw new Error("hostile drain found an account too small to overdraw");
+  const held = reserveBudgetForAdmission(store, {
+    accountId: ledger.binding.budgetAccountRef,
+    admissionRef: `hostile-drain-${label}`,
+    amounts: purposes.map((purpose, index) => ({
+      meter: ACTIVATION_WORLD_METER, purpose, quantity: index === 0 ? head : 1,
+    })),
+    context: {
+      commandId: `cmd-hostile-drain-${label}`, correlationId: `corr-hostile-drain-${label}`,
+      decidedAt: DECIDED_AT, principalId: PRINCIPAL_ID,
     },
-    gate: GATE, view: BUDGET_VIEW,
-  };
-  return payload;
+    gate: { allowance: { decisionRef: "decision-hostile-drain", outcome: "ALLOW" }, approval: null },
+    goalRef: GOAL_ID,
+    projectId: PROJECT_ID,
+  });
+  if (!held.ok) throw new Error(`hostile drain was refused: ${held.code}`);
 }
+
+/** The durable pair an over-committed account answers with, taken from production, not chosen. */
+const DURABLE_OVERDRAW: RefusalExpectation = Object.freeze({
+  code: "BUDGET_LEDGER_TRANSITION_REFUSED", layer: "BUDGET_LEDGER",
+});
 
 /** An envelope carrying one payload key too many. Refused before any domain stage. */
 function smuggledSectionBytes(): Uint8Array {
@@ -438,6 +501,12 @@ function smuggledSectionBytes(): Uint8Array {
 function claimPayload(): Record<string, unknown> {
   const payload = activationPayload();
   delete payload["activation"];
+  // The claim's key set still HOLDS `budget`; only the activation envelope dropped it. Without
+  // this the outer mirror reads null and every case below refuses WORK_PAYLOAD_MALFORMED before
+  // its named leg runs — measured, task-553b2165.
+  payload["budget"] = structuredClone({
+    admission: CLAIM_ADMISSION, gate: CLAIM_GATE, view: CLAIM_BUDGET_VIEW,
+  });
   return payload;
 }
 
@@ -543,45 +612,112 @@ export function grantDurableAdmissions(): number {
 }
 
 /**
- * TWO ATTEMPTS RACING FOR THE LAST SLOT, which is the exclusivity property stated as a fact
- * about production rather than about the fixture: the live-claim table is filled to one below
- * `PROVIDER_SLOT_CEILING`, both attempts run against ONE shared table, and an admitted claim
- * appends its own occupancy before the next read. Exactly one can therefore be admitted.
+ * TWO ACTIVATIONS RACING FOR THE LAST SLOT, which is the exclusivity property stated as a
+ * fact about production rather than about the fixture: three activations are committed
+ * through the full production ingress — distinct command, idempotency, intent and slot
+ * identities, slot dimension "default", never released, so each durably occupies — and both
+ * racers then drive `runEffectActivateCommand` against the SAME store. The table the ceiling
+ * counts is stage B2's server-side derivation from those commits; every `liveClaims` section
+ * this fixture sends is EMPTY, which under the design-427 bypass admitted a fifth slot. The
+ * first racer therefore lands the fourth slot durably and the second is refused off the
+ * occupancy its win just committed.
  *
  * The refused side must carry `WORK_SLOT_EXHAUSTED` — not merely "a refusal": a boundary that
  * refused for a malformed payload would otherwise satisfy a weaker assertion while the
  * ceiling was never consulted.
  */
-let slotLiveClaims: readonly unknown[] = [];
+const SLOT_RACE_SEEDS = Object.freeze(["seed-a", "seed-b", "seed-c"] as const);
+const SLOT_RACE_SIDES = Object.freeze(["race-left", "race-right"] as const);
 
-export async function slotClaimedConcurrently(): Promise<readonly [unknown, unknown]> {
-  const occupancy = (index: number): Record<string, unknown> => ({
-    dimension: "default", slotRef: `held-${index}`, state: "RESERVED",
-  });
-  const table: unknown[] = [occupancy(0), occupancy(1), occupancy(2)];
-  const attempt = (slotRef: string): unknown => {
-    const payload = claimPayload();
-    payload["liveClaims"] = table.map((entry) => structuredClone(entry));
-    const slot = payload["slot"] as Record<string, unknown>;
-    slot["slotRef"] = slotRef;
-    const outcome = claimWork(payload);
-    // Only an ADMITTED claim occupies the slot it just took. Appending unconditionally
-    // would make the second attempt's refusal an artefact of this fixture rather than of
-    // the ceiling production enforces.
-    if (isAdmitted(outcome)) {
-      table.push(occupancy(table.length));
-    }
-    return fromFailure(outcome);
-  };
-  const left = attempt("slot-left");
-  const right = attempt("slot-right");
-  slotLiveClaims = table;
-  return [left, right];
+let slotRaceStore: ActivationLedgerStore | null = null;
+
+/**
+ * The accepted-path envelope with EVERY identity the ledger keys on renamed per slug, so
+ * several committed activations coexist in one store: the commit's aggregate is
+ * `deriveActivationAggregateId(aggregateId, idempotencyKey)` and the minted grant id is
+ * derived from the intent id, so reusing any of them would answer the seed with a replay or
+ * a grant conflict instead of a fourth occupied slot.
+ */
+function slotActivateBytes(slug: string): Uint8Array {
+  const intentId = `intent-${slug}`;
+  const lease = { ...LEASE_RECORD, leaseId: `lease-${slug}`, leaseToken: `token-${slug}` };
+  const proof = { ...LEASE_PROOF, leaseToken: `token-${slug}` };
+  return encoder.encode(JSON.stringify({
+    commandId: `cmd-activate-${slug}`, correlationId: `corr-${slug}`, decidedAt: DECIDED_AT,
+    expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
+    payload: {
+      activation: {
+        attempt: {
+          aggregateId: `agg-${slug}`, attemptId: `attempt-${slug}`, intentId,
+          state: "LAUNCH_REQUESTED", version: 0,
+        },
+        claim: {
+          claimId: `claim-${slug}`, claimedAt: DECIDED_AT, intentId,
+          lockIdentity: `lock-${slug}`, wrapperIdentity: `wrapper-${slug}`,
+        },
+        dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: proof,
+        lockIdentity: `lock-${slug}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
+        tombstone: null, wrapperIdentity: `wrapper-${slug}`,
+      },
+      effect: {
+        command: { kind: "claim" },
+        intent: {
+          ...EFFECT_INTENT, aggregateId: `agg-${slug}`, idempotencyKey: `idem-${slug}`,
+          intentId, leaseBinding: lease, predecessorCursor: `cursor-${slug}`,
+        },
+      },
+      lease: { proof, record: lease },
+      // Deliberately EMPTY: the caller's table is admitted at the envelope and must decide
+      // nothing. An empty table was exactly what the design-427 bypass admitted a fifth
+      // slot from, so a ceiling that still read it would admit BOTH racers here.
+      liveClaims: [],
+      slot: {
+        dimension: "default", requestId: `req-${slug}`, rows: [RESOURCE_ROW],
+        slotRef: `slot-${slug}`,
+      },
+    },
+    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+  }));
 }
 
-/** How many slots the shared table durably holds beyond the three it started with. */
+export async function slotClaimedConcurrently(): Promise<readonly [unknown, unknown]> {
+  const store = openHostileStore("slot-ceiling-race");
+  slotRaceStore = store as unknown as ActivationLedgerStore;
+  for (const slug of SLOT_RACE_SEEDS) {
+    const seeded = runEffectActivateCommand(store, slotActivateBytes(slug));
+    // A refused seed would leave fewer than three slots durably held, and the race below
+    // would then prove exhaustion against a ceiling nobody reached.
+    if (!isAdmitted(seeded)) {
+      throw new Error(`slot race seed ${slug} was refused instead of occupying`);
+    }
+  }
+  const [left, right] = SLOT_RACE_SIDES;
+  return [
+    ingressOf(runEffectActivateCommand(store, slotActivateBytes(left))),
+    ingressOf(runEffectActivateCommand(store, slotActivateBytes(right))),
+  ] as const;
+}
+
+/**
+ * The DURABLE count of activation-ledger events across BOTH racing aggregates.
+ *
+ * Negative when `run` never stored a handle, so a case that silently stopped driving the
+ * store reddens here rather than reporting a satisfying zero. The three seeds are
+ * deliberately excluded: they are the arrangement, and a count that included them would
+ * report a double-admitted race as `3 + 2` instead of the `1` the suite requires — a
+ * refusal returned to one racer is not evidence that racer's write never landed.
+ */
 export function slotDurableAdmissions(): number {
-  return slotLiveClaims.length - 3;
+  if (slotRaceStore === null) {
+    return -1;
+  }
+  const store = slotRaceStore;
+  return SLOT_RACE_SIDES.reduce(
+    (total, slug) =>
+      total + activationEventCount(store, deriveActivationAggregateId(`agg-${slug}`, `idem-${slug}`)),
+    0,
+  );
 }
 
 /** The durable proof: how many activation events the ledger aggregate actually holds. */
@@ -759,21 +895,25 @@ export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze(
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER", arm: "BEFORE",
-    name: "an admission exceeding the view is answered by the claim kernel, not the budget stage",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
-    run: async () =>
-      ingressOf(runEffectActivateCommand(openHostileStore("budget-before"), activateBytes(overdrawnBudgetPayload()))),
+    name: "an admission the DURABLE account cannot cover is refused by the durable ledger",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
+    run: async () => {
+      const store = openHostileStore("budget-before");
+      drainDurableBudget(store, "before");
+      return ingressOf(runEffectActivateCommand(store, activateBytes()));
+    },
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER", arm: "AFTER",
-    name: "the same overdrawn admission is refused identically after an activation committed",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
+    name: "the same durable shortfall is refused identically after an activation committed",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
     run: async () => {
       const store = openHostileStore("budget-after");
       runEffectActivateCommand(store, activateBytes());
-      return ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload(), "cmd-activate-3")));
+      drainDurableBudget(store, "after");
+      return ingressOf(runEffectActivateCommand(store, activateBytes(activationPayload(), "cmd-activate-3")));
     },
   },
   {
@@ -1885,15 +2025,16 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
   },
   {
     constant: "ACTIVATION_BUDGET_LAYER",
-    name: "two overdrawn admissions racing are both refused, and neither is admitted at zero cost",
-    arranged: "AUTHORITY",
-    expected: { code: "WORK_BUDGET_REFUSED", layer: "AUTHORITY" },
+    name: "two admissions racing a drained durable account are both refused at zero cost",
+    arranged: "BUDGET_LEDGER",
+    expected: DURABLE_OVERDRAW,
     maxAdmitted: 0,
     run: async () => {
       const store = openHostileStore("budget-race");
+      drainDurableBudget(store, "race");
       return [
-        ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload()))),
-        ingressOf(runEffectActivateCommand(store, activateBytes(overdrawnBudgetPayload(), "cmd-activate-5"))),
+        ingressOf(runEffectActivateCommand(store, activateBytes())),
+        ingressOf(runEffectActivateCommand(store, activateBytes(activationPayload(), "cmd-activate-5"))),
       ] as const;
     },
   },

@@ -10,6 +10,7 @@ import type { ApprovalPolicy, HumanAuthorityGate } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { driveTo, finalizeRequestIndex } from "../bootstrap/bootstrap-journey-fixtures.js";
 import {
   GOAL_ID,
   GRAPH_REVISION_REF,
@@ -27,7 +28,10 @@ import {
   openStore,
   planningActivation,
   planningChain,
+  SEALED_SUBMISSION_HASH,
+  sealedPlanningChain,
   send,
+  sendReviewed,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readApprovalGate } from "./approval-gate.js";
 import {
@@ -86,7 +90,9 @@ function planningRunRow(store: SqliteEventStore): PlanningRunRow | undefined {
     PlanningRunRow | undefined;
 }
 
-function seedPlanningRunResult(store: SqliteEventStore, result: unknown): void {
+function seedPlanningRunResult(
+  store: SqliteEventStore, result: unknown, expectedVersion = 0,
+): void {
   const encoder = new TextEncoder();
   store.commitExpectedVersionDecision({
     commandKind: "plan.propose",
@@ -94,12 +100,16 @@ function seedPlanningRunResult(store: SqliteEventStore, result: unknown): void {
     correlationId: "corr-corrupt-run",
     decidedAt: "2026-08-08T00:00:00.000Z",
     events: [{
-      eventId: "seed-corrupt-run-event",
+      eventId: `seed-corrupt-run-event-${String(expectedVersion)}`,
       eventType: "CorruptRunSeeded",
       payload: encoder.encode("null"),
     }],
-    expectedVersion: 0,
-    key: { commandId: "seed-corrupt-run", principalId: "principal-1", projectId: PROJECT_ID },
+    expectedVersion,
+    key: {
+      commandId: `seed-corrupt-run-${String(expectedVersion)}`,
+      principalId: "principal-1",
+      projectId: PROJECT_ID,
+    },
     requestBytes: encoder.encode("{}"),
     targetAggregateId: RUN_ID,
   });
@@ -169,24 +179,52 @@ function expectUnstatedPolicy(): void {
 
 function proposeGatedWork(store: SqliteEventStore): void {
   driveThrough(store, "plan.propose");
+  // SEALED since task-16a6a2b1: an authority-less terminal is refused PLANNING_AUTHORITY_REQUIRED
+  // at the persistence layer, so the legacy chain can no longer seed ANY of these arms. Their
+  // subject — the gate, the fold, the policy — is untouched by the swap.
   const outcome = send(store, envelope("plan.propose", 0, {
-    commands: planningChain(),
+    commands: sealedPlanningChain(),
     humanAuthorityGate: HUMAN_GATE,
     runId: RUN_ID,
   }));
   expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
 }
 
-/** A durably proposed run carrying an already-satisfied gate, seeded past ingress. */
+/**
+ * A durably proposed run carrying an already-satisfied gate, seeded past ingress.
+ *
+ * The RUN is built for real — the shipped journey through its finalize terminal, so it reaches
+ * lifecycle PLAN_REVIEW with sealed authority. Only the GATE is seeded on top, because proposal
+ * ingress deliberately refuses caller-shaped grant bytes. A fully seeded run record would now
+ * refuse APPROVAL_RUN_NOT_REVIEWABLE at the run binding (task-2cc6c59d) and this arm's subject
+ * — the policy proceeding on a satisfied gate — would never be reached.
+ */
 function proposeGrantedWork(store: SqliteEventStore): void {
-  driveThrough(store, "plan.propose");
+  driveTo(store, finalizeRequestIndex() + 1);
+  const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+  if (run === undefined) throw new Error("the journey wrote no durable run");
   seedPlanningRunResult(store, {
-    state: { goalRef: GOAL_ID, lifecycle: "PLANNING" },
-    submissionHash: SUBMISSION_HASH,
+    ...(run.result as Record<string, unknown>),
     workIdentity: { humanAuthorityGate: SATISFIED_GATE },
-  });
+  }, run.currentVersion);
   expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(SATISFIED_GATE);
 }
+
+/**
+ * The approval for a run THIS SUITE proposed, naming the hash that run ACTUALLY carries.
+ *
+ * THE TRAP THIS GUARDS, and it is why the hash is read rather than spelled: an approval naming
+ * the wrong hash is refused BOOTSTRAP_REVISION_HASH_MISMATCH @ DAEMON_PREREQUISITE, ABOVE the
+ * human-authority gate these arms are about — the suite would stay red-free while every arm below
+ * exercised the wrong layer (task-074e6d2e). Until task-16a6a2b1 the suite dodged that by
+ * proposing the authority-LESS `planningChain()`, whose terminal spells `SUBMISSION_HASH`; that
+ * chain is now REFUSED at the propose seam, so the arms seed the shipped `sealedPlanningChain()`
+ * and this approval names the hash THAT chain spells. The two cannot drift: both read the one
+ * exported `SEALED_SUBMISSION_HASH`, so a change to the chain's submission moves the approval
+ * with it instead of silently re-routing every arm below to DAEMON_PREREQUISITE.
+ */
+const seededApprovalPayload = (): Record<string, unknown> =>
+  approvalPayload({ record: approvalRecord(SEALED_SUBMISSION_HASH) });
 
 afterEach(closeStores);
 afterEach(() => { vi.unstubAllEnvs(); });
@@ -199,56 +237,58 @@ describe("planning service surface", () => {
 });
 
 describe("plan propose", () => {
-  it("keeps the human authority gate on work identity across lifecycle transitions", () => {
+  /**
+   * REPLACED by task-16a6a2b1, and the narrowing is declared rather than hidden.
+   *
+   * This arm used to drive `propose -> planning.release -> planning.claim -> RE-PROPOSE` on ONE
+   * run and assert the gate survived all of it. The re-propose is now unrepresentable: the core
+   * reducer opens a run exactly once (`planning-run-reducer.ts:178` refuses `create_draft` on a
+   * live run) and a re-plan is a NEW run of `runKind: "REVISION"`, so a second `plan.propose` on
+   * the same run seals authority twice and dies `DURABLE_ID_CONFLICT`. Governor ruling
+   * msg-b51ee31d: same-run re-proposal is not a capability the flip removed — it is a shape the
+   * retired ABSENT leg was accidentally admitting.
+   *
+   * WHAT IS LOST, said plainly: a chain must TERMINATE in a propose (`classifyPlanningChain`), so
+   * a release/reclaim round trip cannot be driven without one. The gate's survival across THOSE
+   * two transitions is therefore no longer observable through production at all, and this arm no
+   * longer claims it. What remains observable — and is asserted below — is the gate surviving the
+   * transitions the propose chain itself performs, plus the refusal that retires the old world.
+   */
+  it("keeps the human authority gate on work identity across the propose chain", () => {
     const store = openStore();
     proposeGatedWork(store);
 
+    // create_draft -> ready -> claim -> propose, all folded in one chain: the gate is carried on
+    // work identity and is still there after the terminal seals.
     expect(planningRunRow(store)?.state?.lifecycle).toBe("PLANNING");
     expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(HUMAN_GATE);
+  });
 
-    const reproposed = send(store, envelope("plan.propose", 1, {
-      commands: [
-        {
-          commandId: "chain-release",
-          expectedVersion: 4,
-          kind: "planning.release",
-          witness: {
-            attemptTerminalRef: "attempt-1-released",
-            handoffRef: "handoff-1",
-            truthClass: "DAEMON_VERIFIED",
-          },
-        },
-        {
-          commandId: "chain-reclaim",
-          expectedVersion: 5,
-          kind: "planning.claim",
-          resumeProof: {
-            handoffKind: "SAFE_RELEASE_HANDOFF",
-            handoffRef: "handoff-1",
-            priorAttemptTerminalRef: "attempt-1-released",
-            truthClass: "DAEMON_VERIFIED",
-          },
-          witness: {
-            attemptRef: "attempt-2",
-            contextRef: "context-2",
-            leaseRef: "lease-2",
-            providerSlotRef: "slot-2",
-            truthClass: "DAEMON_VERIFIED",
-          },
-        },
-        {
-          ...planningChain()[3],
-          commandId: "chain-repropose",
-          expectedVersion: 6,
-        },
-      ],
+  it("refuses a SECOND propose on the same run, which is what retired the old round trip", () => {
+    // The retirement, asserted rather than assumed. If a same-run re-proposal ever became
+    // possible again, the arm above would be under-testing its subject and this reds to say so.
+    const store = openStore();
+    proposeGatedWork(store);
+    const decisions = decisionCount(store);
+
+    const repropose = (): unknown => send(store, envelope("plan.propose", 1, {
+      commands: [{ ...sealedPlanningChain()[3], commandId: "chain-repropose", expectedVersion: 4 }],
       humanAuthorityGate: null,
       runId: RUN_ID,
     }, "cmd-plan-repropose"));
 
-    expect(reproposed.ok, reproposed.ok ? "" : reproposed.code).toBe(true);
-    expect(planningRunRow(store)?.state?.lifecycle).toBe("PLANNING");
+    // ⚠️ IT THROWS. IT DOES NOT REFUSE — and this arm pins the behaviour production actually has
+    // rather than the one it ought to have. The authority event id is derived from the run id
+    // alone (`planning-authority-persistence.ts:243`), so the second seal collides in the STORE
+    // and a DurableIdConflictError escapes as an unhandled exception instead of a stable reason
+    // code at a named layer. A crash is not a refusal. That is a real fail-closed gap, it is
+    // DISCLOSED by task-16a6a2b1 rather than fixed here (the ruling that retired this world also
+    // ruled that nobody widens that id), and if it is ever closed this assertion is what tells
+    // the next author the shape changed.
+    expect(repropose).toThrow(/DURABLE_ID_CONFLICT/u);
+    // Nothing was written: the gate stands and the run did not advance.
     expect(planningRunRow(store)?.workIdentity?.humanAuthorityGate).toEqual(HUMAN_GATE);
+    expect(decisionCount(store)).toBe(decisions);
   });
 
   it("refuses rather than recreating a run whose durable state is unreadable", () => {
@@ -289,7 +329,7 @@ describe("plan propose", () => {
     const before = decisionCount(store);
 
     const outcome = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       runId: RUN_ID,
     }));
 
@@ -297,8 +337,11 @@ describe("plan propose", () => {
     if (!outcome.ok) throw new Error("expected acceptance");
     expect(decisionCount(store)).toBe(before + 1);
     const run = readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID);
+    // SEALED_SUBMISSION_HASH since task-16a6a2b1: the chain this arm folds is the sealed one,
+    // and its terminal spells that hash. Named explicitly rather than read back, so the arm still
+    // pins WHICH submission the fold committed instead of agreeing with whatever it wrote.
     expect((run?.result as { submissionHash?: string } | undefined)?.submissionHash)
-      .toBe(SUBMISSION_HASH);
+      .toBe(SEALED_SUBMISSION_HASH);
   });
 
   it("refuses a chain whose last command is not plan.propose, at the ingress layer", () => {
@@ -362,7 +405,7 @@ describe("approval decide", () => {
       proposeGatedWork(store);
       const before = decisionCount(store);
 
-      const outcome = send(store, envelope("approval.decide", 0, approvalPayload(),
+      const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload(),
         `cmd-gated-${String(index)}`));
 
       expect(outcome.ok, why).toBe(false);
@@ -381,7 +424,7 @@ describe("approval decide", () => {
     const store = openStore();
     driveThrough(store, "plan.propose");
     const proposed = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       humanAuthorityGate: null,
       runId: RUN_ID,
     }));
@@ -390,7 +433,7 @@ describe("approval decide", () => {
     // Under the most permissive settings the file can express, so the gate is what answers.
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected unreadable-gate refusal");
@@ -404,7 +447,7 @@ describe("approval decide", () => {
     const store = openStore();
     driveThrough(store, "plan.propose");
     const proposed = send(store, envelope("plan.propose", 0, {
-      commands: planningChain(),
+      commands: sealedPlanningChain(),
       humanAuthorityGate: {
         gateId: HUMAN_GATE.gateId,
         grant: {
@@ -422,7 +465,7 @@ describe("approval decide", () => {
     const before = decisionCount(store);
     useApprovalSettings(SPEED_APPROVAL_MODE, "0");
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const outcome = send(store, envelope("approval.decide", 0, seededApprovalPayload()));
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected forged-grant refusal");
@@ -569,6 +612,92 @@ describe("approval decide", () => {
   });
 
   /**
+   * THE OPERATOR'S CLICK IS THE HUMAN REVIEW — but only under the composition
+   * root's server-assembled witness. Every witness-less arm above keeps its
+   * refusal byte-for-byte: the handler still cannot know a caller is human on
+   * its own, so nothing decoded from bytes can flip these outcomes. The witness
+   * path exists so a REQUIRE_HUMAN board is operable by the human it requires,
+   * while an explicit GO gate and the delay bound both keep outranking it.
+   */
+  it("commits gate-free approval as the operator's own review under unstated settings", () => {
+    useApprovalSettings(undefined, undefined);
+    expectUnstatedPolicy();
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    // The same dispatch WITHOUT the witness must keep refusing first — the
+    // contrast is the contract: bytes alone can never become a human.
+    const unwitnessed = send(store, envelope("approval.decide", 0, approvalPayload()));
+    expect(unwitnessed.ok).toBe(false);
+    expect(decisionCount(store)).toBe(before);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  it("keeps an explicit GO gate outranking the operator's click", () => {
+    useApprovalSettings(undefined, undefined);
+    const store = openStore();
+    proposeGatedWork(store);
+    const before = decisionCount(store);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, seededApprovalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the unsatisfied gate to stand");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_AUTHORITY_REQUIRED");
+    expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("keeps the deferred-delay bound outranking the operator's click", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "25");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the stated delay to defer");
+    expect(outcome.code).toBe("APPROVAL_HUMAN_REVIEW_REQUIRED");
+    expect(outcome.refusedBy).toBe("APPROVAL_POLICY");
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("fails a witness that names no principal closed at the gate layer", () => {
+    useApprovalSettings(undefined, undefined);
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()), "");
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected the unnamed witness to refuse");
+    expect(outcome.code).toBe("APPROVAL_PRINCIPAL_UNNAMED");
+    expect(outcome.refusedBy).toBe("HUMAN_AUTHORITY_GATE");
+    expect(decisionCount(store)).toBe(before);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("leaves the SPEED path untouched by the witness", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+
+    const outcome = sendReviewed(store, envelope("approval.decide", 0, approvalPayload()));
+
+    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
+    expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
+  });
+
+  /**
    * The registry allow-list already refuses an `approvalPolicy` payload key, but that guard
    * lives in a different file. These arms hold at the HANDLER, in both directions, so the
    * guarantee survives an allow-list edit: a payload can neither loosen nor tighten the
@@ -624,6 +753,8 @@ describe("approval decide", () => {
     const store = openStore();
     proposeGrantedWork(store);
 
+    // The SHIPPED payload, not the legacy one: this arm's run is now the real sealed journey,
+    // so its submission hash is the sealed plan body's own.
     const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
@@ -679,6 +810,26 @@ describe("approval decide", () => {
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("expected refusal");
     expect(outcome.code).toBe("BOOTSTRAP_REVISION_HASH_MISMATCH");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("refuses a runId no plan was proposed under as MISSING, never as a hash mismatch", () => {
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const before = decisionCount(store);
+
+    // The durable proposal exists — under RUN_ID. Naming a different run is a
+    // missing prerequisite for THAT run; the old collapsed guard blamed the
+    // revision hash, and a live operator chased the wrong field (measured on
+    // the board: a dev payload naming an uncommitted run answered HASH_MISMATCH).
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
+      runId: "run-nobody-proposed",
+    })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("BOOTSTRAP_PREREQUISITE_MISSING");
     expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
     expect(decisionCount(store)).toBe(before);
   });
