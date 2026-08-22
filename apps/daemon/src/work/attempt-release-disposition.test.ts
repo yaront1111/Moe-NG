@@ -17,6 +17,7 @@ import { deriveActivationAggregateId } from "../activation/activation-ledger-con
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { commitActivationLedgerRecord } from "../activation/activation-ledger-commit.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
+import { deriveAttemptJournalAggregateId } from "../journal/journal-contracts.js";
 import {
   PRINCIPAL_ID, PROJECT_ID, cleanupRestoreHarnesses, openHarnessStore, seedReadyProject, trackHarnessRoot,
 } from "../recovery/restore-test-harness.js";
@@ -30,8 +31,16 @@ import {
   recordAttemptRelease,
 } from "./attempt-release-disposition.js";
 import type { AttemptReleaseOutcome, AttemptReleaseRequest } from "./attempt-release-disposition.js";
+import { deriveHandoffBinding } from "./attempt-release-handoff.js";
+import {
+  ATTEMPT_RELEASE_RESOURCE_FENCE_CODES,
+} from "./attempt-release-resource-fence.js";
 import { deriveReleaseTerminal } from "./attempt-release-terminal.js";
-import { applyAttemptResourceReport, bindAttemptResources } from "./attempt-resource-authority.js";
+import {
+  ATTEMPT_RESOURCE_BOUND_EVENT_TYPE, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
+  applyAttemptResourceReport, bindAttemptResources, deriveAttemptResourceAggregateId,
+  readAttemptResources,
+} from "./attempt-resource-authority.js";
 import {
   EFFECT_TERMINAL_EVENT_TYPE, deriveTerminalEffectAggregateId, recordTerminalEffect,
 } from "./effect-terminal-ledger.js";
@@ -40,6 +49,7 @@ import type { FoundationAttemptBound } from "./foundation-attempt-contracts.js";
 import {
   RELEASE_TERMINAL_CODES, deriveReleaseTerminalEvidence,
 } from "./release-terminal-evidence.js";
+import { runResourceReconcileCommand } from "./resource-reconcile-command.js";
 import { SAFE_BOUNDARY_OBSERVATION_LAYER } from "./safe-boundary-observation.js";
 
 /**
@@ -113,7 +123,11 @@ const ACTIVATION_SECTION = {
 const ACTIVATION_AGGREGATE = deriveActivationAggregateId(
   EFFECT_INTENT.aggregateId, EFFECT_INTENT.idempotencyKey);
 
-function activationBytes(): Uint8Array {
+/** The slot rows the ingress binds. PARAMETERISED for exactly one case: an
+ *  activation that declares NO resource, which is the only honest production
+ *  route to a durably ABSENT set — `bindActivationResources` discards its bind
+ *  refusal by design, and the reader then answers ATTEMPT_RESOURCE_RECORD_ABSENT. */
+function activationBytes(rows: readonly unknown[] = [RESOURCE_ROW]): Uint8Array {
   return encoder.encode(JSON.stringify({
     commandId: "cmd-release-1", correlationId: "corr-release", decidedAt: DECIDED_AT,
     expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
@@ -122,7 +136,7 @@ function activationBytes(): Uint8Array {
       effect: { command: { kind: "claim" }, intent: EFFECT_INTENT },
       lease: { proof: LEASE_PROOF, record: LEASE_RECORD },
       liveClaims: [{ dimension: "default", slotRef: "held-0", state: "RESERVED" }],
-      slot: { dimension: "default", requestId: "req-1", rows: [RESOURCE_ROW], slotRef: "slot-1" },
+      slot: { dimension: "default", requestId: "req-1", rows, slotRef: "slot-1" },
     }),
     principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
     schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
@@ -273,11 +287,12 @@ function seedTerminality(
  *  command result, so the record this suite calls "durable" really is. */
 function activated(
   label: string, evidence: BoundaryEvidence = "OBSERVED", terminality: Terminality = SETTLED,
+  rows: readonly unknown[] = [RESOURCE_ROW],
 ): Fixture {
   const root = trackHarnessRoot(mkdtempSync(join(tmpdir(), `moe-release-${label}-`)));
   const store = openHarnessStore(join(root, "project.db"));
   seedReadyProject(store);
-  const outcome = runEffectActivateCommand(store, activationBytes());
+  const outcome = runEffectActivateCommand(store, activationBytes(rows));
   if (!outcome.ok) throw new Error(`activation refused: ${outcome.code}`);
   if (evidence !== "ABSENT") seedProviderRun(store, label, evidence);
   seedTerminality(store, label, terminality);
@@ -1057,9 +1072,18 @@ describe("attempt release disposition — DRAINING is its own outcome", () => {
   /** No terminal record for the attempt's own effect intent. */
   const drainedByEffects = (): Record<string, unknown> =>
     rowFrom(drainedBy("effects", "OBSERVED", EFFECTS_PENDING, [false, true]));
-  /** A resource set the scheduler's reducers will still move. */
-  const drainedByResources = (): Record<string, unknown> =>
-    rowFrom(drainedBy("resources", "OBSERVED", RESOURCES_PENDING, [true, false]));
+  /**
+   * THE RESOURCES ARM IS GONE FROM THIS SWEEP, and its absence is the change this
+   * row landed rather than an omission. A non-terminal RESOURCE set no longer
+   * drains: `commitRelease` pins expectedVersion 0, so the DRAINING row this arm
+   * used to assert could never be upgraded once the reconcile command terminalised
+   * the set. It is DEFERRED instead, with zero rows and zero decisions, by the
+   * resource-fence block below — which also owns this arm's replacement.
+   *
+   * THE TWO ARMS THAT REMAIN ARE THE NEGATIVE CONTROL for that fence: both carry
+   * `resourcesTerminal: true`, so their DRAINING rows must be untouched. A fence
+   * that silently killed DRAINING altogether would red right here.
+   */
 
   /** A durable run the host never saw exit — the boundary's only route now. Its
    *  effect is necessarily pending too (see `UNOBSERVED_TERMINALITY`), so this arm
@@ -1074,18 +1098,18 @@ describe("attempt release disposition — DRAINING is its own outcome", () => {
   }
 
   it("records DRAINING with resumable false for each unsettled boundary fact", () => {
-    // THREE DERIVED ARMS, ZERO RELAYED — the cardinality that changed. They are
-    // counted apart because each is reached through a DIFFERENT durable shape: a
-    // sweep that quietly lost one would still show three rows if another
-    // double-counted, and all three are now driven by evidence rather than by a
-    // caller literal this suite chose.
+    // TWO DERIVED ARMS, ZERO RELAYED, and two rather than three because the
+    // resources arm is now FENCED before any write (see the fence block below).
+    // They are counted apart because each is reached through a DIFFERENT durable
+    // shape: a sweep that quietly lost one would still show two rows if the other
+    // double-counted, and both are driven by evidence rather than by a caller
+    // literal this suite chose.
     const effects = [drainedByEffects()];
-    const resources = [drainedByResources()];
     const boundary = [drainedByBoundary()];
-    expect([effects.length, resources.length, boundary.length]).toEqual([1, 1, 1]);
-    const rows = [...effects, ...resources, ...boundary];
+    expect([effects.length, boundary.length]).toEqual([1, 1]);
+    const rows = [...effects, ...boundary];
     // A sweep that generated nothing passes every assertion below vacuously.
-    expect(rows.length).toBe(3);
+    expect(rows.length).toBe(2);
     for (const row of rows) {
       expect([row["outcome"], row["leaseState"], row["resumable"], row["releasePending"]])
         .toEqual(["DRAINING", "DRAINING", false, true]);
@@ -1526,3 +1550,383 @@ function plantReleaseEvent(fixture: Fixture, payload: Uint8Array, expectedVersio
     throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
   }
 }
+
+/**
+ * THE PRE-RELEASE RESOURCE FENCE.
+ *
+ * `commitRelease` pins `expectedVersion: 0`, so the FIRST row an attempt's release
+ * aggregate ever receives is the only one it can hold. A release taken while the
+ * durable resource set is still non-terminal therefore strands the attempt in
+ * DRAINING FOREVER: the reconcile command can terminalise the set a second later
+ * and no later write can upgrade that row. The fence refuses BEFORE the handoff
+ * binding is derived and before the kernel is asked anything, so a deferral leaves
+ * zero rows AND zero decisions.
+ *
+ * WHAT THIS BLOCK DOES NOT OWN: the post-verification retry that turns a deferral
+ * into a release once reconciliation lands (task-48c79a29) and the scheduler
+ * nine-key handoff builder (task-a20e8ef6).
+ */
+describe("attempt release disposition — the resource fence stands before any write", () => {
+  const selector = Object.freeze({ attemptRef: ATTEMPT_REF, projectId: PROJECT_ID });
+  /** The fence's own stable code, written as a LITERAL rather than read off the
+   *  production constant: an operand derived from the subject cannot constrain it. */
+  const UNPROVEN = "ATTEMPT_RELEASE_RESOURCES_UNPROVEN";
+
+  const deferral = Object.freeze({ code: UNPROVEN, refusedBy: DAEMON_ATTEMPT_RELEASE });
+
+  /** A member the scheduler's own reducer moved to QUARANTINED, through the SAME
+   *  production authority the reconcile ingress drives — an UNKNOWN adapter failure
+   *  on the member itself, which `adapterFail` quarantines rather than releases. It
+   *  is a THIRD durable shape: neither ACTIVE nor absent, and still movable. */
+  function quarantineResources(fixture: Fixture, label: string): void {
+    const outcome = applyAttemptResourceReport(fixture.store, {
+      activationAggregateId: ACTIVATION_AGGREGATE, commandId: `cmd-quarantine-${label}`,
+      correlationId: `corr-quarantine-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    }, { disposition: "UNKNOWN", epoch: 1, kind: "FAIL", resourceId: RESOURCE_ROW.resourceId });
+    if (!outcome.ok) throw new Error(`quarantine refused: ${outcome.code}`);
+  }
+
+  /** The durable states of THIS attempt's set, so the sweep below can prove its
+   *  three cases are genuinely different fixtures and not three spellings of one. */
+  function resourceStates(fixture: Fixture): readonly string[] | string {
+    const current = readAttemptResources(fixture.store, ACTIVATION_AGGREGATE, PROJECT_ID);
+    return current.ok ? current.members.map((member) => member.state) : current.code;
+  }
+
+  /**
+   * An UNDECODABLE resource record, planted on the aggregate this attempt's set
+   * derives. PLANTED because no production writer can make one — both the bind and
+   * the transition arms encode through the codec — and a refusal arm no honest
+   * fixture can reach is an arm nothing tests.
+   */
+  function plantUndecodableResources(fixture: Fixture): void {
+    const aggregateId = deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE);
+    const payload = encoder.encode("{");
+    fixture.store.commitExpectedVersionDecision({
+      commandKind: "test.plant_resources", committedResultBytes: payload,
+      correlationId: "plant-resources", decidedAt: DECIDED_AT,
+      events: [{
+        eventId: "plant-resources", eventType: ATTEMPT_RESOURCE_BOUND_EVENT_TYPE, payload,
+      }],
+      // MEASURED, not assumed: the honest bind already holds version 1, and a wrong
+      // expectation would plant nothing while every assertion below read as a pass.
+      expectedVersion: fixture.store.readEvents(aggregateId).length,
+      key: { commandId: "plant-resources", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+      requestBytes: payload, targetAggregateId: aggregateId,
+    });
+  }
+
+  const release = (fixture: Fixture): AttemptReleaseOutcome =>
+    recordAttemptRelease(fixture.store, fixture.bound, fixture.record, settledRequest());
+
+  it("publishes ONE fence code, outside the daemon's closed release vocabulary", () => {
+    expect([...ATTEMPT_RELEASE_RESOURCE_FENCE_CODES]).toEqual([UNPROVEN]);
+    // NOT a member of the closed array: its header forbids daemon-only additions
+    // and a sibling test is coupled to that membership, so the fence rides the
+    // refusal union instead — the same seam the three foreign vocabularies use.
+    expect([...ATTEMPT_RELEASE_CODES]).not.toContain(UNPROVEN);
+  });
+
+  it("DEFERS a release whose resource set the reducers can still move", () => {
+    const fixture = activated("fence-active", "OBSERVED", RESOURCES_PENDING);
+    // THE PRODUCER'S OWN ANSWER for this store, per family: the effects side is
+    // terminal, so nothing else on the path can be what refuses below.
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([true, false]);
+    expect(refusalOf(release(fixture))).toEqual(deferral);
+    // ZERO ROWS AND ZERO DECISIONS. A handler that wrote a DRAINING row and then
+    // refused would sail through a return-value assertion alone.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("carries FIXED prose, so a refusal leaks no durable identifier", () => {
+    const fixture = activated("fence-message", "OBSERVED", RESOURCES_PENDING);
+    const refused = refusalWithMessage(release(fixture));
+    // The literal, not a shape test: `message` is the one free-text field a
+    // refusal may carry, so an interpolated resource id, member count or
+    // aggregate id would reach every caller that can see a deferral.
+    expect(refused).toEqual({
+      code: UNPROVEN, message: "the attempt's durable resource set is not proven terminal",
+      refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+    expect(refused.message).not.toContain(RESOURCE_ROW.resourceId);
+    expect(refused.message).not.toContain(ACTIVATION_AGGREGATE);
+    expect(refused.message).not.toContain(ATTEMPT_REF);
+  });
+
+  it("DEFERS every non-terminal resource SHAPE under one code, writing nothing", () => {
+    const cases = [
+      {
+        // A DURABLY ABSENT SET, reached with no planting at all. The ingress
+        // ADMITS a slot declaring the same resource twice, and `admitBind` then
+        // refuses it — ATTEMPT_RESOURCE_MEMBER_DUPLICATE. A bind refusal is not an
+        // activation refusal by design (`activation-resource-binding.ts`), so the
+        // activation is durable while the resource reader answers
+        // ATTEMPT_RESOURCE_RECORD_ABSENT. That is the production route to a zero
+        // set, and `shapes` below is what proves this fixture really took it.
+        fixture: activated(
+          "fence-absent", "OBSERVED", RESOURCES_PENDING, [RESOURCE_ROW, { ...RESOURCE_ROW }]),
+        label: "absent",
+      },
+      { fixture: activated("fence-sweep-active", "OBSERVED", RESOURCES_PENDING), label: "active" },
+      {
+        fixture: activated("fence-quarantined", "OBSERVED", RESOURCES_PENDING),
+        label: "quarantined", quarantine: true,
+      },
+    ];
+    // A SWEEP THAT GENERATED NOTHING passes every assertion below vacuously.
+    expect(cases.length).toBe(3);
+    const shapes: (readonly string[] | string)[] = [];
+    for (const { fixture, label, quarantine } of cases) {
+      if (quarantine === true) quarantineResources(fixture, label);
+      shapes.push(resourceStates(fixture));
+      const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+      expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal], label)
+        .toEqual([true, false]);
+      expect(refusalOf(release(fixture)), label).toEqual(deferral);
+      expect([durableRowCount(fixture), releaseDecisionCount(fixture)], label).toEqual([0, 0]);
+      expectNoDurableRow(fixture);
+    }
+    // THREE DURABLE SHAPES, not three spellings of one: an absent record, an ACTIVE
+    // member and a QUARANTINED one. Without this a seeding slip would collapse the
+    // sweep into one case repeated and still pass.
+    expect(shapes).toEqual([
+      "ATTEMPT_RESOURCE_RECORD_ABSENT", ["ACTIVE"], ["QUARANTINED"],
+    ]);
+  });
+
+  it("carries an UNREADABLE set under the PRODUCER's code and layer, not the fence's", () => {
+    const fixture = activated("fence-unknown", "OBSERVED", RESOURCES_PENDING);
+    plantUndecodableResources(fixture);
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    if (produced.ok) throw new Error("the planted resource record was still readable");
+    // PINNED AT THE PRODUCER: an exact member of its closed vocabulary.
+    expect(produced.code).toBe("RELEASE_TERMINAL_RESOURCE_UNKNOWN");
+    expect(RELEASE_TERMINAL_CODES).toContain(produced.code);
+    expect(produced.layer).toBe(RELEASE_TERMINAL_EVIDENCE);
+    const outcome = release(fixture);
+    // AND PINNED AT THE CARRIER, against the producer's own answer for the same
+    // store. "One stable outcome" means one outcome SHAPE — never one code
+    // collapsing four layers into the fence's, which is what would happen if the
+    // fence read `resourcesTerminal` off a coerced UNKNOWN.
+    expect(refusalWithMessage(outcome)).toEqual({
+      code: produced.code, message: produced.upstream?.code ?? null,
+      refusedBy: produced.layer,
+    });
+    expect(refusalOf(outcome).code).not.toBe(UNPROVEN);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  /** An unreadable journal for THIS attempt: an event of the wrong type on the
+   *  aggregate the journal reader walks, which `currentEvent` rejects outright.
+   *  It exists to give the LATER seam a refusal of its own. */
+  function plantUnreadableJournal(fixture: Fixture): void {
+    const aggregateId = deriveAttemptJournalAggregateId(fixture.record.activationDigest);
+    const payload = encoder.encode("{}");
+    fixture.store.commitExpectedVersionDecision({
+      commandKind: "test.plant_journal", committedResultBytes: payload,
+      correlationId: "plant-journal", decidedAt: DECIDED_AT,
+      events: [{ eventId: "plant-journal", eventType: "NotAJournalAppend", payload }],
+      expectedVersion: fixture.store.readEvents(aggregateId).length,
+      key: { commandId: "plant-journal", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+      requestBytes: payload, targetAggregateId: aggregateId,
+    });
+  }
+
+  it("answers under the FENCE's layer, not a LATER seam's, when both would refuse", () => {
+    // ORDERING IS OTHERWISE INVISIBLE on a deferred path, and that is a measured
+    // claim rather than an assumption: `deriveHandoffBinding` writes nothing when
+    // the journal is ABSENT (`recordReleaseHandoffBinding` answers written:false),
+    // and `releaseWork` and `releaseProviderSlot` are pure kernels. A fence moved
+    // past any of them would return the SAME code over the SAME zero rows. This
+    // fixture removes that ambiguity by giving the later seam a refusal of its own.
+    const fixture = activated("fence-order-handoff", "OBSERVED", RESOURCES_PENDING);
+    plantUnreadableJournal(fixture);
+    // THE LATER SEAM REALLY WOULD REFUSE — asserted against the production surface
+    // for this very store, not against a literal this file chose.
+    const handoff = deriveHandoffBinding(fixture.store, fixture.bound, fixture.record);
+    expect(handoff.ok).toBe(false);
+    expect(!handoff.ok && [handoff.code, handoff.refusedBy])
+      .toEqual(["JOURNAL_RECORD_MALFORMED", "DAEMON_JOURNAL_APPEND"]);
+    // AND THE FENCE ANSWERS FIRST. DoD 3's other half: this row must not convert an
+    // unrelated later refusal into a release outcome, and must not let one stand in
+    // for the deferral either.
+    expect(refusalOf(release(fixture))).toEqual(deferral);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("LIFTS once the REAL reconcile command terminalises the set, then releases", () => {
+    const fixture = activated("fence-lift", "OBSERVED", RESOURCES_PENDING);
+    expect(refusalOf(release(fixture))).toEqual(deferral);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    // THE AUTHENTICATED PRODUCTION INGRESS, not this suite's direct authority call:
+    // the fence must lift for the command a real operator runs.
+    const reconciled = runResourceReconcileCommand(fixture.store, {
+      commandId: "cmd-reconcile-lift", correlationId: "corr-reconcile-lift",
+      payload: {
+        activationAggregateId: ACTIVATION_AGGREGATE, disposition: "FAILED", epoch: 1,
+        kind: "FAIL", resourceId: RESOURCE_ROW.resourceId,
+      },
+      principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+    });
+    expect(reconciled.ok).toBe(true);
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([true, true]);
+    // AND THE SAME SEAM proceeds to its EXISTING downstream checks with no
+    // caller-supplied terminal flag anywhere: the request is the same four keys.
+    const released = release(fixture);
+    expect(rowOf(released)["outcome"]).toBe("RELEASED");
+    expect(rowOf(released)["providerSlotState"]).toBe("RELEASED");
+    expect(durableRowCount(fixture)).toBe(1);
+  });
+
+  it("leaves a deferred attempt side-effect free however often it is repeated", () => {
+    const fixture = activated("fence-idempotent", "OBSERVED", RESOURCES_PENDING);
+    const first = refusalOf(release(fixture));
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    const second = refusalOf(release(fixture));
+    // IDENTICAL, and identical to the fence's own answer: a second deferral must
+    // not drift into a replay, a NO_OP or a row.
+    expect(second).toEqual(first);
+    expect(second).toEqual(deferral);
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("does NOT weaken the non-resumable cleanup path: the fence is resource-scoped", () => {
+    // The fence reads `resourcesTerminal` and NOTHING else. An attempt whose
+    // resources are terminal but whose EFFECTS are not still reaches the kernel and
+    // still drains — which is also what proves the fence did not silently become a
+    // fence over `releasable`. The DRAINING block above is the fuller control.
+    const fixture = activated("fence-scope-effects", "OBSERVED", EFFECTS_PENDING);
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([false, true]);
+    const written = release(fixture);
+    expect(rowOf(written)["outcome"]).toBe("DRAINING");
+    expect(durableRowCount(fixture)).toBe(1);
+  });
+});
+
+/**
+ * THE VERSION FENCE, over a store that really does move under the release.
+ *
+ * `recordAttemptRelease` is fully synchronous, so no in-process interleaving is
+ * possible between the terminality derivation and `commitRelease`. The residual
+ * window belongs to a SECOND CONNECTION on the file-backed store — another daemon,
+ * a concurrent `resource.reconcile`, a replay — and this block interposes exactly
+ * that: a real durable append to the attempt's own resource aggregate, landed
+ * between the fence's version capture and the commit it guards.
+ */
+describe("attempt release disposition — a stale terminal read authorises nothing", () => {
+  const selector = Object.freeze({ attemptRef: ATTEMPT_REF, projectId: PROJECT_ID });
+  const RESOURCE_AGGREGATE = deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE);
+
+  /**
+   * A store that DELEGATES every call to the real file-backed one and, after
+   * answering the FIRST `getAggregateVersion` for the resource aggregate, lets a
+   * second writer in. The order is load-bearing: the capture must return the
+   * PRE-write version, exactly as a concurrent connection would leave it, or the
+   * re-read would see the same number and the arm would test nothing.
+   *
+   * `Reflect.get` with the real store as the receiver keeps its private fields
+   * reachable; nothing here stubs a version number or fabricates a state.
+   */
+  function interposing(store: SqliteEventStore, onCaptured: () => void): SqliteEventStore {
+    let fired = false;
+    return new Proxy(store, {
+      get(base: SqliteEventStore, key: string | symbol): unknown {
+        const value: unknown = Reflect.get(base, key, base);
+        if (typeof value !== "function") return value;
+        if (key !== "getAggregateVersion") return value.bind(base);
+        return (aggregateId: string): number => {
+          const version = base.getAggregateVersion(aggregateId);
+          if (!fired && aggregateId === RESOURCE_AGGREGATE) { fired = true; onCaptured(); }
+          return version;
+        };
+      },
+    });
+  }
+
+  /** A durable append onto the resource aggregate, committed through the store's
+   *  own decision writer. It is PLANTED rather than reconciled for a MEASURED
+   *  reason, asserted by the arm below: once the set is proven terminal every
+   *  reducer the `resource.reconcile` wire can reach refuses it, so no production
+   *  command can move that aggregate. The guard still has to hold against a writer
+   *  this row cannot enumerate — a second daemon, a replay, a later producer. */
+  function appendResourceEvent(store: SqliteEventStore): void {
+    const payload = encoder.encode("{}");
+    store.commitExpectedVersionDecision({
+      commandKind: "test.interposed_resource_write", committedResultBytes: payload,
+      correlationId: "corr-interposed", decidedAt: DECIDED_AT,
+      events: [{
+        eventId: "interposed-resources", eventType: ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
+        payload,
+      }],
+      expectedVersion: store.readEvents(RESOURCE_AGGREGATE).length,
+      key: { commandId: "cmd-interposed", principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+      requestBytes: payload, targetAggregateId: RESOURCE_AGGREGATE,
+    });
+  }
+
+  it("REFUSES when the resource aggregate moves between the read and the commit", () => {
+    const fixture = activated("fence-version-race");
+    // THE PREMISE: this attempt is fully terminal, so nothing else on the path
+    // refuses and the release would otherwise land a RELEASED row.
+    const produced = deriveReleaseTerminalEvidence(fixture.store, selector);
+    expect(produced.ok && [produced.effectsTerminal, produced.resourcesTerminal])
+      .toEqual([true, true]);
+    const before = fixture.store.getAggregateVersion(RESOURCE_AGGREGATE);
+    let reconciled: unknown = null;
+    const raced = interposing(fixture.store, () => {
+      // A REAL production command is attempted in the window FIRST, and its answer
+      // is asserted below: this is the measurement that says a proven-terminal set
+      // is frozen against the reconcile wire, kept in the committed suite rather
+      // than in a transcript.
+      reconciled = runResourceReconcileCommand(fixture.store, {
+        commandId: "cmd-reconcile-race", correlationId: "corr-reconcile-race",
+        payload: {
+          activationAggregateId: ACTIVATION_AGGREGATE, disposition: "FAILED", epoch: 1,
+          kind: "FAIL", resourceId: RESOURCE_ROW.resourceId,
+        },
+        principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+      });
+      appendResourceEvent(fixture.store);
+    });
+    const outcome = recordAttemptRelease(
+      raced, fixture.bound, fixture.record, settledRequest());
+    // THE PRODUCTION COMMAND REALLY RAN AND REALLY REFUSED — a terminal member is
+    // neither confirmable nor failable, so `applyAttemptResourceReport` carries the
+    // scheduler's own rejection.
+    expect(reconciled).not.toBeNull();
+    expect((reconciled as { ok: boolean }).ok).toBe(false);
+    expect((reconciled as { code: string }).code).toBe("ATTEMPT_RESOURCE_SET_REFUSED");
+    // THE AGGREGATE REALLY MOVED, read out of the store rather than assumed.
+    expect(fixture.store.getAggregateVersion(RESOURCE_AGGREGATE)).toBe(before + 1);
+    expect(refusalOf(outcome)).toEqual({
+      code: "ATTEMPT_RELEASE_RESOURCES_UNPROVEN", refusedBy: DAEMON_ATTEMPT_RELEASE,
+    });
+    // AND NOTHING WAS WRITTEN. The guard is the last statement before the commit,
+    // so an all-or-none refusal has to mean zero rows AND zero decisions.
+    expect([durableRowCount(fixture), releaseDecisionCount(fixture)]).toEqual([0, 0]);
+    expectNoDurableRow(fixture);
+  });
+
+  it("RELEASES over the SAME delegating store when nothing moves — the control", () => {
+    // Without this, a proxy that broke every store call would produce the refusal
+    // above for the wrong reason, and the arm would read as a pass.
+    const fixture = activated("fence-version-control");
+    const before = fixture.store.getAggregateVersion(RESOURCE_AGGREGATE);
+    const quiet = interposing(fixture.store, () => undefined);
+    const outcome = recordAttemptRelease(
+      quiet, fixture.bound, fixture.record, settledRequest());
+    expect(rowOf(outcome)["outcome"]).toBe("RELEASED");
+    expect(fixture.store.getAggregateVersion(RESOURCE_AGGREGATE)).toBe(before);
+    expect(durableRowCount(fixture)).toBe(1);
+  });
+});

@@ -33,6 +33,13 @@
  * rejected request or a row that no longer re-encodes stays UNKNOWN under an
  * exact code and a named layer.
  *
+ * AND FAIL CLOSED ONE STEP EARLIER FOR RESOURCES. `commitRelease` pins
+ * expectedVersion 0, so the first row is the only one this aggregate can hold: a
+ * release over a still-movable resource set strands the attempt in DRAINING even
+ * after `resource.reconcile` terminalises it. `./attempt-release-resource-fence.js`
+ * therefore DEFERS between the terminality derivation and the handoff binding,
+ * leaving zero rows and zero decisions; it judges nothing.
+ *
  * The durable half — the frozen vocabulary, the aggregate derivation, the store
  * reads and the single append — lives in `./attempt-release-store.js` and is
  * re-exported below, so consumers keep one import site.
@@ -52,6 +59,9 @@ import {
   carriesHandoffClaim, deriveHandoffBinding, refuseHandoffClaim,
 } from "./attempt-release-handoff.js";
 import { releaseRecordBody } from "./attempt-release-record.js";
+import {
+  readAttemptResourceVersion, refuseUnprovenResources, resourceVersionMoved, resourcesUnproven,
+} from "./attempt-release-resource-fence.js";
 import {
   carriesTerminalClaim, deriveReleaseTerminal, refuseTerminalClaim,
 } from "./attempt-release-terminal.js";
@@ -182,6 +192,18 @@ export function recordAttemptRelease(
   // release work nothing proved finished.
   const terminal = deriveReleaseTerminal(store, bound, durable);
   if (!terminal.ok) return terminal;
+  // THE RESOURCE FENCE, and its POSITION is the deliverable. A DRAINING row over a
+  // still-movable resource set can never be upgraded once `resource.reconcile`
+  // terminalises it, so refusing HERE — after the derivation that already IS the
+  // strict current read, before the binding is derived and before any kernel is
+  // asked — is what makes a deferral cost zero rows and zero decisions. A second
+  // evidence read would double the horizon race and create the second definition
+  // `release-terminal-evidence.ts` forbids, so the fence composes over this one.
+  if (resourcesUnproven(terminal.flags)) return refuseUnprovenResources();
+  // CAPTURED BESIDE THE CHECK, re-read immediately before the only write below,
+  // and AGGREGATE-SCOPED on purpose: a global `readEventHorizon` re-check moves on
+  // ANY unrelated write and would refuse nearly every release on a busy daemon.
+  const resourceVersion = readAttemptResourceVersion(store, durable);
   // AND SO IS THE HANDOFF BINDING, before the kernel is asked: production passes
   // a null scheduler handoff, so a binding derived after the kernel would never
   // be written. It is a FACT about what the attempt handed off, not authority.
@@ -215,6 +237,13 @@ export function recordAttemptRelease(
   // The event id is COPIED from the grant, never minted: a second release on the
   // same activation collides on store-wide event-id uniqueness instead of
   // quietly landing a second row nobody can choose between.
+  // THE LAST STATEMENT BEFORE THE ONLY WRITE. A second connection that moved this
+  // attempt's resource aggregate since the capture invalidates the terminal answer
+  // this call is about to act on, and expectedVersion 0 means the row it would land
+  // could never be corrected. A stale terminal read authorises nothing.
+  if (resourceVersionMoved(resourceVersion, readAttemptResourceVersion(store, durable))) {
+    return refuseUnprovenResources();
+  }
   if (!commitRelease(store, bound, encoded.bytes, `${durable.grant.grantId}:RELEASED`)) {
     return refuse("ATTEMPT_RELEASE_COMMIT_UNAVAILABLE");
   }

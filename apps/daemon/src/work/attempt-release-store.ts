@@ -23,6 +23,9 @@ import type { SqliteEventStore, StoredEvent } from "@moe/store";
 
 import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
+/** TYPE-ONLY, and load-bearing: the fence imports `DAEMON_ATTEMPT_RELEASE` from here as a VALUE,
+ *  so a value import back would close the runtime cycle this header names. A type import is erased. */
+import type { AttemptReleaseResourceFenceCode } from "./attempt-release-resource-fence.js";
 import {
   decodeFoundationPayload, encodeFoundationPayload, sameBytes, sha256Hex,
 } from "./foundation-attempt-codec.js";
@@ -93,8 +96,8 @@ export type AttemptReleaseOutcomeName = (typeof ATTEMPT_RELEASE_OUTCOMES)[number
 
 export interface AttemptReleaseRefused {
   readonly advisoryOnly: true; readonly authority: "NONE";
-  readonly code: AttemptReleaseCode | AuthorityErrorCode | ReleaseTerminalCode
-    | SafeBoundaryRefusalCode;
+  readonly code: AttemptReleaseCode | AttemptReleaseResourceFenceCode | AuthorityErrorCode
+    | ReleaseTerminalCode | SafeBoundaryRefusalCode;
   /** The refusing layer's own words when it had any; never rewritten here. */
   readonly message: string | null;
   readonly ok: false; readonly refusedBy: AttemptReleaseLayer;
