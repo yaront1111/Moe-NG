@@ -96,13 +96,17 @@ function readHolds(value: unknown): Map<string, number> | null {
 const isLine = (v: unknown): v is SettlementLine => isPlainRecord(v) && hasOnlyOwnStringKeys(v, LINE_KEYS)
   && isRef(v.meter) && oneOf(v.disposition, LINE_DISPOSITIONS) && LINE_AMOUNTS.every((k) => isCount(v[k]))
   && (v.identity === null || isRef(v.identity)) && (v.sequence === null || isCount(v.sequence));
-/** Re-reads a settlement field by field and re-derives its identity, so a forgery cannot transition. */
+/** Re-reads a settlement field by field and re-derives its identity, so a forgery cannot transition. Honest records
+ * carry at most one line per meter, so a duplicate-meter record is a forgery: per-line sufficiency checks and the
+ * per-meter movement map would otherwise let one line's units answer for another's. */
 function readSettlement(value: unknown): SettlementRecord | null {
   const item = readRecord(value, SETTLEMENT_KEYS);
   if (item === null || !isRef(item.reservationId) || !isRef(item.accountId) || !isRef(item.attemptRef)
     || !isCount(item.version) || !oneOf(item.state, SETTLEMENT_STATES) || !isPlainArray(item.lines)
     || !isPlainArray(item.overrun) || typeof item.unknownExternalLiability !== "boolean"
-    || item.settlementId !== deriveSettlementId(item.reservationId) || !item.lines.every(isLine)) return null;
+    || item.settlementId !== deriveSettlementId(item.reservationId)
+    || item.lines.length > MAX_LINES || !item.lines.every(isLine)
+    || new Set((item.lines as readonly SettlementLine[]).map((l) => l.meter)).size !== item.lines.length) return null;
   return item as unknown as SettlementRecord; }
 interface Reading { readonly meter: string; readonly quantity: number; readonly complete: boolean;
   readonly known: boolean; readonly run: string; readonly sequence: number; readonly identity: string }
@@ -174,20 +178,26 @@ export function settleReservation(view: BudgetAvailableView, reservation: Reserv
   return accept(settlement, shift(view, moves, overrun.length > 0 ? "OVERDRAWN" : view.state));
 }
 type Opened = { readonly code: BudgetSettlementIssueCode } | { readonly record: SettlementRecord };
-/** Shared preamble for the quarantine exits: only a QUARANTINED record with backing units transitions. */
+/** Shared preamble for the quarantine exits: only a QUARANTINED record with backing units transitions, and only one
+ * bound to this account — the injective reservation length prefix keeps a foreign record from moving these units. */
 function openQuarantine(view: BudgetAvailableView, settlement: unknown, cmd: Record<string, unknown> | null,
   extra: (record: SettlementRecord) => readonly Check[]): Opened {
   const record = readSettlement(settlement);
   if (!isView(view) || cmd === null || record === null || !isCount(cmd.expectedViewVersion)
     || !isCount(cmd.expectedSettlementVersion)) return { code: "BUDGET_SETTLEMENT_MALFORMED" };
   const code = firstOf([
+    [record.accountId !== view.accountId
+      || !record.reservationId.startsWith(`reservation:${record.accountId.length}:${record.accountId}:`),
+    "BUDGET_SETTLEMENT_IDENTITY_MISMATCH"],
     [record.state !== "QUARANTINED", "BUDGET_SETTLEMENT_ALREADY_SETTLED"], ...extra(record),
     ...fence(view, record.version, cmd.expectedViewVersion, cmd.expectedSettlementVersion),
     [record.lines.some((l) => (bucketOf(view, l.meter)?.quarantined ?? -1) < l.quarantined), "BUDGET_SETTLEMENT_INSUFFICIENT_QUARANTINED"]]);
   return code === null ? { record } : { code }; }
 
 /** Design exits 1 and 2, one verb with two evidence arms: exactly one of a correlated receipt or a never-started proof.
- * The proof arm never touches COMMITTED, and a receipt below the committed lower bound is a conflict, not a refund. */
+ * The proof arm never touches COMMITTED, and a receipt below the committed lower bound is a conflict, not a refund.
+ * Applicability keys on line resolution, not on remaining quarantined units: a LOWER_BOUND line whose whole hold was
+ * already committed still holds an unresolved upper bound, so a later COMPLETE receipt must be able to land on it. */
 export function reconcileSettlement(view: BudgetAvailableView, settlement: SettlementRecord,
   evidence: ReconcileEvidence, command: SettlementCommand): BudgetSettlementResult {
   const arm = readRecord(evidence, ARM_KEYS), proof = arm === null ? null : arm.neverStartedProofRef;
@@ -200,7 +210,8 @@ export function reconcileSettlement(view: BudgetAvailableView, settlement: Settl
     [(readings === null) === (proof === null), "BUDGET_SETTLEMENT_EVIDENCE_AMBIGUOUS"],
     [some((x) => x.run !== r.attemptRef), "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
     [readings !== null && new Set(readings.map((x) => x.meter)).size !== readings.length, "BUDGET_SETTLEMENT_DUPLICATE_METER"],
-    [some((x) => (at(r, x.meter)?.quarantined ?? 0) === 0), "BUDGET_SETTLEMENT_UNKNOWN_METER"],
+    [some((x) => { const l = at(r, x.meter); return l === undefined || RESOLVED.includes(l.disposition); }),
+      "BUDGET_SETTLEMENT_UNKNOWN_METER"],
     [some((x) => x.sequence <= (at(r, x.meter)?.sequence ?? -1)), "BUDGET_SETTLEMENT_SEQUENCE_STALE"],
     [some((x) => x.known && x.quantity < (at(r, x.meter)?.committed ?? 0))
       || (readings === null && r.lines.some((l) => l.committed > 0)), "BUDGET_SETTLEMENT_MEASUREMENT_CONFLICT"]]);
@@ -208,7 +219,7 @@ export function reconcileSettlement(view: BudgetAvailableView, settlement: Settl
   const record = opened.record, moves = new Map<string, Movement>(), lines: SettlementLine[] = [], overrun = [...record.overrun];
   for (const line of record.lines) {
     const reading = readings?.find((x) => x.meter === line.meter);
-    if (line.quarantined === 0 || (readings !== null && reading === undefined)) { lines.push(line); continue; }
+    if (RESOLVED.includes(line.disposition) || (readings !== null && reading === undefined)) { lines.push(line); continue; }
     if (readings === null) {
       moves.set(line.meter, { available: line.quarantined, reserved: 0, quarantined: -line.quarantined, committed: 0 });
       lines.push({ ...line, refunded: line.refunded + line.quarantined, quarantined: 0, disposition: "NEVER_STARTED_REFUND" }); continue; }
@@ -242,7 +253,9 @@ export function closeSettledView(view: BudgetAvailableView, settlements: readonl
   const records = isPlainArray(settlements) && settlements.length <= MAX_LINES ? settlements.map(readSettlement) : null;
   if (!isView(view) || cmd === null || records === null || !isCount(cmd.expectedVersion)
     || records.some((r) => r === null)) return fail(view, null, "BUDGET_SETTLEMENT_MALFORMED");
-  const code = firstOf([...fence(view, 0, cmd.expectedVersion, 0),
+  const code = firstOf([
+    [records.some((r) => r !== null && r.accountId !== view.accountId), "BUDGET_SETTLEMENT_IDENTITY_MISMATCH"],
+    ...fence(view, 0, cmd.expectedVersion, 0),
     [view.state !== "OPEN" || view.meters.some((m) => m.available + m.reserved + m.quarantined > 0)
       || records.some((r) => r?.state === "QUARANTINED"), "BUDGET_SETTLEMENT_ILLEGAL_CLOSE"]]);
   if (code !== null) return fail(view, null, code);

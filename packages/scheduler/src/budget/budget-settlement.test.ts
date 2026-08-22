@@ -112,6 +112,25 @@ it("commits exact use out of QUARANTINED on a later correlated receipt and refun
   expect([bucketOf(view, MS), view.version]).toEqual([bucket(MS, 30, 0, 0, 70), 6]);
   expectConserved(held.view, view, settlement.overrun);
 });
+it("lands a late COMPLETE receipt on a LOWER_BOUND line whose whole hold already committed and keeps the overrun explicit", () => {
+  const held = settled("PARTIAL", 95);
+  const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
+    { measurements: [mkMeasurement("COMPLETE", 100, 4)], neverStartedProofRef: null }, RECONCILE));
+  expect(settlement).toMatchObject({ state: "SETTLED", version: 1,
+    lines: [{ committed: 100, refunded: 0, quarantined: 0, disposition: "EXACT", sequence: 4 }] });
+  expect([...settlement.overrun]).toEqual([{ meter: MS, amount: 5 }, { meter: MS, amount: 5 }]);
+  expect([bucketOf(view, MS), view.state, view.version]).toEqual([bucket(MS, 10, 0, 0, 100), "OVERDRAWN", 6]);
+  expectConserved(held.view, view, settlement.overrun);
+});
+it("settles a PARTIAL receipt that consumed exactly its hold once a COMPLETE receipt confirms no further use", () => {
+  const held = settled("PARTIAL", 90);
+  const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
+    { measurements: [mkMeasurement("COMPLETE", 90, 4)], neverStartedProofRef: null }, RECONCILE));
+  expect(settlement).toMatchObject({ state: "SETTLED", version: 1, overrun: [],
+    lines: [{ committed: 90, refunded: 0, quarantined: 0, disposition: "EXACT", sequence: 4 }] });
+  expect([bucketOf(view, MS), view.state, view.version]).toEqual([bucket(MS, 10, 0, 0, 90), "OPEN", 6]);
+  expectConserved(held.view, view, settlement.overrun);
+});
 it("refunds every quarantined unit on never-started proof while committed attempt.count stays spent", () => {
   const held = quarantined();
   const { settlement, view } = must(reconcileSettlement(held.view, held.settlement,
@@ -154,13 +173,17 @@ const M70 = mkMeasurement("COMPLETE", 70, 3);
 const R4: ReconcileEvidence = { measurements: [mkMeasurement("COMPLETE", 70, 4)], neverStartedProofRef: null };
 const PROOF: ReconcileEvidence = { measurements: null, neverStartedProofRef: "proof:never-started:1" };
 const EXACT = settled("COMPLETE", 70).settlement;
+/** Rebinds a record to another account with a self-consistent inner identity, so only the view binding refuses. */
+const foreign = (record: SettlementRecord): SettlementRecord => { const rid = deriveReservationId("account:other", REF);
+  return { ...record, accountId: "account:other", reservationId: rid, settlementId: deriveSettlementId(rid) }; };
 const onSettle = (reservation: ReservationRecord, measurements: readonly NormalizedMeasurement[] = [M70],
   command = SETTLE, view = mkView()) => (): Probe =>
   probe(view, reservation, () => settleReservation(view, reservation, { measurements }, command));
 const onReconcile = (evidence: ReconcileEvidence, mutate: (h: Held) => Held = (h) => h, command = RECONCILE) =>
   (): Probe => { const h = mutate(quarantined());
     return probe(h.view, h.settlement, () => reconcileSettlement(h.view, h.settlement, evidence, command)); };
-const onConservative = (command = ACK) => (): Probe => { const h = quarantined();
+const onConservative = (command = ACK, mutate: (h: Held) => Held = (h) => h) => (): Probe => {
+  const h = mutate(quarantined());
   return probe(h.view, h.settlement, () => conservativeSettle(h.view, h.settlement, command)); };
 const onClose = (view = drained(), settlements: readonly SettlementRecord[] = []) => (): Probe =>
   probe(view, settlements, () => closeSettledView(view, settlements, CLOSE));
@@ -196,6 +219,14 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
     (h) => ({ ...h, settlement: { ...h.settlement, state: "SETTLED" } })), "ALREADY_SETTLED"],
   ["a reconcile of a written-off record", onReconcile(R4,
     (h) => ({ ...h, settlement: { ...h.settlement, state: "WRITTEN_OFF" } })), "ALREADY_SETTLED"],
+  ["a reconcile of a settlement bound to another account", onReconcile(R4,
+    (h) => ({ ...h, settlement: foreign(h.settlement) })), "IDENTITY_MISMATCH"],
+  ["a reconcile of a settlement whose reservation id names another account", onReconcile(R4,
+    (h) => ({ ...h, settlement: { ...h.settlement, reservationId: deriveReservationId("account:other", REF),
+      settlementId: deriveSettlementId(deriveReservationId("account:other", REF)) } })), "IDENTITY_MISMATCH"],
+  ["a forged settlement carrying two lines of one meter", onReconcile(R4,
+    (h) => ({ ...h, settlement: { ...h.settlement,
+      lines: [...h.settlement.lines, ...h.settlement.lines] } })), "MALFORMED"],
   ["a receipt for a meter the settlement never quarantined", onReconcile(
     { measurements: [mkMeasurement("COMPLETE", 70, 4, AT)], neverStartedProofRef: null }), "UNKNOWN_METER"],
   ["a receipt whose sequence does not advance past the stored one",
@@ -218,6 +249,8 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
   "INSUFFICIENT_QUARANTINED"],
   ["a conservative settlement with no human acknowledgement",
     onConservative({ ...ACK, acknowledgementRef: "" }), "ACKNOWLEDGEMENT_MISSING"],
+  ["a conservative settlement of a record bound to another account",
+    onConservative(ACK, (h) => ({ ...h, settlement: foreign(h.settlement) })), "IDENTITY_MISMATCH"],
   ["a close with units still reserved",
     onClose(drained({ meters: [bucket(MS, 0, 5, 0, 85), bucket(AT, 0, 0, 0, 1)] })), "ILLEGAL_CLOSE"],
   ["a close with units still quarantined",
@@ -228,6 +261,8 @@ const ROWS: readonly (readonly [string, () => Probe, string])[] = [
   ["a close of an already closed account", onClose(drained({ state: "CLOSED" })), "ILLEGAL_CLOSE"],
   ["a close while a supplied settlement is still quarantined",
     onClose(drained(), [quarantined().settlement]), "ILLEGAL_CLOSE"],
+  ["a close judging a settlement bound to another account",
+    onClose(drained(), [foreign(writtenOff(false))]), "IDENTITY_MISMATCH"],
 ];
 it.each(ROWS)("refuses %s with a single frozen code and zero effect", (_name, thunk, code) => {
   const [result, view, record, shot] = thunk();
@@ -238,8 +273,8 @@ it.each(ROWS)("refuses %s with a single frozen code and zero effect", (_name, th
   if (!result.ok) expect(Object.isFrozen(result.issues[0])).toBe(true);
 });
 it("generates every refusal case, covers the published codes exactly, and conserves on every path", () => {
-  expect(ROWS.length).toBe(33);
+  expect(ROWS.length).toBe(38);
   expect(Object.isFrozen(BUDGET_SETTLEMENT_ISSUE_CODES)).toBe(true);
   expect([...observed].sort()).toEqual([...BUDGET_SETTLEMENT_ISSUE_CODES].sort());
-  expect(conserved).toBe(12);
+  expect(conserved).toBe(14);
 });
