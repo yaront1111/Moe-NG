@@ -9,6 +9,7 @@ import {
   versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import type { HandlerContext, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
+import type { ApprovedRunBinding } from "./approval-run-binding.js";
 
 /**
  * The activation half of J1's second human action (design 299).
@@ -30,6 +31,8 @@ export interface ActivationInput {
   /** The caller's `PlanningActivationWitness`; only the core reads its fields. */
   readonly activation: JsonObject;
   readonly approval: ApprovalDecisionRecord;
+  /** The verified approved-run identity; durable-only, see `durableActivationWitness`. */
+  readonly binding: ApprovedRunBinding;
   readonly goalId: string;
   readonly graphRevisionRef: string;
 }
@@ -38,12 +41,38 @@ export interface ActivationInput {
  * `graphApprovalRef` is the core's OWN decided `approvalRef`, never a payload field. A caller
  * therefore cannot present an activation that names some other approval: the only approval an
  * activation can cite is the one this very command just decided.
+ *
+ * THREE KEYS AND EXACTLY THREE. `validActivation` (goal-validation.ts:154) is
+ * `exact(value, ACTIVATION_KEYS)`, so a fourth key here is not additive — it makes the whole
+ * command `illegal` at the core. That is why the run binding rides the DURABLE copy below
+ * instead, and why the two witnesses are separate functions rather than one shape with an
+ * optional field: a single shape would be one careless spread away from reaching the reducer.
  */
 function activationWitness(input: ActivationInput): JsonObject {
   return {
     activeGraphRevisionRef: input.graphRevisionRef,
     graphApprovalRef: input.approval.approvalRef,
     truthClass: input.activation["truthClass"] ?? null,
+  };
+}
+
+/**
+ * The DAEMON-OWNED durable copy: the core's three keys plus the verified approved-run identity.
+ *
+ * The core never reads `eventPayload` back — it is the daemon's own record of what it decided —
+ * so extending this copy is additive where extending the command witness is fatal. Every added
+ * value was read out of a durable record by `verifyApprovedRunBinding`; none is copied from the
+ * request. `readApprovedNodeScope` (goal-close-prerequisite.ts:66-97), the only existing durable
+ * consumer of this event, reads `payload.approval` and never `payload.activation`, so it is
+ * unaffected — asserted by its own suite rather than argued here.
+ */
+function durableActivationWitness(input: ActivationInput, witness: JsonObject): JsonObject {
+  return {
+    ...witness,
+    authorityRef: input.binding.authorityRef,
+    bodiesDigest: input.binding.bodiesDigest,
+    envelopeDigest: input.binding.envelopeDigest,
+    runId: input.binding.runId,
   };
 }
 
@@ -72,7 +101,7 @@ export function activateInitialGraph(
   return commitAccepted(store, request, {
     aggregateId: input.goalId,
     eventPayload: {
-      activation: witness,
+      activation: durableActivationWitness(input, witness),
       approval: input.approval,
       events: verdict.events,
     } as unknown as JsonValue,

@@ -34,6 +34,7 @@ import {
   readApprovalGate,
 } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
+import { verifyApprovedRunBinding } from "./approval-run-binding.js";
 import {
   callerSuppliedAuthorityBodies,
   classifyPlanningChain,
@@ -160,6 +161,8 @@ const proposePlan: CommandHandler = (context): ServiceOutcome => {
 interface DurableRun {
   readonly gate: HumanAuthorityGate | null;
   readonly goalRef: string;
+  /** The whole durable record, carried so the run binding reads the SAME fold this gate did. */
+  readonly record: JsonValue;
   readonly submissionHash: string;
 }
 
@@ -207,7 +210,7 @@ function durableRun(context: HandlerContext, runId: string): DurableRun | null {
   const state = payloadObject(run as JsonObject, "state");
   const goalRef = state === null ? null : payloadRef(state, "goalRef");
   if (submissionHash === null || goalRef === null) return null;
-  return { gate: readApprovalGate(run, runId).gate, goalRef, submissionHash };
+  return { gate: readApprovalGate(run, runId).gate, goalRef, record: run, submissionHash };
 }
 
 /**
@@ -278,9 +281,19 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_PREREQUISITE");
   }
 
+  // WHICH run was approved, verified against durable state — the last gate before the single
+  // durable commit, so a refusal here still leaves nothing committed. It sits AFTER the
+  // authority gate deliberately: those refusals answer who may approve at all, and moving this
+  // check above them would let a not-reviewable run answer for an unsatisfied human gate.
+  const bound = verifyApprovedRunBinding({
+    graphRevisionRef, run: run.record, runId, store: context.store,
+  });
+  if (!bound.ok) return refuse(request.kind, bound.code, bound.layer);
+
   return activateInitialGraph(context, {
     activation,
     approval: verdict.value,
+    binding: bound.binding,
     goalId: run.goalRef,
     graphRevisionRef,
   });

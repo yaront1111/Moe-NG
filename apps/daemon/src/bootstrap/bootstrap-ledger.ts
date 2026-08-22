@@ -60,6 +60,10 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // private too, and `proposePlan` passing the finalize module's closed layer TYPE into `refuse`
   // is what makes this literal verified rather than merely asserted.
   "PLANNING_AUTHORITY_ENVELOPE",
+  // Same discipline once more at the approval seam: `approval-run-binding.ts` keeps its layer
+  // const private and exports only the closed TYPE, and `decideApproval` passing that type
+  // straight into `refuse` is what makes this literal verified rather than merely asserted.
+  "APPROVAL_RUN_BINDING",
   // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
   // travels under the layer that produced it rather than under a daemon restatement.
   ...ACCEPTANCE_CONTRACT_LAYERS,

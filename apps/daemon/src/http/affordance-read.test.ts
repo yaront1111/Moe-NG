@@ -13,6 +13,7 @@ import {
   SPEED_APPROVAL_MODE,
   SPEED_MODE_DELAY_ENV_KEY,
 } from "../planning/approval-policy-settings.js";
+import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { runSessionCommand } from "../identity/session-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -214,7 +215,20 @@ describe("code node steps", () => {
       budgetAccountRef: "budget-account-1", goalId: "goal-n1", planningRunRef: "run-n1",
       witness: { projectReadyRef: "ready-1", truthClass: "DAEMON_VERIFIED" },
     });
-    const submissionHash = "dec0de".padEnd(64, "0");
+    // The run must reach approval FINALIZED and SEALED, or `decideApproval` refuses
+    // APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_AUTHORITY_UNSEALED before any affordance exists to
+    // read (task-2cc6c59d). The bodies are minted by the shipped producer rather than spelled:
+    // the submission hash IS the sealed plan's own `planHash`, and the daemon re-derives it.
+    const sealed = journeyAuthority({
+      authorRef: "architect-1",
+      criterionIds: ["criterion-a"],
+      graphContentHash: "c0ffee".padEnd(64, "0"),
+      graphRevisionRef: "graph-revision-1",
+      idPrefix: "run-n1",
+      nodeIds: ["node-code-1"],
+      stepDescription: "Land the affordance node.",
+    });
+    const submissionHash = sealed.submissionHash;
     commitBootstrap("plan.propose", {
       commands: [
         {
@@ -236,6 +250,7 @@ describe("code node steps", () => {
           },
         },
         {
+          authority: sealed.authority,
           commandId: "n-propose",
           effectTerminalProof: {
             effectTerminalRef: "effect-terminal-1",
@@ -246,6 +261,28 @@ describe("code node steps", () => {
           witness: {
             attemptRef: "attempt-1", submissionRef: "submission-1",
             truthClass: "DAEMON_VERIFIED",
+          },
+        },
+      ],
+      runId: "run-n1",
+    });
+    // The finalize terminal rides its OWN request: `classifyPlanningChain` refuses a chain
+    // holding both terminals with PLANNING_FINALIZE_CHAIN_MIXED.
+    commitBootstrap("plan.propose", {
+      commands: [
+        {
+          commandId: "n-finalize", expectedVersion: 4,
+          kind: "planning.finalize_submission",
+          revision: {
+            dependencyHash: "d1".padEnd(64, "0"), graphContentHash: "c0ffee".padEnd(64, "0"),
+            graphRevisionRef: "graph-revision-1", planHash: submissionHash,
+            qualityHash: "dd".padEnd(64, "0"),
+          },
+          witness: {
+            attemptTerminalRef: "attempt-terminal-1", effectTerminalRef: "effect-terminal-1",
+            nodeSummaries: [{ executionBearing: true, nodeKey: "node-code-1" }],
+            providerSlotTerminalRef: "slot-terminal-1",
+            resourcesTerminalRef: "resources-terminal-1", truthClass: "DAEMON_VERIFIED",
           },
         },
       ],
