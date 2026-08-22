@@ -301,6 +301,33 @@ describe("stdio server daemon response handling", () => {
     expect(JSON.stringify((thrown as McpError).data)).not.toContain(secret);
   });
 
+  it("contains a throwing authenticate as UNKNOWN_ERROR with zero dispatch calls", async () => {
+    // The store behind `authenticate` can throw (busy, closed) instead of answering. Uncontained,
+    // the SDK renders that as its own -32603 whose MESSAGE is the throw's message and whose data
+    // is absent, so both the message and the data are checked here.
+    const secret = "STORE_CLOSED: credential store at /var/lib/moe/sessions.db is closed";
+    const calls: string[] = [];
+    const port: StdioDispatchPort = {
+      authenticate: () => { throw new Error(secret); },
+      dispatchCommandBytes: () => { calls.push("dispatchCommandBytes"); return new Uint8Array(0); },
+      dispatchQueryBytes: () => { calls.push("dispatchQueryBytes"); return new Uint8Array(0); },
+    };
+    let thrown: unknown;
+    try {
+      await withClient(port, (client) => client.callTool({
+        arguments: { ...CONFORMANCE_COMMAND_ARGS }, name: CONFORMANCE_COMMAND_LABEL,
+      }));
+    } catch (error) {
+      thrown = error;
+    }
+    expect(calls).toEqual([]);
+    expect(thrown).toBeInstanceOf(McpError);
+    expect((thrown as McpError).code).toBe(-32603);
+    expect((thrown as McpError).data).toMatchObject({ code: "UNKNOWN_ERROR" });
+    expect(JSON.stringify((thrown as McpError).data)).not.toContain(secret);
+    expect((thrown as McpError).message).not.toContain(secret);
+  });
+
   it("refuses daemon bytes that are not valid UTF-8 instead of emitting replacements", async () => {
     const port = createRecordingPort({
       commandResponse: Uint8Array.from([0x7b, 0xff, 0xfe, 0x7d]),

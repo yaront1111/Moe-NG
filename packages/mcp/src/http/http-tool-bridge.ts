@@ -149,6 +149,11 @@ export function buildEnvelopeBytes(
  * Bounded decode, then authenticate with the VERBATIM dotted kind, then exactly one dispatch on
  * the matching surface. A decode refusal performs zero port calls and an authentication refusal
  * performs zero dispatch calls.
+ *
+ * Both port calls sit inside the same containment: a credential store that throws instead of
+ * returning a verdict is a broken daemon boundary like any other, so it becomes `UNKNOWN_ERROR`
+ * rather than a raw SDK internal error carrying the throw's message. A registry refusal the
+ * port RETURNS is already an `McpError` by the time the catch sees it and passes through intact.
  */
 export async function decodeAndDispatch(
   port: HttpDispatchPort,
@@ -161,13 +166,13 @@ export async function decodeAndDispatch(
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
     : decodeRuntimeQueryEnvelopeBytes(bytes);
   if (!decoded.ok) refuse(decoded.error);
-  const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
-  if (!auth.ok) refuse(auth.error);
   const context: HttpDispatchContext = {
     credential: decoded.envelope.sessionCredential,
     ...(signal === undefined ? {} : { signal }),
   };
   try {
+    const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
+    if (!auth.ok) refuse(auth.error);
     return await (isCommand
       ? port.dispatchCommandBytes(bytes, context)
       : port.dispatchQueryBytes(bytes, context));

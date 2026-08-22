@@ -89,20 +89,48 @@ export interface HttpMcpAdapter {
  * leave that HTTP response pending forever. The SDK `Server` owns `transport.onclose`, so the
  * close cannot be observed there without stealing the SDK's own hook; this latch is the
  * adapter-owned close signal instead, fired by the DELETE callback and by every sweep teardown.
+ *
+ * WHY SUBSCRIBERS AND NOT A SHARED PROMISE. A `Promise<void>` latch is never settled while the
+ * session lives, so every `.then` chained onto it per request is retained until the close,
+ * along with the Response each completed request had already produced: a long-lived session
+ * accumulates one closure and one dead Response per call it ever served, and the eventual
+ * release drains them all at once. A waiter that can deregister the moment its own request
+ * settles holds nothing for a completed call.
  */
 interface SessionCloseLatch {
-  /** Settles when the session closes. Never rejects, so racing it can only add an outcome. */
-  readonly closed: Promise<void>;
   /** Idempotent: releasing an already-released latch is a no-op. */
   release(): void;
+  /**
+   * Runs `onClose` once when the session closes, or at once if it already has, and returns the
+   * deregistration. A request that settles normally MUST deregister, or the latch retains it.
+   */
+  subscribe(onClose: () => void): () => void;
 }
 
 function createSessionCloseLatch(): SessionCloseLatch {
-  let release = (): void => {};
-  const closed = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  return { closed, release };
+  const waiters = new Set<() => void>();
+  let released = false;
+  return {
+    release(): void {
+      if (released) return;
+      released = true;
+      // Snapshot-then-clear, so a waiter that subscribes or deregisters while the release runs
+      // cannot disturb the iteration, and nothing stays referenced after the release returns.
+      const settling = [...waiters];
+      waiters.clear();
+      for (const onClose of settling) onClose();
+    },
+    subscribe(onClose: () => void): () => void {
+      if (released) {
+        onClose();
+        return (): void => {};
+      }
+      waiters.add(onClose);
+      return (): void => {
+        waiters.delete(onClose);
+      };
+    },
+  };
 }
 
 interface SessionAttachment {
@@ -371,13 +399,18 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
       // Raced against the close latch because in JSON response mode the SDK's own promise can
       // otherwise hang forever — see SessionCloseLatch. The latch leg loses to every normal
       // completion and turns a mid-call close into exactly the 404 this adapter serves a
-      // request that arrives after the close.
-      return Promise.race([
-        transport.handleRequest(request, { authInfo, parsedBody: body.value }),
-        latch.closed.then(() =>
-          errorResponse(createRuntimeError({ code: "SESSION_EXPIRED" }), 404),
-        ),
-      ]);
+      // request that arrives after the close. Raced by hand rather than via `Promise.race`
+      // so the latch leg can be DEREGISTERED once the SDK settles: a completed call must not
+      // stay parked on the session until its close.
+      return new Promise<Response>((resolve, reject) => {
+        const unsubscribe = latch.subscribe(() => {
+          resolve(errorResponse(createRuntimeError({ code: "SESSION_EXPIRED" }), 404));
+        });
+        transport
+          .handleRequest(request, { authInfo, parsedBody: body.value })
+          .then(resolve, reject)
+          .finally(unsubscribe);
+      });
     }
     if (!isInitializePayload(body.value)) return refusalResponse("INPUT_INVALID");
     await reapIdleSessions();

@@ -130,6 +130,11 @@ function buildQueryEnvelopeBytes(
  * dispatch on the matching surface. A decode refusal performs zero port calls and an
  * authentication refusal performs zero dispatch calls. Exported so hostile bytes can be
  * driven straight at it, which no protocol roundtrip can express.
+ *
+ * Both port calls sit inside the same containment: a credential store that throws instead of
+ * returning a verdict is a broken daemon boundary like any other, so it becomes `UNKNOWN_ERROR`
+ * rather than a raw SDK internal error carrying the throw's message. A registry refusal the
+ * port RETURNS is already an `McpError` by the time the catch sees it and passes through intact.
  */
 export async function decodeAndDispatch(
   port: StdioDispatchPort,
@@ -141,9 +146,9 @@ export async function decodeAndDispatch(
     ? decodeRuntimeCommandEnvelopeBytes(bytes)
     : decodeRuntimeQueryEnvelopeBytes(bytes);
   if (!decoded.ok) refuse(decoded.error);
-  const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
-  if (!auth.ok) refuse(auth.error);
   try {
+    const auth = port.authenticate(decoded.envelope.sessionCredential, entry.kind);
+    if (!auth.ok) refuse(auth.error);
     return await (isCommand ? port.dispatchCommandBytes(bytes) : port.dispatchQueryBytes(bytes));
   } catch (error) {
     if (error instanceof McpError) throw error;

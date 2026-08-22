@@ -148,7 +148,11 @@ export interface SessionScreenInput<TAttachment> {
 
 type ScreenRefusal = { readonly error: RuntimeError; readonly kind: "refused" };
 
-function refuse(code: HttpAuthRefusalCode | "INPUT_INVALID"): ScreenRefusal {
+/**
+ * The port's closed vocabulary plus the two codes this screen selects on its own: the query
+ * surface refusal, and the containment for a port that throws rather than answers.
+ */
+function refuse(code: HttpAuthRefusalCode | "INPUT_INVALID" | "UNKNOWN_ERROR"): ScreenRefusal {
   return { error: createRuntimeError({ code }), kind: "refused" };
 }
 
@@ -196,7 +200,17 @@ export async function screenRequest<TAttachment>(
   const credential = readBearer(input.request);
   if (credential === null) return refuse("AUTHENTICATION_FAILED");
 
-  const verdict = await input.port.validateBearer(credential);
+  // A port that throws has rendered NO verdict, and that is reported as a broken boundary, not
+  // as a failed authentication: `AUTHENTICATION_FAILED` would direct the client to re-open a
+  // session for a fault a fresh credential cannot cure, while a bare throw would reach the host
+  // as an uncontained 500 carrying whatever the store put in the message. The refusal is
+  // registry-built, so it carries nothing from the throw and nothing from the request.
+  let verdict: HttpAuthVerdict;
+  try {
+    verdict = await input.port.validateBearer(credential);
+  } catch {
+    return refuse("UNKNOWN_ERROR");
+  }
   if (!verdict.ok) {
     return refuse(isRefusalCode(verdict.code) ? verdict.code : "AUTHENTICATION_FAILED");
   }

@@ -27,6 +27,7 @@ import type {
 const BEARER_A = "bearer-A-DO-NOT-LOG-3f9c1e77aa";
 const BEARER_B = "bearer-B-DO-NOT-LOG-812de40cbb";
 const ENDPOINT = "http://127.0.0.1:7391/mcp";
+const THROWN_SECRET = "STORE_BUSY: credential store at /var/lib/moe/sessions.db is locked";
 
 const VERDICT_A: HttpAuthAccepted = Object.freeze({
   ok: true as const,
@@ -152,6 +153,28 @@ describe("http session screening — port verdicts", () => {
     });
     const outcome = await screen(port, request({ authorization: `Bearer ${BEARER_A}` }));
     expect(outcome.kind === "refused" ? outcome.error.code : "").toBe("AUTHENTICATION_FAILED");
+  });
+
+  it.each([
+    ["synchronous", (): HttpAuthVerdict => { throw new Error(THROWN_SECRET); }],
+    ["asynchronous", async (): Promise<HttpAuthVerdict> => { throw new Error(THROWN_SECRET); }],
+  ])("contains a port that throws (%s) as a registry UNKNOWN_ERROR refusal, not a bare throw", async (
+    _mode,
+    validateBearer,
+  ) => {
+    // A throw is not a verdict, so it is neither accepted nor mapped to an authentication
+    // refusal whose recovery command would send the client to re-open a session for a store
+    // fault. Left uncontained it would reach the host as an ordinary exception.
+    const port: HttpSessionPort = { bindSession(): void {}, closeSession(): void {}, validateBearer };
+    const outcome = await screen(port, request({ authorization: `Bearer ${BEARER_A}` }));
+    expect(outcome.kind).toBe("refused");
+    if (outcome.kind !== "refused") return;
+    expect(outcome.error.code).toBe("UNKNOWN_ERROR");
+    expect(outcome.error.transport.httpStatus).toBe(500);
+    expect(outcome.error.recoveryCommands).toEqual([]);
+    const serialized = JSON.stringify(outcome);
+    expect(serialized).not.toContain(THROWN_SECRET);
+    expect(serialized).not.toContain(BEARER_A);
   });
 
   it("accepts a valid bearer with no session header and reports no bound entry", async () => {
