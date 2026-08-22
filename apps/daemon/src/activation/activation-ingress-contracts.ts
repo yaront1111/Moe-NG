@@ -161,7 +161,24 @@ const REQUEST_KEYS = Object.freeze([
 ] as const);
 
 const REQUEST_KEY_SET: ReadonlySet<string> = new Set(REQUEST_KEYS);
-const PAYLOAD_KEY_SET: ReadonlySet<string> = new Set(EFFECT_ACTIVATE_PAYLOAD_KEYS);
+
+/**
+ * TEMPORARY TOLERANCE — task-8be27625, link 1 of 4. REMOVED BY task-b8b69e74.
+ *
+ * Exactly TWO shapes: the full advertised roster, and the same roster without
+ * `budget`. That opens the migration window links 2 and 3 (task-671585ec,
+ * task-553b2165) need — while the count was exact, a sender that stopped sending
+ * the section failed AND dropping the key while senders still sent it failed, so
+ * the fence and all 17 senders had to change in one commit. Once every sender has
+ * moved, link 4 drops `budget` from the roster and this list collapses by itself.
+ *
+ * SORTED STRICT EQUALITY, NOT ARITHMETIC: a `length >= 5` or `5 || 6` test admits
+ * a five-key payload missing a DIFFERENT section, and a six-key one with a section
+ * swapped for a smuggled key. Both are representable; neither is tolerated. */
+const TOLERATED_PAYLOAD_SHAPES: readonly (readonly string[])[] = Object.freeze([
+  Object.freeze([...EFFECT_ACTIVATE_PAYLOAD_KEYS].sort()),
+  Object.freeze([...EFFECT_ACTIVATE_PAYLOAD_KEYS].filter((key) => key !== "budget").sort()),
+]);
 
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 
@@ -175,9 +192,9 @@ function nonEmpty(value: unknown): value is string {
 
 function isSectionRecord(value: unknown): value is JsonObject {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const keys = Object.keys(value);
-  return keys.length === EFFECT_ACTIVATE_PAYLOAD_KEYS.length
-    && keys.every((key) => PAYLOAD_KEY_SET.has(key));
+  const keys = Object.keys(value).sort();
+  return TOLERATED_PAYLOAD_SHAPES.some((shape) =>
+    shape.length === keys.length && shape.every((key, index) => key === keys[index]));
 }
 
 /**
