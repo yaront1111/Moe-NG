@@ -55,10 +55,26 @@ export function readCurrent(path: string | null): ImportRefused | ShadowProjecti
  * checked structurally before it can reach the comparator. A malformed entity refuses
  * with an exact code rather than being coerced into a comparison that would then report
  * confident mismatches derived from junk.
+ *
+ * The version is checked FIRST and against the file's own word, never stamped over it.
+ * The contract promises that vocabulary drift surfaces as a visible version mismatch at
+ * the consumer; a file speaking another version, or none, is a real shape this comparator
+ * knowingly declines (UNSUPPORTED), not bytes that fail to be what they claim (MALFORMED).
+ * Comparing its entities anyway would report confident mismatches between two
+ * vocabularies that never agreed on what a field means.
  */
 function parseCurrent(path: string, parsed: unknown): ImportRefused | ShadowProjection {
   const document = asRecord(parsed);
-  const entities = document === null ? undefined : document["entities"];
+  if (document === null) {
+    return refuseImport("IMPORT_SOURCE_MALFORMED", "INPUT", `${path}: not a projection object`);
+  }
+  const version = document["version"];
+  if (version !== SHADOW_PROJECTION_VERSION) {
+    const spoken = typeof version === "string" ? version : "no version";
+    return refuseImport("IMPORT_SOURCE_UNSUPPORTED", "INPUT",
+      `${path}: ${spoken}, not ${SHADOW_PROJECTION_VERSION}`);
+  }
+  const entities = document["entities"];
   if (!Array.isArray(entities)) {
     return refuseImport("IMPORT_SOURCE_MALFORMED", "INPUT", `${path}: no entities array`);
   }
@@ -86,6 +102,8 @@ function parseCurrent(path: string, parsed: unknown): ImportRefused | ShadowProj
       kind: entity["kind"] as ShadowEntity["kind"],
     }));
   }
+  // The constant, not `version`: equality was proven above, and the constant carries the
+  // literal type the projection contract demands.
   return Object.freeze({
     entities: Object.freeze(parsedEntities),
     version: SHADOW_PROJECTION_VERSION,

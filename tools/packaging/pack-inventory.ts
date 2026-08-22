@@ -201,6 +201,29 @@ export function inspectStagedTree(input: PackInventoryInput): PackInventoryResul
   return Object.freeze({ fileCount: input.paths.length, ok: true });
 }
 
+/**
+ * Every repo path whose bytes decide what the zip contains; dirt in any of them
+ * stops the pack. The source trees and the licence are copied in directly. The
+ * four root files are NOT copied, which is why they were once missing here, but
+ * they are inputs all the same: `pnpm deploy` resolves the shipped third-party
+ * closure from the lockfile, the workspace definition and `.npmrc`, and the root
+ * manifest supplies the version stamped into INSTALL.md and MANIFEST-CLOSURE.txt.
+ * A modified lockfile ships a closure no commit describes.
+ *
+ * Porcelain paths are repo-relative, so `package.json` names the ROOT manifest
+ * only; a package's own manifest is already under `apps/` or `packages/`.
+ */
+export const SHIPPED_PREFIXES = Object.freeze([
+  "apps/",
+  "packages/",
+  "adapters/",
+  "LICENSE",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
+  ".npmrc",
+]);
+
 /** `git status --porcelain` codes are two columns; the path starts at column 3. */
 function porcelainPath(line: string): string {
   const raw = line.slice(3).trim();

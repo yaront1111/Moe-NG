@@ -10,6 +10,7 @@ import {
   PACK_VCS_ARTIFACT_PRESENT,
   PACK_WORKTREE_DIRTY,
   REQUIRED_STAGED_PATHS,
+  SHIPPED_PREFIXES,
   inspectStagedTree,
   inspectWorktree,
 } from "../../../tools/packaging/pack-inventory.js";
@@ -135,7 +136,9 @@ describe("inspectStagedTree refuses by name", () => {
 });
 
 describe("inspectWorktree refuses to ship a peer's uncommitted bytes", () => {
-  const OWNED = Object.freeze(["apps/daemon/", "packages/", "adapters/", "LICENSE"]);
+  // The PRODUCTION list, not a test-local copy: a copy would keep these cases green
+  // while the pack script's own gate quietly narrowed.
+  const OWNED = SHIPPED_PREFIXES;
 
   it("admits a clean worktree", () => {
     expect(inspectWorktree([], OWNED)).toBe(null);
@@ -169,5 +172,27 @@ describe("inspectWorktree refuses to ship a peer's uncommitted bytes", () => {
     );
     expect(refusal?.detail).toContain("packages/store/src/a.ts");
     expect(refusal?.detail).toContain("apps/daemon/src/b.ts");
+  });
+
+  it("refuses a modified lockfile, which decides the third-party closure pnpm deploy ships", () => {
+    const refusal = inspectWorktree([" M pnpm-lock.yaml"], OWNED);
+    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
+    expect(refusal?.detail).toContain("pnpm-lock.yaml");
+  });
+
+  it("refuses a modified root manifest, whose version and dependency fields reach the zip", () => {
+    const refusal = inspectWorktree([" M package.json"], OWNED);
+    expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
+    expect(refusal?.detail).toContain("package.json");
+  });
+
+  it("refuses the workspace definition and the pnpm config, which shape the deploy", () => {
+    for (const line of [" M pnpm-workspace.yaml", " M .npmrc"]) {
+      expect(inspectWorktree([line], OWNED)?.code).toBe(PACK_WORKTREE_DIRTY);
+    }
+  });
+
+  it("reads the root manifest as an exact path, not as any file so named", () => {
+    expect(inspectWorktree([" M tests/e2e/package.json"], OWNED)).toBe(null);
   });
 });

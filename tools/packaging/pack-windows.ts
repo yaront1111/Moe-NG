@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 
 import { MOE_CMD, MOE_PS1, closureDoc, installDoc } from "./pack-docs.js";
 import { collectImportFaults } from "./pack-imports.js";
-import { inspectStagedTree, inspectWorktree } from "./pack-inventory.js";
+import { SHIPPED_PREFIXES, inspectStagedTree, inspectWorktree } from "./pack-inventory.js";
 import {
   collectClosure, collectDevDependencies, collectSourceBridges, findWorkspacePackages,
   pruneTestArtifacts, removeEmptyDirectories, resetDirectory, treeBytes, walkFiles,
@@ -32,8 +32,6 @@ import {
 
 export const PACK_STEP_FAILED = "PACK_STEP_FAILED" as const;
 
-/** Repo paths whose bytes end up in the zip; dirt in any of them stops the pack. */
-const SHIPPED_PREFIXES = Object.freeze(["apps/", "packages/", "adapters/", "LICENSE"]);
 const NODE_RANGE = ">=24.16.0 <25";
 
 export interface PackOptions {
