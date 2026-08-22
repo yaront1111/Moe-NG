@@ -172,3 +172,26 @@ export function createCompatGate(report: unknown): CompatGateResult {
   if (!optionalIdentityValid(report)) return refuse();
   return ADMITTED;
 }
+
+/**
+ * The RUNTIME degenerate pin. `/bootstrap` serves only the wire protocol string,
+ * and that string is the join of all three envelope versions
+ * (command + query + error registry), so matching it pins every envelope version
+ * at once - a compatible daemon cannot serve a drifted wire string, and a drifted
+ * daemon cannot forge the matching one.
+ *
+ * This is DELIBERATELY NARROWER than `createCompatGate`: the offline gate also
+ * checks `contractSchemaHash` and `apiCompatibilityRange`, neither of which the
+ * runtime handshake exposes. Admitting on the wire string alone is a documented
+ * narrowing, and it stays strictly stricter than admitting anything: it can refuse
+ * a compatible daemon (its wire string differs), but it can never admit an
+ * incompatible wire. The parameter is `unknown` because it crosses a trust
+ * boundary - a missing, non-string, or drifted value all resolve to the same
+ * shared `DISTRIBUTION_MISMATCH` refusal that exposes zero builders.
+ */
+export function admitByWireProtocol(protocolVersion: unknown): CompatGateResult {
+  if (typeof protocolVersion === "string" && protocolVersion === GENERATED_WIRE_PROTOCOL_VERSION) {
+    return ADMITTED;
+  }
+  return refuse();
+}

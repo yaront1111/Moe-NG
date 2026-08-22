@@ -18,6 +18,8 @@ export const LIVE_SUBSCRIBER = "control-room-1" as const;
 export const LIVE_CONFIG_REFUSAL_CODES = Object.freeze([
   "LIVE_CONFIG_MISSING",
   "LIVE_COMPAT_REFUSED",
+  "LIVE_BOOTSTRAP_UNAVAILABLE",
+  "LIVE_PAIRING_REFUSED",
 ] as const);
 
 export type LiveConfigRefusalCode = (typeof LIVE_CONFIG_REFUSAL_CODES)[number];

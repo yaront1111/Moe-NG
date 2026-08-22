@@ -1,4 +1,4 @@
-export { createCompatGate } from "./client-compat.js";
+export { admitByWireProtocol, createCompatGate } from "./client-compat.js";
 export {
   CONTROL_ROOM_TRANSPORT_LAYER,
   TRANSPORT_REFUSAL_CODES,
