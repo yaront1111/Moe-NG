@@ -79,7 +79,13 @@ const encoder = new TextEncoder();
 function failureRoundPayload(
   subjectRef: string, round: number, capture: VerifierRunCapture,
 ): JsonObject {
-  const tail = capture.output.slice(-600);
+  // The cut is by UTF-16 code unit, so it can open on the low half of a
+  // surrogate pair. A lone surrogate has no UTF-8 form: the review.submit
+  // decoder refuses the whole envelope (JSON_UNICODE_INVALID), the failure
+  // round never lands, and the node is re-verified on every pass forever.
+  // `toWellFormed` folds the orphan to U+FFFD so the detail stays encodable
+  // wherever the cut falls and whatever the runner handed over.
+  const tail = capture.output.slice(-600).toWellFormed();
   return {
     findings: [{
       detail: `verifier run exited ${String(capture.exitCode)} (output sha256 ${capture.sha256}): ${tail}`,

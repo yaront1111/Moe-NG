@@ -160,8 +160,10 @@ export async function shutdownWrapperRuntime(
  * (default 2), MOE_WRAPPER_INTERVAL_MS (default 15000), MOE_WRAPPER_ONCE=1 for
  * a single pass, MOE_WRAPPER_MAX_ITEM_ATTEMPTS (default 3) staffing tries per
  * unmoved item before it is reported STAFFING_ATTEMPTS_EXHAUSTED instead of
- * respawned. The trusted wrapper hosts MCP on loopback; each agent receives
- * only its scoped bearer, never the operator credential or store path.
+ * respawned, and MOE_AGENT_TIMEOUT_MS (default 30 min) the hard lifetime of
+ * one agent process, from which the agent's bearer TTL is derived. The trusted
+ * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
+ * never the operator credential or store path.
  */
 async function main(): Promise<void> {
   // Knobs first: a malformed knob is refused by name before any store is opened.
@@ -246,13 +248,18 @@ async function main(): Promise<void> {
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
       affordances,
-      claimTtlMs: 30 * 60 * 1000,
+      // Both horizons come from the knobs, where the bearer TTL is derived from
+      // the agent lifetime: a session bound to the claim TTL expired under a
+      // long task that was still renewing its claim, and the exit-path release
+      // under the dead secret wedged the wrapper on AGENT_CLEANUP_FAILED.
+      claimTtlMs: knobs.claimTtlMs,
       clock: () => Date.now(),
       deps: provider.provide(),
       maxAgents: knobs.maxAgents,
       maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),
       operatorCredential: config.credential,
+      sessionTtlMs: knobs.sessionTtlMs,
       spawnAgent: (request) => secureSpawn === null
         ? Promise.reject(new Error("MCP_HTTP_HOST_NOT_STARTED"))
         : secureSpawn(request),
@@ -311,8 +318,11 @@ async function main(): Promise<void> {
     // The admission-shaped boundary, not the lifetime-shaped one: `claudeSpawner`
     // resolves only when the agent EXITS, so a refused start was indistinguishable
     // from a running one and the wrapper printed SPAWNED either way.
+    // The lifetime the bearer TTL above was derived from, handed over rather
+    // than re-read from the environment, so the two cannot drift apart.
     agentSpawner = claudeSpawnStarter(mcpStarted.origin, {
       onFatalContainment: () => { stop.request(); },
+      timeoutMs: knobs.agentTimeoutMs,
     });
     secureSpawn = agentSpawner;
 

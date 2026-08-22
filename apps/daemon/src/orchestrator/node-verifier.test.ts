@@ -58,9 +58,9 @@ const encoder = new TextEncoder();
 const fill = (seed: string): string =>
   (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
 
-function seedCleanRound(): void {
+function seedCleanRound(subjectRef: string = NODE, commandId = "seed-clean-round"): void {
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
-    commandId: "seed-clean-round",
+    commandId,
     correlationId: "seed",
     decidedAt: "2026-08-11T09:00:00.000Z",
     expectedVersion: 0,
@@ -77,7 +77,7 @@ function seedCleanRound(): void {
         { digest: fill("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
       ],
       round: 1,
-      subjectRef: NODE,
+      subjectRef,
     },
     principalId: "sess-agent-x",
     projectId: PROJECT,
@@ -121,6 +121,7 @@ function verifier(
   capture: VerifierRunCapture,
   authority: typeof AUTHORITY | null = AUTHORITY,
   onRun: () => void = () => undefined,
+  nodeRef: string = NODE,
 ) {
   return createNodeVerifier({
     deps: provider.provide(),
@@ -128,7 +129,7 @@ function verifier(
     nodeMission: () => ({
       instructions: "x", test: "node test.mjs", title: "t", workspace: directory,
     }),
-    nodes: () => [{ nodeRef: NODE }],
+    nodes: () => [{ nodeRef }],
     operatorCredential: OPERATOR,
     projectId: PROJECT,
     runTest: () => {
@@ -235,6 +236,50 @@ describe("createNodeVerifier", () => {
     }));
     expect(ledger.accepted?.reviewInputDigest).toBe(receipt.receipt.reviewInputDigest);
     expect(ledger.accepted?.verifierReceiptSha256).toBe(receipt.receiptSha256);
+  });
+
+  it("records a failure round whose 600-unit tail cut lands inside a surrogate pair", async () => {
+    // The failure detail is the last 600 UTF-16 code units of the capture. Cut
+    // there, an astral character straddling the boundary leaves a lone low
+    // surrogate at the head of the tail; review.submit's decoder refuses the
+    // whole envelope (JSON_UNICODE_INVALID), no round lands, and the node is
+    // re-verified every pass. Its own node, so the shared NODE's history above
+    // is not disturbed and nothing here depends on it.
+    const SPLIT_NODE = "node-verify-split";
+    seedCleanRound(SPLIT_NODE, "seed-clean-round-split");
+    // "a", U+1F525 (two code units), then 599 x "b": 602 units, so the cut
+    // opens exactly on the low half. Built from the code point, not pasted, so
+    // the source stays ASCII and the boundary arithmetic is visible.
+    const output = `a${String.fromCodePoint(0x1f525)}${"b".repeat(599)}`;
+    expect(output.length).toBe(602);
+    // The fixture's own positive control: the naive cut really does split.
+    expect(output.slice(-600).isWellFormed()).toBe(false);
+    const sha = createHash("sha256").update(output, "utf8").digest("hex");
+    const capture: VerifierRunCapture = {
+      byteCount: Buffer.byteLength(output, "utf8"), exitCode: 1, output, sha256: sha,
+    };
+    let runs = 0;
+    const reports = await verifier(capture, AUTHORITY, () => { runs += 1; }, SPLIT_NODE)
+      .verifyOnce();
+    expect(reports).toEqual([
+      { detail: "exit 1", nodeRef: SPLIT_NODE, outcome: "FAILED_ROUND_RECORDED" },
+    ]);
+    expect(runs).toBe(1);
+    const ledger = readReviewLedger(store, PROJECT, SPLIT_NODE);
+    expect(ledger.version).toBe(2);
+    const failure = ledger.lineage.records.find(
+      (record) => record.finding.ruleId === VERIFIER_FAILURE_RULE,
+    );
+    expect(failure?.finding.detail).toContain(sha);
+    expect(failure?.finding.detail).toContain("b".repeat(599));
+    expect(failure?.finding.detail.isWellFormed()).toBe(true);
+
+    // The round LANDED: a second pass finds the verifier's own failure as the
+    // latest round and leaves the node alone instead of running the test again.
+    const again = await verifier(capture, AUTHORITY, () => { runs += 1; }, SPLIT_NODE)
+      .verifyOnce();
+    expect(again).toHaveLength(0);
+    expect(runs).toBe(1);
   });
 });
 

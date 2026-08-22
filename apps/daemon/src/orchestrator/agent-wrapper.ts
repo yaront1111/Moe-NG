@@ -11,6 +11,7 @@ import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import { codeMission, mission } from "./agent-mission-text.js";
+import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { createStaffingGate } from "./agent-staffing-gate.js";
 import type { AgentSpawnStart, AgentSpawnStartResult, RunOnceReport,
@@ -37,6 +38,7 @@ import type { AgentSpawnStart, AgentSpawnStartResult, RunOnceReport,
 export interface SpawnRequest {
   /** The agent's bearer credential. Hand it to the process environment only. */
   readonly credential: string;
+  /** The CLAIM's expiry, the horizon the mission names; the bearer's is longer. */
   readonly expiresAt: string;
   readonly kind: string;
   readonly mission: string;
@@ -56,7 +58,10 @@ export interface NodeMission {
 
 export interface AgentWrapperConfig {
   readonly affordances: AffordancePort;
-  /** Claim/session lifetime per spawn. */
+  /**
+   * Claim lifetime per spawn: the reap horizon when a child dies without
+   * releasing. The agent renews it if the work runs longer.
+   */
   readonly claimTtlMs: number;
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
@@ -80,6 +85,15 @@ export interface AgentWrapperConfig {
    */
   readonly payloadHint?: ((kind: string, target: string | null) => JsonObject | null) | undefined;
   /**
+   * Bearer lifetime per spawn, independent of the claim's. The exit-path
+   * release runs under the agent's own secret, so the bearer must outlive the
+   * child process: a session bound to the claim TTL dies while a long task is
+   * still renewing its claim, and every later release is refused as
+   * unauthenticated. Production derives it from the agent lifetime knob
+   * (wrapper-knobs.ts); absent, it falls back to `claimTtlMs`.
+   */
+  readonly sessionTtlMs?: number | undefined;
+  /**
    * Starts the agent process and resolves on STARTUP ADMISSION — a coded
    * refusal, or an accepted start whose `exit` is the child's separate lifetime.
    * Injectable for tests.
@@ -100,6 +114,13 @@ export interface AgentWrapperConfig {
 
 const encoder = new TextEncoder();
 const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set(["approval.decide", "goal.close"]);
+/**
+ * Outcomes the durable staffing gate answers BEFORE any identity is minted.
+ * They are not attempts: nothing was spent, and the condition they report
+ * (a live predecessor, a held claim, a record the fence cannot read) clears
+ * on its own time, not the wrapper's.
+ */
+const GATE_REFUSALS: ReadonlySet<string> = new Set(AGENT_STAFFING_REFUSAL_CODES);
 
 function setupError(action: string): Error {
   return new Error(`AGENT_SETUP_FAILED:${action}:UNEXPECTED_ERROR`);
@@ -117,9 +138,13 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   const active = new Map<string, Promise<void>>();
   const cleanupFailures: Error[] = [];
   const maxItemAttempts = config.maxItemAttempts ?? 3;
-  // Staffing attempts per work item since it last MOVED. Counts every try —
-  // spawned or refused at claim — because each one mints identity and possibly
-  // a process. Not durable on purpose: a wrapper restart re-arms every item,
+  // Staffing attempts per work item since it last MOVED. Counts every try that
+  // minted identity (spawned, or refused at claim) because each one spent a
+  // session and possibly a process. A refusal at the durable gate minted
+  // nothing and is NOT counted: an orphan child that outlives its claim reads
+  // CHILD_LIVE pass after pass, and counting those would exhaust the item for
+  // good while the orphan is still running, so it never gets restaffed once the
+  // orphan dies. Not durable on purpose: a wrapper restart re-arms every item,
   // which errs toward staffing, and the durable staffing gate still fences the
   // restart races this map cannot see.
   const attempts = new Map<string, number>();
@@ -195,11 +220,18 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     let secret: string;
     let sessionId: string;
     let expiresAt: string;
+    let sessionExpiresAt: string;
     try {
       secret = config.mintSecret();
       // The full mint, never a prefix: distinct mints can share long prefixes.
       sessionId = `sess-wrap-${config.mintSecret()}`;
-      expiresAt = new Date(config.clock() + config.claimTtlMs).toISOString();
+      // Two horizons off one clock read: the claim's (what the mission tells
+      // the agent it holds, and what the agent renews) and the bearer's (which
+      // must still authenticate the release after the child has exited).
+      const now = config.clock();
+      expiresAt = new Date(now + config.claimTtlMs).toISOString();
+      sessionExpiresAt =
+        new Date(now + (config.sessionTtlMs ?? config.claimTtlMs)).toISOString();
     } catch {
       const failure = setupError("identity.mint");
       cleanupFailures.push(failure);
@@ -208,6 +240,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
 
     const cleanupAuthority = createAgentAuthorityCleanup({
       affordances: config.affordances,
+      clock: config.clock,
       dispatch,
       operatorCredential: config.operatorCredential,
       secret,
@@ -226,7 +259,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       opened = dispatch(config.operatorCredential, "session.open", {
         capabilities: [...capabilities],
         credentialSha256: createHash("sha256").update(secret, "utf8").digest("hex"),
-        expiresAt,
+        expiresAt: sessionExpiresAt,
         sessionId,
       }, `session/${sessionId}`, 0);
     } catch {
@@ -367,6 +400,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // and resolved, or withdrawn — so its attempt counter re-arms. A claim alone
     // is not movement: the staffed child holds one while it works, and resetting
     // on it would let an unsatisfiable step spin forever in claim-sized hops.
+    // Nor is a gate refusal an attempt (see `attempts`): the surface shows an
+    // orphan's item as READY and unclaimed every pass, and only the gate knows
+    // the child is still there.
     const ready = new Set(surface.steps
       .filter((step) => step.status === "READY")
       .map((step) => workItemIdFor(step.kind, step.aggregateId)));
@@ -394,8 +430,11 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
         continue;
       }
-      attempts.set(workItemId, tried + 1);
-      spawned.push(await staff(step));
+      const report = await staff(step);
+      // Charged only for a try that got past the gate: a fence refusal spent
+      // nothing and must not exhaust the item while its predecessor lives.
+      if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
+      spawned.push(report);
       if (failureOutcome() !== null) break;
     }
     return { active: active.size, spawned, surfaceOutcome: failureOutcome() ?? "SURFACE" };

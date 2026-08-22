@@ -1274,6 +1274,114 @@ describe("createAgentWrapper — durable staffing fence", () => {
     }
   });
 
+  it("does not charge a fence refusal against the attempt budget, so a dead orphan is restaffed", async () => {
+    // The fence's CHILD_LIVE answer is the correct one for as long as the orphan
+    // runs, and it is minted BEFORE any identity: nothing was spent. Counting it
+    // as an attempt exhausted the item after maxItemAttempts passes, and the
+    // exhaustion outlived the orphan: the surface keeps the item READY and
+    // unclaimed, so the counter never re-armed, and the item was lost to the
+    // restarted wrapper for good. The same shape as the race above: wrapper A's
+    // child outlives its claim, a restarted wrapper B polls past the budget
+    // while the child lives, then the child dies and B must staff it.
+    const projectId = "proj-wrapper-fence-budget";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    const stores: SqliteEventStore[] = [];
+    try {
+      const opening = harness.port.readSurface();
+      if (opening.outcome !== "SURFACE") throw new Error(opening.code);
+      const first = opening.steps.find((step) =>
+        step.status === "READY" && step.claim === null
+        && !step.kind.startsWith("session.")
+        && step.kind !== "approval.decide" && step.kind !== "goal.close");
+      if (first === undefined) throw new Error("no staffable step on the surface");
+      const target = workItemIdFor(first.kind, first.aggregateId);
+      const soloPort: AffordancePort = {
+        boundProjectId: projectId,
+        readSurface: () => {
+          const surface = harness.port.readSurface();
+          if (surface.outcome !== "SURFACE") return surface;
+          return {
+            ...surface,
+            steps: surface.steps
+              .filter((step) => workItemIdFor(step.kind, step.aggregateId) === target),
+          };
+        },
+      };
+
+      const spawnCalls: string[] = [];
+      const spawnAgent = async (request: SpawnRequest): Promise<AgentSpawnStartResult> => {
+        spawnCalls.push(request.workItemId);
+        return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
+      };
+
+      const firstStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(firstStore);
+      let suffix = 0;
+      const firstWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `budgta${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        staffingFence: createAgentSessionFence({ isProcessAlive: () => true, projectId, store: firstStore }),
+      });
+      const firstReport = await firstWrapper.runOnce();
+      expect(firstReport.spawned).toMatchObject([{ outcome: "SPAWNED", workItemId: target }]);
+      const agentSession = firstReport.spawned[0]?.sessionId;
+      if (agentSession === null || agentSession === undefined) throw new Error("no session");
+
+      // The claim goes while the child stays: the orphan state, produced durably.
+      const claimed = readWorkClaimLedger(store, projectId).claims.get(target);
+      if (claimed === undefined) throw new Error("no durable claim to retire");
+      writeClaim(
+        store, projectId, "work.release", agentSession, target,
+        claimed.version, "fence-budget-reap",
+      );
+      const aged = soloPort.readSurface();
+      if (aged.outcome !== "SURFACE") throw new Error(aged.code);
+      expect(aged.steps).toMatchObject([{ claim: null, status: "READY" }]);
+
+      // A RESTARTED wrapper whose probe is the only thing that changes below.
+      firstStore.close();
+      stores.pop();
+      const secondStore = SqliteEventStore.openForProject(harness.storePath, projectId);
+      stores.push(secondStore);
+      let orphanAlive = true;
+      const maxItemAttempts = 3;
+      const secondWrapper = createAgentWrapper({
+        affordances: soloPort, claimTtlMs: 60_000, clock: () => NOW + 120_000,
+        deps: harness.isolated.provide(), maxAgents: 1, maxItemAttempts,
+        mintSecret: () => `budgtb${String(suffix += 1).padStart(4, "0")}${"0".repeat(26)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent,
+        staffingFence: createAgentSessionFence({
+          isProcessAlive: () => orphanAlive, projectId, store: secondStore,
+        }),
+      });
+
+      // One past the budget, deliberately: with refusals charged, the fourth
+      // pass is the one that reads STAFFING_ATTEMPTS_EXHAUSTED instead.
+      for (let pass = 0; pass <= maxItemAttempts; pass += 1) {
+        const report = await secondWrapper.runOnce();
+        expect(report.spawned, `pass ${String(pass + 1)}`).toMatchObject([
+          { outcome: "AGENT_STAFFING_CHILD_LIVE", sessionId: null, workItemId: target },
+        ]);
+      }
+      expect(spawnCalls).toEqual([target]);
+
+      // The orphan dies. The gate admits; the wrapper must still be willing.
+      orphanAlive = false;
+      const restaffed = await secondWrapper.runOnce();
+      expect(restaffed.spawned).toMatchObject([{ outcome: "SPAWNED", workItemId: target }]);
+      expect(spawnCalls).toEqual([target, target]);
+    } finally {
+      store.close();
+      while (stores.length > 0) stores.pop()?.close();
+      harness.dispose();
+    }
+  });
+
   it("records the pid the SPAWNER reported, never the wrapper's own", async () => {
     // Found by a SURVIVING mutant: replacing `childPid: start.pid` with
     // `childPid: process.pid` left all 112 tests green. Every other case here
@@ -1825,6 +1933,76 @@ describe("createAgentWrapper — durable staffing fence", () => {
         .toEqual({ verdict: "UNAUTHENTICATED" });
       expect(authenticator.authenticate(OPERATOR)).toMatchObject({ verdict: "AUTHENTICATED" });
     } finally {
+      harness.dispose();
+    }
+  });
+});
+
+describe("createAgentWrapper - bearer and claim horizons", () => {
+  it("opens the bearer on the session TTL while the claim keeps the claim TTL", async () => {
+    // Live shape: a long task renews its claim past the 30-minute bearer, the
+    // child exits, and every exit-path release under the dead secret is refused
+    // as unauthenticated, which wedges the wrapper on AGENT_CLEANUP_FAILED. The
+    // two horizons are separate knobs, and the durable records prove which
+    // received which.
+    const projectId = "proj-wrapper-session-ttl";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    const requests: SpawnRequest[] = [];
+    try {
+      let suffix = 0;
+      const split = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `ttl-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        sessionTtlMs: 600_000,
+        spawnAgent: async (request) => {
+          requests.push(request);
+          return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
+        },
+      });
+
+      const staffed = (await split.runOnce()).spawned[0];
+      expect(staffed?.outcome).toBe("SPAWNED");
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
+        throw new Error("nothing staffed");
+      }
+      expect(readSessionLedger(reader, projectId).sessions.get(staffed.sessionId))
+        .toMatchObject({ expiresAt: new Date(NOW + 600_000).toISOString(), status: "OPEN" });
+      expect(readWorkClaimLedger(reader, projectId).claims.get(staffed.workItemId))
+        .toMatchObject({ expiresAt: new Date(NOW + 60_000).toISOString(), status: "OPEN" });
+      // The mission names the CLAIM horizon: that is the one the agent renews.
+      expect(requests[0]?.expiresAt).toBe(new Date(NOW + 60_000).toISOString());
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("binds the bearer to the claim TTL only when no session TTL is configured", async () => {
+    const projectId = "proj-wrapper-session-ttl-fallback";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      let suffix = 0;
+      const bound = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 1,
+        mintSecret: () => `tfb-${String(suffix += 1).padStart(4, "0")}${"0".repeat(28)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () =>
+          ({ exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID }),
+      });
+
+      const staffed = (await bound.runOnce()).spawned[0];
+      if (staffed?.sessionId === null || staffed?.sessionId === undefined) {
+        throw new Error("nothing staffed");
+      }
+      expect(readSessionLedger(reader, projectId).sessions.get(staffed.sessionId))
+        .toMatchObject({ expiresAt: new Date(NOW + 60_000).toISOString(), status: "OPEN" });
+    } finally {
+      reader.close();
       harness.dispose();
     }
   });
