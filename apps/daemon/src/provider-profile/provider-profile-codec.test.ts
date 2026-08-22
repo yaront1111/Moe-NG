@@ -17,6 +17,7 @@ import {
   PROVIDER_PROFILE_LIMIT_BINDINGS,
   PROVIDER_PROFILE_REGISTRATION_CODES,
   PROVIDER_PROFILE_SCHEMA_VERSION,
+  PROVIDER_PROFILE_SCHEMA_VERSION_V1,
   admitProviderProfile,
   decodeProviderProfileBytes,
   encodeProviderProfileBytes,
@@ -93,8 +94,9 @@ const SELECTION_KEYS = Object.keys(CONTROL.selection);
 describe("provider profile codec — admission", () => {
   it("admits the canonical body as a deep-frozen, server-stamped revision", () => {
     const revision = admitOrThrow(validDraft());
-    expect(revision.schemaVersion).toBe(PROVIDER_PROFILE_SCHEMA_VERSION);
-    expect(PROVIDER_PROFILE_SCHEMA_VERSION).toBe("moe-provider-profile/1");
+    expect(revision.schemaVersion).toBe(PROVIDER_PROFILE_SCHEMA_VERSION_V1);
+    expect(PROVIDER_PROFILE_SCHEMA_VERSION_V1).toBe("moe-provider-profile/1");
+    expect(PROVIDER_PROFILE_SCHEMA_VERSION).toBe("moe-provider-profile/2");
     expect(revision.profileDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(revision.provider).toBe("claude");
     expect(revision.providerMinimumProfileRef).toBe("provider-profile-1");
@@ -281,10 +283,10 @@ describe("provider profile codec — canonical bytes", () => {
 
   it("refuses an unsupported schema version before anything else it could blame", () => {
     const drifted = canonicalText(CONTROL).replace(
-      PROVIDER_PROFILE_SCHEMA_VERSION,
-      "moe-provider-profile/2",
+      CONTROL.schemaVersion,
+      "moe-provider-profile/3",
     );
-    expect(drifted).toContain("moe-provider-profile/2");
+    expect(drifted).toContain("moe-provider-profile/3");
     expect(decodeRefusal(encoder.encode(drifted))).toEqual({
       code: "PROVIDER_PROFILE_VERSION_UNSUPPORTED",
       layer: CODEC_LAYER,
@@ -360,6 +362,7 @@ describe("provider profile codec — published rosters", () => {
       "PROVIDER_PROFILE_VERSION_UNSUPPORTED",
       "PROVIDER_PROFILE_NONCANONICAL",
       "PROVIDER_PROFILE_DIGEST_MISMATCH",
+      "PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED",
     ]);
     expect(PROVIDER_PROFILE_REGISTRATION_CODES).toEqual([
       "PROVIDER_PROFILE_REF_MISMATCH",
@@ -547,6 +550,43 @@ describe("provider.probe — profile registration", () => {
     expect(probedEvents(store).length).toBe(1);
   });
 
+  /**
+   * Declaring a context limit on an EXISTING identity is a rebind, not an update.
+   *
+   * The completion record for this change states that operators mint a NEW profileRevisionId to
+   * declare a limit. That is a claim about production behaviour, so it is asserted here rather
+   * than left in prose: the same identity carrying a declaration it did not carry before is
+   * different content under an unchanged name, which is exactly what the immutability rule
+   * refuses.
+   */
+  it("refuses a context limit declared onto an existing profileRevisionId, at registration", () => {
+    const store = registeredStore();
+    acceptedProbe(send(store, probeFor(validDraft(), { commandId: "probe-1" })));
+    const outcome = send(
+      store,
+      probeFor(validDraftV2(), { commandId: "probe-2", expectedVersion: 1 }),
+    );
+    expect(refusedProbe(outcome)).toEqual({
+      code: "PROVIDER_PROFILE_IMMUTABILITY_CONFLICT",
+      refusedBy: REGISTRATION_LAYER,
+    });
+    expect(probedEvents(store).length).toBe(1);
+  });
+
+  it("registers a declared context limit under a fresh profileRevisionId", () => {
+    const store = registeredStore();
+    acceptedProbe(send(store, probeFor(validDraft(), { commandId: "probe-1" })));
+    const minted = validDraftV2();
+    minted.profileRevisionId = "profile-revision-2";
+    const accepted = acceptedProbe(
+      send(store, probeFor(minted, { commandId: "probe-3", expectedVersion: 1 })),
+    );
+    const profile = accepted.profile as Record<string, unknown>;
+    expect(profile.schemaVersion).toBe("moe-provider-profile/2");
+    expect(profile.contextLimit).toEqual(conservativeLimit());
+    expect(probedEvents(store).length).toBe(2);
+  });
+
   it("refuses a profileRevisionId rebound after an intervening probe, at registration", () => {
     // Immutability is a rule about the whole durable history, not about the previous probe.
     // Comparing only the last committed decision lets one interleaved probe under a different
@@ -653,3 +693,260 @@ function strippedSeal(value: unknown): Record<string, unknown> {
   delete record.schemaVersion;
   return record;
 }
+
+/**
+ * The pre-bump golden: what THIS body sealed to under the single-schema codec, captured from a
+ * throwaway run at HEAD 320cd93 before `contextLimit` existed. It is an independently taken
+ * image of the old output, not a value recomputed from the new code, so it can constrain the
+ * claim that v1 sealing is byte-identical after the bump. See task-be8d405b step 2.
+ */
+const GOLDEN_V1_DIGEST = "5be2604c479a043e3cb6e9172f50062ac798c7d71a96cf289800a41af2c5b89d";
+const GOLDEN_V1_BYTES = 878;
+
+const V1_DRAFT_NAMES: readonly string[] = Object.freeze([
+  "capabilitySchemaDigest", "concurrencyCeiling", "limits", "modelSnapshotEvidence",
+  "modelSnapshotKind", "profileRevisionId", "provider", "providerMinimumProfileRef",
+  "reasoningEffort", "selectedModelId", "selection",
+]);
+
+const DECLARED_SOURCE = "operator declaration: project configuration 2026-08-22";
+
+function conservativeLimit(): Record<string, unknown> {
+  return { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE };
+}
+
+/** The 12-key v2 draft: the v1 body plus exactly one declared context limit. */
+function validDraftV2(contextLimit: unknown = conservativeLimit()): Record<string, unknown> {
+  return { ...validDraft(), contextLimit };
+}
+
+function draftKeysOf(revision: ProviderProfileRevision): readonly string[] {
+  return Object.keys(revision).filter(
+    (key) => !(SERVER_STAMPED as readonly string[]).includes(key),
+  );
+}
+
+/** Set-equality in BOTH directions, stated as such rather than inferred from one inclusion. */
+function expectSameKeySet(actual: readonly string[], expected: readonly string[]): void {
+  expect(new Set(actual).size).toBe(actual.length);
+  expect(new Set(expected).size).toBe(expected.length);
+  expect(actual.every((key) => expected.includes(key))).toBe(true);
+  expect(expected.every((key) => actual.includes(key))).toBe(true);
+  expect([...actual].sort()).toEqual([...expected].sort());
+}
+
+function malformedLimitCases(): readonly HostileCase[] {
+  return [
+    { label: "bytes zero", value: { bytes: 0, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes negative", value: { bytes: -1, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes float", value: { bytes: 1.5, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes NaN", value: { bytes: Number.NaN, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes infinite", value: { bytes: Number.POSITIVE_INFINITY, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes unsafe", value: { bytes: Number.MAX_SAFE_INTEGER + 2, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "bytes as string", value: { bytes: "900000", kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "tokens zero", value: { kind: "EXACT_TOKENS", source: DECLARED_SOURCE, tokens: 0 } },
+    { label: "tokens negative", value: { kind: "EXACT_TOKENS", source: DECLARED_SOURCE, tokens: -200 } },
+    { label: "tokens float", value: { kind: "EXACT_TOKENS", source: DECLARED_SOURCE, tokens: 200_000.5 } },
+    { label: "sourceless CONSERVATIVE_INPUT_BYTES", value: { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES" } },
+    { label: "sourceless EXACT_TOKENS", value: { kind: "EXACT_TOKENS", tokens: 200_000 } },
+    { label: "empty source", value: { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: "" } },
+    { label: "over-long source", value: { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: "s".repeat(257) } },
+    { label: "non-string source", value: { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: 7 } },
+    { label: "unknown kind", value: { bytes: 900_000, kind: "APPROXIMATE_TOKENS", source: DECLARED_SOURCE } },
+    { label: "kind wrong case", value: { bytes: 900_000, kind: "conservative_input_bytes", source: DECLARED_SOURCE } },
+    { label: "UNKNOWN carrying a source", value: { kind: "UNKNOWN", source: DECLARED_SOURCE } },
+    { label: "UNKNOWN carrying bytes", value: { bytes: 900_000, kind: "UNKNOWN" } },
+    { label: "CONSERVATIVE_INPUT_BYTES carrying tokens", value: { kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE, tokens: 200_000 } },
+    { label: "EXACT_TOKENS carrying bytes", value: { bytes: 900_000, kind: "EXACT_TOKENS", source: DECLARED_SOURCE } },
+    { label: "declared kind with an extra key", value: { bytes: 900_000, extra: "x", kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE } },
+    { label: "null", value: null },
+    { label: "string", value: "CONSERVATIVE_INPUT_BYTES" },
+    { label: "number", value: 900_000 },
+    { label: "array", value: [conservativeLimit()] },
+    { label: "empty record", value: {} },
+    { label: "kind missing", value: { bytes: 900_000, source: DECLARED_SOURCE } },
+  ];
+}
+
+/** Drops each v1 key from a v2 draft. `contextLimit` is deliberately NOT in this sweep. */
+function v2MissingCases(): readonly HostileCase[] {
+  return V1_DRAFT_NAMES.map((key) => ({
+    label: `v2 draft missing ${key}`,
+    value: withoutKey(validDraftV2(), key),
+  }));
+}
+
+describe("provider profile codec — v2 context-limit declaration", () => {
+  it("pins the v1 roster and derives the v2 roster as v1 + contextLimit from the seam", () => {
+    const v1Keys = draftKeysOf(admitOrThrow(validDraft()));
+    expectSameKeySet(v1Keys, V1_DRAFT_NAMES);
+    expect(v1Keys.length).toBe(11);
+    const v2Keys = draftKeysOf(admitOrThrow(validDraftV2()));
+    expectSameKeySet(v2Keys, [...V1_DRAFT_NAMES, "contextLimit"]);
+    expect(v2Keys.length).toBe(12);
+  });
+
+  it("seals a v2 revision whose admitted keys set-equal its encoded keys, both directions", () => {
+    const revision = admitOrThrow(validDraftV2());
+    const encoded = Object.keys(JSON.parse(canonicalText(revision)) as Record<string, unknown>);
+    expectSameKeySet(Object.keys(revision), encoded);
+    expect(encoded).toContain("contextLimit");
+    expect(revision.schemaVersion).toBe("moe-provider-profile/2");
+  });
+
+  it("seals an 11-key draft under v1, byte-identical to the pre-bump codec", () => {
+    const revision = admitOrThrow(validDraft());
+    expect(revision.schemaVersion).toBe("moe-provider-profile/1");
+    expect(revision.profileDigest).toBe(GOLDEN_V1_DIGEST);
+    expect(encodeProviderProfileBytes(revision).byteLength).toBe(GOLDEN_V1_BYTES);
+    expect(Object.keys(revision)).not.toContain("contextLimit");
+    expect("contextLimit" in revision).toBe(false);
+  });
+
+  it("treats a dropped contextLimit as a v1 body rather than a refusal", () => {
+    const revision = admitOrThrow(withoutKey(validDraftV2(), "contextLimit"));
+    expect(revision.schemaVersion).toBe("moe-provider-profile/1");
+    expect(revision.profileDigest).toBe(GOLDEN_V1_DIGEST);
+  });
+
+  it("carries the declaration onto the revision verbatim", () => {
+    const revision = admitOrThrow(validDraftV2());
+    expect(revision.contextLimit).toEqual({
+      bytes: 900_000,
+      kind: "CONSERVATIVE_INPUT_BYTES",
+      source: DECLARED_SOURCE,
+    });
+    expect(isDeeplyFrozen(revision)).toBe(true);
+  });
+
+  it.each([
+    ["EXACT_TOKENS", { kind: "EXACT_TOKENS", source: "model card: claude-opus-5 200k window", tokens: 200_000 }],
+    ["UNKNOWN", { kind: "UNKNOWN" }],
+    ["CONSERVATIVE_INPUT_BYTES", { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE }],
+  ])("admits a %s declaration and echoes it unchanged", (_label, limit) => {
+    expect(admitOrThrow(validDraftV2(limit)).contextLimit).toEqual(limit);
+  });
+
+  it("covers contextLimit in the profileDigest", () => {
+    const first = admitOrThrow(validDraftV2());
+    const second = admitOrThrow(
+      validDraftV2({ bytes: 900_001, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE }),
+    );
+    const sourceShifted = admitOrThrow(
+      validDraftV2({ bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES", source: "model card" }),
+    );
+    expect(second.profileDigest).not.toBe(first.profileDigest);
+    expect(sourceShifted.profileDigest).not.toBe(first.profileDigest);
+    expect(admitOrThrow(validDraftV2({ kind: "UNKNOWN" })).profileDigest).not.toBe(
+      first.profileDigest,
+    );
+    expect(admitOrThrow(validDraftV2()).profileDigest).toBe(first.profileDigest);
+    expect(first.profileDigest).not.toBe(GOLDEN_V1_DIGEST);
+  });
+
+  it("generates every context-limit case it claims to sweep", () => {
+    expect(malformedLimitCases().length).toBe(28);
+    expect(malformedLimitCases().length).toBeGreaterThan(0);
+    expect(v2MissingCases().length).toBe(V1_DRAFT_NAMES.length);
+    expect(v2MissingCases().length).toBeGreaterThan(0);
+  });
+
+  it.each(malformedLimitCases().map((entry) => [entry.label, entry.value] as const))(
+    "refuses contextLimit %s as PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED at the codec layer",
+    (_label, limit) => {
+      expect(refusalOf(validDraftV2(limit))).toEqual({
+        code: "PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED",
+        layer: CODEC_LAYER,
+      });
+    },
+  );
+
+  it.each(v2MissingCases().map((entry) => [entry.label, entry.value] as const))(
+    "refuses %s as PROVIDER_PROFILE_INPUT_INVALID at the codec layer",
+    (_label, value) => {
+      expect(refusalOf(value)).toEqual({
+        code: "PROVIDER_PROFILE_INPUT_INVALID",
+        layer: CODEC_LAYER,
+      });
+    },
+  );
+
+  it.each([
+    ["an unknown extra key beside a valid declaration", { ...validDraftV2(), extra: "x" }],
+    ["a caller-supplied schemaVersion", { ...validDraftV2(), schemaVersion: "moe-provider-profile/2" }],
+    ["a caller-supplied profileDigest", { ...validDraftV2(), profileDigest: "b2".repeat(32) }],
+  ])("refuses %s as PROVIDER_PROFILE_INPUT_INVALID, not as a limit fault", (_label, draft) => {
+    expect(refusalOf(draft)).toEqual({
+      code: "PROVIDER_PROFILE_INPUT_INVALID",
+      layer: CODEC_LAYER,
+    });
+  });
+
+  it("still blames the general body path when a v2 draft breaks a non-limit field", () => {
+    expect(refusalOf({ ...validDraftV2(), concurrencyCeiling: 0 })).toEqual({
+      code: "PROVIDER_PROFILE_INPUT_INVALID",
+      layer: CODEC_LAYER,
+    });
+  });
+});
+
+describe("provider profile codec — v2 canonical bytes", () => {
+  it("round-trips v2 bytes with the declaration intact", () => {
+    const revision = admitOrThrow(validDraftV2());
+    const decoded = decodeOrThrow(encodeProviderProfileBytes(revision));
+    expect(decoded).toEqual(revision);
+    expect(decoded.contextLimit).toEqual(conservativeLimit());
+    expect(isDeeplyFrozen(decoded)).toBe(true);
+  });
+
+  it("still decodes v1 bytes under the dual-version codec", () => {
+    const decoded = decodeOrThrow(encodeProviderProfileBytes(admitOrThrow(validDraft())));
+    expect(decoded.schemaVersion).toBe("moe-provider-profile/1");
+    expect(decoded.profileDigest).toBe(GOLDEN_V1_DIGEST);
+    expect("contextLimit" in decoded).toBe(false);
+  });
+
+  it("answers VERSION_UNSUPPORTED before roster exactness — a deliberate precedence", () => {
+    const parsed = JSON.parse(canonicalText(CONTROL)) as Record<string, unknown>;
+    parsed.schemaVersion = "moe-provider-profile/3";
+    parsed.extra = "x";
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(parsed).sort()) sorted[key] = parsed[key];
+    expect(decodeRefusal(encoder.encode(JSON.stringify(sorted)))).toEqual({
+      code: "PROVIDER_PROFILE_VERSION_UNSUPPORTED",
+      layer: CODEC_LAYER,
+    });
+  });
+
+  it("refuses v2 bytes carrying a malformed declaration", () => {
+    const revision = admitOrThrow(validDraftV2());
+    const tampered = canonicalText(revision).replace('"bytes":900000', '"bytes":-1');
+    expect(tampered).toContain('"bytes":-1');
+    expect(decodeRefusal(encoder.encode(tampered))).toEqual({
+      code: "PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED",
+      layer: CODEC_LAYER,
+    });
+  });
+
+  it("refuses v1 bytes that smuggle a contextLimit key", () => {
+    const parsed = JSON.parse(canonicalText(CONTROL)) as Record<string, unknown>;
+    parsed.contextLimit = conservativeLimit();
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(parsed).sort()) sorted[key] = parsed[key];
+    expect(decodeRefusal(encoder.encode(JSON.stringify(sorted)))).toEqual({
+      code: "PROVIDER_PROFILE_INPUT_INVALID",
+      layer: CODEC_LAYER,
+    });
+  });
+
+  it("refuses v2 bytes whose embedded digest does not recompute", () => {
+    const revision = admitOrThrow(validDraftV2());
+    const forged = "c3".repeat(32);
+    const tampered = canonicalText(revision).replace(revision.profileDigest, forged);
+    expect(tampered).toContain(forged);
+    expect(decodeRefusal(encoder.encode(tampered))).toEqual({
+      code: "PROVIDER_PROFILE_DIGEST_MISMATCH",
+      layer: CODEC_LAYER,
+    });
+  });
+});

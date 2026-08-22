@@ -25,6 +25,7 @@ import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner
 
 import {
   PROFILE_HEX64,
+  admittedContextLimit,
   admittedLimits,
   admittedSelection,
   boundedText,
@@ -34,17 +35,33 @@ import {
   member,
   positiveCount,
 } from "./provider-profile-fields.js";
-import type { ProviderProfileLimits } from "./provider-profile-fields.js";
+import type { ProviderContextLimit, ProviderProfileLimits } from "./provider-profile-fields.js";
 
-export type { ProviderProfileLimits } from "./provider-profile-fields.js";
+export type { ProviderContextLimit, ProviderProfileLimits } from "./provider-profile-fields.js";
 
-export const PROVIDER_PROFILE_SCHEMA_VERSION = "moe-provider-profile/1";
+/**
+ * TWO live schemas, not one. `/1` predates the context-limit declaration and is kept exactly as
+ * it was: a body carrying the original eleven fields still seals to the same canonical bytes and
+ * the same digest it did before this field existed, so every revision already persisted stays
+ * readable and keeps its identity. `/2` is `/1` plus a declared `contextLimit`.
+ *
+ * A revision written under `/1` therefore has NO declaration — not a defaulted one. Serving it
+ * as UNKNOWN is the honest reading of a record that predates the question, and that decision is
+ * taken once, at the reader (`provider-profile-resolver.ts`), never by inventing a value here.
+ */
+export const PROVIDER_PROFILE_SCHEMA_VERSION_V1 = "moe-provider-profile/1";
+export const PROVIDER_PROFILE_SCHEMA_VERSION = "moe-provider-profile/2";
+
+export type ProviderProfileSchemaVersion =
+  | typeof PROVIDER_PROFILE_SCHEMA_VERSION_V1
+  | typeof PROVIDER_PROFILE_SCHEMA_VERSION;
 
 export const PROVIDER_PROFILE_CODEC_CODES = Object.freeze([
   "PROVIDER_PROFILE_INPUT_INVALID",
   "PROVIDER_PROFILE_VERSION_UNSUPPORTED",
   "PROVIDER_PROFILE_NONCANONICAL",
   "PROVIDER_PROFILE_DIGEST_MISMATCH",
+  "PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED",
 ] as const);
 
 export const PROVIDER_PROFILE_REGISTRATION_CODES = Object.freeze([
@@ -92,6 +109,12 @@ export interface ProviderProfileIssue {
 export interface ProviderProfileRevision {
   readonly capabilitySchemaDigest: string;
   readonly concurrencyCeiling: number;
+  /**
+   * Present iff `schemaVersion` is `/2`. Optional HERE and required on `ProviderCapabilities`:
+   * a `/1` revision genuinely carries no declaration, and typing the field as always-present
+   * would force this module to manufacture one for records that never had it.
+   */
+  readonly contextLimit?: ProviderContextLimit;
   readonly limits: ProviderProfileLimits;
   readonly modelSnapshotEvidence: string;
   readonly modelSnapshotKind: ClaudeModelEvidenceKind;
@@ -101,7 +124,7 @@ export interface ProviderProfileRevision {
   readonly provider: "claude";
   readonly providerMinimumProfileRef: string;
   readonly reasoningEffort: ClaudeReasoningEffort;
-  readonly schemaVersion: typeof PROVIDER_PROFILE_SCHEMA_VERSION;
+  readonly schemaVersion: ProviderProfileSchemaVersion;
   readonly selectedModelId: string;
   readonly selection: ProjectConfigurationSelection;
 }
@@ -113,14 +136,35 @@ export type ProviderProfileAdmission =
 /** The validated body, minus the two fields only this module may stamp. */
 export type ProviderProfileBody = Omit<ProviderProfileRevision, "profileDigest" | "schemaVersion">;
 
-const DRAFT_KEYS: readonly string[] = Object.freeze([
+const DRAFT_KEYS_V1: readonly string[] = Object.freeze([
   "capabilitySchemaDigest", "concurrencyCeiling", "limits", "modelSnapshotEvidence",
   "modelSnapshotKind", "profileRevisionId", "provider", "providerMinimumProfileRef",
   "reasoningEffort", "selectedModelId", "selection",
 ]);
-const ENCODED_KEYS: readonly string[] = Object.freeze([
-  ...DRAFT_KEYS, "profileDigest", "schemaVersion",
+/** Derived, never restated: the shared eleven cannot drift between the two schemas. */
+const DRAFT_KEYS_V2: readonly string[] = Object.freeze([...DRAFT_KEYS_V1, "contextLimit"]);
+const ENCODED_KEYS_V1: readonly string[] = Object.freeze([
+  ...DRAFT_KEYS_V1, "profileDigest", "schemaVersion",
 ]);
+const ENCODED_KEYS_V2: readonly string[] = Object.freeze([
+  ...DRAFT_KEYS_V2, "profileDigest", "schemaVersion",
+]);
+
+type BodyAdmission =
+  | { readonly body: ProviderProfileBody; readonly ok: true }
+  | { readonly code: ProviderProfileCodecCode; readonly ok: false };
+
+function isSupportedVersion(value: string): value is ProviderProfileSchemaVersion {
+  return value === PROVIDER_PROFILE_SCHEMA_VERSION_V1 || value === PROVIDER_PROFILE_SCHEMA_VERSION;
+}
+
+function draftKeysFor(version: ProviderProfileSchemaVersion): readonly string[] {
+  return version === PROVIDER_PROFILE_SCHEMA_VERSION_V1 ? DRAFT_KEYS_V1 : DRAFT_KEYS_V2;
+}
+
+function encodedKeysFor(version: ProviderProfileSchemaVersion): readonly string[] {
+  return version === PROVIDER_PROFILE_SCHEMA_VERSION_V1 ? ENCODED_KEYS_V1 : ENCODED_KEYS_V2;
+}
 const MAX_PROFILE_BYTES = 16_384;
 const encoder = new TextEncoder();
 /** Fatal: mis-encoded bytes must refuse rather than become U+FFFD and admit as text. */
@@ -133,8 +177,9 @@ function refusal(code: ProviderProfileCodecCode, message: string): ProviderProfi
   });
 }
 
+/** The eleven fields both schemas share, admitted identically under either version. */
 export function admittedProfileBody(value: unknown): ProviderProfileBody | null {
-  if (!hasExactKeys(value, DRAFT_KEYS)) return null;
+  if (!hasExactKeys(value, DRAFT_KEYS_V1)) return null;
   const capabilitySchemaDigest = boundedText(value.capabilitySchemaDigest);
   const concurrencyCeiling = positiveCount(value.concurrencyCeiling);
   const limits = admittedLimits(value.limits);
@@ -158,9 +203,35 @@ export function admittedProfileBody(value: unknown): ProviderProfileBody | null 
   };
 }
 
+/**
+ * A malformed declaration is blamed as ITS OWN fault rather than folded into the generic body
+ * refusal: an operator who wrote a limit without a source has made a different mistake from one
+ * who sent an unknown key, and a single code would tell them the wrong thing.
+ */
+function admittedVersionedBody(
+  value: Record<string, unknown>,
+  version: ProviderProfileSchemaVersion,
+): BodyAdmission {
+  const core = admittedProfileBody(pick(value, DRAFT_KEYS_V1));
+  if (core === null) {
+    return { code: "PROVIDER_PROFILE_INPUT_INVALID", ok: false };
+  }
+  if (version === PROVIDER_PROFILE_SCHEMA_VERSION_V1) {
+    return { body: core, ok: true };
+  }
+  const contextLimit = admittedContextLimit(value.contextLimit);
+  if (contextLimit === null) {
+    return { code: "PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED", ok: false };
+  }
+  return { body: { ...core, contextLimit }, ok: true };
+}
+
 /** The digest preimage is the versioned body WITHOUT the digest, never the digest's own bytes. */
-function sealed(body: ProviderProfileBody): ProviderProfileRevision {
-  const versioned = { ...body, schemaVersion: PROVIDER_PROFILE_SCHEMA_VERSION } as const;
+function sealed(
+  body: ProviderProfileBody,
+  version: ProviderProfileSchemaVersion,
+): ProviderProfileRevision {
+  const versioned = { ...body, schemaVersion: version };
   const profileDigest = createHash("sha256").update(canonicalJson(versioned), "utf8").digest("hex");
   const revision = { ...versioned, profileDigest };
   Object.freeze(revision.limits);
@@ -168,12 +239,23 @@ function sealed(body: ProviderProfileBody): ProviderProfileRevision {
   return Object.freeze(revision);
 }
 
+/** Which schema is this draft claiming? Key shape decides, because no caller may name a version. */
+function draftVersion(value: unknown): ProviderProfileSchemaVersion | null {
+  if (hasExactKeys(value, DRAFT_KEYS_V1)) return PROVIDER_PROFILE_SCHEMA_VERSION_V1;
+  if (hasExactKeys(value, DRAFT_KEYS_V2)) return PROVIDER_PROFILE_SCHEMA_VERSION;
+  return null;
+}
+
 export function admitProviderProfile(value: unknown): ProviderProfileAdmission {
-  const body = admittedProfileBody(value);
-  if (body === null) {
+  const version = draftVersion(value);
+  if (version === null || !isRecord(value)) {
     return refusal("PROVIDER_PROFILE_INPUT_INVALID", "profile body is not an admissible record");
   }
-  return Object.freeze({ ok: true as const, revision: sealed(body) });
+  const admitted = admittedVersionedBody(value, version);
+  if (!admitted.ok) {
+    return refusal(admitted.code, "profile body is not an admissible record");
+  }
+  return Object.freeze({ ok: true as const, revision: sealed(admitted.body, version) });
 }
 
 export function encodeProviderProfileBytes(revision: ProviderProfileRevision): Uint8Array {
@@ -191,9 +273,9 @@ function textOf(input: unknown): string | null {
   }
 }
 
-function bodyOf(parsed: Record<string, unknown>): Record<string, unknown> {
+function pick(parsed: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> {
   const body: Record<string, unknown> = {};
-  for (const key of DRAFT_KEYS) body[key] = parsed[key];
+  for (const key of keys) body[key] = parsed[key];
   return body;
 }
 
@@ -205,22 +287,32 @@ export function decodeProviderProfileBytes(input: unknown): ProviderProfileAdmis
   }
   const parsed = decoded.value as Record<string, unknown>;
   const version = parsed.schemaVersion;
-  if (typeof version !== "string" || !hasExactKeys(parsed, ENCODED_KEYS)) {
+  if (typeof version !== "string") {
     return refusal("PROVIDER_PROFILE_INPUT_INVALID", "encoded profile is not an exact record");
   }
-  if (version !== PROVIDER_PROFILE_SCHEMA_VERSION) {
+  // Version is judged BEFORE key exactness: bytes from a schema this build does not know are
+  // unsupported, not malformed, and blaming their key set would send the operator to fix a
+  // record that a newer build wrote correctly.
+  if (!isSupportedVersion(version)) {
     return refusal("PROVIDER_PROFILE_VERSION_UNSUPPORTED", `unsupported version ${version}`);
   }
+  if (!hasExactKeys(parsed, encodedKeysFor(version))) {
+    return refusal("PROVIDER_PROFILE_INPUT_INVALID", "encoded profile is not an exact record");
+  }
   const profileDigest = boundedText(parsed.profileDigest);
-  const body = admittedProfileBody(bodyOf(parsed));
-  if (body === null || profileDigest === null || !PROFILE_HEX64.test(profileDigest)) {
+  const admitted = admittedVersionedBody(pick(parsed, draftKeysFor(version)), version);
+  if (!admitted.ok) {
+    return refusal(admitted.code, "encoded profile body is not admissible");
+  }
+  const body = admitted.body;
+  if (profileDigest === null || !PROFILE_HEX64.test(profileDigest)) {
     return refusal("PROVIDER_PROFILE_INPUT_INVALID", "encoded profile body is not admissible");
   }
-  const restated = { ...body, profileDigest, schemaVersion: PROVIDER_PROFILE_SCHEMA_VERSION };
+  const restated = { ...body, profileDigest, schemaVersion: version };
   if (canonicalJson(restated) !== text) {
     return refusal("PROVIDER_PROFILE_NONCANONICAL", "bytes are not the canonical encoding");
   }
-  const resealed = sealed(body);
+  const resealed = sealed(body, version);
   if (resealed.profileDigest !== profileDigest) {
     return refusal("PROVIDER_PROFILE_DIGEST_MISMATCH", "embedded digest does not recompute");
   }

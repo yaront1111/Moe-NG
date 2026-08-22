@@ -575,3 +575,140 @@ describe("provider.probe owns the envelope-versus-body ref check", () => {
     expect(outcome.refusedBy).toBe("PROVIDER_PROFILE_REGISTRATION");
   });
 });
+
+const DECLARED_SOURCE = "operator declaration: project configuration 2026-08-22";
+const DECLARED_LIMIT = Object.freeze({
+  bytes: 900_000,
+  kind: "CONSERVATIVE_INPUT_BYTES" as const,
+  source: DECLARED_SOURCE,
+});
+
+function expectCapabilities(value: unknown): Record<string, unknown> {
+  const result = value as Record<string, unknown>;
+  if (result.ok !== true) throw new Error(`expected capabilities, got ${String(result.code)}`);
+  return result;
+}
+
+function resolved(store: SqliteEventStore, settingsDigest: string): Record<string, unknown> {
+  return expectCapabilities(
+    resolveCurrentProviderProfile(store, {
+      projectId: PROJECT_ID,
+      expectedConfigurationDigest: settingsDigest,
+    }),
+  );
+}
+
+/** The profile as the production writer actually committed it, read back off the event stream. */
+function storedProfile(store: SqliteEventStore): Record<string, unknown> {
+  const [event] = store.readEvents(`${PROJECT_ID}-provider`);
+  if (event === undefined) throw new Error("no ProviderProbed event was committed");
+  const payload = JSON.parse(new TextDecoder().decode(event.payload)) as Record<string, unknown>;
+  return payload.profile as Record<string, unknown>;
+}
+
+describe("resolveCurrentProviderProfile — declared context limit", () => {
+  it("serves a declared limit verbatim, never a ceiling or a default", () => {
+    const { settingsDigest, store } = seed(withProfile({ contextLimit: { ...DECLARED_LIMIT } }));
+
+    const result = resolved(store, settingsDigest);
+
+    expect(result.contextLimit).toEqual({
+      bytes: 900_000,
+      kind: "CONSERVATIVE_INPUT_BYTES",
+      source: DECLARED_SOURCE,
+    });
+    // The four capture ceilings and the shared context default are all DIFFERENT numbers from
+    // the declared one, so a mapping to any of them reddens this arm rather than coinciding.
+    const limits = result.limits as Record<string, number>;
+    for (const ceiling of Object.values(limits)) {
+      expect((result.contextLimit as { bytes: number }).bytes).not.toBe(ceiling);
+    }
+    expect((result.contextLimit as { bytes: number }).bytes).not.toBe(64 * 1024);
+  });
+
+  it("serves an EXACT_TOKENS declaration verbatim", () => {
+    const declared = {
+      kind: "EXACT_TOKENS",
+      source: "model card: claude-opus-5 200k window, output reserved",
+      tokens: 200_000,
+    };
+    const { settingsDigest, store } = seed(withProfile({ contextLimit: { ...declared } }));
+
+    expect(resolved(store, settingsDigest).contextLimit).toEqual(declared);
+  });
+
+  it("serves an explicitly declared UNKNOWN as exactly one key", () => {
+    const { settingsDigest, store } = seed(withProfile({ contextLimit: { kind: "UNKNOWN" } }));
+
+    const contextLimit = resolved(store, settingsDigest).contextLimit as Record<string, unknown>;
+    expect(contextLimit).toEqual({ kind: "UNKNOWN" });
+    expect(Object.keys(contextLimit)).toEqual(["kind"]);
+  });
+
+  /**
+   * DoD-4: a revision written BEFORE this field existed.
+   *
+   * The eleven-key body is what the old codec admitted, and the stored record proves it — the
+   * writer stamped `moe-provider-profile/1` and committed no `contextLimit` key at all. Serving
+   * that as UNKNOWN is a STATED DECISION: a revision that predates the question has no answer to
+   * it, and manufacturing one would give an invented number the authority of a durable record.
+   */
+  it("serves a pre-bump v1 revision as UNKNOWN, by decision rather than by default", () => {
+    const { settingsDigest, store } = seed();
+
+    const stored = storedProfile(store);
+    expect(stored.schemaVersion).toBe("moe-provider-profile/1");
+    expect(Object.keys(stored)).not.toContain("contextLimit");
+
+    const contextLimit = resolved(store, settingsDigest).contextLimit as Record<string, unknown>;
+    expect(contextLimit).toEqual({ kind: "UNKNOWN" });
+    expect(Object.keys(contextLimit)).toEqual(["kind"]);
+  });
+
+  it("changes the served profileDigest when only the declaration changes", () => {
+    const withoutDeclaration = seed();
+    const withDeclaration = seed(withProfile({ contextLimit: { ...DECLARED_LIMIT } }));
+
+    const bare = resolved(withoutDeclaration.store, withoutDeclaration.settingsDigest);
+    const declared = resolved(withDeclaration.store, withDeclaration.settingsDigest);
+
+    expect(declared.profileDigest).not.toBe(bare.profileDigest);
+    expect(declared.profileRevisionId).toBe(bare.profileRevisionId);
+  });
+
+  it.each([
+    ["sourceless", { bytes: 900_000, kind: "CONSERVATIVE_INPUT_BYTES" }],
+    ["negative bytes", { bytes: -1, kind: "CONSERVATIVE_INPUT_BYTES", source: DECLARED_SOURCE }],
+    ["unknown kind", { bytes: 900_000, kind: "APPROXIMATE", source: DECLARED_SOURCE }],
+  ])(
+    "refuses a %s declaration at the writer and serves no profile at all",
+    (_label, contextLimit) => {
+      const store = openStore();
+      const steps = [
+        envelope("project.register", 0, { owner: "owner-1" }),
+        envelope("project.bind_repository", 1, { observation: OBSERVATION }),
+      ];
+      for (const step of steps) {
+        const outcome = send(store, step);
+        if (!outcome.ok) throw new Error(`seed failed at ${step.kind}: ${outcome.code}`);
+      }
+
+      const refused = send(
+        store,
+        envelope("provider.probe", 0, {
+          observation: {
+            profile: { ...profileBody(), contextLimit },
+            providerMinimumProfileRef: MINIMUM_REF,
+            truthClass: "DAEMON_VERIFIED",
+          },
+        }),
+      );
+
+      expect(refused.ok).toBe(false);
+      if (refused.ok) return;
+      expect(refused.code).toBe("PROVIDER_PROFILE_CONTEXT_LIMIT_MALFORMED");
+      expect(refused.refusedBy).toBe("PROVIDER_PROFILE_CODEC");
+      expect(store.readEvents(`${PROJECT_ID}-provider`)).toHaveLength(0);
+    },
+  );
+});

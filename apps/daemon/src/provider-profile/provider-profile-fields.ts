@@ -102,3 +102,57 @@ export function admittedSelection(value: unknown): ProjectConfigurationSelection
   }
   return refs as unknown as ProjectConfigurationSelection;
 }
+
+/**
+ * How much context the provider will accept, as DECLARED by the operator or by a model card.
+ *
+ * Three things are load-bearing. `source` is MANDATORY on both declared kinds: a number whose
+ * justification lives only in a commit message is the same defect as no number at all, so a
+ * limit without a source is malformed rather than being coerced to UNKNOWN. UNKNOWN is exactly
+ * one key, so an absent declaration cannot smuggle a stray field past this admitter. And no
+ * value here has a default: an unreadable declaration refuses, and the honest gap survives as
+ * UNKNOWN rather than becoming a capture ceiling or a budget constant borrowed from elsewhere.
+ *
+ * `@moe/runner`'s ClaudeContextLimit carries the same three kinds WITHOUT a source, and that
+ * asymmetry is deliberate: the probe reports what a CLI can prove about itself, while this type
+ * records a decision somebody made. Do not unify them by dropping the provenance.
+ */
+export type ProviderContextLimit =
+  | { readonly kind: "UNKNOWN" }
+  | { readonly bytes: number; readonly kind: "CONSERVATIVE_INPUT_BYTES"; readonly source: string }
+  | { readonly kind: "EXACT_TOKENS"; readonly source: string; readonly tokens: number };
+
+export const PROFILE_CONTEXT_LIMIT_UNKNOWN_KEYS: readonly string[] = Object.freeze(["kind"]);
+export const PROFILE_CONTEXT_LIMIT_BYTES_KEYS: readonly string[] = Object.freeze([
+  "bytes", "kind", "source",
+]);
+export const PROFILE_CONTEXT_LIMIT_TOKENS_KEYS: readonly string[] = Object.freeze([
+  "kind", "source", "tokens",
+]);
+
+/** The one UNKNOWN value, so no caller can mint a second shape of "we do not know". */
+export const UNKNOWN_CONTEXT_LIMIT: ProviderContextLimit = Object.freeze({
+  kind: "UNKNOWN" as const,
+});
+
+export function admittedContextLimit(value: unknown): ProviderContextLimit | null {
+  if (!isRecord(value)) return null;
+  if (value.kind === "UNKNOWN") {
+    return hasExactKeys(value, PROFILE_CONTEXT_LIMIT_UNKNOWN_KEYS) ? UNKNOWN_CONTEXT_LIMIT : null;
+  }
+  if (value.kind === "CONSERVATIVE_INPUT_BYTES") {
+    if (!hasExactKeys(value, PROFILE_CONTEXT_LIMIT_BYTES_KEYS)) return null;
+    const bytes = positiveCount(value.bytes);
+    const source = boundedText(value.source);
+    if (bytes === null || source === null) return null;
+    return Object.freeze({ bytes, kind: "CONSERVATIVE_INPUT_BYTES" as const, source });
+  }
+  if (value.kind === "EXACT_TOKENS") {
+    if (!hasExactKeys(value, PROFILE_CONTEXT_LIMIT_TOKENS_KEYS)) return null;
+    const source = boundedText(value.source);
+    const tokens = positiveCount(value.tokens);
+    if (source === null || tokens === null) return null;
+    return Object.freeze({ kind: "EXACT_TOKENS" as const, source, tokens });
+  }
+  return null;
+}

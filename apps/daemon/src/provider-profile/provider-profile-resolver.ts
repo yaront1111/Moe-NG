@@ -27,7 +27,8 @@ import {
   severedBinding,
 } from "./provider-profile-reader-checks.js";
 import type { ProviderProfileReaderUnknown } from "./provider-profile-reader-checks.js";
-import { hasExactKeys } from "./provider-profile-fields.js";
+import { UNKNOWN_CONTEXT_LIMIT, hasExactKeys } from "./provider-profile-fields.js";
+import type { ProviderContextLimit } from "./provider-profile-fields.js";
 
 export {
   PROVIDER_PROFILE_READER_CODES,
@@ -45,6 +46,13 @@ export interface ProviderCapabilities {
   readonly concurrencyCeiling: number;
   /** Echoed from the durable manifest, never recomputed here. */
   readonly configurationDigest: string;
+  /**
+   * REQUIRED here though it is optional on the revision, because a consumer sizing a context
+   * window must be handed an answer rather than an absent field it could read as zero. The
+   * answer for a revision that never declared one is `UNKNOWN` — an honest gap that carries no
+   * authority, never a default, a capture ceiling, or a budget constant from another module.
+   */
+  readonly contextLimit: ProviderContextLimit;
   readonly evidence: "DURABLE";
   readonly limits: ProviderProfileLimits;
   readonly modelSnapshotEvidence: string;
@@ -101,6 +109,7 @@ function capabilities(
     capabilitySchemaDigest: revision.capabilitySchemaDigest,
     concurrencyCeiling: revision.concurrencyCeiling,
     configurationDigest: manifest.settingsDigest,
+    contextLimit: revision.contextLimit ?? UNKNOWN_CONTEXT_LIMIT,
     evidence: "DURABLE" as const,
     limits: Object.freeze({ ...revision.limits }),
     modelSnapshotEvidence: revision.modelSnapshotEvidence,
