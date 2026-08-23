@@ -632,6 +632,38 @@ describe("current active graph projection", () => {
     });
   });
 
+  it("discovers aggregates payload-free instead of paging the whole event store", () => {
+    withStore("payload-free", (store) => {
+      seedActive(store, "graph-revision-1", PRIMARY);
+      const counts = { readEventsAfter: 0 };
+      const counted = new Proxy(store, {
+        get(target, property) {
+          if (property === "readEventsAfter") {
+            return (...args: Parameters<SqliteEventStore["readEventsAfter"]>) => {
+              counts.readEventsAfter += 1;
+              return target.readEventsAfter(...args);
+            };
+          }
+          const value = Reflect.get(target, property, target) as unknown;
+          return typeof value === "function"
+            ? (value as (...functionArguments: readonly unknown[]) => unknown).bind(target)
+            : value;
+        },
+      });
+
+      const read = readCurrentActiveGraph(counted, PROJECT_ID);
+
+      // The ANSWER is unchanged; what this pins is HOW discovery read for it.
+      expect(read.ok).toBe(true);
+      if (!read.ok) throw new Error(`unexpected refusal ${read.code}`);
+      expect(read.revisionId).toBe("graph-revision-1");
+      // Discovery must key on aggregate ids alone. Paging the global stream
+      // through readEventsAfter materializes EVERY stored payload on EVERY
+      // read — the cost this projection was measured paying per caller.
+      expect(counts.readEventsAfter).toBe(0);
+    });
+  });
+
   it("refuses every hostile ordering with its OWN code and refusing layer", () => {
     const legal = drive([
       createOf("graph-revision-1", PRIMARY.graphContentHash), submit,

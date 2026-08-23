@@ -35,9 +35,6 @@ import type { GraphDecisionEvidenceCode } from "./graph-decision-evidence.js";
 /** Names the layer that answered the caller. */
 export const ACTIVE_GRAPH_PROJECTION_LAYER = "ACTIVE_GRAPH_PROJECTION" as const;
 
-/** How many stored events one enumeration page carries. */
-const ENUMERATION_PAGE = 200;
-
 /**
  * Refusals this module originates. Codes passed through from the core replay keep
  * their own spelling and are deliberately NOT merged in here — a caller can tell
@@ -113,8 +110,8 @@ export function graphRevisionAggregateId(projectId: string, revisionId: string):
 }
 
 /**
- * Discover every revision aggregate by its AGGREGATE ID PREFIX, over all stored
- * events, not by any single event kind.
+ * Discover every revision aggregate by its AGGREGATE ID PREFIX, never by any
+ * single event kind.
  *
  * Keying discovery on `GraphRevisionCreated` was a real defect: an aggregate
  * whose create event is absent — a genuinely corrupt durable history — was never
@@ -124,21 +121,14 @@ export function graphRevisionAggregateId(projectId: string, revisionId: string):
  * projection exists to prevent. Enumerating by prefix means a history cannot
  * escape by lacking any particular event; the replay then answers with its own
  * `GRAPH_REVISION_REPLAY_MISSING_CREATE`.
+ *
+ * The store's prefix primitive preserves that guarantee — it keys on
+ * `aggregate_id` alone — while replacing what used to be a full scan: paging
+ * EVERY stored event through `readEventsAfter` materialized every payload in
+ * the store on every call, for every caller of this projection.
  */
 function enumerateAggregateIds(store: SqliteEventStore, projectId: string): readonly string[] {
-  const prefix = graphRevisionAggregateId(projectId, "");
-  const aggregateIds = new Set<string>();
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readEventsAfter(cursor, ENUMERATION_PAGE);
-    for (const event of page.items) {
-      if (event.aggregateId.startsWith(prefix)) aggregateIds.add(event.aggregateId);
-    }
-    if (!page.hasMore || page.nextCursor === null) {
-      return [...aggregateIds];
-    }
-    cursor = page.nextCursor;
-  }
+  return store.enumerateAggregateIdsByPrefix(graphRevisionAggregateId(projectId, ""));
 }
 
 /**

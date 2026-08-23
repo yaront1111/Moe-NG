@@ -57,6 +57,16 @@ export class EventReadModelStore extends EventReadQueryStore {
     });
   }
 
+  /**
+   * Payload-free discovery: every distinct aggregate id in the given id-prefix
+   * range, sorted ascending. Whole by design rather than paged — distinct ids
+   * are bounded by real aggregates, not by stored events — and never silently
+   * truncated. See `aggregateIdPrefixEnumeration` for the range contract.
+   */
+  public enumerateAggregateIdsByPrefix(aggregateIdPrefix: string): readonly string[] {
+    return this.aggregateIdPrefixEnumeration(aggregateIdPrefix);
+  }
+
   public readEvents(aggregateId: string): readonly StoredEvent[] {
     const page = this.readAggregateEvents(aggregateId, 0, MAX_PAGE_SIZE);
     if (page.hasMore) {

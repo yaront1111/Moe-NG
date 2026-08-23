@@ -32,20 +32,37 @@ export type BudgetBindingPort = (
 const GOAL_CREATED_EVENT_TYPE = "GoalCreated";
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
-function goalCreatedFact(events: readonly StoredEvent[]): Record<string, unknown> | null {
+/**
+ * MISSING and UNREADABLE are deliberately distinct halves of "no fact": a goal
+ * with no `GoalCreated` row is a world that was never established, while a
+ * `GoalCreated`-typed row whose bytes cannot be decoded — or whose readable
+ * content does not carry the fact its type claims, the same content-vs-type
+ * breach `budget-genesis-leg.ts` refuses on the ledger root — is a durable
+ * record that EXISTS and cannot be trusted. Collapsing the two into one `null`
+ * was a real defect: corruption answered `BUDGET_PROJECTION_GOAL_ABSENT`, the
+ * code a cleanly-bootstrappable world gets.
+ */
+type GoalCreatedFact =
+  | { readonly kind: "MISSING" }
+  | { readonly kind: "UNREADABLE" }
+  | { readonly kind: "FACT"; readonly fact: Record<string, unknown> };
+
+function goalCreatedFact(events: readonly StoredEvent[]): GoalCreatedFact {
   const row = events.find((event) => event.eventType === GOAL_CREATED_EVENT_TYPE);
-  if (row === undefined) return null;
+  if (row === undefined) return { kind: "MISSING" };
   let parsed: unknown;
   try {
     parsed = JSON.parse(decoder.decode(row.payload)) as unknown;
   } catch {
-    return null;
+    return { kind: "UNREADABLE" };
   }
   const list = Array.isArray(parsed) ? parsed : [parsed];
   const created = list.find((entry) =>
     entry !== null && typeof entry === "object"
     && (entry as Record<string, unknown>)["kind"] === GOAL_CREATED_EVENT_TYPE);
-  return created === undefined ? null : (created as Record<string, unknown>);
+  return created === undefined
+    ? { kind: "UNREADABLE" }
+    : { fact: created as Record<string, unknown>, kind: "FACT" };
 }
 
 /** The half of a binding the GOAL's own durable record answers, with no graph involved. */
@@ -73,12 +90,13 @@ export function readGoalBudgetIdentity(
     return budgetProjectionRefusal("BUDGET_PROJECTION_GOAL_ABSENT");
   }
   const created = goalCreatedFact(store.readEvents(goalRef));
-  if (created === null) return budgetProjectionRefusal("BUDGET_PROJECTION_GOAL_ABSENT");
-  const accountRef = created["budgetAccountRef"];
+  if (created.kind === "MISSING") return budgetProjectionRefusal("BUDGET_PROJECTION_GOAL_ABSENT");
+  if (created.kind === "UNREADABLE") return budgetProjectionRefusal("BUDGET_PROJECTION_CORRUPT");
+  const accountRef = created.fact["budgetAccountRef"];
   if (typeof accountRef !== "string" || accountRef.length === 0) {
     return budgetProjectionRefusal("BUDGET_PROJECTION_GOAL_ABSENT");
   }
-  if (created["projectId"] !== projectId || created["goalId"] !== goalRef) {
+  if (created.fact["projectId"] !== projectId || created.fact["goalId"] !== goalRef) {
     return budgetProjectionRefusal("BUDGET_PROJECTION_SCOPE_FOREIGN");
   }
   return Object.freeze({

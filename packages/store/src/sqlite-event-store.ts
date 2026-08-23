@@ -283,6 +283,15 @@ export class SqliteEventStore {
     return this.#core.commitWithApply(input, apply);
   }
 
+  /**
+   * Payload-free discovery: every distinct aggregate id in the given id-prefix
+   * range, sorted ascending. Bounded by real aggregates rather than stored
+   * events, so it is returned whole — no cursor, no truncation.
+   */
+  public enumerateAggregateIdsByPrefix(aggregateIdPrefix: string): readonly string[] {
+    return this.#core.enumerateAggregateIdsByPrefix(aggregateIdPrefix);
+  }
+
   public getAggregateVersion(aggregateId: string): number {
     return this.#core.getAggregateVersion(aggregateId);
   }

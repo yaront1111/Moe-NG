@@ -23,10 +23,35 @@ import {
   requireSafeNonnegativeInteger,
 } from "./store-input.js";
 import {
+  requireRowString,
   requireStoredIntegerAtLeast,
   requireStoredPositiveBigIntText,
 } from "./store-rows.js";
 import { EventReadMaterializationStore } from "./event-read-materialization.js";
+
+/**
+ * Exclusive upper bound of an aggregate-id prefix range, computed in CODE POINT
+ * space. SQLite compares TEXT under BINARY collation — memcmp over UTF-8 bytes —
+ * and code point order equals UTF-8 byte order, so bumping the prefix's last
+ * code point yields the smallest string no id starting with the prefix can
+ * reach. An increment landing in the surrogate gap continues at U+E000: no
+ * well-formed string carries a lone surrogate, so nothing lives in between.
+ * Trailing U+10FFFF code points cannot be bumped and are dropped instead; a
+ * prefix made ONLY of them has no upper bound at all, and `null` is exact
+ * there because any id sorting at or above such a prefix necessarily starts
+ * with it.
+ */
+function aggregateIdPrefixUpperBound(prefix: string): string | null {
+  const codePoints = [...prefix];
+  for (let index = codePoints.length - 1; index >= 0; index -= 1) {
+    const code = codePoints[index]!.codePointAt(0)!;
+    if (code < 0x10_ff_ff) {
+      const bumped = code + 1 === 0xd8_00 ? 0xe0_00 : code + 1;
+      return codePoints.slice(0, index).join("") + String.fromCodePoint(bumped);
+    }
+  }
+  return null;
+}
 
 /**
  * The two phases of the event-type page. Exported for the EXPLAIN QUERY PLAN
@@ -124,6 +149,42 @@ export class EventReadQueryStore extends EventReadMaterializationStore {
         selection.hasMore,
         lastSequence,
       );
+    });
+  }
+
+  /**
+   * Every DISTINCT aggregate id in one id-prefix range, sorted ascending in the
+   * store's BINARY collation, touching aggregate-id bytes ONLY: no payload,
+   * metadata or decision column is selected and no stored record is decoded, so
+   * discovery works even over rows a materializing read would refuse.
+   *
+   * Deliberately NOT a cursor page and never truncated: the result is bounded
+   * by DISTINCT REAL AGGREGATES, not by stored events, and an id-only row
+   * carries none of the blob weight the byte-budgeted pages exist to meter.
+   */
+  protected aggregateIdPrefixEnumeration(aggregateIdPrefix: string): readonly string[] {
+    return this.readSnapshotOperation("enumerate aggregate ids", () => {
+      this.assertCachedProjectBinding();
+      const safePrefix = requireIdentifier(aggregateIdPrefix, "aggregateIdPrefix");
+      const upperBound = aggregateIdPrefixUpperBound(safePrefix);
+      const rows = upperBound === null
+        ? this.database
+          .prepare(`
+        SELECT DISTINCT events.aggregate_id
+        FROM domain_events AS events
+        WHERE events.aggregate_id >= ?
+        ORDER BY events.aggregate_id
+        `)
+          .all(safePrefix)
+        : this.database
+          .prepare(`
+        SELECT DISTINCT events.aggregate_id
+        FROM domain_events AS events
+        WHERE events.aggregate_id >= ? AND events.aggregate_id < ?
+        ORDER BY events.aggregate_id
+        `)
+          .all(safePrefix, upperBound);
+      return Object.freeze(rows.map((row) => requireRowString(row, "aggregate_id")));
     });
   }
 
