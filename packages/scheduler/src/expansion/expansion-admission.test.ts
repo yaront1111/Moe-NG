@@ -52,8 +52,11 @@ function healthyReceipt(): Record<string, unknown> {
 }
 
 /** The single issue a refusal carried, failing loudly if there was not exactly one. */
-function onlyIssue(value: unknown): { code: string; layer: string; missingInput: string | null } {
-  const result = value as { ok: boolean; issues?: readonly { code: string; layer: string; missingInput: string | null }[] };
+function onlyIssue(value: unknown): { code: string; layer: string; message: string; missingInput: string | null } {
+  const result = value as {
+    ok: boolean;
+    issues?: readonly { code: string; layer: string; message: string; missingInput: string | null }[];
+  };
   expect(result.ok).toBe(false);
   expect(result.issues).toBeDefined();
   expect(result.issues).toHaveLength(1);
@@ -110,6 +113,31 @@ describe("the seven derivations refuse independently", () => {
     const issue = onlyIssue(deriveExpansionEvidence(receipt));
     expect(issue.code).toBe("EXPANSION_SCOPE_OVERLAP");
     expect(issue.layer).toBe("SCOPE");
+  });
+
+  it("refuses a duplicated childKey even when the child scopes are disjoint", () => {
+    // Scope keys are de-duplicated above; the child IDENTITY must be too. Two
+    // children under one key with disjoint scopes would otherwise pass
+    // derivation and flow a duplicated key list into everything bound to it.
+    const receipt = healthyReceipt();
+    const children = receipt["childScopes"] as Record<string, unknown>[];
+    children[1] = { ...children[1], childKey: "child-1" };
+    const issue = onlyIssue(deriveExpansionEvidence(receipt));
+    expect(issue.code).toBe("EXPANSION_EVIDENCE_MALFORMED");
+    expect(issue.layer).toBe("EVIDENCE");
+    expect(issue.message).toBe("childScopes[1].childKey child-1 duplicates an earlier child");
+  });
+
+  it("admits distinct childKeys over disjoint scopes, carrying each key exactly once", () => {
+    // Positive control for the duplicate arm: uniqueness never refuses unique
+    // keys, and the derived width counts each child exactly once.
+    const result = deriveExpansionEvidence(healthyReceipt()) as {
+      ok: boolean;
+      value?: { childKeys: readonly string[]; childWidth: number };
+    };
+    expect(result.ok).toBe(true);
+    expect(result.value?.childKeys).toEqual(["child-1", "child-2"]);
+    expect(result.value?.childWidth).toBe(2);
   });
 
   it("refuses a child scope not contained by the parent scope", () => {
