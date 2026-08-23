@@ -680,12 +680,34 @@ describe("coordination mailbox durability", () => {
     });
   });
 
-  it("refuses a send whose time-to-live has already elapsed", () => {
+  it("refuses a zero time-to-live at DECODE, citing the published minimum", () => {
     withHarness((harness) => {
       const refused = refusal(send(harness, draft("EVENT", { ttlMilliseconds: 0 })));
+      expect(refused.code).toBe("COORDINATION_INPUT_INVALID");
+      expect(refused.layer).toBe("DECODE");
+      expect(refused.detail).toContain(`at least ${COORDINATION_LIMITS.minTtlMilliseconds}`);
+      expect(readOwn(harness, REVIEWER)).toStrictEqual([]);
+    });
+  });
+
+  it("still refuses an already-expired envelope at the MAILBOX layer as defense in depth", () => {
+    // The codec refuses ttl=0 at DECODE, so this guard is reachable only by a caller that
+    // bypassed the codec; the mailbox keeps its own refusal rather than durably storing an
+    // envelope that is born expired.
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT);
+    try {
+      const decoded = decodeCoordinationEnvelope(draft("EVENT"));
+      if (!decoded.ok) throw new Error("expected the fixture envelope to decode");
+      const mailbox = createDurableMailbox(store);
+      const refused = refusal(mailbox.send({
+        canonicalBytes: decoded.canonicalBytes, digest: decoded.digest,
+        envelope: { ...decoded.envelope, ttlMilliseconds: 0 }, now: NOW,
+      }));
       expect(refused.code).toBe("COORDINATION_MESSAGE_EXPIRED");
       expect(refused.layer).toBe("MAILBOX");
-    });
+    } finally {
+      store.close();
+    }
   });
 
   it("reports an expired message as a typed sequence-bearing item at the boundary", () => {
@@ -950,6 +972,87 @@ function failingCommit(
     getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
     readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) =>
       store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes),
+  };
+}
+
+describe("coordination reply-target lookup store fidelity", () => {
+  it("answers STORE_BUSY, not REPLY_TARGET_MISSING, when the lookup read throws", () => {
+    const trap = { armed: false };
+    const harness = openHarness((store) => busyReceiptReads(store, trap));
+    try {
+      expect(send(harness, draft("REQUEST", { messageId: "msg-req" })).outcome).toBe("ACCEPTED");
+      harness.controls.sessionId = REVIEWER.sessionId;
+      harness.controls.capabilities = allCapabilities(REVIEWER.sessionId);
+      trap.armed = true;
+      const refused = refusal(send(harness, draft("RESPONSE", {
+        inReplyTo: "msg-req", messageId: "msg-res", recipient: CODER, sender: REVIEWER,
+      })));
+      trap.armed = false;
+      // A transient store failure must surface as such; the durable request EXISTS, so a
+      // permanent CORRELATION verdict here would launder the outage into a semantic answer.
+      expect(refused.code).toBe("COORDINATION_STORE_BUSY");
+      expect(refused.layer).toBe("STORE");
+    } finally {
+      harness.store.close();
+    }
+  });
+
+  it("answers STORE_UNAVAILABLE, not REPLY_TARGET_MISSING, for a corrupt stored request row", () => {
+    const trap = { armed: false };
+    const harness = openHarness((store) => corruptPayloadReads(store, trap));
+    try {
+      expect(send(harness, draft("REQUEST", { messageId: "msg-req" })).outcome).toBe("ACCEPTED");
+      harness.controls.sessionId = REVIEWER.sessionId;
+      harness.controls.capabilities = allCapabilities(REVIEWER.sessionId);
+      trap.armed = true;
+      const refused = refusal(send(harness, draft("RESPONSE", {
+        inReplyTo: "msg-req", messageId: "msg-res", recipient: CODER, sender: REVIEWER,
+      })));
+      trap.armed = false;
+      // Same shape as replayed()/page(): an unreadable durable record is a STORE corruption
+      // signal, never evidence that the request was absent.
+      expect(refused.code).toBe("COORDINATION_STORE_UNAVAILABLE");
+      expect(refused.layer).toBe("STORE");
+    } finally {
+      harness.store.close();
+    }
+  });
+});
+
+/** Serves every operation from the real store but, while armed, fails the receipt READ the
+ *  way a busy SQLite does: by throwing DurableStoreError, never by answering null. */
+function busyReceiptReads(
+  store: SqliteEventStore, trap: { armed: boolean },
+): CoordinationEventStore {
+  return {
+    commit: (input) => store.commit(input),
+    getAggregateVersion: (aggregateId) => store.getAggregateVersion(aggregateId),
+    getCommandReceipt: (commandId) => {
+      if (trap.armed) throw new DurableStoreError("STORE_BUSY", "injected read failure");
+      return store.getCommandReceipt(commandId);
+    },
+    readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) =>
+      store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes),
+  };
+}
+
+/** Serves reads from the real store but, while armed, hands the mailbox rows back with
+ *  undecodable envelope payload bytes, modeling a corrupt durable record. */
+function corruptPayloadReads(
+  store: SqliteEventStore, trap: { armed: boolean },
+): CoordinationEventStore {
+  return {
+    commit: (input) => store.commit(input),
+    getAggregateVersion: (aggregateId) => store.getAggregateVersion(aggregateId),
+    getCommandReceipt: (commandId) => store.getCommandReceipt(commandId),
+    readAggregateEvents: (aggregateId, after, limit, maxDecodedBytes) => {
+      const page = store.readAggregateEvents(aggregateId, after, limit, maxDecodedBytes);
+      if (!trap.armed || !aggregateId.startsWith("moe-coordination-mailbox:")) return page;
+      return {
+        ...page,
+        items: page.items.map((event) => ({ ...event, payload: new Uint8Array([0xff]) })),
+      };
+    },
   };
 }
 

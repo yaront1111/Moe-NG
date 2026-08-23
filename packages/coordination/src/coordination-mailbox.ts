@@ -34,8 +34,10 @@ export interface MailboxLookupInput {
 
 export interface DurableMailbox {
   acknowledge(input: MailboxAckInput): CoordinationAckResult;
-  /** Resolves one durable message by its bounded id through the deterministic command slot. */
-  lookup(input: MailboxLookupInput): CoordinationDelivery | null;
+  /** Resolves one durable message by its bounded id through the deterministic command slot.
+   *  `null` means TRUE absence (no durable receipt); a store failure or an unreadable durable
+   *  row surfaces as a refusal, never as absence. */
+  lookup(input: MailboxLookupInput): CoordinationDelivery | CoordinationRefused | null;
   read(input: MailboxReadInput): CoordinationReadResult;
   replay(input: MailboxReplayInput): CoordinationReadResult;
   send(input: MailboxSendInput): CoordinationSendResult;
@@ -230,17 +232,17 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
     );
   }
 
-  function lookup(input: MailboxLookupInput): CoordinationDelivery | null {
-    try {
-      const mailbox = mailboxAggregateId(input.mailbox);
-      const receipt = store.getCommandReceipt(sendCommandId(mailbox, input.messageId));
-      if (receipt === null) return null;
-      const entry = reader.entryAt(mailbox, receipt.currentVersion);
-      if (entry === null || entry.stamp.messageId !== input.messageId) return null;
-      return reader.delivery(entry, input.now);
-    } catch {
-      return null;
-    }
+  /** A durable receipt proves the message id landed here, so an unreadable or mismatched row
+   *  behind it is corruption (exactly as in replayed()), never absence. Store throws escape
+   *  to the guard() wrapper below and map through mapStoreError. */
+  function lookup(input: MailboxLookupInput): CoordinationDelivery | CoordinationRefused | null {
+    const mailbox = mailboxAggregateId(input.mailbox);
+    const receipt = store.getCommandReceipt(sendCommandId(mailbox, input.messageId));
+    if (receipt === null) return null;
+    const entry = reader.entryAt(mailbox, receipt.currentVersion);
+    if (entry === null || entry.stamp.messageId !== input.messageId) return corruptRecord();
+    const delivery = reader.delivery(entry, input.now);
+    return delivery === null ? corruptRecord() : delivery;
   }
 
   function read(input: MailboxReadInput): CoordinationReadResult {
@@ -259,7 +261,7 @@ export function createDurableMailbox(store: CoordinationEventStore): DurableMail
 
   const mailbox: DurableMailbox = {
     acknowledge: (input: MailboxAckInput) => guard(() => acknowledge(input)),
-    lookup,
+    lookup: (input: MailboxLookupInput) => guard(() => lookup(input)),
     read: (input: MailboxReadInput) => guard(() => read(input)),
     replay: (input: MailboxReplayInput) => guard(() => replay(input)),
     send: (input: MailboxSendInput) => guard(() => send(input)),

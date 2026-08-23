@@ -154,6 +154,9 @@ export function createCoordinationService(
       const stored = dependencies.mailbox.lookup({
         mailbox: envelope.sender, messageId: envelope.inReplyTo, now: started.now,
       });
+      // A refused lookup IS the command's answer: a store failure must never be narrowed
+      // into the permanent REPLY_TARGET_MISSING verdict that a true null absence earns.
+      if (stored !== null && "outcome" in stored) return stored;
       const correlation = checkCorrelation(envelope, stored);
       if (correlation !== null) return correlation;
     }

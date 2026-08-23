@@ -279,11 +279,13 @@ describe("coordination durability across restart", () => {
         accepted(send(writer, {
           ...envelope("EVENT", "msg-ttl"), ttlMilliseconds: 5_000,
         }));
+        // ttl=0 can no longer reach the mailbox: the published minimum is 1 and the codec
+        // refuses an under-minimum ttl before anything durable is touched.
         const dead = refusalOf(send(writer, {
           ...envelope("EVENT", "msg-dead"), ttlMilliseconds: 0,
         }));
-        expect(dead.code).toBe("COORDINATION_MESSAGE_EXPIRED");
-        expect(dead.layer).toBe("MAILBOX");
+        expect(dead.code).toBe("COORDINATION_INPUT_INVALID");
+        expect(dead.layer).toBe("DECODE");
       });
       withSession(path, REVIEWER.sessionId, (reader) => {
         reader.controls.now = NOW + 4_999;

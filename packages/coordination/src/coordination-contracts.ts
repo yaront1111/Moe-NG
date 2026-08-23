@@ -58,7 +58,7 @@ export const COORDINATION_LIMITS = Object.freeze({
   maxSendAttempts: 8,
   maxTextUtf8Bytes: 1_024,
   maxTtlMilliseconds: 86_400_000,
-  minTtlMilliseconds: 0,
+  minTtlMilliseconds: 1,
 });
 
 export type CoordinationEndpoint = (typeof COORDINATION_ENDPOINTS)[number];

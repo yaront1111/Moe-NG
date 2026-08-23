@@ -110,7 +110,10 @@ export function digestBytes(domain: string, ...parts: readonly Uint8Array[]): st
 
 function readTtl(raw: unknown): PartResult<number> {
   if (!isSafeCount(raw) || raw < COORDINATION_LIMITS.minTtlMilliseconds) {
-    return bad("COORDINATION_INPUT_INVALID", "ttlMilliseconds must be a non-negative integer");
+    return bad(
+      "COORDINATION_INPUT_INVALID",
+      `ttlMilliseconds must be an integer of at least ${COORDINATION_LIMITS.minTtlMilliseconds}`,
+    );
   }
   if (raw > COORDINATION_LIMITS.maxTtlMilliseconds) {
     return bad("COORDINATION_LIMIT_EXCEEDED", "ttlMilliseconds exceeds the supported window");
