@@ -123,6 +123,12 @@ export {
  * and a consumer that could call `prepare` directly would skip every pure check
  * that makes the composition all-or-none.
  *
+ * SUCCESSOR-RING CARRY. admitExpansion consumes ONE rotateOnce outcome and does
+ * NOT return the successor ring: a consumer that persists rotation state must
+ * call the public rotateOnce on the identical rotation input and persist
+ * outcome.ring. Rebuilding a zero-counter ring per call degrades WDRR to fixed
+ * alphabetical priority (roundsAdvanced === 1 on every call is the tell).
+ *
  * FORBIDDEN_VERDICT_KEYS is published because it is a declared CASE LIST, not
  * plumbing: a refusal matrix must sweep it from the production constant, or the
  * sweep silently shrinks when the vocabulary grows.

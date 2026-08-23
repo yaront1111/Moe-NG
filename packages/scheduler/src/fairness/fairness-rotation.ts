@@ -14,11 +14,15 @@
  * order and is honoured. WORK CONSERVING: a round credits only non-empty queues
  * and selection skips to the next resource, so an empty or blocked turn never
  * idles a ring still holding a servable head — the property a textbook deficit
- * loop misses. CAPACITY BOUNDED: a resource at capacity, or a dimension at its
- * ceiling, is not selected, and a forced head overrides neither, or forcing
- * would silently become a cap-raising mechanism. STARVATION BOUNDED: one round
- * serves sum(weights) items and credits every non-empty queue, so a queue of
- * weight w is served w times per round — arithmetic, not eventual.
+ * loop misses. CAPACITY BOUNDED: a resource at capacity, a dimension at its
+ * ceiling, or a ring at an accepted revision's cap is not selected, and a
+ * forced head overrides none of them, or forcing would silently become a
+ * cap-raising mechanism. STARVATION BOUNDED: one round
+ * serves sum(weights) items and credits every non-empty queue, and a head that
+ * is not servable banks AT MOST one round's share — its post-credit deficit is
+ * clamped to its resource weight — so a queue of weight w is served at most w
+ * times per round, arithmetic, not eventual: a short block loses no share, and
+ * a long block cannot return holding a banked monopoly burst.
  */
 import { compareStrings } from "../authority/authority-kernel.js";
 import { acceptFairness, isFairnessRefusal } from "./fairness-contract.js";
@@ -123,16 +127,28 @@ function pick(heads: readonly QueueHead[], inputs: FairnessRotationInputs): Queu
 }
 
 /**
- * Credits every non-empty queue by its resource's weight, INCLUDING one blocked
- * by capacity: blocking is transient and dropping its credit would turn a short
- * block into lost share. That is also the only reason this add can overflow at
- * all, and why it is guarded.
+ * Credits every non-empty queue by its resource's weight — but a head that is
+ * not SERVABLE holds AT MOST one round's share afterwards: its post-credit
+ * deficit is clamped to the resource weight, and min(deficit + weight, weight)
+ * is `weight` for any non-negative deficit, so the clamp is written as the
+ * weight itself. A short block loses no share — the queue still holds a full
+ * round's credit the moment it unblocks. A long block cannot bank a monopoly —
+ * without the clamp, N blocked rounds returned N back-to-back selections
+ * against servable peers, which falsified the per-round starvation bound. The
+ * clamp also bounds every non-servable counter, so only a SERVABLE head —
+ * credited only at deficit zero — reaches the guarded add, kept as a
+ * defensive fence on the weight it adds.
  */
 function advanceRound(
   heads: readonly QueueHead[], entries: readonly FairnessRingQueueEntry[],
+  inputs: FairnessRotationInputs,
 ): readonly FairnessRingQueueEntry[] | FairnessContractRefusal {
   const credited = [...entries];
   for (const head of heads) {
+    if (headState(head, inputs) !== "SERVABLE") {
+      credited[head.index] = { ...head.entry, deficitCounter: head.weight };
+      continue;
+    }
     const next = safeAdd(head.entry.deficitCounter, head.weight);
     if (next === null) {
       return refuseRotation("FAIRNESS_CONTRACT_INVALID_COUNTER", "RING",
@@ -225,13 +241,25 @@ export function rotateOnce(value: unknown): FairnessContractResult<FairnessRotat
     }
     return outcome("IDLE_CAPACITY_BOUND", null, ring, ring.entries, 0);
   }
+  // The revised cap is enforced exactly as the dimension ceiling above: the
+  // input boundary refused strictly-over as a contradiction, so AT the bound
+  // means no headroom — idle, and refuse a forced head rather than let forcing
+  // raise the revised bound. Selecting here would place in-flight one past the
+  // cap and turn every later call into a strictly-over refusal.
+  if (inputs.revisedCapUnits !== null && inputs.totalInFlight >= inputs.revisedCapUnits) {
+    if (forcedHead !== null) {
+      return refuseRotation("FAIRNESS_CONTRACT_CARDINALITY_EXCEEDED", "RING",
+        "a forced head cannot be admitted at the revised cap", [forcedHead]);
+    }
+    return outcome("IDLE_CAPACITY_BOUND", null, ring, ring.entries, 0);
+  }
   if (forcedHead !== null) return forcedSelection(inputs, forcedHead);
   let entries = ring.entries;
   let heads = queueHeads(ring, entries);
   let chosen = pick(heads, inputs);
   let roundsAdvanced = 0;
   if (chosen === null && heads.length > 0) {
-    const credited = advanceRound(heads, entries);
+    const credited = advanceRound(heads, entries, inputs);
     if (isFairnessRefusal(credited)) return credited;
     entries = credited;
     roundsAdvanced = 1;

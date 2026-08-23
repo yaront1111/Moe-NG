@@ -243,6 +243,13 @@ interface PureFacts {
 /**
  * Validate one sealed expansion proposal and prepare — never grant — its
  * admission. Deterministic, side-effect-free, deeply frozen.
+ *
+ * SUCCESSOR-RING CARRY: the admission CONSUMES one `rotateOnce` outcome and
+ * does not return the successor ring. A consumer that persists rotation state
+ * must call the public `rotateOnce` on the identical rotation input and
+ * persist `outcome.ring`; a consumer that instead rebuilds a zero-counter
+ * ring per call degrades WDRR to fixed alphabetical priority
+ * (`roundsAdvanced === 1` on every call is the tell).
  */
 export function admitExpansion(value: unknown): ExpansionAdmissionResult {
   const request = parseExpansionRequest(value);
