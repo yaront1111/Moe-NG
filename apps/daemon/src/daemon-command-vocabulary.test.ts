@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
-  PAYLOAD_KEYS, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, agentCapabilitiesFor,
-  type WiredCommandKind,
+  PAYLOAD_KEYS, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
+  agentCapabilitiesFor, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 
 /**
@@ -17,7 +17,7 @@ import {
  * the registry the HTTP seam actually serves. This file asserts it at the source, which
  * is where the next command kind will be registered.
  */
-type Family = "BOOTSTRAP" | "REVIEW" | "SESSION" | "STANDALONE" | "WORK";
+type Family = "BOOTSTRAP" | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
   readonly agent: readonly string[];
@@ -71,6 +71,16 @@ const ROWS: readonly VocabularyRow[] = [
   // The allow-list is identity plus one adapter observation -- no state, no terminal flag.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "resource.reconcile",
     payloadKeys: ["activationAggregateId", "disposition", "epoch", "kind", "resourceId"] },
+  // The attempt reports its OWN step boundary, the same attempt-as-authenticated-reporter
+  // grant journal.append and resource.reconcile carry. Three keys each: no ordinal, no
+  // truthClass, no completed state and no roster replacement, so the daemon decides every
+  // fact the durable record carries and ADMIN would fence reach without fencing anything.
+  { agent: [WORK], capability: WORK, family: "STEP", kind: "step.start",
+    payloadKeys: ["attemptAggregateId", "effectId", "label"] },
+  { agent: [WORK], capability: WORK, family: "STEP", kind: "step.finish",
+    payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
+  { agent: [WORK], capability: WORK, family: "STEP", kind: "step.checkpoint",
+    payloadKeys: ["attemptAggregateId", "effectId", "nextSafeActionRef"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -116,21 +126,22 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
+  STEP: new Map(Object.entries(STEP_FAMILY)),
   WORK: new Map(Object.entries(WORK_FAMILY)),
 };
 
-const FAMILY_NAMES = ["BOOTSTRAP", "REVIEW", "SESSION", "WORK"] as const;
+const FAMILY_NAMES = ["BOOTSTRAP", "REVIEW", "SESSION", "STEP", "WORK"] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   "approval.decide", "goal.close", "integration.accept_output", "session.open",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the twenty-six wired kinds in their registration order", () => {
+  it("carries exactly the thirty wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(27);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(27);
+    expect(ROWS).toHaveLength(30);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(30);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -169,7 +180,7 @@ describe("command vocabulary", () => {
 
   it("holds no family entry beyond the transcribed kinds", () => {
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(20);
+    expect(declared).toHaveLength(23);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -178,6 +189,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(10);
     expect(FAMILY_MAPS.REVIEW.size).toBe(4);
     expect(FAMILY_MAPS.SESSION.size).toBe(3);
+    expect(FAMILY_MAPS.STEP.size).toBe(3);
     expect(FAMILY_MAPS.WORK.size).toBe(3);
   });
 
@@ -187,6 +199,7 @@ describe("command vocabulary", () => {
     expect(Object.isFrozen(BOOTSTRAP_FAMILY)).toBe(true);
     expect(Object.isFrozen(REVIEW_FAMILY)).toBe(true);
     expect(Object.isFrozen(SESSION_FAMILY)).toBe(true);
+    expect(Object.isFrozen(STEP_FAMILY)).toBe(true);
     expect(Object.isFrozen(WORK_FAMILY)).toBe(true);
     expect(Object.isFrozen(PAYLOAD_KEYS)).toBe(true);
     expect(Object.isFrozen(OPERATOR_CAPABILITIES)).toBe(true);
@@ -208,7 +221,7 @@ describe("command vocabulary", () => {
     expect(OPERATOR_ONLY).toHaveLength(4);
     expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(4);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // nineteen that must stay open, one dropped reddens on the four that must not.
+    // twenty-six that must stay open, one dropped reddens on the four that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }

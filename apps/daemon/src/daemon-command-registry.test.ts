@@ -45,6 +45,7 @@ const WORK = "work.write";
 const PREREQUISITE = "BOOTSTRAP_PREREQUISITE_MISSING";
 const INGRESS = "DAEMON_INGRESS";
 const PREREQ_LAYER = "DAEMON_PREREQUISITE";
+const STEP_LAYER = "DAEMON_STEP_LIFECYCLE";
 
 const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "approval.decide",
@@ -124,6 +125,15 @@ const ROWS: readonly Row[] = [
     payloadKeys: ["capabilities", "credentialSha256", "expiresAt", "sessionId"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "SESSION_PAYLOAD_INVALID",
     kind: "session.renew", layer: INGRESS, payloadKeys: ["expiresAt", "sessionId"] },
+  // An empty payload carries none of the three keys, so the step writer's own envelope
+  // decode answers before any binding, roster or checkpoint judgement runs.
+  { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.checkpoint",
+    layer: STEP_LAYER,
+    payloadKeys: ["attemptAggregateId", "effectId", "nextSafeActionRef"] },
+  { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.finish",
+    layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
+  { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.start",
+    layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "label"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -146,6 +156,7 @@ const ROWS: readonly Row[] = [
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
+  "step.start", "step.finish", "step.checkpoint",
   "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
   "project.bind_repository", "project.register", "provider.probe", "qualification.replan",
@@ -241,18 +252,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the twenty-seven characterized kinds and nothing else", () => {
+  it("serves exactly the thirty characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(27);
-    expect(deps.registry.size).toBe(27);
+    expect(ROWS).toHaveLength(30);
+    expect(deps.registry.size).toBe(30);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(27);
+    expect(REGISTRATION_ORDER).toHaveLength(30);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -542,7 +553,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(27);
+    expect(ports.registry.size).toBe(30);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -564,7 +575,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(27);
+    expect(supplied.registry.size).toBe(30);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

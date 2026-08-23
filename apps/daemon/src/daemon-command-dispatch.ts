@@ -7,6 +7,7 @@ import type { JournalAppendOutcome } from "./journal/journal-contracts.js";
 import type { RecoveryCompletionOutcome } from "./recovery/recovery-completion.js";
 import type { ReviewOutcome } from "./review/review-ledger.js";
 import type { DecisionPortResult, DurableDecision } from "./http/http-contract.js";
+import type { StepLifecycleOutcome } from "./work/step-lifecycle-contracts.js";
 import type { WorkClaimOutcome } from "./work/work-claim-services.js";
 
 /**
@@ -39,7 +40,8 @@ export class DomainRefusal extends Error {
 
 export function decisionOf(
   outcome: ActivationIngressOutcome | JournalAppendOutcome | RecoveryCompletionOutcome
-    | ReviewOutcome | ServiceOutcome | SessionOutcome | WorkClaimOutcome,
+    | ReviewOutcome | ServiceOutcome | SessionOutcome | StepLifecycleOutcome
+    | WorkClaimOutcome,
 ): DurableDecision {
   if (!outcome.ok) {
     throw new DomainRefusal(

@@ -24,6 +24,8 @@ import { runJournalAppendCommand } from "./journal/journal-append.js";
 import {
   RESOURCE_RECONCILE_COMMAND_KIND, runResourceReconcileCommand,
 } from "./work/resource-reconcile-command.js";
+import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
+import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -46,7 +48,7 @@ import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
   from "./http/http-contract.js";
 import { DomainRefusal, decisionOf, encoder, refusalFor } from "./daemon-command-dispatch.js";
 import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
-  REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, type WiredCommandKind }
+  REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
 
 /**
@@ -162,6 +164,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
     const review = kind in REVIEW_FAMILY;
     const session = kind in SESSION_FAMILY;
+    const step = kind in STEP_FAMILY;
     const work = kind in WORK_FAMILY;
     const schemaVersion = activation
       ? ACTIVATION_INGRESS_SCHEMA_VERSION
@@ -173,7 +176,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
             ? REVIEW_SCHEMA_VERSION
             : session
               ? SESSION_SCHEMA_VERSION
-              : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
+              : step
+                ? STEP_LIFECYCLE_SCHEMA_VERSION
+                : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId) {
@@ -234,6 +239,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         return decisionOf(runRecoveryCompleteCommand(store, bytes, recoveryAuthority));
       }
       if (review) return decisionOf(runReviewCommand(store, bytes));
+      if (step) return decisionOf(runStepLifecycleCommand(store, bytes));
       if (session) {
         return decisionOf(runSessionCommand(
           store,
@@ -263,7 +269,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
     // gate and is refused there. A reader who mistakes
     // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation || journal || reconcile
+    const requiredCapability = activation || continuation || journal || reconcile || step
       ? CAPABILITIES.WORK
       : recovery
         ? CAPABILITIES.ADMIN

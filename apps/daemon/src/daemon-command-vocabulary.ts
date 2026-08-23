@@ -15,6 +15,11 @@ import type { ReviewCommandKind } from "./review/review-contracts.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { RESOURCE_RECONCILE_COMMAND_KIND, RESOURCE_RECONCILE_PAYLOAD_KEYS }
   from "./work/resource-reconcile-command.js";
+import {
+  STEP_CHECKPOINT_COMMAND_KIND, STEP_CHECKPOINT_PAYLOAD_KEYS, STEP_FINISH_COMMAND_KIND,
+  STEP_FINISH_PAYLOAD_KEYS, STEP_START_COMMAND_KIND, STEP_START_PAYLOAD_KEYS,
+} from "./work/step-lifecycle-contracts.js";
+import type { StepLifecycleCommandKind } from "./work/step-lifecycle-contracts.js";
 import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
 
 /**
@@ -58,12 +63,18 @@ export const WORK_FAMILY: Readonly<Record<WorkClaimCommandKind, string>> = Objec
   "work.renew": CAPABILITIES.WORK,
 });
 
+export const STEP_FAMILY: Readonly<Record<StepLifecycleCommandKind, string>> = Object.freeze({
+  [STEP_CHECKPOINT_COMMAND_KIND]: CAPABILITIES.WORK,
+  [STEP_FINISH_COMMAND_KIND]: CAPABILITIES.WORK,
+  [STEP_START_COMMAND_KIND]: CAPABILITIES.WORK,
+});
+
 export type WiredCommandKind =
   | BootstrapCommandKind | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
-  | typeof RESOURCE_RECONCILE_COMMAND_KIND;
+  | typeof RESOURCE_RECONCILE_COMMAND_KIND | StepLifecycleCommandKind;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -92,6 +103,13 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // safety here is not a wider capability: the payload cannot state an outcome, and
   // the scheduler reducers decide what an adapter report means.
   if (kind === RESOURCE_RECONCILE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // Reporting a step boundary on the attempt an agent already holds is that attempt's
+  // OWN authority -- the same attempt-as-authenticated-reporter grant journal.append and
+  // resource.reconcile carry. ADMIN would fence reach without fencing anything real:
+  // these payloads admit three keys each and cannot state truthClass, an ordering index
+  // or a completed state, so the daemon decides every fact the record carries and there
+  // is no wider capability left to gate.
+  if (kind in STEP_FAMILY) return Object.freeze([CAPABILITIES.WORK]);
   if (kind === RECOVERY_COMPLETION_COMMAND_KIND) {
     return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
   }
@@ -118,6 +136,9 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
     [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,
     [RESOURCE_RECONCILE_COMMAND_KIND]: RESOURCE_RECONCILE_PAYLOAD_KEYS,
+    [STEP_START_COMMAND_KIND]: STEP_START_PAYLOAD_KEYS,
+    [STEP_FINISH_COMMAND_KIND]: STEP_FINISH_PAYLOAD_KEYS,
+    [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
     "escalation.decide": ["escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     "goal.create": ["budgetAccountRef", "goalId", "planningRunRef", "witness"],
