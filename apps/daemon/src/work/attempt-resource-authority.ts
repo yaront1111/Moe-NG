@@ -214,27 +214,67 @@ function reduceReport(
   });
 }
 
-/** The TRANSITION arm. Predecessor members are read through the durable reader,
- *  never taken from a caller list, so a report cannot smuggle in a set. */
+/** The resource aggregate's event count, or `null` when the store cannot answer:
+ *  a crash is not a refusal, so the throw is contained rather than escaping. */
+function resourceHorizon(store: SqliteEventStore, binding: AttemptResourceBinding): number | null {
+  try {
+    return store.readEvents(
+      deriveAttemptResourceAggregateId(binding.activationAggregateId)).length;
+  } catch { return null; }
+}
+
+/** The CANONICAL fingerprint of a member sequence, so "changed" is a byte fact and
+ *  not a field-by-field opinion. ORDER counts — the reducers map the projection
+ *  positionally. `null` means UNENCODABLE, which is never "equal". */
+function memberDigest(rows: readonly AttemptResourceMember[]): string | null {
+  const encoded = encodeFoundationPayload({ members: rows.map(memberOf) });
+  return encoded.ok ? encoded.digest : null;
+}
+
+/**
+ * The TRANSITION arm. Predecessor members are read through the durable reader,
+ * never taken from a caller list, so a report cannot smuggle in a set.
+ *
+ * A STABLE READ HORIZON, OR NOTHING. The head is measured BEFORE the strict
+ * projection and verified after it: a writer landing in between would make both the
+ * reducer's answer and the unchanged comparison describe a set that no longer
+ * exists. The captured head is then what the append expects, so a LATER race still
+ * fails closed inside `commitExpectedVersionDecision`.
+ *
+ * AN ACCEPTED REPORT THAT MOVES NOTHING WRITES NOTHING. `grantSuccessorCapacity`
+ * accepts a set with no quarantine and returns it unchanged, so an operator-proven
+ * release replayed over an already-cleared set is a successful no-op at the reducer.
+ * Committing it would append a transition carrying states the record already holds —
+ * noise that makes an idempotent report read as a movement and grows the aggregate
+ * once per retry. The comparison is DURABLE projection versus REDUCER rows; no
+ * caller-supplied desired state is inspected anywhere.
+ */
 export function applyAttemptResourceReport(
   store: SqliteEventStore, binding: AttemptResourceBinding, report: AttemptResourceReport,
 ): AttemptResourceOutcome {
   const durable = durableActivation(store, binding);
   if (isRefusal(durable)) return durable;
+  const expectedVersion = resourceHorizon(store, binding);
+  if (expectedVersion === null) return refuseLocalResource("ATTEMPT_RESOURCE_RECORD_UNREADABLE");
   const current = readAttemptResources(
     store, binding.activationAggregateId, binding.projectId);
   if (!current.ok) return current;
+  if (resourceHorizon(store, binding) !== expectedVersion) {
+    return refuseLocalResource(
+      "ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE", "EXPECTED_VERSION_CONFLICT");
+  }
   const outcome = reduceReport(current.members.map(memberOf), report);
   if (outcome === null || !outcome.ok) return schedulerRefusal(outcome);
+  const before = memberDigest(current.members);
+  const after = memberDigest(outcome.value.rows);
+  if (before === null || after === null) {
+    return refuseLocalResource("ATTEMPT_RESOURCE_RECORD_MALFORMED");
+  }
+  // The reader's own deeply frozen answer, returned whole: re-reading would only
+  // re-derive the projection this comparison just proved unchanged.
+  if (before === after) return current;
   const encoded = encodeFoundationPayload(bodyOf(durable, binding.projectId, outcome.value.rows));
   if (!encoded.ok) return refuseLocalResource("ATTEMPT_RESOURCE_RECORD_MALFORMED");
-  // A crash is not a refusal: the head this append expects is measured inside a
-  // guard, so a store that throws stays UNREADABLE rather than escaping.
-  let expectedVersion: number;
-  try {
-    expectedVersion = store.readEvents(
-      deriveAttemptResourceAggregateId(binding.activationAggregateId)).length;
-  } catch { return refuseLocalResource("ATTEMPT_RESOURCE_RECORD_UNREADABLE"); }
   const refusedBy = commitResourceEvent(store, {
     binding, bytes: encoded.bytes,
     eventId: `${durable.grant.grantId}:RESOURCES:${expectedVersion}`,

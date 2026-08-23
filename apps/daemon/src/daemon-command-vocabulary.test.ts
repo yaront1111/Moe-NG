@@ -71,6 +71,15 @@ const ROWS: readonly VocabularyRow[] = [
   // The allow-list is identity plus one adapter observation -- no state, no terminal flag.
   { agent: [WORK], capability: WORK, family: "STANDALONE", kind: "resource.reconcile",
     payloadKeys: ["activationAggregateId", "disposition", "epoch", "kind", "resourceId"] },
+  // OPERATOR-ONLY and ADMIN-capable, unlike its resource.reconcile sibling. The
+  // attempt reports what its adapter observed; a PROVEN RELEASE is a human's evidence
+  // that a quarantined resource is genuinely free, so the attempt may not clear its own
+  // quarantine. ADMIN is the reach fence and the configured operator identity is the
+  // human-only one; the allow-list is identity plus a proof REFERENCE -- no resource id,
+  // no state, no terminal flag.
+  { agent: [ADMIN, WORK], capability: ADMIN, family: "STANDALONE",
+    kind: "resource.confirm_released",
+    payloadKeys: ["activationAggregateId", "proofRef"] },
   // The attempt reports its OWN step boundary, the same attempt-as-authenticated-reporter
   // grant journal.append and resource.reconcile carry. Three keys each: no ordinal, no
   // truthClass, no completed state and no roster replacement, so the daemon decides every
@@ -133,15 +142,16 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 const FAMILY_NAMES = ["BOOTSTRAP", "REVIEW", "SESSION", "STEP", "WORK"] as const;
 
 const OPERATOR_ONLY: readonly WiredCommandKind[] = [
-  "approval.decide", "goal.close", "integration.accept_output", "session.open",
+  "approval.decide", "goal.close", "integration.accept_output",
+  "resource.confirm_released", "session.open",
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly the thirty wired kinds in their registration order", () => {
+  it("carries exactly the thirty-one wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(30);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(30);
+    expect(ROWS).toHaveLength(31);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(31);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -217,11 +227,11 @@ describe("command vocabulary", () => {
     expect(OPERATOR_CAPABILITIES).toEqual([ADMIN, GOAL, PLANNING, REVIEW, WORK]);
   });
 
-  it("gates exactly four kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(4);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(4);
+  it("gates exactly five kinds behind the operator principal", () => {
+    expect(OPERATOR_ONLY).toHaveLength(5);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(5);
     // Both directions over every wired kind: a kind added to the set reddens on the
-    // twenty-six that must stay open, one dropped reddens on the four that must not.
+    // twenty-six that must stay open, one dropped reddens on the five that must not.
     for (const row of ROWS) {
       expect(OPERATOR_PRINCIPAL_KINDS.has(row.kind)).toBe(OPERATOR_ONLY.includes(row.kind));
     }

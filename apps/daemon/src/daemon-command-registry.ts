@@ -22,6 +22,9 @@ import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
   from "./journal/journal-contracts.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
 import {
+  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND, runResourceConfirmReleasedCommand,
+} from "./work/resource-confirm-released-command.js";
+import {
   RESOURCE_RECONCILE_COMMAND_KIND, runResourceReconcileCommand,
 } from "./work/resource-reconcile-command.js";
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
@@ -170,6 +173,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       });
     }
     const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
+    const confirmReleased = kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND;
     const continuation = kind === CONTINUATION_COMMAND_KIND;
     const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
     const reconcile = kind === RESOURCE_RECONCILE_COMMAND_KIND;
@@ -244,6 +248,32 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           resultCode: outcome.authority,
         });
       }
+      // ITS OWN BRANCH, never folded into `reconcile` above: that seam is the
+      // ATTEMPT's authority over its own resources, and admitting a proven release
+      // there would let an attempt clear the quarantine its own uncertainty created.
+      // Its request is identity plus a proof reference, assembled from the ENVELOPE
+      // and the AUTHENTICATED principal rather than materialized as request bytes.
+      if (confirmReleased) {
+        const outcome = runResourceConfirmReleasedCommand(store, {
+          commandId: envelope.commandId,
+          correlationId: envelope.correlationId,
+          payload: envelope.payload,
+          principalId: principal.principalId,
+          projectId,
+        });
+        if (!outcome.ok) {
+          throw new DomainRefusal(
+            outcome.code, outcome.refusedBy, outcome.upstreamCode ?? outcome.code,
+          );
+        }
+        return Object.freeze({
+          commandId: envelope.commandId,
+          disposition: "DECIDED" as const,
+          effectId: outcome.attemptRef,
+          // The ANSWER's own authority word, read off the durable reader's result.
+          resultCode: outcome.authority,
+        });
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
@@ -283,7 +313,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     // this line for the R3 fence will later weaken the approval check.
     const requiredCapability = activation || continuation || journal || reconcile || step
       ? CAPABILITIES.WORK
-      : recovery
+      : confirmReleased || recovery
         ? CAPABILITIES.ADMIN
         : review
           ? REVIEW_FAMILY[kind as ReviewCommandKind]

@@ -1,10 +1,12 @@
 import { adapterConfirm, adapterFail, grantSuccessorCapacity } from "@moe/scheduler";
 import type { AcquisitionSet } from "@moe/scheduler";
+import type { SqliteEventStore, StoredEvent } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
 import {
-  DAEMON_ATTEMPT_RESOURCE, SCHEDULER_RESOURCE_AUTHORITY, deriveAttemptResourceAggregateId,
+  ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE, DAEMON_ATTEMPT_RESOURCE,
+  SCHEDULER_RESOURCE_AUTHORITY, deriveAttemptResourceAggregateId,
 } from "./attempt-resource-authority-contracts.js";
 import type {
   AttemptResourceMember, AttemptResourceOutcome, AttemptResourceReport,
@@ -13,7 +15,8 @@ import {
   applyAttemptResourceReport, bindAttemptResources, readAttemptResources,
 } from "./attempt-resource-authority.js";
 import {
-  ACTIVATION_AGGREGATE, activatedWith, duplicateRows, failableRows,
+  ACTIVATION_AGGREGATE, activatedWith, canonicalBytes, duplicateRows, failableRows,
+  plantResourceEvent, resourceBody, resourceRow,
 } from "./attempt-resource-test-harness.js";
 import type { ResourceFixture } from "./attempt-resource-test-harness.js";
 
@@ -195,6 +198,12 @@ describe("attempt resource transitions — a refused report writes nothing", () 
     },
   ];
 
+  // THE SWEPT CASE COUNT, pinned: a table that lost its entries would generate
+  // zero cases and this describe block would pass while asserting nothing.
+  it("sweeps every transcribed refusal case", () => {
+    expect(cases).toHaveLength(5);
+  });
+
   for (const testCase of cases) {
     it(`refuses ${testCase.label} and appends no event`, () => {
       const fixture = bound(`refuse-${testCase.upstreamCode}-${testCase.report.kind}`);
@@ -276,5 +285,122 @@ describe("attempt resource transitions — a refused report writes nothing", () 
         authority: "NONE", code: "ATTEMPT_RESOURCE_SET_REFUSED",
         refusedBy: SCHEDULER_RESOURCE_AUTHORITY, upstreamCode: "AUTHORITY_STALE_LEASE",
       });
+  });
+});
+
+/**
+ * AN ACCEPTED REPORT THAT MOVES NOTHING MUST WRITE NOTHING.
+ *
+ * `grantSuccessorCapacity` ACCEPTS a set with no quarantine and returns it
+ * unchanged, so an operator-proven release replayed over an already-cleared set
+ * is a successful no-op at the reducer. Committing that result would append a
+ * transition event carrying the states the record already holds — durable noise
+ * that makes an idempotent GRANT look like a movement, and that grows the
+ * aggregate once per retry.
+ *
+ * The pairing is the whole point: the zero-event arm below is only meaningful
+ * beside the one-event arm, which proves the suppression is a COMPARISON and not
+ * a GRANT-shaped write being dropped.
+ */
+describe("attempt resource transitions — an accepted no-op appends nothing", () => {
+  it("appends no event for a GRANT the reducer accepts without moving a member", () => {
+    const fixture = bound("grant-noop-zero-event");
+    const before = read(fixture);
+    const beforeCount = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
+    // NOT A REFUSAL ARM: the reducer's own control ACCEPTS this report and
+    // returns the same states, so what is being asserted is suppression of an
+    // accepted write, not the absence of a refused one.
+    const control = reduced(membersOf(before), (rows) =>
+      grantSuccessorCapacity(rows, "proof-noop"));
+    expect(statesOf(control.rows)).toEqual(statesOf(membersOf(before)));
+
+    const applied = apply(fixture, { kind: "GRANT", proofRef: "proof-noop" });
+
+    expect(applied.ok).toBe(true);
+    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(beforeCount);
+    // The SAME strict projection, digest included — not a re-derived look-alike.
+    expect(applied).toEqual(before);
+  });
+
+  it("appends exactly one event for a GRANT that really clears a quarantine", () => {
+    const fixture = bound("grant-moves-one-event");
+    const held = membersOf(apply(fixture, FAIL_RES_1));
+    const before = read(fixture);
+    const beforeCount = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
+
+    const cleared = apply(fixture, { kind: "GRANT", proofRef: "proof-moves" });
+
+    // The movement is REAL, so the suppression above cannot be what answered here.
+    expect(statesOf(membersOf(cleared))["res-2"]).not.toBe(statesOf(held)["res-2"]);
+    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(beforeCount + 1);
+    expect(cleared).not.toEqual(before);
+  });
+});
+
+/**
+ * A STABLE READ HORIZON, or no write at all.
+ *
+ * The projection this module reduces is read from the resource aggregate, and the
+ * append that follows expects a head measured around it. A concurrent writer that
+ * lands BETWEEN those two reads would make the reducer's answer describe a set
+ * that no longer exists, and the no-op comparison above would compare against a
+ * superseded projection. The head is therefore captured before the read and
+ * verified after it, and a move refuses rather than writing.
+ */
+describe("attempt resource transitions — a moved read horizon writes nothing", () => {
+  /** The REAL file-backed store, with one concurrent append interleaved between
+   *  the horizon capture and the strict projection. Every other method is the
+   *  store's own, bound to the store, so nothing here reimplements persistence. */
+  function interleaved(store: SqliteEventStore, onFirstResourceRead: () => void): SqliteEventStore {
+    let seen = 0;
+    return new Proxy(store, {
+      get(target, property): unknown {
+        if (property === "readEvents") {
+          return (aggregateId: string): readonly StoredEvent[] => {
+            const events = target.readEvents(aggregateId);
+            if (aggregateId === RESOURCE_AGGREGATE) {
+              seen += 1;
+              if (seen === 1) onFirstResourceRead();
+            }
+            return events;
+          };
+        }
+        const value = Reflect.get(target, property, target) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+  }
+
+  it("refuses when the resource head moves across the read, and appends nothing", () => {
+    const fixture = bound("horizon-moved");
+    // POSITIVE CONTROL on a twin fixture: the very same report is ACCEPTED when
+    // no writer interleaves, so the refusal below is the horizon and not the report.
+    const twin = bound("horizon-stable");
+    expect(apply(twin, FAIL_RES_1).ok).toBe(true);
+
+    let planted = false;
+    const store = interleaved(fixture.store, () => {
+      if (planted) return;
+      planted = true;
+      plantResourceEvent(
+        fixture.store, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
+        canonicalBytes(resourceBody({
+          members: [resourceRow("res-1"), resourceRow("res-2"), resourceRow("res-3")],
+        })), 1, "horizon-moved");
+    });
+
+    const answered = applyAttemptResourceReport(store, fixture.binding, FAIL_RES_1);
+
+    expect(planted).toBe(true);
+    expect(refusalOf(answered)).toEqual({
+      authority: "NONE", code: "ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE",
+      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "EXPECTED_VERSION_CONFLICT",
+    });
+    // The bind plus the interleaved plant, and nothing this report wrote.
+    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(2);
+    // The concurrent writer's states survive: the refused report moved no member.
+    expect(statesOf(membersOf(read(fixture)))).toEqual({
+      "res-1": "ACTIVE", "res-2": "ACTIVE", "res-3": "ACTIVE",
+    });
   });
 });

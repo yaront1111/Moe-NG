@@ -80,6 +80,12 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], capability: WORK, code: "RESOURCE_RECONCILE_REQUEST_MALFORMED",
     kind: "resource.reconcile", layer: "DAEMON_RESOURCE_RECONCILE",
     payloadKeys: ["activationAggregateId", "disposition", "epoch", "kind", "resourceId"] },
+  // OPERATOR-ONLY, so the empty-payload probe below only reaches this ingress's own
+  // request shape because `send` authenticates as the CONFIGURED OPERATOR. A scoped
+  // ADMIN session is refused one stage earlier, at OPERATOR_PRINCIPAL_REQUIRED.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "RESOURCE_CONFIRM_RELEASED_REQUEST_MALFORMED",
+    kind: "resource.confirm_released", layer: "DAEMON_RESOURCE_CONFIRM_RELEASED",
+    payloadKeys: ["activationAggregateId", "proofRef"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.close",
     layer: PREREQ_LAYER, payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "goal.create",
@@ -156,6 +162,7 @@ const ROWS: readonly Row[] = [
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "approval.decide", "work.resume", "effect.activate", "recovery.complete", "journal.append",
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
+  "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint",
   "escalation.decide", "goal.close", "goal.create", "integration.accept_output",
   "plan.propose", "policy.install", "policy.validate", "project.activate",
@@ -171,7 +178,8 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
-  "approval.decide", "goal.close", "integration.accept_output", "session.open",
+  "approval.decide", "goal.close", "integration.accept_output",
+  "resource.confirm_released", "session.open",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -252,18 +260,18 @@ function openSession(
 }
 
 describe("registered command table", () => {
-  it("serves exactly the thirty characterized kinds and nothing else", () => {
+  it("serves exactly the thirty-one characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(30);
-    expect(deps.registry.size).toBe(30);
+    expect(ROWS).toHaveLength(31);
+    expect(deps.registry.size).toBe(31);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(30);
+    expect(REGISTRATION_ORDER).toHaveLength(31);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -432,9 +440,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the four transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(4);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(4);
+    it("gates exactly the five transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(5);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(5);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -553,7 +561,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(30);
+    expect(ports.registry.size).toBe(31);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -575,7 +583,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(30);
+    expect(supplied.registry.size).toBe(31);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();

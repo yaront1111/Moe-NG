@@ -13,6 +13,9 @@ import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
   from "./recovery/recovery-completion-digest.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
+import {
+  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND, RESOURCE_CONFIRM_RELEASED_PAYLOAD_KEYS,
+} from "./work/resource-confirm-released-command.js";
 import { RESOURCE_RECONCILE_COMMAND_KIND, RESOURCE_RECONCILE_PAYLOAD_KEYS }
   from "./work/resource-reconcile-command.js";
 import {
@@ -74,7 +77,8 @@ export type WiredCommandKind =
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof FOUNDATION_DISPATCH_COMMAND_KIND | typeof FOUNDATION_VERIFICATION_COMMAND_KIND
   | typeof JOURNAL_APPEND_COMMAND_KIND | typeof RECOVERY_COMPLETION_COMMAND_KIND
-  | typeof RESOURCE_RECONCILE_COMMAND_KIND | StepLifecycleCommandKind;
+  | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
+  | StepLifecycleCommandKind;
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   if (kind === "node.deliver") {
@@ -103,6 +107,16 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // safety here is not a wider capability: the payload cannot state an outcome, and
   // the scheduler reducers decide what an adapter report means.
   if (kind === RESOURCE_RECONCILE_COMMAND_KIND) return Object.freeze([CAPABILITIES.WORK]);
+  // ADMIN IS THE REACH FENCE, NOT THE HUMAN-ONLY FENCE. A proven release is not the
+  // attempt's own authority the way reconcile is: it clears a quarantine the attempt's
+  // OWN uncertainty created, so WORK would let an attempt free itself. ADMIN keeps
+  // scoped agent sessions out of reach; what actually makes this human-only is
+  // membership in OPERATOR_PRINCIPAL_KINDS below, which demands the CONFIGURED
+  // operator identity. A reader who mistakes this line for the human gate will later
+  // weaken the principal check and hand an ADMIN agent a release it never proved.
+  if (kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND) {
+    return Object.freeze([CAPABILITIES.ADMIN, CAPABILITIES.WORK]);
+  }
   // Reporting a step boundary on the attempt an agent already holds is that attempt's
   // OWN authority -- the same attempt-as-authenticated-reporter grant journal.append and
   // resource.reconcile carry. ADMIN would fence reach without fencing anything real:
@@ -136,6 +150,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
     [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,
     [RESOURCE_RECONCILE_COMMAND_KIND]: RESOURCE_RECONCILE_PAYLOAD_KEYS,
+    [RESOURCE_CONFIRM_RELEASED_COMMAND_KIND]: RESOURCE_CONFIRM_RELEASED_PAYLOAD_KEYS,
     [STEP_START_COMMAND_KIND]: STEP_START_PAYLOAD_KEYS,
     [STEP_FINISH_COMMAND_KIND]: STEP_FINISH_PAYLOAD_KEYS,
     [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
@@ -163,9 +178,14 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
   CAPABILITIES.REVIEW, CAPABILITIES.WORK,
 ]);
 
+/** The HUMAN-ONLY fence: the registry compares the AUTHENTICATED principal against the
+ *  daemon's CONFIGURED operator id, which no minted session can hold whatever its
+ *  capabilities say. `resource.confirm_released` belongs here because a proven release
+ *  is a human's evidence about the physical world; ADMIN above only fences reach. */
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   "approval.decide",
   "goal.close",
   "integration.accept_output",
+  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
   "session.open",
 ]);
