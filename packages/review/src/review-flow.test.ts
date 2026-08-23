@@ -8,6 +8,7 @@ import type {
   ReviewLineage,
   ReviewPackageBoundField,
   ReviewPackageItemInput,
+  ReviewProofState,
   ReviewerCalibration,
   ReviewerIndependenceInput,
 } from "./review-contract.js";
@@ -194,6 +195,29 @@ describe("clean review package exclusions", () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected refusal");
     expect(result.code).toBe("PACKAGE_ITEM_DIGEST_INVALID");
+    expect(result.layer).toBe("PACKAGE");
+  });
+
+  /**
+   * `not.toThrow` is load-bearing: without admission a non-string locator reached the canonical
+   * sort comparator and died there with an unstructured TypeError from `canonicalJson`. A crash
+   * names no reason code, so the caller cannot tell a malformed item from a broken digest.
+   */
+  it("refuses a non-string locator instead of throwing in the canonical sort", () => {
+    const items: readonly ReviewPackageItemInput[] = [
+      ...withoutKind("DAEMON_ARTIFACT"),
+      {
+        digest: hex("d2"), kind: "DAEMON_ARTIFACT", locator: undefined,
+      } as unknown as ReviewPackageItemInput,
+    ];
+
+    expect(() => buildReviewPackage(items)).not.toThrow();
+
+    const result = buildReviewPackage(items);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal, got a package");
+    expect(result.code).toBe("PACKAGE_ITEM_LOCATOR_INVALID");
     expect(result.layer).toBe("PACKAGE");
   });
 });
@@ -550,6 +574,20 @@ describe("acceptance qualification", () => {
     expect(result.value.reviewerCalibrationDigest).toMatch(/^[0-9a-f]{64}$/u);
   });
 
+  it("binds the calibration facts: a different corpus revision changes the digest", () => {
+    const base = qualifyReviewAcceptance(acceptance());
+    const otherCorpus = qualifyReviewAcceptance(acceptance({
+      calibration: { ...CURRENT_CALIBRATION, corpusRevision: "corpus/2026-09" },
+    }));
+
+    if (!base.ok) throw new Error(`expected qualification, refused with ${base.code}`);
+    if (!otherCorpus.ok) {
+      throw new Error(`expected qualification, refused with ${otherCorpus.code}`);
+    }
+    expect(otherCorpus.value.reviewerCalibrationDigest)
+      .not.toBe(base.value.reviewerCalibrationDigest);
+  });
+
   it("cannot accept on a FAILED proof", () => {
     const result = qualifyReviewAcceptance(acceptance({ proof: "FAILED" }));
 
@@ -571,6 +609,18 @@ describe("acceptance qualification", () => {
     expect(unknown.layer).toBe("ACCEPTANCE");
     expect(unknown).not.toHaveProperty("value");
     expect(unknown.code).not.toBe(failed.code);
+  });
+
+  it("refuses a proof value outside the closed vocabulary rather than failing open", () => {
+    const result = qualifyReviewAcceptance(acceptance({
+      proof: "TAMPERED" as unknown as ReviewProofState,
+    }));
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("expected a refusal, got a qualification");
+    expect(result.code).toBe("PROOF_UNKNOWN");
+    expect(result.layer).toBe("ACCEPTANCE");
+    expect(result).not.toHaveProperty("value");
   });
 
   it("cannot accept when reviewer independence is UNKNOWN, even on a passed proof", () => {

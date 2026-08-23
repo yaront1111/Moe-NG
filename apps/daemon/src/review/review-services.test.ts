@@ -17,8 +17,10 @@ import {
   hex64,
   openRestartableStore,
   openStore,
+  oversizeRoundEnvelope,
   packageItems,
   reopen,
+  seedLineageNearReadBound,
   send,
   submit,
   submitPayload,
@@ -358,6 +360,40 @@ describe("a refusal names the code AND the layer that produced it", () => {
     expect(outcome.code).toBe("REVIEW_EXPECTED_VERSION_STALE");
     expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
     expect(decisionCount(store)).toBe(before);
+  });
+
+  it("refuses a round whose stored result would exceed the read bound, keeping the subject readable", () => {
+    const store = openStore();
+    // Round 1 sits near the bound but under it: it commits AND reads back.
+    seedLineageNearReadBound(store);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).unreadable).toBe(false);
+    const before = decisionCount(store);
+
+    // Round 2 re-snapshots the full lineage plus two more near-cap findings — past the
+    // MAX_JSON_BODY_BYTES bound the result's sole reader enforces. Pre-fix this committed
+    // ok:true and every later read of the subject was permanently unreadable, so every
+    // handler refused the subject forever; the write side must refuse the round instead.
+    const poison = send(store, oversizeRoundEnvelope());
+
+    const after = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+    // One comparison carrying the whole pre-fix symptom: the poisoning write reads as
+    // { ok: true, code: null, unreadable: true } and fails this in a single diff.
+    expect({ ok: poison.ok, code: poison.ok ? null : poison.code, unreadable: after.unreadable })
+      .toEqual({ ok: false, code: "REVIEW_RESULT_TOO_LARGE", unreadable: false });
+    if (poison.ok) throw new Error("expected refusal");
+    expect(poison.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+    expect(after.rounds).toHaveLength(1);
+
+    // The refusal is per-command, not a poisoned subject: a small round 2 still records.
+    // (Intended limit of this rule: once the lineage ITSELF nears the bound, every further
+    // submit refuses TOO_LARGE — the subject stays readable and escalation still works.)
+    const recovery = send(
+      store,
+      envelope("review.submit", 1, submitPayload(2), "cmd-small-round-2"),
+    );
+    expect(recovery.ok, recovery.ok ? "" : recovery.code).toBe(true);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds).toHaveLength(2);
   });
 
   it("refuses a commandId reused under a different kind, claiming no authority", () => {

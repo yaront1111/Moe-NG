@@ -58,6 +58,14 @@ export type ReviewDecisionLayer = (typeof REVIEW_DECISION_LAYERS)[number];
 /** Design 15.2: three unsuccessful rounds create a `REVIEW_ESCALATION` blocker. */
 export const REVIEW_ESCALATION_ROUND_LIMIT = 3;
 
+/**
+ * Absolute per-subject round ceiling: 8x the escalation limit, pinned as a literal so moving
+ * either bound is a conscious act. An escalation is a blocker with a human-in-loop fix round
+ * after it, not an unbounded resubmission channel; past this ceiling no further round is
+ * admissible for the subject at all.
+ */
+export const REVIEW_ROUND_ABSOLUTE_CEILING = 24;
+
 /** Pinned package version; it participates in the package digest. */
 export const REVIEW_PACKAGE_VERSION = "moe-review-package/1" as const;
 
@@ -73,6 +81,7 @@ export const REVIEW_REASON_CODES = Object.freeze([
   "PACKAGE_ITEM_DIGEST_INVALID",
   "PACKAGE_ITEM_KIND_FORBIDDEN",
   "PACKAGE_ITEM_KIND_UNKNOWN",
+  "PACKAGE_ITEM_LOCATOR_INVALID",
   "PROOF_FAILED",
   "PROOF_UNKNOWN",
   "REVIEWER_CALIBRATION_STALE",

@@ -10,13 +10,16 @@ import {
   closeStores,
   commitRaw,
   deltaNode,
+  driveEscalatedRounds,
   driveRounds,
   envelope,
   escalationPayload,
   hex64,
   openStore,
+  oversizeRoundEnvelope,
   packageItems,
   replanPayload,
+  seedLineageNearReadBound,
   seedVerifierReceipt,
   send,
   submit,
@@ -64,6 +67,8 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_PAYLOAD_INVALID",
   "REVIEW_REPLAN_WITHOUT_ROUND",
   "REVIEW_REQUEST_INVALID",
+  "REVIEW_RESULT_TOO_LARGE",
+  "REVIEW_ROUND_CEILING_REACHED",
   "REVIEW_VERIFIER_RECEIPT_INVALID",
   "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
   "REVIEW_VERIFIER_RECEIPT_STALE",
@@ -95,6 +100,10 @@ function driveDaemonRefusals(): readonly string[] {
     round: 1,
     routing: { layer: "FINDINGS", reasonCodes: [], repeatFingerprints: [], route: "ACCEPT" },
   }).ok).toBe(true);
+  const oversizeStore = openStore();
+  seedLineageNearReadBound(oversizeStore);
+  const ceilingStore = openStore();
+  driveEscalatedRounds(ceilingStore, 24);
   const missingReceiptStore = openStore();
   expect(send(missingReceiptStore, envelope(
     "review.submit", 0, submitPayload(1, []), "cmd-missing-receipt-source",
@@ -183,6 +192,13 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("stored round that does not parse", send(corruptStore, envelope(
       "review.submit", 1, submitPayload(2), "cmd-after-corrupt",
+    ))),
+    daemonCode(
+      "round whose stored result would exceed the read bound",
+      send(oversizeStore, oversizeRoundEnvelope()),
+    ),
+    daemonCode("round past the absolute ceiling", send(ceilingStore, envelope(
+      "review.submit", 25, submitPayload(25), "cmd-round-past-ceiling",
     ))),
     daemonCode("accepting a second time", send(acceptedStore, envelope(
       "integration.accept_output",

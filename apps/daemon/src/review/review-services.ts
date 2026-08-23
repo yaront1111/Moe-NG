@@ -1,8 +1,10 @@
+import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import {
   REVIEW_ESCALATION_ROUND_LIMIT,
   REVIEW_FINDING_SEVERITIES,
   REVIEW_FINDING_SUBJECT_KINDS,
+  REVIEW_ROUND_ABSOLUTE_CEILING,
   buildReviewPackage,
   recordReviewRound,
 } from "@moe/review";
@@ -40,6 +42,8 @@ import { boundPackageItems } from "./review-round-items.js";
 
 const SEVERITIES: ReadonlySet<string> = new Set<string>(REVIEW_FINDING_SEVERITIES);
 const SUBJECT_KINDS: ReadonlySet<string> = new Set<string>(REVIEW_FINDING_SUBJECT_KINDS);
+
+const encoder = new TextEncoder();
 
 /**
  * Shape only, against the KERNEL'S OWN vocabularies rather than a local copy of them. A finding
@@ -132,12 +136,38 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   if (ledger.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && !ledger.escalated) {
     return refuse(request.kind, "REVIEW_ESCALATION_REQUIRED", "DAEMON_PREREQUISITE");
   }
+  // A recorded escalation admits the human-in-loop fix round; it does not open an unbounded
+  // resubmission channel. Each admitted round re-snapshots the FULL lineage into its result,
+  // so a subject that rounds forever is an unbounded write amplifier. The ceiling counts
+  // COMMITTED rounds — clean ones included — because the amplification does too.
+  if (ledger.rounds.length >= REVIEW_ROUND_ABSOLUTE_CEILING) {
+    return refuse(request.kind, "REVIEW_ROUND_CEILING_REACHED", "DAEMON_PREREQUISITE");
+  }
   if (request.expectedVersion !== ledger.version) {
     return refuse(request.kind, "REVIEW_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
   const recorded = recordReviewRound(ledger.lineage, { findings, round });
   if (!recorded.ok) return refuseFromKernel(request.kind, recorded.code, recorded.layer);
   const { lineage, routing } = recorded.value;
+  const result = {
+    lineage,
+    // The set the kernel BOUND, never `items` — the caller's raw parsed array would durably
+    // record content the digest stored beside it does not attest. Retained on the RESULT and
+    // not on the event: recoverability is this surface's concern, the event shape is shared.
+    packageItems: boundPackageItems(built.value),
+    reviewInputDigest: built.value.reviewInputDigest,
+    round,
+    routing,
+  } as unknown as JsonValue;
+  // The result embeds the FULL lineage every round, so it grows with history while the store
+  // bounds only the blob. Its sole reader decodes through `decodeBoundedJsonBytes`, which
+  // refuses anything past MAX_JSON_BODY_BYTES — so a result committed past that bound would
+  // read back as permanently unreadable and every later command on the subject would refuse.
+  // Measure the EXACT bytes `commitAccepted` will store and fail closed on the write side;
+  // the subject stays readable and a smaller round (or escalation) still proceeds.
+  if (encoder.encode(JSON.stringify(result)).byteLength > MAX_JSON_BODY_BYTES) {
+    return refuse(request.kind, "REVIEW_RESULT_TOO_LARGE", "DAEMON_PREREQUISITE");
+  }
   return commitAccepted(store, request, {
     aggregateId: subjectRef,
     eventPayload: {
@@ -148,16 +178,7 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     },
     eventType: "ReviewRoundRecorded",
     expectedVersion: ledger.version,
-    result: {
-      lineage,
-      // The set the kernel BOUND, never `items` — the caller's raw parsed array would durably
-      // record content the digest stored beside it does not attest. Retained on the RESULT and
-      // not on the event: recoverability is this surface's concern, the event shape is shared.
-      packageItems: boundPackageItems(built.value),
-      reviewInputDigest: built.value.reviewInputDigest,
-      round,
-      routing,
-    } as unknown as JsonValue,
+    result,
   });
 };
 

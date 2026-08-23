@@ -220,7 +220,10 @@ export function qualifyReviewAcceptance(input: ReviewAcceptanceInput): ReviewAcc
     return acceptanceRefusal("REVIEW_ROUND_CAP_REACHED", "FINDINGS", []);
   }
   if (input.proof === "FAILED") return acceptanceRefusal("PROOF_FAILED", "ACCEPTANCE", []);
-  if (input.proof === "UNKNOWN") return acceptanceRefusal("PROOF_UNKNOWN", "ACCEPTANCE", []);
+  // Membership, not enumeration of the bad cases: only "PASSED" proceeds. A value outside the
+  // closed vocabulary is exactly as unproven as "UNKNOWN", so it refuses with that code rather
+  // than falling open into the policy gate.
+  if (input.proof !== "PASSED") return acceptanceRefusal("PROOF_UNKNOWN", "ACCEPTANCE", []);
   const evaluated = evaluatePolicy(input.policy);
   if (!evaluated.ok) return acceptanceRefusal("ACCEPTANCE_POLICY_REFUSED", "ACCEPTANCE", []);
   if (evaluated.record.decision !== "ALLOW") {
@@ -236,7 +239,17 @@ export function qualifyReviewAcceptance(input: ReviewAcceptanceInput): ReviewAcc
       policyDecision: evaluated.record.decision,
       policyReasonCodes: evaluated.record.reasonCodes,
       reviewInputDigest: input.reviewInputDigest,
-      reviewerCalibrationDigest: eligible.value.independence.calibrationDigest,
+      // Binds the ReviewerCalibration facts THEMSELVES alongside the independence digest.
+      // The independence digest alone covers no calibration field, so two acceptances under
+      // different corpus revisions would hash identically on this field.
+      reviewerCalibrationDigest: canonicalDigest({
+        calibration: {
+          corpusRevision: input.calibration.corpusRevision,
+          sentinelPassed: input.calibration.sentinelPassed,
+          staleness: input.calibration.staleness,
+        },
+        independence: eligible.value.independence.calibrationDigest,
+      }),
     },
   });
 }

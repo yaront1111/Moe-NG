@@ -1,4 +1,4 @@
-import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
+import { REVIEW_ESCALATION_ROUND_LIMIT, REVIEW_ROUND_ABSOLUTE_CEILING } from "@moe/review";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { readReviewLedger } from "./review-ledger.js";
@@ -12,6 +12,7 @@ import {
   calibration,
   closeStores,
   decisionCount,
+  driveEscalatedRounds,
   driveRounds,
   envelope,
   escalationPayload,
@@ -41,6 +42,12 @@ afterEach(closeStores);
  */
 it("reads the escalation limit from @moe/review rather than a local copy", () => {
   expect(REVIEW_ESCALATION_ROUND_LIMIT).toBe(3);
+});
+
+/** Both the value and its 8x relation to the limit are pinned, so either moving is a conscious act. */
+it("reads the absolute round ceiling from @moe/review rather than a local copy", () => {
+  expect(REVIEW_ROUND_ABSOLUTE_CEILING).toBe(24);
+  expect(REVIEW_ROUND_ABSOLUTE_CEILING).toBe(REVIEW_ESCALATION_ROUND_LIMIT * 8);
 });
 
 function escalate(
@@ -189,6 +196,31 @@ describe("the three-round counter is durable and escalation is explicit (DoD 4)"
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds)
       .toHaveLength(REVIEW_ESCALATION_ROUND_LIMIT + 1);
+  });
+
+  it("refuses a round past the absolute ceiling even on an escalated subject", () => {
+    const store = openStore();
+    // A recorded escalation admits the human-in-loop fix round (pinned above) — but it must
+    // not open an unbounded resubmission channel that re-snapshots the full lineage forever.
+    driveEscalatedRounds(store, REVIEW_ROUND_ABSOLUTE_CEILING);
+    // The round AT the ceiling was admitted: the boundary is at the ceiling, not near it.
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds)
+      .toHaveLength(REVIEW_ROUND_ABSOLUTE_CEILING);
+    const before = decisionCount(store);
+
+    const outcome = send(store, envelope("review.submit", REVIEW_ROUND_ABSOLUTE_CEILING + 1,
+      submitPayload(REVIEW_ROUND_ABSOLUTE_CEILING + 1, [
+        finding({ ruleId: "rule-past-ceiling", subject: { kind: "NODE", locator: "node-past" } }),
+      ]), "cmd-round-past-ceiling"));
+
+    expect(outcome.ok, outcome.ok ? "round past the absolute ceiling was admitted" : "")
+      .toBe(false);
+    if (outcome.ok) throw new Error("expected refusal");
+    expect(outcome.code).toBe("REVIEW_ROUND_CEILING_REACHED");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+    expect(decisionCount(store)).toBe(before);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds)
+      .toHaveLength(REVIEW_ROUND_ABSOLUTE_CEILING);
   });
 });
 
