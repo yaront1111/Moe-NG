@@ -11,12 +11,14 @@ import { describe, expect, it } from "vitest";
 import {
   CONVERGENCE_BREAKER_CODES,
   CONVERGENCE_BREAKER_LAYER,
+  MAX_ACTIVE_HOLDS,
+  MAX_HOLD_ENTRY_IDS,
   type BreakerOutcome,
   type BreakerRequest,
   type FailureFingerprint,
   type HumanRelease,
 } from "./breaker-contract.js";
-import { decideBreaker, emptyHolds } from "./breaker.js";
+import { decideBreaker, emptyHolds, retainHolds } from "./breaker.js";
 import {
   FINGERPRINT_FIELDS,
   computeFailureFingerprint,
@@ -67,6 +69,34 @@ function fingerprintOf(value: DeadEndJournalEntry): FailureFingerprint {
 /** Opens the hold on the base entry's fingerprint and returns the resulting state. */
 function heldOnBaseBug(): ReturnType<typeof decideBreaker> {
   return decideBreaker(emptyHolds(), request());
+}
+
+/**
+ * Hand-pinned, never read off the constant under test: a cap that silently
+ * moves must redden this file, not re-derive it.
+ */
+const HOLD_CAP = 4096;
+
+let capHoldsMemo: ReturnType<typeof emptyHolds> | null = null;
+
+/**
+ * Fills the ledger to the cap with distinct fingerprints (only
+ * `environmentDigest` varies). Built once and shared: every transition is pure
+ * and never mutates its input map.
+ */
+function holdsAtCap(): ReturnType<typeof emptyHolds> {
+  if (capHoldsMemo !== null) return capHoldsMemo;
+  let holds = emptyHolds();
+  for (let index = 0; index < HOLD_CAP; index += 1) {
+    const report = request({
+      entry: entry({ id: `entry-cap-${index}`, environmentDigest: `env-cap-${index}` }),
+    });
+    const transition = decideBreaker(holds, report);
+    if (!transition.outcome.ok) throw new Error(`cap fill refused at index ${index}`);
+    holds = transition.holds;
+  }
+  capHoldsMemo = holds;
+  return capHoldsMemo;
 }
 
 describe("failure fingerprint", () => {
@@ -221,6 +251,57 @@ describe("hold convergence", () => {
   });
 });
 
+describe("entry id window", () => {
+  /** Hand-pinned like HOLD_CAP: a silently moved window must redden this file. */
+  const ENTRY_ID_CAP = 64;
+
+  /** entry-1 opens the hold; entry-2 .. entry-65 join it: 65 distinct ids. */
+  function windowFilledHolds(): ReturnType<typeof emptyHolds> {
+    let holds = heldOnBaseBug().holds;
+    for (let index = 2; index <= ENTRY_ID_CAP + 1; index += 1) {
+      holds = decideBreaker(holds, request({ entry: entry({ id: `entry-${index}` }) })).holds;
+    }
+    return holds;
+  }
+
+  it("caps the window at the hand-pinned reviewed value", () => {
+    expect(MAX_HOLD_ENTRY_IDS).toBe(ENTRY_ID_CAP);
+  });
+
+  it("drops the oldest entry id past the cap and keeps the newest", () => {
+    const holds = windowFilledHolds();
+
+    const hold = [...holds.values()][0];
+    expect(holds.size).toBe(1);
+    expect(hold?.entryIds.length).toBe(ENTRY_ID_CAP);
+    expect(hold?.entryIds[0]).toBe("entry-2");
+    expect(hold?.entryIds.at(-1)).toBe(`entry-${ENTRY_ID_CAP + 1}`);
+    expect(hold?.entryIds).not.toContain("entry-1");
+  });
+
+  it("re-reporting an id already in the window neither grows nor reorders it", () => {
+    const filled = windowFilledHolds();
+    const before = [...filled.values()][0]?.entryIds;
+
+    const again = decideBreaker(
+      filled,
+      request({ entry: entry({ id: `entry-${ENTRY_ID_CAP + 1}` }) }),
+    );
+
+    expect([...again.holds.values()][0]?.entryIds).toEqual(before);
+    expect(before?.length).toBe(ENTRY_ID_CAP);
+  });
+
+  it("re-appends a dropped id as the newest breadcrumb", () => {
+    const again = decideBreaker(windowFilledHolds(), request({ entry: entry({ id: "entry-1" }) }));
+
+    const window = [...again.holds.values()][0]?.entryIds;
+    expect(window?.length).toBe(ENTRY_ID_CAP);
+    expect(window?.[0]).toBe("entry-3");
+    expect(window?.at(-1)).toBe("entry-1");
+  });
+});
+
 describe("retry unlock", () => {
   it("refuses an unmoved predicate and keeps the refusing layer visible", () => {
     const held = heldOnBaseBug();
@@ -328,6 +409,77 @@ describe("retry unlock", () => {
   });
 });
 
+describe("predicate key discipline", () => {
+  /**
+   * Field checks alone are not enough: a predicate can carry every valid field
+   * PLUS an extra key. If the hold (or the compared candidate) is built by
+   * spreading the caller's object, that key reaches `canonicalSha256`, where an
+   * unserializable value (`junk: undefined`) THROWS inside every later unlock
+   * attempt — a crash instead of a refusal — and a serializable one perturbs
+   * the digest so byte-identical facts read as movement. Exact per-variant key
+   * sets refuse both at the door.
+   */
+  const junkRetryPredicates = Object.freeze([
+    ["an extra undefined-valued key", { ...HELD_PREDICATE, junk: undefined }],
+    ["an extra serializable key", { ...HELD_PREDICATE, junk: "perturb" }],
+  ] as const);
+
+  it("covers every junk-keyed first report", () => {
+    expect(junkRetryPredicates.length).toBeGreaterThan(0);
+  });
+
+  it.each(junkRetryPredicates)(
+    "refuses a first report whose retry predicate carries %s",
+    (_label, predicate) => {
+      const transition = decideBreaker(
+        emptyHolds(),
+        request({ entry: entry({ retryPredicate: predicate as unknown as FactPredicate }) }),
+      );
+
+      expect(transition.outcome.ok).toBe(false);
+      if (transition.outcome.ok) throw new Error("unreachable");
+      expect(transition.outcome.code).toBe("BREAKER_INPUT_INVALID");
+      expect(transition.holds.size).toBe(0);
+    },
+  );
+
+  it("keeps a junk-keyed predicate from poisoning later unlocks", () => {
+    const junk = { ...HELD_PREDICATE, junk: undefined } as unknown as FactPredicate;
+    const opened = decideBreaker(emptyHolds(), request({ entry: entry({ retryPredicate: junk }) }));
+
+    const retry = decideBreaker(opened.holds, request({ candidatePredicate: MOVED_PREDICATE }));
+
+    expect(opened.outcome.ok).toBe(false);
+    expect(retry.outcome.ok).toBe(true);
+    expect(retry.holds.size).toBe(1);
+  });
+
+  const junkCandidates = Object.freeze([
+    ["an extra serializable key", { ...HELD_PREDICATE, junk: "perturb" }],
+    ["an extra undefined-valued key", { ...MOVED_PREDICATE, junk: undefined }],
+  ] as const);
+
+  it("covers every junk-keyed candidate", () => {
+    expect(junkCandidates.length).toBeGreaterThan(0);
+  });
+
+  it.each(junkCandidates)(
+    "refuses a candidate carrying %s instead of reading it as movement",
+    (_label, candidate) => {
+      const held = heldOnBaseBug();
+      const transition = decideBreaker(
+        held.holds,
+        request({ candidatePredicate: candidate as unknown as FactPredicate }),
+      );
+
+      expect(transition.outcome.ok).toBe(false);
+      if (transition.outcome.ok) throw new Error("unreachable");
+      expect(transition.outcome.code).toBe("BREAKER_INPUT_INVALID");
+      expect(transition.holds.size).toBe(1);
+    },
+  );
+});
+
 describe("human release", () => {
   function release(fingerprint: FailureFingerprint): HumanRelease {
     return { kind: "HUMAN_RELEASE", decisionId: "decision-1", fingerprint };
@@ -355,22 +507,96 @@ describe("human release", () => {
   });
 });
 
+describe("hold capacity", () => {
+  it("caps the ledger at the hand-pinned reviewed value", () => {
+    expect(MAX_ACTIVE_HOLDS).toBe(HOLD_CAP);
+  });
+
+  it("refuses to open a hold past the cap and leaves the ledger unchanged", () => {
+    const atCap = holdsAtCap();
+    const overflow = entry({ id: "entry-cap-overflow", environmentDigest: "env-cap-overflow" });
+
+    const transition = decideBreaker(atCap, request({ entry: overflow }));
+
+    expect(atCap.size).toBe(HOLD_CAP);
+    expect(transition.outcome.ok).toBe(false);
+    if (transition.outcome.ok) throw new Error("unreachable");
+    expect(transition.outcome.code).toBe("BREAKER_HOLDS_EXHAUSTED");
+    expect(transition.outcome.decision).toBe("REFUSE");
+    expect(transition.holds.size).toBe(HOLD_CAP);
+    expect(transition.holds.has(fingerprintOf(overflow))).toBe(false);
+  });
+
+  it("still converges a sibling onto its existing hold at cap", () => {
+    const sibling = entry({ id: "entry-cap-sibling", environmentDigest: "env-cap-0" });
+
+    const transition = decideBreaker(holdsAtCap(), request({ entry: sibling }));
+
+    expect(transition.outcome.ok).toBe(false);
+    if (transition.outcome.ok) throw new Error("unreachable");
+    expect(transition.outcome.code).toBe("SAME_BUG_HOLD_ACTIVE");
+    expect(transition.holds.size).toBe(HOLD_CAP);
+  });
+
+  it("still unlocks an existing hold at cap when the predicate moves", () => {
+    const retry = request({
+      entry: entry({ id: "entry-cap-retry", environmentDigest: "env-cap-0" }),
+      candidatePredicate: MOVED_PREDICATE,
+    });
+
+    const transition = decideBreaker(holdsAtCap(), retry);
+
+    expect(transition.outcome.ok).toBe(true);
+    expect(transition.holds.size).toBe(HOLD_CAP - 1);
+  });
+});
+
+describe("hold eviction", () => {
+  it("retainHolds keeps only vouched fingerprints and re-admits new holds", () => {
+    const atCap = holdsAtCap();
+    const kept = fingerprintOf(entry({ environmentDigest: "env-cap-0" }));
+
+    const retained = retainHolds(atCap, (fingerprint) => fingerprint === kept);
+
+    expect(retained.size).toBe(1);
+    expect(retained.has(kept)).toBe(true);
+    expect(atCap.size).toBe(HOLD_CAP);
+
+    const admitted = decideBreaker(
+      retained,
+      request({ entry: entry({ id: "entry-after-evict", environmentDigest: "env-after-evict" }) }),
+    );
+    expect(admitted.outcome.ok).toBe(true);
+    expect(admitted.holds.size).toBe(2);
+  });
+
+  it("retainHolds carries the kept record over unchanged", () => {
+    const kept = fingerprintOf(entry());
+    const held = heldOnBaseBug();
+
+    const retained = retainHolds(held.holds, (fingerprint) => fingerprint === kept);
+
+    expect(retained.get(kept)).toBe(held.holds.get(kept));
+  });
+});
+
 describe("refusal sweep", () => {
   const sweep = Object.freeze([
-    ["a malformed entry", request({ entry: { ...entry(), baseDigest: 3 } as unknown as DeadEndJournalEntry }), "BREAKER_INPUT_INVALID"],
-    ["a converging sibling", request(), "SAME_BUG_HOLD_ACTIVE"],
-    ["an unmoved retry", request({ candidatePredicate: HELD_PREDICATE }), "RETRY_PREDICATE_UNCHANGED_HOLD"],
+    ["a malformed entry", (): ReturnType<typeof emptyHolds> => heldOnBaseBug().holds, request({ entry: { ...entry(), baseDigest: 3 } as unknown as DeadEndJournalEntry }), "BREAKER_INPUT_INVALID"],
+    ["a converging sibling", (): ReturnType<typeof emptyHolds> => heldOnBaseBug().holds, request(), "SAME_BUG_HOLD_ACTIVE"],
+    ["an unmoved retry", (): ReturnType<typeof emptyHolds> => heldOnBaseBug().holds, request({ candidatePredicate: HELD_PREDICATE }), "RETRY_PREDICATE_UNCHANGED_HOLD"],
+    ["a novel fingerprint at the hold cap", holdsAtCap, request({ entry: entry({ id: "entry-sweep-overflow", environmentDigest: "env-sweep-overflow" }) }), "BREAKER_HOLDS_EXHAUSTED"],
   ] as const);
 
   it("generated a non-empty sweep covering every stable code", () => {
     expect(sweep.length).toBeGreaterThan(0);
-    expect([...new Set(sweep.map(([, , code]) => code))].sort()).toEqual(
+    expect([...new Set(sweep.map(([, , , code]) => code))].sort()).toEqual(
       [...CONVERGENCE_BREAKER_CODES].sort(),
     );
   });
 
-  it.each(sweep)("refuses %s with its stable code", (_label, breakerRequest, code) => {
-    const outcome: BreakerOutcome = decideBreaker(heldOnBaseBug().holds, breakerRequest).outcome;
+  it.each(sweep)("refuses %s with its stable code", (_label, holds, breakerRequest, code) => {
+    const outcome: BreakerOutcome = decideBreaker(holds(), breakerRequest).outcome;
 
     expect(outcome.ok).toBe(false);
     if (outcome.ok) throw new Error("unreachable");

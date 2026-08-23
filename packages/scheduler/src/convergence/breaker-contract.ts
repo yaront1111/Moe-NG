@@ -21,12 +21,35 @@ export const CONVERGENCE_BREAKER_LAYER = "CONVERGENCE_BREAKER";
  * any other code is a defect, not a new case.
  */
 export const CONVERGENCE_BREAKER_CODES = Object.freeze([
+  "BREAKER_HOLDS_EXHAUSTED",
   "BREAKER_INPUT_INVALID",
   "RETRY_PREDICATE_UNCHANGED_HOLD",
   "SAME_BUG_HOLD_ACTIVE",
 ] as const);
 
 export type ConvergenceBreakerCode = (typeof CONVERGENCE_BREAKER_CODES)[number];
+
+/**
+ * Ceiling on simultaneously tracked holds. A hold is otherwise permanent state
+ * inserted on any novel fingerprint — and fingerprints span the recipe, base
+ * and environment digests, so a base rotation mints novel fingerprints while
+ * stranding the old ones forever. At the cap a NEW hold is refused with
+ * `BREAKER_HOLDS_EXHAUSTED`; requests on an already-held fingerprint keep
+ * converging, unlocking and releasing. `retainHolds` is the consumer's
+ * eviction lever for holds a rotation has stranded.
+ */
+export const MAX_ACTIVE_HOLDS = 4096;
+
+/**
+ * Ceiling on the entry ids one hold accumulates. Ids are free-form caller
+ * strings — the only unbounded value a hold carries — and every sibling join
+ * appends one, so a convergence storm would grow a single record without
+ * limit. The window DROPS THE OLDEST id first: ids are provenance breadcrumbs,
+ * not authority, and the newest arrivals are the ones an operator inspecting a
+ * live hold needs. An id evicted from the window re-appends as newest if it is
+ * ever reported again.
+ */
+export const MAX_HOLD_ENTRY_IDS = 64;
 
 /**
  * Hold reasons are a closed vocabulary rather than prose. An explanation
@@ -52,8 +75,10 @@ export type FailureFingerprint = string & {
 
 /**
  * The bounded hold, and simultaneously its explanation: it names the
- * fingerprint being held, every sibling entry that converged onto it, why it
+ * fingerprint being held, the sibling entries that converged onto it, why it
  * holds, and the authoritative predicate whose movement would release it.
+ * `entryIds` is a WINDOW, not a full census: at most `MAX_HOLD_ENTRY_IDS`
+ * breadcrumbs in arrival order, oldest dropped first.
  */
 export interface HoldRecord {
   readonly fingerprint: FailureFingerprint;
@@ -130,9 +155,28 @@ export interface BreakerInputRefusal {
   readonly refusedBy: null;
 }
 
+/**
+ * The ledger is full and the request's fingerprint is not among the tracked
+ * ones. Refusing is the only bounded answer: admitting untracked would break
+ * "admitted ⇒ convergence is being watched", and inserting would grow state
+ * without bound under fingerprint churn.
+ */
+export interface BreakerHoldsExhaustedRefusal {
+  readonly ok: false;
+  readonly decision: "REFUSE";
+  readonly truth: "UNKNOWN";
+  readonly layer: typeof CONVERGENCE_BREAKER_LAYER;
+  readonly code: "BREAKER_HOLDS_EXHAUSTED";
+  readonly refusedBy: null;
+}
+
 export type BreakerHold = RetryPredicateHold | SameBugHold;
 
-export type BreakerOutcome = BreakerAdmission | BreakerHold | BreakerInputRefusal;
+export type BreakerOutcome =
+  | BreakerAdmission
+  | BreakerHold
+  | BreakerInputRefusal
+  | BreakerHoldsExhaustedRefusal;
 
 /**
  * The decision plus the hold state it produces. Returning the next state is
@@ -154,5 +198,14 @@ export const BREAKER_INPUT_INVALID_REFUSAL: BreakerInputRefusal = Object.freeze(
   truth: "UNKNOWN",
   layer: CONVERGENCE_BREAKER_LAYER,
   code: "BREAKER_INPUT_INVALID",
+  refusedBy: null,
+});
+
+export const BREAKER_HOLDS_EXHAUSTED_REFUSAL: BreakerHoldsExhaustedRefusal = Object.freeze({
+  ok: false,
+  decision: "REFUSE",
+  truth: "UNKNOWN",
+  layer: CONVERGENCE_BREAKER_LAYER,
+  code: "BREAKER_HOLDS_EXHAUSTED",
   refusedBy: null,
 });
