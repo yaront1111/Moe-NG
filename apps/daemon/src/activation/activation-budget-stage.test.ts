@@ -34,10 +34,11 @@
  * layer, the ledger's own vocabulary when a present witness does not allow, and the standing
  * hold that answers before any witness is resolved at all.
  *
- * THE WORLD IS PRODUCTION-WRITTEN. `seedActivationWorld` drives the graph through
+ * THE WORLD USES PRODUCTION DURABLE SHAPES. `seedActivationWorld` drives the graph through
  * `reduceGraphRevision` / `putGraphBody` / `createNodeDefinition` + `deriveNodeAuthoritySet` and
- * the root through `authorizeBudgetRoot`; the policy decisions ride `policy.install` +
- * `policy.validate`. Nothing here folds an event by hand.
+ * the root through `authorizeBudgetRoot`. Non-allowing decisions remain production-written;
+ * ALLOW reader coverage uses the explicitly historical event-seam fixture and claims no current
+ * production reachability.
  *
  * WINDOWS HANDLE DISCIPLINE: the store handle closes in a `finally` INSIDE the temp directory's
  * own `finally`. A handle held across `rmSync` throws EPERM and kills the vitest worker with no
@@ -54,10 +55,13 @@ import { SqliteEventStore } from "@moe/store";
 
 import type { JsonObject } from "@moe/contracts";
 
+import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { GOAL_ID, PROJECT_ID, driveThrough } from "../bootstrap/bootstrap-test-fixtures.js";
 import { reserveBudgetForAdmission } from "../budget/budget-ledger-holds.js";
 
-import { seedActivationWorld } from "./activation-world-fixtures.js";
+import {
+  seedActivationWorld, seedActivationWorldWithoutPolicyWitness,
+} from "./activation-world-fixtures.js";
 import {
   ACTIVATION_INGRESS_LAYER, ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "./activation-ingress-contracts.js";
@@ -69,6 +73,9 @@ import { resolveAdmissionGate } from "./admission-gate-resolver.js";
 import {
   seedAllowingPolicyDecision, seedNonAllowingPolicyDecision,
 } from "./admission-witness-fixtures.js";
+import {
+  HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, plantHistoricalPolicyAllowance,
+} from "./policy-allowance-fixtures.js";
 
 const COMMAND_ID = "cmd-activate-stage-1";
 const DECIDED_AT = "2026-08-19T00:00:00.000Z";
@@ -129,10 +136,26 @@ const stage = (store: SqliteEventStore, commandId?: string) =>
 
 const LEDGER_REFUSED = ["BUDGET_LEDGER_TRANSITION_REFUSED", "BUDGET_LEDGER"] as const;
 
+function plantHistoricalAllowance(store: SqliteEventStore): void {
+  plantHistoricalPolicyAllowance(
+    store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS,
+  );
+  const landed = store.readEvents(policyAggregateId(PROJECT_ID)).filter(
+    (event) => event.commandId.startsWith("plant-historical-policy-allowance-"),
+  );
+  expect(landed).toHaveLength(1);
+  expect(landed[0]?.eventType).toBe("PolicyEvaluated");
+  expect(landed[0]?.committedAt).toBe(
+    new Date(HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS).toISOString(),
+  );
+}
+
 describe("activation budget stage — the accepted control the refusal arms hang off", () => {
   it("reserves against durable authority with no caller input at all", () => {
     withStore("accept", (store) => {
-      seeded(store);
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store);
+      plantHistoricalAllowance(store);
       const result = stage(store);
       // Quoted so a refusal names itself rather than failing as `false !== true`.
       expect(refusalOf(result)[0]).toBe("UNEXPECTEDLY_ADMITTED");
@@ -160,8 +183,7 @@ describe("activation budget stage — resolving the witness is its job, ALLOWING
   it("lets a non-allowing durable decision through to the writer, in the LEDGER's vocabulary", () => {
     withStore("deny-passthrough", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedNonAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
       // The witness EXISTS, so neither this stage nor the resolver may answer. Which vocabulary
       // and which LAYER replied is the assertion: restamping would make "no durable witness"
       // and "the durable witness says no" indistinguishable at the ingress boundary.
@@ -172,8 +194,7 @@ describe("activation budget stage — resolving the witness is its job, ALLOWING
   it("keeps the scheduler's own refusal reachable only as the ledger's sourceCode", () => {
     withStore("deny-source", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedNonAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
       const refused = stage(store) as { readonly sourceCode?: unknown };
       // RECORDED, not endorsed: the stage rebuilds its refusal as `{code, layer, ok}` and drops
       // `sourceCode`, so BUDGET_RESERVATION_POLICY_NOT_ALLOWED / _APPROVAL_NOT_CURRENT /

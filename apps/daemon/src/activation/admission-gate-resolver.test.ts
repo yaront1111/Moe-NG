@@ -19,17 +19,16 @@
  * different vocabularies, and a suite that only proved "it refused" would pass while the two
  * merged.
  *
- * EVERY WITNESS IS PRODUCTION-WRITTEN. The policy decisions ride `policy.install` +
- * `policy.validate` and the approval rides `approval.decide` — see `admission-witness-fixtures`
- * for why the stock bootstrap world's decision is HOLD_UNKNOWN rather than ALLOW, which is the
- * measurement this row turned on.
+ * EVERY WITNESS USES THE PRODUCTION DURABLE SHAPE. Non-allowing decisions and approvals remain
+ * production-written. ALLOW reader arms use an explicitly historical event-seam fixture because
+ * production cannot create that decision today; the fixture never claims otherwise.
  *
  * WINDOWS HANDLE DISCIPLINE: the store handle closes in a `finally` INSIDE the temp directory's
  * own `finally`. A handle held across `rmSync` throws EPERM and kills the vitest worker with no
  * output at all.
  */
 
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -65,8 +64,10 @@ import {
 import { ADMISSION_GATE_RESOLVER_CODES, resolveAdmissionGate } from "./admission-gate-resolver.js";
 import {
   seedAllowingPolicyDecision, seedApprovedNodeScope, seedNonAllowingPolicyDecision,
-  seedTrailingPolicyInstall,
 } from "./admission-witness-fixtures.js";
+import {
+  HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, plantHistoricalPolicyAllowance,
+} from "./policy-allowance-fixtures.js";
 
 const COMMAND_ID = "cmd-activate-resolver-1";
 const DECIDED_AT = "2026-08-19T00:00:00.000Z";
@@ -182,6 +183,22 @@ function latestPolicyEvaluated(store: SqliteEventStore): JsonObject {
   return decoded.value as JsonObject;
 }
 
+function plantTrailingPolicyInstall(store: SqliteEventStore): void {
+  const aggregateId = policyAggregateId(PROJECT_ID);
+  const source = store.readEvents(aggregateId).find((event) => event.eventType === "PolicyInstalled");
+  if (source === undefined) throw new Error("the world must carry a PolicyInstalled to copy");
+  const expectedVersion = store.getAggregateVersion(aggregateId);
+  const commandId = `plant-trailing-policy-install-${String(expectedVersion + 1)}`;
+  store.commit({
+    aggregateId,
+    commandBytes: new TextEncoder().encode(commandId),
+    commandId,
+    committedAt: "2025-01-01T00:00:00.001Z",
+    events: [{ eventId: `${commandId}-PolicyInstalled`, eventType: "PolicyInstalled", payload: source.payload }],
+    expectedVersion,
+  });
+}
+
 /** The durable approval record, read back for the same reason. */
 function durableApproval(store: SqliteEventStore): JsonObject {
   const events = store.readEvents(GOAL_ID)
@@ -201,12 +218,61 @@ const SCOPE = ["ADMISSION_GATE_SCOPE_MISMATCH", RESOLVER_LAYER] as const;
  *  different layer from the resolver's, which is the whole distinction DoD 2 asks for. */
 const LEDGER_REFUSED = ["BUDGET_LEDGER_TRANSITION_REFUSED", "BUDGET_LEDGER"] as const;
 
+function plantHistoricalAllowance(store: SqliteEventStore): void {
+  plantHistoricalPolicyAllowance(
+    store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS,
+  );
+  const landed = store.readEvents(policyAggregateId(PROJECT_ID)).filter(
+    (event) => event.commandId.startsWith("plant-historical-policy-allowance-"),
+  );
+  expect(landed).toHaveLength(1);
+  expect(landed[0]?.eventType).toBe("PolicyEvaluated");
+  expect(landed[0]?.committedAt).toBe(
+    new Date(HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS).toISOString(),
+  );
+}
+
+describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance containment", () => {
+  it("keeps the generic activation world import graph disconnected from the fixture", () => {
+    const source = readFileSync(new URL("./activation-world-fixtures.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(
+      /\b(?:from\s+|import\s*)["']\.\/policy-allowance-fixtures\.js["']/,
+    );
+  });
+
+  it("plants the writer's exact historical payload before the resolver reads it", () => {
+    withStore("historical-policy-allowance", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorld(store);
+      plantHistoricalAllowance(store);
+
+      const durable = latestPolicyEvaluated(store);
+      expect(Object.keys(durable).sort()).toStrictEqual([
+        "decision", "decisionDigest", "policyRef", "principalId", "sliceRef",
+      ]);
+      expect(durable["decision"]).toBe("ALLOW");
+      expect(durable).not.toHaveProperty("facts");
+      expect(durable).not.toHaveProperty("tier");
+      expect(durable).not.toHaveProperty("truthClass");
+      expect(durable).not.toHaveProperty("waiver");
+
+      const resolved = resolve(store, "allowance");
+      expect(refusalOf(resolved)[0]).toBe("UNEXPECTEDLY_ADMITTED");
+      if (!resolved.ok) return;
+      expect(resolved.gate.allowance).toStrictEqual({
+        decisionRef: durable["policyRef"], outcome: "ALLOW",
+      });
+      expect(resolved.gate.approval).toBeNull();
+    });
+  });
+});
+
 describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durable policy decision", () => {
   it("builds the allowance from the latest PolicyEvaluated, field for field", () => {
     withStore("policy-happy", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
+      plantHistoricalAllowance(store);
 
       const resolved = resolve(store, "allowance");
       expect(refusalOf(resolved)[0]).toBe("UNEXPECTEDLY_ADMITTED");
@@ -226,10 +292,10 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
   it("selects the decision BY TYPE, not as the newest event on the aggregate", () => {
     withStore("policy-by-type", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
+      plantHistoricalAllowance(store);
       // A LATER `PolicyInstalled`, so the newest event on the policy stream is NOT the decision.
-      seedTrailingPolicyInstall(store);
+      plantTrailingPolicyInstall(store);
       const events = store.readEvents(policyAggregateId(PROJECT_ID));
       expect(events[events.length - 1]?.eventType).toBe("PolicyInstalled");
 
@@ -341,8 +407,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
   it("forwards a non-allowing policy decision to the ledger, unrestamped", () => {
     withStore("policy-not-allowed", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedNonAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
 
       // The witness EXISTS, so the resolver must not answer at all.
       const resolved = resolve(store, "allowance");
@@ -373,8 +438,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
   it("names BUDGET_RESERVATION_POLICY_NOT_ALLOWED as the scheduler's own source code", () => {
     withStore("policy-source-code", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
-      seedNonAllowingPolicyDecision(store);
+      seedActivationWorldWithoutPolicyWitness(store);
       const resolved = resolve(store, "allowance");
       expect(resolved.ok).toBe(true);
       if (!resolved.ok) return;
@@ -490,8 +554,13 @@ describe("admission gate resolver — the resolved gate always carries the node'
         // BOTH durable witnesses exist in this world, so the choice cannot come from what
         // happens to be present — only from the node's own `admissionGatePolicy`.
         seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
-        seedActivationWorldWithGatePolicy(store, policy);
-        seedAllowingPolicyDecision(store);
+        if (policy === "POLICY_ALLOWANCE") {
+          seedActivationWorldWithoutPolicyWitness(store, policy);
+          plantHistoricalAllowance(store);
+        } else {
+          seedActivationWorldWithGatePolicy(store, policy);
+          seedAllowingPolicyDecision(store);
+        }
 
         const resolved = resolve(store, field);
         expect(refusalOf(resolved)[0]).toBe("UNEXPECTEDLY_ADMITTED");
