@@ -261,6 +261,25 @@ describe("sealRecipe is wired, not merely exported (task-143cad76)", () => {
     expect(callers).toContain("evidence/recipe-seal-composition.ts");
   });
 
+  it("has a production IMPORTER, so the composition is not an orphan module", () => {
+    // QA (comment-36ba55e9c14e49c194864182eb12fed5) showed the arm above is blind
+    // to the OUTER edge: it proves composition -> sealRecipe and says nothing
+    // about anything served importing the composition. This adds the import edge.
+    //
+    // HONEST LIMIT, stated so nobody mistakes this for the guard that closes it:
+    // an import can survive its call site (a `void` reference keeps it), so this
+    // arm alone would NOT red on a deleted seal block. The arm that does is
+    // behavioural and lives in daemon-foundation-verification-command.test.ts -
+    // it drives the served kind and asserts a durable RECIPE_SEALED row. This one
+    // catches the cheaper regression: the module quietly losing every importer.
+    const importers = productionSources(DAEMON_SRC)
+      .filter((path) => /from\s+"[^"]*recipe-seal-composition\.js"/u.test(readFileSync(path, "utf8")))
+      .map((path) => path.slice(DAEMON_SRC.length).replaceAll("\\", "/"))
+      .sort();
+    expect(importers.length).toBeGreaterThan(0);
+    expect(importers).toContain("daemon-foundation-verification-command.ts");
+  });
+
   it("proves the scan can see a call site at all", () => {
     // POSITIVE CONTROL. An empty enumeration and a broken enumeration look
     // identical, and this arm's whole job is to notice an empty one.

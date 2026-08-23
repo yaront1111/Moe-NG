@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,11 @@ import {
   FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS,
 } from "./evidence/foundation-verification-contracts.js";
 import { deriveVerificationAggregateId } from "./evidence/foundation-verification-service.js";
+import { storedRecipe } from "./evidence/foundation-verification-store.js";
+import { derivedRecipeAggregateId } from "./evidence/recipe-seal-composition.js";
+import { VERIFICATION_CATALOG_VERSION } from "./evidence/verification-catalog-contracts.js";
+import { REVISION_ID, probeFor }
+  from "./provider-profile/provider-runtime-observation-test-fixtures.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { ASYNC_ENTRY_REQUIRED_CODE, DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
 import type { AuthenticatedPrincipal } from "./http/http-contract.js";
@@ -250,5 +255,163 @@ describe("foundation.verification is reachable from the production registry", ()
       })).rejects.toBeInstanceOf(DomainRefusal);
     }
     expect(reads).toEqual(["agent-first", "agent-second"]);
+  });
+});
+
+/**
+ * THE OUTER EDGE: served kind -> recipe seal composition.
+ *
+ * `recipe-seal-composition.test.ts` proves the INNER edge (composition ->
+ * sealRecipe) by grepping production sources for the call. That arm is blind to
+ * whether anything served imports the composition at all: delete the seal block
+ * from the handler and the composition becomes an orphan with zero production
+ * importers while every content grep still passes. Reported by QA in
+ * comment-36ba55e9c14e49c194864182eb12fed5, and this is the arm that closes it.
+ *
+ * It is BEHAVIOURAL, not structural, so it cannot be satisfied by a spelling:
+ * it drives `foundation.verification` through the shipped registry and asserts a
+ * durable RECIPE_SEALED row appeared, carrying the operator's configured argv.
+ */
+const SEAL_PROJECT = "proj-foundation-verification-seal";
+const SEAL_CAPABILITY = "daemon-verification";
+const SEAL_ARGV = ["pnpm", "--filter", "@moe/daemon", "test"];
+
+const sealDirectory = mkdtempSync(join(tmpdir(), "moe-verification-seal-edge-"));
+const sealStorePath = join(sealDirectory, "store.db");
+const sealCatalogPath = join(sealDirectory, "verification-catalog.json");
+
+const sealSetup = SqliteEventStore.openForProject(sealStorePath, SEAL_PROJECT);
+installTestRecoveryBinding(sealSetup);
+sealSetup.close();
+
+writeFileSync(sealCatalogPath, JSON.stringify({
+  catalogVersion: VERIFICATION_CATALOG_VERSION,
+  entries: [{
+    argv: SEAL_ARGV, capability: SEAL_CAPABILITY, profileRevisionId: REVISION_ID,
+    projectId: SEAL_PROJECT,
+  }],
+}), "utf8");
+
+const sealProvider = createStoreDependencies({
+  clock: (): string => DECIDED_AT,
+  credential: CREDENTIAL,
+  principalId: "operator-local",
+  projectId: SEAL_PROJECT,
+  storePath: sealStorePath,
+  verificationCatalogPath: sealCatalogPath,
+});
+const sealDeps = sealProvider.provide();
+
+afterAll(() => {
+  sealProvider.close();
+  rmSync(sealDirectory, { force: true, recursive: true });
+});
+
+const admin = (): AuthenticatedPrincipal => ({
+  capabilities: [CAPABILITIES.ADMIN], principalId: "operator-local", projectId: SEAL_PROJECT,
+});
+
+/** The registry's own kind union, so a kind it does not serve is unrepresentable. */
+type ServedKind = Parameters<typeof sealDeps.registry.get>[0];
+
+/** Drives a bootstrap kind through the SAME registry the verification kind is served by. */
+function bootstrap(kind: ServedKind, payload: Readonly<Record<string, unknown>>): void {
+  const entry = sealDeps.registry.get(kind);
+  if (entry === undefined) throw new Error(`${kind} is not registered`);
+  entry.handler({
+    envelope: {
+      commandId: `cmd-${kind}`,
+      commandKind: kind,
+      correlationId: "corr-seal-edge",
+      expectedVersion: 0,
+      payload: payload as RuntimeCommandEnvelope["payload"],
+      requestDigest: "c".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: `${SEAL_PROJECT}-provider`,
+    },
+    principal: admin(),
+  });
+}
+
+describe("the served kind reaches the recipe seal (task-143cad76)", () => {
+  it("seals the configured recipe on the way to verifying, from the served handler", async () => {
+    bootstrap("project.register", { owner: "owner-1" });
+    bootstrap("provider.probe", probeFor().payload);
+
+    const recipeAggregateId = derivedRecipeAggregateId(SEAL_PROJECT, SEAL_CAPABILITY);
+    const entry = sealDeps.registry.get(FOUNDATION_VERIFICATION_COMMAND_KIND);
+    // The verification itself REFUSES: no attempt was ever dispatched. That is the
+    // point - the seal has to have happened on the way there, before the refusal.
+    await expect(entry?.asyncHandler?.({
+      envelope: {
+        commandId: "cmd-seal-edge",
+        commandKind: FOUNDATION_VERIFICATION_COMMAND_KIND,
+        correlationId: "corr-seal-edge",
+        expectedVersion: 0,
+        payload: {
+          attemptAggregateId: ABSENT_ATTEMPT,
+          candidateRoot: sealDirectory,
+          expectedRecordDigest: "b".repeat(64),
+          recipeAggregateId,
+          verificationId: "verification-seal-edge",
+        },
+        requestDigest: "a".repeat(64),
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+        sessionCredential: CREDENTIAL,
+        targetAggregateId: "agg-verification",
+      },
+      principal: {
+        capabilities: [WORK], principalId: "operator-local", projectId: SEAL_PROJECT,
+      },
+    })).rejects.toBeInstanceOf(DomainRefusal);
+
+    const reader = SqliteEventStore.openForProject(sealStorePath, SEAL_PROJECT);
+    try {
+      const sealed = storedRecipe(reader, recipeAggregateId);
+      if (sealed === null || "ok" in sealed) {
+        throw new Error("the served handler left no durable RECIPE_SEALED row");
+      }
+      // The operator's configured vector, read back off the durable seal: this
+      // is what an orphaned composition can never produce.
+      expect([...sealed.recipe.argv]).toEqual(SEAL_ARGV);
+    } finally {
+      reader.close();
+    }
+  });
+});
+
+describe("no catalog means no recipe, never an invented one (task-143cad76)", () => {
+  it("seals nothing when no catalog is configured, and writes no row for the identity", async () => {
+    // The provider in the first describe has NO verificationCatalogPath. The seal
+    // seam is therefore a REFUSING state, not a skipped one: the handler must
+    // leave the derived identity empty rather than materialize a placeholder.
+    //
+    // What this arm does NOT claim: that the seal's refusal is what the caller
+    // sees. It is not, and the reason is ordering - `service.verify` reaches the
+    // ATTEMPT record before the recipe, so with no attempt dispatched the answer
+    // is FOUNDATION_ATTEMPT_RECORD_ABSENT under DAEMON_FOUNDATION_ATTEMPT. The
+    // recipe refusal (FOUNDATION_VERIFICATION_RECIPE_UNRESOLVED under
+    // DAEMON_VERIFICATION_IDENTITY) surfaces only once the attempt exists, which
+    // is evidence/foundation-verification-service.test.ts's ground to cover.
+    const unsealable = derivedRecipeAggregateId(PROJECT, SEAL_CAPABILITY);
+    await expect(entryOf().asyncHandler?.({
+      envelope: envelopeOf("cmd-unconfigured-catalog", {
+        ...request(), recipeAggregateId: unsealable,
+      }),
+      principal: operator(),
+    })).rejects.toMatchObject({
+      code: "FOUNDATION_ATTEMPT_RECORD_ABSENT",
+      layer: "DAEMON_FOUNDATION_ATTEMPT",
+    });
+
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      // Fail-closed, checked on the durable side: no catalog, no seal, no row -
+      // and in particular no placeholder recipe minted to keep the path moving.
+      expect(storedRecipe(reader, unsealable)).toBeNull();
+    } finally {
+      reader.close();
+    }
   });
 });
