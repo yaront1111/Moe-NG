@@ -403,4 +403,59 @@ describe("attempt resource transitions — a moved read horizon writes nothing",
       "res-1": "ACTIVE", "res-2": "ACTIVE", "res-3": "ACTIVE",
     });
   });
+
+  /**
+   * THE DISCRIMINATING VARIANT, and the reason the arm above is not enough.
+   *
+   * With a MOVING report the post-read horizon check and the expected-version
+   * commit fence answer identically - same code, same refusing layer, same
+   * upstream code - so deleting the check leaves the arm above green and the
+   * guard unverified. Reported by qa-fc9c6bbd on task-7eceb55b.
+   *
+   * An accepted NO-OP separates them, because the two layers are on opposite
+   * sides of the suppression. A GRANT over a set holding no QUARANTINED member
+   * reduces to the same states, so `before === after` returns the projection as
+   * OK and the commit fence is never reached. Only the post-read horizon check
+   * can refuse this call, which is exactly what makes its deletion visible.
+   */
+  it("refuses a moved horizon even when the report itself is an accepted no-op", () => {
+    const fixture = bound("horizon-moved-noop");
+    const report: AttemptResourceReport = { kind: "GRANT", proofRef: "proof-horizon-noop" };
+
+    // TWO POSITIVE CONTROLS on a twin, both needed. The first proves the report
+    // is ACCEPTED with no writer interleaved, so the refusal below is the
+    // horizon. The second proves it is a genuine NO-OP - it appends nothing -
+    // so this call really does bypass the commit fence rather than merely
+    // happening to pass it.
+    const twin = bound("horizon-stable-noop");
+    const twinCount = twin.store.readEvents(
+      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE)).length;
+    expect(apply(twin, report).ok).toBe(true);
+    expect(twin.store.readEvents(
+      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE))).toHaveLength(twinCount);
+
+    let planted = false;
+    const store = interleaved(fixture.store, () => {
+      if (planted) return;
+      planted = true;
+      plantResourceEvent(
+        fixture.store, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
+        canonicalBytes(resourceBody({
+          members: [resourceRow("res-1"), resourceRow("res-2"), resourceRow("res-3")],
+        })), 1, "horizon-moved-noop");
+    });
+
+    const answered = applyAttemptResourceReport(store, fixture.binding, report);
+
+    expect(planted).toBe(true);
+    expect(refusalOf(answered)).toEqual({
+      authority: "NONE", code: "ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE",
+      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "EXPECTED_VERSION_CONFLICT",
+    });
+    // The bind plus the interleaved plant, and nothing this report wrote.
+    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(2);
+    expect(statesOf(membersOf(read(fixture)))).toEqual({
+      "res-1": "ACTIVE", "res-2": "ACTIVE", "res-3": "ACTIVE",
+    });
+  });
 });
