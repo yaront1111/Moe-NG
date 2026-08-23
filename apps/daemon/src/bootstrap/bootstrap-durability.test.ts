@@ -22,6 +22,7 @@ import {
   send,
 } from "./bootstrap-test-fixtures.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import {
   cleanupGoalClosureFixtures,
@@ -140,6 +141,12 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
       // By INDEX: `driveThrough` keys on kind and would rewind the finalize request's prefix
       // back to the proposal, sending a finalize against a run that never proposed.
       driveTo(store, index);
+      // The FUNDED world before this journey's approval (task-1de7b81a). A budget root is
+      // once-only and nothing can top one up, so a project approved without a funded root holds
+      // the zero-amount genesis root forever and its later effect.activate refuses. `driveTo`
+      // seeds the world for every index PAST the approval; this line covers the index that IS
+      // the approval, whose request the test sends itself.
+      if (kind === "approval.decide") seedActivationWorld(store);
       if (kind === "goal.close") await qualifyClosure(store, "node-1");
       const before = decisionCount(store);
 

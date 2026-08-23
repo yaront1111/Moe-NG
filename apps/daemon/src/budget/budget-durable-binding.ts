@@ -17,6 +17,18 @@ export type BudgetBindingResult =
   | { readonly ok: true; readonly binding: BudgetDurableBinding }
   | BudgetRefusal;
 
+/**
+ * How a writer READS its bindings, so one may be composed rather than hardcoded.
+ *
+ * `readBudgetBinding` is the only lawful default and every existing caller gets it. The port
+ * exists because ONE moment cannot use it: at approval the graph is not yet ACTIVE, so the
+ * strict reader necessarily refuses, and the genesis derivation has to be reachable from INSIDE
+ * the writer that owns the once-only guard rather than around it.
+ */
+export type BudgetBindingPort = (
+  store: SqliteEventStore, projectId: string, goalRef: string,
+) => BudgetBindingResult;
+
 const GOAL_CREATED_EVENT_TYPE = "GoalCreated";
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -36,14 +48,27 @@ function goalCreatedFact(events: readonly StoredEvent[]): Record<string, unknown
   return created === undefined ? null : (created as Record<string, unknown>);
 }
 
+/** The half of a binding the GOAL's own durable record answers, with no graph involved. */
+export interface GoalBudgetIdentity {
+  readonly budgetAccountRef: string;
+  readonly ownerRef: string;
+}
+
+export type GoalBudgetIdentityResult =
+  | { readonly ok: true; readonly identity: GoalBudgetIdentity }
+  | BudgetRefusal;
+
 /**
- * The server-side bindings a budget transition is bound to, all read from DURABLE records: the
- * account ref off the goal's own `GoalCreated`, the revision and epoch off the current active
- * graph. No caller supplies any of them, which is exactly task rail 1.
+ * The account and owner a budget is bound to, read off the goal's own `GoalCreated`.
+ *
+ * SPLIT OUT of `readBudgetBinding` so the genesis derivation (`budget-genesis-binding.ts`) reads
+ * the SAME durable fact through the SAME decode rather than parsing `GoalCreated` a second time.
+ * Two decodes of one durable record are free to disagree, and a disagreement inside the bytes a
+ * root authorization is bound to is the one that cannot be corrected afterwards.
  */
-export function readBudgetBinding(
+export function readGoalBudgetIdentity(
   store: SqliteEventStore, projectId: string, goalRef: string,
-): BudgetBindingResult {
+): GoalBudgetIdentityResult {
   if (projectId.length === 0 || goalRef.length === 0) {
     return budgetProjectionRefusal("BUDGET_PROJECTION_GOAL_ABSENT");
   }
@@ -56,6 +81,23 @@ export function readBudgetBinding(
   if (created["projectId"] !== projectId || created["goalId"] !== goalRef) {
     return budgetProjectionRefusal("BUDGET_PROJECTION_SCOPE_FOREIGN");
   }
+  return Object.freeze({
+    identity: Object.freeze({ budgetAccountRef: accountRef, ownerRef: goalRef }),
+    ok: true as const,
+  });
+}
+
+/**
+ * The server-side bindings a budget transition is bound to, all read from DURABLE records: the
+ * account ref off the goal's own `GoalCreated`, the revision and epoch off the current active
+ * graph. No caller supplies any of them, which is exactly task rail 1.
+ */
+export function readBudgetBinding(
+  store: SqliteEventStore, projectId: string, goalRef: string,
+): BudgetBindingResult {
+  const identity = readGoalBudgetIdentity(store, projectId, goalRef);
+  if (!identity.ok) return identity;
+  const accountRef = identity.identity.budgetAccountRef;
   const graph = readCurrentActiveGraph(store, projectId);
   if (!graph.ok) {
     return budgetProjectionRefusal(

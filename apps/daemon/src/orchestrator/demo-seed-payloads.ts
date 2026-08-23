@@ -344,11 +344,21 @@ export function finalizeChain(input: DemoSeedInput): readonly Record<string, unk
   ];
 }
 
-/** `expectedGoalVersion` is 1: `goal.create` leaves the goal at domain version 1. */
+/**
+ * `expectedGoalVersion` is 1: `goal.create` leaves the goal at domain version 1.
+ *
+ * NO `budgetHash` (task-1de7b81a). It was the placeholder hex64("b0"); the approve path now
+ * establishes the project's budget root and records the digest it computes over that durable
+ * record, so a seed cannot supply the value — and one that disagrees is refused
+ * BOOTSTRAP_BUDGET_HASH_MISMATCH rather than silently overriding the server.
+ *
+ * `policyHash` IS STILL A PLACEHOLDER and deliberately survives: task-eb6a1fa6 owns the policy
+ * half, and deleting it here would strip a field its consumer still reads while leaving nobody
+ * accountable for the gap.
+ */
 export function planningActivation(input: DemoSeedInput): Record<string, unknown> {
   return {
     activationRef: `${input.runId}-activation`,
-    budgetHash: hex64("b0"),
     expectedGoalVersion: 1,
     goalDraftNoActiveRevision: true,
     graphHash: hex64("6a"),

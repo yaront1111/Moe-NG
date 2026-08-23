@@ -10,6 +10,7 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
+import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import {
   cleanupGoalClosureFixtures,
   seedReviewAcceptance,
@@ -158,6 +159,10 @@ describe("J1 is exactly three human actions (design 1095)", () => {
     let lifecycleAfterThird: string | undefined;
 
     for (const request of sequence) {
+      // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
+      // so a project approved without one gets the zero-amount genesis root and every
+      // later effect.activate refuses against a root nothing can top up.
+      if (request.kind === "approval.decide") seedActivationWorld(store);
       if (request.kind === "goal.close") await qualifyClosure(store);
       const outcome = drive(store, request);
       expect(outcome.ok, `${request.kind}: ${outcome.ok ? "" : outcome.code}`).toBe(true);
@@ -205,10 +210,15 @@ describe("each command is idempotent on replay (DoD 5)", () => {
   ) => {
     const store = openStore();
     for (const request of sequence.slice(0, index)) {
+      if (request.kind === "approval.decide") seedActivationWorld(store);
       expect(drive(store, request).ok, request.kind).toBe(true);
     }
     const request = sequence[index] as Envelope;
 
+    // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
+    // so a project approved without one gets the zero-amount genesis root and every
+    // later effect.activate refuses against a root nothing can top up.
+    if (request.kind === "approval.decide") seedActivationWorld(store);
     if (request.kind === "goal.close") await qualifyClosure(store);
 
     const first = drive(store, request);
@@ -243,6 +253,10 @@ describe("closure leaves earlier review and evidence records untouched (DoD 4)",
       let before: ReturnType<typeof evidenceBytes> | undefined;
 
       for (const request of bootstrapSequence()) {
+        // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
+        // so a project approved without one gets the zero-amount genesis root and every
+        // later effect.activate refuses against a root nothing can top up.
+        if (request.kind === "approval.decide") seedActivationWorld(store);
         if (request.kind === "goal.close") {
           await qualifyClosure(store);
           before = evidenceBytes(store);

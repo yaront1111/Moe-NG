@@ -65,6 +65,16 @@ export const SERVICE_REFUSED_BY = Object.freeze([
   // const private and exports only the closed TYPE, and `decideApproval` passing that type
   // straight into `refuse` is what makes this literal verified rather than merely asserted.
   "APPROVAL_RUN_BINDING",
+  // The budget family's two layers, spelled literally for the same reason as the pairs above:
+  // `budget-ledger-contracts.ts` keeps BOTH constants module-private (its header explains that
+  // exporting them would declare a boundary the security roster demands a hostile trio for) and
+  // exports only the closed `BudgetRefusalLayer` TYPE. `activateInitialGraph` passing that type
+  // straight into `refuse` is what makes these two literals verified rather than asserted, and
+  // keeping them apart is load-bearing: BUDGET_LEDGER is a writer refusing, while
+  // BUDGET_CURRENT_PROJECTION is the durable reader refusing, and an operator repairs the two
+  // differently.
+  "BUDGET_LEDGER",
+  "BUDGET_CURRENT_PROJECTION",
   // The two BODY vocabularies, spread from their own exported rosters so a core codec's verdict
   // travels under the layer that produced it rather than under a daemon restatement.
   // Same discipline at the graph-content ingress: its layer const stays private and `proposePlan`
@@ -89,6 +99,11 @@ export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "BOOTSTRAP_EXPECTED_VERSION_STALE",
   "BOOTSTRAP_POLICY_UNKNOWN",
   "BOOTSTRAP_REVISION_HASH_MISMATCH",
+  // A caller's activation `budgetHash` that disagrees with the digest of the root the SERVER
+  // built. Deliberately its own code rather than the revision-hash one next door: the two name
+  // different disagreements and an operator repairs them differently — one is the plan bytes,
+  // the other is the budget authorization.
+  "BOOTSTRAP_BUDGET_HASH_MISMATCH",
   "BOOTSTRAP_COMMAND_ID_REUSED",
   "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
 ] as const);

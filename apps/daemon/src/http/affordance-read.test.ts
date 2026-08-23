@@ -294,7 +294,10 @@ describe("code node steps", () => {
     });
     commitBootstrap("approval.decide", {
       activation: {
-        activationRef: "activation-1", budgetHash: "b0".padEnd(64, "0"),
+        // NO `budgetHash` (task-1de7b81a): the approve path derives it from the budget root it
+        // establishes, and a caller's placeholder that disagrees is refused
+        // BOOTSTRAP_BUDGET_HASH_MISMATCH. `policyHash` stays — task-eb6a1fa6 owns it.
+        activationRef: "activation-1",
         expectedGoalVersion: 1, goalDraftNoActiveRevision: true,
         graphHash: "6a".padEnd(64, "0"), policyHash: "b1".padEnd(64, "0"),
         qualityHash: "dd".padEnd(64, "0"), truthClass: "HUMAN_APPROVED",

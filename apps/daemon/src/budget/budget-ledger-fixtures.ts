@@ -478,3 +478,22 @@ export function plantRawTransition(
     expectedVersion: store.getAggregateVersion(aggregateId),
   });
 }
+
+/**
+ * An ACTIVE graph revision whose BODY was never recorded.
+ *
+ * `readCurrentActiveGraph` answers `ACTIVE_GRAPH_BODY_UNAVAILABLE` here rather than
+ * `ACTIVE_GRAPH_ABSENT`: a durable history that exists and cannot be read whole is a DIFFERENT
+ * world from a clean empty project, which is the distinction active-graph-projection.ts:120-126
+ * exists to preserve. A genesis bootstrap must refuse this world, so a suite needs a way to
+ * reach it through the same writers the ACTIVE world is seeded with.
+ */
+export function seedActiveGraphWithoutBody(store: SqliteEventStore): GraphRevisionState {
+  seedProjectAndGoal(store);
+  const driven = drive([
+    createOf(REVISION_ID, PRIMARY_CONTENT.graphContentHash), submit,
+    approveAndActivateOf(PRIMARY_CONTENT.graphContentHash),
+  ]);
+  commitRevision(store, REVISION_ID, driven.events, "seed-bodyless");
+  return driven.state;
+}

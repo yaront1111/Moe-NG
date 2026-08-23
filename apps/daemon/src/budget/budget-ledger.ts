@@ -31,6 +31,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { readCurrentBudgetLedger } from "./budget-current-projection.js";
 import { readBudgetBinding } from "./budget-durable-binding.js";
+import type { BudgetBindingPort } from "./budget-durable-binding.js";
 import type { BudgetCurrentProjection } from "./budget-current-projection.js";
 import {
   admitBudgetInput,
@@ -85,16 +86,26 @@ export function budgetRecordOf(fields: Omit<BudgetLedgerRecord, "recordVersion">
  * The amounts are the operator's declared budget and are the ONLY thing the request contributes;
  * the account it opens, the owner it is bound to and the graph revision it is issued against are
  * all read from durable records here.
+ *
+ * `readBinding` DEFAULTS TO THE STRICT READER and every existing caller gets it, so nothing
+ * about this path moves. It is a parameter for one reason: the strict reader answers off the
+ * CURRENT ACTIVE graph, and the one moment a project needs its root — approval, before any graph
+ * is active — is precisely the moment that read must refuse. The genesis derivation therefore
+ * has to be reachable from INSIDE this function, which owns the once-only guard below; passing
+ * it around the writer would mean reimplementing that guard, and a second implementation of
+ * "only once, ever" is the last thing this ledger should have. What may be injected is a READ,
+ * never a decision: the amounts, the replay, the guard and the reducer all still run here.
  */
 export function authorizeBudgetRoot(
   store: SqliteEventStore, input: BudgetAuthorizeInput, commit: BudgetCommitPort = store,
+  readBinding: BudgetBindingPort = readBudgetBinding,
 ): BudgetWriteResult {
   const inadmissible = admitBudgetInput(input, BUDGET_AUTHORIZE_INPUT_KEYS, BUDGET_AMOUNTS_SHAPE);
   if (inadmissible !== null) return inadmissible;
   // SCOPE BEFORE IDENTITY. The decision key carries a projectId and the store refuses a lookup
   // outside the project it was opened for, so a foreign request must be named as foreign here
   // rather than surfacing as an unavailable store one call later.
-  const bound = readBudgetBinding(store, input.projectId, input.goalRef);
+  const bound = readBinding(store, input.projectId, input.goalRef);
   if (!bound.ok) return bound;
   const binding = bound.binding;
   const requestDigest = budgetRequestDigest(input);

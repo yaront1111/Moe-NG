@@ -435,9 +435,21 @@ export async function seedVerifiedNode(
   });
 }
 
-/** The approval whose durable `approvedNodeScope` is the closure's node set. */
+/**
+ * The approval whose durable `approvedNodeScope` is the closure's node set.
+ *
+ * THE WORLD IS SEEDED FIRST (task-1de7b81a), and the order is now load-bearing rather than
+ * incidental. `seedActivationWorld` is what stands in for the grant this repository cannot yet
+ * express: it authorizes a FUNDED budget root, and a root is once-only. Approving first would
+ * mint the zero-amount genesis root instead, and every later `effect.activate` in this lineage
+ * would refuse BUDGET_LEDGER_TRANSITION_REFUSED against a root that can never be topped up —
+ * `openBudgetRoot` is the only unit-creating reducer in `@moe/scheduler`. The call is idempotent
+ * and `seedProvenAttempt` makes it anyway, so the world these fixtures measure is unchanged;
+ * only the moment it comes into existence moved earlier.
+ */
 export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): void {
   driveThrough(store, "approval.decide");
+  seedActivationWorld(store);
   const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
     // The SEALED hash: `driveThrough` proposed through the shipped journey, whose propose
     // terminal carries the authority member, so the run's submission hash is the sealed

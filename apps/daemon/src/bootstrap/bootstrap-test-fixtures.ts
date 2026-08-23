@@ -394,7 +394,11 @@ export function planningActivation(
 ): Record<string, unknown> {
   return {
     activationRef: "activation-1",
-    budgetHash: hex64("b0"),
+    // NO `budgetHash` (task-1de7b81a). It used to be the placeholder hex64("b0"), and the
+    // approve path now derives the real one from the genesis budget root it builds and commits.
+    // A caller may still state an expectation — one that disagrees is refused
+    // BOOTSTRAP_BUDGET_HASH_MISMATCH — but it cannot supply the durable value, so a fixture that
+    // kept a placeholder here would only be asserting that the server refuses it.
     expectedGoalVersion: 1,
     goalDraftNoActiveRevision: true,
     graphHash: hex64("6a"),

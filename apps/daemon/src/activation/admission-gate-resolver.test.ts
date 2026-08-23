@@ -281,8 +281,15 @@ describe("admission gate resolver — HUMAN_APPROVAL is witnessed by the durable
 
   it("reserves through the stage for a HUMAN_APPROVAL node with no payload budget", () => {
     withStore("human-reserve", (store) => {
-      seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
+      // ORDER IS LOAD-BEARING (task-1de7b81a): `approval.decide` establishes the project's
+      // budget root, a root is ONCE-ONLY, and nothing in `@moe/scheduler` can add units to one.
+      // The world's FUNDED root therefore has to land before the approval, or this reserve draws
+      // on the zero-amount genesis root and refuses BUDGET_LEDGER_TRANSITION_REFUSED. The prefix
+      // is driven first because the world seeder needs the goal, and `driveThrough` replays
+      // idempotently inside `seedApprovedNodeScope` afterwards.
+      driveThrough(store, "approval.decide");
       seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+      seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
 
       const result = stage(store, undefined);
       expect(refusalOf(result)[0]).toBe("UNEXPECTEDLY_ADMITTED");
