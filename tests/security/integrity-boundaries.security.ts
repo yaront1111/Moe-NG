@@ -114,7 +114,13 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // (task-515d2f90, cashing producer task-210efa47's deferral), the canonical node-body
     // codec and the recursion digest that feed GraphRevisionContent v3. Axis by human REPL
     // ruling, comment-2a7c5a33; both boundaries' three arms land with this bump.
-    expect(ROSTER_INTEGRITY).toHaveLength(19);
+    // 19 -> 20 for CONFIRMATORY_FREEZE_AUTHORITY_LAYER (producer task-22b69ee5, which mints the
+    // constant and lands this bump with its three arms). The unusual member of this axis: a
+    // WITHHELD custody/signing authority whose reader has no granted arm at all, tagged
+    // `integrity` by SUBJECT — it names an authority record, the same reading that put
+    // NODE_AUTHORITY_LAYERS here under the human REPL ruling comment-2a7c5a33, and the reading
+    // this slice's own `admitted()` net already assumes where it reads `authority !== "NONE"`.
+    expect(ROSTER_INTEGRITY).toHaveLength(20);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {

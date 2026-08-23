@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 15, integrity 19, durable-store 16, runtime-provider
- * 25, scheduler-activation 29 — sums to 104, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 15, integrity 20, durable-store 16, runtime-provider
+ * 25, scheduler-activation 29 — sums to 105, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -218,6 +218,16 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
   { constant: "BENCHMARK_PROJECTION_LAYERS", file: "packages/benchmark/src/benchmark-projection-vocabulary.ts", axis: "runtime-provider" },
+  // The confirmatory-freeze custody/signing authority, withheld: its reader returns one
+  // unconditional refusal and has no granted arm at all. `integrity` by SUBJECT, and the
+  // directory sibling directly above is the reason this needs saying — BENCHMARK_PROJECTION_LAYERS
+  // is runtime-provider because it CONSUMES the provider-run family, which this consumes
+  // nothing of. This one names an AUTHORITY RECORD, so it sits with APPROVAL_AUTHORITY_LAYERS,
+  // SESSION_AUTH_LAYERS and NODE_AUTHORITY_LAYERS (the last by the human REPL ruling
+  // comment-2a7c5a33), and the integrity slice's own `admitted()` net already reads
+  // `authority !== "NONE"` explicitly. Withholding ruling comment-b308bf89a6d24978a928eadc5bade7b1;
+  // producer and arms both task-22b69ee5.
+  { constant: "CONFIRMATORY_FREEZE_AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_REFUSAL_LAYERS", file: "packages/contracts/src/configuration/project-configuration-contract.ts", axis: "integrity" },
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_PROPOSAL_LAYERS", file: "packages/contracts/src/document-work/document-work-proposal-contract.ts", axis: "integrity" },
@@ -341,8 +351,20 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * codec and of the recursion digest that FEED GraphRevisionContent v3 - the direct sibling
  * of GRAPH_CONTENT_LAYERS above and of ACCEPTANCE_CONTRACT_LAYERS / PLAN_REVISION_LAYERS -
  * not an in-force execution or scheduler decision. Both rows land WITH their arms.
+ *
+ * 104 -> 105 for CONFIRMATORY_FREEZE_AUTHORITY_LAYER (producer task-22b69ee5, which mints the
+ * constant and lands this row and its arms in the same pass, after QA reddened the ratchet by
+ * name at 6ded104: scan 105 vs roster 104). `integrity` by SUBJECT on the same reading as the
+ * NODE_AUTHORITY pair above — it names the refusal layer of a CUSTODY AND SIGNING AUTHORITY
+ * RECORD, not an execution, a provider run or a scheduler decision — and the directory sibling
+ * BENCHMARK_PROJECTION_LAYERS is runtime-provider for a subject reason (it consumes provider-run
+ * records) that does not reach here. The boundary is unusual and the note is here so a later
+ * reader audits the tag rather than guesses: the module has NO granted arm, so its three hostile
+ * arms probe the one property a withheld authority can lose — that no environment variable, no
+ * planted authority-record file and no concurrent mutation can flip the refusal. Withholding
+ * ruling comment-b308bf89a6d24978a928eadc5bade7b1.
  */
-const EXPECTED_ROSTER_SIZE = 104;
+const EXPECTED_ROSTER_SIZE = 105;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -351,7 +373,7 @@ const EXPECTED_ROSTER_SIZE = 104;
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 41,
-  "packages/benchmark": 1,
+  "packages/benchmark": 2,
   "packages/runner": 22,
   "packages/core": 12,
   "packages/scheduler": 10,

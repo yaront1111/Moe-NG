@@ -32,6 +32,7 @@
  */
 
 import { createHash, generateKeyPairSync, sign, verify } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -86,6 +87,9 @@ import {
 import type {
   FoundationRepositoryScopeCatalog,
 } from "../../apps/daemon/src/work/foundation-repository-scope-contracts.js";
+import {
+  CONFIRMATORY_FREEZE_AUTHORITY_LAYER, readConfirmatoryFreezeAuthority,
+} from "../../packages/benchmark/src/confirmatory-freeze-authority.js";
 import {
   DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS,
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_REFUSAL_LAYERS,
@@ -146,7 +150,7 @@ import {
 } from "../../packages/scheduler/src/index.js";
 import { SqliteEventStore, verifyBackupGeneration } from "../../packages/store/src/index.js";
 
-import { hostileRoot, probeRacing } from "./hostile-harness.js";
+import { hostileRoot, probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 
 /**
@@ -2471,11 +2475,179 @@ const nodeRecursionCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// CONFIRMATORY_FREEZE_AUTHORITY_LAYER — the WITHHELD benchmark custody and signing authority.
+//
+// THE ODD ONE ON THIS AXIS, and the note is here so a later reader AUDITS the tag rather than
+// guessing at it. Every other boundary in this file guards a digest, a codec or an authority
+// record that CAN be granted. This one names a decision that no such record exists anywhere,
+// taken under governor ruling comment-b308bf89a6d24978a928eadc5bade7b1 (producer task-22b69ee5).
+// Its reader is zero-arity and returns one unconditional refusal, so there is no forged PAYLOAD
+// that could reach it and no reseal rule for it to satisfy. The hostile move is the only one a
+// withheld authority can lose to: AMBIENT STATE. Each arm plants a COMPLETE, internally
+// consistent authority record in a throwaway root and points a plausible environment surface at
+// it, then reads. If any of that could flip the answer, the module would be a DISABLED authority
+// check rather than an ABSENT authority — the exact failure the ruling forbids.
+//
+// A REFUSAL AGAINST AN INCOMPLETE RECORD WOULD PROVE NOTHING, so `forgeAuthorityRecord` re-reads
+// its own bytes and THROWS unless every field the module's supersession clause enumerates came
+// back a string. That is the same in-fixture discipline `sealedManifest` uses above, expressed as
+// a throw rather than as prose; it is not the reseal thunk, because nothing here is digest-borne.
+//
+// NOTHING HERE GRANTS ANYTHING. The planted record is hostile INPUT. It is never handed to
+// production — production reads nothing — it holds identifiers only, with no key material, no
+// signature and no credential value, and its root is removed by `cleanupHostileRoots`. No
+// confirmatory corpus byte is generated, read, written or committed by any of it.
+// ---------------------------------------------------------------------------
+
+const CONFIRMATORY = "CONFIRMATORY_FREEZE_AUTHORITY_LAYER";
+
+/** Same order of magnitude as `RACE_BOUND`, and far above an in-process read that settles in
+ *  microseconds: an expiry here means the reader grew an I/O path, which is itself the finding. */
+const CONFIRMATORY_BOUND = Object.freeze({
+  label: "confirmatory-freeze-authority", timeoutMs: 2_000,
+});
+
+/** The LAYER is read out of the production constant so a rename reddens; the CODE is a hard
+ *  literal so a re-spelling of the production code cannot move both sides together and stay
+ *  green. Both halves are required — this boundary's whole evidentiary value is its exact tuple. */
+const CONFIRMATORY_REFUSAL: RefusalExpectation = {
+  code: "CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED",
+  layer: soleLayer(CONFIRMATORY_FREEZE_AUTHORITY_LAYER, "CONFIRMATORY_FREEZE_AUTHORITY"),
+};
+
+/** Every field the module's own supersession clause names. Kept complete on purpose: the record
+ *  below must be the one that WOULD satisfy a future strict reader, not a plausible-looking stub. */
+const CONFIRMATORY_AUTHORITY_FIELDS: readonly string[] = Object.freeze([
+  "allowedViewers", "canonicalBytesCovered", "custodian", "independentAuthor", "keyRotation",
+  "redactionRules", "registrySemantics", "restrictedArtifactBoundary",
+  "separationFromImplementers", "signatureAlgorithm", "signatureEncoding", "signerKeyId",
+  "timestampSemantics", "trustedPublicKeyDistribution",
+]);
+
+/** Writes the forged record into a fresh throwaway root and proves its own forgery is COMPLETE
+ *  by reading the bytes back. Identifier strings only — never a key, a signature or a secret. */
+function forgeAuthorityRecord(tag: string): string {
+  const file = join(hostileRoot(`confirmatory-${tag}`), "confirmatory-freeze-authority.json");
+  writeFileSync(file, JSON.stringify(Object.fromEntries(
+    CONFIRMATORY_AUTHORITY_FIELDS.map((field) => [field, `${tag}-${field}`]),
+  )), "utf8");
+  const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
+  const missing = CONFIRMATORY_AUTHORITY_FIELDS.filter((f) => typeof parsed[f] !== "string");
+  if (missing.length > 0) {
+    throw new Error(`forged confirmatory authority record is incomplete: ${missing.join(", ")}`);
+  }
+  return file;
+}
+
+/** Points a plausible environment surface at the planted record and hands back the undo. Restore
+ *  is by CAPTURED PRIOR, including deleting a key that did not exist, so one arm cannot leak an
+ *  authority-shaped variable into the rest of a fork the lane runs with `fileParallelism: false`. */
+function pointEnvironmentAt(file: string, tag: string): () => void {
+  const planted: Readonly<Record<string, string>> = {
+    MOE_BENCHMARK_FREEZE_AUTHORITY_FILE: file,
+    MOE_BENCHMARK_FREEZE_CUSTODIAN: `${tag}-custodian`,
+    MOE_BENCHMARK_FREEZE_SIGNER_KEY_ID: `${tag}-signerKeyId`,
+  };
+  const prior = Object.keys(planted).map((key) => [key, process.env[key]] as const);
+  for (const [key, value] of Object.entries(planted)) {
+    process.env[key] = value;
+  }
+  // READ BACK, for the same reason `forgeAuthorityRecord` re-reads its bytes: an arm whose plant
+  // silently did nothing would still pass, and would then be asserting that a refusal survives
+  // an environment nobody changed. This is the assertion that keeps the AFTER arm attached.
+  const unset = Object.entries(planted).filter(([key, value]) => process.env[key] !== value);
+  if (unset.length > 0) {
+    throw new Error(`forged authority environment did not take: ${unset.map(([k]) => k).join(", ")}`);
+  }
+  return () => {
+    for (const [key, value] of prior) {
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  };
+}
+
+const confirmatoryFreezeAuthorityCases: readonly HostileCase[] = [
+  before(
+    CONFIRMATORY, "read BEFORE a complete forged authority record is planted",
+    CONFIRMATORY_REFUSAL,
+    // The ordering is the harness's, not the case's: `probeBefore` runs the read to completion
+    // and only then applies the effect, so this arm pins the answer a caller gets on a machine
+    // where nothing has been planted yet. Paired with the AFTER arm it is the falsifier for
+    // "the refusal is really unconditional" — one of the two would move if it were not.
+    async () => {
+      let undo: (() => void) | undefined;
+      try {
+        const outcome = await probeBefore(
+          CONFIRMATORY_BOUND,
+          async () => readConfirmatoryFreezeAuthority(),
+          async () => {
+            const file = forgeAuthorityRecord("before");
+            undo = pointEnvironmentAt(file, "before");
+            return file;
+          },
+        );
+        return outcome.probe;
+      } finally {
+        undo?.();
+      }
+    },
+  ),
+  after(
+    CONFIRMATORY, "read AFTER a complete forged record is planted and the environment points at it",
+    CONFIRMATORY_REFUSAL,
+    // THE ARM THAT CARRIES THE PROPERTY. A complete authority record exists on disk and three
+    // plausible variables name it, its custodian and its signer key id. A reader that consulted
+    // any of them — or that grew a "configured authority" fallback later — answers differently
+    // here and reddens on the exact tuple, which is the whole reason the tuple is pinned.
+    async () => {
+      let undo: (() => void) | undefined;
+      try {
+        const outcome = await probeAfter(
+          CONFIRMATORY_BOUND,
+          async () => {
+            const file = forgeAuthorityRecord("after");
+            undo = pointEnvironmentAt(file, "after");
+            return file;
+          },
+          async () => readConfirmatoryFreezeAuthority(),
+        );
+        return outcome.probe;
+      } finally {
+        undo?.();
+      }
+    },
+  ),
+  racingExactly(
+    CONFIRMATORY, "two reads race while forged records are planted under both of them",
+    CONFIRMATORY_REFUSAL, CONFIRMATORY_REFUSAL,
+    // Both legs are pinned EXACTLY rather than left to the shape assertion, and both are read
+    // legs: a race in which only one side reads could be satisfied by a reader that answers
+    // correctly once and then caches. The legs plant into SEPARATE roots and touch no shared
+    // environment key, so neither can restore over the other — the interleaving is real and the
+    // teardown is still deterministic. The yields put each plant on the other's continuation.
+    async () => {
+      forgeAuthorityRecord("race-left");
+      await Promise.resolve();
+      return readConfirmatoryFreezeAuthority();
+    },
+    async () => {
+      await Promise.resolve();
+      forgeAuthorityRecord("race-right");
+      return readConfirmatoryFreezeAuthority();
+    },
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
   ...selectionCases, ...approvalCases, ...sessionCases,
   ...authorityCases, ...documentCases, ...distributionCases, ...reviewCases,
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
   ...graphContentCases, ...repositoryScopeCases,
-  ...nodeAuthorityCases, ...nodeRecursionCases,
+  ...nodeAuthorityCases, ...nodeRecursionCases, ...confirmatoryFreezeAuthorityCases,
 ]);
