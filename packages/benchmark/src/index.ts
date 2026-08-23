@@ -48,8 +48,21 @@
  * cover only what IT could not project. Flattening them would make a scheduler issue
  * indistinguishable from a provider refusal, and the durable bytes are all a later
  * reader has.
+ *
+ * THE ONE NON-PROJECTION EXPORT, AND WHY IT IS NOT A WIDENING. `readConfirmatoryFreezeAuthority`
+ * publishes a REFUSAL, never a capability: the confirmatory corpus has no author,
+ * custodian, signing key, or registry, so the reader always answers
+ * `CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED` at `CONFIRMATORY_FREEZE_AUTHORITY`. It adds
+ * no scoring, no corpus handling, no signature verification, and no campaign execution
+ * to this package — a consumer can learn from it only that nobody may freeze and seal,
+ * which is exactly the fact a downstream admission path must fail closed on.
  */
 
+export {
+  CONFIRMATORY_FREEZE_AUTHORITY_CODE, CONFIRMATORY_FREEZE_AUTHORITY_LAYER,
+  readConfirmatoryFreezeAuthority,
+} from "./confirmatory-freeze-authority.js";
+export type { ConfirmatoryFreezeAuthorityRefusal } from "./confirmatory-freeze-authority.js";
 export {
   BENCHMARK_COST_BASES, BENCHMARK_PROJECTION_CODES, BENCHMARK_PROJECTION_LAYERS,
   BENCHMARK_PROJECTION_MESSAGES, BENCHMARK_UNKNOWN_BASES, benchmarkProjectionRefusal,
