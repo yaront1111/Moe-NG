@@ -82,10 +82,19 @@ export function createFoundationVerificationHandler(
     // verify, and a recipe that exists nowhere makes `service.verify` refuse
     // under its own code below -- which is the answer that names the right
     // layer. Throwing here would replace that answer with the catalog's.
+    //
+    // ONE CARVE-OUT: FOUNDATION_VERIFICATION_RECIPE_CONFLICT. The identity is a
+    // pure function of (projectId, capability) -- argv is NOT an input -- so an
+    // operator-edited catalog argv for an already-sealed pair conflicts here and
+    // nowhere below: the durable seal still resolves and still re-derives, so
+    // `service.verify` would execute the OLD argv and mint a receipt, and drift
+    // would read as success. That is the one refusal verify cannot catch, so it
+    // surfaces here -- the seal's own code and layer, carried verbatim like the
+    // verify refusals below. Every other seal refusal keeps the fall-through.
     const recipeAggregateId = payload["recipeAggregateId"];
     if (options.verificationCatalogSource !== undefined
       && typeof recipeAggregateId === "string") {
-      createRecipeSealComposition({
+      const sealed = createRecipeSealComposition({
         catalog: createVerificationCatalogReader({
           catalogSource: options.verificationCatalogSource,
         }),
@@ -93,6 +102,9 @@ export function createFoundationVerificationHandler(
         projectId: options.projectId,
         store: options.store,
       }).sealNamed(recipeAggregateId);
+      if (!sealed.ok && sealed.code === "FOUNDATION_VERIFICATION_RECIPE_CONFLICT") {
+        throw new DomainRefusal(sealed.code, sealed.layer, sealed.code);
+      }
     }
 
     const outcome = await service.verify({
