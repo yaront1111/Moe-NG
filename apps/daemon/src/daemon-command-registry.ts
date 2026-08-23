@@ -85,6 +85,11 @@ export interface DaemonCommandPortOptions {
   readonly operatorPrincipalId: string;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+  /** The daemon-startup VERIFICATION catalog: the host-scoped argv authority the
+   *  recipe seal derives its command from. OPTIONAL on the same terms as the
+   *  workspace catalog above — an unsupplied source is a refusing state, not a
+   *  skipped one, so sealing refuses and no unconfigured command is ever run. */
+  readonly verificationCatalogSource?: () => unknown;
 }
 
 export interface DaemonCommandPorts {
@@ -139,7 +144,14 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
     store,
   });
-  const verifyFoundationAttempt = createFoundationVerificationHandler({ projectId, store });
+  const verifyFoundationAttempt = createFoundationVerificationHandler({
+    projectId, store,
+    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit
+    // `undefined` is a DIFFERENT thing from an absent key, and only the absent
+    // key means "no catalog configured".
+    ...(options.verificationCatalogSource === undefined
+      ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
+  });
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each

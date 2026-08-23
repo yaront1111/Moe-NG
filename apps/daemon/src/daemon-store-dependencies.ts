@@ -11,6 +11,12 @@ import {
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import {
+  VERIFICATION_CATALOG_ENV_KEY,
+} from "./evidence/verification-catalog-contracts.js";
+import {
+  readVerificationCatalogConfig,
+} from "./evidence/verification-catalog-reader.js";
+import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY, createFoundationCaptureLifecycle,
   readFoundationCatalogConfig,
 } from "./work/foundation-capture-lifecycle.js";
@@ -53,6 +59,9 @@ export interface StoreDependencyConfig {
   readonly principalId: string;
   readonly projectId: string;
   readonly storePath: string;
+  /** OPTIONAL, same rule as the workspace catalog: absent is a valid state, and
+   *  recipe sealing then refuses at use time rather than blocking boot. */
+  readonly verificationCatalogPath?: string | undefined;
   /** OPTIONAL. Absent is a valid state: Foundation preparation then refuses at
    *  dispatch time and the daemon still boots and serves every other kind. */
   readonly workspaceCatalogPath?: string | undefined;
@@ -74,12 +83,14 @@ export function readStoreDependencyEnv(
   const principalId = env.MOE_PRINCIPAL_ID;
   const nodeSpecsDir = env.MOE_NODE_SPECS_DIR;
   const catalogPath = env[FOUNDATION_WORKSPACE_CATALOG_ENV_KEY];
+  const verificationCatalogPath = env[VERIFICATION_CATALOG_ENV_KEY];
   return Object.freeze({
     credential: env.MOE_DAEMON_CREDENTIAL as string,
     nodeSpecsDir: nodeSpecsDir === "" ? undefined : nodeSpecsDir,
     principalId: principalId === undefined || principalId === "" ? "operator-local" : principalId,
     projectId: env.MOE_PROJECT_ID as string,
     storePath: env.MOE_STORE_PATH as string,
+    verificationCatalogPath: verificationCatalogPath === "" ? undefined : verificationCatalogPath,
     workspaceCatalogPath: catalogPath === "" ? undefined : catalogPath,
   });
 }
@@ -135,6 +146,12 @@ export function createStoreDependencies(
   const foundationCatalogSource = readFoundationCatalogConfig({
     [FOUNDATION_WORKSPACE_CATALOG_ENV_KEY]: config.workspaceCatalogPath,
   });
+  // The host-scoped verification catalog, on the SAME lazy-source discipline as
+  // its workspace sibling above: one source, read on use, so an absent or
+  // unreadable catalog refuses recipe sealing instead of failing daemon boot.
+  const verificationCatalogSource = readVerificationCatalogConfig({
+    [VERIFICATION_CATALOG_ENV_KEY]: config.verificationCatalogPath,
+  });
   const { decisions, registry } = createDaemonCommandPorts({
     clock,
     foundationCatalogSource,
@@ -145,6 +162,7 @@ export function createStoreDependencies(
       catalogSource: foundationCatalogSource, store,
     }),
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    verificationCatalogSource,
   });
 
   const authenticator = createSessionAuthenticator(store, {

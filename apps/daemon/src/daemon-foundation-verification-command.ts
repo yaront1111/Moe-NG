@@ -3,6 +3,8 @@ import type { SqliteEventStore } from "@moe/store";
 import { DomainRefusal } from "./daemon-command-dispatch.js";
 import { createFoundationVerificationService }
   from "./evidence/foundation-verification-service.js";
+import { createRecipeSealComposition } from "./evidence/recipe-seal-composition.js";
+import { createVerificationCatalogReader } from "./evidence/verification-catalog-reader.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
 import type { DurableDecision } from "./http/http-contract.js";
 
@@ -34,6 +36,10 @@ export interface FoundationVerificationCommandOptions {
   /** The server's project identity. Never read from the payload. */
   readonly projectId: string;
   readonly store: SqliteEventStore;
+  /** The host-scoped verification catalog source. OPTIONAL, and its absence is a
+   *  REFUSING state rather than a skipped one: with no catalog nothing is sealed
+   *  here, so a verification naming an unsealed recipe still refuses below. */
+  readonly verificationCatalogSource?: () => unknown;
 }
 
 export function createFoundationVerificationHandler(
@@ -52,6 +58,36 @@ export function createFoundationVerificationHandler(
     // The payload names WHICH verification; every authority the service reads -- the
     // sealed recipe, the activation, the attempt record -- is server-side durable state.
     const { payload } = envelope;
+
+    // MATERIALIZE THE NAMED RECIPE FROM SERVER-SIDE AUTHORITY, and this is the
+    // production call site that makes `sealRecipe` reachable from a served kind.
+    // `foundation.verification` NAMES an already-sealed recipe and never created
+    // one, while `sealRecipe` had no production caller at all -- so the durable
+    // executable body it seals was unreachable from anything the daemon serves.
+    //
+    // The identity is matched against the ids this project's CONFIGURED pairs
+    // derive to, so the caller selects which server-derived recipe to
+    // materialize and contributes not one byte of it. A re-seal of the same
+    // identity replays from durable bytes; a drifted command refuses CONFLICT.
+    //
+    // Its refusal is deliberately NOT thrown. Sealing is materialization, not
+    // the verification's verdict: a recipe sealed by some other route must still
+    // verify, and a recipe that exists nowhere makes `service.verify` refuse
+    // under its own code below -- which is the answer that names the right
+    // layer. Throwing here would replace that answer with the catalog's.
+    const recipeAggregateId = payload["recipeAggregateId"];
+    if (options.verificationCatalogSource !== undefined
+      && typeof recipeAggregateId === "string") {
+      createRecipeSealComposition({
+        catalog: createVerificationCatalogReader({
+          catalogSource: options.verificationCatalogSource,
+        }),
+        principalId: principal.principalId,
+        projectId: options.projectId,
+        store: options.store,
+      }).sealNamed(recipeAggregateId);
+    }
+
     const outcome = await service.verify({
       attemptAggregateId: payload["attemptAggregateId"],
       candidateRoot: payload["candidateRoot"],
