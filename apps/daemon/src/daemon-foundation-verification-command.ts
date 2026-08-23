@@ -49,8 +49,15 @@ export function createFoundationVerificationHandler(
     // PER CALL, never hoisted out of this closure: the service writes every durable phase
     // under the identity it was constructed with, so a service built once at startup would
     // attribute one caller's verification to whoever happened to boot the daemon.
+    //
+    // Read ONCE per command, into a const. Two reads of `principal.principalId`
+    // are two chances for a getter to answer differently, which would let the
+    // recipe seal below and the verification commit under DIFFERENT identities
+    // for one command -- and the seam's own arm pins the read count for exactly
+    // that reason.
+    const principalId = principal.principalId;
     const service = createFoundationVerificationService({
-      principalId: principal.principalId,
+      principalId,
       projectId: options.projectId,
       store: options.store,
     });
@@ -82,7 +89,7 @@ export function createFoundationVerificationHandler(
         catalog: createVerificationCatalogReader({
           catalogSource: options.verificationCatalogSource,
         }),
-        principalId: principal.principalId,
+        principalId,
         projectId: options.projectId,
         store: options.store,
       }).sealNamed(recipeAggregateId);
