@@ -155,6 +155,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     expect([...new Set(resealed)].sort()).toEqual([
       "ACCEPTANCE_CONTRACT_LAYERS",
       "APPROVAL_AUTHORITY_LAYERS",
+      // task-3a10eb6b: the authority record has no digest yet, but its AFTER forgery still
+      // owes the same two-part production recheck before the exact foreign-scope refusal.
+      "CONFIRMATORY_FREEZE_AUTHORITY_LAYER",
       "DISTRIBUTION_REFUSAL_LAYERS",
       "DOCUMENT_WORK_PROPOSAL_LAYERS",
       // Added with the FOUNDATION_REPOSITORY_SCOPE_LAYERS arms (producer task-4af0e3dc):

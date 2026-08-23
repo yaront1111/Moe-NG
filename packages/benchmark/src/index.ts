@@ -49,15 +49,14 @@
  * indistinguishable from a provider refusal, and the durable bytes are all a later
  * reader has.
  *
- * TWO NON-PROJECTION EXPORTS, AND WHY NEITHER IS A WIDENING. Both publish a REFUSAL rather
- * than a capability, and neither adds scoring, corpus handling, signature verification or
- * campaign execution to this package.
+ * TWO NON-PROJECTION EXPORT FAMILIES, AND WHY NEITHER IS CAMPAIGN AUTHORITY. Neither adds
+ * scoring, corpus handling, signature verification or campaign execution to this package.
  *
- * 1. `readConfirmatoryFreezeAuthority`. The confirmatory corpus has no author, custodian,
- *    signing key, or registry, so the reader always answers
- *    `CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED` at `CONFIRMATORY_FREEZE_AUTHORITY`. A
- *    consumer can learn from it only that nobody may freeze and seal, which is exactly the
- *    fact a downstream admission path must fail closed on.
+ * 1. `readConfirmatoryFreezeAuthority` and its pure record validator. No authority record
+ *    is installed, so the zero-arity reader currently answers
+ *    `CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED` at `CONFIRMATORY_FREEZE_AUTHORITY`. The
+ *    validator makes a later human installation a strict data change; callers cannot feed
+ *    their own bytes or path to the production reader.
  *
  * 2. `runPreFreezeAudit`. The pinned benchmark spec requires, at its Section 12.1, an
  *    automated namespace-and-reference audit that "must pass" before a campaign is frozen,
@@ -77,14 +76,24 @@
  *    it creates and reads NO corpus bytes, admits NO freeze manifest, verifies NO
  *    signature, names NO custodian, executes NO campaign, computes NO score and decides NO
  *    claim. A passing audit is a necessary condition for a freeze and never a sufficient
- *    one — the authority reader above still refuses unconditionally.
+ *    one — the authority reader above still refuses while no record is installed.
  */
 
 export {
   CONFIRMATORY_FREEZE_AUTHORITY_CODE, CONFIRMATORY_FREEZE_AUTHORITY_LAYER,
-  readConfirmatoryFreezeAuthority,
+  CONFIRMATORY_FREEZE_AUTHORITY_RECORD_PATH, readConfirmatoryFreezeAuthority,
 } from "./confirmatory-freeze-authority.js";
-export type { ConfirmatoryFreezeAuthorityRefusal } from "./confirmatory-freeze-authority.js";
+export type {
+  ConfirmatoryFreezeAuthorityReadResult, ConfirmatoryFreezeAuthorityRefusal,
+} from "./confirmatory-freeze-authority.js";
+export {
+  CONFIRMATORY_FREEZE_AUTHORITY_CODES, validateConfirmatoryFreezeAuthorityRecord,
+} from "./confirmatory-freeze-authority-contracts.js";
+export type {
+  ConfirmatoryFreezeAuthorityCode, ConfirmatoryFreezeAuthorityGrant,
+  ConfirmatoryFreezeAuthorityRecord, ConfirmatoryFreezeAuthorityRecordSource,
+  ConfirmatoryFreezeAuthorityValidation, ConfirmatoryFreezeAuthorityValidationRefusal,
+} from "./confirmatory-freeze-authority-contracts.js";
 export {
   PRE_FREEZE_AUDIT_CODES, PRE_FREEZE_AUDIT_LAYER, preFreezeAuditRefusal, preFreezeAuditVerdict,
 } from "./pre-freeze-audit-vocabulary.js";

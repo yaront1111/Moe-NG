@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { existsSync } from "node:fs";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   CONFIRMATORY_FREEZE_AUTHORITY_CODE, CONFIRMATORY_FREEZE_AUTHORITY_LAYER,
+  CONFIRMATORY_FREEZE_AUTHORITY_RECORD_PATH,
   readConfirmatoryFreezeAuthority,
 } from "./index.js";
 import type { ConfirmatoryFreezeAuthorityRefusal } from "./index.js";
@@ -47,7 +50,63 @@ const restoreEnvironment = (): void => {
 };
 
 describe("confirmatory freeze authority is unassigned (task-22b69ee5)", () => {
-  afterEach(restoreEnvironment);
+  afterEach(() => {
+    restoreEnvironment();
+    vi.doUnmock("node:fs");
+    vi.resetModules();
+  });
+
+  it("routes bytes from the fixed record source through strict validation", async () => {
+    vi.resetModules();
+    vi.doMock("node:fs", () => ({ readFileSync: () => new TextEncoder().encode("{") }));
+    const module = await import("./confirmatory-freeze-authority.js");
+
+    const result = module.readConfirmatoryFreezeAuthority();
+
+    expect(result).toMatchObject({
+      authority: "NONE",
+      code: "CONFIRMATORY_FREEZE_AUTHORITY_MALFORMED",
+      layer: "CONFIRMATORY_FREEZE_AUTHORITY",
+      ok: false,
+    });
+  });
+
+  it("codes a non-missing file-read failure as unreadable at the authority layer", async () => {
+    vi.resetModules();
+    vi.doMock("node:fs", () => ({
+      readFileSync: () => {
+        throw Object.assign(new Error("access denied"), { code: "EACCES" });
+      },
+    }));
+    const module = await import("./confirmatory-freeze-authority.js");
+
+    expect(module.readConfirmatoryFreezeAuthority()).toEqual({
+      authority: "NONE",
+      code: "CONFIRMATORY_FREEZE_AUTHORITY_UNREADABLE",
+      layer: "CONFIRMATORY_FREEZE_AUTHORITY",
+      ok: false,
+    });
+  });
+
+  it("has no authority record installed at the reader's fixed path", () => {
+    expect(CONFIRMATORY_FREEZE_AUTHORITY_RECORD_PATH).toBe(
+      "packages/benchmark/authority/confirmatory-freeze-authority.json",
+    );
+    const recordUrl = new URL(`../../../${CONFIRMATORY_FREEZE_AUTHORITY_RECORD_PATH}`, import.meta.url);
+
+    expect(existsSync(recordUrl)).toBe(false);
+  });
+
+  it("still returns the exact unassigned tuple when no authority record is installed", () => {
+    const result = readConfirmatoryFreezeAuthority();
+
+    expect(result).toEqual({
+      authority: "NONE",
+      code: "CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED",
+      layer: "CONFIRMATORY_FREEZE_AUTHORITY",
+      ok: false,
+    });
+  });
 
   it("exports the exact code and layer literals the ruling named", () => {
     expect(CONFIRMATORY_FREEZE_AUTHORITY_CODE).toBe("CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED");
@@ -55,8 +114,10 @@ describe("confirmatory freeze authority is unassigned (task-22b69ee5)", () => {
   });
 
   it("refuses with exactly the ruled code at exactly the ruled layer", () => {
-    const refusal: ConfirmatoryFreezeAuthorityRefusal = readConfirmatoryFreezeAuthority();
+    const refusal = readConfirmatoryFreezeAuthority();
 
+    expect(refusal.ok).toBe(false);
+    if (refusal.ok) throw new Error("no record may grant authority on the committed tree");
     expect(refusal.code).toBe("CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED");
     expect(refusal.layer).toBe("CONFIRMATORY_FREEZE_AUTHORITY");
     expect(refusal.authority).toBe("NONE");
@@ -122,6 +183,7 @@ describe("confirmatory freeze authority is unassigned (task-22b69ee5)", () => {
     const after = readConfirmatoryFreezeAuthority();
 
     expect(after).toEqual(EXPECTED_REFUSAL);
+    if (after.ok) throw new Error("environment mutation granted confirmatory authority");
     expect(after.code).toBe("CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED");
     expect(after.layer).toBe("CONFIRMATORY_FREEZE_AUTHORITY");
     expect(after).toEqual(before);
@@ -149,6 +211,7 @@ describe("confirmatory freeze authority is unassigned (task-22b69ee5)", () => {
     }).toThrow(TypeError);
 
     expect(first.ok).toBe(false);
+    if (first.ok) throw new Error("no record may grant authority on the committed tree");
     expect(first.code).toBe("CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED");
     // A mutation of one caller's copy must not reach the next caller's.
     expect(readConfirmatoryFreezeAuthority()).toEqual(EXPECTED_REFUSAL);

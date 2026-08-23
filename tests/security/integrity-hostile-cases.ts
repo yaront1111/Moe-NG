@@ -91,6 +91,9 @@ import {
   CONFIRMATORY_FREEZE_AUTHORITY_LAYER, readConfirmatoryFreezeAuthority,
 } from "../../packages/benchmark/src/confirmatory-freeze-authority.js";
 import {
+  validateConfirmatoryFreezeAuthorityRecord,
+} from "../../packages/benchmark/src/confirmatory-freeze-authority-contracts.js";
+import {
   DISTRIBUTION_REFUSAL_LAYERS, DOCUMENT_WORK_PROPOSAL_LAYERS,
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_REFUSAL_LAYERS,
   decodeDocumentWorkProposalBytes, parseProjectConfigurationManifest,
@@ -2476,28 +2479,17 @@ const nodeRecursionCases: readonly HostileCase[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// CONFIRMATORY_FREEZE_AUTHORITY_LAYER — the WITHHELD benchmark custody and signing authority.
+// CONFIRMATORY_FREEZE_AUTHORITY_LAYER — record mechanism present, authority still WITHHELD.
 //
-// THE ODD ONE ON THIS AXIS, and the note is here so a later reader AUDITS the tag rather than
-// guessing at it. Every other boundary in this file guards a digest, a codec or an authority
-// record that CAN be granted. This one names a decision that no such record exists anywhere,
-// taken under governor ruling comment-b308bf89a6d24978a928eadc5bade7b1 (producer task-22b69ee5).
-// Its reader is zero-arity and returns one unconditional refusal, so there is no forged PAYLOAD
-// that could reach it and no reseal rule for it to satisfy. The hostile move is the only one a
-// withheld authority can lose to: AMBIENT STATE. Each arm plants a COMPLETE, internally
-// consistent authority record in a throwaway root and points a plausible environment surface at
-// it, then reads. If any of that could flip the answer, the module would be a DISABLED authority
-// check rather than an ABSENT authority — the exact failure the ruling forbids.
+// task-22b69ee5 produced the original unconditional withholding under ruling
+// comment-b308bf89a6d24978a928eadc5bade7b1. task-3a10eb6b adds the strict record contract and
+// fixed-path reader without installing a record. The legacy three arms keep proving that caller
+// arguments and ambient state cannot redirect that fixed path. The three contract arms below
+// separately prove malformed bytes, a form-valid foreign-scope forgery, and two raced semantic
+// refusals all answer with authority NONE and their exact code/layer.
 //
-// A REFUSAL AGAINST AN INCOMPLETE RECORD WOULD PROVE NOTHING, so `forgeAuthorityRecord` re-reads
-// its own bytes and THROWS unless every field the module's supersession clause enumerates came
-// back a string. That is the same in-fixture discipline `sealedManifest` uses above, expressed as
-// a throw rather than as prose; it is not the reseal thunk, because nothing here is digest-borne.
-//
-// NOTHING HERE GRANTS ANYTHING. The planted record is hostile INPUT. It is never handed to
-// production — production reads nothing — it holds identifiers only, with no key material, no
-// signature and no credential value, and its root is removed by `cleanupHostileRoots`. No
-// confirmatory corpus byte is generated, read, written or committed by any of it.
+// Test records contain identifier strings only: no key material, signature, credential or corpus
+// byte. The only file writes go to hostileRoot; none can reach the production reader's fixed path.
 // ---------------------------------------------------------------------------
 
 const CONFIRMATORY = "CONFIRMATORY_FREEZE_AUTHORITY_LAYER";
@@ -2511,32 +2503,54 @@ const CONFIRMATORY_BOUND = Object.freeze({
 /** The LAYER is read out of the production constant so a rename reddens; the CODE is a hard
  *  literal so a re-spelling of the production code cannot move both sides together and stay
  *  green. Both halves are required — this boundary's whole evidentiary value is its exact tuple. */
-const CONFIRMATORY_REFUSAL: RefusalExpectation = {
+type ConfirmatoryExpectation = RefusalExpectation & { readonly authority: "NONE" };
+
+const confirmatoryExpectation = (code: string): ConfirmatoryExpectation => ({
+  authority: "NONE",
+  code,
+  layer: soleLayer(CONFIRMATORY_FREEZE_AUTHORITY_LAYER, "CONFIRMATORY_FREEZE_AUTHORITY"),
+});
+
+const CONFIRMATORY_REFUSAL: ConfirmatoryExpectation = {
+  authority: "NONE",
   code: "CONFIRMATORY_FREEZE_AUTHORITY_UNASSIGNED",
   layer: soleLayer(CONFIRMATORY_FREEZE_AUTHORITY_LAYER, "CONFIRMATORY_FREEZE_AUTHORITY"),
 };
 
-/** Every field the module's own supersession clause names. Kept complete on purpose: the record
- *  below must be the one that WOULD satisfy a future strict reader, not a plausible-looking stub. */
-const CONFIRMATORY_AUTHORITY_FIELDS: readonly string[] = Object.freeze([
-  "allowedViewers", "canonicalBytesCovered", "custodian", "independentAuthor", "keyRotation",
-  "redactionRules", "registrySemantics", "restrictedArtifactBoundary",
-  "separationFromImplementers", "signatureAlgorithm", "signatureEncoding", "signerKeyId",
-  "timestampSemantics", "trustedPublicKeyDistribution",
-]);
+const authorityRecord = (scope: string): Record<string, unknown> => ({
+  schemaVersion: 1,
+  scope,
+  scopeReference: "urn:hostile:confirmatory-corpus",
+  independentAuthor: "hostile-independent-author-id",
+  custodian: "hostile-custodian-id",
+  allowedViewers: ["hostile-viewer-class"],
+  restrictedArtifactBoundary: "hostile-artifact-boundary",
+  separationFromImplementers: "hostile-separation-attestation",
+  signatureAlgorithm: "hostile-algorithm-reference",
+  signatureEncoding: "hostile-encoding-reference",
+  signerKeyId: "hostile-key-reference",
+  trustedPublicKeyDistribution: "hostile-distribution-semantics",
+  keyRotation: "hostile-rotation-semantics",
+  canonicalBytesCovered: "hostile-canonical-domain",
+  issuedAt: "2026-08-23T00:00:00.000Z",
+  timestampSemantics: "utc-rfc3339",
+  publicRegistryReference: "hostile-public-registry-reference",
+  registrySemantics: "hostile-append-only-semantics",
+  redactionRules: "hostile-redaction-rules",
+  staleAfter: "2998-01-01T00:00:00.000Z",
+  expiresAt: "2999-01-01T00:00:00.000Z",
+  revokedAt: null,
+});
 
-/** Writes the forged record into a fresh throwaway root and proves its own forgery is COMPLETE
- *  by reading the bytes back. Identifier strings only — never a key, a signature or a secret. */
+const authorityBytes = (record: Record<string, unknown>): Uint8Array =>
+  new TextEncoder().encode(JSON.stringify(record));
+
+/** Writes only to a throwaway root, then proves the bytes are a complete production-valid form. */
 function forgeAuthorityRecord(tag: string): string {
   const file = join(hostileRoot(`confirmatory-${tag}`), "confirmatory-freeze-authority.json");
-  writeFileSync(file, JSON.stringify(Object.fromEntries(
-    CONFIRMATORY_AUTHORITY_FIELDS.map((field) => [field, `${tag}-${field}`]),
-  )), "utf8");
-  const parsed = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>;
-  const missing = CONFIRMATORY_AUTHORITY_FIELDS.filter((f) => typeof parsed[f] !== "string");
-  if (missing.length > 0) {
-    throw new Error(`forged confirmatory authority record is incomplete: ${missing.join(", ")}`);
-  }
+  writeFileSync(file, JSON.stringify(authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS")), "utf8");
+  const validation = validateConfirmatoryFreezeAuthorityRecord(readFileSync(file));
+  if (!validation.ok) throw new Error(`ambient authority fixture invalid: ${validation.code}`);
   return file;
 }
 
@@ -2570,6 +2584,32 @@ function pointEnvironmentAt(file: string, tag: string): () => void {
     }
   };
 }
+
+const CONFIRMATORY_MALFORMED_BYTES = new TextEncoder().encode("{");
+const CONFIRMATORY_FOREIGN_BYTES = authorityBytes(authorityRecord("FOREIGN_CORPUS"));
+const CONFIRMATORY_REVOKED_BYTES = authorityBytes({
+  ...authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS"),
+  revokedAt: "2026-08-23T01:00:00.000Z",
+});
+const CONFIRMATORY_EXPIRED_BYTES = authorityBytes({
+  ...authorityRecord("CONFIRMATORY_BENCHMARK_CORPUS"),
+  issuedAt: "1998-01-01T00:00:00.000Z",
+  staleAfter: "1999-01-01T00:00:00.000Z",
+  expiresAt: "2000-01-01T00:00:00.000Z",
+});
+
+const CONFIRMATORY_MALFORMED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_MALFORMED",
+);
+const CONFIRMATORY_FOREIGN = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_FOREIGN_SCOPE",
+);
+const CONFIRMATORY_REVOKED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_REVOKED",
+);
+const CONFIRMATORY_EXPIRED = confirmatoryExpectation(
+  "CONFIRMATORY_FREEZE_AUTHORITY_EXPIRED",
+);
 
 const confirmatoryFreezeAuthorityCases: readonly HostileCase[] = [
   before(
@@ -2639,6 +2679,40 @@ const confirmatoryFreezeAuthorityCases: readonly HostileCase[] = [
       await Promise.resolve();
       forgeAuthorityRecord("race-right");
       return readConfirmatoryFreezeAuthority();
+    },
+  ),
+  before(
+    CONFIRMATORY, "refuse malformed hostile bytes before a validation record can be built",
+    CONFIRMATORY_MALFORMED,
+    async () => validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_MALFORMED_BYTES),
+  ),
+  forged(
+    CONFIRMATORY, "refuse a form-valid foreign-scope record after strict decoding",
+    CONFIRMATORY_FOREIGN,
+    // The harness's integrity half re-runs the production check over the SAME forged bytes.
+    // It proves the form reached semantic validation and the exact fail-closed decision holds;
+    // no test helper reimplements the validator.
+    async () => {
+      const result = validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_FOREIGN_BYTES);
+      return {
+        ok: !result.ok
+          && result.authority === "NONE"
+          && result.code === "CONFIRMATORY_FREEZE_AUTHORITY_FOREIGN_SCOPE"
+          && result.layer === "CONFIRMATORY_FREEZE_AUTHORITY",
+      };
+    },
+    async () => validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_FOREIGN_BYTES),
+  ),
+  racingExactly(
+    CONFIRMATORY, "race revoked and expired authority records without admitting either",
+    CONFIRMATORY_REVOKED, CONFIRMATORY_EXPIRED,
+    async () => {
+      await Promise.resolve();
+      return validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_REVOKED_BYTES);
+    },
+    async () => {
+      await Promise.resolve();
+      return validateConfirmatoryFreezeAuthorityRecord(CONFIRMATORY_EXPIRED_BYTES);
     },
   ),
 ];

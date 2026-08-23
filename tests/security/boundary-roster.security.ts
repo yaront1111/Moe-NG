@@ -218,15 +218,17 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // Provider-run record projection: consumes the provider-run family, same subject as
   // PROVIDER_RUN_LEDGER_LAYERS (governor entry 2026-08-16, producer task-b937811e).
   { constant: "BENCHMARK_PROJECTION_LAYERS", file: "packages/benchmark/src/benchmark-projection-vocabulary.ts", axis: "runtime-provider" },
-  // The confirmatory-freeze custody/signing authority, withheld: its reader returns one
-  // unconditional refusal and has no granted arm at all. `integrity` by SUBJECT, and the
+  // The confirmatory-freeze custody/signing authority, still withheld: its zero-arity reader
+  // returns the no-record refusal on committed bytes, while a strict contract defines how a
+  // future human-installed record would be validated. `integrity` by SUBJECT, and the
   // directory sibling directly above is the reason this needs saying — BENCHMARK_PROJECTION_LAYERS
   // is runtime-provider because it CONSUMES the provider-run family, which this consumes
   // nothing of. This one names an AUTHORITY RECORD, so it sits with APPROVAL_AUTHORITY_LAYERS,
   // SESSION_AUTH_LAYERS and NODE_AUTHORITY_LAYERS (the last by the human REPL ruling
   // comment-2a7c5a33), and the integrity slice's own `admitted()` net already reads
   // `authority !== "NONE"` explicitly. Withholding ruling comment-b308bf89a6d24978a928eadc5bade7b1;
-  // producer and arms both task-22b69ee5.
+  // withholding producer/ambient arms task-22b69ee5; contract codes and validation arms
+  // task-3a10eb6b87ad4ff5b3dbc3a58f0f0631.
   { constant: "CONFIRMATORY_FREEZE_AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_REFUSAL_LAYERS", file: "packages/contracts/src/configuration/project-configuration-contract.ts", axis: "integrity" },
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
