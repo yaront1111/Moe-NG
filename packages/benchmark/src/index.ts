@@ -112,8 +112,8 @@ export {
   PINNED_BENCHMARK_SPEC_SHA256, PINNED_REBUILD_DESIGN_SHA256, collectBareScenarioTokens,
   collectFamilyDefinitions, collectFamilyUses, collectGateIdUses, collectHeadingNumbers,
   collectSectionPointers, expandFamilyRange, isPinnedSource, readPinnedSource,
-} from "./pre-freeze-spec-source.js";
-export type { LocatedToken, PinnedSource } from "./pre-freeze-spec-source.js";
+} from "./pre-freeze-source-reader.js";
+export type { LocatedToken, PinnedSource } from "./pre-freeze-source-reader.js";
 export {
   DEFAULT_PINNED_DOCUMENT_ROOT, PINNED_BENCHMARK_SPEC_RELATIVE_PATH,
   PINNED_DOCUMENT_ROOT_ENV, PINNED_REBUILD_DESIGN_RELATIVE_PATH, isPinnedDocument,
