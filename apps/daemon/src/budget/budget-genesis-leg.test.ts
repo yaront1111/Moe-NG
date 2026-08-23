@@ -12,8 +12,10 @@ import type { SqliteEventStore } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
 import type { ApprovedRunBinding } from "../planning/approval-run-binding.js";
-import { GENESIS_AMOUNTS, buildGenesisBudgetLeg } from "./budget-genesis-leg.js";
-import type { GenesisLegResult } from "./budget-genesis-leg.js";
+import {
+  GENESIS_AMOUNTS, buildGenesisBudgetLeg, resolveApprovalBudgetRoot,
+} from "./budget-genesis-leg.js";
+import type { ApprovalBudgetRoot, GenesisLegResult } from "./budget-genesis-leg.js";
 import { deriveBudgetAggregateId } from "./budget-ledger-contracts.js";
 import {
   BUDGET_ACCOUNT_REF,
@@ -56,6 +58,11 @@ function built(result: GenesisLegResult): Extract<GenesisLegResult, { ok: true }
 
 function refused(result: GenesisLegResult): Extract<GenesisLegResult, { ok: false }> {
   if (result.ok) throw new Error("expected a refusal, got a leg");
+  return result;
+}
+
+function refusedRoot(result: ApprovalBudgetRoot): Extract<ApprovalBudgetRoot, { ok: false }> {
+  if (result.ok) throw new Error(`expected a refusal, got a ${result.source} root`);
   return result;
 }
 
@@ -164,6 +171,66 @@ describe("buildGenesisBudgetLeg (task-1de7b81a)", () => {
       expect(result.layer).toBe("BUDGET_CURRENT_PROJECTION");
       expect(result.sourceCode).toBe("ACTIVE_GRAPH_BODY_UNAVAILABLE");
       expect(result.sourceLayer).toBe("ACTIVE_GRAPH_PROJECTION");
+    });
+  });
+
+  // THE CROSSOVER GATE, both sides of it. `resolveApprovalBudgetRoot` is the function the approve
+  // path actually calls, and it converts EXACTLY ONE refusal — BUDGET_LEDGER_ALREADY_AUTHORIZED —
+  // into a read of the durable root. Every other refusal must come back untouched. Nothing
+  // asserted that until now: widening the gate to admit every refusal left the whole daemon suite
+  // green (QA drill 2, comment-fee1c731), because the accept side was pinned and the refuse side
+  // was not.
+  it("forwards a NON-crossover refusal untouched instead of reading a root", () => {
+    withBudgetStore("resolve-corrupt-no-root", (store) => {
+      seedActiveGraphWithoutBody(store);
+
+      const result = resolveApprovalBudgetRoot(store, legInput());
+
+      // Unrestamped, all four fields: this is the binding reader's own answer, arriving through
+      // the approve path's entry point rather than through the leg builder next door.
+      expect(refusedRoot(result).code).toBe("BUDGET_PROJECTION_GRAPH_UNAVAILABLE");
+      expect(refusedRoot(result).layer).toBe("BUDGET_CURRENT_PROJECTION");
+      expect(refusedRoot(result).sourceCode).toBe("ACTIVE_GRAPH_BODY_UNAVAILABLE");
+      expect(refusedRoot(result).sourceLayer).toBe("ACTIVE_GRAPH_PROJECTION");
+      expect(refusedRoot(result).outcome).toBe("UNKNOWN");
+    });
+  });
+
+  it("REFUSES over an unreadable graph history even when a root is already durable", () => {
+    withBudgetStore("resolve-corrupt-with-root", (store) => {
+      // The root is committed through the production leg — real bytes, real digest — and the
+      // history is broken AFTERWARDS, which is the only order that reaches this state: a world
+      // whose graph is already unreadable cannot mint a root at all.
+      seedProjectAndGoal(store);
+      commitAsSecondaryLeg(store, built(buildGenesisBudgetLeg(store, legInput())));
+      seedActiveGraphWithoutBody(store);
+      expect(store.readEvents(AGGREGATE)).toHaveLength(1);
+
+      const result = resolveApprovalBudgetRoot(store, legInput("cmd-approve-2"));
+
+      // THE HAZARD THIS PINS: `readAuthorizedRootDigest` never consults the graph, so a gate that
+      // let this refusal cross over would answer `ok` with a digest — reporting an established
+      // budget authority over a durable history nobody can read.
+      expect(refusedRoot(result).code).toBe("BUDGET_PROJECTION_GRAPH_UNAVAILABLE");
+      expect(refusedRoot(result).sourceCode).toBe("ACTIVE_GRAPH_BODY_UNAVAILABLE");
+      expect("digest" in result).toBe(false);
+    });
+  });
+
+  it("crosses over on ALREADY_AUTHORIZED alone, answering EXISTING from the durable bytes", () => {
+    withBudgetStore("resolve-existing", (store) => {
+      seedProjectAndGoal(store);
+      const first = built(buildGenesisBudgetLeg(store, legInput()));
+      commitAsSecondaryLeg(store, first);
+
+      const result = resolveApprovalBudgetRoot(store, legInput("cmd-approve-2"));
+
+      // The positive side of the same gate: the once-only refusal is the ONE that becomes a read,
+      // and the digest it answers with is the committed root's own.
+      if (!result.ok) throw new Error(`expected a root, got ${result.code}`);
+      expect(result.source).toBe("EXISTING");
+      expect(result.digest).toBe(first.digest);
+      expect(store.readEvents(AGGREGATE)).toHaveLength(1);
     });
   });
 
