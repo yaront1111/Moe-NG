@@ -66,7 +66,8 @@ const VISUALS: Readonly<Record<TruthClass, CordumTruthVisual>> = Object.freeze({
     toneVar: "--cr-truth-human", borderStyle: "double", receiptLink: "decision",
   },
   UNKNOWN: {
-    glyph: "?", shortLabel: "UNK", name: "Unknown \u2014 no class supplied",
+    glyph: "?", shortLabel: "UNK",
+    name: "Unknown \u2014 evidence absent, corrupt, stale, or irreconcilable",
     toneVar: "--cr-truth-unknown", borderStyle: "dotted", receiptLink: "finding",
   },
 });

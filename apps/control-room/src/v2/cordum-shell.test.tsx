@@ -190,4 +190,12 @@ describe("SaysWho maps daemon truth classes to Cordum presentations (UI-1)", () 
     // A valid token keeps its class.
     expect(sayWho("HUMAN_APPROVED").truthClass).toBe("HUMAN_APPROVED");
   });
+
+  it("names UNKNOWN by the model's meaning, not a claim that no class was supplied", () => {
+    // The origin axis already reports absence; a daemon-supplied UNKNOWN class must not
+    // be described as if the payload had omitted it.
+    const shown = sayWho("UNKNOWN");
+    expect(shown.name).toBe("Unknown — evidence absent, corrupt, stale, or irreconcilable");
+    expect(shown.name).not.toContain("no class supplied");
+  });
 });
