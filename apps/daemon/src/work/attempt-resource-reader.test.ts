@@ -8,8 +8,8 @@ import {
 import type { AttemptResourceOutcome } from "./attempt-resource-authority-contracts.js";
 import { readAttemptResources } from "./attempt-resource-authority.js";
 import {
-  ACTIVATION_AGGREGATE, activatedWith, canonicalBytes, cleanRows, driftedBytes, duplicateRows,
-  plantResourceEvent, resourceBody, resourceRow,
+  ACTIVATION_AGGREGATE, canonicalBytes, cleanRows, driftedBytes, duplicateRows,
+  openUnactivatedResourceFixture, plantResourceEvent, resourceBody, resourceRow,
 } from "./attempt-resource-test-harness.js";
 import type { ResourceFixture } from "./attempt-resource-test-harness.js";
 
@@ -23,11 +23,18 @@ import type { ResourceFixture } from "./attempt-resource-test-harness.js";
  *
  * Every refusal asserts the code, the LAYER, and that authority is "NONE" — a
  * refusal that granted authority would satisfy a code-only assertion.
+ *
+ * THE HOST NEEDS NO ACTIVATION, and asserting that is part of the point.
+ * `readAttemptResources` reads the RESOURCE aggregate alone — it never consults
+ * `binding.activationAggregateId` beyond deriving that id — so hosting these
+ * cases on an activation was a precondition this reader never had. Every case
+ * below therefore runs on a bare store, and loses nothing: the planted evidence
+ * is the subject, and the reader is the only authority consulted.
  */
 
 afterEach(cleanupRestoreHarnesses);
 
-const hostFixture = (label: string): ResourceFixture => activatedWith(label, duplicateRows());
+const hostFixture = (label: string): ResourceFixture => openUnactivatedResourceFixture(label);
 
 function refusalOf(outcome: AttemptResourceOutcome): {
   authority: string; code: string; refusedBy: string;
@@ -43,7 +50,13 @@ const refused = (code: string) => ({
 const read = (fixture: ResourceFixture, projectId = PROJECT_ID): AttemptResourceOutcome =>
   readAttemptResources(fixture.store, ACTIVATION_AGGREGATE, projectId);
 
-/** One valid bind, planted so the tail cases have a legitimate head to follow. */
+/**
+ * A well-formed bind-shaped HEAD, planted directly into the durable store so the
+ * tail cases have something to follow. It is EVIDENCE, not an authorized bind:
+ * no admission path ran, nothing granted it, and a case may only ask what the
+ * READER makes of these bytes — never treat a green read here as proof that
+ * production could have written them.
+ */
 function plantedBind(
   label: string, overrides: Readonly<Record<string, unknown>> = {},
 ): ResourceFixture {

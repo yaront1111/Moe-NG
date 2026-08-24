@@ -1,78 +1,55 @@
 import { adapterConfirm, adapterFail, grantSuccessorCapacity } from "@moe/scheduler";
-import type { AcquisitionSet } from "@moe/scheduler";
-import type { SqliteEventStore, StoredEvent } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
+import { cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
 import {
-  ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE, DAEMON_ATTEMPT_RESOURCE,
-  SCHEDULER_RESOURCE_AUTHORITY, deriveAttemptResourceAggregateId,
+  DAEMON_ATTEMPT_RESOURCE, deriveAttemptResourceAggregateId,
 } from "./attempt-resource-authority-contracts.js";
 import type {
-  AttemptResourceMember, AttemptResourceOutcome, AttemptResourceReport,
+  AttemptResourceOutcome, AttemptResourceReport,
 } from "./attempt-resource-authority-contracts.js";
+import { applyAttemptResourceReport } from "./attempt-resource-authority.js";
 import {
-  applyAttemptResourceReport, bindAttemptResources, readAttemptResources,
-} from "./attempt-resource-authority.js";
-import {
-  ACTIVATION_AGGREGATE, activatedWith, canonicalBytes, duplicateRows, failableRows,
-  plantResourceEvent, resourceBody, resourceRow,
+  ACTIVATION_AGGREGATE, failableRows, openUnactivatedResourceFixture,
 } from "./attempt-resource-test-harness.js";
 import type { ResourceFixture } from "./attempt-resource-test-harness.js";
 
 /**
- * The TRANSITION arm.
+ * The TRANSITION arm, over a store holding NO ACTIVATION.
  *
- * NO EXPECTED STATE IN THIS FILE IS HAND-WRITTEN. Each case computes what it
- * expects by running the SAME public reducer over the SAME durable members and
- * comparing against those returned rows, because a test whose both operands are
- * hand-written string literals is a tautology: it would stay green if the applier
- * re-derived the states itself, which is exactly the defect the epic forbids.
+ * `applyAttemptResourceReport` reads the activation through `durableActivation` before it
+ * measures a horizon, projects a record or consults a reducer. While policy cannot
+ * authoritatively ALLOW, production cannot mint a committed activation and no honest route
+ * reaches a bound set from a test; governor ruling comment-937524c83a1945a5afae3ed8ac2405b9
+ * forbids manufacturing one "by any name" and directs a suite in this position to change
+ * WHAT it asserts. So what is asserted here is the reachable claim: every report shape —
+ * well formed or hostile — is refused on the ACTIVATION, with the exact code, the exact
+ * layer and the reader's own upstream code, and nothing durable is written.
  *
- * Every reducer comparison is guarded against being vacuous: `statesOf` results
- * are checked to contain MORE THAN ONE distinct state before being compared, so
- * a reducer that collapsed the whole set to one value could not satisfy the
- * assertion by accident.
+ * THE UNIFORM ANSWER IS DISCRIMINATED, not assumed. Every generated report is also pushed
+ * through the very reducers `reduceReport` would dispatch it to — `adapterConfirm`,
+ * `adapterFail`, `grantSuccessorCapacity` — over a store-free admitted set, and those
+ * answers are required to differ across the matrix. An applier that reduced before reading
+ * the activation could not answer every case with one triple.
+ *
+ * RETIRED WITH THIS MIGRATION, each needing a bind that lands: the RELEASED-versus-
+ * QUARANTINED preservation cases, the aggregate-order fold, the five transcribed scheduler
+ * refusal arms, the accepted-no-op suppression pair, and BOTH moved-read-horizon guards
+ * (including the discriminating no-op variant qa-fc9c6bbd added on task-7eceb55b). The
+ * horizon and no-op-suppression guards are daemon-local and have NO surviving owner; they
+ * are recorded as an open gap in this row's reconciliation comment. The pure reducer
+ * semantics are covered by packages/scheduler/src/authority/lease-resource.test.ts.
  */
 
 afterEach(cleanupRestoreHarnesses);
 
 const RESOURCE_AGGREGATE = deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE);
 
-/** Bound over `failableRows`, hosted on an activation whose own bind cannot land
- *  so this suite's first write is always the bind under test. */
-function bound(label: string): ResourceFixture {
-  const fixture = activatedWith(label, duplicateRows());
-  const outcome = bindAttemptResources(fixture.store, fixture.binding, failableRows());
-  if (!outcome.ok) throw new Error(`bind refused: ${outcome.code}`);
-  return fixture;
-}
-
-const membersOf = (outcome: AttemptResourceOutcome): readonly AttemptResourceMember[] => {
-  if (!outcome.ok) throw new Error(`expected a bound set, refused with ${outcome.code}`);
-  return outcome.members;
-};
-
-const statesOf = (
-  rows: readonly { readonly resourceId: string; readonly state: string }[],
-): Record<string, string> =>
-  Object.fromEntries(rows.map((row) => [row.resourceId, row.state]));
-
-/** The reducer's OWN answer over the same durable members. */
-function reduced(
-  members: readonly AttemptResourceMember[], run: (rows: readonly unknown[]) => unknown,
-): AcquisitionSet {
-  const outcome = run(members.map((member) => ({ ...member }))) as
-    { ok: boolean; value: AcquisitionSet };
-  if (!outcome.ok) throw new Error("the reducer refused the control run");
-  return outcome.value;
-}
-
-const read = (fixture: ResourceFixture): AttemptResourceOutcome =>
-  readAttemptResources(fixture.store, ACTIVATION_AGGREGATE, PROJECT_ID);
-
-const apply = (fixture: ResourceFixture, report: AttemptResourceReport): AttemptResourceOutcome =>
-  applyAttemptResourceReport(fixture.store, fixture.binding, report);
+/** The exact triple every report owes while the activation aggregate is empty. */
+const ACTIVATION_ABSENT = Object.freeze({
+  authority: "NONE", code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE",
+  refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "FOUNDATION_BINDING_NOT_FOUND",
+});
 
 function refusalOf(outcome: AttemptResourceOutcome): {
   authority: string; code: string; refusedBy: string; upstreamCode: string | null;
@@ -84,179 +61,128 @@ function refusalOf(outcome: AttemptResourceOutcome): {
   };
 }
 
+const apply = (fixture: ResourceFixture, report: AttemptResourceReport): AttemptResourceOutcome =>
+  applyAttemptResourceReport(fixture.store, fixture.binding, report);
+
 const FAIL_RES_1: AttemptResourceReport = Object.freeze({
   disposition: "FAILED", epoch: 1, kind: "FAIL", resourceId: "res-1",
 });
 
-describe("attempt resource transitions — the reducer decides, this module records", () => {
-  it("preserves RELEASED versus QUARANTINED exactly as adapterFail returned them", () => {
-    const fixture = bound("fail");
-    const before = membersOf(read(fixture));
-    const control = reduced(before, (rows) => adapterFail(rows, "res-1", 1, "FAILED"));
-    const expected = statesOf(control.rows);
-    // NOT VACUOUS: the control genuinely splits the set, so a comparison against
-    // it can fail. A reducer that collapsed everything to one state would trip
-    // here rather than making the next assertion trivially true.
-    expect(new Set(Object.values(expected)).size).toBeGreaterThan(1);
-    const applied = apply(fixture, FAIL_RES_1);
-    expect(statesOf(membersOf(applied))).toEqual(expected);
-    // All three members survive the hold; none is dropped and none is invented.
-    expect(membersOf(applied).map((member) => member.resourceId))
-      .toEqual(["res-1", "res-2", "res-3"]);
-    expect(membersOf(read(fixture))).toEqual(membersOf(applied));
-  });
+interface ReportCase { readonly label: string; readonly report: AttemptResourceReport }
 
-  it("keeps a QUARANTINED member in the answer, granting it no terminal authority", () => {
-    const fixture = bound("quarantine-visible");
-    const before = membersOf(read(fixture));
-    const control = reduced(before, (rows) => adapterFail(rows, "res-1", 1, "FAILED"));
-    const applied = apply(fixture, FAIL_RES_1);
-    // res-2 cannot be fenced, so a SIBLING's failure must not release it — and
-    // what it becomes is read off the reducer's own row, never written here.
-    expect(statesOf(membersOf(applied))["res-2"]).toBe(statesOf(control.rows)["res-2"]);
-    expect(statesOf(control.rows)["res-2"]).not.toBe(statesOf(control.rows)["res-1"]);
-    if (!applied.ok) throw new Error("expected a bound set");
-    // The answer exposes no terminality: classifying that is the consumer's job,
-    // and a second definition inside durable bytes would drift silently.
-    expect(Object.keys(applied).sort()).toEqual([
-      "attemptRef", "authority", "digest", "effectIntentRef", "members", "ok", "projectId",
-    ]);
-    expect(applied.authority).toBe("DURABLE_RESOURCE_SET");
-  });
-
-  it("returns every nonterminal ACTIVE member when a grant changes nothing", () => {
-    const fixture = bound("grant-noop");
-    const before = membersOf(read(fixture));
-    const control = reduced(before, (rows) => grantSuccessorCapacity(rows, "proof-ref-1"));
-    const applied = apply(fixture, { kind: "GRANT", proofRef: "proof-ref-1" });
-    expect(statesOf(membersOf(applied))).toEqual(statesOf(control.rows));
-    // Nothing was QUARANTINED, so the reducer returned the set untouched and
-    // every member is still the nonterminal ACTIVE it was bound as.
-    expect(new Set(Object.values(statesOf(control.rows)))).toEqual(new Set(["ACTIVE"]));
-    expect(membersOf(applied)).toHaveLength(3);
-  });
-
-  it("clears a quarantine only through the reducer that is allowed to clear it", () => {
-    const fixture = bound("grant-clear");
-    const held = membersOf(apply(fixture, FAIL_RES_1));
-    const control = reduced(held, (rows) => grantSuccessorCapacity(rows, "proof-ref-2"));
-    const cleared = apply(fixture, { kind: "GRANT", proofRef: "proof-ref-2" });
-    expect(statesOf(membersOf(cleared))).toEqual(statesOf(control.rows));
-    // The state genuinely moved, so this is not comparing a set against itself.
-    expect(statesOf(held)["res-2"]).not.toBe(statesOf(control.rows)["res-2"]);
-  });
-});
-
-describe("attempt resource transitions — order is the aggregate's, and it matters", () => {
-  it("folds two transitions in aggregateSequence order, the later one winning", () => {
-    const fixture = bound("ordering");
-    const first = membersOf(apply(fixture, FAIL_RES_1));
-    const second = membersOf(apply(fixture, { kind: "GRANT", proofRef: "proof-ref-3" }));
-    // THE ORDERING ASSERTION IS NOT VACUOUS: res-2's state differs between the
-    // two transitions, so a reversed fold would give a DIFFERENT answer.
-    expect(statesOf(first)["res-2"]).not.toBe(statesOf(second)["res-2"]);
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(3);
-    expect(statesOf(membersOf(read(fixture)))).toEqual(statesOf(second));
-    expect(statesOf(membersOf(read(fixture)))).not.toEqual(statesOf(first));
-  });
-});
-
-describe("attempt resource transitions — a refused report writes nothing", () => {
-  const cases: readonly {
-    readonly label: string; readonly report: AttemptResourceReport;
-    readonly refusedBy: string; readonly code: string; readonly upstreamCode: string | null;
-  }[] = [
+/**
+ * GENERATED, and the count is asserted before any outcome is: a matrix that lost
+ * its entries would produce zero cases and pass while asserting nothing.
+ */
+function reportCases(): readonly ReportCase[] {
+  const cases: ReportCase[] = [
+    { label: "confirm", report: { epoch: 1, kind: "CONFIRM", resourceId: "res-1" } },
+    { label: "confirm:stale-epoch", report: { epoch: 9, kind: "CONFIRM", resourceId: "res-1" } },
+    { label: "fail:released", report: FAIL_RES_1 },
     {
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", label: "a confirmation for a non-external resource",
-      refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      report: { epoch: 1, kind: "CONFIRM", resourceId: "res-1" },
-      upstreamCode: "AUTHORITY_STALE_LEASE",
+      label: "fail:unknown",
+      report: { disposition: "UNKNOWN", epoch: 1, kind: "FAIL", resourceId: "res-2" },
     },
-    {
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", label: "a stale acquisition epoch",
-      refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      report: { disposition: "FAILED", epoch: 9, kind: "FAIL", resourceId: "res-1" },
-      upstreamCode: "AUTHORITY_STALE_EPOCH",
-    },
-    {
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", label: "a disposition outside FAILED or UNKNOWN",
-      refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      report: { disposition: "PROBABLY_FINE", epoch: 1, kind: "FAIL", resourceId: "res-1" },
-      upstreamCode: "AUTHORITY_MALFORMED_INPUT",
-    },
-    {
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", label: "a resource outside this acquisition set",
-      refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      report: { disposition: "FAILED", epoch: 1, kind: "FAIL", resourceId: "res-elsewhere" },
-      upstreamCode: "AUTHORITY_STALE_LEASE",
-    },
-    {
-      code: "ATTEMPT_RESOURCE_SET_REFUSED", label: "a grant with no proof over a held set",
-      refusedBy: SCHEDULER_RESOURCE_AUTHORITY,
-      report: { kind: "GRANT", proofRef: "" },
-      upstreamCode: "AUTHORITY_STALE_LEASE",
-    },
+    { label: "grant:proven", report: { kind: "GRANT", proofRef: "proof-ref-1" } },
+    { label: "grant:no-proof", report: { kind: "GRANT", proofRef: "" } },
   ];
-
-  // THE SWEPT CASE COUNT, pinned: a table that lost its entries would generate
-  // zero cases and this describe block would pass while asserting nothing.
-  it("sweeps every transcribed refusal case", () => {
-    expect(cases).toHaveLength(5);
-  });
-
-  for (const testCase of cases) {
-    it(`refuses ${testCase.label} and appends no event`, () => {
-      const fixture = bound(`refuse-${testCase.upstreamCode}-${testCase.report.kind}`);
-      // The grant-without-proof case needs a quarantine in front of it, since a
-      // set with nothing quarantined is settled without consulting the proof.
-      if (testCase.report.kind === "GRANT") apply(fixture, FAIL_RES_1);
-      const before = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
-      const digest = read(fixture);
-      expect(refusalOf(apply(fixture, testCase.report))).toEqual({
-        authority: "NONE", code: testCase.code, refusedBy: testCase.refusedBy,
-        upstreamCode: testCase.upstreamCode,
-      });
-      expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(before);
-      expect(read(fixture)).toEqual(digest);
+  for (const disposition of ["PROBABLY_FINE", "", "FAILED"]) {
+    cases.push({
+      label: `fail:disposition:${JSON.stringify(disposition)}`,
+      report: { disposition, epoch: 1, kind: "FAIL", resourceId: "res-1" },
     });
   }
-
-  it("propagates the reader's own ABSENT when nothing was ever bound", () => {
-    const fixture = activatedWith("apply-absent", duplicateRows());
-    expect(refusalOf(apply(fixture, FAIL_RES_1))).toEqual({
-      authority: "NONE", code: "ATTEMPT_RESOURCE_RECORD_ABSENT",
-      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: null,
+  for (const epoch of [0, 9, -1, Number.NaN]) {
+    cases.push({
+      label: `fail:epoch:${String(epoch)}`,
+      report: { disposition: "FAILED", epoch, kind: "FAIL", resourceId: "res-1" },
     });
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(0);
-  });
-
-  it("refuses a report whose activation names a foreign project", () => {
-    const fixture = bound("apply-foreign");
-    const before = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
-    const binding = { ...fixture.binding, projectId: "project-foreign" };
-    expect(refusalOf(applyAttemptResourceReport(fixture.store, binding, FAIL_RES_1))).toEqual({
-      authority: "NONE", code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE",
-      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "FOUNDATION_BINDING_PROJECT_MISMATCH",
+  }
+  for (const resourceId of ["res-elsewhere", "", "res-3"]) {
+    cases.push({
+      label: `fail:resource:${JSON.stringify(resourceId)}`,
+      report: { disposition: "FAILED", epoch: 1, kind: "FAIL", resourceId },
     });
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(before);
-  });
-
-  it("ignores extra row, state and set fields smuggled onto a report", () => {
-    const clean = bound("no-caller-rows-clean");
-    const hostile = bound("no-caller-rows-hostile");
-    // Production must answer identically: the report says WHICH resource and WHAT
-    // the adapter said, and there is no channel for a caller to name the result.
-    // Asserting the report's own key set instead would only test the fixture.
-    const smuggled = {
+  }
+  // A report carrying fields production has no channel for. There is no way for a
+  // caller to name the resulting states, and the answer must not vary with them.
+  cases.push({
+    label: "fail:smuggled-set",
+    report: {
       ...FAIL_RES_1, members: [{ resourceId: "res-1", state: "RELEASED" }],
       rows: [{ resourceId: "res-2", state: "RELEASED" }], state: "RELEASED",
-    } as unknown as AttemptResourceReport;
-    expect(statesOf(membersOf(apply(hostile, smuggled))))
-      .toEqual(statesOf(membersOf(apply(clean, FAIL_RES_1))));
+    } as unknown as AttemptResourceReport,
+  });
+  return cases;
+}
+
+const REQUIRED_REPORT_LABELS: readonly string[] = [
+  "confirm", "fail:released", "fail:unknown", "grant:proven", "grant:no-proof",
+  "fail:disposition:\"PROBABLY_FINE\"", "fail:epoch:9", "fail:epoch:NaN",
+  "fail:resource:\"res-elsewhere\"", "fail:smuggled-set",
+];
+
+/** A reducer-admitted member list built with NO store at all, so the dispatch
+ *  below exercises the same three public reducers `reduceReport` would call. */
+function admittedMembers(): readonly unknown[] {
+  const outcome = grantSuccessorCapacity(failableRows(), null);
+  if (!outcome.ok) throw new Error("the reducer refused the control set");
+  return outcome.value.rows.map((row) => ({ ...row }));
+}
+
+/** What the SCHEDULER answers for this report over that set: "ACCEPTED", its own
+ *  refusal code, or `null` when it throws rather than returning. */
+function reducerAnswer(report: AttemptResourceReport): string | null {
+  const members = admittedMembers();
+  let outcome: ReturnType<typeof grantSuccessorCapacity>;
+  try {
+    if (report.kind === "CONFIRM") {
+      outcome = adapterConfirm(members, report.resourceId, report.epoch);
+    } else if (report.kind === "FAIL") {
+      outcome = adapterFail(members, report.resourceId, report.epoch, report.disposition);
+    } else {
+      outcome = grantSuccessorCapacity(members, report.proofRef);
+    }
+  } catch { return null; }
+  return outcome.ok ? "ACCEPTED" : outcome.issues[0]?.code ?? "REFUSED";
+}
+
+describe("attempt resource transitions — the report matrix is generated and discriminating", () => {
+  it("emits uniquely labelled cases the reducers do NOT answer uniformly", () => {
+    const cases = reportCases();
+    const labels = cases.map((testCase) => testCase.label);
+    expect(cases.length).toBeGreaterThanOrEqual(16);
+    expect(new Set(labels).size).toBe(cases.length);
+    expect(REQUIRED_REPORT_LABELS.filter((label) => !labels.includes(label))).toEqual([]);
+    // All three report kinds are represented, so no dispatch branch is unswept.
+    expect(new Set(cases.map((testCase) => testCase.report.kind)))
+      .toEqual(new Set(["CONFIRM", "FAIL", "GRANT"]));
+    // THE DISCRIMINATOR. Over one admitted set these reports genuinely diverge at
+    // the layer that reads them, so the single triple asserted below can only be
+    // the activation gate speaking first.
+    const answers = cases.map((testCase) => reducerAnswer(testCase.report));
+    expect(new Set(answers).size).toBeGreaterThan(2);
+    expect(answers).toContain("ACCEPTED");
   });
 
-  it("refuses a report against an unreadable store rather than crashing", () => {
-    const fixture = bound("apply-unreadable");
+  for (const testCase of reportCases()) {
+    it(`refuses ${testCase.label} on the activation and appends no event`, () => {
+      const fixture = openUnactivatedResourceFixture(`apply-${testCase.label}`);
+      const outcome = apply(fixture, testCase.report);
+      expect([testCase.label, refusalOf(outcome)]).toEqual([testCase.label, ACTIVATION_ABSENT]);
+      expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(0);
+      // Store-wide, so a report cannot have written to some other aggregate.
+      expect(fixture.store.readEventHorizon()).toBe(0n);
+    });
+  }
+});
+
+describe("attempt resource transitions — the activation read is not a generic failure", () => {
+  it("reports the STORE's own failure as a null upstream, not as a missing binding", () => {
+    // A REAL store failure, not a mock: a closed handle throws before any reader is
+    // consulted, so there is no upstream code to preserve. Folding this into
+    // FOUNDATION_BINDING_NOT_FOUND would report a broken store as an absent activation.
+    const fixture = openUnactivatedResourceFixture("apply-unreadable");
     fixture.store.close();
     expect(refusalOf(apply(fixture, FAIL_RES_1))).toEqual({
       authority: "NONE", code: "ATTEMPT_RESOURCE_ACTIVATION_UNREADABLE",
@@ -264,198 +190,28 @@ describe("attempt resource transitions — a refused report writes nothing", () 
     });
   });
 
-  it("cannot reach an ACCEPTED confirmation, and says so instead of faking one", () => {
-    // AN HONEST STRUCTURAL LIMIT, asserted rather than glossed over. A bind
-    // requires every member ACTIVE, and no public reducer maps an ACTIVE set back
-    // to PENDING_ACQUIRE (`adapterFail` yields RELEASED/QUARANTINED,
-    // `grantSuccessorCapacity` yields RELEASED). `adapterConfirm` accepts ONLY an
-    // external PENDING_ACQUIRE row, so over any set this module can bind it must
-    // refuse. The CONFIRM arm therefore has no accepted-path coverage here, and
-    // this case pins WHY so a reader cannot mistake it for one.
-    const fixture = bound("confirm-unreachable");
-    const before = membersOf(read(fixture));
-    const held = membersOf(apply(fixture, FAIL_RES_1));
-    for (const members of [before, held]) {
-      const control = adapterConfirm(members.map((member) => ({ ...member })), "res-1", 1);
-      expect(control.ok).toBe(false);
-      expect(members.every((member) => member.state !== "PENDING_ACQUIRE")).toBe(true);
-    }
-    expect(refusalOf(apply(fixture, { epoch: 1, kind: "CONFIRM", resourceId: "res-1" })))
-      .toEqual({
-        authority: "NONE", code: "ATTEMPT_RESOURCE_SET_REFUSED",
-        refusedBy: SCHEDULER_RESOURCE_AUTHORITY, upstreamCode: "AUTHORITY_STALE_LEASE",
-      });
-  });
-});
-
-/**
- * AN ACCEPTED REPORT THAT MOVES NOTHING MUST WRITE NOTHING.
- *
- * `grantSuccessorCapacity` ACCEPTS a set with no quarantine and returns it
- * unchanged, so an operator-proven release replayed over an already-cleared set
- * is a successful no-op at the reducer. Committing that result would append a
- * transition event carrying the states the record already holds — durable noise
- * that makes an idempotent GRANT look like a movement, and that grows the
- * aggregate once per retry.
- *
- * The pairing is the whole point: the zero-event arm below is only meaningful
- * beside the one-event arm, which proves the suppression is a COMPARISON and not
- * a GRANT-shaped write being dropped.
- */
-describe("attempt resource transitions — an accepted no-op appends nothing", () => {
-  it("appends no event for a GRANT the reducer accepts without moving a member", () => {
-    const fixture = bound("grant-noop-zero-event");
-    const before = read(fixture);
-    const beforeCount = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
-    // NOT A REFUSAL ARM: the reducer's own control ACCEPTS this report and
-    // returns the same states, so what is being asserted is suppression of an
-    // accepted write, not the absence of a refused one.
-    const control = reduced(membersOf(before), (rows) =>
-      grantSuccessorCapacity(rows, "proof-noop"));
-    expect(statesOf(control.rows)).toEqual(statesOf(membersOf(before)));
-
-    const applied = apply(fixture, { kind: "GRANT", proofRef: "proof-noop" });
-
-    expect(applied.ok).toBe(true);
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(beforeCount);
-    // The SAME strict projection, digest included — not a re-derived look-alike.
-    expect(applied).toEqual(before);
+  it("answers absence before the project fence, and says so rather than implying one", () => {
+    // AN HONEST STRUCTURAL LIMIT. `tracedProject` refuses a foreign project, but it
+    // is only reached once the aggregate holds an event, so over an empty aggregate
+    // FOUNDATION_BINDING_PROJECT_MISMATCH is unreachable and the answer is absence.
+    // Pinned so a reader cannot mistake this case for foreign-project coverage.
+    const fixture = openUnactivatedResourceFixture("apply-foreign");
+    const binding = { ...fixture.binding, projectId: "project-foreign" };
+    expect(refusalOf(applyAttemptResourceReport(fixture.store, binding, FAIL_RES_1)))
+      .toEqual(ACTIVATION_ABSENT);
+    expect(fixture.store.readEventHorizon()).toBe(0n);
   });
 
-  it("appends exactly one event for a GRANT that really clears a quarantine", () => {
-    const fixture = bound("grant-moves-one-event");
-    const held = membersOf(apply(fixture, FAIL_RES_1));
-    const before = read(fixture);
-    const beforeCount = fixture.store.readEvents(RESOURCE_AGGREGATE).length;
-
-    const cleared = apply(fixture, { kind: "GRANT", proofRef: "proof-moves" });
-
-    // The movement is REAL, so the suppression above cannot be what answered here.
-    expect(statesOf(membersOf(cleared))["res-2"]).not.toBe(statesOf(held)["res-2"]);
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(beforeCount + 1);
-    expect(cleared).not.toEqual(before);
-  });
-});
-
-/**
- * A STABLE READ HORIZON, or no write at all.
- *
- * The projection this module reduces is read from the resource aggregate, and the
- * append that follows expects a head measured around it. A concurrent writer that
- * lands BETWEEN those two reads would make the reducer's answer describe a set
- * that no longer exists, and the no-op comparison above would compare against a
- * superseded projection. The head is therefore captured before the read and
- * verified after it, and a move refuses rather than writing.
- */
-describe("attempt resource transitions — a moved read horizon writes nothing", () => {
-  /** The REAL file-backed store, with one concurrent append interleaved between
-   *  the horizon capture and the strict projection. Every other method is the
-   *  store's own, bound to the store, so nothing here reimplements persistence. */
-  function interleaved(store: SqliteEventStore, onFirstResourceRead: () => void): SqliteEventStore {
-    let seen = 0;
-    return new Proxy(store, {
-      get(target, property): unknown {
-        if (property === "readEvents") {
-          return (aggregateId: string): readonly StoredEvent[] => {
-            const events = target.readEvents(aggregateId);
-            if (aggregateId === RESOURCE_AGGREGATE) {
-              seen += 1;
-              if (seen === 1) onFirstResourceRead();
-            }
-            return events;
-          };
-        }
-        const value = Reflect.get(target, property, target) as unknown;
-        return typeof value === "function" ? value.bind(target) : value;
-      },
-    });
-  }
-
-  it("refuses when the resource head moves across the read, and appends nothing", () => {
-    const fixture = bound("horizon-moved");
-    // POSITIVE CONTROL on a twin fixture: the very same report is ACCEPTED when
-    // no writer interleaves, so the refusal below is the horizon and not the report.
-    const twin = bound("horizon-stable");
-    expect(apply(twin, FAIL_RES_1).ok).toBe(true);
-
-    let planted = false;
-    const store = interleaved(fixture.store, () => {
-      if (planted) return;
-      planted = true;
-      plantResourceEvent(
-        fixture.store, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
-        canonicalBytes(resourceBody({
-          members: [resourceRow("res-1"), resourceRow("res-2"), resourceRow("res-3")],
-        })), 1, "horizon-moved");
-    });
-
-    const answered = applyAttemptResourceReport(store, fixture.binding, FAIL_RES_1);
-
-    expect(planted).toBe(true);
-    expect(refusalOf(answered)).toEqual({
-      authority: "NONE", code: "ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE",
-      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "EXPECTED_VERSION_CONFLICT",
-    });
-    // The bind plus the interleaved plant, and nothing this report wrote.
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(2);
-    // The concurrent writer's states survive: the refused report moved no member.
-    expect(statesOf(membersOf(read(fixture)))).toEqual({
-      "res-1": "ACTIVE", "res-2": "ACTIVE", "res-3": "ACTIVE",
-    });
-  });
-
-  /**
-   * THE DISCRIMINATING VARIANT, and the reason the arm above is not enough.
-   *
-   * With a MOVING report the post-read horizon check and the expected-version
-   * commit fence answer identically - same code, same refusing layer, same
-   * upstream code - so deleting the check leaves the arm above green and the
-   * guard unverified. Reported by qa-fc9c6bbd on task-7eceb55b.
-   *
-   * An accepted NO-OP separates them, because the two layers are on opposite
-   * sides of the suppression. A GRANT over a set holding no QUARANTINED member
-   * reduces to the same states, so `before === after` returns the projection as
-   * OK and the commit fence is never reached. Only the post-read horizon check
-   * can refuse this call, which is exactly what makes its deletion visible.
-   */
-  it("refuses a moved horizon even when the report itself is an accepted no-op", () => {
-    const fixture = bound("horizon-moved-noop");
-    const report: AttemptResourceReport = { kind: "GRANT", proofRef: "proof-horizon-noop" };
-
-    // TWO POSITIVE CONTROLS on a twin, both needed. The first proves the report
-    // is ACCEPTED with no writer interleaved, so the refusal below is the
-    // horizon. The second proves it is a genuine NO-OP - it appends nothing -
-    // so this call really does bypass the commit fence rather than merely
-    // happening to pass it.
-    const twin = bound("horizon-stable-noop");
-    const twinCount = twin.store.readEvents(
-      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE)).length;
-    expect(apply(twin, report).ok).toBe(true);
-    expect(twin.store.readEvents(
-      deriveAttemptResourceAggregateId(ACTIVATION_AGGREGATE))).toHaveLength(twinCount);
-
-    let planted = false;
-    const store = interleaved(fixture.store, () => {
-      if (planted) return;
-      planted = true;
-      plantResourceEvent(
-        fixture.store, ATTEMPT_RESOURCE_TRANSITION_EVENT_TYPE,
-        canonicalBytes(resourceBody({
-          members: [resourceRow("res-1"), resourceRow("res-2"), resourceRow("res-3")],
-        })), 1, "horizon-moved-noop");
-    });
-
-    const answered = applyAttemptResourceReport(store, fixture.binding, report);
-
-    expect(planted).toBe(true);
-    expect(refusalOf(answered)).toEqual({
-      authority: "NONE", code: "ATTEMPT_RESOURCE_COMMIT_UNAVAILABLE",
-      refusedBy: DAEMON_ATTEMPT_RESOURCE, upstreamCode: "EXPECTED_VERSION_CONFLICT",
-    });
-    // The bind plus the interleaved plant, and nothing this report wrote.
-    expect(fixture.store.readEvents(RESOURCE_AGGREGATE)).toHaveLength(2);
-    expect(statesOf(membersOf(read(fixture)))).toEqual({
-      "res-1": "ACTIVE", "res-2": "ACTIVE", "res-3": "ACTIVE",
-    });
+  it("gives a smuggled report the SAME answer as its clean twin", () => {
+    // The two reports are genuinely different objects — asserted, so this is not
+    // comparing a value against itself — and production still has no channel by
+    // which a caller can name a resulting state.
+    const smuggled = reportCases().find((testCase) => testCase.label === "fail:smuggled-set");
+    if (smuggled === undefined) throw new Error("the smuggled report case was not generated");
+    expect(Object.keys(smuggled.report).sort()).not.toEqual(Object.keys(FAIL_RES_1).sort());
+    const hostile = openUnactivatedResourceFixture("smuggled-hostile");
+    const clean = openUnactivatedResourceFixture("smuggled-clean");
+    expect(refusalOf(apply(hostile, smuggled.report))).toEqual(refusalOf(apply(clean, FAIL_RES_1)));
+    expect(hostile.store.readEventHorizon()).toBe(0n);
   });
 });
