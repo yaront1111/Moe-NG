@@ -1,168 +1,158 @@
-/**
- * The pin resolver's own suite.
- *
- * Every refusal here asserts the STABLE CODE, never "it threw" -- a bare
- * throw-assertion would stay green if a second guard started answering first.
- * The last describe block drives the PRODUCTION surface (real environment, real
- * committed receipt) rather than the injected-input function, because a suite
- * that only ever drives the pure resolver proves nothing about what production
- * actually feeds it.
- */
-import { readFileSync } from "node:fs";
+/** Current checkout authority. Historical receipts have a separate module. */
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import {
-  PORTABILITY_SOURCE_COMMIT, SOURCE_COMMIT_CODES, SOURCE_COMMIT_ENV, SOURCE_COMMIT_PIN_FILE,
-  readPinBytes, readPortabilitySourceCommit, resolvePortabilitySourceCommit, resolveSourceCommit,
+  PORTABILITY_SOURCE_COMMIT, SOURCE_COMMIT_CODES, SOURCE_COMMIT_ENV,
+  SOURCE_COMMIT_EVIDENCE_ENV, SOURCE_COMMIT_GIT_ENV, observeCheckoutCommit,
+  readPortabilitySourceCommit, resolvePortabilitySourceCommit, resolveSourceCommit,
 } from "./portability-source-commit.js";
 
 const SHA_A = "a1f71a43c71cd03367a90baf52d99d814042dbe7";
 const SHA_B = "d543f71ea380d46a3f801178b4821c4bc0abe9b7";
-/** An UNSEALED receipt: no external run has been accepted at this commit yet. */
-const pin = (sourceCommit: unknown): string => JSON.stringify({ externalRun: null, sourceCommit });
-/** A SEALED receipt: exact-sha-evidence-gate.mjs accepted a push run here. */
-const sealedPin = (sourceCommit: unknown): string =>
-  JSON.stringify({ externalRun: { runId: 32312669884 }, sourceCommit });
+const HISTORICAL_BYTES = JSON.stringify({ sourceCommit: SHA_A });
 
-describe("portability source-commit resolution — acceptance", () => {
-  it("binds from the pin receipt alone and names PIN", () => {
-    const outcome = resolveSourceCommit({ env: undefined, pinBytes: pin(SHA_A) });
-    expect(outcome).toEqual({ boundBy: "PIN", ok: true, sourceCommit: SHA_A });
+const CURRENT_RUN_CASES = Object.freeze([
+  {
+    actualCheckoutCommit: SHA_A,
+    declaredCommit: undefined,
+    event: "branch checkout without an external declaration",
+    expected: { boundBy: "CHECKOUT", ok: true, sourceCommit: SHA_A },
+  },
+  {
+    actualCheckoutCommit: SHA_A,
+    declaredCommit: SHA_A,
+    event: "pull-request head checkout whose declaration agrees",
+    expected: { boundBy: "CHECKOUT", ok: true, sourceCommit: SHA_A },
+  },
+  {
+    actualCheckoutCommit: SHA_B,
+    declaredCommit: SHA_A,
+    event: "synthetic merge checkout mislabeled as the pull-request head",
+    expected: {
+      code: "PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH",
+      layer: "PORTABILITY_EVIDENCE",
+      ok: false,
+    },
+  },
+] as const);
+
+const SPECIAL_INDEX_FLAG_CASES = Object.freeze([
+  {
+    clear: "--no-assume-unchanged",
+    mutation: "assume-unchanged mutation\n",
+    set: "--assume-unchanged",
+  },
+  {
+    clear: "--no-skip-worktree",
+    mutation: "skip-worktree mutation\n",
+    set: "--skip-worktree",
+  },
+] as const);
+
+describe("portability source-commit resolution — current checkout authority", () => {
+  it("decides a nonzero branch, pull-request-head, and synthetic-merge roster", () => {
+    expect(CURRENT_RUN_CASES).toHaveLength(3);
+    expect(CURRENT_RUN_CASES.length).toBeGreaterThan(0);
+    for (const row of CURRENT_RUN_CASES) {
+      expect([
+        row.event,
+        resolveSourceCommit({
+          actualCheckoutCommit: row.actualCheckoutCommit,
+          declaredCommit: row.declaredCommit,
+        }),
+      ]).toEqual([row.event, row.expected]);
+    }
   });
 
-  it("binds from the environment alone and names ENV", () => {
-    const outcome = resolveSourceCommit({ env: SHA_B, pinBytes: undefined });
-    expect(outcome).toEqual({ boundBy: "ENV", ok: true, sourceCommit: SHA_B });
-  });
-
-  it("binds when both agree and names PIN_AND_ENV", () => {
-    const outcome = resolveSourceCommit({ env: SHA_A, pinBytes: pin(SHA_A) });
-    expect(outcome).toEqual({ boundBy: "PIN_AND_ENV", ok: true, sourceCommit: SHA_A });
-  });
-
-  it("treats a blank environment value as unset rather than malformed", () => {
-    expect(resolveSourceCommit({ env: "   ", pinBytes: pin(SHA_A) })).toEqual({
-      boundBy: "PIN", ok: true, sourceCommit: SHA_A,
+  it("publishes the exact checkout-mismatch refusal code and layer", () => {
+    expect(SOURCE_COMMIT_CODES.checkoutMismatch).toBe(
+      "PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH",
+    );
+    expect(resolveSourceCommit({
+      actualCheckoutCommit: SHA_B,
+      declaredCommit: SHA_A,
+    })).toEqual({
+      code: SOURCE_COMMIT_CODES.checkoutMismatch,
+      layer: "PORTABILITY_EVIDENCE",
+      ok: false,
     });
   });
 
-  it("treats a receipt whose sourceCommit is null as an absent pin", () => {
-    expect(resolveSourceCommit({ env: SHA_B, pinBytes: pin(null) })).toEqual({
-      boundBy: "ENV", ok: true, sourceCommit: SHA_B,
-    });
-  });
-});
-
-describe("portability source-commit resolution — refusals name their code", () => {
-  it("refuses ABSENT when neither input supplies a commit", () => {
-    expect(resolveSourceCommit({ env: undefined, pinBytes: undefined })).toEqual({
-      code: SOURCE_COMMIT_CODES.absent, ok: false,
-    });
-    expect(SOURCE_COMMIT_CODES.absent).toBe("PORTABILITY_SOURCE_COMMIT_ABSENT");
-  });
-
-  it("refuses ABSENT when a receipt is present but carries no commit", () => {
-    expect(resolveSourceCommit({ env: undefined, pinBytes: pin(null) })).toEqual({
-      code: SOURCE_COMMIT_CODES.absent, ok: false,
-    });
-  });
-
-  it.each([
-    ["short", "a1f71a4"],
-    ["uppercase", SHA_A.toUpperCase()],
-    ["overlong", `${SHA_A}0`],
-    ["non-hex", `${SHA_A.slice(0, 39)}z`],
-    ["a git ref rather than an object name", "refs/heads/main"],
-  ])("refuses MALFORMED for an environment value that is %s", (_label, value) => {
-    expect(resolveSourceCommit({ env: value, pinBytes: undefined })).toEqual({
-      code: SOURCE_COMMIT_CODES.malformed, ok: false,
-    });
-  });
-
-  it("refuses MALFORMED for a receipt value that is not an object name", () => {
-    expect(resolveSourceCommit({ env: undefined, pinBytes: pin("HEAD") })).toEqual({
-      code: SOURCE_COMMIT_CODES.malformed, ok: false,
-    });
-    expect(SOURCE_COMMIT_CODES.malformed).toBe("PORTABILITY_SOURCE_COMMIT_MALFORMED");
-  });
-
-  it("refuses SEALED_CONFLICT when a sealed receipt names another tree", () => {
-    expect(resolveSourceCommit({ env: SHA_B, pinBytes: sealedPin(SHA_A) })).toEqual({
-      code: SOURCE_COMMIT_CODES.conflict, ok: false,
-    });
-    expect(SOURCE_COMMIT_CODES.conflict).toBe("PORTABILITY_SOURCE_COMMIT_SEALED_CONFLICT");
-  });
-
-  it("refuses rather than silently reusing sealed evidence for other bytes", () => {
-    // This is the "do not reuse the old receipt" hazard in executable form: a
-    // receipt sealed at SHA_A must never bless a run whose bytes are SHA_B.
-    const outcome = resolveSourceCommit({ env: SHA_B, pinBytes: sealedPin(SHA_A) });
-    expect(outcome.ok).toBe(false);
-    expect(outcome).not.toMatchObject({ sourceCommit: SHA_B });
-    expect(outcome).not.toMatchObject({ sourceCommit: SHA_A });
-  });
-
-  it("a sealed receipt AGREEING with the environment still binds", () => {
-    expect(resolveSourceCommit({ env: SHA_A, pinBytes: sealedPin(SHA_A) })).toEqual({
-      boundBy: "PIN_AND_ENV", ok: true, sourceCommit: SHA_A,
-    });
-  });
-
-  it("an UNSEALED receipt yields to the running commit instead of refusing", () => {
-    // The receipt answers "where was evidence taken"; the environment answers
-    // "what is running". A run newer than an unsealed receipt is ordinary.
-    expect(resolveSourceCommit({ env: SHA_B, pinBytes: pin(SHA_A) })).toEqual({
-      boundBy: "ENV", ok: true, sourceCommit: SHA_B,
-    });
-  });
-
-  it("SEALED_CONFLICT needs the seal, not merely a disagreement", () => {
-    const unsealed = resolveSourceCommit({ env: SHA_B, pinBytes: pin(SHA_A) });
-    const sealed = resolveSourceCommit({ env: SHA_B, pinBytes: sealedPin(SHA_A) });
-    expect(unsealed.ok).toBe(true);
-    expect(sealed.ok).toBe(false);
-  });
-
-  it.each([
-    ["unparseable bytes", "{not json"],
-    ["a JSON array", "[]"],
-    ["a JSON scalar", '"a1f71a4"'],
-    ["a non-string sourceCommit", JSON.stringify({ sourceCommit: 7 })],
-  ])("refuses PIN_UNREADABLE for %s", (_label, bytes) => {
-    expect(resolveSourceCommit({ env: SHA_A, pinBytes: bytes })).toEqual({
-      code: SOURCE_COMMIT_CODES.pinUnreadable, ok: false,
-    });
+  it("pins the checkout-observer refusal vocabulary", () => {
+    expect(SOURCE_COMMIT_CODES.checkoutDirty).toBe("PORTABILITY_SOURCE_CHECKOUT_DIRTY");
+    expect(SOURCE_COMMIT_CODES.observationFailed).toBe(
+      "PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED",
+    );
+    expect(SOURCE_COMMIT_CODES.repositoryMismatch).toBe(
+      "PORTABILITY_SOURCE_REPOSITORY_MISMATCH",
+    );
     expect(SOURCE_COMMIT_CODES.pinUnreadable).toBe("PORTABILITY_SOURCE_COMMIT_PIN_UNREADABLE");
   });
 
-  it("refuses an unreadable receipt BEFORE consulting a valid environment value", () => {
-    // Ordering matters: a corrupt receipt with a good environment value must not
-    // read as bound, or a mangled pin would be invisible in CI forever.
-    expect(resolveSourceCommit({ env: SHA_A, pinBytes: "{not json" })).toEqual({
-      code: SOURCE_COMMIT_CODES.pinUnreadable, ok: false,
+  it.each([
+    ["absent checkout", undefined, undefined, SOURCE_COMMIT_CODES.absent],
+    ["short checkout", "a1f71a4", SHA_A, SOURCE_COMMIT_CODES.malformed],
+    ["uppercase checkout", SHA_A.toUpperCase(), SHA_A, SOURCE_COMMIT_CODES.malformed],
+    ["truncated declaration", SHA_A, SHA_A.slice(0, 39), SOURCE_COMMIT_CODES.malformed],
+    ["blank declaration", SHA_A, "   ", SOURCE_COMMIT_CODES.malformed],
+  ] as const)("refuses a %s with an exact code and layer", (
+    _label, actualCheckoutCommit, declaredCommit, code,
+  ) => {
+    expect(resolveSourceCommit({ actualCheckoutCommit, declaredCommit })).toEqual({
+      code,
+      layer: "PORTABILITY_EVIDENCE",
+      ok: false,
     });
   });
 
-  it("never falls back to the moving head", () => {
-    const source = readFileSync(join(import.meta.dirname, "portability-source-commit.ts"), "utf8");
-    // Comments are stripped first: this guard is about what the module EXECUTES,
-    // and the prose above deliberately names the hazard it closes. A guard that
-    // reads comments would be satisfied by renaming a sentence.
-    const code = source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/^\s*\/\/.*$/gmu, "");
-    expect(code).toContain("resolveSourceCommit");
-    expect(code).not.toMatch(/rev-parse/u);
-    expect(code).not.toMatch(/child_process/u);
-    expect(code).not.toMatch(/\.git['"`]/u);
+  it("never lets historical receipt bytes select or conflict with the current checkout", () => {
+    const hostileInputs = {
+      actualCheckoutCommit: SHA_B,
+      declaredCommit: SHA_B,
+      pinBytes: HISTORICAL_BYTES,
+    };
+    const receiptOnlyInputs = {
+      actualCheckoutCommit: undefined,
+      declaredCommit: undefined,
+      pinBytes: HISTORICAL_BYTES,
+    };
+    expect(resolveSourceCommit(hostileInputs)).toEqual({
+      boundBy: "CHECKOUT",
+      ok: true,
+      sourceCommit: SHA_B,
+    });
+    expect(resolveSourceCommit(receiptOnlyInputs)).toEqual({
+      code: SOURCE_COMMIT_CODES.absent,
+      layer: "PORTABILITY_EVIDENCE",
+      ok: false,
+    });
+  });
+
+  it("requires the suite-wide declaration when evidence mode is explicit", () => {
+    expect(resolveSourceCommit({
+      actualCheckoutCommit: SHA_A,
+      requireDeclaration: true,
+    })).toEqual({
+      code: SOURCE_COMMIT_CODES.absent,
+      layer: "PORTABILITY_EVIDENCE",
+      ok: false,
+    });
   });
 });
 
 describe("portability source-commit resolution — production surface", () => {
-  it("resolves through the real environment and the real committed receipt", () => {
+  it("binds the real checkout and treats the environment only as a declaration", () => {
     const outcome = resolvePortabilitySourceCommit();
-    expect(outcome.ok).toBe(true);
-    expect(outcome).toMatchObject({ sourceCommit: expect.stringMatching(/^[0-9a-f]{40}$/u) });
+    expect(outcome).toEqual({
+      boundBy: "CHECKOUT",
+      ok: true,
+      sourceCommit: expect.stringMatching(/^[0-9a-f]{40}$/u),
+    });
   });
 
   it("exposes ONE captured constant that equals a fresh production read", () => {
@@ -170,28 +160,161 @@ describe("portability source-commit resolution — production surface", () => {
     expect(PORTABILITY_SOURCE_COMMIT).toBe(readPortabilitySourceCommit());
   });
 
-  it("finds the committed receipt on disk and parses it as its contract", () => {
-    const bytes = readPinBytes();
-    expect(bytes, `${SOURCE_COMMIT_PIN_FILE} must be committed beside the resolver`).toBeTypeOf("string");
-    const parsed = JSON.parse(bytes ?? "") as Record<string, unknown>;
-    expect(parsed["sourceCommit"]).toMatch(/^[0-9a-f]{40}$/u);
-    // UNKNOWN external evidence stays typed. `externalRun` is null until an
-    // external push run at `sourceCommit` is accepted by the exact-SHA gate; a
-    // null here is UNKNOWN, and this suite never reads it as a pass.
-    expect(parsed).toHaveProperty("externalRun");
-    expect(parsed).toHaveProperty("aggregateDigest");
-    // A SEALED receipt must carry the digest that seals it. Sealed-without-digest
-    // would be an evidence claim with nothing behind it.
-    if (parsed["externalRun"] !== null) {
-      expect(parsed["aggregateDigest"]).toMatch(/^sha256:[0-9a-f]{64}$/u);
-    }
-  });
-
-  it("names the environment variable CI binds to the push run's github.sha", () => {
+  it("names the workflow inputs checked against the observed checkout", () => {
     expect(SOURCE_COMMIT_ENV).toBe("MOE_PORTABILITY_SOURCE_COMMIT");
+    expect(SOURCE_COMMIT_EVIDENCE_ENV).toBe("MOE_PORTABILITY_EVIDENCE_MODE");
+    expect(SOURCE_COMMIT_GIT_ENV).toBe("MOE_PORTABILITY_GIT_EXECUTABLE");
   });
 
-  it("returns undefined pin bytes for a directory holding no receipt", () => {
-    expect(readPinBytes(join(import.meta.dirname, "no-such-directory"))).toBeUndefined();
-  });
+  it("scrubs Git routing variables and rejects tracked-byte drift", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-portability-checkout-"));
+    try {
+      execFileSync("git", ["init", "--quiet", root], { stdio: "ignore" });
+      execFileSync("git", ["-C", root, "config", "core.autocrlf", "false"]);
+      execFileSync("git", ["-C", root, "config", "user.email", "test@example.invalid"]);
+      execFileSync("git", ["-C", root, "config", "user.name", "Moe Test"]);
+      const hooksDirectory = join(root, ".git-hooks-disabled");
+      mkdirSync(hooksDirectory);
+      execFileSync("git", ["-C", root, "config", "core.hooksPath", hooksDirectory]);
+      writeFileSync(join(root, "tracked.txt"), "committed\n", "utf8");
+      execFileSync("git", ["-C", root, "add", "tracked.txt"]);
+      execFileSync("git", ["-C", root, "commit", "--quiet", "--no-gpg-sign", "-m", "fixture"]);
+      const decoy = join(root, "decoy");
+      mkdirSync(decoy);
+      const environment = { ...process.env, GIT_DIR: decoy, GIT_WORK_TREE: decoy };
+      expect(observeCheckoutCommit(root, {
+        environment,
+        gitExecutable: "git",
+        requireAbsoluteExecutable: true,
+      })).toEqual({
+        code: SOURCE_COMMIT_CODES.observationFailed,
+        layer: "PORTABILITY_EVIDENCE",
+        ok: false,
+      });
+      expect(observeCheckoutCommit(decoy, { environment })).toEqual({
+        code: SOURCE_COMMIT_CODES.repositoryMismatch,
+        layer: "PORTABILITY_EVIDENCE",
+        ok: false,
+      });
+      const clean = observeCheckoutCommit(root, { environment, requireClean: true });
+      expect(clean).toMatchObject({ ok: true, sourceCommit: expect.stringMatching(/^[0-9a-f]{40}$/u) });
+
+      expect(SPECIAL_INDEX_FLAG_CASES).toHaveLength(2);
+      expect(SPECIAL_INDEX_FLAG_CASES.length).toBeGreaterThan(0);
+      let executedFlagCases = 0;
+      for (const flagCase of SPECIAL_INDEX_FLAG_CASES) {
+        execFileSync("git", ["-C", root, "update-index", flagCase.set, "tracked.txt"]);
+        writeFileSync(join(root, "tracked.txt"), flagCase.mutation, "utf8");
+        expect(observeCheckoutCommit(root, { environment, requireClean: true })).toEqual({
+          code: SOURCE_COMMIT_CODES.checkoutDirty,
+          layer: "PORTABILITY_EVIDENCE",
+          ok: false,
+        });
+        execFileSync("git", ["-C", root, "update-index", flagCase.clear, "tracked.txt"]);
+        writeFileSync(join(root, "tracked.txt"), "committed\n", "utf8");
+        executedFlagCases += 1;
+      }
+      expect(executedFlagCases).toBe(SPECIAL_INDEX_FLAG_CASES.length);
+
+      writeFileSync(join(root, "tracked.txt"), "mutated\n", "utf8");
+      expect(observeCheckoutCommit(root, { environment, requireClean: true })).toEqual({
+        code: SOURCE_COMMIT_CODES.checkoutDirty,
+        layer: "PORTABILITY_EVIDENCE",
+        ok: false,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 300_000);
+
+  it("rejects same-length tracked drift hidden behind the index stat cache", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-portability-stat-cache-"));
+    try {
+      execFileSync("git", ["init", "--quiet", root], { stdio: "ignore" });
+      execFileSync("git", ["-C", root, "config", "core.autocrlf", "false"]);
+      execFileSync("git", ["-C", root, "config", "core.trustctime", "false"]);
+      execFileSync("git", ["-C", root, "config", "core.checkStat", "minimal"]);
+      execFileSync("git", ["-C", root, "config", "user.email", "test@example.invalid"]);
+      execFileSync("git", ["-C", root, "config", "user.name", "Moe Test"]);
+      const hooksDirectory = join(root, ".git-hooks-disabled");
+      mkdirSync(hooksDirectory);
+      execFileSync("git", ["-C", root, "config", "core.hooksPath", hooksDirectory]);
+      const tracked = join(root, "tracked.txt");
+      writeFileSync(tracked, "committed\n", "utf8");
+      execFileSync("git", ["-C", root, "add", "tracked.txt"]);
+      execFileSync("git", ["-C", root, "commit", "--quiet", "--no-gpg-sign", "-m", "fixture"]);
+
+      const cachedTime = new Date("2001-01-01T00:00:00.000Z");
+      utimesSync(tracked, cachedTime, cachedTime);
+      execFileSync("git", ["-C", root, "update-index", "--refresh"]);
+      const indexPath = join(root, ".git", "index");
+      const indexBefore = readFileSync(indexPath);
+      writeFileSync(tracked, "subverted\n", "utf8");
+      utimesSync(tracked, cachedTime, cachedTime);
+
+      expect(() => execFileSync(
+        "git", ["-C", root, "diff", "--quiet", "--", "tracked.txt"], { stdio: "ignore" },
+      )).not.toThrow();
+      expect(observeCheckoutCommit(root, { requireClean: true })).toEqual({
+        code: SOURCE_COMMIT_CODES.checkoutDirty,
+        layer: "PORTABILITY_EVIDENCE",
+        ok: false,
+      });
+      expect(readFileSync(indexPath)).toEqual(indexBefore);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 300_000);
+
+  it("does not let repository-local filters forge the reconstructed tree", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-portability-filter-routing-"));
+    try {
+      execFileSync("git", ["init", "--quiet", root], { stdio: "ignore" });
+      execFileSync("git", ["-C", root, "config", "core.autocrlf", "false"]);
+      execFileSync("git", ["-C", root, "config", "core.trustctime", "false"]);
+      execFileSync("git", ["-C", root, "config", "core.checkStat", "minimal"]);
+      execFileSync("git", ["-C", root, "config", "user.email", "test@example.invalid"]);
+      execFileSync("git", ["-C", root, "config", "user.name", "Moe Test"]);
+      const hooksDirectory = join(root, ".git-hooks-disabled");
+      mkdirSync(hooksDirectory);
+      execFileSync("git", ["-C", root, "config", "core.hooksPath", hooksDirectory]);
+      const tracked = join(root, "tracked.txt");
+      writeFileSync(join(root, ".gitattributes"), "tracked.txt filter=forge\n", "utf8");
+      writeFileSync(tracked, "committed\n", "utf8");
+      execFileSync("git", ["-C", root, "add", ".gitattributes", "tracked.txt"]);
+      execFileSync("git", ["-C", root, "commit", "--quiet", "--no-gpg-sign", "-m", "fixture"]);
+
+      const cachedTime = new Date("2001-01-01T00:00:00.000Z");
+      utimesSync(tracked, cachedTime, cachedTime);
+      execFileSync("git", ["-C", root, "update-index", "--refresh"]);
+      execFileSync("git", ["-C", root, "config", "filter.forge.clean",
+        "while IFS= read -r line; do printf 'committed\\n'; done"]);
+      execFileSync("git", ["-C", root, "config", "filter.forge.required", "true"]);
+      writeFileSync(tracked, "tampered!\n", "utf8");
+      utimesSync(tracked, cachedTime, cachedTime);
+
+      expect(() => execFileSync(
+        "git", ["-C", root, "diff", "--quiet", "--", "tracked.txt"],
+        { stdio: "ignore", timeout: 30_000 },
+      )).not.toThrow();
+      const headBlob = execFileSync(
+        "git", ["-C", root, "rev-parse", "HEAD:tracked.txt"], { encoding: "utf8" },
+      ).trim();
+      expect(execFileSync(
+        "git", ["-C", root, "hash-object", "--path=tracked.txt", "tracked.txt"],
+        { encoding: "utf8" },
+      ).trim()).toBe(headBlob);
+      expect(execFileSync(
+        "git", ["-C", root, "status", "--porcelain=v1", "--untracked-files=no"],
+        { encoding: "utf8" },
+      )).toBe("");
+      expect(observeCheckoutCommit(root, { requireClean: true })).toEqual({
+        code: SOURCE_COMMIT_CODES.checkoutDirty,
+        layer: "PORTABILITY_EVIDENCE",
+        ok: false,
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  }, 300_000);
 });

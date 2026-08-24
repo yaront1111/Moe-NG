@@ -539,11 +539,155 @@ jobs:
       # The ONE commit every matrix row, fixture hash and handshake in this run
       # binds to. `github.sha` is the commit on a push run but the ephemeral
       # MERGE commit on a pull_request run, and a merge sha exists nowhere in
-      # history -- so the head sha is selected explicitly. The resolver refuses
-      # rather than falling back to `git rev-parse HEAD` if this is ever unset.
+      # history -- so the head sha is declared explicitly. The checkout observer
+      # below remains the authority; this declaration can only veto a mismatch.
       MOE_PORTABILITY_SOURCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+      MOE_PORTABILITY_EVIDENCE_MODE: "1"
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Verify portability source checkout
+        id: portability-source
+        shell: bash
+        run: |
+          if ! git_executable="$(command -v git)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: trusted Git executable is unavailable"
+            exit 1
+          fi
+          case "${git_executable}" in
+            /*) ;;
+            *)
+              echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: Git executable is not absolute"
+              exit 1
+              ;;
+          esac
+          while IFS='=' read -r environment_entry; do
+            environment_name="${environment_entry%%=*}"
+            case "${environment_name}" in GIT_*) unset "${environment_name}" ;; esac
+          done < <(env)
+          export GIT_ATTR_NOSYSTEM="1"
+          export GIT_CONFIG_GLOBAL="/dev/null"
+          export GIT_CONFIG_NOSYSTEM="1"
+          export GIT_NO_REPLACE_OBJECTS="1"
+          export GIT_OPTIONAL_LOCKS="0"
+          export GIT_TERMINAL_PROMPT="0"
+          portability_git() {
+            "${git_executable}" --no-replace-objects \
+              -c "safe.directory=${GITHUB_WORKSPACE}" \
+              -c core.fsmonitor=false -c core.untrackedCache=false \
+              -C "${GITHUB_WORKSPACE}" "$@"
+          }
+          if ! actual_checkout_commit="$(portability_git rev-parse --verify HEAD)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: checkout HEAD is unreadable"
+            exit 1
+          fi
+          if [ "${actual_checkout_commit}" != "${MOE_PORTABILITY_SOURCE_COMMIT}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH@PORTABILITY_EVIDENCE: checkout ${actual_checkout_commit} does not match declared ${MOE_PORTABILITY_SOURCE_COMMIT}"
+            exit 1
+          fi
+          if ! checkout_root="$(portability_git rev-parse --show-toplevel)" || \
+             ! checkout_root="$(cd "${checkout_root}" && pwd -P)" || \
+             ! workspace_root="$(cd "${GITHUB_WORKSPACE}" && pwd -P)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: checkout owner is unreadable"
+            exit 1
+          fi
+          if [ "${checkout_root}" != "${workspace_root}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_REPOSITORY_MISMATCH@PORTABILITY_EVIDENCE: checkout owner differs from the workflow workspace"
+            exit 1
+          fi
+          verify_index_flags() {
+            local index_entry
+            local index_flags_clean=1
+            local index_flags_file="${RUNNER_TEMP}/moe-portability-index-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}-${RANDOM}"
+            if ! (set -o noclobber; : > "${index_flags_file}") 2>/dev/null; then
+              return 2
+            fi
+            if ! portability_git ls-files -v -z -- > "${index_flags_file}"; then
+              rm -f -- "${index_flags_file}"
+              return 2
+            fi
+            while IFS= read -r -d '' index_entry; do
+              case "${index_entry}" in
+                "H "*) ;;
+                *) index_flags_clean=0; break ;;
+              esac
+            done < "${index_flags_file}"
+            rm -f -- "${index_flags_file}" || return 2
+            [ "${index_flags_clean}" -eq 1 ]
+          }
+          verify_worktree_tree() {
+            local observed_commit="$1"
+            local expected_tree real_objects reconstructed_tree tree_scratch
+            local tree_status=0
+            if ! expected_tree="$(portability_git rev-parse --verify "${observed_commit}^{tree}")" || \
+               ! [[ "${expected_tree}" =~ ^[0-9a-f]{40}$ ]] || \
+               ! real_objects="$(portability_git rev-parse --path-format=absolute --git-path objects)"; then
+              return 2
+            fi
+            case "${real_objects}" in /*) ;; *) return 2 ;; esac
+            if ! tree_scratch="$(mktemp -d "${RUNNER_TEMP}/moe-portability-tree.XXXXXX")" || \
+               ! mkdir "${tree_scratch}/template" || \
+               ! portability_git init --bare --quiet --template="${tree_scratch}/template" "${tree_scratch}/git"; then
+              [ -z "${tree_scratch:-}" ] || rm -rf -- "${tree_scratch}"
+              return 2
+            fi
+            (
+              export GIT_DIR="${tree_scratch}/git"
+              export GIT_WORK_TREE="${GITHUB_WORKSPACE}"
+              export GIT_INDEX_FILE="${tree_scratch}/index"
+              export GIT_OBJECT_DIRECTORY="${tree_scratch}/git/objects"
+              export GIT_ALTERNATE_OBJECT_DIRECTORIES="${real_objects}"
+              portability_git -c core.trustctime=true -c core.checkStat=default \
+                read-tree --no-sparse-checkout "${observed_commit}^{tree}" || exit 2
+              portability_git -c core.trustctime=true -c core.checkStat=default \
+                add --update -- . || exit 2
+              reconstructed_tree="$(portability_git -c core.trustctime=true \
+                -c core.checkStat=default write-tree)" || exit 2
+              [[ "${reconstructed_tree}" =~ ^[0-9a-f]{40}$ ]] || exit 2
+              [ "${reconstructed_tree}" = "${expected_tree}" ] || exit 1
+            ) || tree_status=$?
+            rm -rf -- "${tree_scratch}" || return 2
+            [ "${tree_status}" -le 1 ] || return 2
+            return "${tree_status}"
+          }
+          index_flag_status=0
+          verify_index_flags || index_flag_status=$?
+          if [ "${index_flag_status}" -eq 1 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: special Git index flags can hide tracked checkout bytes"
+            exit 1
+          fi
+          if [ "${index_flag_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: Git index flags are unreadable"
+            exit 1
+          fi
+          tree_status=0
+          verify_worktree_tree "${actual_checkout_commit}" || tree_status=$?
+          if [ "${tree_status}" -eq 1 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: reconstructed tracked tree differs from checkout HEAD"
+            exit 1
+          fi
+          if [ "${tree_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: tracked tree reconstruction failed"
+            exit 1
+          fi
+          if ! portability_git --no-pager diff --no-ext-diff --quiet --ignore-submodules=none -- || \
+             ! portability_git --no-pager diff --cached --no-ext-diff --quiet --ignore-submodules=none --; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: tracked checkout bytes differ from HEAD"
+            exit 1
+          fi
+          if ! confirmed_checkout_commit="$(portability_git rev-parse --verify HEAD)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: checkout HEAD cannot be re-read"
+            exit 1
+          fi
+          if [ "${confirmed_checkout_commit}" != "${actual_checkout_commit}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: checkout HEAD changed during verification"
+            exit 1
+          fi
+          echo "MOE_PORTABILITY_SOURCE_COMMIT=${actual_checkout_commit}" >> "${GITHUB_ENV}"
+          echo "source_commit=${actual_checkout_commit}" >> "${GITHUB_OUTPUT}"
+          echo "git_executable=${git_executable}" >> "${GITHUB_OUTPUT}"
 
       - name: Record host facts
         run: |
@@ -569,6 +713,9 @@ jobs:
       # Every leg below therefore asserts a POSITIVE count line as well, and
       # captures ${PIPESTATUS[0]} because a piped run reports tee's exit.
       - name: Integration gate (vitest)
+        env:
+          MOE_PORTABILITY_GIT_EXECUTABLE: ${{ steps.portability-source.outputs.git_executable }}
+          MOE_PORTABILITY_SOURCE_COMMIT: ${{ steps.portability-source.outputs.source_commit }}
         run: |
           set -o pipefail
           set +e
@@ -654,6 +801,9 @@ jobs:
       # check above. This step refuses unless every named matrix reports a
       # positive executed-case count on this host.
       - name: Per-matrix executed counts
+        env:
+          MOE_PORTABILITY_GIT_EXECUTABLE: ${{ steps.portability-source.outputs.git_executable }}
+          MOE_PORTABILITY_SOURCE_COMMIT: ${{ steps.portability-source.outputs.source_commit }}
         run: |
           set -o pipefail
           set +e
@@ -672,7 +822,9 @@ jobs:
               "projection-shadow-matrix.test.ts",
               "provider-shadow-matrix.test.ts",
               "transport-host-matrix.test.ts",
+              "portability-historical-receipt.test.ts",
               "portability-source-commit.test.ts",
+              "portability-workflow.test.ts",
             ];
             const counts = new Map();
             for (const file of report.testResults) {
@@ -694,10 +846,141 @@ jobs:
             }
           '
 
+      - name: Reverify portability source checkout
+        if: always()
+        env:
+          EXPECTED_GIT_EXECUTABLE: ${{ steps.portability-source.outputs.git_executable }}
+          EXPECTED_PORTABILITY_SOURCE_COMMIT: ${{ steps.portability-source.outputs.source_commit }}
+        shell: bash
+        run: |
+          while IFS='=' read -r environment_entry; do
+            environment_name="${environment_entry%%=*}"
+            case "${environment_name}" in GIT_*) unset "${environment_name}" ;; esac
+          done < <(env)
+          export GIT_ATTR_NOSYSTEM="1"
+          export GIT_CONFIG_GLOBAL="/dev/null"
+          export GIT_CONFIG_NOSYSTEM="1"
+          export GIT_NO_REPLACE_OBJECTS="1"
+          export GIT_OPTIONAL_LOCKS="0"
+          export GIT_TERMINAL_PROMPT="0"
+          portability_git() {
+            "${EXPECTED_GIT_EXECUTABLE}" --no-replace-objects \
+              -c "safe.directory=${GITHUB_WORKSPACE}" \
+              -c core.fsmonitor=false -c core.untrackedCache=false \
+              -C "${GITHUB_WORKSPACE}" "$@"
+          }
+          if [ -z "${EXPECTED_GIT_EXECUTABLE}" ] || \
+             ! actual_checkout_commit="$(portability_git rev-parse --verify HEAD)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final checkout HEAD is unreadable"
+            exit 1
+          fi
+          if [ "${actual_checkout_commit}" != "${EXPECTED_PORTABILITY_SOURCE_COMMIT}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_COMMIT_CHECKOUT_MISMATCH@PORTABILITY_EVIDENCE: final checkout ${actual_checkout_commit} does not match observed ${EXPECTED_PORTABILITY_SOURCE_COMMIT}"
+            exit 1
+          fi
+          if ! checkout_root="$(portability_git rev-parse --show-toplevel)" || \
+             ! checkout_root="$(cd "${checkout_root}" && pwd -P)" || \
+             ! workspace_root="$(cd "${GITHUB_WORKSPACE}" && pwd -P)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final checkout owner is unreadable"
+            exit 1
+          fi
+          if [ "${checkout_root}" != "${workspace_root}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_REPOSITORY_MISMATCH@PORTABILITY_EVIDENCE: final checkout owner differs from the workflow workspace"
+            exit 1
+          fi
+          verify_index_flags() {
+            local index_entry
+            local index_flags_clean=1
+            local index_flags_file="${RUNNER_TEMP}/moe-portability-index-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RANDOM}-${RANDOM}"
+            if ! (set -o noclobber; : > "${index_flags_file}") 2>/dev/null; then
+              return 2
+            fi
+            if ! portability_git ls-files -v -z -- > "${index_flags_file}"; then
+              rm -f -- "${index_flags_file}"
+              return 2
+            fi
+            while IFS= read -r -d '' index_entry; do
+              case "${index_entry}" in
+                "H "*) ;;
+                *) index_flags_clean=0; break ;;
+              esac
+            done < "${index_flags_file}"
+            rm -f -- "${index_flags_file}" || return 2
+            [ "${index_flags_clean}" -eq 1 ]
+          }
+          verify_worktree_tree() {
+            local observed_commit="$1"
+            local expected_tree real_objects reconstructed_tree tree_scratch
+            local tree_status=0
+            if ! expected_tree="$(portability_git rev-parse --verify "${observed_commit}^{tree}")" || \
+               ! [[ "${expected_tree}" =~ ^[0-9a-f]{40}$ ]] || \
+               ! real_objects="$(portability_git rev-parse --path-format=absolute --git-path objects)"; then
+              return 2
+            fi
+            case "${real_objects}" in /*) ;; *) return 2 ;; esac
+            if ! tree_scratch="$(mktemp -d "${RUNNER_TEMP}/moe-portability-tree.XXXXXX")" || \
+               ! mkdir "${tree_scratch}/template" || \
+               ! portability_git init --bare --quiet --template="${tree_scratch}/template" "${tree_scratch}/git"; then
+              [ -z "${tree_scratch:-}" ] || rm -rf -- "${tree_scratch}"
+              return 2
+            fi
+            (
+              export GIT_DIR="${tree_scratch}/git"
+              export GIT_WORK_TREE="${GITHUB_WORKSPACE}"
+              export GIT_INDEX_FILE="${tree_scratch}/index"
+              export GIT_OBJECT_DIRECTORY="${tree_scratch}/git/objects"
+              export GIT_ALTERNATE_OBJECT_DIRECTORIES="${real_objects}"
+              portability_git -c core.trustctime=true -c core.checkStat=default \
+                read-tree --no-sparse-checkout "${observed_commit}^{tree}" || exit 2
+              portability_git -c core.trustctime=true -c core.checkStat=default \
+                add --update -- . || exit 2
+              reconstructed_tree="$(portability_git -c core.trustctime=true \
+                -c core.checkStat=default write-tree)" || exit 2
+              [[ "${reconstructed_tree}" =~ ^[0-9a-f]{40}$ ]] || exit 2
+              [ "${reconstructed_tree}" = "${expected_tree}" ] || exit 1
+            ) || tree_status=$?
+            rm -rf -- "${tree_scratch}" || return 2
+            [ "${tree_status}" -le 1 ] || return 2
+            return "${tree_status}"
+          }
+          index_flag_status=0
+          verify_index_flags || index_flag_status=$?
+          if [ "${index_flag_status}" -eq 1 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: special Git index flags can hide final tracked checkout bytes"
+            exit 1
+          fi
+          if [ "${index_flag_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final Git index flags are unreadable"
+            exit 1
+          fi
+          tree_status=0
+          verify_worktree_tree "${actual_checkout_commit}" || tree_status=$?
+          if [ "${tree_status}" -eq 1 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: final reconstructed tracked tree differs from checkout HEAD"
+            exit 1
+          fi
+          if [ "${tree_status}" -ne 0 ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final tracked tree reconstruction failed"
+            exit 1
+          fi
+          if ! portability_git --no-pager diff --no-ext-diff --quiet --ignore-submodules=none -- || \
+             ! portability_git --no-pager diff --cached --no-ext-diff --quiet --ignore-submodules=none --; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_DIRTY@PORTABILITY_EVIDENCE: final tracked checkout bytes differ from HEAD"
+            exit 1
+          fi
+          if ! confirmed_checkout_commit="$(portability_git rev-parse --verify HEAD)"; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final checkout HEAD cannot be re-read"
+            exit 1
+          fi
+          if [ "${confirmed_checkout_commit}" != "${actual_checkout_commit}" ]; then
+            echo "::error title=portability-evidence::PORTABILITY_SOURCE_CHECKOUT_OBSERVATION_FAILED@PORTABILITY_EVIDENCE: final checkout HEAD changed during verification"
+            exit 1
+          fi
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: portability-evidence-${{ matrix.os }}-${{ github.event.pull_request.head.sha || github.sha }}
+          name: portability-evidence-${{ matrix.os }}-${{ steps.portability-source.outputs.source_commit }}
           path: |
             portability-integration.log
             portability-supply-chain.log
