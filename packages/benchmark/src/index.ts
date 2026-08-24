@@ -130,6 +130,25 @@ export {
 } from "./pre-freeze-pinned-documents.js";
 export type { PinnedDocument } from "./pre-freeze-pinned-documents.js";
 export {
+  CONFIRMATORY_FREEZE_BINDING_KINDS, CONFIRMATORY_FREEZE_MANIFEST_MAX_BYTES,
+  FREEZE_MANIFEST_SCHEMA_VERSION, canonicalizeConfirmatoryFreezeManifest,
+  decodeConfirmatoryFreezeManifest,
+} from "./freeze-manifest-contracts.js";
+export type {
+  ConfirmatoryFreezeAttestation, ConfirmatoryFreezeBinding,
+  ConfirmatoryFreezeBindingKind, ConfirmatoryFreezeManifest,
+  ConfirmatoryFreezeManifestContractCode, ConfirmatoryFreezeManifestContractRefusal,
+  ConfirmatoryFreezeManifestDecode,
+} from "./freeze-manifest-contracts.js";
+export {
+  CONFIRMATORY_FREEZE_MANIFEST_ADMISSION_CODES, admitConfirmatoryFreezeManifest,
+  deriveConfirmatoryFreezeCampaignId, deriveConfirmatoryFreezeManifestRegistryRef,
+} from "./freeze-manifest-admission.js";
+export type {
+  ConfirmatoryFreezeCampaignIdentityInput, ConfirmatoryFreezeManifestAdmission,
+  ConfirmatoryFreezeManifestAdmissionCode, ConfirmatoryFreezeManifestAdmissionRefusal,
+} from "./freeze-manifest-admission.js";
+export {
   FROZEN_COMPARABLE_COHORT_FLOOR, FROZEN_COMPARATOR_GATE_IDS, FROZEN_CONSTANT_SYMBOL_COUNT,
   FROZEN_GATE_IDS, FROZEN_GATE_THRESHOLD_SYMBOLS, FROZEN_NI_TAIL_DIRECTIONS,
   FROZEN_OUT_OF_LADDER_GATE_IDS, FROZEN_REFERENCE_CARDINALITY, FROZEN_RUNG_GATE_INVENTORY,
