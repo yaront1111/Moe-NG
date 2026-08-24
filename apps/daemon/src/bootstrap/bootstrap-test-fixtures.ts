@@ -462,7 +462,7 @@ export function acceptancePayload(
 
 export function approvalRecord(exactRevisionHash: string): Record<string, unknown> {
   return {
-    actor: "human-1",
+    actor: "principal-1",
     actorKind: "HUMAN",
     applicablePolicyRef: hex64("aa"),
     approvalRef: "approval-1",

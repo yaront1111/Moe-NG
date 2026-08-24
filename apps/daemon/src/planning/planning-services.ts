@@ -239,6 +239,12 @@ const decideApproval: CommandHandler = (context): ServiceOutcome => {
     || graphRevisionRef === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+  // The approval record is durable authority attributed to a human. Its actor is therefore a
+  // claim to compare with the authenticated envelope principal, never an identity to trust or
+  // silently rewrite. Refuse before any authority decision or durable write can observe it.
+  if (record["actor"] !== request.principalId) {
+    return refuse(request.kind, "BOOTSTRAP_APPROVAL_ACTOR_UNBOUND", "DAEMON_INGRESS");
+  }
 
   const run = durableRun(context, runId);
   // An unknown run is a MISSING prerequisite, not a hash disagreement. Collapsing the two made

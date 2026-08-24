@@ -308,7 +308,7 @@ describe("code node steps", () => {
       },
       graphRevisionRef: "graph-revision-1",
       record: {
-        actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: "aa".padEnd(64, "0"),
+        actor: "operator-local", actorKind: "HUMAN", applicablePolicyRef: "aa".padEnd(64, "0"),
         approvalRef: "approval-1", approvedNodeScope: ["node-code-1"],
         budgetRef: "bb".padEnd(64, "0"), criteriaRef: "cc".padEnd(64, "0"),
         decision: null, decisionReason: null,

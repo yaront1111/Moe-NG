@@ -68,22 +68,33 @@ interface PlanningRunRow {
   readonly workIdentity?: { readonly humanAuthorityGate?: HumanAuthorityGate };
 }
 
+interface DurableApprovalRow {
+  readonly actor?: string;
+  readonly approvalRef?: string;
+}
+
 function goalRow(store: SqliteEventStore): GoalRow | undefined {
   return readDurableLedger(store, PROJECT_ID).aggregates.get(GOAL_ID)?.result as
     GoalRow | undefined;
 }
 
 /** Reads the approval evidence back out of the durable event ledger, not out of the response. */
-function durableApprovalRefs(store: SqliteEventStore): readonly string[] {
+function durableApprovals(store: SqliteEventStore): readonly DurableApprovalRow[] {
   const decoder = new TextDecoder();
   return store.readEvents(GOAL_ID).flatMap((event) => {
     const payload = JSON.parse(decoder.decode(event.payload)) as {
-      readonly approval?: { readonly approvalRef?: string };
+      readonly approval?: DurableApprovalRow;
     };
-    const approvalRef = payload.approval?.approvalRef;
-    return approvalRef === undefined ? [] : [approvalRef];
+    return payload.approval === undefined ? [] : [payload.approval];
   });
 }
+
+const durableApprovalRefs = (store: SqliteEventStore): readonly string[] =>
+  durableApprovals(store).flatMap(({ approvalRef }) =>
+    approvalRef === undefined ? [] : [approvalRef]);
+
+const eventCount = (store: SqliteEventStore): number =>
+  store.readEventsAfter(0n, 1_000).items.length;
 
 function planningRunRow(store: SqliteEventStore): PlanningRunRow | undefined {
   return readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)?.result as
@@ -762,12 +773,40 @@ describe("approval decide", () => {
     expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
   });
 
-  it("commits the core's decided record and carries durable authority", () => {
+  it("refuses an approval record whose actor is not the authenticated request principal", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
+    const store = openStore();
+    driveThrough(store, "approval.decide");
+    const beforeDecisions = decisionCount(store);
+    const beforeEvents = eventCount(store);
+    expect(beforeDecisions).toBeGreaterThan(0);
+    expect(beforeEvents).toBeGreaterThan(0);
+
+    const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
+      record: { ...approvalRecord(SEALED_SUBMISSION_HASH), actor: "principal-forged" },
+    })));
+
+    expect(outcome.ok).toBe(false);
+    if (outcome.ok) throw new Error("expected actor-binding refusal");
+    expect(outcome.code).toBe("BOOTSTRAP_APPROVAL_ACTOR_UNBOUND");
+    expect(outcome.refusedBy).toBe("DAEMON_INGRESS");
+    expect(decisionCount(store)).toBe(beforeDecisions);
+    expect(eventCount(store)).toBe(beforeEvents);
+    expect(durableApprovals(store)).toEqual([]);
+    expect(goalRow(store)?.lifecycle).toBe("DRAFT");
+  });
+
+  it("commits the matching authenticated actor unchanged with durable authority", () => {
+    useApprovalSettings(SPEED_APPROVAL_MODE, "0");
     const store = openStore();
     driveThrough(store, "approval.decide");
     const before = decisionCount(store);
 
-    const outcome = send(store, envelope("approval.decide", 0, approvalPayload()));
+    const request = envelope("approval.decide", 0, approvalPayload({
+      record: { ...approvalRecord(SEALED_SUBMISSION_HASH), actor: "operator-positive-control" },
+    }));
+
+    const outcome = send(store, { ...request, principalId: "operator-positive-control" });
 
     expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
     if (!outcome.ok) throw new Error("expected acceptance");
@@ -776,6 +815,8 @@ describe("approval decide", () => {
     expect(decisionCount(store)).toBe(before + 1);
     // The approval record itself is durable in the event ledger, read back from the store.
     expect(durableApprovalRefs(store)).toEqual(["approval-1"]);
+    expect(durableApprovals(store).map(({ actor }) => actor))
+      .toEqual(["operator-positive-control"]);
   });
 
   it("refuses an ineligible approver with the core's code, not the daemon's", () => {
