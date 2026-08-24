@@ -148,6 +148,21 @@ describe("inspectWorktree refuses to ship a peer's uncommitted bytes", () => {
     expect(inspectWorktree([" M .moe/tasks/task-1.json", "?? notes.md"], OWNED)).toBe(null);
   });
 
+  it("refuses dirty packaging code because those bytes author the release artifact", () => {
+    for (const line of [
+      " M tools/packaging/pack-docs.ts",
+      "?? tools/packaging/new-pack-stage.ts",
+    ]) {
+      const refusal = inspectWorktree([line], OWNED);
+      expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
+      expect(refusal?.detail).toContain(line.slice(3));
+    }
+  });
+
+  it("does not widen packaging authority to unrelated tools", () => {
+    expect(inspectWorktree([" M tools/import/import-shadow.ts"], OWNED)).toBe(null);
+  });
+
   it("refuses a modified shipped file and names it", () => {
     const refusal = inspectWorktree([" M packages/store/src/index.ts"], OWNED);
     expect(refusal?.code).toBe(PACK_WORKTREE_DIRTY);
