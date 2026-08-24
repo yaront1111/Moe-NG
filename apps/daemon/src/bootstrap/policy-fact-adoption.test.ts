@@ -3,7 +3,6 @@ import type { JsonObject } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resolvePolicyFact } from "./policy-fact-resolver.js";
 import {
   OBSERVATION,
   POLICY_REF,
@@ -20,6 +19,11 @@ const ACTION = "plan.approve";
 const PRINCIPAL_ID = "principal-1";
 const CALLER_DIGEST = hex64("cab");
 const HOSTILE_TRUTH_CLASSES = ["DAEMON_VERIFIED", "HUMAN_APPROVED"] as const;
+const EXPECTED_SERVER_FACT = Object.freeze({
+  factId: "policy-risk-unclassifiable:sha256:17915477c20a992c486fe9cfbc31340d728b202e943b45c149707ced4b04c803",
+  tier: null,
+  truthClass: "UNKNOWN",
+} as const);
 
 function seedPolicy(): SqliteEventStore {
   const store = openStore();
@@ -133,12 +137,10 @@ describe("server-held policy fact adoption", () => {
     const verifiedOutcome = objectField(material, "verifiedOutcome", "decisionMaterial");
     const result = decodeObject(outcome.decision.resultBytes, "command result");
     const resultRecord = objectField(result, "record", "command result");
-    const expectedFact = resolvePolicyFact(PROJECT_ID, PRINCIPAL_ID, ACTION);
-
     expect(material["projectId"]).toBe(PROJECT_ID);
     expect(verifiedInput["actor"]).toBe(PRINCIPAL_ID);
     expect(verifiedInput["action"]).toBe(ACTION);
-    expect(verifiedInput["facts"]).toEqual([expectedFact]);
+    expect(verifiedInput["facts"]).toEqual([EXPECTED_SERVER_FACT]);
     expect(verifiedOutcome["decision"]).toBe("HOLD_UNKNOWN");
     expect(verifiedOutcome["reasonCodes"]).toEqual(["RISK_TIER_UNCLASSIFIABLE"]);
     expect(row["decision"]).toBe("HOLD_UNKNOWN");
