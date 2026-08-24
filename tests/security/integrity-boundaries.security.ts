@@ -40,6 +40,10 @@ import {
   INTEGRITY_HOSTILE_CASES, cleanupRestoreHarnesses, openedStores,
 } from "./integrity-hostile-cases.js";
 import type { HostileArm, HostileCase } from "./integrity-hostile-cases.js";
+import {
+  PROJECT_INTEGRITY_HOSTILE_CASES,
+  projectIntegrityControls,
+} from "./project-integrity-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -54,10 +58,14 @@ function rosterIntegrityConstants(): readonly string[] {
 }
 
 const ROSTER_INTEGRITY = rosterIntegrityConstants();
-const COVERED = [...new Set(INTEGRITY_HOSTILE_CASES.map((entry) => entry.constant))];
+const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
+  ...INTEGRITY_HOSTILE_CASES,
+  ...PROJECT_INTEGRITY_HOSTILE_CASES,
+]);
+const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
 const armsFor = (constant: string): readonly HostileArm[] =>
-  INTEGRITY_HOSTILE_CASES.filter((entry) => entry.constant === constant).map((entry) => entry.arm);
+  HOSTILE_CASES.filter((entry) => entry.constant === constant).map((entry) => entry.arm);
 
 /**
  * A conservative net for "this hostile input was ADMITTED". It names success shapes only, so
@@ -122,7 +130,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // this slice's own `admitted()` net already assumes where it reads `authority !== "NONE"`.
     // 20 -> 21 for PRE_FREEZE_AUDIT_LAYER, the pinned-document integrity audit. Its
     // verdict builder's BEFORE/AFTER/RACE probes land with this bump.
-    expect(ROSTER_INTEGRITY).toHaveLength(21);
+    // 21 -> 23 for PRODUCT_CONTRACT_LAYERS and DECISION_LEDGER_LAYER, two canonical
+    // integrity codecs. Product Contract also carries a production re-seal control.
+    expect(ROSTER_INTEGRITY).toHaveLength(23);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -148,7 +158,7 @@ describe("integrity axis versus the declared-boundary roster", () => {
   );
 
   it("re-seals at least one forgery per digest-bearing boundary", () => {
-    const resealed = INTEGRITY_HOSTILE_CASES.filter(
+    const resealed = HOSTILE_CASES.filter(
       (entry) => entry.arm !== "RACE" && entry.integrity !== undefined,
     ).map((entry) => entry.constant);
     // Asserted as a set with a positive count, so a forgery quietly dropped from the table
@@ -179,6 +189,7 @@ describe("integrity axis versus the declared-boundary roster", () => {
       // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
       // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
       "PLAN_REVISION_LAYERS",
+      "PRODUCT_CONTRACT_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
       "REVIEW_DECISION_LAYERS",
@@ -187,7 +198,7 @@ describe("integrity axis versus the declared-boundary roster", () => {
   });
 
   it("pins both exact refusal tuples on the AcceptanceContract race", () => {
-    const races = INTEGRITY_HOSTILE_CASES.filter(
+    const races = HOSTILE_CASES.filter(
       (entry): entry is Extract<HostileCase, { arm: "RACE" }> =>
         entry.arm === "RACE" && entry.constant === "ACCEPTANCE_CONTRACT_LAYERS",
     );
@@ -205,10 +216,20 @@ describe("integrity axis versus the declared-boundary roster", () => {
   });
 });
 
-const refusalCases = INTEGRITY_HOSTILE_CASES.filter(
+describe("new canonical integrity boundaries admit their positive controls", () => {
+  it("round-trips Product Contract and decision-leg bytes through production", () => {
+    const controls = projectIntegrityControls();
+    expect(controls.productRoundTrip).toBe(true);
+    expect(controls.decisionRoundTrip).toBe(true);
+    expect(controls.productDigest).toMatch(/^[0-9a-f]{64}$/u);
+    expect(controls.decisionDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+});
+
+const refusalCases = HOSTILE_CASES.filter(
   (entry): entry is Extract<HostileCase, { arm: "AFTER" | "BEFORE" }> => entry.arm !== "RACE",
 );
-const raceCases = INTEGRITY_HOSTILE_CASES.filter(
+const raceCases = HOSTILE_CASES.filter(
   (entry): entry is Extract<HostileCase, { arm: "RACE" }> => entry.arm === "RACE",
 );
 

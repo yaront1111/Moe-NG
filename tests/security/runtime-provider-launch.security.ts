@@ -1,7 +1,7 @@
 /**
  * HOSTILE COVERAGE — the PROVIDER LAUNCH, RENDER, TELEMETRY AND USAGE group of the
- * runtime-provider axis. Seven of the roster's twenty-two entries; the partition is declared in
- * `runtime-provider-ledger.ts` and its union is checked against the roster in the evidence file.
+ * runtime-provider axis. Eight of the roster's thirty-one entries; the partition is declared in
+ * `runtime-provider-invariants.ts` and its union is checked against the roster in the evidence file.
  *
  * THE TRAP THAT WOULD OTHERWISE MAKE HALF THIS FILE VACUOUS, measured at
  * `claude-telemetry-launch.ts:206`: `launchClaudeWithTelemetry` returns `ok: true` for a launcher

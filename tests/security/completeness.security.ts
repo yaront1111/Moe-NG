@@ -48,6 +48,7 @@ import {
   hostileRaceCases,
 } from "./durable-store-boundary-scenarios.js";
 import { INTEGRITY_HOSTILE_CASES } from "./integrity-hostile-cases.js";
+import { PROJECT_INTEGRITY_HOSTILE_CASES } from "./project-integrity-hostile-cases.js";
 import {
   ACTIVATION_ADMISSION_CASES,
   ACTIVATION_ADMISSION_RACES,
@@ -64,6 +65,11 @@ import {
   PLANNING_GRAPH_CASES,
   PLANNING_GRAPH_RACES,
 } from "./planning-graph-hostile-cases.js";
+import {
+  PROJECT_ADMISSION_CASES,
+  PROJECT_ADMISSION_RACES,
+} from "./project-admission-hostile-cases.js";
+import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
@@ -102,10 +108,12 @@ const AXES: readonly string[] = Object.freeze([...new Set(ROSTER.map((row) => ro
 // ── The four table-backed axes ────────────────────────────────────────────────────────────
 
 const transportPairs = (): readonly CoveredPair[] =>
-  TRANSPORT_HOSTILE_CASES.map((entry) => [entry.boundary, entry.arm] as const);
+  [...TRANSPORT_HOSTILE_CASES, ...PROJECT_TRANSPORT_HOSTILE_CASES]
+    .map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
-  INTEGRITY_HOSTILE_CASES.map((entry) => [entry.constant, entry.arm] as const);
+  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES]
+    .map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the
  *  wrong export resolves to the arm it actually declares. Race cases carry no phase field. */
@@ -130,6 +138,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...SCHEDULER_DECISION_CASES,
     ...PLANNING_GRAPH_CASES,
     ...FOUNDATION_DISPATCH_CASES,
+    ...PROJECT_ADMISSION_CASES,
   ].map((entry) => [entry.constant, entry.arm] as const),
   ...[
     ...ACTIVATION_ADMISSION_RACES,
@@ -137,6 +146,7 @@ const schedulerActivationPairs = (): readonly CoveredPair[] => [
     ...SCHEDULER_DECISION_RACES,
     ...PLANNING_GRAPH_RACES,
     ...FOUNDATION_DISPATCH_RACES,
+    ...PROJECT_ADMISSION_RACES,
   ].map((entry) => [entry.constant, "RACE"] as const),
 ];
 

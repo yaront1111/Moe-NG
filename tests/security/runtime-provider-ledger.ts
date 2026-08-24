@@ -1,5 +1,5 @@
 /**
- * THE LEDGER — shared recording machinery for the three runtime-provider slices.
+ * THE LEDGER — shared recording machinery for the four runtime-provider slices.
  *
  * NOT a `*.security.ts` file, deliberately: the lane collects that suffix, so this would
  * register as a suite with no cases and `passWithNoTests: false` would fail on its emptiness.
@@ -21,7 +21,7 @@ import { assertRefusedWith } from "./hostile-harness.js";
 import type { HostileBound, LegOutcome, RefusalExpectation } from "./hostile-harness.js";
 
 /**
- * The partition and the coverage judgements, re-exported so the three slices keep ONE import
+ * The partition and the coverage judgements, re-exported so the four slices keep ONE import
  * site for the shared machinery. The split was forced by the 400-line rail, and a slice should
  * not have to know which side of it a helper landed on. No runtime cycle: the sibling imports
  * only the `Ledger` TYPE back, which is erased.

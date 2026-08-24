@@ -7,6 +7,11 @@ import {
 import { recoveryBindingDigest } from "../../packages/store/src/recovery-install-codec.js";
 
 import { compareRangePin } from "../../apps/daemon/src/recovery/doctor-version-contract.js";
+import {
+  PROJECT_CATALOG_LAYER,
+  PROJECT_CATALOG_UNREADABLE,
+  PROJECT_CATALOG_WRITE_FAILED,
+} from "../../apps/daemon/src/projects/project-catalog.js";
 import { appendDurableInventoryObservation } from "../../apps/daemon/src/recovery/durable-recovery-inventory.js";
 import { storeUnavailable } from "../../apps/daemon/src/recovery/recovery-completion-evidence.js";
 import { createNodeRecoveryCryptoPort } from "../../apps/daemon/src/recovery/recovery-incarnation.node.js";
@@ -23,6 +28,7 @@ import { restoreRefusal } from "../../apps/daemon/src/recovery/restore-controlle
 import { inspectRecoveryAnchor, prepareRecoveryAnchor } from "../../packages/store/src/recovery-anchor.js";
 import { decodeRecoveryBinding } from "../../packages/store/src/recovery-install-codec.js";
 import { hostileRoot } from "./hostile-harness.js";
+import { runProjectCatalogRefusal } from "./project-catalog-durable-scenarios.js";
 import {
   SAFE_BOUNDARY_OBSERVATION_LAYER,
   safeBoundaryAfter,
@@ -40,6 +46,7 @@ import type { RefusalExpectation } from "./hostile-harness.js";
 export const DURABLE_BOUNDARY_NAMES = Object.freeze([
   "DOCTOR_VERSION_LAYERS",
   "IMPORT_SHADOW_READ_LAYER",
+  "PROJECT_CATALOG_LAYER",
   "DURABLE_INVENTORY_ADAPTER_LAYER",
   "DURABLE_STORE_LAYER",
   "RECOVERY_INCARNATION_LAYER",
@@ -95,6 +102,11 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
         code: phase === "BEFORE" ? "IMPORT_SHADOW_STORE_UNREADABLE" : "IMPORT_SHADOW_EVIDENCE_MALFORMED",
         layer: IMPORT_SHADOW_READ_LAYER,
       };
+    case "PROJECT_CATALOG_LAYER":
+      return {
+        code: phase === "BEFORE" ? PROJECT_CATALOG_UNREADABLE : PROJECT_CATALOG_WRITE_FAILED,
+        layer: PROJECT_CATALOG_LAYER,
+      };
     case "DURABLE_INVENTORY_ADAPTER_LAYER":
       return INVENTORY;
     case "DURABLE_STORE_LAYER":
@@ -146,6 +158,7 @@ const expectations = (boundary: DurableBoundaryName, phase: HostilePhase): Refus
 const questions: Readonly<Record<DurableBoundaryName, readonly [string, string]>> = Object.freeze({
   DOCTOR_VERSION_LAYERS: ["unsupported declared range stays unknown", "stale declared range gains no authority"],
   IMPORT_SHADOW_READ_LAYER: ["a closed durable reader yields no shadow projection", "an import missing a row cannot become evidence"],
+  PROJECT_CATALOG_LAYER: ["an unreadable catalog cannot become an empty catalog", "a failed atomic replacement preserves the prior catalog"],
   DURABLE_INVENTORY_ADAPTER_LAYER: ["malformed observation preserves its upstream tuple", "late malformed observation cannot write"],
   DURABLE_STORE_LAYER: ["a closed durable reader fails closed", "a stale closed reader cannot invent evidence"],
   RECOVERY_INCARNATION_LAYER: ["malformed mint input is refused", "one restore command cannot change generation"],
@@ -175,6 +188,7 @@ const preexistingAfter = (boundary: DurableBoundaryName): number => {
   // The two claims the import corpus seeds through `commitLegacyImport`, both still durable:
   // the row the reader never saw was hidden by the narrowing port, not removed from the store.
   if (boundary === "IMPORT_SHADOW_READ_LAYER") return SEEDED_IMPORT_ROWS;
+  if (boundary === "PROJECT_CATALOG_LAYER") return 1;
   return 0;
 };
 
@@ -235,6 +249,14 @@ function raceFor(boundary: DurableBoundaryName): RaceCase {
       expected: { code: "SAFE_BOUNDARY_COMMIT_CONFLICT", layer: SAFE_BOUNDARY_OBSERVATION_LAYER },
       expectedDurableEvents: 1,
       question: `two ${boundary} writers derive one identity and only one may commit it`,
+    };
+  }
+  if (boundary === "PROJECT_CATALOG_LAYER") {
+    return {
+      boundary,
+      expected: { code: PROJECT_CATALOG_WRITE_FAILED, layer: PROJECT_CATALOG_LAYER },
+      expectedDurableEvents: 1,
+      question: `two hostile ${boundary} writers preserve the one prior catalog`,
     };
   }
   return {
@@ -387,6 +409,12 @@ async function boundaryRefusal(
 }
 
 export async function runRefusalCase(hostileCase: RefusalCase): Promise<RefusalCaseResult> {
+  if (hostileCase.boundary === "PROJECT_CATALOG_LAYER") {
+    return await runProjectCatalogRefusal(
+      hostileCase.phase,
+      hostileRoot(`${hostileCase.phase.toLowerCase()}-project-catalog`),
+    );
+  }
   // Delegated whole, exactly as the import-shadow arms are: this boundary seeds a durable
   // provider-run through the real activation ingress and commits through production, so it
   // owns its store rather than borrowing the generic one opened below.

@@ -2,15 +2,14 @@
  * HOSTILE COVERAGE — the EVIDENCE, WORKSPACE, CONTAINMENT AND SUPERVISION group, and the
  * COMPLETENESS HOME for the whole runtime-provider axis.
  *
- * Ten of the roster's twenty-five entries live here; the other fifteen are in
- * `runtime-provider-platform.security.ts` and `runtime-provider-launch.security.ts`. This file is
- * the ONE place the union of the three partitions is checked against the roster's committed bytes,
+ * Eleven of the roster's thirty-one entries live here; the other twenty are in the platform,
+ * launch and project-runtime slices. This file is the ONE place the union of the four partitions is checked against the roster's committed bytes,
  * in BOTH directions, so a boundary owned by nobody — or a name no roster entry carries — reddens
- * exactly once rather than three times or never.
+ * exactly once rather than four times or never.
  *
  * WHY THE WHOLE-SLICE INVARIANT RUNS PER FILE. The lane is `pool: "forks"` with `isolate: true`,
- * so the three files cannot share one array. `describeSliceInvariants` is ONE implementation
- * invoked three times, each over that file's ENTIRE ledger rather than per case: no admitted
+ * so the four files cannot share one array. `describeSliceInvariants` is ONE implementation
+ * invoked four times, each over that file's ENTIRE ledger rather than per case: no admitted
  * artifact, no accepted receipt, no materialized path outside containment, no executed effect,
  * no truth class above UNKNOWN, and no refusal message echoing a path or digest.
  *

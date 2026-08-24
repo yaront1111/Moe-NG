@@ -28,6 +28,10 @@ import {
 } from "./durable-store-boundary-scenarios.js";
 import type { RaceCase } from "./durable-store-boundary-scenarios.js";
 import {
+  projectCatalogAcceptedControl,
+  projectCatalogRace,
+} from "./project-catalog-durable-scenarios.js";
+import {
   SEEDED_IMPORT_ROWS,
   importShadowClosedStore,
   importShadowMidReadCommit,
@@ -184,9 +188,12 @@ const IMPORT_SHADOW_RACE_CASES = hostileRaceCases
  */
 const SAFE_BOUNDARY_RACE_CASES = hostileRaceCases
   .filter((entry) => entry.boundary === "SAFE_BOUNDARY_OBSERVATION_LAYER");
+const PROJECT_CATALOG_RACE_CASES = hostileRaceCases
+  .filter((entry) => entry.boundary === "PROJECT_CATALOG_LAYER");
 const WORKER_RACE_CASES = hostileRaceCases.filter((entry) =>
   entry.boundary !== "IMPORT_SHADOW_READ_LAYER"
-  && entry.boundary !== "SAFE_BOUNDARY_OBSERVATION_LAYER");
+  && entry.boundary !== "SAFE_BOUNDARY_OBSERVATION_LAYER"
+  && entry.boundary !== "PROJECT_CATALOG_LAYER");
 
 function gradeImportShadowRace(hostileCase: RaceCase): void {
   const outcome = importShadowMidReadCommit(importShadowRoot("race"));
@@ -226,12 +233,23 @@ function gradeSafeBoundaryRace(hostileCase: RaceCase): void {
   expect(outcome.durableComplete).toBe(true);
 }
 
+async function gradeProjectCatalogRace(hostileCase: RaceCase): Promise<void> {
+  const outcome = await projectCatalogRace(hostileRoot("race-project-catalog"));
+  expect(outcome.sides).toHaveLength(2);
+  expect(outcome.admittedSides).toBe(0);
+  for (const side of outcome.sides) assertRefusedWith(side, hostileCase.expected);
+  expect(outcome.durableRecords).toBe(hostileCase.expectedDurableEvents);
+  expect(outcome.durableComplete).toBe(true);
+}
+
 describe("durable-store roster coverage", () => {
   it("takes the durable-store subset from the committed roster in both directions", () => {
     // 15 -> 16 on 2026-08-20: SAFE_BOUNDARY_OBSERVATION_LAYER (producer task-ded026d6,
     // roster entry and arms task-120403f7). Counted off the roster's committed bytes by the
     // set assertion below; this literal is what makes a silently-shrunk subset redden.
-    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(16);
+    // 16 -> 17 for the atomic project catalog, including preservation and concurrent-hostile
+    // writer controls over the real filesystem implementation.
+    expect(DURABLE_BOUNDARY_NAMES).toHaveLength(17);
     expect([...DURABLE_BOUNDARY_NAMES].sort()).toStrictEqual(rosterNames);
   });
 
@@ -289,6 +307,15 @@ describe("the import-shadow read admits what it should", () => {
   });
 });
 
+describe("the project catalog admits canonical durable bytes", () => {
+  it("ACCEPT PROJECT_CATALOG_LAYER: an atomic save round-trips one exact catalog", async () => {
+    const outcome = await projectCatalogAcceptedControl(hostileRoot("control-project-catalog"));
+    expect(outcome.ok).toBe(true);
+    expect(outcome.persisted).toBe(true);
+    expect(outcome.entries).toBe(0);
+  });
+});
+
 /**
  * THE POSITIVE CONTROLS FOR THE SAFE-BOUNDARY ARMS.
  *
@@ -336,10 +363,11 @@ describe("the safe-boundary observation records what it should", () => {
 });
 
 describe("hostile durable-store races", () => {
-  it("splits the race arms into the three runners with nothing left over", () => {
+  it("splits the race arms into the four runners with nothing left over", () => {
     expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
     expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
-    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 2);
+    expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
+    expect(WORKER_RACE_CASES).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 3);
   });
 
   for (const hostileCase of WORKER_RACE_CASES) {
@@ -363,6 +391,12 @@ describe("hostile durable-store races", () => {
   for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) {
     it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, () => {
       gradeSafeBoundaryRace(hostileCase);
+    });
+  }
+
+  for (const hostileCase of PROJECT_CATALOG_RACE_CASES) {
+    it(`RACE ${hostileCase.boundary}: ${hostileCase.question}`, async () => {
+      await gradeProjectCatalogRace(hostileCase);
     });
   }
 });
@@ -441,10 +475,12 @@ it("whole-slice invariant: hostile refusals never create fragments or authority"
   }
   for (const hostileCase of IMPORT_SHADOW_RACE_CASES) gradeImportShadowRace(hostileCase);
   for (const hostileCase of SAFE_BOUNDARY_RACE_CASES) gradeSafeBoundaryRace(hostileCase);
+  for (const hostileCase of PROJECT_CATALOG_RACE_CASES) await gradeProjectCatalogRace(hostileCase);
   expect(refusalResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length * 2);
-  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 2);
+  expect(raceResults).toHaveLength(DURABLE_BOUNDARY_NAMES.length - 3);
   expect(IMPORT_SHADOW_RACE_CASES).toHaveLength(1);
   expect(SAFE_BOUNDARY_RACE_CASES).toHaveLength(1);
+  expect(PROJECT_CATALOG_RACE_CASES).toHaveLength(1);
   expect(refusalResults.every(({ hostileCase, result }) =>
     result.durableComplete && result.durableRecords === hostileCase.preexistingRecords
     && (result.truth === undefined || result.truth === "UNKNOWN")

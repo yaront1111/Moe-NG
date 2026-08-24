@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 15, integrity 21, durable-store 16, runtime-provider
- * 25, scheduler-activation 29 — sums to 106, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 18, integrity 23, durable-store 17, runtime-provider
+ * 31, scheduler-activation 31 — sums to 120, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -142,6 +142,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  // Browser-side manager bootstrap, fragment capture and response decoding. `transport` by
+  // SUBJECT: it grants no project authority and owns no runtime; it validates the loopback
+  // request/response seam before handing a client to the UI.
+  { constant: "PROJECT_MANAGER_LOCAL_LAYER", file: "apps/control-room/src/v2/projects/project-manager-client.ts", axis: "transport" },
   { constant: "ACTIVATION_BUDGET_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_INGRESS_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_SLOT_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
@@ -159,6 +163,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "AFFORDANCE_SURFACE_LAYER", file: "apps/daemon/src/http/affordance-contract.ts", axis: "transport" },
   { constant: "EVENT_STREAM_LAYER", file: "apps/daemon/src/http/event-stream-observation.ts", axis: "transport" },
   { constant: "CONTROL_ROOM_LISTENER_LAYER", file: "apps/daemon/src/http/http-listener-guards.ts", axis: "transport" },
+  // The one-shot requester/operator state machine decides whether a pairing claim may
+  // proceed. `scheduler-activation` by SUBJECT despite living under http: it schedules an
+  // admission and owns no wire codec or authenticated session record.
+  { constant: "PAIRING_APPROVAL_LAYER", file: "apps/daemon/src/http/pairing-approval-window.ts", axis: "scheduler-activation" },
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
@@ -173,6 +181,19 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // d60a48f under task-dd4ffa0c. Roster entry and arms: task-c5be7926.
   { constant: "ACTIVE_GRAPH_PROJECTION_LAYER", file: "apps/daemon/src/planning/active-graph-projection.ts", axis: "scheduler-activation" },
   { constant: "GRAPH_BODY_RECORD_LAYER", file: "apps/daemon/src/planning/graph-body-record.ts", axis: "scheduler-activation" },
+  // The project catalog is the manager's atomic durable identity file; filesystem/process
+  // launch surfaces are runtime-provider, the request/IPC codecs are transport, and the
+  // manager service is the admission state machine. Tag each by SUBJECT, not directory.
+  { constant: "PROJECT_CATALOG_LAYER", file: "apps/daemon/src/projects/project-catalog.ts", axis: "durable-store" },
+  { constant: "PROJECT_MANAGER_FILES_LAYER", file: "apps/daemon/src/projects/project-manager-files.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_HTTP_LAYER", file: "apps/daemon/src/projects/project-manager-http-contract.ts", axis: "transport" },
+  { constant: "PROJECT_MANAGER_LAUNCH_LAYER", file: "apps/daemon/src/projects/project-manager-launch.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_MAIN_LAYER", file: "apps/daemon/src/projects/project-manager-main.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_MANAGER_LAYER", file: "apps/daemon/src/projects/project-manager-service.ts", axis: "scheduler-activation" },
+  { constant: "PROJECT_RUNTIME_SUPERVISOR_LAYER", file: "apps/daemon/src/projects/project-runtime-session.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_SINGLE_MAIN_LAYER", file: "apps/daemon/src/projects/project-single-main.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_STACK_HOST_LAYER", file: "apps/daemon/src/projects/project-stack-host.ts", axis: "runtime-provider" },
+  { constant: "PROJECT_STACK_PROTOCOL_LAYER", file: "apps/daemon/src/projects/project-stack-protocol.ts", axis: "transport" },
   // The daemon's independent read of one committed legacy import. `durable-store` by
   // SUBJECT: it answers for durable evidence read out of the event store — it captures a
   // store horizon, refuses if that horizon moved, and owns no codec and no admission
@@ -250,6 +271,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "GRAPH_REVISION_LAYER", file: "packages/core/src/planning/graph-revision-contract.ts", axis: "scheduler-activation" },
   { constant: "PLAN_REVISION_LAYERS", file: "packages/core/src/planning/plan-revision-contract.ts", axis: "integrity" },
   { constant: "PLANNING_EXPANSION_LAYERS", file: "packages/core/src/planning/planning-expansion-validation.ts", axis: "scheduler-activation" },
+  // A versioned canonical product-revision codec with an embedded content digest.
+  { constant: "PRODUCT_CONTRACT_LAYERS", file: "packages/core/src/product-contract/product-contract-contract.ts", axis: "integrity" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
   { constant: "IMPORT_REFUSAL_LAYERS", file: "packages/import/src/import-contract.ts", axis: "transport" },
   { constant: "HTTP_SHUTDOWN_LAYER", file: "packages/mcp/src/http/http-shutdown.ts", axis: "transport" },
@@ -286,6 +309,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "NODE_AUTHORITY_RECURSION_LAYERS", file: "packages/scheduler/src/node-authority/node-authority-public.ts", axis: "integrity" },
   { constant: "READINESS_LAYERS", file: "packages/scheduler/src/readiness/readiness-model.ts", axis: "scheduler-activation" },
   { constant: "SUPERSESSION_DISPOSITION_LAYERS", file: "packages/scheduler/src/supersession/supersession-disposition-contract.ts", axis: "scheduler-activation" },
+  // An immutable canonical codec whose identity digest binds every ordered decision leg.
+  { constant: "DECISION_LEDGER_LAYER", file: "packages/store/src/decision-leg-roster.ts", axis: "integrity" },
   { constant: "RECOVERY_ANCHOR_LAYER", file: "packages/store/src/recovery-anchor-contracts.ts", axis: "durable-store" },
   { constant: "RECOVERY_BINDING_CODEC_LAYER", file: "packages/store/src/recovery-install-contracts.ts", axis: "durable-store" },
   { constant: "RECOVERY_INSTALL_LAYERS", file: "packages/store/src/recovery-install-contracts.ts", axis: "durable-store" },
@@ -373,22 +398,28 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * 105 -> 106 for PRE_FREEZE_AUDIT_LAYER. The pinned-document audit answers integrity
  * questions about exact bytes, references and verdict construction; its hostile trio lands
  * with the roster row, so the completeness ratchet never observes a bookkeeping-only bump.
+ *
+ * 106 -> 120 for the project-manager product seam plus PRODUCT_CONTRACT_LAYERS and
+ * DECISION_LEDGER_LAYER. The project entries are tagged by subject: three request/response
+ * codecs are transport, two admission state machines are scheduler-activation, the atomic
+ * catalog is durable-store, six filesystem/process surfaces are runtime-provider, and the
+ * two canonical codecs are integrity. All 42 hostile arms land with these rows.
  */
-const EXPECTED_ROSTER_SIZE = 106;
+const EXPECTED_ROSTER_SIZE = 120;
 
 /**
- * The nine-way per-area split. A scanner that silently matched only one directory
+ * The per-area split. A scanner that silently matched only one directory
  * satisfies set-equality against a roster built from that same broken scan; only the
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 41,
+  "apps/daemon": 52,
   "packages/benchmark": 3,
   "packages/runner": 22,
-  "packages/core": 12,
+  "packages/core": 13,
   "packages/scheduler": 10,
-  "packages/store": 4,
-  "apps/control-room": 4,
+  "packages/store": 5,
+  "apps/control-room": 5,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,

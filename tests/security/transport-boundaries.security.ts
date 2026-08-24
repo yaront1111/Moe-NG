@@ -31,6 +31,7 @@ import { afterAll, describe, expect, it } from "vitest";
 
 import { assertRefusedWith, cleanupHostileRoots } from "./hostile-harness.js";
 import type { LegOutcome } from "./hostile-harness.js";
+import { PROJECT_TRANSPORT_HOSTILE_CASES } from "./project-transport-hostile-cases.js";
 import { TRANSPORT_HOSTILE_CASES } from "./transport-hostile-cases.js";
 import type { HostileArm } from "./transport-hostile-cases.js";
 
@@ -47,6 +48,10 @@ function transportRoster(): readonly string[] {
 
 const ROSTER_TRANSPORT = transportRoster();
 const ARMS: readonly HostileArm[] = Object.freeze(["AFTER", "BEFORE", "RACE"]);
+const HOSTILE_CASES = Object.freeze([
+  ...TRANSPORT_HOSTILE_CASES,
+  ...PROJECT_TRANSPORT_HOSTILE_CASES,
+]);
 
 interface Recorded {
   readonly admitted: boolean;
@@ -102,7 +107,7 @@ const sideValue = (side: LegOutcome<unknown>): unknown =>
   side.status === "fulfilled" ? side.value : side.reason;
 
 describe("transport axis — hostile before, after and race schedules", () => {
-  for (const hostileCase of TRANSPORT_HOSTILE_CASES) {
+  for (const hostileCase of HOSTILE_CASES) {
     it(`${hostileCase.boundary} ${hostileCase.arm} — ${hostileCase.name}`, async () => {
       // Read through `hostileCase` rather than destructuring up front: destructuring here
       // would fix `expected` to the union before the discriminant narrows it.
@@ -134,18 +139,18 @@ describe("transport axis — completeness against the roster and the no-admissio
 
   it("reads a POSITIVE number of transport entries off the roster's committed bytes", () => {
     expect(ROSTER_TRANSPORT.length).toBeGreaterThan(0);
-    expect(ROSTER_TRANSPORT).toHaveLength(15);
+    expect(ROSTER_TRANSPORT).toHaveLength(18);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 
   it("executed a POSITIVE number of hostile cases, one outcome per admission point", () => {
     // A table that silently produced zero cases would make every assertion below vacuous.
-    expect(TRANSPORT_HOSTILE_CASES.length).toBeGreaterThanOrEqual(ROSTER_TRANSPORT.length * 3);
+    expect(HOSTILE_CASES.length).toBeGreaterThanOrEqual(ROSTER_TRANSPORT.length * 3);
     // A race contributes TWO outcomes, one per side, so a case that silently dropped a leg
     // reddens here rather than passing on the half it kept.
-    const races = TRANSPORT_HOSTILE_CASES.filter((entry) => entry.arm === "RACE").length;
+    const races = HOSTILE_CASES.filter((entry) => entry.arm === "RACE").length;
     expect(races).toBe(ROSTER_TRANSPORT.length);
-    expect(RECORDED).toHaveLength(TRANSPORT_HOSTILE_CASES.length + races);
+    expect(RECORDED).toHaveLength(HOSTILE_CASES.length + races);
   });
 
   it("sweeps exactly the roster's transport entries, in BOTH directions", () => {

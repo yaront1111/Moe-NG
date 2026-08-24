@@ -39,6 +39,10 @@ import {
   closeFoundationDispatchStores,
 } from "./foundation-dispatch-hostile-cases.js";
 import {
+  PROJECT_ADMISSION_CASES,
+  PROJECT_ADMISSION_RACES,
+} from "./project-admission-hostile-cases.js";
+import {
   ACCEPTED_CONTROL_EXPECTATION,
   ACTIVE_GRAPH_PROJECTION_LAYER,
   BODY_CONTROL_EXPECTATION,
@@ -100,8 +104,8 @@ function rosterAxisConstants(): readonly string[] {
 
 const ROSTER_AXIS = rosterAxisConstants();
 
-const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES]);
-const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES]);
+const CASES: readonly HostileCase[] = Object.freeze([...ACTIVATION_ADMISSION_CASES, ...EXPANSION_SUPERSESSION_CASES, ...SCHEDULER_DECISION_CASES, ...PLANNING_GRAPH_CASES, ...FOUNDATION_DISPATCH_CASES, ...PROJECT_ADMISSION_CASES]);
+const RACES: readonly HostileRaceCase[] = Object.freeze([...ACTIVATION_ADMISSION_RACES, ...EXPANSION_SUPERSESSION_RACES, ...SCHEDULER_DECISION_RACES, ...PLANNING_GRAPH_RACES, ...FOUNDATION_DISPATCH_RACES, ...PROJECT_ADMISSION_RACES]);
 
 const COVERED = [
   ...new Set([...CASES.map((entry) => entry.constant), ...RACES.map((entry) => entry.constant)]),
@@ -159,7 +163,8 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // (task-c5be7926). 28 -> 29 on 2026-08-20: FOUNDATION_DISPATCH_DERIVATION_LAYER
     // (producer task-a9fd91c3, row and arms task-120403f7). Measured off the roster's
     // committed bytes, not off this file's own case tables.
-    expect(ROSTER_AXIS).toHaveLength(29);
+    // 29 -> 31 for the pairing-claim and project-manager mutation admission state machines.
+    expect(ROSTER_AXIS).toHaveLength(31);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
