@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -147,6 +147,31 @@ describe("createNodeGitObserver().listRefs — real git", { timeout: 30_000 }, (
     const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
     expect(observer.headCommit()).toMatch(/^[0-9a-f]{40}$|^[0-9a-f]{64}$/u);
     expect(observer.lsFilesTracked()).toEqual(["seed.txt"]);
+  });
+});
+
+/**
+ * The ignored listing runs under the same 8MiB spawn cap as every other
+ * observation, and a lived-in checkout's PER-FILE ignored listing (node_modules,
+ * build output) measures past that cap: the un-collapsed form overflows its own
+ * observation and every dispatch over such a checkout refuses. Collapsing a
+ * fully ignored directory to one `dir/` entry is what keeps the listing inside
+ * the cap, and the attribution index and the capture rules already understand
+ * trailing-slash directory entries.
+ */
+describe("createNodeGitObserver().lsFilesIgnored — real git", { timeout: 30_000 }, () => {
+  it("collapses a fully ignored directory to a single dir/ entry, keeping a lone ignored file per-file", () => {
+    const root = temporaryRepository();
+    writeFileSync(join(root, ".gitignore"), "logs/\nnoise.log\n");
+    mkdirSync(join(root, "logs"));
+    writeFileSync(join(root, "logs", "one.log"), "one\n");
+    writeFileSync(join(root, "logs", "two.log"), "two\n");
+    writeFileSync(join(root, "noise.log"), "noise\n");
+    const observer = createNodeGitObserver(root, hermeticGitEnvironment(process.env));
+    // The collapsed entry carries git's own trailing slash; the per-file entries
+    // under it must NOT appear, because per-file enumeration is exactly what
+    // overflows the spawn cap on a real checkout.
+    expect(observer.lsFilesIgnored()).toEqual(["logs/", "noise.log"]);
   });
 });
 

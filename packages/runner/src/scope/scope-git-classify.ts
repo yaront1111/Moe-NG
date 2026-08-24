@@ -12,8 +12,10 @@ import { ScopeObserverError } from "./scope-contract.js";
  * changing a signature every existing caller depends on. The classification is
  * the part that has branches, so the classification is the part that moves.
  *
- * Classification stays scoped to THIS operation rather than widening runGit,
- * which would change how the other five observer methods classify.
+ * runGit has since learned to recognise ENOBUFS itself, so the overflow
+ * promotion in classifyRefFailure is now a redundant second witness; the
+ * classifier is kept because it still does what runGit does not — attribute
+ * the refusal to the GIT_OBSERVER layer.
  */
 
 /**

@@ -607,24 +607,29 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
     });
   });
 
-  it("refuses a declared scope git reports as ignored", () => {
+  it("refuses an ignored directory git reports under the declared scope", () => {
     const fixture = seedWorkspace({ ...SEED, ".gitignore": "work/logs/\n" });
     const proof = provenProof(fixture);
     mkdirSync(join(fixture.root, "work", "logs"), { recursive: true });
     writeFileSync(join(fixture.root, "work", "logs", "run.log"), "log\n");
+    // The ignored listing collapses the fully ignored directory to `work/logs/`
+    // (per-file enumeration would overflow the observation cap on a real
+    // checkout), so the refusal names the collapsed directory, slash stripped.
     expect(capture(fixture, proof)).toMatchObject({
       ok: false,
       code: "RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE",
       layer: "RUNNER_WORKSPACE_CAPTURE",
-      path: "work",
+      path: "work/logs",
     });
   });
 
   // The attribution index folds a declared directory to the STRONGEST class in
   // its subtree, and DIRTY (rank 4) and UNTRACKED (rank 2) both outrank IGNORED
-  // (rank 5). A sibling write therefore hides the ignored file from the
+  // (rank 5). A sibling write therefore hides the ignored tree from the
   // canonical entry; the refusal has to come from the ignored-path bucket, or
   // ignore-ruled bytes seal as authored results whenever anything else changed.
+  // The bucket carries the COLLAPSED `work/logs/` entry, so the refusal names
+  // the directory (slash stripped) rather than a file inside it.
   it("refuses an ignored file under the scope even when a dirty sibling masks it in the fold", () => {
     const fixture = seedWorkspace({ ...SEED, ".gitignore": "work/logs/\n" });
     const proof = provenProof(fixture);
@@ -635,7 +640,7 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
       ok: false,
       code: "RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE",
       layer: "RUNNER_WORKSPACE_CAPTURE",
-      path: "work/logs/run.log",
+      path: "work/logs",
     });
   });
 
@@ -649,7 +654,7 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
       ok: false,
       code: "RUNNER_FOUNDATION_CAPTURE_IGNORED_STATE",
       layer: "RUNNER_WORKSPACE_CAPTURE",
-      path: "work/logs/run.log",
+      path: "work/logs",
     });
   });
 
