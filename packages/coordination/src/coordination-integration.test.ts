@@ -327,6 +327,7 @@ it("loads the curated entrypoint in Node's strip-types runtime with no missing b
     "COORDINATION_ENDPOINT_VERSION", "COORDINATION_ENVELOPE_KINDS",
     "COORDINATION_ENVELOPE_VERSION", "COORDINATION_FORBIDDEN_FIELDS", "COORDINATION_LAYERS",
     "COORDINATION_LIMITS", "COORDINATION_ROLES", "COORDINATION_SCOPE",
-    "coordinationCapability", "createCoordinationService", "createDurableMailbox",
+    "coordinationCapability", "coordinationRequestDigest", "createCoordinationService",
+    "createDurableMailbox",
   ]);
 });

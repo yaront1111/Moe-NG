@@ -18,7 +18,7 @@ import {
 } from "@moe/coordination";
 import type {
   CoordinationAckResult, CoordinationAcknowledgeRequest, CoordinationAuthRequest,
-  CoordinationEffectBindingPort, CoordinationEndpoint, CoordinationMailboxRequest,
+  CoordinationEffectBindingPort, CoordinationMailboxRequest,
   CoordinationReadResult, CoordinationRecipientRegistry, CoordinationReplayRequest,
   CoordinationSendRequest, CoordinationSendResult,
 } from "@moe/coordination";
@@ -29,9 +29,14 @@ import type {
   SessionAuthorityCode, SessionAuthorityLayer, SessionAuthorityService,
 } from "../identity/session-authority-contracts.js";
 import {
-  isBoundedId, readExactRecord, sessionAuthorityRequestDigest,
+  isBoundedId, isSessionDigest, readExactRecord,
 } from "../identity/session-authority-protocol.js";
 import { createSessionAuthority } from "../identity/session-authority.js";
+import {
+  coordinationPresentationDigest, readCoordinationPresentationTargets,
+} from "./coordination-presentation.js";
+export { coordinationPresentationDigest } from "./coordination-presentation.js";
+export type { CoordinationPresentationFields } from "./coordination-presentation.js";
 import { readRecipientFold } from "./recipient-registry-records.js";
 import { createRecipientRegistry } from "./recipient-registry.js";
 import type { RecipientRegistryService } from "./recipient-registry.js";
@@ -45,7 +50,6 @@ const PRESENTATION_KEYS = [
 ] as const;
 
 const MAILBOX_ENDPOINTS = ["ACKNOWLEDGE", "READ", "REPLAY"] as const;
-const MAX_TARGETS = 32;
 
 /** The one non-positive effect answer. Every ABSENT, UNKNOWN and thrown outcome collapses to
  *  exactly this record — no code, no layer, no aggregate id — so a refusal cannot become a
@@ -57,16 +61,6 @@ export interface CoordinationAdapterOptions {
   readonly clock: () => number;
   readonly projectId: string;
   readonly store: SqliteEventStore;
-}
-
-/** The tuple a coordination presentation is signed over. Both sides derive it from values
- *  they already hold, so a presentation signed for one endpoint, transport, or session is
- *  worthless on another. */
-export interface CoordinationPresentationFields {
-  readonly endpoint: CoordinationEndpoint;
-  readonly requestId: string;
-  readonly sessionId: string;
-  readonly transportId: string;
 }
 
 /** A refusal carries the DAEMON's own code and layer. It is not a binding — the coordination
@@ -88,24 +82,6 @@ export interface CoordinationAdapter {
   readonly resolveRecipient: CoordinationRecipientRegistry;
   readonly send: (request: CoordinationSendRequest) => CoordinationSendResult;
   readonly sessions: SessionAuthorityService;
-}
-
-/**
- * Domain-separated from every session-authority command digest by its `kind`, so a
- * presentation minted for coordination traffic can never authorize a lifecycle mutation.
- */
-export function coordinationPresentationDigest(
-  fields: CoordinationPresentationFields,
-): string {
-  return sessionAuthorityRequestDigest({
-    endpoint: fields.endpoint,
-    endpointVersion: COORDINATION_ENDPOINT_VERSION,
-    kind: "COORDINATION_REQUEST",
-    requestId: fields.requestId,
-    scope: COORDINATION_SCOPE,
-    sessionId: fields.sessionId,
-    transportId: fields.transportId,
-  });
 }
 
 export function createCoordinationAdapter(
@@ -136,18 +112,14 @@ export function createCoordinationAdapter(
    * Mailbox capabilities are always the authenticated session's OWN — the service separately
    * requires the binding to own the addressed mailbox. Send capabilities are minted only for
    * candidate targets that hold a live committed recipient record, so naming a target is a
-   * request the durable ledger either justifies or drops. Bounded at
-   * MAX_TARGETS * kinds + mailbox endpoints, well inside the contract's capability ceiling.
+   * request the durable ledger either justifies or drops. The presentation reader has already
+   * bounded and authenticated the target list, keeping this inside the capability ceiling.
    */
-  function capabilitiesFor(sessionId: string, targets: unknown): readonly string[] {
+  function capabilitiesFor(sessionId: string, targets: readonly string[]): readonly string[] {
     const granted: string[] = MAILBOX_ENDPOINTS.map(
       (endpoint) => coordinationCapability(endpoint, sessionId),
     );
-    if (!Array.isArray(targets)) return Object.freeze(granted);
-    const seen = new Set<string>();
-    for (const target of targets.slice(0, MAX_TARGETS)) {
-      if (!isBoundedId(target) || seen.has(target)) continue;
-      seen.add(target);
+    for (const target of targets) {
       if (!liveRecipient(target)) continue;
       for (const kind of COORDINATION_ENVELOPE_KINDS) {
         granted.push(coordinationCapability("SEND", target, kind));
@@ -159,8 +131,8 @@ export function createCoordinationAdapter(
   /**
    * Derives the binding from a durable authentication. The proof is verified by the session
    * authority against the credential's committed public key over a challenge that binds the
-   * endpoint, transport, session, and request id, and its nonce is burned durably, so a
-   * presentation is single-use and cannot be moved to another request.
+   * endpoint, transport, session, request id, canonical request digest, and capability targets.
+   * Its nonce is burned durably, so a presentation is single-use.
    */
   function authenticate(request: CoordinationAuthRequest): unknown {
     try {
@@ -176,7 +148,9 @@ export function createCoordinationAdapter(
       if (!isBoundedId(requestId) || !isBoundedId(sessionId)) {
         return refused("SESSION_AUTHORITY_INVALID", "BINDING");
       }
-      if (!isBoundedId(request.transportId)) {
+      const targets = readCoordinationPresentationTargets(raw.targets);
+      if (!isBoundedId(request.transportId) || !isSessionDigest(request.requestDigest)
+        || targets === null) {
         return refused("SESSION_AUTHORITY_INVALID", "BINDING");
       }
       const outcome = sessions.authenticate({
@@ -187,7 +161,8 @@ export function createCoordinationAdapter(
         projectId,
         proof: raw.proof,
         requestDigest: coordinationPresentationDigest({
-          endpoint: request.endpoint, requestId, sessionId, transportId: request.transportId,
+          endpoint: request.endpoint, requestDigest: request.requestDigest, requestId, sessionId,
+          targets, transportId: request.transportId,
         }),
         requestId,
         sessionId,
@@ -199,7 +174,7 @@ export function createCoordinationAdapter(
         return refused("SESSION_AUTHORITY_INVALID", "BINDING");
       }
       return Object.freeze({
-        capabilities: capabilitiesFor(authenticated, raw.targets),
+        capabilities: capabilitiesFor(authenticated, targets),
         ok: true as const,
         principalId,
         sessionId: authenticated,
