@@ -126,9 +126,7 @@ import {
 } from "../../apps/daemon/src/goals/goal-close-prerequisite.js";
 import {
   approveNodes,
-  cleanupGoalClosureFixtures,
   seedReviewAcceptance,
-  seedVerifiedNode,
 } from "../../apps/daemon/src/goals/goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "../../apps/daemon/src/goals/goal-qualification.js";
 import { hostileRoot } from "./hostile-harness.js";
@@ -1201,13 +1199,37 @@ export function goalAcceptedControls(): readonly GoalPrerequisiteProof[] {
   return goalControls;
 }
 
-/** Handles first, then the verification scratch roots: win32 holds the store file open. */
+/**
+ * Handles only. The verification scratch roots went with the chain that created them: nothing
+ * here materializes a candidate tree any more, so there is no second thing to clean.
+ */
 export function closeGoalPrerequisiteFixtures(): void {
   closeStores();
-  cleanupGoalClosureFixtures();
 }
 
 type GoalStore = ReturnType<typeof openStore>;
+
+/**
+ * THE CHAIN THIS FILE CAN NO LONGER BUILD, kept as a NAMED failure rather than deleted.
+ *
+ * Three arrangements below need a durable PASSED Foundation verification receipt over a proven
+ * attempt. That chain starts at a committed activation, and production refuses to commit one
+ * from a test world, so the shared `seedVerifiedNode` fixture was removed under governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 (task-c048b0811943443cb32b45cc7e33c43d).
+ *
+ * THESE ARMS WERE ALREADY RED BEFORE THAT REMOVAL — measured on the pre-removal tree:
+ * `pnpm test:security` reported `Tests 11 failed | 440 passed (451)`, nine of them here,
+ * including the ACCEPTED control. Deleting them would weaken this file's boundary proof, and a
+ * boundary whose accepted control has quietly vanished refuses everything for free. They
+ * therefore stay and fail under a reason that says WHY. RE-SCOPING THEM — the clause-3 question
+ * of what these arms should assert on a world production can reach — belongs to this file's
+ * owner, task-64a72f8d, not to the row that removed the fixture.
+ */
+function verifiedNodeIsUnbuildable(nodeRef: string): void {
+  throw new Error(
+    `GOAL_CLOSURE_VERIFIED_NODE_UNBUILDABLE: no committed activation can be minted from a test `
+    + `world, so no PASSED Foundation verification receipt can name ${nodeRef}`);
+}
 
 /** Read straight off the durable store — never off the answer the command returned. */
 function goalResidue(store: GoalStore): GoalResidue {
@@ -1295,9 +1317,9 @@ async function ambiguouslyReceiptedGoal(): Promise<GoalStore> {
   const store = openStore();
   approveNodes(store, ["node-1"]);
   seedReviewAcceptance(store, "node-1");
-  await seedVerifiedNode(store, "node-1");
+  verifiedNodeIsUnbuildable("node-1");
   afterPrecondition = qualifyGoalClosure(store, GOAL_PROJECT_ID, GOAL_ID);
-  await seedVerifiedNode(store, "node-1");
+  verifiedNodeIsUnbuildable("node-1");
   return store;
 }
 
@@ -1311,7 +1333,7 @@ export async function runAcceptedGoalCloseControl(): Promise<unknown> {
   const store = openStore();
   approveNodes(store, ["node-1"]);
   seedReviewAcceptance(store, "node-1");
-  await seedVerifiedNode(store, "node-1");
+  verifiedNodeIsUnbuildable("node-1");
   return captureGoalClose(store, "CONTROL", "cmd-goal.close-control");
 }
 

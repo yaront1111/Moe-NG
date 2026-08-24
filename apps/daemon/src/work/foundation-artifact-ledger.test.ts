@@ -6,10 +6,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
-import {
-  cleanupGoalClosureFixtures, seedProvenAttempt,
-} from "../goals/goal-closure-test-fixtures.js";
-import type { SeedProvenAttemptOptions, SeededAttempt } from "../goals/goal-closure-test-fixtures.js";
+import { scanGlobalEvents } from "../goals/goal-closure-test-fixtures.js";
 import { seedReadyProject } from "../recovery/restore-test-harness.js";
 import {
   FOUNDATION_ARTIFACT_EVENT_TYPE, deriveFoundationArtifactAggregateId,
@@ -17,42 +14,52 @@ import {
   sealFoundationArtifactRoster,
 } from "./foundation-artifact-ledger.js";
 import {
-  canonicalArtifactRoster, deriveFoundationArtifactDigest,
+  canonicalArtifactRoster, deriveFoundationArtifactDigest, sealFoundationArtifactManifest,
 } from "./foundation-artifact-manifest.js";
-import {
-  decodeFoundationPayload, encodeFoundationPayload,
-} from "./foundation-attempt-codec.js";
-import { readFoundationAttemptRecord } from "./foundation-attempt-store.js";
+import { encodeFoundationPayload } from "./foundation-attempt-codec.js";
 
 import type { FoundationArtifactLedgerOutcome } from "./foundation-artifact-ledger.js";
 
 /**
- * THE FOUNDATION ARTIFACT-ROSTER SEAL, graded against the human OPTION-A ruling
- * (task-4a318d03, comment-a662f748). The ruling authorizes sealing the closed-M1
- * EMPTY roster as observed truth and attaches two conditions, and those two
- * conditions are what most of this file tests:
+ * THE FOUNDATION ARTIFACT-ROSTER SEAL on the store PRODUCTION CAN ACTUALLY REACH.
  *
- *   1. A sealed empty must be provably DIFFERENT from never-enumerated.
- *   2. A caller-supplied NONEMPTY roster must still be REFUSED on this lane.
+ * WHAT THIS FILE USED TO DO, AND WHY IT STOPPED. Every store-backed arm began with
+ * `seedProvenAttempt`, which drove `runEffectActivateCommand` to commit an activation. Production
+ * cannot commit one from a test world any more, so those arms asserted against a state nothing
+ * can build. Governor ruling comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 is applied here:
+ * the world is not rebuilt below the admission path, the SUBJECT is narrowed to what this store
+ * can honestly hold — a REAL, file-backed, bootstrapped project carrying NO attempt and NO
+ * activation.
  *
- * EVERY DURABLE ASSERTION READS THE STORE, not the writer's return value. A
- * writer that answered correctly and wrote nothing — or wrote twice — would sail
- * through a return-value-only arm, and the rows are the fact the consumer
- * (task-a20e8ef6) will actually read.
+ * WHAT THAT WORLD STILL PROVES, and it is the direction the human OPTION-A ruling
+ * (task-4a318d03, comment-a662f748) cared most about: condition 2, that a caller-supplied
+ * NONEMPTY roster is REFUSED on this lane, and that it is refused BEFORE the attempt is even
+ * read. Plus the strict reader's whole refusal vocabulary — ABSENT, DRIFT, PROJECT_MISMATCH,
+ * ATTEMPT_MISMATCH — reached by planting rows directly on the artifact aggregate.
  *
- * THE SEAL IS NEVER CALLED DIRECTLY TO PROVE THE LANE. Arms A, B and C reach it
- * only through `recordProvenFoundationAttempt` via the production seed, so they
- * prove the LANE refuses or seals rather than that a predicate returns false.
- * `sealFoundationArtifactRoster` is called directly ONLY in arm D, where the
- * subject is replay identity rather than lane policy.
+ * A PLANTED ROW IS A READER FIXTURE AND NEVER EVIDENCE THAT THE LANE SEALED. Nothing below
+ * claims the production writer succeeded; the writer is exercised only on its REFUSING paths.
+ * Condition 1's positive half — a sealed empty roster being provably different from
+ * never-enumerated — needed a proven attempt and is retired, with the never-enumerated half
+ * surviving as the ABSENT arm.
+ *
+ * EVERY DURABLE ASSERTION READS THE STORE, not the writer's return value. A writer that answered
+ * correctly and wrote a row anyway would sail through a return-value-only arm.
  */
 
 const LEDGER_LAYER = "DAEMON_FOUNDATION_ARTIFACT_LEDGER";
 const HEX64 = /^[0-9a-f]{64}$/u;
+const PRINCIPAL_ID = "principal-1";
+const DECIDED_AT = "2026-08-15T00:00:00.000Z";
+/** A dispatch aggregate this file never writes an attempt event to: the artifact lane keys its
+ *  own aggregate off it, and `durableInstant` reads it to stamp a seal. */
+const ATTEMPT_AGGREGATE = "foundation-dispatch:unattempted";
+const ATTEMPT_REF = "attempt-unattempted-1";
+const INPUT_SHA = "c".repeat(64);
+const RESULT_SHA = "d".repeat(64);
 const scratch: string[] = [];
 
 afterAll(() => {
-  cleanupGoalClosureFixtures();
   while (scratch.length > 0) {
     rmSync(scratch.pop() as string, { force: true, maxRetries: 5, recursive: true });
   }
@@ -62,8 +69,10 @@ afterAll(() => {
  * FILE-BACKED, per DoD 4 — `openEphemeralForProjectTest` is `:memory:` and would
  * not exercise the durability path the consumer reads through. The project is
  * driven to READY through the REAL bootstrap chain (`seedReadyProject`), not
- * written by hand: a fresh file-backed store has no bootstrap ledger, and
- * `goal.create` refuses `BOOTSTRAP_PREREQUISITE_MISSING` without it.
+ * written by hand: a fresh file-backed store has no bootstrap ledger, and the
+ * lane's own commits refuse without it. `seedReadyProject` seeds a graph and a
+ * funded budget root; it commits NO activation ledger row, which the store-wide
+ * arm below measures rather than assumes.
  *
  * Opened inside a case and closed in `finally`: a held sqlite handle kills the
  * vitest worker on Windows.
@@ -78,35 +87,9 @@ function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
   } finally { store.close(); }
 }
 
-function artifactRows(store: SqliteEventStore, dispatchAggregateId: string): number {
-  const aggregate = deriveFoundationArtifactAggregateId(dispatchAggregateId);
-  return store.readEvents(aggregate)
+function artifactRows(store: SqliteEventStore): number {
+  return store.readEvents(deriveFoundationArtifactAggregateId(ATTEMPT_AGGREGATE))
     .filter((event) => event.eventType === FOUNDATION_ARTIFACT_EVENT_TYPE).length;
-}
-
-function nested(value: Record<string, unknown>, key: string): Record<string, unknown> {
-  const found = value[key];
-  if (typeof found !== "object" || found === null) throw new TypeError(`${key} is not a record`);
-  return found as Record<string, unknown>;
-}
-
-/** The durable result manifest of the seeded attempt, read back out of the store. */
-function resultManifestSha(store: SqliteEventStore, seeded: SeededAttempt): string {
-  const stored = readFoundationAttemptRecord(store, seeded.attemptAggregateId);
-  if (!stored.ok) throw new Error(`attempt record unreadable: ${stored.code}`);
-  return nested(stored.record, "resultManifest")["sha256"] as string;
-}
-
-function attemptReason(store: SqliteEventStore, seeded: SeededAttempt): Record<string, unknown> {
-  const stored = readFoundationAttemptRecord(store, seeded.attemptAggregateId);
-  if (!stored.ok) throw new Error(`attempt record unreadable: ${stored.code}`);
-  return stored.record;
-}
-
-function seed(
-  store: SqliteEventStore, label: string, options: SeedProvenAttemptOptions = {},
-): SeededAttempt {
-  return seedProvenAttempt(store, "node-1", label, options);
 }
 
 function expectRefusal(
@@ -121,219 +104,155 @@ function expectRefusal(
 const REF_A = Object.freeze({ byteLength: 11, sha256: "a".repeat(64) });
 const REF_B = Object.freeze({ byteLength: 22, sha256: "b".repeat(64) });
 
-describe("foundation artifact seal — the AUTHORIZED EMPTY roster is durable truth", () => {
-  it("seals a 64-hex digest, a STATED zero count and the enumeration binding", () => {
-    withStore("empty", (store) => {
-      const seeded = seed(store, "artifact-empty");
-      // ASSERTED FIRST, so a refused seal reports ITS OWN CODE here rather than
-      // surfacing as a null result manifest three assertions later.
-      const settled = attemptReason(store, seeded);
-      expect(settled["reasonCode"]).toBeNull();
-      expect(settled["truthClass"]).toBe("PROVEN");
-      const manifestSha = resultManifestSha(store, seeded);
+const QUERY = Object.freeze({ attemptAggregateId: ATTEMPT_AGGREGATE, projectId: PROJECT_ID });
 
-      const read = readFoundationArtifactManifest(
-        store, { attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID });
+/** The seal request a direct caller composes. Non-authoritative by construction: the identities
+ *  are this file's own literals, not anything a durable record handed back. */
+function sealRequest(
+  overrides: Readonly<Record<string, unknown>> = {},
+): Parameters<typeof sealFoundationArtifactRoster>[1] {
+  return {
+    attemptAggregateId: ATTEMPT_AGGREGATE, attemptRef: ATTEMPT_REF,
+    commandId: "cmd-artifact-direct", correlationId: "corr-artifact-direct",
+    declaredArtifactRefs: [], inputManifestSha256: INPUT_SHA, principalId: PRINCIPAL_ID,
+    projectId: PROJECT_ID, resultManifestSha256: RESULT_SHA,
+    ...overrides,
+  };
+}
 
-      expect(read.ok).toBe(true);
-      if (!read.ok) return;
-      const { manifest } = read;
-      expect(manifest.artifactDigest).toMatch(HEX64);
-      // STATED, not inferred: the count is the observation half of the denominator.
-      expect(manifest.artifactRefCount).toBe(0);
-      expect(manifest.artifactRefs).toStrictEqual([]);
-      // THE BINDING half — present only because the capture answered and the
-      // result manifest built. This is what a never-enumerated roster cannot have.
-      expect(manifest.resultManifestSha256).toBe(manifestSha);
-      expect(manifest.attemptRef).toBe(seeded.attemptRef);
-      expect(manifest.projectId).toBe(PROJECT_ID);
-      expect(manifest.manifestVersion).toBe("moe-foundation-artifact-manifest/1");
-      // RAW COUNT OUT OF THE STORE: exactly one row, and it is the seal's own type.
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(1);
-      const events = store.readEvents(
-        deriveFoundationArtifactAggregateId(seeded.dispatchAggregateId));
-      expect(events.map((event) => event.eventType)).toStrictEqual([
-        FOUNDATION_ARTIFACT_EVENT_TYPE,
-      ]);
-      // AND THE ATTEMPT SETTLED PROVEN — a seal that refused would have forced
-      // the advisory UNKNOWN branch instead, so this pins the ordering too.
-      expect(attemptReason(store, seeded)["truthClass"]).toBe("PROVEN");
+/**
+ * A canonical manifest row planted straight onto the artifact aggregate.
+ *
+ * READER FIXTURE ONLY. The body comes from the production sealer
+ * (`sealFoundationArtifactManifest`), so the reader meets the exact shape it would meet in the
+ * field; `mutate` then drifts one field for the arms whose guard is unreachable from a
+ * well-formed row. Committing it says nothing about whether the LANE would have sealed it — this
+ * world holds no attempt, and the lane refuses on that.
+ */
+function plantManifest(
+  store: SqliteEventStore, label: string,
+  parts: Readonly<{ attemptRef?: string; projectId?: string }> = {},
+  mutate: (body: Record<string, unknown>) => Record<string, unknown> = (body) => body,
+): void {
+  const sealed = sealFoundationArtifactManifest({
+    attemptRef: parts.attemptRef ?? ATTEMPT_REF, declaredArtifactRefs: [],
+    inputManifestSha256: INPUT_SHA, projectId: parts.projectId ?? PROJECT_ID,
+    resultManifestSha256: RESULT_SHA,
+  });
+  if (!sealed.ok) throw new Error(`manifest fixture refused: ${sealed.code}`);
+  const encoded = encodeFoundationPayload(
+    mutate({ ...sealed.manifest as unknown as Record<string, unknown> }));
+  if (!encoded.ok) throw new Error(`manifest fixture is not encodable: ${encoded.code}`);
+  const aggregateId = deriveFoundationArtifactAggregateId(ATTEMPT_AGGREGATE);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "test.plant_foundation_artifact", committedResultBytes: encoded.bytes,
+    correlationId: `corr-plant-${label}`, decidedAt: DECIDED_AT,
+    events: [{
+      eventId: `plant-${label}`, eventType: FOUNDATION_ARTIFACT_EVENT_TYPE, payload: encoded.bytes,
+    }],
+    expectedVersion: store.readEvents(aggregateId).length,
+    key: { commandId: `cmd-plant-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: encoded.bytes, targetAggregateId: aggregateId,
+  });
+  if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    throw new Error(`planting refused: ${committed.decision.effectDisposition}`);
+  }
+}
+
+describe("foundation artifact seal — the world production can reach holds no attempt", () => {
+  it("carries no committed activation anywhere, measured store-wide", () => {
+    withStore("unactivated", (store) => {
+      const scan = scanGlobalEvents(store);
+
+      // POSITIVE CONTROL: the bootstrap really ran, so a zero activation count is a measurement
+      // and not an empty store answering for one.
+      expect(scan.total).toBeGreaterThan(0);
+      expect(scan.exhausted).toBe(true);
+      expect(scan.activationRows).toBe(0);
+      expect(artifactRows(store)).toBe(0);
     });
   });
 
-  it("derives a digest that is NOT the result-manifest sha256 of the same attempt", () => {
-    withStore("digest-discipline", (store) => {
-      const seeded = seed(store, "artifact-discipline");
-      const manifestSha = resultManifestSha(store, seeded);
+  it("refuses to seal even an AUTHORIZED empty roster while the attempt holds no event", () => {
+    withStore("no-durable-instant", (store) => {
+      // The empty roster clears the nonempty fence, so the refusal below is the NEXT one:
+      // `durableInstant` finds no event on the attempt aggregate and has no honest stamp to
+      // commit under. A wall-clock fallback here is exactly what the module refuses to do.
+      const outcome = sealFoundationArtifactRoster(store, sealRequest());
 
-      const read = readFoundationArtifactManifest(
-        store, { attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID });
-
-      expect(read.ok).toBe(true);
-      if (!read.ok) return;
-      // RAIL 1 AS A TEST RATHER THAN A COMMENT. `resultTreeSha256` IS
-      // `resultManifest.sha256` on this lane (`evidence-receipt.ts:202`), so
-      // returning it here would be the exact substitution rail 1 names.
-      expect(manifestSha).toMatch(HEX64);
-      expect(read.manifest.artifactDigest).not.toBe(manifestSha);
-      expect(read.manifest.resultManifestSha256).toBe(manifestSha);
+      expectRefusal(outcome, "FOUNDATION_ARTIFACT_LEDGER_UNREADABLE", LEDGER_LAYER);
+      expect(artifactRows(store)).toBe(0);
     });
   });
-});
 
-describe("foundation artifact seal — CONDITION 1: sealed-empty and never-enumerated differ", () => {
-  it("answers ABSENT at its own layer with ZERO rows when the capture never answered", () => {
+  it("answers ABSENT at its own layer with ZERO rows when nothing ever enumerated", () => {
     withStore("not-enumerated", (store) => {
-      // NOT-ENUMERATED REACHED HONESTLY: the same production chain, with a capture
-      // answer the store's own `exactKeys` fence refuses at :215-217 — before any
-      // seal is attempted. Nothing here reaches around the writer.
-      const seeded = seed(store, "artifact-unanswered", { answer: { authoredPaths: [] } });
-      const durable = attemptReason(store, seeded);
-      expect(durable["reasonCode"]).toBe("FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN");
-      expect(durable["truthClass"]).toBe("UNKNOWN");
-      expect(durable["resultManifest"]).toBeNull();
-
-      const read = readFoundationArtifactManifest(
-        store, { attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID });
+      const read = readFoundationArtifactManifest(store, QUERY);
 
       expectRefusal(read, "FOUNDATION_ARTIFACT_LEDGER_ABSENT", LEDGER_LAYER);
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(0);
-    });
-  });
-
-  it("gives the two cases DIFFERENT durable outcomes in one store", () => {
-    withStore("condition-one", (store) => {
-      // BOTH SIDES SIDE BY SIDE. Separately each arm could pass while the seal was
-      // a no-op or the reader always refused; together they cannot.
-      const sealedAttempt = seed(store, "artifact-both-sealed");
-      const unanswered = seed(
-        store, "artifact-both-unanswered", { answer: { authoredPaths: [] } });
-
-      const observedEmpty = readFoundationArtifactManifest(
-        store, { attemptAggregateId: sealedAttempt.dispatchAggregateId, projectId: PROJECT_ID });
-      const neverEnumerated = readFoundationArtifactManifest(
-        store, { attemptAggregateId: unanswered.dispatchAggregateId, projectId: PROJECT_ID });
-
-      expect(observedEmpty.ok).toBe(true);
-      expectRefusal(neverEnumerated, "FOUNDATION_ARTIFACT_LEDGER_ABSENT", LEDGER_LAYER);
-      // The empty roster is IDENTICAL in both worlds; only the enumeration proof
-      // differs. That is the whole point of the condition.
-      expect(observedEmpty.ok && observedEmpty.manifest.artifactRefCount).toBe(0);
-      expect(artifactRows(store, sealedAttempt.dispatchAggregateId)).toBe(1);
-      expect(artifactRows(store, unanswered.dispatchAggregateId)).toBe(0);
+      expect(artifactRows(store)).toBe(0);
     });
   });
 });
 
 describe("foundation artifact seal — CONDITION 2: the lane REFUSES caller-handed refs", () => {
-  it("refuses a nonempty roster offered through the production writer, writing no row", () => {
+  it("refuses a nonempty roster BEFORE it reads the attempt, and writes no row", () => {
     withStore("unauthorized", (store) => {
-      // REACHED THROUGH THE PRODUCTION SEAM. Everything except the roster is the
-      // real capture answer, so the attempt is valid up to the fence and this arm
-      // proves the LANE refuses rather than that a predicate returns false.
-      const seeded = seed(
-        store, "artifact-unauthorized", { declaredArtifactRefs: [REF_A] });
+      const offered = sealFoundationArtifactRoster(
+        store, sealRequest({ declaredArtifactRefs: [REF_A] }));
 
-      const durable = attemptReason(store, seeded);
-      expect(durable["reasonCode"]).toBe("FOUNDATION_ARTIFACT_LEDGER_ROSTER_UNAUTHORIZED");
-      expect(durable["reasonLayer"]).toBe(LEDGER_LAYER);
-      // A REFUSED SEAL MUST NOT SETTLE PROVEN.
-      expect(durable["truthClass"]).toBe("UNKNOWN");
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(0);
-
-      const read = readFoundationArtifactManifest(
-        store, { attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID });
-      expectRefusal(read, "FOUNDATION_ARTIFACT_LEDGER_ABSENT", LEDGER_LAYER);
+      expectRefusal(offered, "FOUNDATION_ARTIFACT_LEDGER_ROSTER_UNAUTHORIZED", LEDGER_LAYER);
+      expect(artifactRows(store)).toBe(0);
+      // THE ORDERING, made falsifiable rather than asserted in prose. The SAME world with an
+      // EMPTY roster refuses under a DIFFERENT code, so the nonempty fence provably answered
+      // first: if it ran after the attempt read, both calls would say UNREADABLE.
+      expectRefusal(sealFoundationArtifactRoster(store, sealRequest()),
+        "FOUNDATION_ARTIFACT_LEDGER_UNREADABLE", LEDGER_LAYER);
+      expect(artifactRows(store)).toBe(0);
     });
   });
 });
 
-describe("foundation artifact seal — identity, replay and bindings", () => {
-  it("is idempotent on identical bytes and fences a differing body", () => {
-    withStore("replay", (store) => {
-      const seeded = seed(store, "artifact-replay");
-      const manifestSha = resultManifestSha(store, seeded);
-      const request = {
-        attemptAggregateId: seeded.dispatchAggregateId, attemptRef: seeded.attemptRef,
-        commandId: seeded.bound.commandId, correlationId: seeded.bound.correlationId,
-        declaredArtifactRefs: [], inputManifestSha256: "c".repeat(64),
-        principalId: seeded.bound.principalId, projectId: PROJECT_ID,
-        resultManifestSha256: manifestSha,
-      };
-
-      // The production seal already ran; re-deriving the SAME body adopts the row.
-      const replay = sealFoundationArtifactRoster(store, {
-        ...request,
-        inputManifestSha256: readInputManifestSha(store, seeded),
-      });
-      expect(replay.ok).toBe(true);
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(1);
-
-      // A DIFFERING body is a real conflict, not a second truth.
-      const conflicting = sealFoundationArtifactRoster(store, {
-        ...request, resultManifestSha256: "d".repeat(64),
-      });
-      expectRefusal(conflicting, "FOUNDATION_ARTIFACT_LEDGER_CONFLICT", LEDGER_LAYER);
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(1);
-    });
-  });
-
+describe("foundation artifact reader — the strict refusal vocabulary", () => {
   it("refuses a durable row whose artifactDigest does not seal its own roster", () => {
     withStore("forged-digest", (store) => {
-      const seeded = seed(store, "artifact-forged");
-      const aggregate = deriveFoundationArtifactAggregateId(seeded.dispatchAggregateId);
-      const sealedRow = store.readEvents(aggregate)[0];
-      expect(sealedRow).toBeDefined();
-      if (sealedRow === undefined) return;
-      const decoded = decodeFoundationPayload(sealedRow.payload);
-      expect(decoded.ok).toBe(true);
-      if (!decoded.ok) return;
+      // A FORGED ROW, canonical in every other respect: re-encoding it reproduces its own bytes,
+      // so the byte-compare alone would pass it. Only re-deriving the digest FROM THE ROSTER
+      // catches a digest that belongs to nothing.
+      plantManifest(store, "forged", {}, (body) => ({ ...body, artifactDigest: "e".repeat(64) }));
+      expect(artifactRows(store)).toBe(1);
 
-      // A FORGED ROW, canonical in every other respect: re-encoding it reproduces
-      // its own bytes, so the byte-compare alone would pass it. Only re-deriving
-      // the digest FROM THE ROSTER catches a digest that belongs to nothing.
-      const forged = encodeFoundationPayload({
-        ...decoded.value, artifactDigest: "e".repeat(64),
-      });
-      expect(forged.ok).toBe(true);
-      if (!forged.ok) return;
-      store.commitExpectedVersionDecision({
-        commandKind: "foundation.artifact.seal", committedResultBytes: forged.bytes,
-        correlationId: "corr-forged", decidedAt: sealedRow.committedAt,
-        events: [{
-          eventId: `${forged.digest}:ARTIFACT`,
-          eventType: FOUNDATION_ARTIFACT_EVENT_TYPE, payload: forged.bytes,
-        }],
-        expectedVersion: store.readEvents(aggregate).length,
-        key: { commandId: "cmd-forged", principalId: "principal-1", projectId: PROJECT_ID },
-        requestBytes: forged.bytes, targetAggregateId: aggregate,
-      });
-      // LATEST WINS, so the forged row is the one the reader now decodes.
-      expect(artifactRows(store, seeded.dispatchAggregateId)).toBe(2);
-
-      const read = readFoundationArtifactManifest(
-        store, { attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID });
+      const read = readFoundationArtifactManifest(store, QUERY);
 
       expectRefusal(read, "FOUNDATION_ARTIFACT_LEDGER_DRIFT", LEDGER_LAYER);
+      expect(artifactRows(store)).toBe(1);
     });
   });
 
-  it("refuses a foreign project and a foreign attempt under distinct codes", () => {
+  it("refuses a row belonging to another project, and one bound to another attempt", () => {
     withStore("bindings", (store) => {
-      const seeded = seed(store, "artifact-bindings");
-      const query = {
-        attemptAggregateId: seeded.dispatchAggregateId, projectId: PROJECT_ID,
-      };
+      plantManifest(store, "foreign-project", { projectId: "project-foreign" });
+      expect(artifactRows(store)).toBe(1);
 
-      expectRefusal(
-        readFoundationArtifactManifest(store, { ...query, projectId: "project-foreign" }),
+      expectRefusal(readFoundationArtifactManifest(store, QUERY),
         "FOUNDATION_ARTIFACT_LEDGER_PROJECT_MISMATCH", LEDGER_LAYER);
+      // The SAME row read under its OWN project decodes and answers, so the refusal above is the
+      // project binding rather than a row that was never readable.
+      const own = readFoundationArtifactManifest(
+        store, { ...QUERY, projectId: "project-foreign" });
+      expect(own.ok).toBe(true);
+      if (!own.ok) return;
+      expect(own.manifest.attemptRef).toBe(ATTEMPT_REF);
+      expect(own.manifest.artifactRefCount).toBe(0);
+      expect(own.manifest.artifactDigest).toMatch(HEX64);
       expectRefusal(
-        readFoundationArtifactForAttempt(store, query, "attempt-foreign"),
+        readFoundationArtifactForAttempt(
+          store, { ...QUERY, projectId: "project-foreign" }, "attempt-foreign"),
         "FOUNDATION_ARTIFACT_LEDGER_ATTEMPT_MISMATCH", LEDGER_LAYER);
-      // The same read with the RIGHT attempt still answers, so the two arms above
-      // are refusing on the binding rather than on a row that was never readable.
-      expect(readFoundationArtifactForAttempt(store, query, seeded.attemptRef).ok).toBe(true);
+      // ...and the attempt binding answers for the attempt it really names.
+      expect(readFoundationArtifactForAttempt(
+        store, { ...QUERY, projectId: "project-foreign" }, ATTEMPT_REF).ok).toBe(true);
+      expect(artifactRows(store)).toBe(1);
     });
   });
 });
@@ -370,10 +289,3 @@ describe("foundation artifact manifest — the canonical roster", () => {
     expect(duplicated.layer).toBe("DAEMON_FOUNDATION_ARTIFACT");
   });
 });
-
-/** The seeded attempt's own input-manifest sha, read back out of the durable record. */
-function readInputManifestSha(store: SqliteEventStore, seeded: SeededAttempt): string {
-  const stored = readFoundationAttemptRecord(store, seeded.attemptAggregateId);
-  if (!stored.ok) throw new Error(`attempt record unreadable: ${stored.code}`);
-  return nested(stored.record, "inputManifest")["sha256"] as string;
-}

@@ -24,11 +24,7 @@ import {
 import { driveTo } from "./bootstrap-journey-fixtures.js";
 import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
-import {
-  cleanupGoalClosureFixtures,
-  seedReviewAcceptance,
-  seedVerifiedNode,
-} from "../goals/goal-closure-test-fixtures.js";
+import { scanGlobalEvents } from "../goals/goal-closure-test-fixtures.js";
 
 /**
  * Durability behaviour of the nine bootstrap services: the command-driven sequence (DoD 1),
@@ -38,20 +34,27 @@ import {
  * Every refusal assertion names the stable code AND the layer that produced it. Three layers
  * can refuse here — the ingress gate, the daemon's durable-sequence gate, and a core reducer —
  * so asserting only "it refused" would go vacuous the moment an earlier layer starts answering.
+ *
+ * `goal.close` IS THE ONE REQUEST THIS JOURNEY CANNOT DRIVE TO A DECISION. Its daemon
+ * prerequisite demands a durable Foundation verification receipt, and no test world can commit
+ * the activation that chain starts from — `runEffectActivateCommand` refuses. Rather than delete
+ * the row from the generated matrix (which would silently shrink the sweep) or rebuild the world
+ * below the admission path (governor ruling comment-937524c83a1945a5afae3ed8ac2405b9 forbids it),
+ * the matrix keeps every request and asserts the answer `goal.close` GENUINELY returns here: the
+ * exact no-receipt refusal, twice, with no durable row either time.
  */
 
 afterEach(closeStores);
-afterEach(cleanupGoalClosureFixtures);
 
-/**
- * Seeds the whole non-human evidence chain required before final goal acceptance: a durable
- * verification receipt for the approved node and its accepted review. Both go through the
- * production pipelines, so the close case cannot pass on a fabricated store row.
- */
-async function qualifyClosure(store: SqliteEventStore, nodeRef: string): Promise<void> {
-  seedReviewAcceptance(store, nodeRef);
-  await seedVerifiedNode(store, nodeRef);
-}
+/** The frozen tuple `goal.close` answers on this journey, restated by hand so a code, a layer or
+ *  an authority quietly changing is a red rather than a shrug. */
+const NO_RECEIPT_REFUSAL = Object.freeze({
+  advisoryOnly: true,
+  authority: "NONE",
+  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
+  ok: false,
+  refusedBy: "DAEMON_PREREQUISITE",
+});
 
 function registerAndBind(store: SqliteEventStore): void {
   const sequence = bootstrapSequence();
@@ -136,7 +139,7 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
 
   it.each(sequence.map((request, index) => [request.kind, index] as const))(
     "%s commits one decision and replays it exactly",
-    async (kind, index) => {
+    (kind, index) => {
       const store = openStore();
       // By INDEX: `driveThrough` keys on kind and would rewind the finalize request's prefix
       // back to the proposal, sending a finalize against a run that never proposed.
@@ -147,10 +150,26 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
       // seeds the world for every index PAST the approval; this line covers the index that IS
       // the approval, whose request the test sends itself.
       if (kind === "approval.decide") seedActivationWorld(store);
-      if (kind === "goal.close") await qualifyClosure(store, "node-1");
       const before = decisionCount(store);
 
       const request = sequence[index] as Envelope;
+      if (kind === "goal.close") {
+        // STORE-WIDE, not one guessed aggregate: a committed activation anywhere would make this
+        // arm's refusal the wrong subject. `total` is the positive control — the journey really
+        // did write events — so a zero activation count is measured, not vacuous.
+        const scan = scanGlobalEvents(store);
+        expect(scan.total).toBeGreaterThan(0);
+        expect(scan.exhausted).toBe(true);
+        expect(scan.activationRows).toBe(0);
+
+        expect(send(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        expect(decisionCount(store)).toBe(before);
+        // A refusal is not a decision, so the SECOND call re-derives it rather than replaying a
+        // row: identical answer, still nothing durable.
+        expect(send(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        expect(decisionCount(store)).toBe(before);
+        return;
+      }
       const first = send(store, request);
       expect(first.ok, `first ${kind}: ${first.ok ? "" : first.code}`).toBe(true);
       if (!first.ok) throw new Error("expected acceptance");

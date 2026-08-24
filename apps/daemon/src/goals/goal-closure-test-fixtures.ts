@@ -1,438 +1,78 @@
-import { rmSync } from "node:fs";
-
 import * as daemon from "@moe/daemon";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
-import {
-  CLAUDE_LAUNCHER_VERSION, buildInputManifest, buildProviderRuntimeObservation, observeScope,
-} from "@moe/runner";
-import type { DeclaredInput, GitObserver, ProviderRuntimeObservation } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
-import {
-  ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
-} from "../activation/activation-ingress-contracts.js";
-import { runEffectActivateCommand } from "../activation/activation-ingress.js";
+import { ACTIVATION_LEDGER_EVENT_TYPE } from "../activation/activation-ledger-contracts.js";
 import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
-import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
-import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
-import { createFoundationLauncherAuthority } from "../activation/foundation-launch-authority.js";
 import {
   PROJECT_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-import { createFoundationVerificationService } from "../evidence/foundation-verification-service.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
-import { encodeFoundationPayload } from "../work/foundation-attempt-codec.js";
-import {
-  FOUNDATION_RESERVATION_VERSION, deriveDispatchAggregateId,
-} from "../work/foundation-attempt-contracts.js";
-import type { ActivationLedgerRecord } from "../activation/activation-ledger-contracts.js";
-import type { FoundationAttemptBound } from "../work/foundation-attempt-contracts.js";
-import {
-  commitFoundationPhase, readDurableFoundationObservation, readFoundationAttemptRecord,
-  recordProvenFoundationAttempt,
-} from "../work/foundation-attempt-store.js";
-import {
-  candidateTreeEntries, materializeCandidateTree, type CandidateTree,
-} from "../evidence/foundation-verification-tree-fixtures.js";
 
 /**
- * Durable evidence for the goal-closure suites, seeded through PRODUCTION code only.
+ * The APPROVAL and REVIEW half of the goal-closure worlds, staged through PRODUCTION code only.
  *
- * `seedVerifiedNode` drives the whole real chain — activation ingress, launcher authority,
- * the durable attempt writer, the sealed recipe and a REAL child process through the shipped
- * node launcher. A receipt minted from a recording launcher would be exactly the mock-backed
- * acceptance the task rails forbid, so no stand-in appears anywhere below.
+ * WHAT THIS MODULE CAN AND CANNOT MINT, stated so no consumer mistakes silence for capability.
+ * It stages exactly two durable facts: a decided approval naming an approved node scope, and an
+ * accepted review with the verifier receipt that acceptance attests. Both travel the shipped
+ * command paths.
  *
- * EVERY IDENTITY IS DERIVED FROM THE NODE REF. Two nodes seeded into one store would otherwise
- * share a lease, an effect intent and therefore a grant, and `runVerifierProcess` keeps a
- * module-level run registry keyed by grantId: the second node would silently adopt the first
- * one's run.
+ * IT NEVER MINTS `EffectActivationCommitted`, A PROVEN FOUNDATION ATTEMPT, OR A FOUNDATION
+ * VERIFICATION RECEIPT. It used to: `seedProvenAttempt` drove `runEffectActivateCommand` and
+ * `seedVerifiedNode` drove a real verifier child process on top of it. Production cannot
+ * currently commit an activation from a test world — the ingress refuses — so that whole chain
+ * asserted against a state production cannot reach. Governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 directs the remedy taken here: the chain is
+ * DELETED and the suites assert the refusal production genuinely returns without it, rather than
+ * the world being rebuilt below the admission path under another name. Minting one here — from a
+ * ledger record, a raw positive attempt or receipt row, a seeded policy fact, or any other
+ * bypass — is exactly what that ruling forbids.
+ *
+ * The reachable first fence for every consumer is therefore
+ * `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` at `DAEMON_PREREQUISITE`, and the artifact lane's is
+ * `FOUNDATION_ARTIFACT_LEDGER_ABSENT`/`_UNREADABLE` at `DAEMON_FOUNDATION_ARTIFACT_LEDGER`.
  *
  * Test-tier scaffolding, reached only from `*.test.ts`, so it deliberately has no `.js` bridge —
- * `review-test-fixtures.ts` has none either.
+ * `review-test-fixtures.ts` has none either, and `index-surface.test.ts` keeps both names off the
+ * published root.
  */
 
 const encoder = new TextEncoder();
-const PRINCIPAL_ID = "principal-1";
-const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const OPERATOR_CREDENTIAL = "j1-operator-credential";
 const OPERATOR_PRINCIPAL_ID = "j1-operator";
+const GLOBAL_PAGE_LIMIT = 200;
 
-const DIGEST = "a".repeat(64);
-const DIGEST_A = "2".repeat(64), DIGEST_B = "3".repeat(64), DIGEST_C = "4".repeat(64);
-
-const scratchRoots: string[] = [];
-
-/** Recursive and forced: a win32 host briefly holds a handle on a just-exited child's cwd. */
-export function cleanupGoalClosureFixtures(): void {
-  while (scratchRoots.length > 0) {
-    const root = scratchRoots.pop();
-    if (root !== undefined) rmSync(root, { force: true, maxRetries: 20, recursive: true, retryDelay: 250 });
-  }
+export interface GlobalEventScan {
+  /** Rows of `ACTIVATION_LEDGER_EVENT_TYPE` anywhere in the store. */
+  readonly activationRows: number;
+  /** False if the walk stopped on a non-advancing cursor rather than on `hasMore`. */
+  readonly exhausted: boolean;
+  readonly total: number;
 }
 
-let seedOrdinal = 0;
-
 /**
- * A label that is unique for the whole PROCESS, not just the store.
+ * The whole store's event stream, walked to exhaustion.
  *
- * `runVerifierProcess` keeps a module-level run registry keyed by grantId, and the grant is
- * derived from the whole successor intent — so two seeds sharing a label refuse
- * GRANT_ALREADY_CONSUMED in the SECOND test even though each has its own store. Measured, not
- * assumed: that is exactly how this fixture failed before the ordinal was added.
+ * STORE-WIDE AND NOT PER-AGGREGATE, deliberately. A consumer asserting "this world holds no
+ * committed activation" by reading one guessed aggregate would miss a row committed anywhere
+ * else, and the sibling row that landed this technique (task-bff22559, commit d96797f) flagged
+ * exactly that trap. `total` is returned so the caller can assert a NONZERO denominator: an empty
+ * store also has zero activation rows, and a scan that measured nothing would pass vacuously.
  */
-function nextLabel(nodeRef: string): string {
-  seedOrdinal += 1;
-  return `${nodeRef.replace(/[^0-9a-zA-Z-]/gu, "-")}-${String(seedOrdinal)}`;
-}
-
-function leaseRecord(label: string): Record<string, unknown> {
-  return {
-    authorityHashRef: DIGEST, bootId: "boot-1", epoch: 3, kind: "ASSIGNMENT",
-    leaseId: `lease-${label}`, leaseToken: `token-${label}`, monotonicObservation: 500,
-    ownerSessionRef: `session-${label}`, serverWallDeadline: 1_000, state: "ACTIVE", version: 7,
-  };
-}
-
-function leaseProof(label: string): Record<string, unknown> {
-  return {
-    authorityHashRef: DIGEST, epoch: 3, expectedVersion: 7, leaseToken: `token-${label}`,
-    ownerSessionRef: `session-${label}`,
-  };
-}
-
-const VERIFIER_IDENTITY = Object.freeze({
-  capabilitySchemaDigest: DIGEST_B, verifierId: "moe-verifier", verifierVersion: "1.0.0",
-});
-/** An argv the wrapper's launch gate accepts: an absolute executable path. */
-const EXIT_ZERO = Object.freeze([process.execPath, "-e", "process.exit(0)"]);
-const EXIT_THREE = Object.freeze([process.execPath, "-e", "process.exit(3)"]);
-
-function activationBytes(label: string): Uint8Array {
-  const intentId = `intent-${label}`;
-  const lease = leaseRecord(label);
-  const proof = leaseProof(label);
-  return encoder.encode(JSON.stringify({
-    commandId: `cmd-activate-${label}`, correlationId: `corr-${label}`, decidedAt: DECIDED_AT,
-    expectedVersion: 0, kind: EFFECT_ACTIVATE_COMMAND_KIND,
-    payload: structuredClone({
-      activation: {
-        attempt: {
-          aggregateId: `agg-${label}`, attemptId: `attempt-${label}`, intentId,
-          state: "LAUNCH_REQUESTED", version: 0,
-        },
-        claim: {
-          claimId: `claim-${label}`, claimedAt: DECIDED_AT, intentId,
-          lockIdentity: `lock-${label}`, wrapperIdentity: `wrapper-${label}`,
-        },
-        dependencyWitnesses: [], desiredState: "ACTIVE", leaseProof: proof,
-        lockIdentity: `lock-${label}`, observedGraphEpoch: 4, observedRuntimeDigest: DIGEST,
-        tombstone: null, wrapperIdentity: `wrapper-${label}`,
-      },
-      effect: {
-        command: { kind: "claim" },
-        intent: {
-          aggregateId: `agg-${label}`, desiredState: "ACTIVE", expectedGraphEpoch: 4,
-          idempotencyKey: `idem-${label}`, inputBinding: DIGEST, intentId, leaseBinding: lease,
-          predecessorCursor: "cursor-1", protocolVersion: "moe-effect-intent/1",
-          runtimeObservationDigest: DIGEST, state: "PENDING", version: 0,
-        },
-      },
-      lease: { proof, record: lease },
-      liveClaims: [{ dimension: "default", slotRef: `held-${label}`, state: "RESERVED" }],
-      slot: {
-        dimension: "default", requestId: `req-${label}`,
-        rows: [{
-          capacityUnits: 1, effectIntentRef: `intent-ref-${label}`, epoch: 1, external: false,
-          fenceable: true, resourceId: `res-${label}`, state: "ACTIVE",
-        }],
-        slotRef: `slot-${label}`,
-      },
-    }),
-    principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
-    schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
-  }));
-}
-
-function fakeGit(head: string): GitObserver {
-  return {
-    headCommit: () => head, lsFilesIgnored: () => [], lsFilesTracked: () => [],
-    statusPorcelainV2: () => encoder.encode(`# branch.oid ${head}\0`), submodulePaths: () => [],
-  };
-}
-
-/**
- * The workspace answer the runner's result-manifest builder accepts. Its inherited entry
- * names the REAL tree's bytes: the verification service binds a candidate root to the
- * durable input manifest byte for byte before it activates anything, so the manifest
- * and the tree it is later verified against must agree on HEAD and on every sealed byte.
- */
-function captureAnswer(tree: CandidateTree): Record<string, unknown> {
-  const observed = observeScope({
-    baseIdentity: tree.head, declaredScopePaths: ["pkg/src"], gitObserver: fakeGit(tree.head),
-    observedAt: "2026-08-15T00:00:02Z", observerVersion: "moe-runner-scope-observer/1",
-    pathObserver: { exists: () => false, realpath: (path: string) => path },
-    worktreeRoot: "fixture-root",
-  });
-  if (!observed.ok) throw new Error(`scope fixture failed: ${observed.code}`);
-  return {
-    authoredPaths: ["pkg/src/authored.ts"],
-    // EMPTY, matching what the runner's production capture actually pins
-    // (`foundation-workspace-capture.ts:221`) and what
-    // `foundation-capture-producer.test.ts:240` asserts the producer yields.
-    // A fabricated ref here would hand the Foundation lane a roster no capture
-    // can produce, and the seal refuses exactly that (task-4a318d03 condition 2).
-    declaredArtifactRefs: [],
-    resultTreeEntries: [
-      {
-        byteLength: tree.byteLength, kind: "REGULAR", origin: "INHERITED", path: "pkg/src/base.ts",
-        sha256: tree.sha256,
-      },
-      {
-        byteLength: 4, kind: "REGULAR", origin: "AUTHORED", path: "pkg/src/authored.ts",
-        sha256: DIGEST_B,
-      },
-    ],
-    scopeObservation: observed.observation,
-  };
-}
-
-function sealedInput(tree: CandidateTree): Record<string, unknown> {
-  const built = buildInputManifest({
-    baseIdentity: tree.head, entries: candidateTreeEntries(tree) as never,
-  });
-  if (!built.ok) throw new Error(`input manifest fixture refused: ${built.code}`);
-  return built.manifest as unknown as Record<string, unknown>;
-}
-
-/** A genuinely digest-bound quote from the runner's own observation builder. */
-function runtimeQuote(): ProviderRuntimeObservation {
-  const built = buildProviderRuntimeObservation({
-    adapterCapabilitySchemaDigest: DIGEST_B, clock: { observedAt: () => DECIDED_AT },
-    pinningMethod: "CONTENT_ADDRESSED_COPY",
-    platformIdentity: { arch: "x64", os: "win32", osVersion: "10.0.26200" },
-    reportedVersion: "claude/2.0.0",
-    resolvedRuntimeClosure: [
-      { kind: "EXECUTABLE", path: "C:\\installed\\claude.exe", sha256: DIGEST_A },
-    ] as never,
-  });
-  if (!built.ok) throw new Error(`runtime quote fixture refused: ${built.code}`);
-  return built.observation;
-}
-
-function declaredInputs(): readonly DeclaredInput[] {
-  return [{ path: "pkg/src/base.ts", ref: { byteLength: 10, sha256: DIGEST_A } }];
-}
-
-function nested(value: Record<string, unknown>, key: string): Record<string, unknown> {
-  const found = value[key];
-  if (typeof found !== "object" || found === null || Array.isArray(found)) {
-    throw new TypeError(`${key} is not a record`);
+export function scanGlobalEvents(store: SqliteEventStore): GlobalEventScan {
+  let activationRows = 0, total = 0, cursor = 0n;
+  for (;;) {
+    const page = store.readEventsAfter(cursor, GLOBAL_PAGE_LIMIT);
+    total += page.items.length;
+    activationRows += page.items
+      .filter((event) => event.eventType === ACTIVATION_LEDGER_EVENT_TYPE).length;
+    if (!page.hasMore || page.nextCursor === null) {
+      return Object.freeze({ activationRows, exhausted: true, total });
+    }
+    if (page.nextCursor <= cursor) return Object.freeze({ activationRows, exhausted: false, total });
+    cursor = page.nextCursor;
   }
-  return found as Record<string, unknown>;
-}
-
-export interface SeededAttempt {
-  readonly attemptAggregateId: string;
-  /** `record.attempt.attemptId`, the ref downstream ledgers bind their rows to. */
-  readonly attemptRef: string;
-  readonly bound: FoundationAttemptBound;
-  /** The real tree the attempt's input manifest was sealed over; verify against THIS root. */
-  readonly candidateRoot: string;
-  /** `bound.target` — the aggregate carrying RESERVED/RECORDED for this attempt. */
-  readonly dispatchAggregateId: string;
-  readonly record: ActivationLedgerRecord;
-  readonly recordDigest: string;
-}
-
-export interface SeedProvenAttemptOptions {
-  /**
-   * REPLACES THE CAPTURE ANSWER, so a caller can drive the SAME production chain
-   * into `FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN` (`foundation-attempt-store.ts:215-217`)
-   * without duplicating sixty lines of it. The chain is unchanged — only what the
-   * capture reported differs — so an arm using this is still testing production.
-   */
-  readonly answer?: Record<string, unknown>;
-  /**
-   * Overrides exactly ONE key of the REAL capture answer. Everything else stays
-   * what the production capture reported, so an arm offering a hostile roster is
-   * still driving a valid attempt rather than a hand-built one.
-   */
-  readonly declaredArtifactRefs?: unknown;
-}
-
-function seededAnswer(
-  tree: CandidateTree, options: SeedProvenAttemptOptions,
-): Record<string, unknown> {
-  if (options.answer !== undefined) return options.answer;
-  const real = captureAnswer(tree);
-  return options.declaredArtifactRefs === undefined
-    ? real : { ...real, declaredArtifactRefs: options.declaredArtifactRefs };
-}
-
-/**
- * A durable PROVEN attempt record, produced by the production chain only: activation ingress ->
- * launcher authority GRANT_CONSUMED/PREFLIGHT/PROCESS_OBSERVED -> `readDurableFoundationObservation`
- * -> `recordProvenFoundationAttempt`. `nodeKey` is the node ref, which is the only durable
- * node -> receipt edge: `buildEvidenceReceipt` copies it into `receipt.graphIdentity`.
- */
-export function seedProvenAttempt(
-  store: SqliteEventStore, nodeRef: string, label: string = nextLabel(nodeRef),
-  options: SeedProvenAttemptOptions = {},
-): SeededAttempt {
-  // The activation below is the exact call whose authority moves from the caller's budget
-  // section to the durable ACTIVE graph (task-e194c5f6 step 6). Enriching the world here is a
-  // strict no-op today and is what keeps this lineage off that wall; it is idempotent, so a
-  // caller that already drove the planning chain to an ACTIVE graph is left untouched.
-  seedActivationWorld(store);
-  const tree = materializeCandidateTree(label);
-  scratchRoots.push(tree.root);
-  const activationAggregate = deriveActivationAggregateId(`agg-${label}`, `idem-${label}`);
-  const activated = runEffectActivateCommand(store, activationBytes(label));
-  if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
-  const initial = readFoundationActivationHistory(
-    activationAggregate, store.readEvents(activationAggregate), PROJECT_ID);
-  if (!initial.ok) throw new Error(`activation unreadable: ${initial.result.status}`);
-  const { record } = initial.history;
-  const claim = {
-    claimId: `claim-${label}`, claimedAt: DECIDED_AT, intentId: `intent-${label}`,
-    lockIdentity: `lock-${label}`, wrapperIdentity: `wrapper-${label}`,
-  };
-  const registration = {
-    bootstrapCredentialDigest: DIGEST_B, lockIdentity: `lock-${label}`,
-    processIdentity: `windows:4242:${label}`, registeredAt: "2026-08-15T00:00:01.000Z",
-    wrapperIdentity: `wrapper-${label}`,
-  };
-  const authority = createFoundationLauncherAuthority({
-    aggregateId: activationAggregate, correlationId: `corr-tail-${label}`,
-    key: { commandId: `cmd-tail-${label}`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
-    projectId: PROJECT_ID, store,
-  });
-  const consumed = authority.consumeGrantDurably(record.grant, record.grant.wrapperIdentity);
-  const grant = nested(consumed as Record<string, unknown>, "grant");
-  authority.commitProcessRegistration({
-    claim, phase: "PREFLIGHT", prior: null,
-    registration: {
-      ...registration, processIdentity: `pending:${record.grant.wrapperIdentity}`,
-      registeredAt: "2026-08-15T00:00:00.500Z",
-    },
-  });
-  authority.commitProcessRegistration({ claim, phase: "STARTED", prior: null, registration });
-  const bound: FoundationAttemptBound = Object.freeze({
-    aggregateId: activationAggregate, claim, commandId: `cmd-dispatch-${label}`,
-    correlationId: `corr-dispatch-${label}`, nodeKey: nodeRef, principalId: PRINCIPAL_ID,
-    projectId: PROJECT_ID, sessionId: `session-${label}`,
-    target: deriveDispatchAggregateId(activationAggregate),
-  });
-  const observed = readDurableFoundationObservation(store, bound, record, {
-    code: null, consumedGrant: grant, kind: "OBSERVED", layer: null,
-    observation: {
-      activationDigest: record.activationDigest, completedAt: "2026-08-15T00:00:02.000Z",
-      consumedGrantDigest: DIGEST_A, effectDigest: DIGEST_B, exit: { code: 0, kind: "EXITED" },
-      freshRuntimeDigest: DIGEST_C, grantId: record.grant.grantId,
-      launcherVersion: CLAUDE_LAUNCHER_VERSION, lockIdentity: registration.lockIdentity,
-      observationDigest: DIGEST_A, pinnedClosureDigest: DIGEST_B,
-      processIdentity: registration.processIdentity, quotedRuntimeDigest: DIGEST,
-      reasonCode: null, reasonLayer: null, registrationDigest: DIGEST_C,
-      runtimeBindingDigest: DIGEST, startedAt: "2026-08-15T00:00:01.000Z",
-      stderr: { sha256: DIGEST_B }, stdout: { sha256: DIGEST_A }, truthClass: "PROVEN",
-      wrapperIdentity: registration.wrapperIdentity,
-    },
-    ok: true, registration: { ...registration }, truthClass: "PROVEN",
-  });
-  if (observed === null) throw new Error("durable observation fixture was refused");
-  // RECORDED commits at expectedVersion 1, so the dispatch aggregate must already carry its
-  // RESERVED event — the production reservation, not a shortcut around it.
-  const reservation = encodeFoundationPayload({
-    activationDigest: record.activationDigest, attemptAggregateId: bound.aggregateId,
-    attemptId: record.attempt.attemptId, grantId: record.grant.grantId, nodeKey: bound.nodeKey,
-    recordVersion: FOUNDATION_RESERVATION_VERSION, requestDigest: DIGEST_A,
-    sessionId: bound.sessionId,
-  });
-  if (!reservation.ok) throw new Error("reservation fixture refused");
-  const reserved = commitFoundationPhase(
-    store, bound, "RESERVED", reservation.bytes, 0, `${record.grant.grantId}:RESERVED`);
-  if (reserved === null || reserved.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    throw new Error("reservation fixture was not committed");
-  }
-  recordProvenFoundationAttempt(store, bound, record, sealedInput(tree), {
-    answer: seededAnswer(tree, options),
-    observation: observed[0], registration: observed[1],
-  });
-  // The digest always comes from the RE-DECODED durable record, never from the writer's answer.
-  const stored = readFoundationAttemptRecord(store, activationAggregate);
-  if (!stored.ok) throw new Error(`record fixture unreadable: ${stored.code}`);
-  return {
-    attemptAggregateId: activationAggregate, attemptRef: record.attempt.attemptId, bound,
-    candidateRoot: tree.root, dispatchAggregateId: bound.target, record,
-    recordDigest: stored.digest,
-  };
-}
-
-export interface SeededVerification {
-  readonly attemptAggregateId: string;
-  readonly effectIdentity: string;
-  readonly leaseIdentity: string;
-  readonly nodeRef: string;
-  readonly receiptSha256: string;
-  readonly recordDigest: string;
-  readonly row: Record<string, unknown>;
-  readonly verificationId: string;
-}
-
-/**
- * One durably RECEIPTED, PASSED verification naming `nodeRef`, through the real chain and a
- * real child process. It THROWS on anything other than a PASSED receipt: a fixture that
- * silently produced no row would leave every later assertion inspecting an empty store.
- *
- * The store must already be a bootstrapped, ACTIVE project — every caller drives
- * `bootstrapSequence` first, so re-seeding the project here would only replay it.
- */
-export interface SeedVerifiedNodeOptions {
-  /** A verifier that exits non-zero, so the durable receipt lands verdict FAILED. */
-  readonly failing?: boolean;
-}
-
-export async function seedVerifiedNode(
-  store: SqliteEventStore, nodeRef: string, options: SeedVerifiedNodeOptions = {},
-): Promise<SeededVerification> {
-  const label = nextLabel(nodeRef);
-  const failing = options.failing === true;
-  const ground = seedProvenAttempt(store, nodeRef, label);
-  const service = createFoundationVerificationService({
-    principalId: PRINCIPAL_ID, projectId: PROJECT_ID, store,
-  });
-  const sealed = service.sealRecipe({
-    argv: failing ? EXIT_THREE : EXIT_ZERO, declaredInputs: declaredInputs(),
-    declaredOutputPaths: [], recipeAggregateId: `recipe-${label}`,
-    runtimeObservation: runtimeQuote(), verifierIdentity: VERIFIER_IDENTITY,
-  });
-  if (!sealed.ok) throw new Error(`recipe seal fixture refused: ${sealed.code}`);
-  const outcome = await service.verify({
-    attemptAggregateId: ground.attemptAggregateId, candidateRoot: ground.candidateRoot,
-    expectedRecordDigest: ground.recordDigest, recipeAggregateId: `recipe-${label}`,
-    verificationId: `verify-${label}`,
-  });
-  if (!outcome.ok) throw new Error(`verification fixture refused: ${outcome.code}`);
-  const expected = failing ? "FAILED" : "PASSED";
-  if (outcome.verdict !== expected) {
-    throw new Error(`verification fixture answered ${outcome.verdict}, not ${expected}`);
-  }
-  const receipt = nested(outcome.row, "receipt");
-  if (receipt["graphIdentity"] !== nodeRef) {
-    throw new Error(`receipt names ${String(receipt["graphIdentity"])}, not ${nodeRef}`);
-  }
-  return Object.freeze({
-    attemptAggregateId: ground.attemptAggregateId,
-    effectIdentity: String(receipt["effectIdentity"]),
-    leaseIdentity: String(receipt["leaseIdentity"]),
-    nodeRef,
-    receiptSha256: String(outcome.row["receiptSha256"]),
-    recordDigest: ground.recordDigest,
-    row: outcome.row,
-    verificationId: `verify-${label}`,
-  });
 }
 
 /**
@@ -443,9 +83,9 @@ export async function seedVerifiedNode(
  * express: it authorizes a FUNDED budget root, and a root is once-only. Approving first would
  * mint the zero-amount genesis root instead, and every later `effect.activate` in this lineage
  * would refuse BUDGET_LEDGER_TRANSITION_REFUSED against a root that can never be topped up —
- * `openBudgetRoot` is the only unit-creating reducer in `@moe/scheduler`. The call is idempotent
- * and `seedProvenAttempt` makes it anyway, so the world these fixtures measure is unchanged;
- * only the moment it comes into existence moved earlier.
+ * `openBudgetRoot` is the only unit-creating reducer in `@moe/scheduler`. The call is idempotent,
+ * so the world these fixtures measure is unchanged; only the moment it comes into existence
+ * moved earlier. It seeds a GRAPH and a BUDGET ROOT and commits no activation ledger row.
  */
 export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): void {
   driveThrough(store, "approval.decide");
@@ -464,6 +104,10 @@ export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[
  * The daemon-side review acceptance required before the third human action, driven through the
  * PUBLISHED, authenticated package-root command path. The verifier receipt is the daemon's own
  * internal producer, so the fixture seeds that durable fact and nothing else.
+ *
+ * A `VerifierReceiptRecorded` row is NOT a Foundation verification receipt: the closure composer
+ * reads it only after an in-scope node already has one, which is why every consumer of this
+ * helper still refuses at the receipt fence.
  */
 export function seedReviewAcceptance(store: SqliteEventStore, nodeRef = "node-1"): void {
   const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);

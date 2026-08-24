@@ -11,11 +11,7 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
 import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
-import {
-  cleanupGoalClosureFixtures,
-  seedReviewAcceptance,
-  seedVerifiedNode,
-} from "./goal-closure-test-fixtures.js";
+import { scanGlobalEvents, seedReviewAcceptance } from "./goal-closure-test-fixtures.js";
 
 /**
  * J1's command path, driven end to end through the PUBLISHED `@moe/daemon` root.
@@ -25,6 +21,13 @@ import {
  * `./goals/goal-services.js` would stay green against a surface no consumer can import
  * (see `mem:pattern-prove-a-published-package-root-with-plain-node`). The fixtures supply
  * request DATA only; the pipeline, the handler tables and the vocabulary are all root exports.
+ *
+ * THE THIRD HUMAN ACTION IS ATTEMPTED AND REFUSED, and that is what production does today rather
+ * than a weakening of the claim. `goal.close` needs a durable Foundation verification receipt,
+ * which needs a committed activation no test world can produce. Governor ruling
+ * comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 forbids manufacturing one, so the journey
+ * still ISSUES the third action, pins the exact refusal, and proves the goal is not left parked
+ * mid-closure and that the published vocabulary holds no fourth human action to rescue it with.
  */
 
 const encoder = new TextEncoder();
@@ -63,27 +66,39 @@ function drive(store: SqliteEventStore, request: Envelope): daemon.ServiceOutcom
   return daemon.runBootstrapCommand(store, encoder.encode(JSON.stringify(request)), HANDLERS);
 }
 
-/**
- * The daemon-side evidence required before the third human action: a durable verification
- * receipt for the approved node and its accepted review. Both are seeded by the SHARED fixture,
- * which drives production code — the acceptance still traverses the published, authenticated
- * package-root command path, and the receipt comes from a real verifier child process.
- */
-async function qualifyClosure(store: SqliteEventStore, nodeRef = "node-1"): Promise<void> {
-  seedReviewAcceptance(store, nodeRef);
-  await seedVerifiedNode(store, nodeRef);
+/** The frozen tuple the third human action answers with, restated by hand in full. */
+const NO_RECEIPT_REFUSAL = Object.freeze({
+  advisoryOnly: true,
+  authority: "NONE",
+  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
+  ok: false,
+  refusedBy: "DAEMON_PREREQUISITE",
+});
+
+/** No committed activation ANYWHERE in the store, with the journey's own events as the positive
+ *  control: a store-wide walk, not one guessed aggregate. */
+function expectUnactivatedWorld(store: SqliteEventStore): void {
+  const scan = scanGlobalEvents(store);
+  expect(scan.total).toBeGreaterThan(0);
+  expect(scan.exhausted).toBe(true);
+  expect(scan.activationRows).toBe(0);
 }
 
 /**
  * The review and evidence records as BYTES, so DoD 4's "earlier records remain readable and
  * byte-identical" is a byte comparison rather than a claim. Two objects can be deep-equal while
- * their canonical bytes differ, and it is the bytes closure hashed.
+ * their canonical bytes differ, and it is the bytes the composer reads.
+ *
+ * THE RECEIPT COUNTED IS THE VERIFIER RECEIPT the acceptance attests — the daemon's own durable
+ * producer, and exactly what `qualifyGoalClosure` re-reads through `readVerifierReceipt`. The
+ * Foundation verification receipt this file used to count needs a committed activation and can no
+ * longer exist in any reachable world; counting an event type nothing writes would make the
+ * comparison below vacuous, which the nonzero denominator guard catches.
  *
  * The event type is restated by hand for the same reason `OWNED_KINDS` is: deriving it from the
- * production constant would make the comparison agree with itself. The non-vacuity guard below
- * is what catches a restatement that has gone stale.
+ * production constant would make the comparison agree with itself.
  */
-const RECEIPTED_EVENT_TYPE = "FoundationVerificationReceipted";
+const RECEIPTED_EVENT_TYPE = "VerifierReceiptRecorded";
 
 function evidenceBytes(store: SqliteEventStore): Readonly<{
   readonly acceptances: readonly string[];
@@ -137,7 +152,6 @@ function isHumanAction(kind: string): boolean {
 }
 
 afterEach(closeStores);
-afterEach(cleanupGoalClosureFixtures);
 
 describe("J1 command vocabulary", () => {
   it("publishes exactly the ten owned kinds from the package root", () => {
@@ -152,32 +166,41 @@ describe("J1 command vocabulary", () => {
 });
 
 describe("J1 is exactly three human actions (design 1095)", () => {
-  it("reaches the accepted terminal state after the third, with no fourth action", async () => {
+  it("issues the third human action and is refused, leaving no half-closed goal", () => {
     const store = openStore();
     const sequence = bootstrapSequence();
     const humanKinds: string[] = [];
-    let lifecycleAfterThird: string | undefined;
+    let closeAnswer: daemon.ServiceOutcome | undefined;
 
     for (const request of sequence) {
       // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
       // so a project approved without one gets the zero-amount genesis root and every
       // later effect.activate refuses against a root nothing can top up.
       if (request.kind === "approval.decide") seedActivationWorld(store);
-      if (request.kind === "goal.close") await qualifyClosure(store);
+      if (request.kind === "goal.close") {
+        // The REVIEWED half is real and production-driven, so the refusal below is the receipt
+        // fence rather than the review one.
+        seedReviewAcceptance(store);
+        expectUnactivatedWorld(store);
+        closeAnswer = drive(store, request);
+        humanKinds.push(request.kind);
+        continue;
+      }
       const outcome = drive(store, request);
       expect(outcome.ok, `${request.kind}: ${outcome.ok ? "" : outcome.code}`).toBe(true);
       if (!isHumanAction(request.kind)) continue;
       humanKinds.push(request.kind);
-      if (humanKinds.length === HUMAN_ACTIONS.length) lifecycleAfterThird = goalLifecycle(store);
     }
 
     // Non-vacuity: the journey really did run, and really did contain three human actions.
     expect(sequence.length).toBeGreaterThan(0);
     expect(humanKinds).toEqual([...HUMAN_ACTIONS]);
     expect(humanKinds).toHaveLength(3);
-    // The accepted terminal state is reached BY the third action, so a fourth is never needed.
-    expect(lifecycleAfterThird).toBe("COMPLETED");
-    expect(goalLifecycle(store)).toBe("COMPLETED");
+    expect(closeAnswer).toMatchObject(NO_RECEIPT_REFUSAL);
+    // NOT CLOSING: a goal parked mid-closure would need a fourth human action to escape, and the
+    // published vocabulary holds none — the three restated above are all of them.
+    expect(goalLifecycle(store)).toBe("EXECUTION_ENABLED");
+    expect(OWNED_KINDS.filter((kind) => isHumanAction(kind))).toHaveLength(3);
   }, 90_000);
 
   it("activates the graph inside the approval, not as a separate human action", () => {
@@ -205,7 +228,7 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     expect(new Set(cases.map(([kind]) => kind))).toEqual(new Set<string>(OWNED_KINDS));
   });
 
-  it.each(cases)("%s replays to the same decision and leaves one durable row", async (
+  it.each(cases)("%s replays to the same decision and leaves one durable row", (
     kind, index,
   ) => {
     const store = openStore();
@@ -219,7 +242,18 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     // so a project approved without one gets the zero-amount genesis root and every
     // later effect.activate refuses against a root nothing can top up.
     if (request.kind === "approval.decide") seedActivationWorld(store);
-    if (request.kind === "goal.close") await qualifyClosure(store);
+    if (request.kind === "goal.close") {
+      seedReviewAcceptance(store);
+      expectUnactivatedWorld(store);
+      // A refusal composes no decision, so "replay" here means RE-DERIVED: the identical answer
+      // twice, and still no durable row on either call.
+      expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+      expect(rowsFor(store, request.commandId)).toBe(0);
+      expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+      expect(rowsFor(store, request.commandId)).toBe(0);
+      expect(kind).toBe(request.kind);
+      return;
+    }
 
     const first = drive(store, request);
     expect(first.ok, first.ok ? "" : first.code).toBe(true);
@@ -241,35 +275,37 @@ describe("each command is idempotent on replay (DoD 5)", () => {
 });
 
 /**
- * DoD 4's other half, which no existing case covered: the closure is not allowed to disturb the
- * evidence it consumed. The composer reads the acceptance decision and the receipt row on the
- * way through, so "it only reads" has to be proven against the BYTES on both sides of the one
- * command that could rewrite them.
+ * DoD 4's other half: the closure is not allowed to disturb the evidence it consumed. The
+ * composer reads the acceptance decision and the verifier receipt row on the way through — and
+ * it reads them on the REFUSING path too, which is the path this world can reach — so "it only
+ * reads" is proven against the BYTES on both sides of the one command that could rewrite them.
  */
 describe("closure leaves earlier review and evidence records untouched (DoD 4)", () => {
-  it("keeps the acceptance decision and the receipt row byte-identical across goal.close",
-    async () => {
-      const store = openStore();
-      let before: ReturnType<typeof evidenceBytes> | undefined;
+  it("keeps the acceptance decision and the receipt row byte-identical across goal.close", () => {
+    const store = openStore();
+    let before: ReturnType<typeof evidenceBytes> | undefined;
 
-      for (const request of bootstrapSequence()) {
-        // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
-        // so a project approved without one gets the zero-amount genesis root and every
-        // later effect.activate refuses against a root nothing can top up.
-        if (request.kind === "approval.decide") seedActivationWorld(store);
-        if (request.kind === "goal.close") {
-          await qualifyClosure(store);
-          before = evidenceBytes(store);
-          // Non-vacuity: there really are records to be disturbed, and a stale event-type
-          // literal above would be caught here rather than passing as "nothing changed".
-          expect(before.acceptances.length).toBeGreaterThan(0);
-          expect(before.receipts.length).toBeGreaterThan(0);
-        }
-        expect(drive(store, request).ok, request.kind).toBe(true);
+    for (const request of bootstrapSequence()) {
+      // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
+      // so a project approved without one gets the zero-amount genesis root and every
+      // later effect.activate refuses against a root nothing can top up.
+      if (request.kind === "approval.decide") seedActivationWorld(store);
+      if (request.kind === "goal.close") {
+        seedReviewAcceptance(store);
+        expectUnactivatedWorld(store);
+        before = evidenceBytes(store);
+        // Non-vacuity: there really are records to be disturbed, and a stale event-type
+        // literal above would be caught here rather than passing as "nothing changed".
+        expect(before.acceptances.length).toBeGreaterThan(0);
+        expect(before.receipts.length).toBeGreaterThan(0);
+        expect(drive(store, request)).toMatchObject(NO_RECEIPT_REFUSAL);
+        continue;
       }
+      expect(drive(store, request).ok, request.kind).toBe(true);
+    }
 
-      expect(goalLifecycle(store)).toBe("COMPLETED");
-      expect(before).toBeDefined();
-      expect(evidenceBytes(store)).toEqual(before);
-    }, 90_000);
+    expect(goalLifecycle(store)).toBe("EXECUTION_ENABLED");
+    expect(before).toBeDefined();
+    expect(evidenceBytes(store)).toEqual(before);
+  }, 90_000);
 });

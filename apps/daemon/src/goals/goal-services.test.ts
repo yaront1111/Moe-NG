@@ -18,7 +18,6 @@ import {
   send,
   zeroAuthorityWitness,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-import { readReviewLedger } from "../review/review-ledger.js";
 import {
   GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
   GOAL_PREREQUISITE_LAYER,
@@ -26,9 +25,8 @@ import {
 } from "./goal-close-prerequisite.js";
 import {
   approveNodes,
-  cleanupGoalClosureFixtures,
+  scanGlobalEvents,
   seedReviewAcceptance,
-  seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
 import { GOAL_HANDLERS } from "./goal-services.js";
 
@@ -41,6 +39,17 @@ import { GOAL_HANDLERS } from "./goal-services.js";
  * accepted terminal state, so a forged or evidence-free acceptance is the worst defect
  * available here. Every refusal arm below therefore reads the goal back out of the store — a
  * handler that mutated and then refused would sail through a return-value-only assertion.
+ *
+ * NO ARM HERE CLOSES A GOAL, and that is a statement about production rather than about this
+ * file. Closing needs a durable Foundation verification receipt, which needs a proven attempt,
+ * which needs a committed activation no test world can produce — `runEffectActivateCommand`
+ * refuses. Governor ruling comment-937524c83a1945a5afae3ed8ac2405b9 clause 3 forbids rebuilding
+ * that world below the admission path, so the seven arms that required it are RETIRED rather
+ * than faked. Core's own `EXECUTION_ENABLED -> CLOSING -> COMPLETED` transition, its
+ * ILLEGAL_TRANSITION on a second close and its EXPECTED_VERSION_CONFLICT still have an owner in
+ * `packages/core/src/goal/goal-reducer.test.ts`; the DAEMON-side composition of a SUCCESSFUL
+ * close has NO owner until production can mint an activation. Stated plainly so the absence
+ * below reads as a disclosed gap and not as coverage.
  */
 
 interface GoalRow {
@@ -56,10 +65,23 @@ function goalRow(store: SqliteEventStore): GoalRow | undefined {
     GoalRow | undefined;
 }
 
-/** The whole durable prerequisite for one node: a PASSED receipt and an accepted review. */
-async function qualifyNode(store: SqliteEventStore, nodeRef: string): Promise<void> {
-  seedReviewAcceptance(store, nodeRef);
-  await seedVerifiedNode(store, nodeRef);
+/** The frozen tuple `goal.close` answers while no durable Foundation verification receipt names
+ *  an approved node. Restated by hand, in full, so a code, a refusing layer or an authority
+ *  quietly changing reddens here instead of passing as "still refused". */
+const NO_RECEIPT_REFUSAL = Object.freeze({
+  advisoryOnly: true,
+  authority: "NONE",
+  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
+  ok: false,
+  refusedBy: "DAEMON_PREREQUISITE",
+});
+
+/** No committed activation ANYWHERE, with the world's own events as the positive control. */
+function expectUnactivatedWorld(store: SqliteEventStore): void {
+  const scan = scanGlobalEvents(store);
+  expect(scan.total).toBeGreaterThan(0);
+  expect(scan.exhausted).toBe(true);
+  expect(scan.activationRows).toBe(0);
 }
 
 function stageUnreadableExecutionApproval(
@@ -101,32 +123,6 @@ function stageUnreadableExecutionApproval(
   expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
 }
 
-function stageUnreadableReviewAcceptance(store: SqliteEventStore, nodeRef: string): void {
-  const committed = store.commitExpectedVersionDecision({
-    commandKind: "integration.accept_output",
-    committedResultBytes: encoder.encode("{}"),
-    correlationId: "corr-corrupt-review",
-    decidedAt: "2026-08-10T00:00:00.000Z",
-    events: [{
-      eventId: `cmd-corrupt-review-${nodeRef}`,
-      eventType: "ReviewOutputAccepted",
-      payload: encoder.encode(JSON.stringify({ subjectRef: nodeRef })),
-    }],
-    expectedVersion: readReviewLedger(store, PROJECT_ID, nodeRef).version,
-    key: {
-      commandId: `cmd-corrupt-review-${nodeRef}`,
-      principalId: "reviewer-1",
-      projectId: PROJECT_ID,
-    },
-    requestBytes: encoder.encode(JSON.stringify({
-      kind: "integration.accept_output",
-      payload: { subjectRef: nodeRef },
-    })),
-    targetAggregateId: nodeRef,
-  });
-  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
-}
-
 interface DurableCloseSnapshot {
   readonly decisionCount: number;
   readonly goal: GoalRow | undefined;
@@ -148,7 +144,6 @@ function expectNoCloseMutation(store: SqliteEventStore, before: DurableCloseSnap
 }
 
 afterEach(closeStores);
-afterEach(cleanupGoalClosureFixtures);
 
 describe("goal service surface", () => {
   it("contributes the create and close handlers, appended in that order", () => {
@@ -272,70 +267,16 @@ describe("goal close accepts the verified result", () => {
   it("refuses before core when no durable verification receipt names the approved node", () => {
     const store = openStore();
     driveThrough(store, "goal.close");
+    // The REVIEWED half is present, so the review guard cannot be what answers below.
+    seedReviewAcceptance(store, "node-1");
+    expectUnactivatedWorld(store);
     const before = closeSnapshot(store);
 
     const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
 
-    expect(outcome).toMatchObject({
-      advisoryOnly: true,
-      authority: "NONE",
-      code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      ok: false,
-      refusedBy: "DAEMON_PREREQUISITE",
-    });
+    expect(outcome).toMatchObject(NO_RECEIPT_REFUSAL);
     expectNoCloseMutation(store, before);
   });
-
-  it("refuses before core when a verified node has no durable review acceptance", async () => {
-    const store = openStore();
-    approveNodes(store, ["node-1"]);
-    await seedVerifiedNode(store, "node-1");
-    const before = closeSnapshot(store);
-
-    const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
-
-    expect(outcome).toMatchObject({
-      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
-      ok: false,
-      refusedBy: "DAEMON_PREREQUISITE",
-    });
-    expectNoCloseMutation(store, before);
-  }, 60_000);
-
-  it("refuses before core when only part of the approved node scope is qualified", async () => {
-    const store = openStore();
-    approveNodes(store, ["node-1", "node-2"]);
-    await qualifyNode(store, "node-1");
-    seedReviewAcceptance(store, "node-2");
-    const before = closeSnapshot(store);
-
-    const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
-
-    expect(outcome).toMatchObject({
-      code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      ok: false,
-      refusedBy: "DAEMON_PREREQUISITE",
-    });
-    expectNoCloseMutation(store, before);
-  }, 60_000);
-
-  it("refuses before core when an approved node's durable review ledger is unreadable",
-    async () => {
-      const store = openStore();
-      approveNodes(store, ["node-1"]);
-      await qualifyNode(store, "node-1");
-      stageUnreadableReviewAcceptance(store, "node-1");
-      const before = closeSnapshot(store);
-
-      const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
-
-      expect(outcome).toMatchObject({
-        code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
-        ok: false,
-        refusedBy: "DAEMON_PREREQUISITE",
-      });
-      expectNoCloseMutation(store, before);
-    }, 60_000);
 
   it.each([
     ["missing", { activation: { graphApprovalRef: "approval-1" }, events: [] }],
@@ -378,68 +319,17 @@ describe("goal close accepts the verified result", () => {
     expectNoCloseMutation(store, before);
   });
 
-  it("drives the goal to its accepted terminal state when every approved node is qualified",
-    async () => {
-      const store = openStore();
-      approveNodes(store, ["node-1", "node-2"]);
-      await qualifyNode(store, "node-1");
-      await qualifyNode(store, "node-2");
-      const before = decisionCount(store);
-      expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
-
-      const outcome = send(store, envelope("goal.close", 2, acceptancePayload()));
-
-      expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-      if (!outcome.ok) throw new Error("expected acceptance");
-      expect(outcome.disposition).toBe("DECIDED");
-      expect(outcome.authority).toBe("DURABLE_DECISION");
-      expect(decisionCount(store)).toBe(before + 1);
-      const goal = goalRow(store);
-      expect(goal?.lifecycle).toBe("COMPLETED");
-      // Closing and completion are both applied by the one command, so the version moves by two.
-      expect(goal?.version).toBe(4);
-      expect(goal?.activeGraphRevisionRef).toBe(null);
-    }, 90_000);
-
   /**
-   * DoD 1, direction ONE. The payload's witnesses are the worst a caller could send — refs that
-   * name nothing and a truth class the core rejects outright — and the goal still closes,
-   * because the values the core validates were derived from durable records instead. If the
-   * handler ever forwarded the payload again, `validClosure` would refuse this and it reddens.
-   */
-  it("closes on durable records even when the payload's witnesses are garbage", async () => {
-    const store = openStore();
-    approveNodes(store, ["node-1"]);
-    await qualifyNode(store, "node-1");
-    const before = decisionCount(store);
-
-    const outcome = send(store, envelope("goal.close", 2, acceptancePayload({
-      closureWitness: closureWitness({
-        acceptanceClosureRef: "not-a-real-ref",
-        completionNodeAcceptedRef: "not-a-real-ref",
-        noPendingDraftOrSupersession: false,
-        obligationsHoldRef: "not-a-real-ref",
-        truthClass: "AGENT_REPORTED",
-      }),
-      zeroAuthorityWitness: zeroAuthorityWitness({
-        truthClass: "SELF_REPORTED",
-        zeroAuthorityProofRef: "not-a-real-ref",
-      }),
-    })));
-
-    expect(outcome.ok, outcome.ok ? "" : outcome.code).toBe(true);
-    expect(decisionCount(store)).toBe(before + 1);
-    expect(goalRow(store)?.lifecycle).toBe("COMPLETED");
-  }, 60_000);
-
-  /**
-   * DoD 1, direction TWO, and it is the half that makes direction one mean something: a
-   * perfectly-shaped payload that `validClosure` and `validZeroAuthority` would both accept
-   * still refuses, at the DAEMON layer, because no durable record backs it.
+   * DoD 1, direction TWO — the half that still has a reachable subject. A perfectly-shaped
+   * payload that `validClosure` and `validZeroAuthority` would both accept still refuses, at the
+   * DAEMON layer, because no durable record backs it. Direction ONE (garbage payload witnesses
+   * that close anyway on durable records) needed a successful close and is retired with the rest.
    */
   it("refuses perfectly-shaped payload witnesses when no durable record backs them", () => {
     const store = openStore();
     approveNodes(store, ["node-1"]);
+    seedReviewAcceptance(store, "node-1");
+    expectUnactivatedWorld(store);
     const before = closeSnapshot(store);
 
     const outcome = send(store, envelope("goal.close", 2, acceptancePayload({
@@ -447,11 +337,7 @@ describe("goal close accepts the verified result", () => {
       zeroAuthorityWitness: zeroAuthorityWitness(),
     })));
 
-    expect(outcome).toMatchObject({
-      code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      ok: false,
-      refusedBy: "DAEMON_PREREQUISITE",
-    });
+    expect(outcome).toMatchObject(NO_RECEIPT_REFUSAL);
     expectNoCloseMutation(store, before);
   });
 
@@ -493,41 +379,4 @@ describe("goal close accepts the verified result", () => {
     expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
   });
 
-  it("refuses a stale expected version through the core rather than overwriting", async () => {
-    const store = openStore();
-    approveNodes(store, ["node-1"]);
-    await qualifyNode(store, "node-1");
-    const before = decisionCount(store);
-
-    const outcome = send(store, envelope("goal.close", 99, acceptancePayload()));
-
-    expect(outcome.ok).toBe(false);
-    if (outcome.ok) throw new Error("expected refusal");
-    expect(outcome.refusedBy).toBe("CORE_REDUCER");
-    expect(outcome.code).toBe("EXPECTED_VERSION_CONFLICT");
-    expect(decisionCount(store)).toBe(before);
-    expect(goalRow(store)?.lifecycle).toBe("EXECUTION_ENABLED");
-  }, 60_000);
-
-  it("refuses a second acceptance of an already accepted goal, by the core's transitions",
-    async () => {
-      const store = openStore();
-      approveNodes(store, ["node-1"]);
-      await qualifyNode(store, "node-1");
-      expect(send(store, envelope("goal.close", 2, acceptancePayload())).ok).toBe(true);
-      const before = decisionCount(store);
-
-      // A distinct commandId, so the replay path cannot answer and the transition table must.
-      const outcome = send(
-        store,
-        envelope("goal.close", 4, acceptancePayload(), "cmd-goal.close-again"),
-      );
-
-      expect(outcome.ok).toBe(false);
-      if (outcome.ok) throw new Error("expected refusal");
-      expect(outcome.refusedBy).toBe("CORE_REDUCER");
-      expect(outcome.code).toBe("ILLEGAL_TRANSITION");
-      expect(decisionCount(store)).toBe(before);
-      expect(goalRow(store)?.version).toBe(4);
-    }, 60_000);
 });
