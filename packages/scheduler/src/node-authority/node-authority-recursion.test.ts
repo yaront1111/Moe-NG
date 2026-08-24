@@ -209,6 +209,18 @@ function bodies(overrides: Readonly<Record<string, NodeOptions>> = {}): unknown[
   ];
 }
 
+/** Deliberately alternate spellings of one admissible body set. */
+function noncanonicalBodies(): Json[] {
+  const input = JSON.parse(JSON.stringify(bodies())) as Json[];
+  const first = input[0] as Json;
+  first["constraints"] = ["constraint-z", "constraint-a", "constraint-z"];
+  first["resources"] = ["resource-z", "resource-a", "resource-z"];
+  first["verificationRecipeRevisions"] = ["recipe-b", "recipe-a", "recipe-b"];
+  first["readScopes"] = ["services\\api\\src", "services/api/src", "services\\api\\docs"];
+  first["writeScopes"] = ["services\\api\\src\\node", "services/api/src/node"];
+  return input.reverse();
+}
+
 function derived(snapshot: Json = snapshotDraft(), input: unknown[] = bodies()) {
   return deriveNodeAuthoritySet(snapshot, input);
 }
@@ -244,6 +256,28 @@ describe("node authority recursion — accepted control", () => {
     expect(result.hardEdgeCount).toBe(2);
     expect(Object.isFrozen(result.value)).toBe(true);
     expect(Object.isFrozen(result.value[0])).toBe(true);
+  });
+
+  it("returns the exact admitted definitions in deterministic node order", () => {
+    const raw = noncanonicalBodies();
+    const result = acceptedOrThrow(snapshotDraft(), raw);
+    expect(result.definitions.map((definition) => definition.nodeKey))
+      .toEqual(["node-a", "node-b", "node-c"]);
+    expect(result.definitions[0]).not.toBe(raw[2]);
+    expect(result.definitions[0]).toMatchObject({
+      constraints: ["constraint-a", "constraint-z"],
+      readScopes: ["services/api/docs", "services/api/src"],
+      resources: ["resource-a", "resource-z"],
+      verificationRecipeRevisions: ["recipe-a", "recipe-b"],
+      writeScopes: ["services/api/src/node"],
+    });
+    expect(Object.isFrozen(result.definitions)).toBe(true);
+    expect(Object.isFrozen(result.definitions[0])).toBe(true);
+    expect(Object.isFrozen(result.definitions[0]?.constraints)).toBe(true);
+
+    const replay = acceptedOrThrow(snapshotDraft(), [...result.definitions]);
+    expect(replay.value).toEqual(result.value);
+    expect(replay.definitions).toEqual(result.definitions);
   });
 
   it("derives a 64-hex hash for every node", () => {

@@ -16,11 +16,17 @@ import type {
   GraphContentResult,
   GraphRevisionContent,
 } from "./graph-content.js";
-import { GRAPH_CONTENT_HASH_DOMAIN } from "./graph-content-fields.js";
+import {
+  GRAPH_CONTENT_HASH_DOMAIN,
+  graphContentDigest,
+  readContentFields,
+} from "./graph-content-fields.js";
 import { GRAPH_CONTENT_ISSUE_LAYER } from "./graph-content-issues.js";
 import {
   SCHEMA_TAG as SCHEMA_TAG_PRODUCTION,
   SNAPSHOT_IDENTITY_DOMAIN,
+  canonicalContentJson,
+  canonicalGraphJson,
 } from "./graph-content-format.js";
 import { validateGraphSnapshot } from "./validate-graph.js";
 import { ABSOLUTE_MAX_GRAPH_NODES } from "./graph-policy.js";
@@ -34,7 +40,10 @@ import {
 import { createAcceptanceContract, createPlanRevision } from "@moe/core";
 import { ADMISSION_PURPOSES } from "./budget/budget-reservation.js";
 import { snapshotIdentityHash } from "./graph-content-format.js";
-import { createNodeDefinition } from "./node-authority/node-authority-codec.js";
+import {
+  admitNodeDefinition,
+  createNodeDefinition,
+} from "./node-authority/node-authority-codec.js";
 import {
   NODE_AUTHORITY_LIMITS,
   canonicalText,
@@ -1530,6 +1539,49 @@ const controlWith = (
 ): GraphRevisionContent =>
   contentOf(baseSnapshot(), { nodeAuthority: authorityFor(baseSnapshot(), undefined, overrides) });
 
+function equivalentRawDefinitions(): Json[] {
+  const definitions = JSON.parse(JSON.stringify(definitionsFor(
+    baseSnapshot(), BASE_BINDING,
+  ))) as Json[];
+  const first = definitions[0] as Json;
+  first["constraints"] = ["constraint-z", "constraint-a", "constraint-z"];
+  first["resources"] = ["resource-z", "resource-a", "resource-z"];
+  first["verificationRecipeRevisions"] = ["recipe-b", "recipe-a", "recipe-b"];
+  first["readScopes"] = ["services\\api\\src", "services/api/src", "services\\api\\docs"];
+  first["writeScopes"] = ["services\\api\\src\\node", "services/api/src/node"];
+  return definitions;
+}
+
+function admittedDefinitions(input: readonly unknown[]): Json[] {
+  return input.map((body) => {
+    const admitted = admitNodeDefinition(body);
+    if (!admitted.ok) {
+      throw new Error(admitted.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+    }
+    return admitted.value.definition as unknown as Json;
+  });
+}
+
+function contentWithDefinitions(definitions: Json[]): GraphRevisionContent {
+  const derived = deriveNodeAuthoritySet(baseSnapshot(), definitions);
+  if (!derived.ok) {
+    throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return contentOf(baseSnapshot(), {
+    nodeAuthority: { authorities: derived.value, definitions },
+  });
+}
+
+function selfConsistentBytes(content: GraphRevisionContent): Uint8Array {
+  const read = readContentFields(content);
+  if (!read.ok) throw new Error(`content fixture refused: ${read.field}`);
+  const validated = validateGraphSnapshot(read.snapshot);
+  if (!validated.ok) throw new Error("graph fixture refused");
+  const contentJson = canonicalContentJson(validated.graph, read.fields);
+  const hash = graphContentDigest(validated.graph, read.fields);
+  return ENCODER.encode(canonicalGraphJson(hash, contentJson));
+}
+
 /**
  * Bodies paired with INERT hashes instead of derived ones, for the arms where the
  * composer is expected to refuse: deriving first would throw in the fixture and
@@ -1586,6 +1638,47 @@ describe("graph content v3 — the mandatory node authority section", () => {
     if (!derived.ok) return;
     expect(section.authorities).toEqual([...derived.value]);
     expect(derived.hardEdgeCount).toBe(2);
+  });
+
+  it("hashes and returns the admitted canonical bodies, never raw equivalents", () => {
+    const raw = equivalentRawDefinitions();
+    const canonical = admittedDefinitions(raw);
+    const fromRaw = okValue(encodeGraphContent(contentWithDefinitions(raw)));
+    const control = okValue(encodeGraphContent(contentWithDefinitions(canonical)));
+
+    expect(fromRaw.graphContentHash).toBe(control.graphContentHash);
+    expect(Array.from(fromRaw.bytes)).toEqual(Array.from(control.bytes));
+    expect(sectionOf(fromRaw.content).definitions).toEqual(canonical);
+    expect(sectionOf(fromRaw.content).definitions[0]).not.toBe(raw[0]);
+    expect(sectionOf(fromRaw.content).definitions[0]).toMatchObject({
+      constraints: ["constraint-a", "constraint-z"],
+      readScopes: ["services/api/docs", "services/api/src"],
+      resources: ["resource-a", "resource-z"],
+      verificationRecipeRevisions: ["recipe-a", "recipe-b"],
+      writeScopes: ["services/api/src/node"],
+    });
+    expect(Object.isFrozen(sectionOf(fromRaw.content).definitions[0]?.["constraints"]))
+      .toBe(true);
+    (raw[0]?.["constraints"] as string[]).push("constraint-after-admission");
+    expect(sectionOf(fromRaw.content).definitions[0]?.["constraints"])
+      .not.toContain("constraint-after-admission");
+
+    const reproduced = deriveNodeAuthoritySet(
+      baseSnapshot(), sectionOf(fromRaw.content).definitions,
+    );
+    expect(reproduced.ok).toBe(true);
+    if (!reproduced.ok) return;
+    expect(reproduced.value).toEqual(sectionOf(fromRaw.content).authorities);
+    const decoded = okValue(decodeGraphContent(fromRaw.bytes));
+    expect(Array.from(okValue(encodeGraphContent(decoded.content)).bytes))
+      .toEqual(Array.from(fromRaw.bytes));
+  });
+
+  it("refuses a self-consistent envelope that authenticates raw equivalent bodies", () => {
+    const forged = selfConsistentBytes(contentWithDefinitions(equivalentRawDefinitions()));
+    expect(pairsOf(decodeGraphContent(forged))).toEqual([[
+      "GRAPH_CONTENT_DIGEST_MISMATCH", "GRAPH_CONTENT_IDENTITY",
+    ]]);
   });
 
   it("serializes the section into the canonical bytes it hashes", () => {

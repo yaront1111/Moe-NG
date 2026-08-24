@@ -136,7 +136,7 @@ function bindAuthority(
     return refuse("GRAPH_CONTENT_AUTHORITY_DISAGREEMENT",
       "stated node authority set is not the one derived from these definitions");
   }
-  const nodeAuthority = deepFreeze({ authorities: derived.value, definitions });
+  const nodeAuthority = deepFreeze({ authorities: derived.value, definitions: derived.definitions });
   return { ok: true, fields: { ...fields, nodeAuthority } };
 }
 

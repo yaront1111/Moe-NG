@@ -49,7 +49,7 @@ export interface NodeAuthorityRecursionIssue {
 export interface NodeAuthorityEntry { readonly nodeAuthorityHash: string;
   readonly nodeKey: string }
 export type NodeAuthorityRecursionResult =
-  | { readonly hardEdgeCount: number; readonly ok: true;
+  | { readonly definitions: readonly NodeDefinition[]; readonly hardEdgeCount: number; readonly ok: true;
     readonly value: readonly NodeAuthorityEntry[] }
   | { readonly issues: readonly NodeAuthorityRecursionIssue[]; readonly ok: false };
 
@@ -243,6 +243,8 @@ export function deriveNodeAuthoritySet(
   const value = [...hashes.entries()]
     .map(([nodeKey, nodeAuthorityHash]) => ({ nodeAuthorityHash, nodeKey }))
     .sort((left, right) => compareStrings(left.nodeKey, right.nodeKey));
-  return Object.freeze({ hardEdgeCount: index.hardEdgeCount, ok: true as const,
+  const definitions = deepFreeze(Object.freeze(
+    value.map(({ nodeKey }) => byKey.get(nodeKey) as NodeDefinition)));
+  return Object.freeze({ definitions, hardEdgeCount: index.hardEdgeCount, ok: true as const,
     value: deepFreeze(Object.freeze(value)) });
 }
