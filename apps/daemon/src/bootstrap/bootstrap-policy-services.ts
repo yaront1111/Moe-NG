@@ -5,6 +5,7 @@ import {
   callerSuppliedKey,
   decisionDigestFor,
 } from "./bootstrap-policy-authority.js";
+import { resolvePolicyFact, resolvePolicyWaivers } from "./policy-fact-resolver.js";
 export { readPolicyEvaluationAuthority } from "./bootstrap-policy-authority.js";
 export type {
   PolicyEvaluationAuthority,
@@ -26,10 +27,9 @@ import type { CommandHandler, HandlerContext, ServiceOutcome } from "./bootstrap
  * Policy install and validate.
  *
  * Neither has a `@moe/core` reducer that owns lifecycle: install records a slice durably, and
- * validate hands the caller's evaluation input to the core's `evaluatePolicy` unchanged. The
- * daemon's only judgement is the durable one — whether the policy named by the input was ever
- * installed for this project — and that refusal is marked `DAEMON_PREREQUISITE` so it cannot be
- * mistaken for the core rejecting the policy on its merits.
+ * validate binds every authoritative input to daemon-held state before calling `evaluatePolicy`.
+ * Caller-supplied facts, slices, and waivers are refused at ingress; the installed slice and the
+ * server's honest unknown-risk fact keep the core decision durable without inventing authority.
  */
 
 interface InstalledPolicies {
@@ -86,6 +86,9 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
   if (supplied === "sliceChain") {
     return refuse(request.kind, "BOOTSTRAP_POLICY_CHAIN_CALLER_SUPPLIED", "DAEMON_INGRESS");
   }
+  if (supplied === "facts") {
+    return refuse(request.kind, "BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED", "DAEMON_INGRESS");
+  }
   if (supplied !== null) {
     return refuse(request.kind, "BOOTSTRAP_POLICY_WAIVER_UNVERIFIABLE", "DAEMON_INGRESS");
   }
@@ -105,11 +108,22 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
   // The existence check above stopped being the whole judgement and became the SELECTOR: the
   // chain core evaluates is the bytes `installPolicy` wrote, not a chain the caller re-sent.
   const slice = installed[policyRef] as JsonValue;
+  const action = typeof input["action"] === "string" ? input["action"] : "";
+  const waiverResolution = resolvePolicyWaivers();
   const evaluated = evaluatePolicy({
-    ...input,
+    action: input["action"],
     actor: request.principalId,
+    callerRiskHint: input["callerRiskHint"],
+    decisionDigest: input["decisionDigest"],
+    evaluatedAtEpochMs: input["evaluatedAtEpochMs"],
+    evaluatorVersion: input["evaluatorVersion"],
+    facts: [resolvePolicyFact(request.projectId, request.principalId, action)],
+    graphNodeRevisionRefs: input["graphNodeRevisionRefs"],
+    policyRevisionRef: input["policyRevisionRef"],
+    requiredFactIds: input["requiredFactIds"],
+    scope: input["scope"],
     sliceChain: [slice],
-    waivers: [],
+    waivers: waiverResolution.waivers,
   });
   if (!evaluated.ok) {
     return refuse(request.kind, evaluated.error.code, "CORE_REDUCER", evaluated.error);

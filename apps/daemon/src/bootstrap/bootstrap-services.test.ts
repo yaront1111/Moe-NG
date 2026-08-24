@@ -250,7 +250,6 @@ describe("policy.validate - binds the principal and the installed slices (task-e
       decisionDigest: hex64("d1"),
       evaluatedAtEpochMs: 1_760_000_000_000,
       evaluatorVersion: "evaluator-1",
-      facts: [],
       graphNodeRevisionRefs: [],
       policyRevisionRef,
       requiredFactIds: [],
@@ -403,15 +402,24 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     }
   });
 
-  // `facts` STAY CALLER-ATTRIBUTED - deliberately not refused, because no durable fact producer
-  // exists and refusing them would close nothing this row is about.
-  it("still accepts caller-attributed facts", () => {
+  it("refuses caller-supplied facts with their own ingress code", () => {
     const store = seeded([allowSlice]);
     const outcome = validate(store, {
       ...baseInput(ALLOW_REF),
       facts: [{ factId: "fact-1", tier: "R0", truthClass: "DAEMON_VERIFIED" }],
     }, 1);
-    expect(outcome.ok).toBe(true);
+
+    expectRefusal(outcome, "BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED");
+    expect(() => evaluatedRow(store)).toThrow();
+  });
+
+  it("routes the server-resolved fact through the evaluator and durable writer", () => {
+    const store = seeded([allowSlice]);
+    const input = baseInput(ALLOW_REF);
+    delete input.facts;
+
+    expect(validate(store, input, 1).ok).toBe(true);
+    expect(evaluatedRow(store).decision).toBe("HOLD_UNKNOWN");
   });
 });
 
@@ -508,7 +516,6 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
         decisionDigest: hex64("d1"),
         evaluatedAtEpochMs: 1_760_000_000_000,
         evaluatorVersion: "evaluator-1",
-        facts: [],
         graphNodeRevisionRefs: [],
         policyRevisionRef: sliceRef,
         requiredFactIds: [],

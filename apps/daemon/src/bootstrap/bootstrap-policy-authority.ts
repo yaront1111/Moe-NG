@@ -19,7 +19,7 @@ import type { JsonObject, JsonValue } from "@moe/contracts";
  *
  * Named once so the refusal and the composition below cannot drift apart.
  */
-const SERVER_SOURCED_KEYS: readonly string[] = Object.freeze(["sliceChain", "waivers"]);
+const SERVER_SOURCED_KEYS: readonly string[] = Object.freeze(["sliceChain", "waivers", "facts"]);
 
 /** Domain-separated so this digest can never collide with another preimage's. */
 const DECISION_DIGEST_DOMAIN = "moe.policy.validate.decision.v1";

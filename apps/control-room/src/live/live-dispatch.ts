@@ -203,7 +203,7 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     input: {
       action: "plan.approve", actor: "principal-1", callerRiskHint: null,
       decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-      evaluatorVersion: "evaluator-1", facts: [], graphNodeRevisionRefs: [],
+      evaluatorVersion: "evaluator-1", graphNodeRevisionRefs: [],
       policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
       sliceChain: [{ autoApprovalOptIns: [], rules: [], sliceRef: POLICY_REF }],
       waivers: [],

@@ -233,7 +233,6 @@ export function evaluationInput(policyRevisionRef: string): Record<string, unkno
     decisionDigest: hex64("d1"),
     evaluatedAtEpochMs: 1_760_000_000_000,
     evaluatorVersion: "evaluator-1",
-    facts: [],
     graphNodeRevisionRefs: [],
     policyRevisionRef,
     requiredFactIds: [],

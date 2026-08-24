@@ -410,7 +410,10 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
     withStore("policy-reserve", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorld(store);
-      seedAllowingPolicyDecision(store);
+      // Planted at the seam, not driven: since the server resolver supplies a null-tier UNKNOWN
+      // fact, `policy.validate` records HOLD_UNKNOWN and production can no longer mint an ALLOW.
+      // The gate is unchanged — this world simply HOLDS the durable allowing witness it requires.
+      plantHistoricalAllowance(store);
 
       const result = stage(store, undefined);
       expect(refusalOf(result)[0]).toBe("UNEXPECTEDLY_ADMITTED");
@@ -578,7 +581,10 @@ describe("admission gate resolver — one policy's witness can never satisfy the
     withStore("cross-human", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
-      seedAllowingPolicyDecision(store);
+      // Planted, because production now records HOLD_UNKNOWN. Driving the seeder instead would
+      // leave a NON-allowing row here and quietly weaken this arm to "a policy witness that does
+      // not even allow fails to satisfy HUMAN_APPROVAL", which is not the claim in the title.
+      plantHistoricalAllowance(store);
       // The allowance is real, durable and ALLOWING — and it is the wrong witness.
       expect(latestPolicyEvaluated(store)["decision"]).toBe("ALLOW");
 
@@ -705,7 +711,10 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
     withStore("gate-unread", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorld(store);
-      seedAllowingPolicyDecision(store);
+      // Planted, same reason as above: the contrast this arm measures is the PAYLOAD gate, so the
+      // world must still hold an allowing durable witness or both halves refuse for an unrelated
+      // reason and the pairing proves nothing.
+      plantHistoricalAllowance(store);
       // Two DISTINCT admission identities, each shown to hold nothing before its own call —
       // otherwise the second would be answered by the first's standing hold, not by the gate.
       expect(activationAdmissionRef("cmd-a")).not.toBe(activationAdmissionRef("cmd-b"));
