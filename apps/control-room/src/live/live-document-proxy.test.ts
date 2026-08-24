@@ -1,10 +1,33 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
-
 import { expect, it } from "vitest";
 
-it("proxies every authenticated read and acknowledgement through the same-origin dev seam", () => {
-  const config = readFileSync(resolve(process.cwd(), "vite.config.ts"), "utf8");
-  expect(config).toContain('"/documents/dossier/read"');
-  expect(config).toContain('"/events/ack"');
+import { buildDevProxy, DEV_PROXY_PATHS } from "./dev-proxy-paths.js";
+
+it("proxies the complete project-daemon v2 surface without manager authority", () => {
+  expect(DEV_PROXY_PATHS).toStrictEqual([
+    "/affordances/read",
+    "/bootstrap",
+    "/command",
+    "/documents/dossier/read",
+    "/documents/ingest",
+    "/events/ack",
+    "/events/read",
+    "/events/resume",
+    "/goals/read",
+    "/graph/get",
+    "/planning/run/read",
+    "/session/pair",
+  ]);
+  expect(new Set(DEV_PROXY_PATHS).size).toBe(DEV_PROXY_PATHS.length);
+  expect(DEV_PROXY_PATHS.some((path) => path.startsWith("/manager/"))).toBe(false);
+
+  const origin = "http://127.0.0.1:43123";
+  const proxy = buildDevProxy(origin);
+  expect(Object.keys(proxy)).toStrictEqual([...DEV_PROXY_PATHS]);
+  for (const entry of Object.values(proxy)) {
+    expect(entry).toStrictEqual({
+      changeOrigin: true,
+      headers: { origin },
+      target: origin,
+    });
+  }
 });

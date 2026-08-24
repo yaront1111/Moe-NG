@@ -1,6 +1,8 @@
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
+import { buildDevProxy } from "./src/live/dev-proxy-paths.js";
+
 /**
  * One config serves the dev server, the production build, and the test run.
  *
@@ -10,9 +12,10 @@ import { defineConfig } from "vitest/config";
  * package script instead of the repository-wide test gate.
  *
  * Live-mode support (DEVELOPMENT_ONLY):
- * - Command, event read/ack, affordance, and document-dossier calls are proxied so the browser
- *   stays same-origin; the proxy restores the Origin/Host pair the daemon's
- *   listener guards expect. Target override: MOE_DAEMON_ORIGIN.
+ * - The complete project-daemon v2 handshake, command, event, document, goal,
+ *   graph, and plan surface is proxied so the browser stays same-origin; the
+ *   proxy restores the Origin/Host pair the daemon's listener guards expect.
+ *   Target override: MOE_DAEMON_ORIGIN.
  * - `__MOE_DEV_COMPAT_REPORT__` is built at config time from the generated
  *   contract pins and still validated by the real compat gate in the browser —
  *   the gate stays the only admission authority. When the pins fail to load the
@@ -56,15 +59,7 @@ export default defineConfig(async () => ({
   },
   plugins: [react()],
   server: {
-    proxy: Object.fromEntries(
-      [
-        "/command", "/events/read", "/events/ack", "/affordances/read", "/documents/dossier/read",
-      ].map((path) => [path, {
-        changeOrigin: true,
-        headers: { origin: DAEMON_ORIGIN },
-        target: DAEMON_ORIGIN,
-      }]),
-    ),
+    proxy: buildDevProxy(DAEMON_ORIGIN),
   },
   test: {
     environment: "jsdom",
