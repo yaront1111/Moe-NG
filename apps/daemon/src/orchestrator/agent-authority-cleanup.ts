@@ -162,6 +162,7 @@ export function createAgentAuthorityCleanup(
 
   const releaseClaim = (): void => {
     let outcome = "WORK_ITEM_NOT_VISIBLE";
+    let workItemSeen = false;
     for (let attempt = 0; attempt < CLEANUP_ATTEMPTS; attempt += 1) {
       let surface: ReturnType<AffordancePort["readSurface"]>;
       try {
@@ -177,6 +178,7 @@ export function createAgentAuthorityCleanup(
       const staffed = surface.steps.find((candidate) =>
         workItemIdFor(candidate.kind, candidate.aggregateId) === config.workItemId);
       if (staffed === undefined) continue;
+      workItemSeen = true;
       if (staffed.claim === null || staffed.claim.claimedBy !== config.sessionId) return;
       let released: CommandOutcome;
       try {
@@ -201,6 +203,18 @@ export function createAgentAuthorityCleanup(
         outcome = reviveBearer(surface, attempt) ?? outcome;
       }
     }
+    // A work item NO attempt could see mirrors closeSession's vanished-session
+    // arm: there is nothing this reaper can or should release. Unlike a closed
+    // session its absence does not PROVE release (deliver rows exist only
+    // while the spec file enumerates, and spec loaders swallow FS errors into
+    // "no specs"), but an unreleased claim is bounded and self-healing —
+    // runPass skips claimed steps, the fence refuses AGENT_STAFFING_CLAIM_HELD
+    // for this one item only, and the durable claim expires at CLAIM_TTL_MS
+    // (30 minutes, wrapper-knobs.ts) — whereas the throw would feed the
+    // wrapper's fail-closed halt latch and stop ALL staffing for good. An item
+    // that WAS seen held by this session keeps failing closed below: there the
+    // refusal is evidence of a genuine leak, and the latch is the point.
+    if (!workItemSeen) return;
     throw cleanupError("work.release", outcome);
   };
 

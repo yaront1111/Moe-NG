@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AffordancePort } from "../http/affordance-contract.js";
+import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
 import {
   createAgentAuthorityCleanup,
 } from "./agent-authority-cleanup.js";
@@ -13,38 +13,48 @@ const NOW = Date.UTC(2026, 7, 16, 11, 30);
 /**
  * The surface as the daemon lists it: an OPEN session offers BOTH lifecycle
  * steps at the session's current version, and a renewal advances that version.
+ * `workItemVisible` is consulted once per surface read: deliver rows exist
+ * only while the spec file enumerates, so a deleted spec (or a transient
+ * readdir failure the loader swallows into "no specs") drops the work item
+ * from the surface while the session steps stay listed.
  */
-function authoritySurface(sessionVersion: () => number = () => 9): AffordancePort {
+function authoritySurface(
+  sessionVersion: () => number = () => 9,
+  workItemVisible: () => boolean = () => true,
+): AffordancePort {
   return {
     boundProjectId: "project-cleanup-test",
-    readSurface: () => ({
-      nextAllowedCommands: [],
-      outcome: "SURFACE",
-      steps: [
-        {
-          aggregateId: "policy-cleanup-test",
-          claim: {
-            claimedBy: SESSION_ID,
-            expiresAt: "2026-08-16T12:00:00.000Z",
-            version: 7,
-          },
-          claimAggregateVersion: 7,
-          kind: "policy.install",
-          missing: [],
-          status: "READY",
-          version: 0,
+    readSurface: () => {
+      const workItemStep: ChainStep = {
+        aggregateId: "policy-cleanup-test",
+        claim: {
+          claimedBy: SESSION_ID,
+          expiresAt: "2026-08-16T12:00:00.000Z",
+          version: 7,
         },
-        ...(["session.close", "session.renew"] as const).map((kind) => ({
-          aggregateId: `session/${SESSION_ID}`,
-          claim: null,
-          claimAggregateVersion: 0,
-          kind,
-          missing: [],
-          status: "READY" as const,
-          version: sessionVersion(),
-        })),
-      ],
-    }),
+        claimAggregateVersion: 7,
+        kind: "policy.install",
+        missing: [],
+        status: "READY",
+        version: 0,
+      };
+      return {
+        nextAllowedCommands: [],
+        outcome: "SURFACE",
+        steps: [
+          ...(workItemVisible() ? [workItemStep] : []),
+          ...(["session.close", "session.renew"] as const).map((kind) => ({
+            aggregateId: `session/${SESSION_ID}`,
+            claim: null,
+            claimAggregateVersion: 0,
+            kind,
+            missing: [],
+            status: "READY" as const,
+            version: sessionVersion(),
+          })),
+        ],
+      };
+    },
   };
 }
 
@@ -199,5 +209,84 @@ describe("createAgentAuthorityCleanup", () => {
       "work.release", "session.renew", "work.release", "session.renew",
       "work.release", "session.renew", "session.close",
     ]);
+  });
+
+  it("resolves clean, releasing nothing, when the work item is never visible on any attempt", () => {
+    // A vanished spec removes the deliver row from every surface read. There
+    // is nothing this reaper can release; the durable claim self-heals at
+    // CLAIM_TTL_MS, so the vanish must NOT feed the wrapper's fail-closed
+    // halt latch as AGENT_CLEANUP_FAILED:work.release:WORK_ITEM_NOT_VISIBLE.
+    let surfaceReads = 0;
+    const kinds: string[] = [];
+    const dispatch: AgentAuthorityDispatch = (_credential, kind) => {
+      kinds.push(kind);
+      return { code: "EFFECTS_COMMITTED", ok: true };
+    };
+    const cleanup = createAgentAuthorityCleanup({
+      affordances: authoritySurface(() => 9, () => {
+        surfaceReads += 1;
+        return false;
+      }),
+      clock: () => NOW, dispatch,
+      operatorCredential: "operator", secret: "agent-secret",
+      sessionId: SESSION_ID, workItemId: WORK_ITEM_ID,
+    });
+
+    expect(cleanup(true).map((error) => error.message)).toEqual([]);
+    // Absence is retried, never short-circuited: every release attempt
+    // re-reads the surface (a one-read blip still gets the release on the
+    // next attempt), and the session close then reads once more.
+    expect(surfaceReads).toBe(4);
+    expect(kinds).toEqual(["session.close"]);
+  });
+
+  it("still fails closed when the item stays visibly claimed and every release is refused", () => {
+    const kinds: string[] = [];
+    const dispatch: AgentAuthorityDispatch = (_credential, kind) => {
+      kinds.push(kind);
+      return kind === "work.release"
+        ? { code: "EXPECTED_VERSION_CONFLICT", ok: true }
+        : { code: "EFFECTS_COMMITTED", ok: true };
+    };
+    const cleanup = createAgentAuthorityCleanup({
+      affordances: authoritySurface(), clock: () => NOW, dispatch,
+      operatorCredential: "operator", secret: "agent-secret",
+      sessionId: SESSION_ID, workItemId: WORK_ITEM_ID,
+    });
+
+    expect(cleanup(true).map((error) => error.message)).toEqual([
+      "AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT",
+    ]);
+    expect(kinds).toEqual([
+      "work.release", "work.release", "work.release", "session.close",
+    ]);
+  });
+
+  it("keeps the fail-closed throw when the item vanishes only after it was seen claimed", () => {
+    // Seen-then-vanished is not the never-seen arm: the one observation
+    // showed the claim held by THIS session and the release was refused, so
+    // exhaustion still reports the possible leak instead of resolving clean.
+    let surfaceReads = 0;
+    const kinds: string[] = [];
+    const dispatch: AgentAuthorityDispatch = (_credential, kind) => {
+      kinds.push(kind);
+      return kind === "work.release"
+        ? { code: "EXPECTED_VERSION_CONFLICT", ok: true }
+        : { code: "EFFECTS_COMMITTED", ok: true };
+    };
+    const cleanup = createAgentAuthorityCleanup({
+      affordances: authoritySurface(() => 9, () => {
+        surfaceReads += 1;
+        return surfaceReads === 1;
+      }),
+      clock: () => NOW, dispatch,
+      operatorCredential: "operator", secret: "agent-secret",
+      sessionId: SESSION_ID, workItemId: WORK_ITEM_ID,
+    });
+
+    expect(cleanup(true).map((error) => error.message)).toEqual([
+      "AGENT_CLEANUP_FAILED:work.release:EXPECTED_VERSION_CONFLICT",
+    ]);
+    expect(kinds).toEqual(["work.release", "session.close"]);
   });
 });
