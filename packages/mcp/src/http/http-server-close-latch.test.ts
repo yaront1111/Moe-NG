@@ -21,7 +21,9 @@ import {
   CONFORMANCE_COMMAND_RESPONSE_TEXT,
   createRecordingPort,
 } from "../dispatch-conformance.js";
+import { createHttpMcpAdapter } from "./http-server.js";
 import { MCP_SESSION_ID_HEADER } from "./http-session.js";
+import type { HttpAuthVerdict, HttpSessionPort } from "./http-session.js";
 import {
   INITIALIZE_BODY,
   build,
@@ -150,6 +152,73 @@ describe("http adapter - close latch retains no completed request", () => {
     const error = (await readPayload(response))["error"] as { data?: { code?: string } };
     expect(error.data?.code).toBe("SESSION_EXPIRED");
     expect(port.calls).toEqual([]);
+    await adapter.close();
+  });
+
+  /**
+   * The case above lets the DELETE COMPLETE before the body arrives, so the transport is
+   * already closed and refuses the dispatch on its own. This variant parks the DELETE INSIDE
+   * `onsessionclosed` — the SDK runs that callback BEFORE `close()` — by handing the session
+   * port a closeSession that does not settle. The latch is released and the registry entry is
+   * gone, but the transport still accepts messages: a POST resuming from its body read in that
+   * window used to receive the latch's 404 AND still dispatch the tool — an execution the
+   * client was just told did not happen.
+   */
+  it("dispatches nothing for a POST resuming while the DELETE is still inside onsessionclosed", async () => {
+    const port = createRecordingPort();
+    let releaseClose: () => void = () => {};
+    const sessionPort: HttpSessionPort = {
+      bindSession(): void {},
+      closeSession(): Promise<void> {
+        return new Promise((resolve) => {
+          releaseClose = resolve;
+        });
+      },
+      validateBearer(): HttpAuthVerdict {
+        return { ok: true, principalRef: "principal-http", sessionRef: "session-http" };
+      },
+    };
+    const adapter = createHttpMcpAdapter({ dispatchPort: port, sessionPort });
+    const initialized = await adapter.handleRequest(build({ body: INITIALIZE_BODY }));
+    const sessionId = initialized.headers.get(MCP_SESSION_ID_HEADER) ?? "";
+    await initialized.text();
+    expect(sessionId).not.toBe("");
+
+    let pushBody: () => void = () => {};
+    const body = new ReadableStream<Uint8Array>({
+      start(controller): void {
+        pushBody = (): void => {
+          controller.enqueue(new TextEncoder().encode(
+            toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS),
+          ));
+          controller.close();
+        };
+      },
+    });
+    const streaming = new Request(build({ body: "{}", sessionId }), {
+      body,
+      ...({ duplex: "half" } as object),
+    });
+    const parked = adapter.handleRequest(streaming);
+    await settle();
+    expect(port.calls).toEqual([]);
+
+    // NOT awaited: the DELETE parks inside onsessionclosed on the unsettled closeSession.
+    const deleting = adapter.handleRequest(build({ method: "DELETE", sessionId }));
+    await settle();
+
+    pushBody();
+    const response = await parked;
+    expect(response.status).toBe(404);
+    const error = (await readPayload(response))["error"] as { data?: { code?: string } };
+    expect(error.data?.code).toBe("SESSION_EXPIRED");
+    // Past the dispatch microtasks: an empty log means NO dispatch, not a count taken early.
+    await settle();
+    expect(port.calls).toEqual([]);
+
+    releaseClose();
+    const deleted = await deleting;
+    expect(deleted.status).toBe(200);
     await adapter.close();
   });
 });

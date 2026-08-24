@@ -134,6 +134,15 @@ function createSessionCloseLatch(): SessionCloseLatch {
 }
 
 interface SessionAttachment {
+  /**
+   * JSON-RPC request ids this session is still serving. WHY: the SDK maps each pending request
+   * to its response stream by bare `message.id`, so a second POST reusing an in-flight id would
+   * OVERWRITE the first call's mapping — the first call's result would be delivered as the
+   * second POST's body while the first response pends until the session closes. The adapter
+   * refuses the duplicate before the SDK ever sees it; ids leave this set when their POST's
+   * `handleRequest` promise settles.
+   */
+  readonly inflightRequestIds: Set<number | string>;
   /** Settles in-flight JSON-mode responses when this session closes. */
   readonly latch: SessionCloseLatch;
   readonly server: Server;
@@ -268,6 +277,23 @@ function isInitializePayload(value: unknown): boolean {
   );
 }
 
+/**
+ * The ids of every JSON-RPC REQUEST in a parsed body — a message carrying both an id and a
+ * method. Responses (no method) and notifications (no id) never enter the SDK's stream mapping,
+ * so they are not screened.
+ */
+function requestIdsOf(value: unknown): readonly (number | string)[] {
+  const messages = Array.isArray(value) ? value : [value];
+  const ids: (number | string)[] = [];
+  for (const message of messages) {
+    if (typeof message !== "object" || message === null) continue;
+    const { id, method } = message as { id?: unknown; method?: unknown };
+    if (typeof method !== "string") continue;
+    if (typeof id === "number" || typeof id === "string") ids.push(id);
+  }
+  return ids;
+}
+
 async function openSessionTransport(
   options: HttpAdapterOptions,
   registry: HttpSessionRegistry<SessionAttachment>,
@@ -280,6 +306,7 @@ async function openSessionTransport(
     options.dispatchPort, options.serverName ?? "moe-runtime", listedTools,
   );
   const latch = createSessionCloseLatch();
+  const inflightRequestIds = new Set<number | string>();
   const origin = request.headers.get("origin");
   let failed = false;
   // Defence in depth behind this adapter's own loopback screen: the session is PINNED to the
@@ -305,6 +332,7 @@ async function openSessionTransport(
       onsessioninitialized: async (id): Promise<void> => {
         try {
           await bindDaemonSession(registry, options.sessionPort, id, verdict, {
+            inflightRequestIds,
             latch,
             server,
             transport,
@@ -318,6 +346,7 @@ async function openSessionTransport(
   await server.connect(transport);
   return {
     bindFailed: (): boolean => failed,
+    inflightRequestIds,
     latch,
     server,
     transport,
@@ -394,8 +423,24 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
     if (!body.ok) return body.response;
 
     if (screened.entry !== undefined) {
+      // Re-screened AFTER the body read: the entry was captured before an await the session's
+      // DELETE can interleave with, and the SDK runs `onsessionclosed` BEFORE its `close()` —
+      // in that window the registry entry is already gone while the transport still accepts
+      // messages, so a dispatch here would EXECUTE a call whose client is simultaneously told
+      // the session expired. Same 404 as a request that arrives after the close.
+      if (registry.get(screened.entry.sessionId) === undefined) {
+        return errorResponse(createRuntimeError({ code: "SESSION_EXPIRED" }), 404);
+      }
       registry.touch(screened.entry.sessionId, now());
-      const { latch, transport } = screened.entry.attachment;
+      const { inflightRequestIds, latch, transport } = screened.entry.attachment;
+      // Screened BEFORE dispatch like every other refusal: an id already in flight on this
+      // session would overwrite the SDK's per-id stream mapping and cross-wire the two
+      // responses — see SessionAttachment.inflightRequestIds.
+      const requestIds = requestIdsOf(body.value);
+      if (requestIds.some((id) => inflightRequestIds.has(id))) {
+        return refusalResponse("INPUT_INVALID");
+      }
+      for (const id of requestIds) inflightRequestIds.add(id);
       // Raced against the close latch because in JSON response mode the SDK's own promise can
       // otherwise hang forever — see SessionCloseLatch. The latch leg loses to every normal
       // completion and turns a mid-call close into exactly the 404 this adapter serves a
@@ -403,13 +448,28 @@ export function createHttpMcpAdapter(options: HttpAdapterOptions): HttpMcpAdapte
       // so the latch leg can be DEREGISTERED once the SDK settles: a completed call must not
       // stay parked on the session until its close.
       return new Promise<Response>((resolve, reject) => {
+        let closedBeforeDispatch = false;
         const unsubscribe = latch.subscribe(() => {
+          closedBeforeDispatch = true;
           resolve(errorResponse(createRuntimeError({ code: "SESSION_EXPIRED" }), 404));
         });
+        // Ids release when the POST settles; on a mid-call close the SDK promise never
+        // settles, and the ids die with the unregistered attachment instead.
+        const settleRequest = (): void => {
+          unsubscribe();
+          for (const id of requestIds) inflightRequestIds.delete(id);
+        };
+        // Belt behind the registry re-check above: a latch that has ALREADY released runs its
+        // subscriber synchronously, so the resolve above just refused this call — dispatching
+        // it into the closing session would execute it anyway.
+        if (closedBeforeDispatch) {
+          settleRequest();
+          return;
+        }
         transport
           .handleRequest(request, { authInfo, parsedBody: body.value })
           .then(resolve, reject)
-          .finally(unsubscribe);
+          .finally(settleRequest);
       });
     }
     if (!isInitializePayload(body.value)) return refusalResponse("INPUT_INVALID");

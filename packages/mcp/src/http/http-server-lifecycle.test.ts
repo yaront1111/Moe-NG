@@ -61,18 +61,22 @@ async function openSessionOn(adapter: { handleRequest(request: Request): Promise
 }
 
 interface DeferredPort extends HttpDispatchPort {
+  /** Ordered dispatch log, one entry per call that REACHED this port. */
+  readonly calls: readonly string[];
   readonly captured: readonly AbortSignal[];
   release(): void;
 }
 
 /** Holds every dispatch open until `release()`, so a call can be caught genuinely in flight. */
 function createDeferredPort(): DeferredPort {
+  const calls: string[] = [];
   const captured: AbortSignal[] = [];
   const releases: (() => void)[] = [];
-  const dispatch = (
+  const dispatch = (label: string) => (
     _bytes: Uint8Array,
     context: HttpDispatchContext,
   ): Promise<Uint8Array> => {
+    calls.push(label);
     if (context.signal !== undefined) captured.push(context.signal);
     return new Promise((resolve) => {
       releases.push(() => {
@@ -82,9 +86,10 @@ function createDeferredPort(): DeferredPort {
   };
   return {
     authenticate: () => ({ ok: true as const }),
+    calls,
     captured,
-    dispatchCommandBytes: dispatch,
-    dispatchQueryBytes: dispatch,
+    dispatchCommandBytes: dispatch("dispatchCommandBytes"),
+    dispatchQueryBytes: dispatch("dispatchQueryBytes"),
     release(): void {
       for (const resolve of releases.splice(0)) resolve();
     },
@@ -379,6 +384,62 @@ describe("http adapter — session close settles JSON-mode POSTs", () => {
     const error = (await readPayload(response))["error"] as { data?: { code?: string } };
     expect(error.data?.code).toBe("SESSION_EXPIRED");
     port.release();
+  });
+});
+
+describe("http adapter — duplicate in-flight request ids", () => {
+  /**
+   * The SDK maps each pending request to its response stream by bare `message.id`, so a second
+   * POST reusing an id still in flight OVERWRITES the first call's mapping: the first call's
+   * result is delivered as the second POST's HTTP body, the second call's own result is dropped,
+   * and the first POST pends until the session closes. The adapter must therefore refuse a
+   * duplicate in-flight id BEFORE the SDK transport ever sees the message.
+   */
+  it("refuses a POST reusing an in-flight request id and keeps the first call's own result", async () => {
+    const port = createDeferredPort();
+    const { adapter, sessionId } = await openSession(port);
+    const inFlight = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId }),
+    );
+    await settle();
+    expect(port.calls).toEqual(["dispatchCommandBytes"]);
+
+    const duplicate = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId }),
+    );
+    await settle();
+    // The refusal precedes dispatch: the duplicate id never reaches the daemon port.
+    expect(port.calls).toEqual(["dispatchCommandBytes"]);
+
+    const refused = await duplicate;
+    expect(refused.status).toBe(400);
+    const error = (await readPayload(refused))["error"] as {
+      code?: number;
+      data?: { code?: string };
+    };
+    expect(error.code).toBe(-32602);
+    expect(error.data?.code).toBe("INPUT_INVALID");
+
+    // The first call still settles with ITS OWN result — not the pend-until-close that the
+    // overwritten mapping used to leave behind.
+    port.release();
+    const response = await inFlight;
+    expect(response.status).toBe(200);
+    const payload = await readPayload(response);
+    expect(payload["id"]).toBe(2);
+    expect(resultText(payload)).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+
+    // The id was RELEASED when the first call settled: the same id serves a fresh call.
+    const reused = adapter.handleRequest(
+      build({ body: toolCallBody(2, CONFORMANCE_COMMAND_LABEL, CONFORMANCE_COMMAND_ARGS), sessionId }),
+    );
+    await settle();
+    expect(port.calls).toEqual(["dispatchCommandBytes", "dispatchCommandBytes"]);
+    port.release();
+    const reusedResponse = await reused;
+    expect(reusedResponse.status).toBe(200);
+    expect(resultText(await readPayload(reusedResponse))).toBe(CONFORMANCE_COMMAND_RESPONSE_TEXT);
+    await adapter.close();
   });
 });
 
