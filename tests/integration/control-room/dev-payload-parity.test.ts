@@ -103,6 +103,9 @@ it("the board's spelling of those bytes is the CANONICAL base64 the ingress admi
   // spelled any other way is refused PLANNING_GRAPH_CONTENT_MALFORMED. Same check, same reason.
   expect(decoded.length).toBeGreaterThan(0);
   expect(Buffer.from(decoded).toString("base64")).toBe(spelled);
+  const graphJson = Buffer.from(decoded).toString("utf8");
+  expect(graphJson).toContain('"admissionGatePolicy":"HUMAN_APPROVAL"');
+  expect(graphJson).not.toContain('"admissionGatePolicy":"POLICY_ALLOWANCE"');
   expect(Array.from(decoded))
     .toEqual(Array.from(Uint8Array.from(Buffer.from(producerResult().graphContentBytesBase64, "base64"))));
 });
@@ -126,4 +129,14 @@ it("every place the board restates that graph hash names the recomputed one", ()
   for (const value of stated) expect(value).toBe(sealed.graphContentHash);
   // The retired placeholder, named so a half-migrated sender cannot pass by keeping one copy.
   expect(stated).not.toContain("c0ffee".padEnd(64, "0"));
+});
+
+it("the board approval names only server-verifiable human and graph authority", () => {
+  const approval = DEV_PAYLOADS["approval.decide"] as Record<string, unknown>;
+  const activation = approval["activation"] as Record<string, unknown>;
+  const record = approval["record"] as Record<string, unknown>;
+
+  expect(activation).not.toHaveProperty("budgetHash");
+  expect(record["actor"]).toBe("operator-local");
+  expect(record["approvedNodeScope"]).toEqual(["node-code-1"]);
 });

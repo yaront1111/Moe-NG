@@ -129,7 +129,7 @@ function nodeDefinitionOf(input: JourneyAuthorityInput, nodeKey: string): NodeDe
       admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
         meter: NODE_METER, purpose, quantity: index + 1,
       })),
-      admissionGatePolicy: "POLICY_ALLOWANCE",
+      admissionGatePolicy: "HUMAN_APPROVAL",
       capability: "capability-implement",
       completionLinkage: nodeKey,
       constraints: ["constraint-a"],

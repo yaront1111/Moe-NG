@@ -35,12 +35,11 @@ const GRAPH_REVISION_REF = "graph-revision-1";
  * PLANNING_GRAPH_CONTENT_MALFORMED for whitespace, the url-safe alphabet or missing padding.
  * Nothing here is trusted; dev-payload-parity.test.ts pins every value below to the producer.
  */
-const GRAPH_CONTENT_HASH = "2bde4c1c1b121208cefc8291052935bd1ee30dd8f100b92c6006cf208507397a";
-const GRAPH_CONTENT_BYTES = "eyJzY2hlbWEiOiJNT0UtR1JBUEgtQ09OVEVOVC8zIiwiaGFzaCI6IjJiZGU0YzFjMWIxMjEyMDhjZWZjODI5MTA1MjkzNWJkMWVlMzBkZDhmMTAwYjkyYzYwMDZjZjIwODUwNzM5N2EiLCJjb250ZW50Ijp7ImF1dGhvciI6Im9wZXJhdG9yLWxvY2FsIiwiY29tcGxldGlvbk5vZGUiOiJub2RlLWNvZGUtMSIsImRlY29tcG9zaXRpb25CdWRnZXQiOjI0LCJub2RlQXV0aG9yaXR5Ijp7ImF1dGhvcml0aWVzIjpbeyJub2RlQXV0aG9yaXR5SGFzaCI6IjNiZDRlMjQ5NGY2Njg2YzlmZmJhODk1MTRlNjIxM2U3ZWE4YjcyNDc3ZDdmMDZkZDUxNjQ4NGQ0YWI1Y2E1YjgiLCJub2RlS2V5Ijoibm9kZS1jb2RlLTEifV0sImRlZmluaXRpb25zIjpbeyJhZG1pc"
-  + "3Npb25BbW91bnRzIjpbeyJtZXRlciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IkNPTlRJTkdFTkNZIiwicXVhbnRpdHkiOjF9LHsibWV0ZXIiOiJydW5uZXIuYXV0aG9yaXplZF9tcyIsInB1cnBvc2UiOiJFWEVDVVRJT04iLCJxdWFudGl0eSI6Mn0seyJtZXRlciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IkZJTkFMX0FDQ0VQVEFOQ0UiLCJxdWFudGl0eSI6M30seyJtZXRlciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IklOREVQRU5ERU5UX1JFVklFVyIsInF1YW50aXR5Ijo0fSx7Im1ldGVyIjoicnVubmVyLmF1dGhvcml6ZWRfbXMiLCJwdXJwb3NlIjoiVkVSSUZJQ0FUSU9OIiwicXVhbn"
-  + "RpdHkiOjV9XSwiYWRtaXNzaW9uR2F0ZVBvbGljeSI6IlBPTElDWV9BTExPV0FOQ0UiLCJjYXBhYmlsaXR5IjoiY2FwYWJpbGl0eS1pbXBsZW1lbnQiLCJjb21wbGV0aW9uTGlua2FnZSI6Im5vZGUtY29kZS0xIiwiY29uc3RyYWludHMiOlsiY29uc3RyYWludC1hIl0sImNyaXRlcmlvbkJpbmRpbmdzIjpbeyJjb250ZW50RGlnZXN0IjoiNWEzN2QzMmU3NDQ3NTIzYWM5NDhlZWIzNzg4MTA1ZDhiNWM4MTlkZGQzOTE1OTJlMjM5NGU2YmZhNjRmNTFjZSIsImNyaXRlcmlvbklkIjoiY3JpdGVyaW9uLWEifV0sImRpcmVjdEhhcmREZXBlbmRlbmNpZXMiOltdLCJqb2luUm9sZSI6IkNPTVBMRVRJT04iLCJtb25vdG9uaWNQcmVkaWNhdGVQcm9vZnMiOlt"
-  + "dLCJub2RlS2V5Ijoibm9kZS1jb2RlLTEiLCJvYmplY3RpdmUiOiJMYW5kIG5vZGUtY29kZS0xLiIsInBsYW5FeGVjdXRpb25Db250ZW50RGlnZXN0IjoiMDNkZmY2MjVkODNlN2JjM2NlYWNlODg0ZDcxNTUzMDM3ZTY1ZTc4MjUzMGZiYmI0Y2Q1M2FiM2JkZTQ3YjBjMyIsInBvbGljeVNsaWNlSGFzaCI6IjMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMiLCJyZWFkU2NvcGVzIjpbInNlcnZpY2VzL2FwaS9zcmMiXSwicmVwb3NpdG9yeUJhc2VUcmVlIjoiNDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NCIsInJlc291"
-  + "cmNlcyI6WyJyZXNvdXJjZS1hIl0sInNjaGVtYVZlcnNpb24iOjIsInZlcmlmaWNhdGlvblJlY2lwZVJldmlzaW9ucyI6WyJyZWNpcGUtYSJdLCJ3cml0ZVNjb3BlcyI6WyJzZXJ2aWNlcy9hcGkvc3JjL25vZGUiXX1dfSwicGFyZW50UmV2aXNpb24iOm51bGwsInBvbGljeVJldmlzaW9uIjoicG9sLTAwMDAwMDAwMDAwMSIsInJlcG9zaXRvcnlCYXNlVHJlZSI6IjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJzbmFwc2hvdCI6eyJub2RlcyI6W3sibm9kZUtleSI6Im5vZGUtY29kZS0xIiwiZXhlY3V0aW9uQmVhcmluZyI6dHJ1ZX1dLCJlZGdlcyI6W10sImNvbXBsZXRpb25Ob2RlS2V5Ijoibm9kZS1jb2RlLTEifX19";
+const GRAPH_CONTENT_HASH = "cc872ea84ee157329bbe3b4590a474bc29d9d0b3c474ce5c809d2c80591c8052";
+const GRAPH_CONTENT_BYTES = "eyJzY2hlbWEiOiJNT0UtR1JBUEgtQ09OVEVOVC8zIiwiaGFzaCI6ImNjODcyZWE4NGVlMTU3MzI5YmJlM2I0NTkwYTQ3NGJjMjlkOWQwYjNjNDc0Y2U1YzgwOWQyYzgwNTkxYzgwNTIiLCJjb250ZW50Ijp7ImF1dGhvciI6Im9wZXJhdG9yLWxvY2FsIiwiY29tcGxldGlvbk5vZGUiOiJub2RlLWNvZGUtMSIsImRlY29tcG9zaXRpb25CdWRnZXQiOjI0LCJub2RlQXV0aG9yaXR5Ijp7ImF1dGhvcml0aWVzIjpbeyJub2RlQXV0aG9yaXR5SGFzaCI6ImViNjI0ZThiYWZlNjk4ZGNlNzk0NWFjNjY2MmY0OWQxMGU2MWQ3MGRhOGZmMWM5MTdlNjU5OWNhZDEwN2M5NTQiLCJub2RlS2V5Ijoibm9kZS1jb2RlLTEifV0sImRlZmluaXRpb25zIjpbeyJhZG1pc3Npb25BbW91bnRzIjpbeyJtZXRlciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IkNPTlRJTkdFTkNZIiwicXVhbnRpdHkiOjF9LHsibWV0ZXIiOiJydW5uZXIuYXV0aG9yaXplZF9tcyIsInB1cnBvc2UiOiJFWEVDVVRJT04iLCJxdWFudGl0eSI6Mn0seyJtZXRl"
+  + "ciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IkZJTkFMX0FDQ0VQVEFOQ0UiLCJxdWFudGl0eSI6M30seyJtZXRlciI6InJ1bm5lci5hdXRob3JpemVkX21zIiwicHVycG9zZSI6IklOREVQRU5ERU5UX1JFVklFVyIsInF1YW50aXR5Ijo0fSx7Im1ldGVyIjoicnVubmVyLmF1dGhvcml6ZWRfbXMiLCJwdXJwb3NlIjoiVkVSSUZJQ0FUSU9OIiwicXVhbnRpdHkiOjV9XSwiYWRtaXNzaW9uR2F0ZVBvbGljeSI6IkhVTUFOX0FQUFJPVkFMIiwiY2FwYWJpbGl0eSI6ImNhcGFiaWxpdHktaW1wbGVtZW50IiwiY29tcGxldGlvbkxpbmthZ2UiOiJub2RlLWNvZGUtMSIsImNvbnN0cmFpbnRzIjpbImNvbnN0cmFpbnQtYSJdLCJjcml0ZXJpb25CaW5kaW5ncyI6W3siY29udGVudERpZ2VzdCI6IjVhMzdkMzJlNzQ0NzUyM2FjOTQ4ZWViMzc4ODEwNWQ4YjVjODE5ZGRkMzkxNTkyZTIzOTRlNmJmYTY0ZjUxY2UiLCJjcml0ZXJpb25JZCI6ImNyaXRlcmlvbi1hIn1dLCJkaXJlY3RIYXJkRGVwZW5kZW5jaWVzIjpbXSwiam9p"
+  + "blJvbGUiOiJDT01QTEVUSU9OIiwibW9ub3RvbmljUHJlZGljYXRlUHJvb2ZzIjpbXSwibm9kZUtleSI6Im5vZGUtY29kZS0xIiwib2JqZWN0aXZlIjoiTGFuZCBub2RlLWNvZGUtMS4iLCJwbGFuRXhlY3V0aW9uQ29udGVudERpZ2VzdCI6IjAzZGZmNjI1ZDgzZTdiYzNjZWFjZTg4NGQ3MTU1MzAzN2U2NWU3ODI1MzBmYmJiNGNkNTNhYjNiZGU0N2IwYzMiLCJwb2xpY3lTbGljZUhhc2giOiIzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzIiwicmVhZFNjb3BlcyI6WyJzZXJ2aWNlcy9hcGkvc3JjIl0sInJlcG9zaXRvcnlCYXNlVHJlZSI6IjQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQiLCJyZXNvdXJjZXMiOlsicmVzb3VyY2UtYSJdLCJzY2hlbWFWZXJzaW9uIjoyLCJ2ZXJpZmljYXRpb25SZWNpcGVSZXZpc2lvbnMiOlsicmVjaXBlLWEiXSwid3JpdGVTY29wZXMiOlsic2VydmljZXMvYXBp"
+  + "L3NyYy9ub2RlIl19XX0sInBhcmVudFJldmlzaW9uIjpudWxsLCJwb2xpY3lSZXZpc2lvbiI6InBvbC0wMDAwMDAwMDAwMDEiLCJyZXBvc2l0b3J5QmFzZVRyZWUiOiI0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0Iiwic25hcHNob3QiOnsibm9kZXMiOlt7Im5vZGVLZXkiOiJub2RlLWNvZGUtMSIsImV4ZWN1dGlvbkJlYXJpbmciOnRydWV9XSwiZWRnZXMiOltdLCJjb21wbGV0aW9uTm9kZUtleSI6Im5vZGUtY29kZS0xIn19fQ==";
 /** The demo code node every shipped journey names; the finalize witness must name one. */
 const DEMO_NODE_REF = "node-code-1";
 
@@ -53,7 +52,7 @@ const DEMO_NODE_REF = "node-code-1";
  * codec's code. SUBMISSION_HASH is the plan body's own planHash, which approval.decide's
  * exactRevisionHash and the finalize's planHash are both judged against.
  */
-const SUBMISSION_HASH = "6396003be69b9f62992113da22565988e91b5741831977996750a274641c9810";
+const SUBMISSION_HASH = "d0266cbd23766f40e216bb798940ddb8de47050b16313a736df718918fa71078";
 const SEALED_AUTHORITY: JsonObject = {
   acceptanceContract: {
     applicability: {
@@ -75,7 +74,7 @@ const SEALED_AUTHORITY: JsonObject = {
         verificationRecipeRefs: [`${GOAL_ID}-criterion-recipe`],
       },
     ],
-    criteriaDigest: "060299f98d92d46d6c7d4c9ae830738792be66a690ed48430cd7e2767ee09c59",
+    criteriaDigest: "4aaf98a1abb16b90da918b10c5df095e3dd617b2da57e9277969883264549756",
     version: "moe-acceptance-contract/1",
   },
   planRevision: {
@@ -158,7 +157,7 @@ const FINALIZE_CHAIN: readonly JsonObject[] = [
 export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze({
   "approval.decide": {
     activation: {
-      activationRef: "activation-1", budgetHash: hex64("b0"), expectedGoalVersion: 1,
+      activationRef: "activation-1", expectedGoalVersion: 1,
       goalDraftNoActiveRevision: true, graphHash: hex64("6a"), policyHash: hex64("b1"),
       qualityHash: hex64("dd"), truthClass: "HUMAN_APPROVED",
     },
@@ -168,8 +167,8 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     },
     graphRevisionRef: GRAPH_REVISION_REF,
     record: {
-      actor: "human-1", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
-      approvalRef: "approval-1", approvedNodeScope: ["node-1"], budgetRef: hex64("bb"),
+      actor: "operator-local", actorKind: "HUMAN", applicablePolicyRef: hex64("aa"),
+      approvalRef: "approval-1", approvedNodeScope: [DEMO_NODE_REF], budgetRef: hex64("bb"),
       criteriaRef: hex64("cc"), decision: null, decisionReason: null,
       dependencyChanges: { additions: [], challenges: [], removals: [] },
       exactRevisionHash: SUBMISSION_HASH, lifecycle: "PENDING",
