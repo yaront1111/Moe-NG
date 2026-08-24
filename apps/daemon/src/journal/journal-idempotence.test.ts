@@ -1,168 +1,81 @@
-import { MAX_JOURNAL_ENTRY_COUNT, createDeadEndJournal } from "@moe/context";
-import type { DeadEndJournalEntry } from "@moe/context";
+import { MAX_JOURNAL_ENTRY_COUNT } from "@moe/context";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROJECT_ID, cleanupRestoreHarnesses } from "../recovery/restore-test-harness.js";
 import {
-  DAEMON_JOURNAL_APPEND, JOURNAL_APPEND_COMMAND_KIND, JOURNAL_CODES,
+  JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION, JOURNAL_CODES,
 } from "./journal-contracts.js";
+import { runJournalAppendCommand } from "./journal-append.js";
 import { decodeJournalEntries } from "./journal-entry-codec.js";
-import { readCurrentAttemptJournal } from "./journal-reader.js";
-import type { AttemptJournalAnswer } from "./journal-reader.js";
-import { entry, journalEventCount, openJournalHarness } from "./journal-test-harness.js";
-import type { JournalHarness, SeamResult } from "./journal-test-harness.js";
-
-/**
- * Idempotence, conflict, append ordering, and the generated hostile sweep.
- *
- * EVERY COUNT IS READ OUT OF THE STORE, never from a command result: "it did not
- * throw the second time" is also exactly what a double write looks like.
- */
+import { DECIDED_AT, entry, openUnactivatedJournalFixture } from "./journal-test-harness.js";
+import type { UnactivatedJournalFixture } from "./journal-test-harness.js";
 
 afterEach(cleanupRestoreHarnesses);
 
+const encoder = new TextEncoder();
 const FIRST = [entry("idem-1", { occurredAt: "2026-08-15T00:00:03.000Z" })];
 const SECOND = [entry("idem-2", { occurredAt: "2026-08-15T00:00:01.000Z" })];
 
-const payloadOf = (
-  harness: JournalHarness, entries: unknown,
-): Record<string, unknown> => ({
-  attemptAggregateId: harness.attempt.aggregateId,
-  effectId: harness.attempt.record.effectIntent.intentId,
-  entries,
-});
-
-const append = (
-  harness: JournalHarness, commandId: string, entries: unknown,
-): SeamResult => harness.send(
-  commandId, JOURNAL_APPEND_COMMAND_KIND, payloadOf(harness, entries),
-  harness.sessionCredential);
-
-function durable(harness: JournalHarness): AttemptJournalAnswer {
-  const answer = readCurrentAttemptJournal(
-    harness.store, harness.attempt.record.activationDigest, PROJECT_ID);
-  if (!answer.ok) throw new Error(`the durable reader refused: ${answer.code}`);
-  return answer;
+function append(
+  fixture: UnactivatedJournalFixture, commandId: string, entries: unknown,
+): ReturnType<typeof runJournalAppendCommand> {
+  const { identity } = fixture;
+  return runJournalAppendCommand(fixture.store, encoder.encode(JSON.stringify({
+    commandId, correlationId: `corr-${commandId}`, decidedAt: DECIDED_AT, expectedVersion: 0,
+    kind: JOURNAL_APPEND_COMMAND_KIND,
+    payload: {
+      attemptAggregateId: identity.aggregateId, effectId: identity.effectIntentRef, entries,
+    },
+    principalId: identity.sessionId, projectId: PROJECT_ID,
+    schemaVersion: JOURNAL_APPEND_SCHEMA_VERSION,
+  })));
 }
 
-const rows = (harness: JournalHarness): number =>
-  journalEventCount(harness.store, harness.attempt.record.activationDigest);
+function expectFirstFence(
+  fixture: UnactivatedJournalFixture, commandId: string, entries: unknown,
+): void {
+  expect(append(fixture, commandId, entries)).toEqual({
+    advisoryOnly: true, authority: "NONE", code: "FOUNDATION_BINDING_NOT_FOUND", error: null,
+    kind: JOURNAL_APPEND_COMMAND_KIND, ok: false,
+    refusedBy: "FOUNDATION_ACTIVATION_BINDING",
+  });
+  expect(fixture.store.getCommandDecision({
+    commandId, principalId: fixture.identity.sessionId, projectId: PROJECT_ID,
+  })).toBeNull();
+}
 
-const canonical = (entries: readonly DeadEndJournalEntry[]): {
-  digest: string; entries: readonly DeadEndJournalEntry[];
-} => {
-  const admitted = createDeadEndJournal(entries);
-  if (admitted.kind !== "ADMITTED") throw new Error(`fixture refused: ${admitted.limit}`);
-  return { digest: admitted.journal.digest, entries: admitted.journal.entries };
-};
+const atLimit = Array.from({ length: MAX_JOURNAL_ENTRY_COUNT }, (_, index) =>
+  entry(`bound-${index}`, { occurredAt: DECIDED_AT }));
 
-describe("journal.append — replay, conflict and append ordering", () => {
-  it("replays the same command bytes without a second durable row", () => {
-    const harness = openJournalHarness("replay");
-    expect(append(harness, "cmd-replay", FIRST)).toMatchObject({
-      decision: { disposition: "DECIDED" }, ok: true,
-    });
-    const before = durable(harness);
-    expect(rows(harness)).toBe(1);
+const RETIRED_WRITER_GROUPS = Object.freeze([
+  { calls: [["cmd-replay", FIRST], ["cmd-replay", FIRST]], label: "same-command replay" },
+  { calls: [["cmd-first", FIRST], ["cmd-second", SECOND], ["cmd-first", FIRST]],
+    label: "replay after tail movement" },
+  { calls: [["cmd-conflict", FIRST], ["cmd-conflict", SECOND]], label: "byte conflict" },
+  { calls: [["cmd-order-1", FIRST], ["cmd-order-2", SECOND]], label: "append ordering" },
+  { calls: [["cmd-at-bound", atLimit], ["cmd-over-bound", [entry("one-too-many")]]],
+    label: "journal count boundary" },
+] as const);
 
-    expect(append(harness, "cmd-replay", FIRST)).toMatchObject({
-      decision: { disposition: "REPLAYED" }, ok: true, outcome: "ACCEPTED",
-    });
-    // The counts come OUT OF THE STORE. A writer that appended a second identical
-    // journal would still answer ok here.
-    expect(rows(harness)).toBe(1);
-    const after = durable(harness);
-    expect(after.journalDigest).toBe(before.journalDigest);
-    expect(after.entries).toEqual(before.entries);
+describe("journal.append — production-unreachable writer journeys stop at the first fence", () => {
+  it("names every retired accepted/replay/conflict/ordering/boundary group", () => {
+    expect(RETIRED_WRITER_GROUPS.map(({ label }) => label)).toEqual([
+      "same-command replay", "replay after tail movement", "byte conflict", "append ordering",
+      "journal count boundary",
+    ]);
   });
 
-  it("still replays the FIRST command after a later append moved the tail", () => {
-    // THE CASE THE writer's `prior.expectedVersion` REUSE EXISTS FOR. The store
-    // hashes expectedVersion into the request identity alongside the bytes
-    // (packages/store/src/store-digests.ts:92), so a writer that re-derived it
-    // from today's tail would send 2 where the original sent 0, and this
-    // byte-identical retry would come back as an idempotency conflict instead of
-    // a replay — a plain retry made indistinguishable from hostile id reuse.
-    const harness = openJournalHarness("replay-after-tail-moved");
-    expect(append(harness, "cmd-first", FIRST).ok).toBe(true);
-    expect(append(harness, "cmd-second", SECOND).ok).toBe(true);
-    expect(rows(harness)).toBe(2);
-    const before = durable(harness);
-
-    expect(append(harness, "cmd-first", FIRST)).toMatchObject({
-      decision: { disposition: "REPLAYED" }, ok: true, outcome: "ACCEPTED",
-    });
-    expect(rows(harness)).toBe(2);
-    const after = durable(harness);
-    expect(after.journalDigest).toBe(before.journalDigest);
-    expect(after.entries).toEqual(before.entries);
-    // And the SECOND command's own replay is unaffected by the first one's.
-    expect(append(harness, "cmd-second", SECOND)).toMatchObject({
-      decision: { disposition: "REPLAYED" }, ok: true,
-    });
-    expect(rows(harness)).toBe(2);
-  });
-
-  it("refuses conflicting bytes under the STORE's own code, before mutating", () => {
-    const harness = openJournalHarness("conflict");
-    expect(append(harness, "cmd-conflict", FIRST).ok).toBe(true);
-    const before = durable(harness);
-
-    const conflicted = append(harness, "cmd-conflict", SECOND);
-    if (!("refusal" in conflicted)) throw new Error("expected a refusal");
-    // NOT flattened into a journal code: the store's idempotency conflict is the
-    // only thing that can say "one command identity, two different requests", and
-    // a DAEMON_JOURNAL_APPEND code here would hide that entirely.
-    expect({ code: conflicted.refusal.code, layer: conflicted.refusal.layer }).toEqual({
-      code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE",
-    });
-    expect(conflicted.refusal.layer).not.toBe(DAEMON_JOURNAL_APPEND);
-    // Refused BEFORE mutating: raw count unchanged and the ORIGINAL still stands.
-    expect(rows(harness)).toBe(1);
-    const after = durable(harness);
-    expect(after.entries).toEqual(before.entries);
-    expect(after.journalDigest).toBe(before.journalDigest);
-    expect(after.entries.map((admitted) => admitted.id)).toEqual(["idem-1"]);
-  });
-
-  it("unions a genuinely new append in the PRODUCTION canonical order", () => {
-    const harness = openJournalHarness("ordering");
-    expect(append(harness, "cmd-order-1", FIRST).ok).toBe(true);
-    expect(append(harness, "cmd-order-2", SECOND).ok).toBe(true);
-    expect(rows(harness)).toBe(2);
-    const answer = durable(harness);
-    const expected = canonical([...FIRST, ...SECOND]);
-    // Asserted against `createDeadEndJournal`'s own answer for the same union,
-    // never a hand-sorted literal: the ordering rule (occurredAt, then id, then
-    // entry digest) belongs to @moe/context and a literal would agree with a
-    // writer that had stopped sorting.
-    expect(answer.entries).toEqual(expected.entries);
-    expect(answer.journalDigest).toBe(expected.digest);
-    // And the order really is NOT insertion order, so the case is not vacuous:
-    // idem-2 occurred first and must sort first despite being appended second.
-    expect(answer.entries.map((admitted) => admitted.id)).toEqual(["idem-2", "idem-1"]);
-  });
-
-  it("admits a journal AT the entry-count bound and refuses one past it", () => {
-    const harness = openJournalHarness("at-bound");
-    const atLimit = Array.from({ length: MAX_JOURNAL_ENTRY_COUNT }, (_, index) =>
-      entry(`bound-${index}`, {
-        occurredAt: `2026-08-15T00:00:${String(index).padStart(2, "0")}.000Z`,
-      }));
-    // THE CONTROL: without it, "one over refuses" could equally be caused by the
-    // daemon rejecting large lists for some unrelated reason.
-    expect(append(harness, "cmd-at-bound", atLimit).ok).toBe(true);
-    expect(durable(harness).entries).toHaveLength(MAX_JOURNAL_ENTRY_COUNT);
-    const over = append(harness, "cmd-over-bound", [entry("one-too-many")]);
-    if (!("refusal" in over)) throw new Error("expected a refusal past the bound");
-    expect({ code: over.refusal.code, layer: over.refusal.layer }).toEqual({
-      code: "JOURNAL_LIMIT_REACHED", layer: "DEAD_END_JOURNAL",
-    });
-    expect(rows(harness)).toBe(1);
+  it.each(RETIRED_WRITER_GROUPS)("replaces $label with exact no-write refusals", ({
+    calls, label,
+  }) => {
+    const fixture = openUnactivatedJournalFixture(`retired-${label}`);
+    for (const [commandId, entries] of calls) expectFirstFence(fixture, commandId, entries);
+    expect(fixture.store.readEventHorizon()).toBe(0n);
+    expect(fixture.store.readEventsAfter(0n, 100).items).toEqual([]);
   });
 });
 
-/** Every mutation JSON can actually carry, generated per field. */
+/** Every mutation JSON can physically carry, generated per field. */
 function wireMutations(): readonly { readonly entries: unknown; readonly label: string }[] {
   const base = entry("sweep");
   const keys = Object.keys(base);
@@ -175,9 +88,6 @@ function wireMutations(): readonly { readonly entries: unknown; readonly label: 
     cases.push({ entries: [{ ...base, [key]: null }], label: `null ${key}` });
     cases.push({ entries: [{ ...base, [key]: [] }], label: `array ${key}` });
   }
-  // `{ __proto__: x }` in a literal SETS THE PROTOTYPE and creates no own key, so
-  // the key has to be defined explicitly or the case tests nothing. JSON.stringify
-  // then emits it and the bounded parser reads it back as a real own property.
   const polluted: Record<string, unknown> = { ...base };
   Object.defineProperty(polluted, "__proto__", {
     configurable: true, enumerable: true, value: { polluted: true }, writable: true,
@@ -193,46 +103,29 @@ function wireMutations(): readonly { readonly entries: unknown; readonly label: 
   return cases;
 }
 
-describe("journal.append — the generated hostile sweep", () => {
+describe("journal.append — the generated wire-hostile sweep", () => {
   const cases = wireMutations();
 
-  it("generates a nonzero number of cases", () => {
-    // A sweep that silently produced zero cases would pass every assertion below.
+  it("generates and uniquely names the exact nonzero case set", () => {
+    expect(cases.length).toBe(Object.keys(entry("sweep-count")).length * 4 + 7);
     expect(cases.length).toBeGreaterThan(0);
-    expect(cases.length).toBe(Object.keys(entry("sweep")).length * 4 + 7);
-    expect(new Set(cases.map((item) => item.label)).size).toBe(cases.length);
+    expect(new Set(cases.map(({ label }) => label)).size).toBe(cases.length);
   });
 
-  it("refuses every generated case with a frozen code, never a throw", () => {
-    const harness = openJournalHarness("sweep");
-    const answers = cases.map((item, index) => {
-      let result: SeamResult;
-      try {
-        result = append(harness, `cmd-sweep-${index}`, item.entries);
-      } catch (error) {
-        throw new Error(`${item.label} CRASHED instead of refusing: ${String(error)}`);
-      }
-      if (!("refusal" in result)) {
-        throw new Error(`${item.label} was ACCEPTED: ${JSON.stringify(result)}`);
-      }
-      return { code: result.refusal.code, label: item.label, layer: result.refusal.layer };
+  it("proves every candidate is hostile downstream while the activation fence answers first", () => {
+    const fixture = openUnactivatedJournalFixture("wire-hostile-sweep");
+    const answers = cases.map(({ entries, label }, index) => {
+      const decoded = decodeJournalEntries(entries);
+      expect(decoded, label).toEqual({ code: "JOURNAL_ENTRY_MALFORMED", ok: false });
+      const commandId = `cmd-wire-hostile-${index}`;
+      expectFirstFence(fixture, commandId, entries);
+      return commandId;
     });
     expect(answers).toHaveLength(cases.length);
-    for (const answer of answers) {
-      expect(JOURNAL_CODES.includes(answer.code as never), answer.label).toBe(true);
-      expect(answer.layer, answer.label).toBe(DAEMON_JOURNAL_APPEND);
-    }
-    // Not one of them left a durable row behind.
-    expect(rows(harness)).toBe(0);
+    expect(fixture.store.readEventHorizon()).toBe(0n);
   });
 });
 
-/**
- * Values JSON physically cannot carry, driven against the PRODUCTION decoder
- * rather than through the seam. `JSON.stringify` invokes a getter, serialises -0
- * as 0 and throws on a revoked proxy, so none of these can reach the writer over
- * the wire — asserting them at the seam would test the encoder, not the fence.
- */
 describe("decodeJournalEntries — reflection-hostile values refuse, never throw", () => {
   function accessorEntry(): unknown {
     const value: Record<string, unknown> = { ...entry("accessor") };
@@ -275,28 +168,23 @@ describe("decodeJournalEntries — reflection-hostile values refuse, never throw
     })() },
   ];
 
-  it("generates a nonzero number of reflection cases", () => {
-    expect(hostile.length).toBeGreaterThan(0);
-    expect(hostile.length).toBe(8);
+  it("generates the exact nonzero reflection case set", () => {
+    expect(hostile).toHaveLength(8);
+    expect(new Set(hostile.map(({ label }) => label)).size).toBe(8);
   });
 
-  it.each(hostile)("refuses $label with a frozen code", ({ label, value }) => {
+  it.each(hostile)("refuses $label with the production codec's exact code", ({ label, value }) => {
     let decoded: ReturnType<typeof decodeJournalEntries>;
     try {
       decoded = decodeJournalEntries(value);
     } catch (error) {
       throw new Error(`${label} CRASHED instead of refusing: ${String(error)}`);
     }
-    expect(decoded.ok).toBe(false);
-    if (decoded.ok) throw new Error(`${label} was admitted`);
-    expect(JOURNAL_CODES.includes(decoded.code)).toBe(true);
-    expect(decoded.code).toBe("JOURNAL_ENTRY_MALFORMED");
+    expect(decoded).toEqual({ code: "JOURNAL_ENTRY_MALFORMED", ok: false });
+    if (!decoded.ok) expect(JOURNAL_CODES.includes(decoded.code)).toBe(true);
   });
 
   it("still admits the untouched control entry", () => {
-    // Without this, every assertion above would pass on a decoder that refused
-    // absolutely everything.
-    const admitted = decodeJournalEntries([entry("control")]);
-    expect(admitted.ok).toBe(true);
+    expect(decodeJournalEntries([entry("control")]).ok).toBe(true);
   });
 });

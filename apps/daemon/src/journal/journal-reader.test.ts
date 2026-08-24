@@ -7,7 +7,7 @@ import { DAEMON_JOURNAL_APPEND, JOURNAL_CODES } from "./journal-contracts.js";
 import { readCurrentAttemptJournal } from "./journal-reader.js";
 import type { AttemptJournalResult, JournalEventSource } from "./journal-reader.js";
 import {
-  NODE_KEY, entry, journalBody, openJournalHarness, plantJournalEvent,
+  NODE_KEY, entry, journalBody, openUnactivatedJournalFixture, plantJournalEvent,
 } from "./journal-test-harness.js";
 
 /**
@@ -18,7 +18,8 @@ import {
  * fixture that was already invalid at an earlier layer. Each case pins the exact
  * CODE and the exact refusing LAYER: this reader is the only thing standing
  * between an unverifiable journal and a release handoff that would accept its
- * digest as a content reference.
+ * digest as a content reference. Planted bytes reach those reader guards; they
+ * are deliberately not evidence that the production writer can create a row.
  */
 
 afterEach(cleanupRestoreHarnesses);
@@ -35,14 +36,14 @@ function refusalOf(answer: AttemptJournalResult): { code: string; layer: string 
 
 describe("readCurrentAttemptJournal — the positive control and its cardinality", () => {
   it("reads a planted canonical body and answers every durable field", () => {
-    const harness = openJournalHarness("reader-control");
-    const { activationDigest } = harness.attempt.record;
+    const harness = openUnactivatedJournalFixture("reader-control");
+    const { activationDigest } = harness.identity;
     // ABSENT before any row: distinct from UNREADABLE because the two demand
     // opposite repairs — write the journal, versus repair the store.
     expect(refusalOf(readCurrentAttemptJournal(harness.store, activationDigest, PROJECT_ID)))
       .toEqual({ code: "JOURNAL_RECORD_ABSENT", layer: DAEMON_JOURNAL_APPEND });
 
-    plantJournalEvent(harness.store, activationDigest, journalBody(harness.attempt, ENTRIES), 0);
+    plantJournalEvent(harness.store, activationDigest, journalBody(harness.identity, ENTRIES), 0);
     const answer = readCurrentAttemptJournal(harness.store, activationDigest, PROJECT_ID);
     if (!answer.ok) throw new Error(`the control body was refused: ${answer.code}`);
     expect(answer.entries).toEqual(
@@ -54,27 +55,27 @@ describe("readCurrentAttemptJournal — the positive control and its cardinality
       authority: answer.authority, effectId: answer.effectId, leaseRef: answer.leaseRef,
       nodeKey: answer.nodeKey, sessionId: answer.sessionId,
     }).toEqual({
-      activationDigest, attemptRef: harness.attempt.record.attempt.attemptId,
-      authority: "DURABLE_JOURNAL", effectId: harness.attempt.record.effectIntent.intentId,
-      leaseRef: harness.attempt.record.lease.leaseId, nodeKey: NODE_KEY,
-      sessionId: harness.attempt.sessionId,
+      activationDigest, attemptRef: harness.identity.attemptRef,
+      authority: "DURABLE_JOURNAL", effectId: harness.identity.effectIntentRef,
+      leaseRef: `lease-${harness.identity.attemptRef}`, nodeKey: NODE_KEY,
+      sessionId: harness.identity.sessionId,
     });
   });
 
   it("refuses an UNREADABLE store separately from an absent row", () => {
-    const harness = openJournalHarness("reader-unreadable");
-    const { activationDigest } = harness.attempt.record;
+    const harness = openUnactivatedJournalFixture("reader-unreadable");
+    const { activationDigest } = harness.identity;
     harness.store.close();
     expect(refusalOf(readCurrentAttemptJournal(harness.store, activationDigest, PROJECT_ID)))
       .toEqual({ code: "JOURNAL_RECORD_UNREADABLE", layer: DAEMON_JOURNAL_APPEND });
   });
 
   it("refuses two rows claiming one sequence, which no repair can choose between", () => {
-    const harness = openJournalHarness("reader-ambiguous");
-    const { activationDigest } = harness.attempt.record;
-    plantJournalEvent(harness.store, activationDigest, journalBody(harness.attempt, ENTRIES), 0);
+    const harness = openUnactivatedJournalFixture("reader-ambiguous");
+    const { activationDigest } = harness.identity;
+    plantJournalEvent(harness.store, activationDigest, journalBody(harness.identity, ENTRIES), 0);
     plantJournalEvent(
-      harness.store, activationDigest, journalBody(harness.attempt, [ENTRIES[0]!]), 1);
+      harness.store, activationDigest, journalBody(harness.identity, [ENTRIES[0]!]), 1);
     // The rows are REAL store rows; only the sequence of the second is drifted,
     // because the store assigns sequences itself and will not mint a duplicate.
     const collided: JournalEventSource = {
@@ -88,9 +89,9 @@ describe("readCurrentAttemptJournal — the positive control and its cardinality
   });
 
   it("refuses a foreign event type on the journal aggregate", () => {
-    const harness = openJournalHarness("reader-foreign-type");
-    const { activationDigest } = harness.attempt.record;
-    plantJournalEvent(harness.store, activationDigest, journalBody(harness.attempt, ENTRIES), 0);
+    const harness = openUnactivatedJournalFixture("reader-foreign-type");
+    const { activationDigest } = harness.identity;
+    plantJournalEvent(harness.store, activationDigest, journalBody(harness.identity, ENTRIES), 0);
     const foreign: JournalEventSource = {
       readEvents: (aggregateId: string): readonly StoredEvent[] =>
         harness.store.readEvents(aggregateId).map((event) =>
@@ -129,30 +130,30 @@ describe("readCurrentAttemptJournal — one drifted field at a time", () => {
   });
 
   it.each(cases)("refuses $label with $code", ({ code, label, overrides }) => {
-    const harness = openJournalHarness(`drift-${label.replaceAll(" ", "-")}`);
-    const { activationDigest } = harness.attempt.record;
+    const harness = openUnactivatedJournalFixture(`drift-${label.replaceAll(" ", "-")}`);
+    const { activationDigest } = harness.identity;
     // POSITIVE CONTROL on the SAME body without the drift, so the refusal below
     // cannot be caused by a fixture that was invalid before the field under test.
-    plantJournalEvent(harness.store, activationDigest, journalBody(harness.attempt, ENTRIES), 0);
+    plantJournalEvent(harness.store, activationDigest, journalBody(harness.identity, ENTRIES), 0);
     expect(readCurrentAttemptJournal(harness.store, activationDigest, PROJECT_ID).ok).toBe(true);
 
-    const drifted = openJournalHarness(`drifted-${label.replaceAll(" ", "-")}`);
-    const digest = drifted.attempt.record.activationDigest;
+    const drifted = openUnactivatedJournalFixture(`drifted-${label.replaceAll(" ", "-")}`);
+    const digest = drifted.identity.activationDigest;
     plantJournalEvent(
-      drifted.store, digest, journalBody(drifted.attempt, ENTRIES, overrides), 0);
+      drifted.store, digest, journalBody(drifted.identity, ENTRIES, overrides), 0);
     expect(refusalOf(readCurrentAttemptJournal(drifted.store, digest, PROJECT_ID)))
       .toEqual({ code, layer: DAEMON_JOURNAL_APPEND });
   });
 
   it("refuses a digest that has quietly stopped covering its entries", () => {
-    const harness = openJournalHarness("reader-digest-mismatch");
-    const { activationDigest } = harness.attempt.record;
+    const harness = openUnactivatedJournalFixture("reader-digest-mismatch");
+    const { activationDigest } = harness.identity;
     // The body stores BOTH entries but a digest computed over only the first —
     // canonical bytes, every other field durable and agreeing, so ONLY the
     // re-derivation can catch it. This is the guard the DoD's mutation drill aims at.
     const partial = createDeadEndJournal([ENTRIES[0]!]);
     if (partial.kind !== "ADMITTED") throw new Error("fixture refused");
-    const body = journalBody(harness.attempt, ENTRIES, {
+    const body = journalBody(harness.identity, ENTRIES, {
       journalDigest: partial.journal.digest,
     });
     expect(body["journalDigest"]).not.toBe(
@@ -163,9 +164,9 @@ describe("readCurrentAttemptJournal — one drifted field at a time", () => {
   });
 
   it("refuses stored bytes that no longer re-encode", () => {
-    const harness = openJournalHarness("reader-drift");
-    const { activationDigest } = harness.attempt.record;
-    plantJournalEvent(harness.store, activationDigest, journalBody(harness.attempt, ENTRIES), 0);
+    const harness = openUnactivatedJournalFixture("reader-drift");
+    const { activationDigest } = harness.identity;
+    plantJournalEvent(harness.store, activationDigest, journalBody(harness.identity, ENTRIES), 0);
     // Canonical encoding sorts keys, so a payload whose keys are stored out of
     // order decodes cleanly and fails only the byte compare.
     const scrambled: JournalEventSource = {
