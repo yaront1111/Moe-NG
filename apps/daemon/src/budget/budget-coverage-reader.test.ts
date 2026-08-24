@@ -12,40 +12,26 @@ import {
   seedProjectAndGoal,
   withBudgetStore,
 } from "./budget-ledger-fixtures.js";
-import { reserveBudgetForAdmission } from "./budget-ledger-holds.js";
 import { authorizeBudgetRoot } from "./budget-ledger.js";
 import {
-  GOAL_ID as SETTLEMENT_GOAL_ID,
-  PROJECT_ID as SETTLEMENT_PROJECT_ID,
-  activatedStore,
-  applySettlement,
+  openUnactivatedBudgetFixture,
   cleanupRestoreHarnesses,
   cleanupSettlementScratchRoots,
-  commitRun,
-  heldOf,
-  usageRows,
+  storeWideEventHorizon,
 } from "./budget-settlement-fixtures.js";
 import {
   AGGREGATE,
   accepted,
   authorizeInput,
-  reserveInput,
   seedFundedChild,
 } from "./budget-transition-fixtures.js";
 
 /**
  * THE BUDGETS/COVERAGE READER the Foundation context matrix names (task-c320c34a's DoD 1).
  *
- * Everything below is seeded through PRODUCTION writers — `authorizeBudgetRoot`,
- * `allocateBudgetToChild` (inside `seedFundedChild`) and `reserveBudgetForAdmission`. No raw
- * event planting and no `seedActivatedHold`: a reader certified against state only a fixture can
- * build proves the fixture, not the path.
- *
- * PARTIAL IS PRODUCTION-REACHABLE AND IS EXERCISED BELOW (task-f432799c). It is driven through
- * `applyProviderUsageToBudget`, the daemon's production caller of `settleBudgetReservation`
- * (budget-settlement-application.ts:167), over the settlement world in
- * `budget-settlement-fixtures.ts` — still production writers end to end, so the discipline above
- * is preserved rather than broken.
+ * Populated worlds below use activation-free production writers. Open holds and applied
+ * settlements are named TODOs rather than fixture-built authority: their only production route
+ * is below effect admission, and production cannot currently mint an activation.
  *
  * MEASURED-COMPLETE REMAINS GATED, ON ONE WRITER ALONE. At commit 9c09252
  * `reconcileBudgetSettlement` (budget-ledger-holds.ts:284) had ZERO production callers:
@@ -124,24 +110,9 @@ describe("the budgets/coverage reader serves the durable current standing", () =
     });
   });
 
-  it("serves a REAL open hold as UNKNOWN with its conserved buckets visible and refundable NULL", () => {
-    withBudgetStore("coverage-open-hold", (store) => {
-      seedFundedChild(store);
-      // PRODUCTION WRITER, not seedActivatedHold: this is the reserve path an activation runs.
-      accepted(reserveBudgetForAdmission(store, reserveInput("cmd-reserve")));
-
-      const tokens = meterOf(served(read(store)), "tokens");
-
-      expect(tokens.coverage).toBe("UNKNOWN");
-      expect(tokens.openHoldCount).toBe(1);
-      // UNKNOWN IS NOT ZERO AND NOT EMPTY. The units are held, not gone: the conserved position
-      // stays visible, and the refundable CLAIM is withheld — `null`, never the number 0, which
-      // would read as "nothing is returnable" rather than "nobody has measured".
-      expect(tokens.refundable).toBeNull();
-      expect(tokens.refundable).not.toBe(0);
-      expect(tokens.buckets.reserved).toBeGreaterThan(0);
-    });
-  });
+  // No owner until production can mint a committed effect activation. Calling the reservation
+  // writer here would manufacture the state below its sole production caller.
+  it.todo("serves a real open hold as UNKNOWN once production can reach admission");
 
   it("appends nothing: a read is a read, on both the served and the refused path", () => {
     withBudgetStore("coverage-readonly", (store) => {
@@ -158,6 +129,28 @@ describe("the budgets/coverage reader serves the durable current standing", () =
 });
 
 describe("the budgets/coverage reader refuses without ever inventing a standing", () => {
+  it("forwards an empty store's projection verdict at all three attribution levels", () => {
+    const store = openUnactivatedBudgetFixture("coverage-empty");
+    try {
+      expect(storeWideEventHorizon(store)).toBe(0n);
+
+      const result = refused(readCurrentBudgetCoverage(store, PROJECT_ID, GOAL_ID));
+
+      expect(result.code).toBe("BUDGET_PROJECTION_GOAL_ABSENT");
+      expect(result.code).not.toBe("BUDGET_COVERAGE_STORE_UNAVAILABLE");
+      expect(result.layer).toBe("BUDGET_COVERAGE_READER");
+      expect(result.upstream).toStrictEqual({
+        code: "BUDGET_PROJECTION_GOAL_ABSENT",
+        layer: "BUDGET_CURRENT_PROJECTION",
+        sourceCode: null,
+        sourceLayer: null,
+      });
+      expect(storeWideEventHorizon(store)).toBe(0n);
+    } finally {
+      store.close();
+    }
+  });
+
   it("stays UNKNOWN with NO success fields when the bindings exist but no ledger was authorized", () => {
     withBudgetStore("coverage-absent", (store) => {
       seedDurableBindings(store);
@@ -216,51 +209,9 @@ describe("the budgets/coverage reader refuses without ever inventing a standing"
     });
   });
 
-  /**
-   * PARTIAL, REACHED THE WAY PRODUCTION REACHES IT (task-f432799c).
-   *
-   * Nothing here is seeded by this suite's budget-only writers, and nothing is planted: the
-   * reservation comes from a real `effect.activate`, the receipt from `commitProviderRunRecord`,
-   * the measurement identities from the scheduler's own `normalizeUsageMeasurement`, and the
-   * settlement from `applyProviderUsageToBudget` — which is the daemon's only production caller
-   * of `settleBudgetReservation` (budget-settlement-application.ts:167). That is the whole point
-   * of the arm: a reader certified against state only a fixture can build proves the fixture.
-   */
-  it("(task-f432799c) serves PARTIAL for a production-applied lower-bound receipt", () => {
-    const store = activatedStore("coverage-partial");
-    const held = heldOf(store);
-    const [meter] = held.meters;
-    if (meter === undefined) throw new Error("the reservation must hold a meter");
-    commitRun(store, held.attemptRef, usageRows(held.attemptRef,
-      held.meters.map((entry) => ({ coverage: "PARTIAL", meter: entry, quantity: 1 } as const))));
-
-    const settled = applySettlement(store, held.attemptRef) as Record<string, unknown>;
-    // Served, not merely un-refused. An arm that accepted a refusal here would assert the
-    // reader's behaviour on a store where no settlement ever landed.
-    if (settled["ok"] !== true) {
-      throw new Error(`the production settlement must be accepted, got ${String(settled["code"])}`
-        + `@${String(settled["layer"])}`);
-    }
-
-    // Read the coverage for the store THIS arm seeded, through the settlement world's own
-    // identities, rather than through the suite's `read` helper. The two identity sets are equal
-    // at commit 9c09252 (bootstrap-test-fixtures.ts:36-37 project-1/goal-1, re-exported by
-    // budget-ledger-fixtures.ts:49; restore-test-harness.ts:38 defines the same PROJECT_ID
-    // independently), and the aliased import means this arm does not depend on that coincidence.
-    const coverage = readCurrentBudgetCoverage(store, SETTLEMENT_PROJECT_ID, SETTLEMENT_GOAL_ID);
-    if (!coverage.ok) throw new Error(`coverage must be served, refused ${coverage.code}`);
-    const projection = coverage.meters.find((entry) => entry.meter === meter);
-    if (projection === undefined) throw new Error(`no coverage row for ${meter}`);
-
-    expect(projection.coverage).toBe("PARTIAL");
-    // The conserved position survives the settlement: the unmeasured remainder is HELD, which is
-    // what makes this a lower bound rather than a completed measurement.
-    expect(projection.buckets.quarantined).toBeGreaterThan(0);
-    expect(projection.buckets.meter).toBe(meter);
-    // refundable is non-null ONLY at COMPLETE (budget-current-projection.ts:184). Asserting NULL
-    // is what separates PARTIAL from COMPLETE; re-stating the enum would not.
-    expect(projection.refundable).toBeNull();
-  });
+  // Owner task-f432799c. It remains gated until a production path can commit an activated hold
+  // and a provider run; the former fixture was not evidence of reachability.
+  it.todo("(task-f432799c) serves PARTIAL for a production-applied lower-bound receipt");
 
   // GATED at commit 9c09252, and the gate is measured, not remembered: `reconcileBudgetSettlement`
   // (budget-ledger-holds.ts:284) has ZERO production callers — `git grep -n
