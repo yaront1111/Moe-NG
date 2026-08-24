@@ -248,6 +248,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
     ...(resolved.documentIngest === undefined
       ? {} : { documentIngest: resolved.documentIngest }),
     ...(resolved.graph === undefined ? {} : { graph: resolved.graph }),
+    ...(resolved.goalCatalog === undefined ? {} : { goalCatalog: resolved.goalCatalog }),
     ...(resolved.planningRuns === undefined
       ? {} : { planningRuns: resolved.planningRuns }),
     ...(resolved.sessionHandshake === undefined

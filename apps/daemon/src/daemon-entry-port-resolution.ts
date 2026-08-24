@@ -3,6 +3,7 @@ import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
+import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
@@ -15,6 +16,8 @@ export interface OptionalDaemonPortProvider {
   documentIngest?(): DocumentIngestPort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
+  /** The strict durable GoalCreated catalog, bound to this daemon's own project. */
+  goalCatalog?(): GoalCatalogReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /**
@@ -37,6 +40,7 @@ export interface ResolvedOptionalDaemonPorts {
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
+  readonly goalCatalog?: GoalCatalogReadPort;
   readonly planningRuns?: PlanningRunReadPort;
   readonly reconciliation?: BootReconciliationPort;
   readonly sessionHandshake?: SessionHandshakePort;
@@ -48,8 +52,8 @@ export type OptionalDaemonPortResolution =
   | { readonly ok: true; readonly ports: ResolvedOptionalDaemonPorts };
 
 const FACTORIES = Object.freeze([
-  "subscriptions", "affordances", "documentDossiers", "documentIngest", "graph", "planningRuns",
-  "reconciliation", "sessionHandshake",
+  "subscriptions", "affordances", "documentDossiers", "documentIngest", "graph", "goalCatalog",
+  "planningRuns", "reconciliation", "sessionHandshake",
 ] as const);
 
 function hasMethods(value: unknown, keys: readonly string[]): boolean {
@@ -115,6 +119,14 @@ export function resolveOptionalDaemonPorts(
     if (graph !== undefined && !hasMethods(graph, ["readCurrentActiveGraph"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const goalCatalogFactory = provider.goalCatalog;
+    if (goalCatalogFactory !== undefined && typeof goalCatalogFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const goalCatalog = goalCatalogFactory?.call(provider);
+    if (goalCatalog !== undefined && !hasMethods(goalCatalog, ["readGoals"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const planningRunFactory = provider.planningRuns;
     if (planningRunFactory !== undefined && typeof planningRunFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -144,6 +156,7 @@ export function resolveOptionalDaemonPorts(
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),
+      ...(goalCatalog === undefined ? {} : { goalCatalog }),
       ...(planningRuns === undefined ? {} : { planningRuns }),
       ...(reconciliation === undefined ? {} : { reconciliation }),
       ...(sessionHandshake === undefined ? {} : { sessionHandshake }),

@@ -6,6 +6,8 @@ import { DOCUMENT_DOSSIER_PATH, handleDocumentDossierReadRequest } from "./docum
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import { DOCUMENT_INGEST_PATH, handleDocumentIngestRequest } from "./document-ingest-route.js";
 import type { DocumentIngestPort } from "./document-ingest-route.js";
+import { GOAL_CATALOG_READ_PATH, handleGoalCatalogReadRequest } from "./goal-catalog-read.js";
+import type { GoalCatalogReadPort } from "./goal-catalog-read.js";
 import { PLANNING_RUN_READ_PATH, handlePlanningRunReadRequest } from "./planning-run-read.js";
 import type { PlanningRunReadPort } from "./planning-run-read.js";
 import type { SubscriptionPort } from "./event-stream-contract.js";
@@ -96,6 +98,8 @@ export interface StartListenerOptions {
   readonly documentIngest?: DocumentIngestPort;
   /** Absent means the graph route refuses rather than inventing a snapshot. */
   readonly graph?: GraphQueryPort;
+  /** Absent means the authenticated goal catalog route refuses rather than inventing rows. */
+  readonly goalCatalog?: GoalCatalogReadPort;
   readonly host?: string;
   readonly log?: (line: string) => void;
   readonly onRequest?: () => void;
@@ -152,6 +156,7 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
   EVENT_PAGE_PATH,
   EVENT_RESUME_PATH,
   GRAPH_GET_PATH,
+  GOAL_CATALOG_READ_PATH,
   PLANNING_RUN_READ_PATH,
 ]);
 
@@ -395,6 +400,25 @@ function servePlanningRun(
     body,
     credential: credentialOf(request),
     protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") {
+    refuseRequest(response, result.code);
+    return;
+  }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveGoalCatalog(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleGoalCatalogReadRequest({
+    authenticator: options.deps.authenticator,
+    goalCatalog: options.goalCatalog,
+  }, {
+    body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request),
   });
   if (result.kind === "LISTENER_REFUSAL") {
     refuseRequest(response, result.code);
@@ -652,6 +676,10 @@ async function serve(
     refuseRequest(response, "LISTENER_PLANNING_RUN_REQUEST_INVALID");
     return;
   }
+  if (path === GOAL_CATALOG_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_GOAL_CATALOG_REQUEST_INVALID");
+    return;
+  }
   if (path === DOCUMENT_INGEST_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_DOCUMENT_INGEST_REQUEST_INVALID");
     return;
@@ -668,6 +696,7 @@ async function serve(
   else if (path === EVENT_RESUME_PATH) serveEventResume(response, request, options, body);
   else if (path === AFFORDANCE_PATH) serveAffordances(response, request, options, body);
   else if (path === GRAPH_GET_PATH) serveGraphQuery(response, request, options, body);
+  else if (path === GOAL_CATALOG_READ_PATH) serveGoalCatalog(response, request, options, body);
   else if (path === PLANNING_RUN_READ_PATH) servePlanningRun(response, request, options, body);
   else if (path === DOCUMENT_INGEST_PATH) serveDocumentIngest(response, request, options, body);
   else serveDocumentDossier(response, request, options, body);

@@ -142,6 +142,13 @@ describe("the Foundation workspace catalog never gates daemon boot", () => {
 });
 
 describe("createStoreDependencies", () => {
+  it("provides the goal catalog over its bound project store", () => {
+    const port = provider.goalCatalog?.();
+    expect(port).toBeDefined();
+    expect(port?.boundProjectId).toBe(PROJECT);
+    expect(port?.readGoals()).toStrictEqual({ goals: [], outcome: "GOALS" });
+  });
+
   it("provides a read-only document dossier port over the bound store", () => {
     const port = provider.documentDossiers?.();
     expect(port).toBeDefined();
@@ -581,8 +588,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // unreachable from the real daemon while every direct-injection test stays
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "affordances", "documentDossiers", "documentIngest", "graph", "planningRuns", "provide",
-        "reconciliation", "restore", "sessionHandshake", "subscriptions",
+        "affordances", "documentDossiers", "documentIngest", "goalCatalog", "graph",
+        "planningRuns", "provide", "reconciliation", "restore", "sessionHandshake", "subscriptions",
       ],
       registerCapability: "project.admin",
       registerHandler: "function",

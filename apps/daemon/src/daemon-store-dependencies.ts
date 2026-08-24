@@ -40,6 +40,8 @@ import { createAffordancePort } from "./http/affordance-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import { createDocumentIngestPort } from "./http/document-ingest-route.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
+import { createGoalCatalogReadPort } from "./http/goal-catalog-read.js";
+import type { GoalCatalogReadPort } from "./http/goal-catalog-read.js";
 import { createPlanningRunReadPort } from "./http/planning-run-read.js";
 import type { PlanningRunReadPort } from "./http/planning-run-read.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
@@ -264,6 +266,9 @@ export function createStoreDependencies(
     readLatest: (projectId: string) => readLatestDocumentWorkDossier(store, projectId),
   });
 
+  const goalCatalog = (): GoalCatalogReadPort =>
+    createGoalCatalogReadPort({ projectId: config.projectId, store });
+
   /**
    * The pending-plan read and the operator document ingest, both bound to this root's own store
    * and project - the only place those are FACTS rather than request input. The ingest mints its
@@ -315,6 +320,7 @@ export function createStoreDependencies(
     documentDossiers,
     documentIngest,
     graph,
+    goalCatalog,
     planningRuns,
     provide,
     reconciliation,
@@ -357,6 +363,11 @@ const provider: DaemonDependencyProvider & Pick<StoreDependencyProvider, "restor
   graph: () => {
     const port = fromEnv().graph;
     if (port === undefined) throw new Error("unreachable: the graph reader is always wired");
+    return port();
+  },
+  goalCatalog: () => {
+    const port = fromEnv().goalCatalog;
+    if (port === undefined) throw new Error("unreachable: the goal catalog is always wired");
     return port();
   },
   planningRuns: () => {
