@@ -134,6 +134,18 @@ export type {
 } from "./document-work/document-work-proposal-contract.js";
 export { decodeDocumentWorkProposalBytes } from "./document-work/document-work-proposal-codec.js";
 export {
+  GOAL_BRIEF_CONTRACT,
+  GOAL_BRIEF_INPUT_INVALID,
+  GOAL_BRIEF_LIMITS,
+  admitGoalBrief,
+} from "./goal-brief/goal-brief-contract.js";
+export type {
+  GoalBrief,
+  GoalBriefAccepted,
+  GoalBriefRefused,
+  GoalBriefResult,
+} from "./goal-brief/goal-brief-contract.js";
+export {
   DISTRIBUTION_COMPONENT_KINDS,
   DISTRIBUTION_CONTAINER_VERSION,
   DISTRIBUTION_MANIFEST_VERSION,
