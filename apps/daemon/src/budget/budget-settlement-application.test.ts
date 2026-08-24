@@ -113,6 +113,23 @@ describe("provider usage applied to budget — reachable refusal ladder", () => 
   });
 });
 
+/**
+ * RETIRED CLAIMS, NAMED RATHER THAN DELETED. Every row below needed `activatedStore(...)` — a
+ * committed effect activation — which production cannot mint today: the only writers that create
+ * an activated reservation (`reserveBudgetForAdmission`, `activateBudgetReservation` in
+ * budget-ledger-holds.ts) have their sole production callers inside the activation lane below the
+ * admission gate, so driving them from a suite would author a state production cannot reach.
+ *
+ * SURVIVING OWNERS for the two forwarding claims this migration retired:
+ *   BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM — origin owned by
+ *     packages/scheduler/src/budget/budget-measurement.test.ts:235 and
+ *     packages/runner/src/providers/telemetry/provider-usage-normalization.test.ts:418.
+ *     The DAEMON-side unrestamped forwarding has NO owner until production can commit an
+ *     activation; that is stated, not papered over.
+ *   BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT — origin owned by
+ *     packages/scheduler/src/budget/budget-settlement.test.ts:318-347; the daemon-side forwarding
+ *     survives at apps/daemon/src/activation/activation-budget-binding.test.ts:493 and :527.
+ */
 describe("provider usage applied to budget — unreachable claims stay visible", () => {
   it.todo("rung 3: goal unresolved after a durable provider run");
   it.todo("rung 4: budget ledger unreadable after a durable run and goal");
@@ -121,4 +138,12 @@ describe("provider usage applied to budget — unreachable claims stay visible",
   it.todo("COMPLETE, PARTIAL, and UNKNOWN settlement dispositions remain distinct");
   it.todo("settlement replay and cross-attempt binding preserve conserved balances");
   it.todo("activation ingress reaches the budget-binding store refusal");
+  it.todo(
+    "forwards the measurement authority's BUDGET_OBSERVATION_TRUNCATED_COMPLETION_CLAIM "
+    + "unrestamped under BUDGET_LEDGER_TRANSITION_REFUSED and moves no money",
+  );
+  it.todo(
+    "forwards the scheduler's BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT when the measurement "
+    + "names another attempt",
+  );
 });
