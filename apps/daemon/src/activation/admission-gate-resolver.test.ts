@@ -92,8 +92,21 @@ const FORGED_GATE = Object.freeze({
  * OWNER of any successor row: task-064b97584aff4e07967738f79134a723, which owns this whole census
  * block and is BLOCKED; it re-measures the families on resume.
  */
+
+/**
+ * RETIRED ROW: `journal`. It named
+ * `["journal", "../journal/journal-test-harness.ts", "runEffectActivateCommand"]`.
+ * task-9c16a3fa983b4333b8911a40a370a17a removed the policy-ALLOW construction precondition from
+ * `openJournalHarness` (eeb85dd), which took that anchor 3 -> 0 in the harness source this row
+ * reads. The family did not merely lose a symbol: it left the population this census measures,
+ * because its world is now built on a bare unactivated store and no longer travels the
+ * POLICY_ALLOWANCE production path at all. Re-anchoring on a symbol the harness does contain
+ * (`handleCommandRequest`, `openUnactivatedJournalFixture`) would keep the count at four while
+ * asserting a policy claim the harness does not make, and re-adding `runEffectActivateCommand`
+ * would be dead code existing only to satisfy `toContain`.
+ * OWNER of any successor row: task-064b97584aff4e07967738f79134a723, as above.
+ */
 const POLICY_ALLOWANCE_HARNESS_FAMILIES = Object.freeze([
-  ["journal", "../journal/journal-test-harness.ts", "runEffectActivateCommand"],
   ["attempt-resource", "../work/attempt-resource-test-harness.ts", "runEffectActivateCommand"],
   ["goal-closure", "../goals/goal-closure-test-fixtures.ts", "seedActivationWorld"],
   ["direct-activation", "./activation-world-fixtures.ts", "seedAllowingPolicyDecision"],
@@ -138,9 +151,9 @@ function withReopenedStore<T>(
   }
 }
 
-describe("server-resolved policy facts — four production-path harness families", () => {
-  it("enumerates all four measured families", () => {
-    expect(POLICY_ALLOWANCE_HARNESS_FAMILIES).toHaveLength(4);
+describe("server-resolved policy facts — three production-path harness families", () => {
+  it("enumerates all three measured families", () => {
+    expect(POLICY_ALLOWANCE_HARNESS_FAMILIES).toHaveLength(3);
   });
 
   it.each(POLICY_ALLOWANCE_HARNESS_FAMILIES)(
