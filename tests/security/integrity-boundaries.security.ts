@@ -44,6 +44,10 @@ import {
   PROJECT_INTEGRITY_HOSTILE_CASES,
   projectIntegrityControls,
 } from "./project-integrity-hostile-cases.js";
+import {
+  POLICY_SLICE_HOSTILE_CASES,
+  policySliceDigestPositiveControl,
+} from "./policy-slice-hostile-cases.js";
 
 const LANE_ROOT = dirname(fileURLToPath(import.meta.url));
 const ROSTER_FILE = join(LANE_ROOT, "boundary-roster.security.ts");
@@ -61,6 +65,7 @@ const ROSTER_INTEGRITY = rosterIntegrityConstants();
 const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...INTEGRITY_HOSTILE_CASES,
   ...PROJECT_INTEGRITY_HOSTILE_CASES,
+  ...POLICY_SLICE_HOSTILE_CASES,
 ]);
 const COVERED = [...new Set(HOSTILE_CASES.map((entry) => entry.constant))];
 
@@ -132,7 +137,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // verdict builder's BEFORE/AFTER/RACE probes land with this bump.
     // 21 -> 23 for PRODUCT_CONTRACT_LAYERS and DECISION_LEDGER_LAYER, two canonical
     // integrity codecs. Product Contract also carries a production re-seal control.
-    expect(ROSTER_INTEGRITY).toHaveLength(23);
+    // 23 -> 24 for POLICY_SLICE_DIGEST_LAYERS, the canonical policy-slice identity
+    // derivation. Its public production call supplies the positive control below.
+    expect(ROSTER_INTEGRITY).toHaveLength(24);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
@@ -157,7 +164,7 @@ describe("integrity axis versus the declared-boundary roster", () => {
     },
   );
 
-  it("re-seals at least one forgery per digest-bearing boundary", () => {
+  it("re-seals at least one forgery per boundary that accepts carried integrity material", () => {
     const resealed = HOSTILE_CASES.filter(
       (entry) => entry.arm !== "RACE" && entry.integrity !== undefined,
     ).map((entry) => entry.constant);
@@ -189,6 +196,8 @@ describe("integrity axis versus the declared-boundary roster", () => {
       // Added with the PLAN_REVISION_LAYERS arms (producer task-9fe1a0e0, governor entry):
       // the plan-revision codec is digest-bearing (planHash), so it owes a forgery here.
       "PLAN_REVISION_LAYERS",
+      // POLICY_SLICE_DIGEST_LAYERS is deliberately absent: it derives and returns a digest,
+      // but accepts no caller-carried seal that a hostile case could truthfully re-seal.
       "PRODUCT_CONTRACT_LAYERS",
       "PROJECT_CONFIGURATION_SELECTION_LAYER",
       "RECOVERY_COMPLETION_LAYER",
@@ -223,6 +232,15 @@ describe("new canonical integrity boundaries admit their positive controls", () 
     expect(controls.decisionRoundTrip).toBe(true);
     expect(controls.productDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(controls.decisionDigest).toMatch(/^[0-9a-f]{64}$/u);
+  });
+
+  it("derives a policy-slice digest through the public core surface", () => {
+    const control = policySliceDigestPositiveControl();
+    expect(control.ok).toBe(true);
+    if (control.ok) {
+      expect(control.digest).toMatch(/^[0-9a-f]{64}$/u);
+      expect(Object.isFrozen(control)).toBe(true);
+    }
   });
 });
 

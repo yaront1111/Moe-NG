@@ -24,6 +24,7 @@ import {
 } from "../recovery/restore-test-harness.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { runWorkClaimCommand } from "../work/work-claim-services.js";
+import { activationAdmissionRef } from "./activation-admission-identity.js";
 import {
   ACTIVATION_LEDGER_EVENT_TYPE,
   deriveActivationAggregateId,
@@ -81,6 +82,7 @@ function readyStore(label: string): SqliteEventStore {
 
 const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
+const ADMISSION_REF = activationAdmissionRef(PROJECT_ID, PRINCIPAL_ID, "cmd-activate-1");
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST,
@@ -310,7 +312,7 @@ describe("effect.activate ingress — the accepted path", () => {
     if (!after.ok) throw new Error(`the durable ledger must read back: ${after.code}`);
     expect(record.budgetReservation).toMatchObject({
       accountId: after.binding.budgetAccountRef,
-      admissionRef: "activation:cmd-activate-1",
+      admissionRef: ADMISSION_REF,
       // RESERVED AT COMMIT TIME, and that is a snapshot rather than the end state. One legs
       // commit may name the budget aggregate EXACTLY once, so the unit-MOVING transition rides
       // it and the attempt binding lands in a SUBSEQUENT decision (task-03049148). This record
@@ -333,7 +335,7 @@ describe("effect.activate ingress — the accepted path", () => {
     // while this record keeps the RESERVED bytes it committed. Asserting equality again would
     // reject a correctly bound reservation.
     const head = after.reservations.find(
-      (entry) => entry.admissionRef === "activation:cmd-activate-1");
+      (entry) => entry.admissionRef === ADMISSION_REF);
     expect(head).toMatchObject({ attemptRef: record.attempt.attemptId, state: "ACTIVATED" });
     // ANTI-TAUTOLOGY: everything the binding does NOT touch is still the ledger module's own
     // committed output, read back out of the durable aggregate rather than hand-built here.
@@ -376,7 +378,7 @@ describe("effect.activate ingress — the accepted path", () => {
     const ledger = readCurrentBudgetLedger(store, PROJECT_ID, GOAL_ID);
     if (!ledger.ok) throw new Error(`the durable ledger must read back: ${ledger.code}`);
     expect(ledger.reservations.filter(
-      (entry) => entry.admissionRef === "activation:cmd-activate-1")).toHaveLength(1);
+      (entry) => entry.admissionRef === ADMISSION_REF)).toHaveLength(1);
   });
 
   it("persists NEITHER aggregate when the budget leg loses an expected-version race", () => {

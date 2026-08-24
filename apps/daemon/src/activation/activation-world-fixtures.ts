@@ -32,6 +32,7 @@
 import {
   createAcceptanceContract,
   createPlanRevision,
+  derivePolicySliceDigest,
   reduceGraphRevision,
 } from "@moe/core";
 import type { GraphRevisionCommand, GraphRevisionEvent, GraphRevisionState } from "@moe/core";
@@ -69,6 +70,15 @@ const seededHash = (seed: string): string => seed.repeat(64).slice(0, 64);
 
 /** The revision the seeded world activates; consumers assert against this id, not a literal. */
 export const ACTIVATION_WORLD_REVISION_ID = "graph-revision-1";
+const ACTIVATION_WORLD_POLICY_SLICE = Object.freeze({
+  autoApprovalOptIns: [{ action: "effect.activate", tier: "R0" as const }],
+  rules: [],
+  sliceRef: "pending-activation-policy-slice",
+});
+const ACTIVATION_WORLD_POLICY_DIGEST = derivePolicySliceDigest(ACTIVATION_WORLD_POLICY_SLICE);
+if (!ACTIVATION_WORLD_POLICY_DIGEST.ok) throw new Error("activation policy slice is invalid");
+/** The canonical policy-slice content identity embedded in every seeded node definition. */
+export const ACTIVATION_WORLD_POLICY_SLICE_HASH = ACTIVATION_WORLD_POLICY_DIGEST.digest;
 /** The single execution-bearing node door 2 must resolve with no caller argument. */
 export const ACTIVATION_WORLD_NODE_KEY = "dev-solo";
 /** Exact, not `> 0`: a fixture that plants an empty graph must not satisfy the readback. */
@@ -158,7 +168,7 @@ function nodeDefinitionFor(
       joinRole: completes ? "COMPLETION" : "NONE",
       nodeKey,
       objective: `Land ${nodeKey}.`,
-      policySliceHash: hex("3"),
+      policySliceHash: ACTIVATION_WORLD_POLICY_SLICE_HASH,
       readScopes: ["services/api/src"],
       repositoryBaseTree: hex("4"),
       resources: ["resource-a"],

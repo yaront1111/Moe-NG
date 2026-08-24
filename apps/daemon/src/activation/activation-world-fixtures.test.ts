@@ -25,7 +25,8 @@ import { GOAL_ID, PROJECT_ID, driveThrough } from "../bootstrap/bootstrap-test-f
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { readCurrentActiveGraph } from "../planning/active-graph-projection.js";
 
-import { activationAdmissionRef, runActivationBudgetStage } from "./activation-budget-stage.js";
+import { activationAdmissionRef } from "./activation-admission-identity.js";
+import { runActivationBudgetStage } from "./activation-budget-stage.js";
 import {
   ACTIVATION_WORLD_AUTHORIZED_AMOUNT,
   ACTIVATION_WORLD_BEARING_NODE_COUNT,
@@ -106,7 +107,7 @@ describe("activation world fixture — the seeded graph reads back through produ
       if (!result.ok) return;
       expect(result.authority.gateWitnessField).toBe("approval");
       expect(result.budget.reservation.admissionRef)
-        .toBe(activationAdmissionRef(request.commandId));
+        .toBe(activationAdmissionRef(request.projectId, request.principalId, request.commandId));
     });
   });
 

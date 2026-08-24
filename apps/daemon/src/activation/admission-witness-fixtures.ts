@@ -47,12 +47,16 @@ import {
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 
-/** The action the bootstrap journey's own policy decision is about. Kept identical to
- *  `evaluationInput` so a seeded opt-in names the action the evaluation actually carries. */
-const POLICY_ACTION = "plan.approve";
 /** R0/R1 are the only tiers `assessTier` can auto-approve; R2/R3 are human-only by design 710. */
 const POLICY_TIER = "R0";
-export const ALLOWING_POLICY_SLICE_REF = hex64("a11007");
+
+export interface PolicyWitnessSubject {
+  readonly action: "effect.activate";
+  readonly graphRevisionRef: string;
+  readonly nodeKey: string;
+  readonly policySliceHash: string;
+  readonly principalId: string;
+}
 
 const CUSTOM_PROJECT_PREFIX_KINDS = new Set([
   "project.register", "project.bind_repository", "provider.probe", "project.activate",
@@ -84,8 +88,8 @@ const policyVersion = (store: SqliteEventStore): number =>
   versionOf(readDurableLedger(store, PROJECT_ID), policyAggregateId(PROJECT_ID));
 
 /** A slice whose opt-in is what turns `assessTier`'s REQUIRE_HUMAN_APPROVAL into ALLOW. */
-const allowingSlice = (sliceRef: string): JsonObject => ({
-  autoApprovalOptIns: [{ action: POLICY_ACTION, tier: POLICY_TIER }],
+const allowingSlice = (sliceRef: string, subject: PolicyWitnessSubject): JsonObject => ({
+  autoApprovalOptIns: [{ action: subject.action, tier: POLICY_TIER }],
   rules: [],
   sliceRef,
 } as unknown as JsonObject);
@@ -100,17 +104,15 @@ const allowingSlice = (sliceRef: string): JsonObject => ({
  * chain from the installed bytes and refuses a caller that supplies one, which is why this
  * function no longer needs to know whether the world opted in.
  */
-const evaluationFor = (sliceRef: string): JsonObject => ({
-  action: POLICY_ACTION,
-  actor: "principal-1",
+const evaluationFor = (sliceRef: string, subject: PolicyWitnessSubject): JsonObject => ({
+  action: subject.action,
+  actor: subject.principalId,
   callerRiskHint: null,
   decisionDigest: hex64("d1"),
-  evaluatedAtEpochMs: 1_760_000_000_000,
-  evaluatorVersion: "evaluator-1",
-  graphNodeRevisionRefs: [],
+  graphNodeRevisionRefs: [subject.graphRevisionRef],
   policyRevisionRef: sliceRef,
   requiredFactIds: [],
-  scope: [],
+  scope: [subject.nodeKey],
 } as unknown as JsonObject);
 
 /**
@@ -126,18 +128,20 @@ const evaluationFor = (sliceRef: string): JsonObject => ({
 const commandIdFor = (kind: string, optedIn: boolean): string =>
   `cmd-witness-${kind}-${optedIn ? "allow" : "hold"}`;
 
-function drivePolicyDecision(store: SqliteEventStore, optedIn: boolean): void {
-  const sliceRef = optedIn ? ALLOWING_POLICY_SLICE_REF : hex64("de9y00");
+function drivePolicyDecision(
+  store: SqliteEventStore, optedIn: boolean, subject: PolicyWitnessSubject,
+): void {
+  const sliceRef = subject.policySliceHash;
   const installed = send(store, envelope("policy.install", policyVersion(store), {
-    slice: optedIn
-      ? allowingSlice(sliceRef)
-      : ({ autoApprovalOptIns: [], rules: [], sliceRef } as unknown as JsonObject),
+    // Both production paths use the node-bound content-addressed slice. Today the daemon's
+    // server-held fact is null-tier UNKNOWN, so even its R0 opt-in honestly evaluates to HOLD.
+    slice: allowingSlice(sliceRef, subject),
   }, commandIdFor("policy.install", optedIn)));
   if (!installed.ok) throw new Error(`witness fixture policy.install refused: ${installed.code}`);
   // The version is READ AGAIN: `policy.install` just moved the aggregate, and a value captured
   // before it would refuse `BOOTSTRAP_EXPECTED_VERSION_STALE`.
   const validated = send(store, envelope("policy.validate", policyVersion(store), {
-    input: evaluationFor(sliceRef),
+    input: evaluationFor(sliceRef, subject),
   }, commandIdFor("policy.validate", optedIn)));
   if (!validated.ok) throw new Error(`witness fixture policy.validate refused: ${validated.code}`);
 }
@@ -152,8 +156,10 @@ function drivePolicyDecision(store: SqliteEventStore, optedIn: boolean): void {
  * REPLACED by this call rather than skipped, which is why a "seed only when absent" rule would
  * be wrong here even while both evaluations honestly remain non-allowing.
  */
-export function seedAllowingPolicyDecision(store: SqliteEventStore): void {
-  drivePolicyDecision(store, true);
+export function seedAllowingPolicyDecision(
+  store: SqliteEventStore, subject: PolicyWitnessSubject,
+): void {
+  drivePolicyDecision(store, true, subject);
 }
 
 /**
@@ -163,8 +169,10 @@ export function seedAllowingPolicyDecision(store: SqliteEventStore): void {
  * This is the honest home for the does-not-allow passthrough: the witness EXISTS, so the
  * resolver must not answer, and `checkGate` must refuse it in the SCHEDULER's vocabulary.
  */
-export function seedNonAllowingPolicyDecision(store: SqliteEventStore): void {
-  drivePolicyDecision(store, false);
+export function seedNonAllowingPolicyDecision(
+  store: SqliteEventStore, subject: PolicyWitnessSubject,
+): void {
+  drivePolicyDecision(store, false, subject);
 }
 
 /**
@@ -176,9 +184,11 @@ export function seedNonAllowingPolicyDecision(store: SqliteEventStore): void {
  * `policy.install` then `policy.validate` leaves the decision last by accident, so an
  * index-based resolver would still pass every other arm. Measured: it did.
  */
-export function seedTrailingPolicyInstall(store: SqliteEventStore): void {
+export function seedTrailingPolicyInstall(
+  store: SqliteEventStore, subject: PolicyWitnessSubject,
+): void {
   const installed = send(store, envelope("policy.install", policyVersion(store), {
-    slice: allowingSlice(hex64("7011a1")),
+    slice: allowingSlice(hex64("7011a1"), subject),
   }, "cmd-witness-policy.install-trailing"));
   if (!installed.ok) throw new Error(`witness fixture trailing install refused: ${installed.code}`);
 }

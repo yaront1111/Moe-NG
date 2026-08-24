@@ -7,9 +7,8 @@
  * four outcome strings are design 11.6 verbatim; the task's "REQUIRE_APPROVAL" is a paraphrase
  * of `REQUIRE_HUMAN_APPROVAL`.
  *
- * Hash discipline: every `*Ref`/`*Hash`/`*Digest` field is a SUPPLIED opaque identity. Core
- * validates shape only and never computes a digest — there is no `node:crypto` import in this
- * package and there must not be one.
+ * Hash discipline: evaluation validates supplied identities; the sibling slice-digest module
+ * separately derives the one content-addressed identity used by policy installation.
  */
 import type { RuntimeError, RuntimeTruthClass } from "@moe/contracts";
 
@@ -164,4 +163,3 @@ export interface PolicyEvaluationRejectedResult {
 export type PolicyEvaluationResult =
   | PolicyEvaluationAcceptedResult
   | PolicyEvaluationRejectedResult;
-

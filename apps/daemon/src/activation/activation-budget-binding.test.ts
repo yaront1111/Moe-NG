@@ -21,6 +21,7 @@ import {
   ACTIVATION_LEDGER_COMMAND_KIND,
   deriveActivationAggregateId,
 } from "./activation-ledger-contracts.js";
+import { activationAdmissionRef } from "./activation-admission-identity.js";
 import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
 import {
   ACTIVATION_INGRESS_SCHEMA_VERSION,
@@ -70,7 +71,7 @@ function readyStore(label: string): SqliteEventStore {
 const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const COMMAND_ID = "cmd-activate-1";
-const ADMISSION_REF = `activation:${COMMAND_ID}`;
+const ADMISSION_REF = activationAdmissionRef(PROJECT_ID, PRINCIPAL_ID, COMMAND_ID);
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST,

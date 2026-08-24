@@ -6,7 +6,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
+import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
   APPROVAL_MODE_ENV_KEY,
@@ -200,7 +200,7 @@ describe("code node steps", () => {
       },
     }, 1);
     commitBootstrap("policy.install", {
-      slice: { autoApprovalOptIns: [], rules: [], sliceRef: "a1b2c3".padEnd(64, "0") },
+      slice: POLICY_SLICE,
     });
     commitBootstrap("project.activate", {
       witness: {

@@ -1,28 +1,17 @@
 /**
  * (C2) THE DURABLE BUDGET STAGE of the authenticated `effect.activate` route.
  *
- * WHAT MOVED. Until this module existed, the activation's budget leg was `claimBudget` reading
- * the CALLER's `payload.budget` — its own `view`, its own `admission` amounts, its own implied
- * coverage — and reserving against them in memory. Nothing durable was consulted and nothing
- * durable was written. Here the account, the amounts and the fenced version are DERIVED from
- * project/goal/graph/node facts, and the hold is committed by the ledger's own writer inside
- * the same decision as the activation.
+ * This replaces `claimBudget` reading caller-supplied views and amounts. Account, amounts and
+ * fence now derive from durable project/goal/graph/node facts, and the ledger writer commits the
+ * hold inside the activation decision.
  *
  * THE CALLER NOW SUPPLIES NOTHING. Until task-93e8aab3 this module read ONE caller input — the
- * admission GATE out of `payload.budget.gate` — because no durable producer of an
- * `AdmissionGate` witness existed. `resolveAdmissionGate` is that producer, so the gate is
- * derived from the policy decision or the approval record the node's OWN durable
- * `admissionGatePolicy` names, and this module does not read request payload bytes at all.
+ * admission GATE out of `payload.budget.gate`. `resolveAdmissionGate` now derives it from the
+ * policy decision or approval record named by the node; this module reads no payload bytes.
  *
- * TWO CODES WERE RETIRED WITH THAT READ, and the retirement is recorded rather than silent
- * (governor `comment-1369e736`, anchored to the DELIVERED tree by `comment-370ca397`):
- *   ACTIVATION_BUDGET_GATE_MALFORMED — "the caller's gate is not a record". Its world was a
- *     payload shape; no payload reaches the gate now, so no path can construct it.
- *   ACTIVATION_BUDGET_GATE_WITNESS_MISMATCH — "the caller's gate lacks the witness the node's
- *     policy names". The resolver BUILDS the witness the policy names, so a gate carrying the
- *     other kind is unrepresentable rather than refused.
- * Both are SUPERSEDED by `ADMISSION_GATE_WITNESS_ABSENT` / `ADMISSION_GATE_SCOPE_MISMATCH` at
- * the `DAEMON_ADMISSION_GATE` layer. Keeping them would leave unreachable arms in a closed enum.
+ * The former caller-gate shape and witness-mismatch codes were retired with that read
+ * (`comment-1369e736`, delivered at `comment-370ca397`). Their worlds are now unrepresentable;
+ * durable resolver refusals at `DAEMON_ADMISSION_GATE` supersede them.
  *
  * WHETHER THE WITNESS ALLOWS IS STILL NOT THIS MODULE'S QUESTION. `checkGate` in `@moe/scheduler`
  * owns it, and its refusal travels out through the reserve writer with its own code and layer.
@@ -49,7 +38,11 @@ import { captureBudgetLeg, deriveActivationBudget } from "./activation-budget-de
 import type { ActivationBudgetAuthority } from "./activation-budget-derivation.js";
 import { ACTIVATION_INGRESS_LAYER } from "./activation-ingress-contracts.js";
 import type { ActivationIngressRequest } from "./activation-ingress-contracts.js";
+import { ACTIVATION_LEDGER_COMMAND_KIND } from "./activation-ledger-contracts.js";
 import { resolveAdmissionGate } from "./admission-gate-resolver.js";
+import {
+  activationAdmissionRef, legacyActivationAdmissionRef,
+} from "./activation-admission-identity.js";
 
 import type { BudgetLedgerRecord } from "../budget/budget-ledger-contracts.js";
 
@@ -99,13 +92,6 @@ export type ActivationBudgetStageResult =
 const refuse = (code: ActivationBudgetStageCode): ActivationBudgetStageRefused =>
   Object.freeze({ code, layer: ACTIVATION_INGRESS_LAYER, ok: false as const });
 
-/**
- * The admission identity, derived from the AUTHENTICATED request rather than from the payload.
- * `commandId` is already the decision key's own component, so two byte-identical retries name
- * the same hold and two distinct commands never can.
- */
-export const activationAdmissionRef = (commandId: string): string => `activation:${commandId}`;
-
 interface StandingHold {
   readonly budget: BudgetLeg;
   readonly leg: ExpectedVersionDecisionLeg;
@@ -135,18 +121,29 @@ interface StandingHold {
  * did not exist yet.
  */
 function readStandingHold(
-  store: SqliteEventStore, projectId: string,
+  store: SqliteEventStore, request: ActivationIngressRequest,
   authority: ActivationBudgetAuthority, admissionRef: string,
 ): StandingHold | null {
-  const aggregateId = deriveBudgetAggregateId(projectId, authority.accountId);
+  const aggregateId = deriveBudgetAggregateId(request.projectId, authority.accountId);
   for (const event of store.readEvents(aggregateId)) {
     if (event.eventType !== BUDGET_LEDGER_EVENT_TYPE) continue;
     const decoded = decodeBudgetLedgerRecord(event.payload);
     // An undecodable record is not evidence of anything; it is left to the projection to refuse.
     if (!decoded.ok) return null;
     if (decoded.record.transition !== "RESERVED") continue;
-    const budget = pairOf(decoded.record, authority.accountId, admissionRef);
-    if (budget === null) continue;
+    let budget = pairOf(decoded.record, authority.accountId, admissionRef);
+    if (budget === null) {
+      budget = pairOf(
+        decoded.record, authority.accountId,
+        legacyActivationAdmissionRef(request.commandId),
+      );
+    }
+    const trace = event.decisionTrace;
+    if (budget === null || trace === undefined
+      || trace.commandKind !== ACTIVATION_LEDGER_COMMAND_KIND
+      || trace.commandId !== request.commandId
+      || trace.principalId !== request.principalId
+      || trace.projectId !== request.projectId) continue;
     return {
       budget,
       leg: {
@@ -197,9 +194,11 @@ export function runActivationBudgetStage(
   // unavailable graph and an unknown meter indistinguishable at the ingress boundary.
   if (!derived.ok) return { code: derived.code, layer: derived.layer, ok: false as const };
   const authority = derived.value;
-  const admissionRef = activationAdmissionRef(request.commandId);
+  const admissionRef = activationAdmissionRef(
+    request.projectId, request.principalId, request.commandId,
+  );
 
-  const standing = readStandingHold(store, request.projectId, authority, admissionRef);
+  const standing = readStandingHold(store, request, authority, admissionRef);
   if (standing !== null) {
     return Object.freeze({
       authority, budget: standing.budget, leg: standing.leg, ok: true as const,
@@ -212,7 +211,10 @@ export function runActivationBudgetStage(
   // faults answered by different authorities, and one may not wear the other's code.
   const resolved = resolveAdmissionGate({
     goalRef: authority.goalRef,
+    graphRevisionRef: authority.graphRevisionRef,
     nodeKey: authority.nodeKey,
+    policySliceHash: authority.policySliceHash,
+    principalId: request.principalId,
     projectId: request.projectId,
     store,
     witnessField: authority.gateWitnessField,

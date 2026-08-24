@@ -1,4 +1,5 @@
 import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner";
+import { derivePolicySliceDigest } from "@moe/core";
 
 import { journeyAuthority } from "../planning/journey-authority-bodies.js";
 import type { JourneyAuthority } from "../planning/journey-authority-bodies.js";
@@ -62,10 +63,15 @@ const DEMO_POLICY_EVALUATED_AT_EPOCH_MS = 1_760_000_000_000;
 /**
  * The one policy address a caller can NAME in `policy.validate`: `evaluatePolicy` requires a
  * 64-hex `policyRevisionRef`, and the value here mirrors the development payload table's
- * `POLICY_REF` (`live-dispatch.ts` / `bootstrap-test-fixtures.ts` — both `hex64("a1b2c3")`,
- * neither importable from a production bin).
+ * The same digest algorithm the bootstrap ingress enforces; no caller-chosen label can stand in
+ * for the slice bytes this demo installs.
  */
-export const DEMO_VALIDATABLE_POLICY_REF = hex64("a1b2c3");
+const VALIDATABLE_POLICY_CANDIDATE = Object.freeze({
+  autoApprovalOptIns: [], rules: [], sliceRef: "pending-demo-policy-slice",
+});
+const VALIDATABLE_POLICY_DIGEST = derivePolicySliceDigest(VALIDATABLE_POLICY_CANDIDATE);
+if (!VALIDATABLE_POLICY_DIGEST.ok) throw new Error("demo validatable policy slice is invalid");
+export const DEMO_VALIDATABLE_POLICY_REF = VALIDATABLE_POLICY_DIGEST.digest;
 
 /**
  * The validatable policy slice. The verifier and calibration slices below live at deliberately
@@ -77,7 +83,11 @@ export const DEMO_VALIDATABLE_POLICY_REF = hex64("a1b2c3");
  * completable; it grants nothing (no rules, no opt-ins).
  */
 export function validatablePolicySlice(): Record<string, unknown> {
-  return { autoApprovalOptIns: [], rules: [], sliceRef: DEMO_VALIDATABLE_POLICY_REF };
+  return {
+    autoApprovalOptIns: VALIDATABLE_POLICY_CANDIDATE.autoApprovalOptIns,
+    rules: VALIDATABLE_POLICY_CANDIDATE.rules,
+    sliceRef: DEMO_VALIDATABLE_POLICY_REF,
+  };
 }
 
 /**

@@ -98,12 +98,15 @@ export const PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "BOOTSTRAP_PREREQUISITE_MISSING",
   "BOOTSTRAP_EXPECTED_VERSION_STALE",
   "BOOTSTRAP_POLICY_UNKNOWN",
+  "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED",
+  "BOOTSTRAP_POLICY_SLICE_DIGEST_MISMATCH",
   "BOOTSTRAP_REVISION_HASH_MISMATCH",
   // A caller's activation `budgetHash` that disagrees with the digest of the root the SERVER
   // built. Deliberately its own code rather than the revision-hash one next door: the two name
   // different disagreements and an operator repairs them differently — one is the plan bytes,
   // the other is the budget authorization.
   "BOOTSTRAP_BUDGET_HASH_MISMATCH",
+  "BOOTSTRAP_POLICY_TIME_UNAVAILABLE",
   "BOOTSTRAP_COMMAND_ID_REUSED",
   "BOOTSTRAP_COMMAND_BYTES_CONFLICT",
 ] as const);

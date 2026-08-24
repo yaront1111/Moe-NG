@@ -38,7 +38,11 @@ import type {
   ExpansionPreparationRefusal, ExpansionPreparationResult, ExpansionPreparationSources,
   ExpansionPreparedFacts, ExpansionResourceReservationFacts,
 } from "@moe/core";
-import type { ApprovalDecisionRecord, PolicyEvaluationInput } from "@moe/core";
+import type {
+  ApprovalDecisionRecord, PolicyEvaluationInput, PolicySliceDigestAcceptedResult,
+  PolicySliceDigestCode, PolicySliceDigestLayer, PolicySliceDigestRefusal,
+  PolicySliceDigestResult,
+} from "@moe/core";
 import type {
   GraphRevisionEventKind, GraphRevisionReplayAcceptedResult, GraphRevisionReplayCode,
   GraphRevisionReplayRefusal, GraphRevisionReplayResult,
@@ -87,7 +91,8 @@ type ExportKind = "array" | "function" | "record" | "string";
  * (2 frozen vocabularies, 1 domain tag, 3 functions) published by task-bcea7056
  * + the 5 approval policy and human-authority values (3 frozen vocabularies,
  * 2 functions) published by task-5d8f11c8 + the 4 graph revision replay values
- * (2 frozen vocabularies, 1 layer tag, 1 function) published by task-ee27ed7c.
+ * (2 frozen vocabularies, 1 layer tag, 1 function) published by task-ee27ed7c
+ * + the 4 content-addressed policy-slice digest values.
  */
 const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["ACCEPTANCE_CONTRACT_CODES", "array"], ["ACCEPTANCE_CONTRACT_DIGEST_DOMAIN", "string"],
@@ -116,7 +121,9 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["POLICY_AUTO_APPROVAL_TIERS", "array"], ["POLICY_OBLIGATION_KINDS", "array"],
   ["POLICY_OUTCOMES", "array"], ["POLICY_OUTCOME_DOMINANCE", "array"],
   ["POLICY_REASON_CODES", "array"], ["POLICY_RISK_TIERS", "array"],
-  ["POLICY_RULE_EFFECTS", "array"], ["PRINCIPAL_KINDS", "array"],
+  ["POLICY_RULE_EFFECTS", "array"], ["POLICY_SLICE_DIGEST_CODES", "array"],
+  ["POLICY_SLICE_DIGEST_LAYERS", "array"], ["POLICY_SLICE_DIGEST_VERSION", "string"],
+  ["PRINCIPAL_KINDS", "array"],
   ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
   ["PRODUCT_CONTRACT_LAYERS", "array"],
   ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
@@ -143,6 +150,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["deriveAcceptanceContractDigest", "function"],
   ["deriveAcceptanceCriterionContent", "function"],
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
+  ["derivePolicySliceDigest", "function"],
   ["deriveProductContractRevisionDigest", "function"],
   ["encodeAcceptanceContract", "function"], ["encodePlanRevision", "function"],
   ["encodeProductContractRevision", "function"],
@@ -168,7 +176,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(118);
+  expect(EXPECTED_EXPORTS.length).toBe(122);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -216,6 +224,22 @@ const policyInput = (): PolicyEvaluationInput => ({
     rules: [{ effect: "ALLOW", obligations: [], requiredFactIds: ["fact-risk"], ruleId: "rule-1" }],
   }],
   waivers: [],
+});
+
+it("publishes the policy-slice digest authority and every result type", () => {
+  const result: PolicySliceDigestResult = core.derivePolicySliceDigest({
+    autoApprovalOptIns: [], rules: [], sliceRef: "slice-root",
+  });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    const accepted: PolicySliceDigestAcceptedResult = result;
+    expect(accepted.digest).toMatch(/^[0-9a-f]{64}$/);
+  } else {
+    const refusal: PolicySliceDigestRefusal = result;
+    const code: PolicySliceDigestCode = refusal.code;
+    const layer: PolicySliceDigestLayer = refusal.layer;
+    expect([code, layer]).toEqual(["POLICY_SLICE_INVALID", "POLICY_SLICE_CODEC"]);
+  }
 });
 
 /**
@@ -827,6 +851,10 @@ try {
     validateProductContractGate1: typeof ns.validateProductContractGate1,
     validateProductAcceptanceBinding: typeof ns.validateProductAcceptanceBinding,
     productContractLayers: [...(ns.PRODUCT_CONTRACT_LAYERS ?? [])],
+    derivePolicySliceDigest: typeof ns.derivePolicySliceDigest,
+    policySliceDigestVersion: ns.POLICY_SLICE_DIGEST_VERSION,
+    policySliceDigestCodes: [...(ns.POLICY_SLICE_DIGEST_CODES ?? [])],
+    policySliceDigestLayers: [...(ns.POLICY_SLICE_DIGEST_LAYERS ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -851,7 +879,7 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 118,
+    namedExportCount: 122,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
@@ -865,6 +893,10 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
     productContractLayers: [
       "PROVENANCE", "LINEAGE", "MATERIALITY", "GATE_1", "ACCEPTANCE_BINDING",
     ],
+    derivePolicySliceDigest: "function",
+    policySliceDigestVersion: "moe.policy.slice.content.v1",
+    policySliceDigestCodes: ["POLICY_SLICE_INVALID"],
+    policySliceDigestLayers: ["POLICY_SLICE_CODEC"],
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",

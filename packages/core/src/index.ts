@@ -245,6 +245,19 @@ export type {
 
 export { evaluatePolicy } from "./policy/policy-evaluation.js";
 export {
+  POLICY_SLICE_DIGEST_CODES,
+  POLICY_SLICE_DIGEST_LAYERS,
+  POLICY_SLICE_DIGEST_VERSION,
+  derivePolicySliceDigest,
+} from "./policy/policy-slice-digest.js";
+export type {
+  PolicySliceDigestAcceptedResult,
+  PolicySliceDigestCode,
+  PolicySliceDigestLayer,
+  PolicySliceDigestRefusal,
+  PolicySliceDigestResult,
+} from "./policy/policy-slice-digest.js";
+export {
   CORE_DECISION_REASON_OBLIGATION,
   CORE_STEP_UP_OBLIGATION,
   POLICY_AUTO_APPROVAL_TIERS,

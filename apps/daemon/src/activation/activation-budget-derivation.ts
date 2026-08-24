@@ -98,6 +98,7 @@ export interface ActivationBudgetAuthority {
   readonly graphRevisionRef: string;
   readonly nodeKey: string;
   readonly ownerRef: string;
+  readonly policySliceHash: string;
 }
 
 export interface ActivationBudgetRefused {
@@ -209,6 +210,7 @@ export function deriveActivationBudget(
       graphRevisionRef: projection.binding.graphRevisionRef,
       nodeKey: resolved,
       ownerRef: projection.binding.ownerRef,
+      policySliceHash: definition.policySliceHash,
     }),
   });
 }

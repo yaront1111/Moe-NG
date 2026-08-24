@@ -24,7 +24,10 @@ const hex64 = (seed: string): string =>
 // same exports). A drifted copy here is exactly how the provider-probe chain silently broke once.
 const GOAL_ID = "goal-live-1";
 const RUN_ID = "run-live-1";
-const POLICY_REF = hex64("a1b2c3");
+// Known-answer digest of the exact empty policy slice below under moe.policy.slice.content.v1.
+// The daemon independently recomputes it at install; parity tests pin this browser constant to
+// the core producer without pulling Node's synchronous crypto implementation into the bundle.
+const POLICY_REF = "e7a5ee197a974a0af533ca454de9f823759f1c128261f0e96a188bec5d7b963a";
 const GRAPH_REVISION_REF = "graph-revision-1";
 /**
  * THE GRAPH THIS BOARD PROPOSES, and the canonical bytes behind it (task-c96ef2d1). The hash was
@@ -201,8 +204,7 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
   "policy.validate": {
     input: {
       action: "plan.approve", callerRiskHint: null,
-      decisionDigest: hex64("d1"), evaluatedAtEpochMs: 1_760_000_000_000,
-      evaluatorVersion: "evaluator-1", graphNodeRevisionRefs: [],
+      decisionDigest: hex64("d1"), graphNodeRevisionRefs: [],
       policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
     },
   },

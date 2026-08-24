@@ -6,7 +6,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
+import { POLICY_SLICE, PROVIDER_OBSERVATION } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { journeyAuthority } from "../planning/journey-authority-bodies.js";
@@ -87,7 +87,7 @@ describe("plan.propose on the surface", () => {
     }, 1);
     commitBootstrap("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitBootstrap("policy.install", {
-      slice: { autoApprovalOptIns: [], rules: [], sliceRef: "a1b2c3".padEnd(64, "0") },
+      slice: POLICY_SLICE,
     });
     commitBootstrap("project.activate", {
       witness: {

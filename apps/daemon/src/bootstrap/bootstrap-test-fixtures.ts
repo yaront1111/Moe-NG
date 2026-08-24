@@ -1,4 +1,5 @@
 import { SqliteEventStore } from "@moe/store";
+import { derivePolicySliceDigest } from "@moe/core";
 
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import {
@@ -45,7 +46,12 @@ export function hex64(seed: string): string {
   return (base + "0".repeat(64)).slice(0, 64);
 }
 
-export const POLICY_REF = hex64("a1b2c3");
+const EMPTY_POLICY_SLICE = Object.freeze({
+  autoApprovalOptIns: [], rules: [], sliceRef: "pending-policy-slice",
+});
+const EMPTY_POLICY_SLICE_DIGEST = derivePolicySliceDigest(EMPTY_POLICY_SLICE);
+if (!EMPTY_POLICY_SLICE_DIGEST.ok) throw new Error("empty policy slice fixture is invalid");
+export const POLICY_REF = EMPTY_POLICY_SLICE_DIGEST.digest;
 export const GRAPH_REVISION_REF = "graph-revision-1";
 
 /**
@@ -220,8 +226,8 @@ export const ACTIVATION_WITNESS = Object.freeze({
  * installed under a human-readable ref could never be named by a valid evaluation input.
  */
 export const POLICY_SLICE = Object.freeze({
-  autoApprovalOptIns: [],
-  rules: [],
+  autoApprovalOptIns: EMPTY_POLICY_SLICE.autoApprovalOptIns,
+  rules: EMPTY_POLICY_SLICE.rules,
   sliceRef: POLICY_REF,
 });
 
@@ -231,8 +237,6 @@ export function evaluationInput(policyRevisionRef: string): Record<string, unkno
     actor: "principal-1",
     callerRiskHint: null,
     decisionDigest: hex64("d1"),
-    evaluatedAtEpochMs: 1_760_000_000_000,
-    evaluatorVersion: "evaluator-1",
     graphNodeRevisionRefs: [],
     policyRevisionRef,
     requiredFactIds: [],

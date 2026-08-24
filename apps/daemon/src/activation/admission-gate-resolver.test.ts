@@ -51,14 +51,16 @@ import { reserveBudgetForAdmission } from "../budget/budget-ledger-holds.js";
 
 import { deriveActivationBudget } from "./activation-budget-derivation.js";
 import {
-  ACTIVATION_BUDGET_STAGE_CODES, activationAdmissionRef, runActivationBudgetStage,
+  ACTIVATION_BUDGET_STAGE_CODES, runActivationBudgetStage,
 } from "./activation-budget-stage.js";
+import { activationAdmissionRef } from "./activation-admission-identity.js";
 import {
   ACTIVATION_INGRESS_LAYER, ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "./activation-ingress-contracts.js";
 import type { ActivationIngressRequest } from "./activation-ingress-contracts.js";
 import {
-  ACTIVATION_WORLD_NODE_KEY, seedActivationWorldWithGatePolicy,
+  ACTIVATION_WORLD_NODE_KEY, ACTIVATION_WORLD_POLICY_SLICE_HASH, ACTIVATION_WORLD_REVISION_ID,
+  seedActivationWorldWithGatePolicy,
   seedActivationWorldWithoutPolicyWitness,
 } from "./activation-world-fixtures.js";
 import { ADMISSION_GATE_RESOLVER_CODES, resolveAdmissionGate } from "./admission-gate-resolver.js";
@@ -66,11 +68,19 @@ import {
   seedAllowingPolicyDecision, seedApprovedNodeScope, seedNonAllowingPolicyDecision,
 } from "./admission-witness-fixtures.js";
 import {
-  HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, plantHistoricalPolicyAllowance,
+  HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, historicalPolicySliceRef,
+  plantHistoricalPolicyAllowance,
 } from "./policy-allowance-fixtures.js";
 
 const COMMAND_ID = "cmd-activate-resolver-1";
 const DECIDED_AT = "2026-08-19T00:00:00.000Z";
+const ACTIVATION_POLICY_SUBJECT = Object.freeze({
+  action: "effect.activate" as const,
+  graphRevisionRef: ACTIVATION_WORLD_REVISION_ID,
+  nodeKey: ACTIVATION_WORLD_NODE_KEY,
+  policySliceHash: ACTIVATION_WORLD_POLICY_SLICE_HASH,
+  principalId: "principal-1",
+});
 
 /**
  * The forgery this row makes unrepresentable: structurally perfect, ALLOWING by `checkGate`'s
@@ -125,7 +135,7 @@ describe("server-resolved policy facts — the explicit negative world", () => {
     withReopenedStore("resolved-explicit-policy-negative", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
-      seedAllowingPolicyDecision(store);
+      seedAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
     }, (store) => {
       const decision = store.getCommandDecision({
         commandId: "cmd-witness-policy.validate-allow",
@@ -142,7 +152,7 @@ describe("server-resolved policy facts — the explicit negative world", () => {
       expect(record["decision"]).toBe("HOLD_UNKNOWN");
       expect(record["reasonCodes"]).toStrictEqual(["RISK_TIER_UNCLASSIFIABLE"]);
       expect(JSON.stringify(record["inputFacts"])).toBe(
-        "[{\"factId\":\"policy-risk-unclassifiable:sha256:17915477c20a992c486fe9cfbc31340d728b202e943b45c149707ced4b04c803\",\"truthClass\":\"UNKNOWN\"}]",
+        "[{\"factId\":\"policy-risk-unclassifiable:sha256:d1b00b797dc06790e122914a3255ba4130e9588d01146ab81311b2fa0c54fa42\",\"truthClass\":\"UNKNOWN\"}]",
       );
 
       const consumed = resolve(store, "allowance");
@@ -198,10 +208,17 @@ const stage = (store: SqliteEventStore, budget: unknown, commandId?: string) =>
       : { request: requestWith(budget, commandId), store },
   );
 
-const resolve = (store: SqliteEventStore, witnessField: "allowance" | "approval") =>
+const resolve = (
+  store: SqliteEventStore,
+  witnessField: "allowance" | "approval",
+  overrides: Readonly<{ graphRevisionRef?: string; principalId?: string }> = {},
+) =>
   resolveAdmissionGate({
     goalRef: GOAL_ID,
+    graphRevisionRef: overrides.graphRevisionRef ?? ACTIVATION_WORLD_REVISION_ID,
     nodeKey: ACTIVATION_WORLD_NODE_KEY,
+    policySliceHash: ACTIVATION_WORLD_POLICY_SLICE_HASH,
+    principalId: overrides.principalId ?? "principal-1",
     projectId: PROJECT_ID,
     store,
     witnessField,
@@ -213,7 +230,7 @@ const resolve = (store: SqliteEventStore, witnessField: "allowance" | "approval"
  *
  * The stage's `readStandingHold` returns an ACCEPTED result and returns EARLY, ABOVE the gate
  * read. A hostile-gate arm run against a world that already holds a reservation for
- * `activationAdmissionRef(commandId)` therefore never reaches the resolver at all, and would
+ * the activation admission identity therefore never reaches the resolver at all, and would
  * "prove" an unreachability this row did not create — it would pass on an unmodified tree. Every
  * such arm below states this precondition and SHOWS it at zero.
  */
@@ -242,10 +259,16 @@ function latestPolicyEvaluated(store: SqliteEventStore): JsonObject {
   return decoded.value as JsonObject;
 }
 
-function plantTrailingPolicyInstall(store: SqliteEventStore): void {
+function plantTrailingPolicyInstall(store: SqliteEventStore, sliceRef?: string): void {
   const aggregateId = policyAggregateId(PROJECT_ID);
   const source = store.readEvents(aggregateId).find((event) => event.eventType === "PolicyInstalled");
   if (source === undefined) throw new Error("the world must carry a PolicyInstalled to copy");
+  const decoded = decodeBoundedJsonBytes(source.payload);
+  if (!decoded.ok || decoded.value === null || typeof decoded.value !== "object"
+    || Array.isArray(decoded.value)) throw new Error("the source install payload is unreadable");
+  const payload = sliceRef === undefined
+    ? source.payload
+    : new TextEncoder().encode(JSON.stringify({ ...decoded.value, sliceRef }));
   const expectedVersion = store.getAggregateVersion(aggregateId);
   const commandId = `plant-trailing-policy-install-${String(expectedVersion + 1)}`;
   store.commit({
@@ -253,7 +276,7 @@ function plantTrailingPolicyInstall(store: SqliteEventStore): void {
     commandBytes: new TextEncoder().encode(commandId),
     commandId,
     committedAt: "2025-01-01T00:00:00.001Z",
-    events: [{ eventId: `${commandId}-PolicyInstalled`, eventType: "PolicyInstalled", payload: source.payload }],
+    events: [{ eventId: `${commandId}-PolicyInstalled`, eventType: "PolicyInstalled", payload }],
     expectedVersion,
   });
 }
@@ -273,13 +296,39 @@ function durableApproval(store: SqliteEventStore): JsonObject {
 const RESOLVER_LAYER = "DAEMON_ADMISSION_GATE";
 const ABSENT = ["ADMISSION_GATE_WITNESS_ABSENT", RESOLVER_LAYER] as const;
 const SCOPE = ["ADMISSION_GATE_SCOPE_MISMATCH", RESOLVER_LAYER] as const;
+const SUBJECT = ["ADMISSION_GATE_SUBJECT_MISMATCH", RESOLVER_LAYER] as const;
 /** What the LEDGER answers when a present witness does not allow. A different vocabulary AND a
  *  different layer from the resolver's, which is the whole distinction DoD 2 asks for. */
 const LEDGER_REFUSED = ["BUDGET_LEDGER_TRANSITION_REFUSED", "BUDGET_LEDGER"] as const;
 
-function plantHistoricalAllowance(store: SqliteEventStore): void {
+interface HistoricalSubjectOverrides {
+  readonly action?: string;
+  readonly additionalAutoApprovalAction?: string;
+  readonly graphNodeRevisionRefs?: readonly string[];
+  readonly policyRef?: string;
+  readonly principalId?: string;
+  readonly scope?: readonly string[];
+}
+
+function plantHistoricalAllowance(
+  store: SqliteEventStore,
+  overrides: HistoricalSubjectOverrides = {},
+): void {
+  const action = overrides.action ?? "effect.activate";
   plantHistoricalPolicyAllowance(
     store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS,
+    {
+      action,
+      ...(overrides.additionalAutoApprovalAction === undefined ? {} : {
+        additionalAutoApprovalAction: overrides.additionalAutoApprovalAction,
+      }),
+      graphNodeRevisionRefs: overrides.graphNodeRevisionRefs ?? [ACTIVATION_WORLD_REVISION_ID],
+      policyRef: overrides.policyRef ?? historicalPolicySliceRef(
+        action, overrides.additionalAutoApprovalAction,
+      ),
+      principalId: overrides.principalId ?? "principal-1",
+      scope: overrides.scope ?? [ACTIVATION_WORLD_NODE_KEY],
+    },
   );
   const landed = store.readEvents(policyAggregateId(PROJECT_ID)).filter(
     (event) => event.commandId.startsWith("plant-historical-policy-allowance-"),
@@ -289,6 +338,27 @@ function plantHistoricalAllowance(store: SqliteEventStore): void {
   expect(landed[0]?.committedAt).toBe(
     new Date(HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS).toISOString(),
   );
+}
+
+function plantLegacyAllowance(store: SqliteEventStore): void {
+  const aggregateId = policyAggregateId(PROJECT_ID);
+  const expectedVersion = store.getAggregateVersion(aggregateId);
+  const commandId = `plant-legacy-policy-allowance-${String(expectedVersion + 1)}`;
+  store.commit({
+    aggregateId,
+    commandBytes: new TextEncoder().encode(commandId),
+    commandId,
+    committedAt: "2024-01-01T00:00:00.000Z",
+    events: [{
+      eventId: `${commandId}-PolicyEvaluated`,
+      eventType: "PolicyEvaluated",
+      payload: new TextEncoder().encode(JSON.stringify({
+        decision: "ALLOW",
+        policyRef: "legacy-policy-without-v2-authority",
+      })),
+    }],
+    expectedVersion,
+  });
 }
 
 describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance containment", () => {
@@ -307,9 +377,16 @@ describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance contain
 
       const durable = latestPolicyEvaluated(store);
       expect(Object.keys(durable).sort()).toStrictEqual([
-        "decision", "decisionDigest", "policyRef", "principalId", "sliceRef",
+        "decision", "decisionDigest", "decisionDigestVersion", "decisionMaterial", "policyRef",
+        "principalId", "projectId", "sliceRef",
       ]);
       expect(durable["decision"]).toBe("ALLOW");
+      // Literal historical compatibility vector. The fixture does not ask today's evaluator
+      // to author its outcome, and this pin also prevents a digest change from silently
+      // regenerating the supposed historical row into a new format.
+      expect(durable["decisionDigest"]).toBe(
+        "f4648891d18ee67dc0668167d6df8bcda057eeae1a3ba505786c322e920d33a0",
+      );
       expect(durable).not.toHaveProperty("facts");
       expect(durable).not.toHaveProperty("tier");
       expect(durable).not.toHaveProperty("truthClass");
@@ -319,7 +396,7 @@ describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance contain
       expect(refusalOf(resolved)[0]).toBe("UNEXPECTEDLY_ADMITTED");
       if (!resolved.ok) return;
       expect(resolved.gate.allowance).toStrictEqual({
-        decisionRef: durable["policyRef"], outcome: "ALLOW",
+        decisionRef: durable["decisionDigest"], outcome: "ALLOW",
       });
       expect(resolved.gate.approval).toBeNull();
     });
@@ -340,11 +417,31 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
       // agree with a resolver that invented both halves.
       const durable = latestPolicyEvaluated(store);
       expect(resolved.gate.allowance).toStrictEqual({
-        decisionRef: durable["policyRef"], outcome: durable["decision"],
+        decisionRef: durable["decisionDigest"], outcome: durable["decision"],
       });
       expect(durable["decision"]).toBe("ALLOW");
       // A POLICY_ALLOWANCE node builds NO human approval, even though nothing forbids the shape.
       expect(resolved.gate.approval).toBeNull();
+    });
+  });
+
+  it.each([
+    ["another action", { action: "plan.approve" }],
+    ["another principal", { principalId: "principal-other" }],
+    ["another node scope", { scope: ["node-other"] }],
+    ["an additional node scope", { scope: [ACTIVATION_WORLD_NODE_KEY, "node-other"] }],
+    ["another graph revision", { graphNodeRevisionRefs: ["graph-revision-other"] }],
+    ["an additional graph revision", {
+      graphNodeRevisionRefs: [ACTIVATION_WORLD_REVISION_ID, "graph-revision-other"],
+    }],
+    ["another policy slice", { additionalAutoApprovalAction: "unrelated.action" }],
+  ] as const)("refuses a valid ALLOW bound to %s", (_label, overrides) => {
+    withStore(`policy-subject-${_label.replaceAll(" ", "-")}`, (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantHistoricalAllowance(store, overrides);
+
+      expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(SUBJECT);
     });
   });
 
@@ -365,6 +462,17 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
     });
   });
 
+  it("refuses a decision superseded by a later install at the same content address", () => {
+    withStore("policy-same-ref-reinstalled", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantHistoricalAllowance(store);
+      plantTrailingPolicyInstall(store, ACTIVATION_WORLD_POLICY_SLICE_HASH);
+
+      expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(ABSENT);
+    });
+  });
+
   it("carries that allowance through the stage into a committed reservation", () => {
     withStore("policy-reserve", (store) => {
       driveThrough(store, "goal.create");
@@ -377,7 +485,9 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
       const result = stage(store, undefined);
       expect(refusalOf(result)[0]).toBe("UNEXPECTEDLY_ADMITTED");
       if (!result.ok) return;
-      expect(result.budget.reservation.admissionRef).toBe(activationAdmissionRef(COMMAND_ID));
+      expect(result.budget.reservation.admissionRef).toBe(
+        activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID),
+      );
       expect(result.authority.gateWitnessField).toBe("allowance");
       // No budget section at all in the payload, and it still reserves. That IS the retirement.
       expect(result.leg.events.length).toBe(1);
@@ -407,6 +517,26 @@ describe("admission gate resolver — HUMAN_APPROVAL is witnessed by the durable
     });
   });
 
+  it("refuses an approval bound to another active graph revision", () => {
+    withStore("human-foreign-graph-revision", (store) => {
+      seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
+      seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+
+      expect(refusalOf(resolve(store, "approval", {
+        graphRevisionRef: "graph-revision-other",
+      }))).toStrictEqual(SUBJECT);
+    });
+  });
+
+  it("does not confuse the activating agent with the human approver", () => {
+    withStore("human-distinct-activator", (store) => {
+      seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
+      seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+
+      expect(resolve(store, "approval", { principalId: "agent-activator" }).ok).toBe(true);
+    });
+  });
+
   it("reserves through the stage for a HUMAN_APPROVAL node with no payload budget", () => {
     withStore("human-reserve", (store) => {
       // ORDER IS LOAD-BEARING (task-1de7b81a): `approval.decide` establishes the project's
@@ -423,12 +553,24 @@ describe("admission gate resolver — HUMAN_APPROVAL is witnessed by the durable
       expect(refusalOf(result)[0]).toBe("UNEXPECTEDLY_ADMITTED");
       if (!result.ok) return;
       expect(result.authority.gateWitnessField).toBe("approval");
-      expect(result.budget.reservation.admissionRef).toBe(activationAdmissionRef(COMMAND_ID));
+      expect(result.budget.reservation.admissionRef).toBe(
+        activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID),
+      );
     });
   });
 });
 
 describe("admission gate resolver — an absent witness is the RESOLVER's own refusal", () => {
+  it("refuses a legacy ALLOW row without sealed v2 authority", () => {
+    withStore("policy-legacy-v1", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      plantLegacyAllowance(store);
+
+      expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(ABSENT);
+    });
+  });
+
   it("refuses a POLICY_ALLOWANCE node whose project never decided a policy", () => {
     withStore("policy-absent", (store) => {
       seedProjectWithoutPolicy(store);
@@ -470,6 +612,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
     withStore("policy-not-allowed", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      seedNonAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
 
       // The witness EXISTS, so the resolver must not answer at all.
       const resolved = resolve(store, "allowance");
@@ -485,8 +628,10 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
     withStore("forged-over-deny", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
-      seedNonAllowingPolicyDecision(store);
-      expect(standingHolds(store, activationAdmissionRef(COMMAND_ID))).toBe(0);
+      seedNonAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
+      expect(standingHolds(
+        store, activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID),
+      )).toBe(0);
 
       // THE ARM A MUTATION DRILL DEMANDED. The witness-absent forgery arm below passes even if
       // the stage hands the CALLER's gate to the writer, because the resolver refuses first and
@@ -501,6 +646,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
     withStore("policy-source-code", (store) => {
       driveThrough(store, "goal.create");
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      seedNonAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
       const resolved = resolve(store, "allowance");
       expect(resolved.ok).toBe(true);
       if (!resolved.ok) return;
@@ -516,7 +662,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
       if (!derived.ok) return;
       const written = reserveBudgetForAdmission(store, {
         accountId: derived.value.accountId,
-        admissionRef: activationAdmissionRef(COMMAND_ID),
+        admissionRef: activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID),
         amounts: derived.value.amounts,
         context: {
           commandId: COMMAND_ID, correlationId: "corr-activate-resolver",
@@ -552,16 +698,17 @@ describe("admission gate resolver — one policy's witness can never satisfy the
     });
   });
 
-  it("refuses a POLICY_ALLOWANCE node holding ONLY a current human approval", () => {
+  it("does not substitute a current human approval for the bound non-allowing policy", () => {
     withStore("cross-policy", (store) => {
       seedApprovedNodeScope(store, [ACTIVATION_WORLD_NODE_KEY]);
       // WITHOUT the policy witness on purpose: the happy seeder would upgrade the bootstrap's
       // HOLD_UNKNOWN to ALLOW and this arm would then pass for the wrong reason — an ALLOWING
       // allowance rather than the approval being ignored.
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      seedNonAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
       // The approval is real, durable, CURRENT and scoped to this very node.
       expect(durableApproval(store)["validity"]).toBe("CURRENT");
-      // The bootstrap's own decision stands and it does not allow, so this refuses at the
+      // The activation-bound decision stands and it does not allow, so this refuses at the
       // ledger — which is itself the proof the approval was never consulted for this node.
       const resolved = resolve(store, "allowance");
       expect(resolved.ok).toBe(true);
@@ -624,7 +771,7 @@ describe("admission gate resolver — the resolved gate always carries the node'
           plantHistoricalAllowance(store);
         } else {
           seedActivationWorldWithGatePolicy(store, policy);
-          seedAllowingPolicyDecision(store);
+          seedAllowingPolicyDecision(store, ACTIVATION_POLICY_SUBJECT);
         }
 
         const resolved = resolve(store, field);
@@ -657,7 +804,9 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
       seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       // PRECONDITION, SHOWN: no hold stands for this admission identity, so `readStandingHold`
       // cannot answer above the gate read and this arm really does reach the resolver.
-      expect(standingHolds(store, activationAdmissionRef(COMMAND_ID))).toBe(0);
+      expect(standingHolds(
+        store, activationAdmissionRef(PROJECT_ID, "principal-1", COMMAND_ID),
+      )).toBe(0);
 
       // Structurally perfect and ALLOWING by `checkGate`'s own rules. Under the retired
       // `checkGateWitness` this passed the stage outright; now nothing reads it. Asserted as a
@@ -676,12 +825,18 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
       plantHistoricalAllowance(store);
       // Two DISTINCT admission identities, each shown to hold nothing before its own call —
       // otherwise the second would be answered by the first's standing hold, not by the gate.
-      expect(activationAdmissionRef("cmd-a")).not.toBe(activationAdmissionRef("cmd-b"));
-      expect(standingHolds(store, activationAdmissionRef("cmd-a"))).toBe(0);
+      expect(activationAdmissionRef(PROJECT_ID, "principal-1", "cmd-a")).not.toBe(
+        activationAdmissionRef(PROJECT_ID, "principal-1", "cmd-b"),
+      );
+      expect(standingHolds(
+        store, activationAdmissionRef(PROJECT_ID, "principal-1", "cmd-a"),
+      )).toBe(0);
 
       // Paired on one world so the contrast is the evidence: the payload gate changes nothing.
       expect(stage(store, undefined, "cmd-a").ok).toBe(true);
-      expect(standingHolds(store, activationAdmissionRef("cmd-b"))).toBe(0);
+      expect(standingHolds(
+        store, activationAdmissionRef(PROJECT_ID, "principal-1", "cmd-b"),
+      )).toBe(0);
       expect(stage(store, { gate: FORGED_GATE }, "cmd-b").ok).toBe(true);
     });
   });
@@ -711,6 +866,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
     // Asserted so a roster that silently grows cannot leave an untested refusal behind.
     expect([...ADMISSION_GATE_RESOLVER_CODES]).toStrictEqual([
       "ADMISSION_GATE_SCOPE_MISMATCH",
+      "ADMISSION_GATE_SUBJECT_MISMATCH",
       "ADMISSION_GATE_WITNESS_ABSENT",
     ]);
   });

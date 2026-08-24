@@ -79,7 +79,10 @@ it("the shipped journey activates its exact human-approved execution node", () =
 
   const resolved = resolveAdmissionGate({
     goalRef: GOAL_ID,
+    graphRevisionRef: "graph-revision-1",
     nodeKey: NODE_ID,
+    policySliceHash: "unused-by-human-approval",
+    principalId: PRINCIPAL_ID,
     projectId: PROJECT_ID,
     store,
     witnessField: "approval",

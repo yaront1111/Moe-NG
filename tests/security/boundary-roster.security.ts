@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 18, integrity 23, durable-store 17, runtime-provider
- * 31, scheduler-activation 31 — sums to 120, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 18, integrity 24, durable-store 17, runtime-provider
+ * 31, scheduler-activation 31 — sums to 121, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -271,6 +271,8 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "GRAPH_REVISION_LAYER", file: "packages/core/src/planning/graph-revision-contract.ts", axis: "scheduler-activation" },
   { constant: "PLAN_REVISION_LAYERS", file: "packages/core/src/planning/plan-revision-contract.ts", axis: "integrity" },
   { constant: "PLANNING_EXPANSION_LAYERS", file: "packages/core/src/planning/planning-expansion-validation.ts", axis: "scheduler-activation" },
+  // The domain-separated canonical digest for an exact immutable policy slice.
+  { constant: "POLICY_SLICE_DIGEST_LAYERS", file: "packages/core/src/policy/policy-slice-digest.ts", axis: "integrity" },
   // A versioned canonical product-revision codec with an embedded content digest.
   { constant: "PRODUCT_CONTRACT_LAYERS", file: "packages/core/src/product-contract/product-contract-contract.ts", axis: "integrity" },
   { constant: "SUPERSESSION_KERNEL_LAYER", file: "packages/core/src/supersession/supersession-engine.ts", axis: "scheduler-activation" },
@@ -404,8 +406,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * codecs are transport, two admission state machines are scheduler-activation, the atomic
  * catalog is durable-store, six filesystem/process surfaces are runtime-provider, and the
  * two canonical codecs are integrity. All 42 hostile arms land with these rows.
+ *
+ * 120 -> 121 for POLICY_SLICE_DIGEST_LAYERS, the versioned domain-separated digest over
+ * one exact policy slice. `integrity` by SUBJECT: it validates and seals canonical policy
+ * content; it does not evaluate, admit or activate an action. Its three hostile arms and
+ * production positive control land with this row.
  */
-const EXPECTED_ROSTER_SIZE = 120;
+const EXPECTED_ROSTER_SIZE = 121;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -416,7 +423,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 52,
   "packages/benchmark": 3,
   "packages/runner": 22,
-  "packages/core": 13,
+  "packages/core": 14,
   "packages/scheduler": 10,
   "packages/store": 5,
   "apps/control-room": 5,

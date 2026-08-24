@@ -49,6 +49,7 @@ import {
 } from "./durable-store-boundary-scenarios.js";
 import { INTEGRITY_HOSTILE_CASES } from "./integrity-hostile-cases.js";
 import { PROJECT_INTEGRITY_HOSTILE_CASES } from "./project-integrity-hostile-cases.js";
+import { POLICY_SLICE_HOSTILE_CASES } from "./policy-slice-hostile-cases.js";
 import {
   ACTIVATION_ADMISSION_CASES,
   ACTIVATION_ADMISSION_RACES,
@@ -112,7 +113,7 @@ const transportPairs = (): readonly CoveredPair[] =>
     .map((entry) => [entry.boundary, entry.arm] as const);
 
 const integrityPairs = (): readonly CoveredPair[] =>
-  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES]
+  [...INTEGRITY_HOSTILE_CASES, ...PROJECT_INTEGRITY_HOSTILE_CASES, ...POLICY_SLICE_HOSTILE_CASES]
     .map((entry) => [entry.constant, entry.arm] as const);
 
 /** `phase` is read off the case rather than implied by its export, so a case filed under the

@@ -1,5 +1,9 @@
 import { RUNTIME_COMMAND_KINDS, decodeBoundedJsonBytes } from "@moe/contracts";
-import type { SqliteEventStore } from "@moe/store";
+import type { JsonValue } from "@moe/contracts";
+import {
+  POLICY_SLICE_DIGEST_VERSION, derivePolicySliceDigest, evaluatePolicy,
+} from "@moe/core";
+import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
@@ -17,9 +21,22 @@ import {
   openStore,
   send,
 } from "./bootstrap-test-fixtures.js";
+import {
+  POLICY_DECISION_DIGEST_VERSION,
+  decisionDigestFor,
+} from "./bootstrap-policy-authority.js";
 import { readPolicyEvaluationAuthority } from "./bootstrap-policy-services.js";
 
 const encoder = new TextEncoder();
+
+function addressedPolicySlice(
+  content: Readonly<Record<string, unknown>> = { autoApprovalOptIns: [], rules: [] },
+): Readonly<Record<string, unknown> & { readonly sliceRef: string }> {
+  const candidate = { ...content, sliceRef: "pending-policy-slice" };
+  const derived = derivePolicySliceDigest(candidate);
+  if (!derived.ok) throw new Error(`policy slice fixture refused: ${derived.code}`);
+  return Object.freeze({ ...candidate, sliceRef: derived.digest });
+}
 
 /**
  * The ten kinds this surface owns, restated as a literal rather than derived from the
@@ -170,6 +187,42 @@ describe("bootstrap request ingress", () => {
   });
 });
 
+describe("policy.install - immutable content authority", () => {
+  afterEach(closeStores);
+
+  it("refuses a valid policy slice whose address is not its canonical content digest", () => {
+    const store = openStore();
+    const outcome = send(store, envelope("policy.install", 0, {
+      slice: { autoApprovalOptIns: [], rules: [], sliceRef: hex64("caller-label") },
+    }, "cmd-install-mismatched-content"));
+
+    expect(outcome).toMatchObject({
+      code: "BOOTSTRAP_POLICY_SLICE_DIGEST_MISMATCH",
+      ok: false,
+      refusedBy: "DAEMON_INGRESS",
+    });
+    expect(store.readEvents(`${PROJECT_ID}-policy`)).toHaveLength(0);
+  });
+
+  it("refuses a second installation at an already durable address", () => {
+    const store = openStore();
+    const slice = addressedPolicySlice();
+    expect(send(store, envelope("policy.install", 0, { slice }, "cmd-install-first")).ok)
+      .toBe(true);
+
+    const duplicate = send(
+      store, envelope("policy.install", 1, { slice }, "cmd-install-duplicate"),
+    );
+    expect(duplicate).toMatchObject({
+      code: "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED",
+      ok: false,
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(store.readEvents(`${PROJECT_ID}-policy`)
+      .filter((event) => event.eventType === "PolicyInstalled")).toHaveLength(1);
+  });
+});
+
 /**
  * `policy.validate` binds to the AUTHENTICATED principal and the INSTALLED slice bytes
  * (task-eb6a1fa6).
@@ -187,8 +240,6 @@ describe("bootstrap request ingress", () => {
 describe("policy.validate - binds the principal and the installed slices (task-eb6a1fa6)", () => {
   afterEach(closeStores);
 
-  const DENY_REF = hex64("de19");
-  const ALLOW_REF = hex64("a110");
   const ACTION = "plan.approve";
   const CALLER_REQUESTED_ACTIONS = [
     ACTION,
@@ -197,7 +248,7 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   ] as const;
 
   /** A slice that FORBIDS the action outright: no opt-in covers it. */
-  const denySlice = Object.freeze({
+  const denySlice = addressedPolicySlice({
     autoApprovalOptIns: [],
     // The EXACT `PolicyRule` shape (policy-contract.ts:80-85): effect, obligations,
     // requiredFactIds, ruleId. A guessed shape is refused by core as INPUT_INVALID before the
@@ -209,8 +260,8 @@ describe("policy.validate - binds the principal and the installed slices (task-e
       requiredFactIds: [],
       ruleId: "rule-deny-approve",
     })],
-    sliceRef: DENY_REF,
   });
+  const DENY_REF = denySlice.sliceRef;
 
   /** The permissive one-element chain a caller would send to overrule it. */
   const permissiveSlice = Object.freeze({
@@ -219,11 +270,8 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     sliceRef: DENY_REF,
   });
 
-  const allowSlice = Object.freeze({
-    autoApprovalOptIns: [],
-    rules: [],
-    sliceRef: ALLOW_REF,
-  });
+  const allowSlice = addressedPolicySlice();
+  const ALLOW_REF = allowSlice.sliceRef;
 
   /** The bootstrap prefix every policy command needs, then the installs the arm asks for. */
   function seeded(slices: readonly Record<string, unknown>[]): SqliteEventStore {
@@ -256,8 +304,6 @@ describe("policy.validate - binds the principal and the installed slices (task-e
       actor: "principal-1",
       callerRiskHint: null,
       decisionDigest: hex64("d1"),
-      evaluatedAtEpochMs: 1_760_000_000_000,
-      evaluatorVersion: "evaluator-1",
       graphNodeRevisionRefs: [],
       policyRevisionRef,
       requiredFactIds: [],
@@ -280,8 +326,11 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   }
 
   /** The LATEST durable PolicyEvaluated payload, selected BY TYPE and never by index. */
-  function evaluatedRow(store: SqliteEventStore): Record<string, unknown> {
-    const events = store.readEvents(`${PROJECT_ID}-policy`)
+  function evaluatedRow(
+    store: SqliteEventStore,
+    projectId: string = PROJECT_ID,
+  ): Record<string, unknown> {
+    const events = store.readEvents(`${projectId}-policy`)
       .filter((event) => event.eventType === "PolicyEvaluated");
     const latest = events[events.length - 1];
     if (latest === undefined) throw new Error("no PolicyEvaluated row was written");
@@ -420,12 +469,96 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     expect(evaluatedRow(store).decisionDigest).not.toBe(allowDigest);
   });
 
+  it("computes a DIFFERENT digest for the same evaluation in another project", () => {
+    const first = seeded([allowSlice]);
+    expect(validate(first, baseInput(ALLOW_REF), 1).ok).toBe(true);
+    const firstDigest = evaluatedRow(first).decisionDigest;
+
+    const otherProjectId = "project-2";
+    const second = SqliteEventStore.openEphemeralForProjectTest(otherProjectId);
+    try {
+      const inOtherProject = (request: ReturnType<typeof envelope>) =>
+        send(second, { ...request, projectId: otherProjectId });
+      for (const step of [
+        envelope("project.register", 0, { owner: "owner-1" }),
+        envelope("project.bind_repository", 1, { observation: OBSERVATION }),
+        envelope("policy.install", 0, { slice: allowSlice }, "cmd-install-other-project"),
+      ]) {
+        const outcome = inOtherProject(step);
+        if (!outcome.ok) throw new Error(`other-project seed refused: ${outcome.code}`);
+      }
+      const outcome = inOtherProject(envelope(
+        "policy.validate",
+        1,
+        { input: baseInput(ALLOW_REF) },
+        "cmd-validate-other-project",
+      ));
+      if (!outcome.ok) throw new Error(`other-project validate refused: ${outcome.code}`);
+
+      expect(evaluatedRow(second, otherProjectId).decisionDigest).not.toBe(firstDigest);
+    } finally {
+      second.close();
+    }
+  });
+
+  it("binds every caller-selected evaluation field that core verified", () => {
+    const store = seeded([allowSlice]);
+    const baseline = baseInput(ALLOW_REF);
+    expect(validate(store, baseline, 1).ok).toBe(true);
+    const baselineDigest = evaluatedRow(store).decisionDigest;
+    const mutations: readonly Record<string, unknown>[] = [
+      { ...baseline, action: "effect.activate" },
+      { ...baseline, callerRiskHint: "R0" },
+      { ...baseline, graphNodeRevisionRefs: ["node-revision-1"] },
+      { ...baseline, requiredFactIds: ["required-fact-1"] },
+      { ...baseline, scope: ["project:project-1"] },
+    ];
+
+    mutations.forEach((input, index) => {
+      expect(validate(store, input, index + 2).ok).toBe(true);
+      expect(evaluatedRow(store).decisionDigest).not.toBe(baselineDigest);
+    });
+  });
+
+  it("does not let the caller's passthrough digest move server evidence", () => {
+    const store = seeded([allowSlice]);
+    const baseline = baseInput(ALLOW_REF);
+    expect(validate(store, baseline, 1).ok).toBe(true);
+    const serverDigest = evaluatedRow(store).decisionDigest;
+
+    expect(validate(store, { ...baseline, decisionDigest: hex64("different") }, 2).ok)
+      .toBe(true);
+    expect(evaluatedRow(store).decisionDigest).toBe(serverDigest);
+  });
+
+  it("returns the server digest instead of echoing the caller digest in the command result", () => {
+    const store = seeded([allowSlice]);
+    const callerDigest = hex64("caller");
+    const commandId = "cmd-validate-result-digest";
+    expect(validate(store, { ...baseInput(ALLOW_REF), decisionDigest: callerDigest }, 1, commandId).ok)
+      .toBe(true);
+
+    const durableDigest = evaluatedRow(store).decisionDigest;
+    const returnedDigest = evaluatedDecision(store, commandId)["decisionDigest"];
+    expect(returnedDigest).toBe(durableDigest);
+    expect(returnedDigest).not.toBe(callerDigest);
+  });
+
   // The durable row must answer who / which / over-what.
   it("carries who evaluated, which slice, and the server digest", () => {
     const store = seeded([allowSlice]);
     expect(validate(store, baseInput(ALLOW_REF), 1).ok).toBe(true);
     const row = evaluatedRow(store);
-    for (const key of ["decision", "policyRef", "principalId", "sliceRef", "decisionDigest"]) {
+    for (const key of [
+      "decision",
+      "policyRef",
+      "principalId",
+      "sliceRef",
+      "decisionDigest",
+      "decisionDigestVersion",
+      "decisionMaterial",
+      "projectId",
+    ]) {
       expect(Object.prototype.hasOwnProperty.call(row, key)).toBe(true);
     }
   });
@@ -439,6 +572,69 @@ describe("policy.validate - binds the principal and the installed slices (task-e
 
     expectRefusal(outcome, "BOOTSTRAP_POLICY_FACTS_CALLER_SUPPLIED");
     expect(() => evaluatedRow(store)).toThrow();
+  });
+
+  it("refuses caller-supplied evaluation time and evaluator provenance", () => {
+    const cases = [
+      ["evaluatedAtEpochMs", 1_760_000_000_000, "BOOTSTRAP_POLICY_TIME_CALLER_SUPPLIED"],
+      ["evaluatorVersion", "caller-evaluator", "BOOTSTRAP_POLICY_EVALUATOR_CALLER_SUPPLIED"],
+    ] as const;
+    for (const [key, value, code] of cases) {
+      const store = seeded([allowSlice]);
+      const outcome = validate(store, { ...baseInput(ALLOW_REF), [key]: value }, 1);
+      expectRefusal(outcome, code);
+      closeStores();
+    }
+  });
+
+  it("sources evaluation time and evaluator identity from daemon authority", () => {
+    const store = seeded([allowSlice]);
+    const input = baseInput(ALLOW_REF);
+    expect(validate(store, input, 1).ok).toBe(true);
+
+    const material = evaluatedRow(store)["decisionMaterial"] as Record<string, unknown>;
+    const verified = material["verifiedInput"] as Record<string, unknown>;
+    expect(verified["evaluatedAtEpochMs"]).toBe(Date.parse("2026-08-08T00:00:00.000Z"));
+    expect(verified["evaluatorVersion"]).toBe("moe-policy-evaluator/1");
+  });
+
+  it("binds the daemon command clock reading into the decision digest", () => {
+    const store = seeded([allowSlice]);
+    const input = baseInput(ALLOW_REF);
+    expect(validate(store, input, 1).ok).toBe(true);
+    const firstDigest = evaluatedRow(store).decisionDigest;
+
+    const second = send(store, {
+      ...envelope("policy.validate", 2, { input }, "cmd-validate-second-clock"),
+      decidedAt: "2026-08-08T00:00:00.001Z",
+    });
+    expect(second.ok).toBe(true);
+    expect(evaluatedRow(store).decisionDigest).not.toBe(firstDigest);
+  });
+
+  it("refuses when the daemon command clock reading is unusable", () => {
+    const store = seeded([allowSlice]);
+    const outcome = send(store, {
+      ...envelope("policy.validate", 1, { input: baseInput(ALLOW_REF) }),
+      decidedAt: "not-a-time",
+    }) as unknown as Record<string, unknown>;
+    expect(outcome.ok).toBe(false);
+    expect(outcome.code).toBe("BOOTSTRAP_POLICY_TIME_UNAVAILABLE");
+    expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+  });
+
+  it("refuses parseable but noncanonical command-clock spellings", () => {
+    for (const decidedAt of ["0", "2026-08-08T03:00:00+03:00"]) {
+      const store = seeded([allowSlice]);
+      const outcome = send(store, {
+        ...envelope("policy.validate", 1, { input: baseInput(ALLOW_REF) }),
+        decidedAt,
+      }) as unknown as Record<string, unknown>;
+      expect(outcome.ok).toBe(false);
+      expect(outcome.code).toBe("BOOTSTRAP_POLICY_TIME_UNAVAILABLE");
+      expect(outcome.refusedBy).toBe("DAEMON_PREREQUISITE");
+      closeStores();
+    }
   });
 
   it("routes the server-resolved fact through the evaluator and durable writer", () => {
@@ -479,24 +675,76 @@ describe("policy.validate - binds the principal and the installed slices (task-e
 describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1fa6)", () => {
   afterEach(closeStores);
 
+  const AUTHORITY_SLICE = addressedPolicySlice();
+  const AUTHORITY_POLICY_REF = AUTHORITY_SLICE.sliceRef;
+  const AUTHORITY_INPUT = {
+    action: "plan.approve",
+    actor: "principal-1",
+    callerRiskHint: null,
+    decisionDigest: hex64("ignored"),
+    evaluatedAtEpochMs: 1_760_000_000_000,
+    evaluatorVersion: "moe-policy-evaluator/1",
+    facts: [{
+      factId: "policy-risk-unclassifiable:test",
+      tier: null,
+      truthClass: "UNKNOWN",
+    }],
+    graphNodeRevisionRefs: [],
+    policyRevisionRef: AUTHORITY_POLICY_REF,
+    requiredFactIds: [],
+    scope: [],
+    sliceChain: [AUTHORITY_SLICE],
+    waivers: [],
+  };
+  const AUTHORITY_EVALUATED = evaluatePolicy(AUTHORITY_INPUT);
+  if (!AUTHORITY_EVALUATED.ok) throw new Error("authority fixture must evaluate");
+  const { decisionDigest: _inputDigest, ...verifiedInput } = AUTHORITY_INPUT;
+  const { decisionDigest: _outcomeDigest, ...verifiedOutcome } = AUTHORITY_EVALUATED.record;
+  const DECISION_MATERIAL = Object.freeze({
+    projectId: PROJECT_ID,
+    serverSources: {
+      evaluationTimeSource: "DAEMON_COMMAND_CLOCK",
+      evaluatorVersionSource: "DAEMON_BUILD",
+      policySliceDigestVersion: POLICY_SLICE_DIGEST_VERSION,
+      waiverResolutionStatus: "RESOLVED_EMPTY",
+    },
+    verifiedInput,
+    verifiedOutcome,
+  });
   const WIDENED = Object.freeze({
-    decision: "ALLOW",
-    decisionDigest: hex64("5e2ver"),
-    policyRef: hex64("a110"),
+    decision: AUTHORITY_EVALUATED.record.decision,
+    decisionDigest: decisionDigestFor(DECISION_MATERIAL as unknown as JsonValue),
+    decisionDigestVersion: POLICY_DECISION_DIGEST_VERSION,
+    decisionMaterial: DECISION_MATERIAL,
+    policyRef: AUTHORITY_POLICY_REF,
     principalId: "principal-1",
-    sliceRef: hex64("a110"),
+    projectId: PROJECT_ID,
+    sliceRef: AUTHORITY_POLICY_REF,
   });
 
-  function authorityOf(row: Record<string, unknown>): Record<string, unknown> {
-    return readPolicyEvaluationAuthority(row as never) as unknown as Record<string, unknown>;
+  function authorityOf(
+    row: Record<string, unknown>,
+    expectedProjectId: string = PROJECT_ID,
+    expectedEvaluatedAtEpochMs: number = AUTHORITY_INPUT.evaluatedAtEpochMs,
+  ): Record<string, unknown> {
+    const result: unknown = readPolicyEvaluationAuthority(
+      row as never, expectedProjectId, expectedEvaluatedAtEpochMs,
+    );
+    return result as Record<string, unknown>;
   }
 
   it("answers from a widened row", () => {
     const read = authorityOf({ ...WIDENED });
-    expect(read.ok).toBe(true);
+    expect(read.ok, String(read.code)).toBe(true);
+    expect(read.action).toBe("plan.approve");
+    expect(read.graphNodeRevisionRefs).toStrictEqual([]);
     expect(read.principalId).toBe("principal-1");
+    expect(read.scope).toStrictEqual([]);
     expect(read.sliceRef).toBe(WIDENED.sliceRef);
     expect(read.decisionDigest).toBe(WIDENED.decisionDigest);
+    expect(read.decisionDigestVersion).toBe(POLICY_DECISION_DIGEST_VERSION);
+    expect(Object.isFrozen(read.graphNodeRevisionRefs)).toBe(true);
+    expect(Object.isFrozen(read.scope)).toBe(true);
   });
 
   // THE LEGACY ROW. Two fields, exactly what `validatePolicy` wrote before this row.
@@ -517,6 +765,8 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
       ["principalId", "POLICY_AUTHORITY_PRINCIPAL_UNKNOWN"],
       ["sliceRef", "POLICY_AUTHORITY_SLICE_UNKNOWN"],
       ["decisionDigest", "POLICY_AUTHORITY_DIGEST_UNKNOWN"],
+      ["decisionDigestVersion", "POLICY_AUTHORITY_DIGEST_VERSION_UNKNOWN"],
+      ["projectId", "POLICY_AUTHORITY_PROJECT_UNKNOWN"],
     ] as const;
     for (const [key, code] of cases) {
       const row: Record<string, unknown> = { ...WIDENED };
@@ -525,10 +775,132 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
     }
   });
 
+  it("refuses a row without the persisted digest material", () => {
+    const row: Record<string, unknown> = { ...WIDENED };
+    delete row["decisionMaterial"];
+    expect(authorityOf(row).code).toBe("POLICY_AUTHORITY_MATERIAL_UNKNOWN");
+  });
+
   it("refuses an empty string as loudly as an absent key", () => {
     // Otherwise "" reads as present and a caller-shaped blank becomes an authority.
     expect(authorityOf({ ...WIDENED, principalId: "" }).code)
       .toBe("POLICY_AUTHORITY_PRINCIPAL_UNKNOWN");
+  });
+
+  it("refuses a digest version whose preimage contract it does not understand", () => {
+    expect(authorityOf({ ...WIDENED, decisionDigestVersion: "future-v3" }).code)
+      .toBe("POLICY_AUTHORITY_DIGEST_VERSION_UNSUPPORTED");
+  });
+
+  it("refuses a policy-slice digest version whose preimage it cannot replay", () => {
+    const decisionMaterial = {
+      ...DECISION_MATERIAL,
+      serverSources: {
+        ...DECISION_MATERIAL.serverSources,
+        policySliceDigestVersion: "future-policy-slice-v2",
+      },
+    };
+    expect(authorityOf({
+      ...WIDENED,
+      decisionDigest: decisionDigestFor(decisionMaterial as unknown as JsonValue),
+      decisionMaterial,
+    }).code).toBe("POLICY_AUTHORITY_SLICE_DIGEST_VERSION_UNSUPPORTED");
+  });
+
+  it("refuses recomputed decision material whose slice bytes do not match its address", () => {
+    const tamperedInput = {
+      ...AUTHORITY_INPUT,
+      sliceChain: [{
+        autoApprovalOptIns: [{ action: "plan.approve", tier: "R0" as const }],
+        rules: [],
+        sliceRef: AUTHORITY_POLICY_REF,
+      }],
+    };
+    const tampered = evaluatePolicy(tamperedInput);
+    if (!tampered.ok) throw new Error("tampered policy fixture must still evaluate");
+    const { decisionDigest: _tamperedInputDigest, ...tamperedVerifiedInput } = tamperedInput;
+    const { decisionDigest: _tamperedOutcomeDigest, ...tamperedVerifiedOutcome } = tampered.record;
+    const decisionMaterial = {
+      ...DECISION_MATERIAL,
+      verifiedInput: tamperedVerifiedInput,
+      verifiedOutcome: tamperedVerifiedOutcome,
+    };
+    expect(authorityOf({
+      ...WIDENED,
+      decision: tampered.record.decision,
+      decisionDigest: decisionDigestFor(decisionMaterial as unknown as JsonValue),
+      decisionMaterial,
+    }).code).toBe("POLICY_AUTHORITY_SLICE_DIGEST_MISMATCH");
+  });
+
+  it("refuses a digest that was not derived from its persisted decision material", () => {
+    const read = authorityOf({
+      ...WIDENED,
+      decisionDigest: hex64("wrong"),
+    });
+    expect(read.ok).toBe(false);
+    expect(read.code).toBe("POLICY_AUTHORITY_DIGEST_MISMATCH");
+  });
+
+  it("refuses copied authority under another expected project", () => {
+    expect(authorityOf({ ...WIDENED }, "project-2").code)
+      .toBe("POLICY_AUTHORITY_PROJECT_MISMATCH");
+  });
+
+  it("refuses authority moved onto an event with another command-clock timestamp", () => {
+    const read = authorityOf(
+      { ...WIDENED }, PROJECT_ID, AUTHORITY_INPUT.evaluatedAtEpochMs + 1,
+    );
+    expect(read.ok).toBe(false);
+    expect(read.code).toBe("POLICY_AUTHORITY_TIME_MISMATCH");
+    expect(read.layer).toBe("DAEMON_POLICY_AUTHORITY");
+  });
+
+  it("refuses a recomputed digest over an outcome core did not produce", () => {
+    const decisionMaterial = {
+      ...DECISION_MATERIAL,
+      verifiedOutcome: { ...verifiedOutcome, decision: "DENY" },
+    };
+    expect(authorityOf({
+      ...WIDENED,
+      decision: "DENY",
+      decisionDigest: decisionDigestFor(decisionMaterial as unknown as JsonValue),
+      decisionMaterial,
+    }).code).toBe("POLICY_AUTHORITY_OUTCOME_MISMATCH");
+  });
+
+  it("refuses a recomputed authority carrying an additional policy slice", () => {
+    const extraInput = {
+      ...AUTHORITY_INPUT,
+      sliceChain: [
+        ...AUTHORITY_INPUT.sliceChain,
+        { autoApprovalOptIns: [], rules: [], sliceRef: hex64("extra-slice") },
+      ],
+    };
+    const extraEvaluated = evaluatePolicy(extraInput);
+    if (!extraEvaluated.ok) throw new Error("additional-slice fixture must evaluate");
+    const { decisionDigest: _extraInputDigest, ...extraVerifiedInput } = extraInput;
+    const { decisionDigest: _extraOutcomeDigest, ...extraVerifiedOutcome } = extraEvaluated.record;
+    const decisionMaterial = {
+      ...DECISION_MATERIAL,
+      verifiedInput: extraVerifiedInput,
+      verifiedOutcome: extraVerifiedOutcome,
+    };
+    expect(authorityOf({
+      ...WIDENED,
+      decision: extraEvaluated.record.decision,
+      decisionDigest: decisionDigestFor(decisionMaterial as unknown as JsonValue),
+      decisionMaterial,
+    }).code).toBe("POLICY_AUTHORITY_SUMMARY_MISMATCH");
+  });
+
+  it("refuses malformed digests, mismatched summaries, and extra row keys", () => {
+    expect(authorityOf({ ...WIDENED, decisionDigest: "not-a-digest" }).code)
+      .toBe("POLICY_AUTHORITY_DIGEST_INVALID");
+    expect(authorityOf({ ...WIDENED, sliceRef: hex64("different") }).code)
+      .toBe("POLICY_AUTHORITY_SLICE_DIGEST_MISMATCH");
+    expect(authorityOf({ ...WIDENED, extra: true }).code)
+      .toBe("POLICY_AUTHORITY_ROW_UNREADABLE");
   });
 
   it("refuses a row that is not a record at all", () => {
@@ -548,9 +920,10 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
       const outcome = send(store, step);
       if (!outcome.ok) throw new Error(`seed refused at ${step.kind}: ${outcome.code}`);
     }
-    const sliceRef = hex64("a110");
+    const slice = addressedPolicySlice();
+    const sliceRef = slice.sliceRef;
     const installed = send(store, envelope("policy.install", 0, {
-      slice: { autoApprovalOptIns: [], rules: [], sliceRef },
+      slice,
     }, "cmd-install-reader"));
     if (!installed.ok) throw new Error(`install refused: ${installed.code}`);
     const validated = send(store, envelope("policy.validate", 1, {
@@ -559,8 +932,6 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
         actor: "principal-1",
         callerRiskHint: null,
         decisionDigest: hex64("d1"),
-        evaluatedAtEpochMs: 1_760_000_000_000,
-        evaluatorVersion: "evaluator-1",
         graphNodeRevisionRefs: [],
         policyRevisionRef: sliceRef,
         requiredFactIds: [],
@@ -576,11 +947,19 @@ describe("readPolicyEvaluationAuthority - refuses rather than infers (task-eb6a1
     const decoded = decodeBoundedJsonBytes(latest.payload);
     if (!decoded.ok) throw new Error(`payload undecodable: ${decoded.code}`);
 
-    const read = authorityOf(decoded.value as unknown as Record<string, unknown>);
+    const read = authorityOf(
+      decoded.value as unknown as Record<string, unknown>,
+      PROJECT_ID,
+      Date.parse(latest.committedAt),
+    );
     expect(read.ok).toBe(true);
+    expect(read.action).toBe("plan.approve");
+    expect(read.graphNodeRevisionRefs).toStrictEqual([]);
     expect(read.principalId).toBe("principal-1");
+    expect(read.scope).toStrictEqual([]);
     expect(read.sliceRef).toBe(sliceRef);
     expect(typeof read.decisionDigest).toBe("string");
+    expect(read.decisionDigestVersion).toBe(POLICY_DECISION_DIGEST_VERSION);
     expect(read.decisionDigest).not.toBe(hex64("d1"));
   });
 });

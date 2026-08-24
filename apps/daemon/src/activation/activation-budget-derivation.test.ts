@@ -406,6 +406,7 @@ describe("activation budget derivation — door 2 (registry): self-derives from 
       const [definition] = content.content.nodeAuthority.definitions;
       expect(definition).toBeDefined();
       expect(derived.value.amounts).toStrictEqual(definition?.admissionAmounts);
+      expect(derived.value.policySliceHash).toBe(definition?.policySliceHash);
       expect(derived.value.amounts.length).toBeGreaterThan(0);
     });
   });

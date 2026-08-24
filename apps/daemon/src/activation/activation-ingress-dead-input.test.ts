@@ -21,6 +21,7 @@ import {
   ACTIVATION_INGRESS_SCHEMA_VERSION,
   EFFECT_ACTIVATE_COMMAND_KIND,
 } from "./activation-ingress-contracts.js";
+import { activationAdmissionRef } from "./activation-admission-identity.js";
 import { deriveActivationAggregateId } from "./activation-ledger-contracts.js";
 import { readActivationLedgerRecord } from "./activation-ledger-reader.js";
 import { runEffectActivateCommand } from "./activation-ingress.js";
@@ -63,6 +64,7 @@ function readyStore(label: string): SqliteEventStore {
 
 const DIGEST = "a".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
+const ADMISSION_REF = activationAdmissionRef(PROJECT_ID, PRINCIPAL_ID, "cmd-activate-1");
 
 const LEASE_RECORD = {
   authorityHashRef: DIGEST,
@@ -253,7 +255,7 @@ describe("effect.activate ingress — the caller budget section is UNREPRESENTAB
     const committed = committedBudget("absent", activationPayload());
 
     expect(committed.embedded).toMatchObject({
-      admissionRef: "activation:cmd-activate-1", state: "RESERVED",
+      admissionRef: ADMISSION_REF, state: "RESERVED",
     });
     expect(committed.embedded.accountId).not.toBe(HOSTILE_BUDGET.view.accountId);
     expect(committed.embedded.admissionRef).not.toBe(HOSTILE_BUDGET.admission.admissionRef);

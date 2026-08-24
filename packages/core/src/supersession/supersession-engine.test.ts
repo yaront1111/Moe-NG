@@ -90,7 +90,7 @@ describe("supersession accepted decision", () => {
     // the four digest/content derivations with their four domain constants.
     // The hand-transcribed NAME list that makes this count reviewable lives in
     // ../index-surface.test.ts; this stays a count so a rename cannot pass both.
-    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(118);
+    expect(Object.keys(core).filter((key) => key !== "default").length).toBe(122);
   });
 
   it("accepts all six kinds and binds a deterministic golden authority hash", () => {

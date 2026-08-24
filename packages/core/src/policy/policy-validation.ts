@@ -4,8 +4,8 @@
  * documented clone. Accessors, proxies, symbols, cycles, and exotic prototypes are snapshotted
  * into inert data once, and every later check reads only the snapshot.
  *
- * Nothing here computes an identity. `validHex64` checks the SHAPE of a supplied digest; core
- * never hashes, so `node:crypto` is deliberately absent from this package.
+ * Nothing in this validation module computes an identity. `validHex64` checks the SHAPE of a
+ * supplied digest; policy content hashing lives in the sibling digest module.
  */
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 import type { RuntimeTruthClass } from "@moe/contracts";

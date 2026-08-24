@@ -101,14 +101,14 @@ describe("policy validation request authority", () => {
       "action",
       "callerRiskHint",
       "decisionDigest",
-      "evaluatedAtEpochMs",
-      "evaluatorVersion",
       "graphNodeRevisionRefs",
       "policyRevisionRef",
       "requiredFactIds",
       "scope",
     ]);
-    for (const serverOwned of ["actor", "facts", "sliceChain", "waivers"]) {
+    for (const serverOwned of [
+      "actor", "evaluatedAtEpochMs", "evaluatorVersion", "facts", "sliceChain", "waivers",
+    ]) {
       expect(input).not.toHaveProperty(serverOwned);
     }
   });
