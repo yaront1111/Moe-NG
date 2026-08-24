@@ -381,6 +381,43 @@ it("an unknown token before any valid use refuses with TOKEN_REJECTED and mints 
   });
 });
 
+it("expires the pairing token after one minute and never reopens it after clock rollback", async () => {
+  let monotonicNow = 10_000;
+  let mintCalls = 0;
+  const seeded = storeBackedOptions({ pairingMonotonicNow: () => monotonicNow });
+  const token = seeded.options.pairingToken ?? "";
+  const options: StartListenerOptions = {
+    ...seeded.options,
+    pairing: {
+      boundProjectId: seeded.handshake.boundProjectId,
+      mint: () => {
+        mintCalls += 1;
+        return seeded.handshake.mint();
+      },
+    },
+  };
+  await withListener(options, async (listener) => {
+    // The deadline is exclusive: at exactly one minute the token is no longer a bearer.
+    monotonicNow += 60_000;
+    const expired = await call(listener, {
+      body: pairBody(token), csrf: CSRF, method: "POST", origin: listener.origin,
+      path: "/session/pair", protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+    expectRefusal(expired, "LISTENER_PAIRING_TOKEN_REJECTED", 401);
+    expect(mintCalls).toBe(0);
+
+    // A bad injected clock must not turn an already-observed expiry back into authority.
+    monotonicNow = 10_001;
+    const rolledBack = await call(listener, {
+      body: pairBody(token), csrf: CSRF, method: "POST", origin: listener.origin,
+      path: "/session/pair", protocolVersion: WIRE_PROTOCOL_VERSION,
+    });
+    expectRefusal(rolledBack, "LISTENER_PAIRING_TOKEN_REJECTED", 401);
+    expect(rolledBack.body).toEqual(expired.body);
+    expect(mintCalls).toBe(0);
+  });
+});
+
 it("never puts the pairing token in a response body or a listener log line", async () => {
   const lines: string[] = [];
   const { options } = storeBackedOptions({ log: (line: string) => lines.push(line) });

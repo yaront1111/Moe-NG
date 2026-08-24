@@ -22,7 +22,6 @@ import {
   credentialOf,
   isLoopbackHost,
   originOf,
-  pairingTokenMatches,
   protocolVersionOf,
   readBoundedBody,
   readEventAcknowledgeRequest,
@@ -42,6 +41,8 @@ import {
 } from "./static-asset-host.js";
 import type { ControlRoomAssetRoot } from "./static-asset-host.js";
 import type { SessionHandshakePort } from "../identity/session-handshake.js";
+import { createPairingTokenWindow } from "./pairing-token-window.js";
+import type { PairingTokenWindow } from "./pairing-token-window.js";
 
 export {
   CONTROL_ROOM_LISTENER_LAYER,
@@ -106,10 +107,15 @@ export interface StartListenerOptions {
    */
   readonly pairing?: SessionHandshakePort;
   /**
-   * The one-time pairing token this listener will honour EXACTLY once. Minted by
-   * the entry when hosting is on and passed in here; written to no durable store
-   * and compared in constant time. Absent (hosting off) means `/session/pair`
-   * refuses `LISTENER_PAIRING_UNAVAILABLE` - there is nothing to pair against.
+   * Monotonic time source for the short-lived pairing bearer. Production omits it and uses
+   * `performance.now`; injection exists so a socket-level test can cross the deadline exactly.
+   */
+  readonly pairingMonotonicNow?: () => number;
+  /**
+   * The pairing token this listener will honour EXACTLY once and for at most one minute. Minted
+   * by the entry when hosting is on and passed in here; written to no durable store and compared
+   * in constant time. Absent (hosting off) means `/session/pair` refuses
+   * `LISTENER_PAIRING_UNAVAILABLE` - there is nothing to pair against.
    */
   readonly pairingToken?: string;
   /** Absent means the pending-plan read route refuses rather than inventing a run. */
@@ -135,11 +141,6 @@ const GRAPH_GET_PATH = "/graph/get";
  */
 const BOOTSTRAP_PATH = "/bootstrap";
 const SESSION_PAIR_PATH = "/session/pair";
-
-/** The one-time consume latch for `/session/pair`, held in process for the daemon's life. */
-interface PairingState {
-  consumed: boolean;
-}
 
 /** The JSON surface. Anything else is either a hosted asset or an unknown route. */
 const JSON_ROUTES: readonly string[] = Object.freeze([
@@ -540,7 +541,7 @@ async function serveSessionPair(
   response: ServerResponse,
   request: IncomingMessage,
   options: StartListenerOptions,
-  pairingState: PairingState,
+  pairingState: PairingTokenWindow,
   authority: string,
   origin: string,
 ): Promise<void> {
@@ -578,16 +579,15 @@ async function serveSessionPair(
   // reservation are one synchronous step, so two concurrent valid presentations
   // cannot both pass. A used latch, or a token that does not match in constant
   // time, is the SAME refusal.
-  if (pairingState.consumed || !pairingTokenMatches(presented, token)) {
+  if (!pairingState.reserve(presented, token)) {
     refuseRequest(response, "LISTENER_PAIRING_TOKEN_REJECTED", policy);
     return;
   }
-  pairingState.consumed = true;
   const minted = pairing.mint();
   if (!minted.ok) {
     // The token bought nothing, so it is released for a retry: no credential was
     // issued, and a mint refusal is a daemon-side fault, not a spent token.
-    pairingState.consumed = false;
+    pairingState.release();
     refuseRequest(response, "LISTENER_PAIRING_MINT_FAILED", policy);
     return;
   }
@@ -607,7 +607,7 @@ async function serve(
   authority: string,
   origin: string,
   assets: ControlRoomAssetRoot | null,
-  pairingState: PairingState,
+  pairingState: PairingTokenWindow,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without the credential and without a query string, so neither can
@@ -706,10 +706,9 @@ export async function startControlRoomListener(
   let authority = "";
   let origin = "";
   let server: Server | null = null;
-  // One latch for this listener's whole life: the pairing token is single-use, so
-  // the consume state is per process, not per request. A restart mints a new
-  // token and a fresh latch.
-  const pairingState: PairingState = { consumed: false };
+  // One short-lived consume window for this listener. A restart mints a new token and therefore
+  // a fresh deadline; expiry is monotonic and latches, so a wall-clock rollback cannot revive it.
+  const pairingState = createPairingTokenWindow(options.pairingMonotonicNow);
   try {
     server = createServer((request, response) => {
       const served = serve(request, response, options, authority, origin, assets, pairingState);
