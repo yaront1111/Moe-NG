@@ -1,53 +1,26 @@
 import { randomBytes as nodeRandomBytes } from "node:crypto";
 import { performance } from "node:perf_hooks";
 
-export const PAIRING_APPROVAL_LAYER = "CONTROL_ROOM_PAIRING_APPROVAL" as const;
-export const PAIRING_APPROVAL_TTL_MS = 60_000;
-export const PAIRING_APPROVAL_MAX_LIVE_REQUESTS = 8;
-export const PAIRING_APPROVAL_COLLISION_ATTEMPTS = 4;
-export const PAIRING_APPROVAL_REFUSAL_CODES = Object.freeze([
-  "PAIRING_APPROVAL_CAPACITY_EXHAUSTED",
-  "PAIRING_APPROVAL_CLOCK_UNAVAILABLE",
-  "PAIRING_APPROVAL_ENTROPY_UNAVAILABLE",
-  "PAIRING_APPROVAL_IDENTITY_EXHAUSTED",
-  "PAIRING_APPROVAL_REQUIRED",
-  "PAIRING_CONFIRMATION_INVALID",
-  "PAIRING_CONFIRMATION_UNKNOWN",
-  "PAIRING_REQUEST_ALREADY_CLAIMED",
-  "PAIRING_REQUEST_BUSY",
-  "PAIRING_REQUEST_EXPIRED",
-  "PAIRING_REQUEST_INVALID",
-  "PAIRING_REQUEST_UNKNOWN",
-] as const);
-export type PairingApprovalRefusalCode = typeof PAIRING_APPROVAL_REFUSAL_CODES[number];
-type RandomBytesSource = (size: number) => Uint8Array;
+import {
+  PAIRING_APPROVAL_COLLISION_ATTEMPTS,
+  PAIRING_APPROVAL_MAX_LIVE_REQUESTS,
+  PAIRING_APPROVAL_TTL_MS,
+  refusePairingApproval,
+} from "./pairing-approval-contract.js";
+import type {
+  PairingApprovalGranted,
+  PairingApprovalRefusal,
+  PairingApprovalWindow,
+  PairingApprovalWindowOptions,
+  PairingClaimReserved,
+  PairingRandomBytesSource,
+  PairingRequestCreated,
+} from "./pairing-approval-contract.js";
+
+export * from "./pairing-approval-contract.js";
+
 type ActiveState = "PENDING" | "APPROVED" | "CLAIMING";
 type TerminalState = "EXPIRED" | "CLAIMED";
-export interface PairingApprovalRefusal {
-  readonly code: PairingApprovalRefusalCode; readonly layer: typeof PAIRING_APPROVAL_LAYER;
-  readonly ok: false;
-}
-export interface PairingRequestCreated {
-  readonly confirmationLabel: string; readonly ok: true; readonly requestId: string;
-}
-export interface PairingClaimReservation { commit(): void; release(): void; }
-export interface PairingClaimReserved {
-  readonly ok: true; readonly reservation: PairingClaimReservation; readonly state: "CLAIMING";
-}
-export interface PairingApprovalGranted { readonly ok: true; readonly state: "APPROVED"; }
-export interface PairingRequestPort {
-  create(): PairingRequestCreated | PairingApprovalRefusal;
-  reserve(requestId: unknown): PairingClaimReserved | PairingApprovalRefusal;
-}
-export interface PairingOperatorPort {
-  approve(confirmationLabel: unknown): PairingApprovalGranted | PairingApprovalRefusal;
-}
-export interface PairingApprovalWindow {
-  readonly operator: PairingOperatorPort; readonly requests: PairingRequestPort;
-}
-export interface PairingApprovalWindowOptions {
-  readonly now?: () => number; readonly randomBytes?: RandomBytesSource;
-}
 interface ActiveRequest {
   readonly confirmationLabel: string;
   readonly deadline: number;
@@ -61,10 +34,8 @@ interface TerminalRequest {
 interface Identity { readonly confirmationLabel: string; readonly requestId: string; }
 const REQUEST_ID = /^[0-9a-f]{64}$/u;
 const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
-function refuse(code: PairingApprovalRefusalCode): PairingApprovalRefusal {
-  return Object.freeze({ code, layer: PAIRING_APPROVAL_LAYER, ok: false as const });
-}
-function randomHex(source: RandomBytesSource, size: number): string | null {
+const refuse = refusePairingApproval;
+function randomHex(source: PairingRandomBytesSource, size: number): string | null {
   try {
     const bytes = source(size);
     if (!(bytes instanceof Uint8Array) || bytes.byteLength !== size) return null;
@@ -80,11 +51,18 @@ class PairingApprovalState {
   private readonly active = new Map<string, ActiveRequest>();
   private readonly terminal = new Map<string, TerminalRequest>();
   private clockFailed = false;
+  private closed = false;
   private lastObserved: number | null = null;
+  private readonly now: () => number;
+  private readonly randomBytes: PairingRandomBytesSource;
+
   constructor(
-    private readonly now: () => number,
-    private readonly randomBytes: RandomBytesSource,
-  ) {}
+    now: () => number,
+    randomBytes: PairingRandomBytesSource,
+  ) {
+    this.now = now;
+    this.randomBytes = randomBytes;
+  }
 
   private observeTime(): number | null {
     if (this.clockFailed) return null;
@@ -157,7 +135,15 @@ class PairingApprovalState {
     return refuse("PAIRING_APPROVAL_IDENTITY_EXHAUSTED");
   }
 
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.active.clear();
+    this.terminal.clear();
+  }
+
   create(): PairingRequestCreated | PairingApprovalRefusal {
+    if (this.closed) return refuse("PAIRING_APPROVAL_UNAVAILABLE");
     const observed = this.observeTime();
     if (observed === null) return refuse("PAIRING_APPROVAL_CLOCK_UNAVAILABLE");
     this.expireAt(observed);
@@ -202,6 +188,7 @@ class PairingApprovalState {
   }
 
   reserve(requestId: unknown): PairingClaimReserved | PairingApprovalRefusal {
+    if (this.closed) return refuse("PAIRING_APPROVAL_UNAVAILABLE");
     if (typeof requestId !== "string" || requestId.length !== 64 || !REQUEST_ID.test(requestId)) {
       return refuse("PAIRING_REQUEST_INVALID");
     }
@@ -219,6 +206,7 @@ class PairingApprovalState {
   }
 
   approve(label: unknown): PairingApprovalGranted | PairingApprovalRefusal {
+    if (this.closed) return refuse("PAIRING_APPROVAL_UNAVAILABLE");
     if (typeof label !== "string" || label.length !== 14 || !CONFIRMATION_LABEL.test(label)) {
       return refuse("PAIRING_CONFIRMATION_INVALID");
     }
@@ -246,5 +234,5 @@ export function createPairingApprovalWindow(
   );
   const requests = Object.freeze({ create: () => state.create(), reserve: (id: unknown) => state.reserve(id) });
   const operator = Object.freeze({ approve: (label: unknown) => state.approve(label) });
-  return Object.freeze({ operator, requests });
+  return Object.freeze({ close: () => state.close(), operator, requests });
 }

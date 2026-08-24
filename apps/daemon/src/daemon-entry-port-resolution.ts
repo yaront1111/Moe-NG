@@ -151,6 +151,12 @@ export function resolveOptionalDaemonPorts(
     if (sessionHandshake !== undefined && !hasMethods(sessionHandshake, ["mint"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    if (sessionHandshake !== undefined) {
+      const boundProjectId = Reflect.get(sessionHandshake, "boundProjectId") as unknown;
+      if (typeof boundProjectId !== "string" || boundProjectId.trim().length === 0) {
+        return Object.freeze({ failure: "INVALID", ok: false } as const);
+      }
+    }
     const ports = Object.freeze({
       ...(affordances === undefined ? {} : { affordances }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),

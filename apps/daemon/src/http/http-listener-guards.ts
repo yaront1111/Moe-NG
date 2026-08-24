@@ -182,13 +182,16 @@ export function statusFor(code: ListenerRefusalCode): number {
  * that is not a `Uint8Array` with `JSON_INPUT_TYPE_INVALID`, so handing it a
  * string would refuse every well-formed request at the decode stage.
  */
-export async function readBoundedBody(request: IncomingMessage): Promise<Uint8Array | null> {
+export async function readBoundedBody(
+  request: IncomingMessage,
+  maximumBytes: number = HTTP_INPUT_BOUNDS.maxBodyBytes,
+): Promise<Uint8Array | null> {
   let total = 0;
   const chunks: Buffer[] = [];
   for await (const chunk of request) {
     const buffer = chunk as Buffer;
     total += buffer.byteLength;
-    if (total > HTTP_INPUT_BOUNDS.maxBodyBytes) return null;
+    if (total > maximumBytes) return null;
     chunks.push(buffer);
   }
   return Uint8Array.from(Buffer.concat(chunks));

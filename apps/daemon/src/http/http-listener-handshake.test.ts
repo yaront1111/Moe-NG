@@ -164,14 +164,14 @@ function expectRefusal(reply: Reply, code: string, status: number): void {
   expect((LISTENER_REFUSAL_CODES as readonly string[]).includes(code)).toBe(true);
 }
 
-function expectPolicyHeaders(reply: Reply): void {
+function expectPolicyHeaders(reply: Reply, cacheControl: "no-cache" | "no-store" = "no-cache"): void {
   expect(reply.headers["content-security-policy"])
     .toBe("default-src 'self'; frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
   expect(reply.headers["x-frame-options"]).toBe("DENY");
   expect(reply.headers["cross-origin-resource-policy"]).toBe("same-origin");
   expect(reply.headers["referrer-policy"]).toBe("no-referrer");
   expect(reply.headers["x-content-type-options"]).toBe("nosniff");
-  expect(reply.headers["cache-control"]).toBe("no-cache");
+  expect(reply.headers["cache-control"]).toBe(cacheControl);
 }
 
 const pairBody = (token: string): string => JSON.stringify({ pairingToken: token });
@@ -297,7 +297,7 @@ it("mints a credential from a valid token that then authenticates on /affordance
     expect(paired.body["protocolVersion"]).toBe(WIRE_PROTOCOL_VERSION);
     expect(paired.body["capabilities"]).toEqual([...OPERATOR_CAPABILITIES]);
     expect(typeof paired.body["expiresAt"]).toBe("string");
-    expectPolicyHeaders(paired);
+    expectPolicyHeaders(paired, "no-store");
 
     // The minted credential authenticates on a real authenticated route.
     const surface = await call(listener, {

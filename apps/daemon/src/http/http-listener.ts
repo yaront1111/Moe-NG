@@ -43,6 +43,19 @@ import {
 } from "./static-asset-host.js";
 import type { ControlRoomAssetRoot } from "./static-asset-host.js";
 import type { SessionHandshakePort } from "../identity/session-handshake.js";
+import {
+  PAIRING_APPROVAL_MAX_BODY_BYTES,
+  PAIRING_CLAIM_PATH,
+  PAIRING_REQUEST_PATH,
+  createPairingApprovalHandshake,
+  pairingApprovalStatusFor,
+} from "./pairing-approval-handshake.js";
+import type { PairingApprovalHandshakePort } from "./pairing-approval-handshake.js";
+import { createPairingApprovalWindow } from "./pairing-approval-window.js";
+import type {
+  PairingApprovalGranted,
+  PairingApprovalRefusal,
+} from "./pairing-approval-window.js";
 import { createPairingTokenWindow } from "./pairing-token-window.js";
 import type { PairingTokenWindow } from "./pairing-token-window.js";
 
@@ -63,12 +76,15 @@ export type { ListenerRefusalCode, ListenerRefused } from "./http-listener-guard
  * error mapping of its own.
  */
 export interface ControlRoomListener {
+  approvePairing(confirmationLabel: unknown): PairingOperatorApprovalResult;
   close(): Promise<void>;
   readonly ok: true;
   readonly origin: string;
   readonly port: number;
 }
 
+export type PairingOperatorApprovalResult =
+  | PairingApprovalGranted | PairingApprovalRefusal | ListenerRefused;
 export type StartListenerResult = ControlRoomListener | ListenerRefused;
 
 export interface StartListenerOptions {
@@ -161,6 +177,10 @@ const JSON_ROUTES: readonly string[] = Object.freeze([
 ]);
 
 type ReplyHeaders = Readonly<Record<string, string>>;
+const PAIRING_APPROVAL_RESPONSE_HEADERS = Object.freeze({
+  ...CONTROL_ROOM_ASSET_RESPONSE_HEADERS,
+  "cache-control": "no-store",
+});
 
 function reply(
   response: ServerResponse, status: number, body: unknown, headers: ReplyHeaders = {},
@@ -569,7 +589,7 @@ async function serveSessionPair(
   authority: string,
   origin: string,
 ): Promise<void> {
-  const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
+  const policy = PAIRING_APPROVAL_RESPONSE_HEADERS;
   const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
   if (headerFault !== null) {
     refuseRequest(response, headerFault, policy);
@@ -624,6 +644,58 @@ async function serveSessionPair(
   }, policy);
 }
 
+async function servePairingApproval(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  handshake: PairingApprovalHandshakePort | null,
+  authority: string,
+  origin: string,
+  path: typeof PAIRING_REQUEST_PATH | typeof PAIRING_CLAIM_PATH,
+  exactPath: boolean,
+): Promise<void> {
+  const policy = PAIRING_APPROVAL_RESPONSE_HEADERS;
+  const headerFault = checkHeaders(request, authority, origin, options.csrfToken);
+  if (headerFault !== null) {
+    refuseRequest(response, headerFault, policy);
+    return;
+  }
+  if (!exactPath) {
+    refuseRequest(response, "LISTENER_ROUTE_UNKNOWN", policy);
+    return;
+  }
+  if (request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PAIRING_METHOD_INVALID", policy);
+    return;
+  }
+  if (protocolVersionOf(request) !== WIRE_PROTOCOL_VERSION) {
+    refuseRequest(response, "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED", policy);
+    return;
+  }
+  if (handshake === null) {
+    refuseRequest(response, "LISTENER_PAIRING_UNAVAILABLE", policy);
+    return;
+  }
+  const body = await readBoundedBody(request, PAIRING_APPROVAL_MAX_BODY_BYTES);
+  if (body === null) {
+    refuseRequest(response, "LISTENER_BODY_TOO_LARGE", policy);
+    return;
+  }
+  const outcome = path === PAIRING_REQUEST_PATH
+    ? handshake.request(body)
+    : handshake.claim(body);
+  if (!outcome.ok) {
+    reply(response, pairingApprovalStatusFor(outcome.code), {
+      code: outcome.code,
+      layer: outcome.layer,
+    }, policy);
+    return;
+  }
+  reply(response, 200, path === PAIRING_CLAIM_PATH
+    ? { ...outcome, protocolVersion: WIRE_PROTOCOL_VERSION }
+    : outcome, policy);
+}
+
 async function serve(
   request: IncomingMessage,
   response: ServerResponse,
@@ -632,12 +704,14 @@ async function serve(
   origin: string,
   assets: ControlRoomAssetRoot | null,
   pairingState: PairingTokenWindow,
+  pairingApproval: PairingApprovalHandshakePort | null,
 ): Promise<void> {
   options.onRequest?.();
   // Logged without the credential and without a query string, so neither can
   // leak into a log line (design 19.2). The pairing token travels only in a POST
   // body, never on the request line, so it never reaches this log either.
-  const path = (request.url ?? "").split("?")[0] ?? "";
+  const rawPath = request.url ?? "";
+  const path = rawPath.split("?")[0] ?? "";
   options.log?.(`${request.method ?? "?"} ${path}`);
 
   // The handshake surface answers ahead of the asset/JSON split: it is neither an
@@ -649,6 +723,12 @@ async function serve(
   }
   if (path === SESSION_PAIR_PATH) {
     await serveSessionPair(response, request, options, pairingState, authority, origin);
+    return;
+  }
+  if (path === PAIRING_REQUEST_PATH || path === PAIRING_CLAIM_PATH) {
+    await servePairingApproval(
+      response, request, options, pairingApproval, authority, origin, path, rawPath === path,
+    );
     return;
   }
 
@@ -738,9 +818,19 @@ export async function startControlRoomListener(
   // One short-lived consume window for this listener. A restart mints a new token and therefore
   // a fresh deadline; expiry is monotonic and latches, so a wall-clock rollback cannot revive it.
   const pairingState = createPairingTokenWindow(options.pairingMonotonicNow);
+  const pairingApprovalWindow = createPairingApprovalWindow(
+    options.pairingMonotonicNow === undefined
+      ? {}
+      : { now: options.pairingMonotonicNow },
+  );
+  const pairingApproval = options.pairing === undefined
+    ? null
+    : createPairingApprovalHandshake(pairingApprovalWindow.requests, options.pairing);
   try {
     server = createServer((request, response) => {
-      const served = serve(request, response, options, authority, origin, assets, pairingState);
+      const served = serve(
+        request, response, options, authority, origin, assets, pairingState, pairingApproval,
+      );
       void served.catch(() => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket.
@@ -757,20 +847,31 @@ export async function startControlRoomListener(
 
     const address = bound.address();
     if (address === null || typeof address === "string") {
+      pairingApprovalWindow.close();
       await closeServer(bound);
       return refuse("LISTENER_BIND_FAILED");
     }
     const port = address.port;
     authority = authorityOf(host, port);
     origin = originOf(host, port);
+    let closed = false;
 
     return Object.freeze({
-      close: () => closeServer(bound),
+      approvePairing: (confirmationLabel: unknown): PairingOperatorApprovalResult =>
+        closed || options.pairing === undefined
+          ? refuse("LISTENER_PAIRING_UNAVAILABLE")
+          : pairingApprovalWindow.operator.approve(confirmationLabel),
+      close: async (): Promise<void> => {
+        closed = true;
+        pairingApprovalWindow.close();
+        await closeServer(bound);
+      },
       ok: true,
       origin,
       port,
     } as const);
   } catch {
+    pairingApprovalWindow.close();
     // Closed on the failure path too: a half-bound server left behind surfaces
     // later as EBUSY on Windows rather than as the real error.
     if (server !== null) await closeServer(server);

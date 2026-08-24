@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  PAIRING_APPROVAL_MAX_BODY_BYTES,
+} from "./pairing-approval-handshake.js";
+import {
   PAIRING_APPROVAL_COLLISION_ATTEMPTS,
   PAIRING_APPROVAL_LAYER,
   PAIRING_APPROVAL_MAX_LIVE_REQUESTS,
@@ -66,19 +69,25 @@ describe("pairing approval public contract", () => {
     expect(PAIRING_APPROVAL_TTL_MS).toBe(60_000);
     expect(PAIRING_APPROVAL_MAX_LIVE_REQUESTS).toBe(8);
     expect(PAIRING_APPROVAL_COLLISION_ATTEMPTS).toBe(4);
+    expect(PAIRING_APPROVAL_MAX_BODY_BYTES).toBe(96);
     expect(PAIRING_APPROVAL_REFUSAL_CODES).toEqual([
       "PAIRING_APPROVAL_CAPACITY_EXHAUSTED",
       "PAIRING_APPROVAL_CLOCK_UNAVAILABLE",
       "PAIRING_APPROVAL_ENTROPY_UNAVAILABLE",
       "PAIRING_APPROVAL_IDENTITY_EXHAUSTED",
       "PAIRING_APPROVAL_REQUIRED",
+      "PAIRING_APPROVAL_UNAVAILABLE",
+      "PAIRING_CLAIM_REQUEST_INVALID",
       "PAIRING_CONFIRMATION_INVALID",
       "PAIRING_CONFIRMATION_UNKNOWN",
+      "PAIRING_CREATE_REQUEST_INVALID",
       "PAIRING_REQUEST_ALREADY_CLAIMED",
       "PAIRING_REQUEST_BUSY",
       "PAIRING_REQUEST_EXPIRED",
       "PAIRING_REQUEST_INVALID",
       "PAIRING_REQUEST_UNKNOWN",
+      "PAIRING_SESSION_MINT_FAILED",
+      "PAIRING_SESSION_MINT_OUTCOME_UNKNOWN",
     ]);
     expect(Object.isFrozen(PAIRING_APPROVAL_REFUSAL_CODES)).toBe(true);
   });
@@ -88,7 +97,7 @@ describe("pairing approval public contract", () => {
 
     expect(REQUEST_KEYS.length).toBeGreaterThan(0);
     expect(OPERATOR_KEYS.length).toBeGreaterThan(0);
-    expect(Object.keys(window).sort()).toEqual(["operator", "requests"]);
+    expect(Object.keys(window).sort()).toEqual(["close", "operator", "requests"]);
     expect(Object.keys(window.requests).sort()).toEqual([...REQUEST_KEYS].sort());
     expect(Object.keys(window.operator).sort()).toEqual([...OPERATOR_KEYS].sort());
     expect(Object.isFrozen(window)).toBe(true);
@@ -116,6 +125,20 @@ describe("pairing approval public contract", () => {
     expect(Object.isFrozen(created)).toBe(true);
     expect(Reflect.set(created, "requestId", "00".repeat(32))).toBe(false);
     expect(created.requestId).toBe("ab".repeat(32));
+  });
+});
+
+describe("pairing approval lifecycle", () => {
+  it("synchronously revokes every requester and operator capability on close", () => {
+    const window = createPairingApprovalWindow({ now: () => 100, randomBytes: sequenceEntropy() });
+    const created = createdRequest(window);
+    expect(window.operator.approve(created.confirmationLabel).ok).toBe(true);
+
+    window.close();
+    window.close();
+    expectRefusal(window.requests.create(), "PAIRING_APPROVAL_UNAVAILABLE");
+    expectRefusal(window.requests.reserve(created.requestId), "PAIRING_APPROVAL_UNAVAILABLE");
+    expectRefusal(window.operator.approve(created.confirmationLabel), "PAIRING_APPROVAL_UNAVAILABLE");
   });
 });
 

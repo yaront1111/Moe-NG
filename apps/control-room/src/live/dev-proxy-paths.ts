@@ -15,6 +15,8 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/graph/get",
   "/planning/run/read",
   "/session/pair",
+  "/session/pair/claim",
+  "/session/pair/request",
 ] as const);
 
 export interface DevProxyEntry {

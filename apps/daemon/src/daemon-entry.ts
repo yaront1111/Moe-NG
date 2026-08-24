@@ -13,7 +13,10 @@ import type {
 } from "./recovery/boot-reconciliation.js";
 import type { CommandAdapterDeps } from "./http/http-contract.js";
 import { startControlRoomListener } from "./http/http-listener.js";
-import type { ListenerRefused } from "./http/http-listener.js";
+import type {
+  ListenerRefused,
+  PairingOperatorApprovalResult,
+} from "./http/http-listener.js";
 
 // The daemon root's transport surface, re-exported here rather than added as a
 // second line to `index.ts`: that file is at its size target and
@@ -27,6 +30,7 @@ export type {
   ControlRoomListener,
   ListenerRefusalCode,
   ListenerRefused,
+  PairingOperatorApprovalResult,
   StartListenerOptions,
   StartListenerResult,
 } from "./http/http-listener.js";
@@ -79,7 +83,13 @@ export type ShutdownResult =
       readonly ok: false;
     };
 
+export type DaemonPairingApprovalResult = PairingOperatorApprovalResult | Extract<
+  ShutdownResult,
+  { readonly ok: false }
+>;
+
 export interface StartedDaemon {
+  approvePairing(confirmationLabel: unknown): DaemonPairingApprovalResult;
   readonly csrfToken: string;
   readonly ok: true;
   readonly origin: string;
@@ -261,6 +271,8 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
 
   let stopped = false;
   return Object.freeze({
+    approvePairing: (confirmationLabel: unknown): DaemonPairingApprovalResult =>
+      stopped ? ALREADY_STOPPED : started.approvePairing(confirmationLabel),
     csrfToken,
     ok: true,
     origin: started.origin,

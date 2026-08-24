@@ -72,6 +72,7 @@ export {
   startDaemon,
   type BootReconciliationPort, type BootReconciliationRefused, type ControlRoomListener,
   type DaemonDependencyProvider, type DaemonEntryRefusalCode, type DaemonEntryRefused,
+  type DaemonPairingApprovalResult,
   type DaemonStartOptions, type DaemonStartResult, type ListenerRefusalCode,
   type ListenerRefused, type ShutdownResult, type StartedDaemon, type StartListenerOptions,
   type StartListenerResult,
