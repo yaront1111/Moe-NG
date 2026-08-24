@@ -13,7 +13,9 @@ import {
   PROVIDER_OBSERVATION,
   envelope,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import {
+  seedActivationWorld, seedActivationWorldWithGatePolicy,
+} from "../activation/activation-world-fixtures.js";
 import { ensureGenesisRecoveryBinding } from "../identity/genesis-recovery-binding.js";
 import { anchorIncarnation } from "./recovery-incarnation-anchor.js";
 import {
@@ -160,8 +162,15 @@ function send(
   if (!outcome.ok) throw new Error(`seeding ${kind} failed: ${outcome.code}`);
 }
 
+export interface SeedReadyProjectOptions {
+  /** Leave the HUMAN_APPROVAL witness for a caller that sends its own approval next. */
+  readonly approval?: "COMMIT" | "DEFER";
+}
+
 /** Drives the real bootstrap path to READY; nothing here writes a project row by hand. */
-export function seedReadyProject(store: SqliteEventStore): void {
+export function seedReadyProject(
+  store: SqliteEventStore, options: SeedReadyProjectOptions = {},
+): void {
   send(store, "project.register", 0, { owner: "owner-1" });
   send(store, "project.bind_repository", 1, { observation: OBSERVATION });
   send(store, "provider.probe", 0, { observation: PROVIDER_OBSERVATION });
@@ -173,7 +182,11 @@ export function seedReadyProject(store: SqliteEventStore): void {
   // The deliberately UNSEEDED worlds live in activation-world-fixtures.ts: they are the homes
   // BUDGET_PROJECTION_GRAPH_UNAVAILABLE and _GOAL_ABSENT keep once the flip lands, and seeding
   // them here would delete the coverage this precondition guards.
-  seedActivationWorld(store);
+  if (options.approval === "DEFER") {
+    seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+  } else {
+    seedActivationWorld(store);
+  }
 }
 
 /** The four project-aggregate events the seed commits, so a cursor is not guessed. */

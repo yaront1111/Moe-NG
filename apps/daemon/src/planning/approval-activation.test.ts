@@ -26,7 +26,7 @@ import {
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { encodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import { decodeBudgetLedgerRecord } from "../budget/budget-ledger-codec.js";
 import {
@@ -180,7 +180,7 @@ describe("approve mints and binds the project's budget root (task-1de7b81a)", ()
     const store = approvableStore();
     // The world's own FUNDED root, authorized before the approval — this repository's stand-in
     // for the grant it cannot yet express.
-    seedActivationWorld(store);
+    seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
     const existing = durableRoot(store);
 
     expect(send(store, approval()).ok).toBe(true);

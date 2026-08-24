@@ -10,7 +10,7 @@ import {
   openStore,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { Envelope } from "../bootstrap/bootstrap-test-fixtures.js";
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { scanGlobalEvents, seedReviewAcceptance } from "./goal-closure-test-fixtures.js";
 
 /**
@@ -176,7 +176,9 @@ describe("J1 is exactly three human actions (design 1095)", () => {
       // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
       // so a project approved without one gets the zero-amount genesis root and every
       // later effect.activate refuses against a root nothing can top up.
-      if (request.kind === "approval.decide") seedActivationWorld(store);
+      if (request.kind === "approval.decide") {
+        seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+      }
       if (request.kind === "goal.close") {
         // The REVIEWED half is real and production-driven, so the refusal below is the receipt
         // fence rather than the review one.
@@ -233,7 +235,9 @@ describe("each command is idempotent on replay (DoD 5)", () => {
   ) => {
     const store = openStore();
     for (const request of sequence.slice(0, index)) {
-      if (request.kind === "approval.decide") seedActivationWorld(store);
+      if (request.kind === "approval.decide") {
+        seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+      }
       expect(drive(store, request).ok, request.kind).toBe(true);
     }
     const request = sequence[index] as Envelope;
@@ -241,7 +245,9 @@ describe("each command is idempotent on replay (DoD 5)", () => {
     // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
     // so a project approved without one gets the zero-amount genesis root and every
     // later effect.activate refuses against a root nothing can top up.
-    if (request.kind === "approval.decide") seedActivationWorld(store);
+    if (request.kind === "approval.decide") {
+      seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+    }
     if (request.kind === "goal.close") {
       seedReviewAcceptance(store);
       expectUnactivatedWorld(store);
@@ -289,7 +295,9 @@ describe("closure leaves earlier review and evidence records untouched (DoD 4)",
       // The FUNDED world before the approval (task-1de7b81a): a budget root is once-only,
       // so a project approved without one gets the zero-amount genesis root and every
       // later effect.activate refuses against a root nothing can top up.
-      if (request.kind === "approval.decide") seedActivationWorld(store);
+      if (request.kind === "approval.decide") {
+        seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+      }
       if (request.kind === "goal.close") {
         seedReviewAcceptance(store);
         expectUnactivatedWorld(store);

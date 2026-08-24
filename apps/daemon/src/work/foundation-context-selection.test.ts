@@ -25,7 +25,8 @@ import { runEffectActivateCommand } from "../activation/activation-ingress.js";
 import { deriveActivationAggregateId } from "../activation/activation-ledger-contracts.js";
 import { readFoundationActivationHistory } from "../activation/activation-ledger-reader.js";
 import {
-  GOAL_ID, RUN_ID, approvalPayload, envelope, finalizeChain, hex64, sealedPlanningChain, send,
+  GOAL_ID, RUN_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, envelope,
+  finalizeChain, hex64, sealedPlanningChain, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCurrentBudgetCoverage } from "../budget/budget-coverage-reader.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
@@ -362,7 +363,9 @@ function world(label: string, options: WorldOptions = {}): World {
   const path = join(root, "project.db");
   const store = SqliteEventStore.openForProject(path, PROJECT_ID);
   stores.push(store);
-  seedReadyProject(store);
+  // This world sends its own sealed plan and approval below. Seed the funded HUMAN graph first,
+  // but leave the approval uncommitted so its command bytes and authority remain this world's.
+  seedReadyProject(store, { approval: "DEFER" });
   const chain = [
     // A SECOND probe with its own command id and the next expected version: `seedReadyProject`
     // already sent one, and reusing its key is a command-bytes conflict, not a new observation.
@@ -375,16 +378,17 @@ function world(label: string, options: WorldOptions = {}): World {
     ...(withApproval ? [
       envelope("plan.propose", 0, { commands: sealedPlanningChain(), runId: RUN_ID }),
       envelope("plan.propose", 0, { commands: finalizeChain(), runId: RUN_ID }, "cmd-finalize"),
-      envelope("approval.decide", 0, approvalPayload()),
+      envelope("approval.decide", 0, approvalPayload({
+        record: {
+          ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [NODE_KEY],
+        },
+      })),
     ] : []),
   ];
   for (const step of chain) {
     const outcome = send(store, step);
     if (!outcome.ok) throw new Error(`world seed refused at ${step.kind}: ${outcome.code}`);
   }
-  const activated = runEffectActivateCommand(store, activationBytes());
-  if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
-
   const created = createProjectConfigurationManifest(PROJECT_ID, settingsBody());
   if (!created.ok) throw new Error(`manifest refused: ${created.code}`);
   const encoded = encodeProjectConfigurationManifest(created.manifest);
@@ -395,6 +399,18 @@ function world(label: string, options: WorldOptions = {}): World {
     principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
   });
   if (!selected.ok) throw new Error(`configuration refused: ${selected.code}`);
+
+  // The explicit missing-plan world must stop before activation: HUMAN_APPROVAL cannot admit an
+  // activation without first creating the very approved plan this negative arm omits.
+  if (!withApproval) {
+    return {
+      captureRef: captureRefOf(), configurationDigest: created.manifest.settingsDigest, path, store,
+      worktreeRoot: join(root, "worktree"),
+    };
+  }
+
+  const activated = runEffectActivateCommand(store, activationBytes());
+  if (!activated.ok) throw new Error(`activation refused: ${activated.code}`);
 
   // THE DISPATCH RESERVATION, exactly the body `foundation-attempt-service.ts` commits: the
   // journal writer reads the node key off it, so without this row the append refuses before any

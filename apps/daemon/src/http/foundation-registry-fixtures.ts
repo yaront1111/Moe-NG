@@ -328,7 +328,9 @@ function nodeDefinitionFor(nodeKey: string, snapshot: GraphSnapshot): NodeDefini
       admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
         meter: "runner.authorized_ms", purpose, quantity: index + 1,
       })),
-      admissionGatePolicy: "POLICY_ALLOWANCE",
+      // The generic seam world is admitted by the production human-approval writer. Production
+      // currently evaluates the policy path to HOLD_UNKNOWN and cannot mint an ALLOW witness.
+      admissionGatePolicy: "HUMAN_APPROVAL",
       capability: "capability-implement",
       completionLinkage: completes ? nodeKey : null,
       constraints: ["constraint-a"],

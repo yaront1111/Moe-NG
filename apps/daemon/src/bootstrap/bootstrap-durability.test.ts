@@ -22,7 +22,7 @@ import {
   send,
 } from "./bootstrap-test-fixtures.js";
 import { driveTo } from "./bootstrap-journey-fixtures.js";
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import type { Envelope } from "./bootstrap-test-fixtures.js";
 import { scanGlobalEvents } from "../goals/goal-closure-test-fixtures.js";
 
@@ -149,7 +149,9 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
       // the zero-amount genesis root forever and its later effect.activate refuses. `driveTo`
       // seeds the world for every index PAST the approval; this line covers the index that IS
       // the approval, whose request the test sends itself.
-      if (kind === "approval.decide") seedActivationWorld(store);
+      if (kind === "approval.decide") {
+        seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+      }
       const before = decisionCount(store);
 
       const request = sequence[index] as Envelope;

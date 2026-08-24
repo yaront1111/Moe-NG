@@ -20,8 +20,8 @@
  * THE HISTORICAL ALLOW RECIPE IS NO LONGER AUTHORITATIVE. The installed slice still carries its
  * old opt-in, but no durable producer is entitled to supply the tier-bearing fact it needs.
  * `policy.validate` now supplies a null-tier UNKNOWN fact and production therefore records
- * RISK_TIER_UNCLASSIFIABLE / HOLD_UNKNOWN. Existing helper names remain temporarily stable for
- * their callers; task-cc3898ce owns the harness-precondition migration.
+ * RISK_TIER_UNCLASSIFIABLE / HOLD_UNKNOWN. Existing helper names remain stable only for explicit
+ * negative worlds; generic happy worlds use the HUMAN_APPROVAL writer below.
  *
  * EVERY FACT GOES IN THROUGH A COMMAND HANDLER. Nothing here folds an event by hand: the policy
  * decision rides `policy.install` + `policy.validate` and the approval rides `approval.decide`,
@@ -37,18 +37,15 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import {
-  GOAL_ID,
   PROJECT_ID,
   SEALED_SUBMISSION_HASH,
   approvalPayload,
   approvalRecord,
-  driveThrough,
+  bootstrapSequence,
   envelope,
   hex64,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-
-import { resolveAdmissionGate } from "./admission-gate-resolver.js";
 
 /** The action the bootstrap journey's own policy decision is about. Kept identical to
  *  `evaluationInput` so a seeded opt-in names the action the evaluation actually carries. */
@@ -56,6 +53,26 @@ const POLICY_ACTION = "plan.approve";
 /** R0/R1 are the only tiers `assessTier` can auto-approve; R2/R3 are human-only by design 710. */
 const POLICY_TIER = "R0";
 export const ALLOWING_POLICY_SLICE_REF = hex64("a11007");
+
+const CUSTOM_PROJECT_PREFIX_KINDS = new Set([
+  "project.register", "project.bind_repository", "provider.probe", "project.activate",
+]);
+
+/**
+ * Drives the approval prefix without replaying a custom project's different bootstrap bytes.
+ * Planning requests are still replayed by command id, including both `plan.propose` phases.
+ */
+export function driveApprovalPrefix(store: SqliteEventStore): void {
+  for (const request of bootstrapSequence()) {
+    if (request.kind === "approval.decide") return;
+    const ledger = readDurableLedger(store, PROJECT_ID);
+    if (CUSTOM_PROJECT_PREFIX_KINDS.has(request.kind) && ledger.kinds.has(request.kind)) continue;
+    const outcome = send(store, request);
+    if (!outcome.ok) {
+      throw new Error(`witness fixture setup failed at ${request.kind}: ${outcome.code}`);
+    }
+  }
+}
 
 /**
  * The one aggregate `policy.install` and `policy.validate` share — PRODUCTION's own constant,
@@ -177,25 +194,9 @@ export function seedTrailingPolicyInstall(store: SqliteEventStore): void {
 export function seedApprovedNodeScope(
   store: SqliteEventStore, nodeKeys: readonly string[],
 ): void {
-  driveThrough(store, "approval.decide");
+  driveApprovalPrefix(store);
   const decided = send(store, envelope("approval.decide", 0, approvalPayload({
     record: { ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [...nodeKeys] },
   })));
   if (!decided.ok) throw new Error(`witness fixture approval.decide refused: ${decided.code}`);
-}
-
-/**
- * Whether the project's LATEST durable policy decision allows, asked through the PRODUCTION
- * reader rather than by decoding events here.
- *
- * `activation-world-fixtures.ts` uses it to add the witness only when it is the missing layer,
- * the same discipline `ensureActiveGraph` and `ensureAuthorizedBudgetRoot` already follow. Going
- * through `resolveAdmissionGate` means a fixture cannot conclude "this world is fine" by a rule
- * the resolver does not actually apply.
- */
-export function policyDecisionAllows(store: SqliteEventStore): boolean {
-  const resolved = resolveAdmissionGate({
-    goalRef: GOAL_ID, nodeKey: "", projectId: PROJECT_ID, store, witnessField: "allowance",
-  });
-  return resolved.ok && resolved.gate.allowance?.outcome === "ALLOW";
 }

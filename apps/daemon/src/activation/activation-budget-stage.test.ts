@@ -59,9 +59,7 @@ import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { GOAL_ID, PROJECT_ID, driveThrough } from "../bootstrap/bootstrap-test-fixtures.js";
 import { reserveBudgetForAdmission } from "../budget/budget-ledger-holds.js";
 
-import {
-  seedActivationWorld, seedActivationWorldWithoutPolicyWitness,
-} from "./activation-world-fixtures.js";
+import { seedActivationWorldWithoutPolicyWitness } from "./activation-world-fixtures.js";
 import {
   ACTIVATION_INGRESS_LAYER, ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
 } from "./activation-ingress-contracts.js";
@@ -71,10 +69,8 @@ import {
 } from "./activation-budget-stage.js";
 import { resolveAdmissionGate } from "./admission-gate-resolver.js";
 import {
-  seedAllowingPolicyDecision, seedNonAllowingPolicyDecision,
-} from "./admission-witness-fixtures.js";
-import {
   HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS, plantHistoricalPolicyAllowance,
+  plantHistoricalPolicyHold,
 } from "./policy-allowance-fixtures.js";
 
 const COMMAND_ID = "cmd-activate-stage-1";
@@ -94,11 +90,11 @@ function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
   }
 }
 
-/** The full happy world: project, goal, ACTIVE graph, authorized root, ALLOWING decision. */
+/** The explicit historical-policy world: production graph/root plus a contained ALLOW event. */
 function seeded(store: SqliteEventStore): void {
   driveThrough(store, "goal.create");
-  seedActivationWorld(store);
-  seedAllowingPolicyDecision(store);
+  seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+  plantHistoricalAllowance(store);
 }
 
 /** Reason code AND refusing layer, never merely "it failed" (global rail 1). */
@@ -154,7 +150,7 @@ describe("activation budget stage — the accepted control the refusal arms hang
   it("reserves against durable authority with no caller input at all", () => {
     withStore("accept", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       plantHistoricalAllowance(store);
       const result = stage(store);
       // Quoted so a refusal names itself rather than failing as `false !== true`.
@@ -183,7 +179,7 @@ describe("activation budget stage — resolving the witness is its job, ALLOWING
   it("lets a non-allowing durable decision through to the writer, in the LEDGER's vocabulary", () => {
     withStore("deny-passthrough", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       // The witness EXISTS, so neither this stage nor the resolver may answer. Which vocabulary
       // and which LAYER replied is the assertion: restamping would make "no durable witness"
       // and "the durable witness says no" indistinguishable at the ingress boundary.
@@ -194,7 +190,7 @@ describe("activation budget stage — resolving the witness is its job, ALLOWING
   it("keeps the scheduler's own refusal reachable only as the ledger's sourceCode", () => {
     withStore("deny-source", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       const refused = stage(store) as { readonly sourceCode?: unknown };
       // RECORDED, not endorsed: the stage rebuilds its refusal as `{code, layer, ok}` and drops
       // `sourceCode`, so BUDGET_RESERVATION_POLICY_NOT_ALLOWED / _APPROVAL_NOT_CURRENT /
@@ -251,9 +247,11 @@ describe("activation budget stage — a hold that already stands answers before 
       });
       expect(refusalOf(reserved)[0]).toBe("UNEXPECTEDLY_ADMITTED");
 
-      // Now the project decides a policy that does NOT allow — appended, so it is the LATEST
-      // decision and any fresh reservation would refuse at the ledger.
-      seedNonAllowingPolicyDecision(store);
+      // Append the contained historical HOLD shape: production cannot extend a stream carrying
+      // reader-only ALLOW history, and this test makes no such authority claim.
+      plantHistoricalPolicyHold(
+        store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS + 1,
+      );
       // The byte-identical retry must still succeed: the hold IS the answer, and re-reserving
       // would fold against a head that already moved and refuse as REPLAY_DIVERGED.
       const replayed = stage(store);
@@ -270,7 +268,9 @@ describe("activation budget stage — a hold that already stands answers before 
       seeded(store);
       const first = stage(store);
       expect(first.ok).toBe(true);
-      seedNonAllowingPolicyDecision(store);
+      plantHistoricalPolicyHold(
+        store, PROJECT_ID, HISTORICAL_POLICY_ALLOWANCE_EVALUATED_AT_EPOCH_MS + 1,
+      );
       // A DIFFERENT commandId derives a different admissionRef, so no hold stands for it and the
       // witness is resolved again — proving the early return is keyed on identity, not on any
       // hold existing anywhere on the account. It then refuses in the LEDGER's own vocabulary,

@@ -58,7 +58,7 @@ import {
 } from "./activation-ingress-contracts.js";
 import type { ActivationIngressRequest } from "./activation-ingress-contracts.js";
 import {
-  ACTIVATION_WORLD_NODE_KEY, seedActivationWorld, seedActivationWorldWithGatePolicy,
+  ACTIVATION_WORLD_NODE_KEY, seedActivationWorldWithGatePolicy,
   seedActivationWorldWithoutPolicyWitness,
 } from "./activation-world-fixtures.js";
 import { ADMISSION_GATE_RESOLVER_CODES, resolveAdmissionGate } from "./admission-gate-resolver.js";
@@ -80,37 +80,6 @@ const FORGED_GATE = Object.freeze({
   allowance: Object.freeze({ decisionRef: "anything", outcome: "ALLOW" }),
   approval: null,
 });
-
-/**
- * RETIRED ROW: `budget-settlement`. It named
- * `["budget-settlement", "../budget/budget-settlement-fixtures.ts", "runEffectActivateCommand"]`.
- * task-f04b6a22dfcc4581b4470dbf79b2a3b3 re-hosted that fixture on a bare unactivated store, so it
- * no longer drives an activation by any name and cannot be a POLICY_ALLOWANCE production-path
- * family. Re-anchoring the row on a budget-lane symbol it does contain (`applyProviderUsageToBudget`)
- * would keep the count at five while asserting a policy claim the fixture does not make, and
- * re-adding `runEffectActivateCommand` would be dead code existing only to satisfy `toContain`.
- * OWNER of any successor row: task-064b97584aff4e07967738f79134a723, which owns this whole census
- * block and is BLOCKED; it re-measures the families on resume.
- */
-
-/**
- * RETIRED ROW: `journal`. It named
- * `["journal", "../journal/journal-test-harness.ts", "runEffectActivateCommand"]`.
- * task-9c16a3fa983b4333b8911a40a370a17a removed the policy-ALLOW construction precondition from
- * `openJournalHarness` (eeb85dd), which took that anchor 3 -> 0 in the harness source this row
- * reads. The family did not merely lose a symbol: it left the population this census measures,
- * because its world is now built on a bare unactivated store and no longer travels the
- * POLICY_ALLOWANCE production path at all. Re-anchoring on a symbol the harness does contain
- * (`handleCommandRequest`, `openUnactivatedJournalFixture`) would keep the count at four while
- * asserting a policy claim the harness does not make, and re-adding `runEffectActivateCommand`
- * would be dead code existing only to satisfy `toContain`.
- * OWNER of any successor row: task-064b97584aff4e07967738f79134a723, as above.
- */
-const POLICY_ALLOWANCE_HARNESS_FAMILIES = Object.freeze([
-  ["attempt-resource", "../work/attempt-resource-test-harness.ts", "runEffectActivateCommand"],
-  ["goal-closure", "../goals/goal-closure-test-fixtures.ts", "seedActivationWorld"],
-  ["direct-activation", "./activation-world-fixtures.ts", "seedAllowingPolicyDecision"],
-] as const);
 
 function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
   const directory = mkdtempSync(join(tmpdir(), `moe-adm-gate-${name}-`));
@@ -151,48 +120,38 @@ function withReopenedStore<T>(
   }
 }
 
-describe("server-resolved policy facts — three production-path harness families", () => {
-  it("enumerates all three measured families", () => {
-    expect(POLICY_ALLOWANCE_HARNESS_FAMILIES).toHaveLength(3);
-  });
-
-  it.each(POLICY_ALLOWANCE_HARNESS_FAMILIES)(
-    "%s reaches the evaluator-owned non-allow reason",
-    (family, sourcePath, productionAnchor) => {
-      const source = readFileSync(new URL(sourcePath, import.meta.url), "utf8");
-      expect(source).toContain(productionAnchor);
-
-      withReopenedStore(`resolved-${family}`, (store) => {
-        driveThrough(store, "goal.create");
-        seedActivationWorldWithoutPolicyWitness(store);
-        seedAllowingPolicyDecision(store);
-      }, (store) => {
-        const decision = store.getCommandDecision({
-          commandId: "cmd-witness-policy.validate-allow",
-          principalId: "principal-1",
-          projectId: PROJECT_ID,
-        });
-        if (decision === null || decision.effectDisposition !== "EFFECTS_COMMITTED") {
-          throw new Error("policy.validate did not commit through the production writer");
-        }
-        const decoded = decodeBoundedJsonBytes(decision.resultBytes);
-        if (!decoded.ok) throw new Error(`policy result undecodable: ${decoded.code}`);
-        const record = (decoded.value as JsonObject)["record"] as JsonObject;
-
-        expect(record["decision"]).toBe("HOLD_UNKNOWN");
-        expect(record["reasonCodes"]).toStrictEqual(["RISK_TIER_UNCLASSIFIABLE"]);
-        expect(JSON.stringify(record["inputFacts"])).toBe(
-          "[{\"factId\":\"policy-risk-unclassifiable:sha256:17915477c20a992c486fe9cfbc31340d728b202e943b45c149707ced4b04c803\",\"truthClass\":\"UNKNOWN\"}]",
-        );
-
-        const consumed = resolve(store, "allowance");
-        expect(consumed.ok).toBe(true);
-        if (!consumed.ok) return;
-        expect(consumed.gate.allowance?.outcome).toBe("HOLD_UNKNOWN");
-        expect(consumed.gate.approval).toBeNull();
+describe("server-resolved policy facts — the explicit negative world", () => {
+  it("reaches the evaluator-owned non-allow reason without fabricating ALLOW", () => {
+    withReopenedStore("resolved-explicit-policy-negative", (store) => {
+      driveThrough(store, "goal.create");
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
+      seedAllowingPolicyDecision(store);
+    }, (store) => {
+      const decision = store.getCommandDecision({
+        commandId: "cmd-witness-policy.validate-allow",
+        principalId: "principal-1",
+        projectId: PROJECT_ID,
       });
-    },
-  );
+      if (decision === null || decision.effectDisposition !== "EFFECTS_COMMITTED") {
+        throw new Error("policy.validate did not commit through the production writer");
+      }
+      const decoded = decodeBoundedJsonBytes(decision.resultBytes);
+      if (!decoded.ok) throw new Error(`policy result undecodable: ${decoded.code}`);
+      const record = (decoded.value as JsonObject)["record"] as JsonObject;
+
+      expect(record["decision"]).toBe("HOLD_UNKNOWN");
+      expect(record["reasonCodes"]).toStrictEqual(["RISK_TIER_UNCLASSIFIABLE"]);
+      expect(JSON.stringify(record["inputFacts"])).toBe(
+        "[{\"factId\":\"policy-risk-unclassifiable:sha256:17915477c20a992c486fe9cfbc31340d728b202e943b45c149707ced4b04c803\",\"truthClass\":\"UNKNOWN\"}]",
+      );
+
+      const consumed = resolve(store, "allowance");
+      expect(consumed.ok).toBe(true);
+      if (!consumed.ok) return;
+      expect(consumed.gate.allowance?.outcome).toBe("HOLD_UNKNOWN");
+      expect(consumed.gate.approval).toBeNull();
+    });
+  });
 });
 
 /**
@@ -343,7 +302,7 @@ describe("task-3a3d53fce0504c46b1d78f7e24f259cf — historical allowance contain
   it("plants the writer's exact historical payload before the resolver reads it", () => {
     withStore("historical-policy-allowance", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
+      seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
       plantHistoricalAllowance(store);
 
       const durable = latestPolicyEvaluated(store);
@@ -371,7 +330,7 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
   it("builds the allowance from the latest PolicyEvaluated, field for field", () => {
     withStore("policy-happy", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       plantHistoricalAllowance(store);
 
       const resolved = resolve(store, "allowance");
@@ -392,7 +351,7 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
   it("selects the decision BY TYPE, not as the newest event on the aggregate", () => {
     withStore("policy-by-type", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       plantHistoricalAllowance(store);
       // A LATER `PolicyInstalled`, so the newest event on the policy stream is NOT the decision.
       plantTrailingPolicyInstall(store);
@@ -409,7 +368,7 @@ describe("admission gate resolver — POLICY_ALLOWANCE is witnessed by the durab
   it("carries that allowance through the stage into a committed reservation", () => {
     withStore("policy-reserve", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
+      seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
       // Planted at the seam, not driven: since the server resolver supplies a null-tier UNKNOWN
       // fact, `policy.validate` records HOLD_UNKNOWN and production can no longer mint an ALLOW.
       // The gate is unchanged — this world simply HOLDS the durable allowing witness it requires.
@@ -473,7 +432,7 @@ describe("admission gate resolver — an absent witness is the RESOLVER's own re
   it("refuses a POLICY_ALLOWANCE node whose project never decided a policy", () => {
     withStore("policy-absent", (store) => {
       seedProjectWithoutPolicy(store);
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       expect(store.readEvents(policyAggregateId(PROJECT_ID)).length).toBe(0);
 
       expect(refusalOf(resolve(store, "allowance"))).toStrictEqual(ABSENT);
@@ -494,7 +453,7 @@ describe("admission gate resolver — an absent witness is the RESOLVER's own re
   it("answers ABSENT in its OWN vocabulary, not the scheduler's GATE_ABSENT", () => {
     withStore("absent-vocabulary", (store) => {
       seedProjectWithoutPolicy(store);
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       const refusal = refusalOf(stage(store, undefined));
       expect(refusal).toStrictEqual(ABSENT);
       // `BUDGET_RESERVATION_GATE_ABSENT` is the SCHEDULER's answer to a both-null gate. It is
@@ -510,7 +469,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
   it("forwards a non-allowing policy decision to the ledger, unrestamped", () => {
     withStore("policy-not-allowed", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
 
       // The witness EXISTS, so the resolver must not answer at all.
       const resolved = resolve(store, "allowance");
@@ -525,7 +484,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
   it("cannot be overridden by a forged ALLOWING gate when the durable witness says no", () => {
     withStore("forged-over-deny", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
+      seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
       seedNonAllowingPolicyDecision(store);
       expect(standingHolds(store, activationAdmissionRef(COMMAND_ID))).toBe(0);
 
@@ -541,7 +500,7 @@ describe("admission gate resolver — whether the witness ALLOWS stays the sched
   it("names BUDGET_RESERVATION_POLICY_NOT_ALLOWED as the scheduler's own source code", () => {
     withStore("policy-source-code", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       const resolved = resolve(store, "allowance");
       expect(resolved.ok).toBe(true);
       if (!resolved.ok) return;
@@ -599,7 +558,7 @@ describe("admission gate resolver — one policy's witness can never satisfy the
       // WITHOUT the policy witness on purpose: the happy seeder would upgrade the bootstrap's
       // HOLD_UNKNOWN to ALLOW and this arm would then pass for the wrong reason — an ALLOWING
       // allowance rather than the approval being ignored.
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       // The approval is real, durable, CURRENT and scoped to this very node.
       expect(durableApproval(store)["validity"]).toBe("CURRENT");
       // The bootstrap's own decision stands and it does not allow, so this refuses at the
@@ -681,7 +640,7 @@ describe("admission gate resolver — the resolved gate always carries the node'
   it("REFUSES rather than throwing when the durable record is absent", () => {
     withStore("no-throw", (store) => {
       seedProjectWithoutPolicy(store);
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       // A crash is not a refusal: `checkGateWitness` used to be the only thing between an
       // absent witness and `checkGate`, and its replacement must answer, not die.
       expect(() => resolve(store, "allowance")).not.toThrow();
@@ -695,7 +654,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
   it("refuses a forged ALLOWING gate on a world with no durable witness", () => {
     withStore("forgery", (store) => {
       seedProjectWithoutPolicy(store);
-      seedActivationWorldWithoutPolicyWitness(store);
+      seedActivationWorldWithoutPolicyWitness(store, "POLICY_ALLOWANCE");
       // PRECONDITION, SHOWN: no hold stands for this admission identity, so `readStandingHold`
       // cannot answer above the gate read and this arm really does reach the resolver.
       expect(standingHolds(store, activationAdmissionRef(COMMAND_ID))).toBe(0);
@@ -710,7 +669,7 @@ describe("admission gate resolver — the caller's gate is no longer an input", 
   it("admits with no budget section at all, and admits identically with a forged one", () => {
     withStore("gate-unread", (store) => {
       driveThrough(store, "goal.create");
-      seedActivationWorld(store);
+      seedActivationWorldWithGatePolicy(store, "POLICY_ALLOWANCE");
       // Planted, same reason as above: the contrast this arm measures is the PAYLOAD gate, so the
       // world must still hold an allowing durable witness or both halves refuse for an unrelated
       // reason and the pairing proves nothing.

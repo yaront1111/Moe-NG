@@ -8,7 +8,7 @@
  */
 import type { SqliteEventStore } from "@moe/store";
 
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import { readDurableLedger } from "./bootstrap-ledger.js";
 import {
   PROJECT_ID,
@@ -192,9 +192,11 @@ export function driveTo(store: SqliteEventStore, index: number): void {
     // no reducer in `@moe/scheduler` able to add units to one: `openBudgetRoot` is the only
     // unit-creating transition. A journey approved before its world is seeded therefore holds
     // the zero-amount genesis root permanently, and every later `effect.activate` in it refuses
-    // BUDGET_LEDGER_TRANSITION_REFUSED. `seedActivationWorld` is this harness's stand-in for the
-    // grant that mints real units; it is idempotent, so a world already seeded is untouched.
-    if (request.kind === "approval.decide") seedActivationWorld(store);
+    // BUDGET_LEDGER_TRANSITION_REFUSED. The witnessless HUMAN_APPROVAL world is this harness's
+    // stand-in for the grant that mints real units; this loop sends the approval itself next.
+    if (request.kind === "approval.decide") {
+      seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
+    }
     const outcome = send(store, request);
     if (!outcome.ok) {
       throw new Error(`fixture setup failed at ${request.kind}: ${outcome.code}`);

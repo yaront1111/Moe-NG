@@ -3,7 +3,7 @@ import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { ACTIVATION_LEDGER_EVENT_TYPE } from "../activation/activation-ledger-contracts.js";
-import { seedActivationWorld } from "../activation/activation-world-fixtures.js";
+import { seedActivationWorldWithGatePolicy } from "../activation/activation-world-fixtures.js";
 import {
   PROJECT_ID, SEALED_SUBMISSION_HASH, approvalPayload, approvalRecord, driveThrough, envelope,
   send,
@@ -79,7 +79,7 @@ export function scanGlobalEvents(store: SqliteEventStore): GlobalEventScan {
  * The approval whose durable `approvedNodeScope` is the closure's node set.
  *
  * THE WORLD IS SEEDED FIRST (task-1de7b81a), and the order is now load-bearing rather than
- * incidental. `seedActivationWorld` is what stands in for the grant this repository cannot yet
+ * incidental. The witnessless HUMAN_APPROVAL world stands in for the grant this repository cannot yet
  * express: it authorizes a FUNDED budget root, and a root is once-only. Approving first would
  * mint the zero-amount genesis root instead, and every later `effect.activate` in this lineage
  * would refuse BUDGET_LEDGER_TRANSITION_REFUSED against a root that can never be topped up —
@@ -89,7 +89,7 @@ export function scanGlobalEvents(store: SqliteEventStore): GlobalEventScan {
  */
 export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[]): void {
   driveThrough(store, "approval.decide");
-  seedActivationWorld(store);
+  seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
   const outcome = send(store, envelope("approval.decide", 0, approvalPayload({
     // The SEALED hash: `driveThrough` proposed through the shipped journey, whose propose
     // terminal carries the authority member, so the run's submission hash is the sealed

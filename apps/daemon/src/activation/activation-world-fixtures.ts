@@ -53,13 +53,15 @@ import type {
 } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
 
-import { GOAL_ID, PROJECT_ID, envelope, goalPayload, send } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  GOAL_ID, PROJECT_ID, envelope, goalPayload, send,
+} from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { authorizeBudgetRoot } from "../budget/budget-ledger.js";
 import { graphRevisionAggregateId, readCurrentActiveGraph } from "../planning/active-graph-projection.js";
 import { putGraphBody } from "../planning/graph-body-record.js";
 
-import { policyDecisionAllows, seedAllowingPolicyDecision } from "./admission-witness-fixtures.js";
+import { driveApprovalPrefix, seedApprovedNodeScope } from "./admission-witness-fixtures.js";
 
 const ENCODER = new TextEncoder();
 const hex = (digit: string): string => digit.repeat(64);
@@ -291,14 +293,14 @@ export function ensureSeededGoal(store: SqliteEventStore): void {
 }
 
 /**
- * The gate policy the seeded node carries unless a caller names another.
+ * The gate policy the generic happy world carries.
  *
- * POLICY_ALLOWANCE is what every world here has always seeded, so it stays the default and no
- * existing seeder changes behaviour. It is a NAMED constant rather than an inline literal
- * because the sibling suite reads it back: a world whose node silently changed policy would
- * otherwise move which durable witness the activation owes, with nothing pointing at it.
+ * Production currently has no authority that can emit an ALLOW policy decision: its honest
+ * null-tier fact evaluates to HOLD_UNKNOWN. The happy world therefore uses the production
+ * HUMAN_APPROVAL path. Explicit historical-policy and witness-absent worlds name their policy
+ * through `seedActivationWorldWithGatePolicy` / `seedActivationWorldWithoutPolicyWitness`.
  */
-export const ACTIVATION_WORLD_GATE_POLICY: NodeAdmissionGatePolicy = "POLICY_ALLOWANCE";
+export const ACTIVATION_WORLD_GATE_POLICY: NodeAdmissionGatePolicy = "HUMAN_APPROVAL";
 
 /** The durable ACTIVE graph on its own — no budget root. */
 export function seedActivationGraph(
@@ -326,16 +328,19 @@ export function seedActivationGraph(
  */
 export function seedActivationWorld(
   store: SqliteEventStore,
-  gatePolicy: NodeAdmissionGatePolicy = ACTIVATION_WORLD_GATE_POLICY,
 ): void {
-  seedActivationWorldWithoutPolicyWitness(store, gatePolicy);
-  // task-93e8aab3, and the exact successor of the graph+root layer above: `effect.activate` now
-  // resolves its `AdmissionGate` from durable records instead of the caller's payload, so a
-  // POLICY_ALLOWANCE world with no allowing decision refuses ADMISSION_GATE_WITNESS_ABSENT.
-  // MEASURED, not predicted: without this line 25 daemon suites / 445 tests refuse there.
-  // Only for the default policy — a HUMAN_APPROVAL world owes an APPROVAL, and its seeder is
-  // `seedApprovedNodeScope`; adding a policy decision it never consults would be noise.
-  if (gatePolicy === "POLICY_ALLOWANCE") ensureAllowingPolicyDecision(store);
+  // Load-bearing order: approval establishes the once-only budget root. Drive only its prefix,
+  // then fund the graph/root, and only then send the approval that binds that funded root.
+  driveApprovalPrefix(store);
+  seedActivationWorldWithoutPolicyWitness(store, ACTIVATION_WORLD_GATE_POLICY);
+  const active = readCurrentActiveGraph(store, PROJECT_ID);
+  if (!active.ok) throw new Error(`activation world graph read refused: ${active.code}`);
+  const approvedNodeScope = active.snapshot.nodes
+    .filter((node) => node.executionBearing)
+    .map((node) => node.nodeKey)
+    .slice()
+    .sort();
+  seedApprovedNodeScope(store, approvedNodeScope);
 }
 
 /**
@@ -349,7 +354,7 @@ export function seedActivationWorld(
  */
 export function seedActivationWorldWithoutPolicyWitness(
   store: SqliteEventStore,
-  gatePolicy: NodeAdmissionGatePolicy = ACTIVATION_WORLD_GATE_POLICY,
+  gatePolicy: NodeAdmissionGatePolicy,
 ): void {
   ensureSeededGoal(store);
   ensureActiveGraph(store, gatePolicy);
@@ -357,25 +362,11 @@ export function seedActivationWorldWithoutPolicyWitness(
 }
 
 /**
- * The durable ALLOWING policy decision, added ONLY when it is the missing layer.
+ * A witnessless world with the node's ADMISSION GATE POLICY chosen by the caller.
  *
- * Asked through `resolveAdmissionGate` itself, so a world whose latest decision the resolver
- * would reject is upgraded and one it accepts is left untouched. Seeding unconditionally would
- * append a second decision on every call and silently overwrite a world that deliberately
- * decided otherwise.
- */
-function ensureAllowingPolicyDecision(store: SqliteEventStore): void {
-  if (policyDecisionAllows(store)) return;
-  seedAllowingPolicyDecision(store);
-}
-
-/**
- * The happy world with the node's ADMISSION GATE POLICY chosen by the caller.
- *
- * Named rather than left as `seedActivationWorld`'s second argument at the call site, because
- * the whole point of a HUMAN_APPROVAL world is that it owes a DIFFERENT durable witness — an
- * approval record instead of a policy decision — and a bare positional argument would read as a
- * detail rather than as the world's defining fact.
+ * This helper never supplies the corresponding witness. Historical POLICY_ALLOWANCE fixtures
+ * add their event-seam allowance explicitly, while HUMAN_APPROVAL negative worlds either stay
+ * absent or call `seedApprovedNodeScope` themselves with the scope under test.
  *
  * IT ONLY BINDS WHEN THE GRAPH IS ABSENT. `ensureActiveGraph` refuses to publish a second ACTIVE
  * revision, so a world that already activated one keeps ITS policy and this argument is a no-op.
@@ -384,7 +375,7 @@ function ensureAllowingPolicyDecision(store: SqliteEventStore): void {
 export function seedActivationWorldWithGatePolicy(
   store: SqliteEventStore, gatePolicy: NodeAdmissionGatePolicy,
 ): void {
-  seedActivationWorld(store, gatePolicy);
+  seedActivationWorldWithoutPolicyWitness(store, gatePolicy);
 }
 
 

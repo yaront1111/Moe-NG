@@ -25,9 +25,11 @@ import { GOAL_ID, PROJECT_ID, driveThrough } from "../bootstrap/bootstrap-test-f
 import { readCurrentBudgetLedger } from "../budget/budget-current-projection.js";
 import { readCurrentActiveGraph } from "../planning/active-graph-projection.js";
 
+import { activationAdmissionRef, runActivationBudgetStage } from "./activation-budget-stage.js";
 import {
   ACTIVATION_WORLD_AUTHORIZED_AMOUNT,
   ACTIVATION_WORLD_BEARING_NODE_COUNT,
+  ACTIVATION_WORLD_GATE_POLICY,
   ACTIVATION_WORLD_METER,
   ACTIVATION_WORLD_NODE_KEY,
   ACTIVATION_WORLD_REVISION_ID,
@@ -36,6 +38,10 @@ import {
   seedActivationWorldWithoutGoal,
   seedActivationWorldWithoutGraph,
 } from "./activation-world-fixtures.js";
+import {
+  ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND,
+} from "./activation-ingress-contracts.js";
+import type { ActivationIngressRequest } from "./activation-ingress-contracts.js";
 
 /**
  * WINDOWS HANDLE DISCIPLINE: the store closes in a `finally` INSIDE the temp directory's own
@@ -67,6 +73,43 @@ const refusalOf = (result: { ok: boolean }): readonly [string, string] => {
 };
 
 describe("activation world fixture — the seeded graph reads back through production", () => {
+  it("uses a real HUMAN_APPROVAL witness and admits the generic activation", () => {
+    withStore("human-approval", (store) => {
+      bootstrapped(store);
+      seedActivationWorld(store);
+
+      const active = readCurrentActiveGraph(store, PROJECT_ID);
+      expect(active.ok).toBe(true);
+      if (!active.ok) return;
+      expect(ACTIVATION_WORLD_GATE_POLICY).toBe("HUMAN_APPROVAL");
+      expect(active.content.nodeAuthority.definitions).toHaveLength(1);
+      expect(active.content.nodeAuthority.definitions[0]?.admissionGatePolicy)
+        .toBe("HUMAN_APPROVAL");
+
+      const activationEvents = store.readEvents(GOAL_ID)
+        .filter((event) => event.eventType === "GoalExecutionEnabled");
+      expect(activationEvents).toHaveLength(1);
+
+      const request: ActivationIngressRequest = {
+        commandId: "cmd-activate-generic-human-world",
+        correlationId: "corr-activate-generic-human-world",
+        decidedAt: "2026-08-19T00:00:00.000Z",
+        expectedVersion: 0,
+        kind: EFFECT_ACTIVATE_COMMAND_KIND,
+        payload: {},
+        principalId: "principal-1",
+        projectId: PROJECT_ID,
+        schemaVersion: ACTIVATION_INGRESS_SCHEMA_VERSION,
+      };
+      const result = runActivationBudgetStage({ request, store });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.authority.gateWitnessField).toBe("approval");
+      expect(result.budget.reservation.admissionRef)
+        .toBe(activationAdmissionRef(request.commandId));
+    });
+  });
+
   it("publishes exactly one ACTIVE revision at the expected id", () => {
     withStore("graph-active", (store) => {
       bootstrapped(store);
@@ -120,6 +163,9 @@ describe("activation world fixture — the seeded graph reads back through produ
       expect(active.ok).toBe(true);
       if (!active.ok) return;
       expect(active.revisionId).toBe(ACTIVATION_WORLD_REVISION_ID);
+      expect(store.readEvents(GOAL_ID)
+        .filter((event) => event.eventType === "GoalExecutionEnabled"))
+        .toHaveLength(1);
     });
   });
 });
