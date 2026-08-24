@@ -36,19 +36,21 @@ export function resolvePolicyWaivers(): ResolvedEmptyPolicyWaivers {
  * RISK_TIER_UNCLASSIFIABLE, and folds the evaluator to HOLD_UNKNOWN. The value therefore keeps
  * `PolicyEvaluated` writable without creating authority or ending the request before evaluation.
  *
- * The three inputs are selected by the server: configured project, authenticated principal, and
- * command action. No payload object crosses this boundary.
+ * The server binds the configured project and authenticated principal. The action is only the
+ * caller-requested evaluation subject: it may distinguish this UNKNOWN audit identity, but it
+ * cannot supply a tier, truth, waiver, or live allowance. Any future tier-bearing action binding
+ * belongs to task-b211ac9de4944582ae19aa73afda7b25, not this fail-closed resolver.
  */
 export function resolvePolicyFact(
   projectId: string,
-  authenticatedActor: string,
-  action: string,
+  authenticatedPrincipal: string,
+  callerRequestedAction: string,
 ): PolicyFactInput {
   const identity = JSON.stringify([
     FACT_ID_DOMAIN,
     projectId,
-    authenticatedActor,
-    action,
+    authenticatedPrincipal,
+    callerRequestedAction,
   ]);
   const digest = createHash("sha256").update(identity, "utf8").digest("hex");
   return Object.freeze({

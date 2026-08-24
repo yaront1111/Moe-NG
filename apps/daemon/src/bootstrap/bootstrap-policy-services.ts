@@ -27,9 +27,10 @@ import type { CommandHandler, HandlerContext, ServiceOutcome } from "./bootstrap
  * Policy install and validate.
  *
  * Neither has a `@moe/core` reducer that owns lifecycle: install records a slice durably, and
- * validate binds every authoritative input to daemon-held state before calling `evaluatePolicy`.
- * Caller-supplied facts, slices, and waivers are refused at ingress; the installed slice and the
- * server's honest unknown-risk fact keep the core decision durable without inventing authority.
+ * validate binds the authenticated principal and installed slice before calling `evaluatePolicy`.
+ * Caller-supplied facts, slices, and waivers are refused at ingress. The requested action remains
+ * a caller-selected evaluation subject; it can distinguish the server's UNKNOWN audit identity,
+ * but it cannot create tier or waiver authority or make a live allowance reachable.
  */
 
 interface InstalledPolicies {
@@ -108,7 +109,10 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
   // The existence check above stopped being the whole judgement and became the SELECTOR: the
   // chain core evaluates is the bytes `installPolicy` wrote, not a chain the caller re-sent.
   const slice = installed[policyRef] as JsonValue;
-  const action = typeof input["action"] === "string" ? input["action"] : "";
+  // This remains caller-requested. It is passed unchanged to core and may influence only the
+  // null-tier UNKNOWN fact's audit identity here. A future tier-bearing source must authenticate
+  // and bind the subject under task-b211ac9de4944582ae19aa73afda7b25.
+  const callerRequestedAction = typeof input["action"] === "string" ? input["action"] : "";
   const waiverResolution = resolvePolicyWaivers();
   const evaluated = evaluatePolicy({
     action: input["action"],
@@ -117,7 +121,7 @@ export const validatePolicy: CommandHandler = (context): ServiceOutcome => {
     decisionDigest: input["decisionDigest"],
     evaluatedAtEpochMs: input["evaluatedAtEpochMs"],
     evaluatorVersion: input["evaluatorVersion"],
-    facts: [resolvePolicyFact(request.projectId, request.principalId, action)],
+    facts: [resolvePolicyFact(request.projectId, request.principalId, callerRequestedAction)],
     graphNodeRevisionRefs: input["graphNodeRevisionRefs"],
     policyRevisionRef: input["policyRevisionRef"],
     requiredFactIds: input["requiredFactIds"],

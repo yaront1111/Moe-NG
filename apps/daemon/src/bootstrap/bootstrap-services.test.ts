@@ -190,6 +190,11 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   const DENY_REF = hex64("de19");
   const ALLOW_REF = hex64("a110");
   const ACTION = "plan.approve";
+  const CALLER_REQUESTED_ACTIONS = [
+    ACTION,
+    "effect.activate",
+    "operator.override",
+  ] as const;
 
   /** A slice that FORBIDS the action outright: no opt-in covers it. */
   const denySlice = Object.freeze({
@@ -242,9 +247,12 @@ describe("policy.validate - binds the principal and the installed slices (task-e
   }
 
   /** The evaluation input WITHOUT the keys this row refuses; arms add back what they test. */
-  function baseInput(policyRevisionRef: string): Record<string, unknown> {
+  function baseInput(
+    policyRevisionRef: string,
+    action: string = ACTION,
+  ): Record<string, unknown> {
     return {
-      action: ACTION,
+      action,
       actor: "principal-1",
       callerRiskHint: null,
       decisionDigest: hex64("d1"),
@@ -280,6 +288,26 @@ describe("policy.validate - binds the principal and the installed slices (task-e
     const decoded = decodeBoundedJsonBytes(latest.payload);
     if (!decoded.ok) throw new Error(`payload undecodable: ${decoded.code}`);
     return decoded.value as unknown as Record<string, unknown>;
+  }
+
+  function evaluatedDecision(
+    store: SqliteEventStore,
+    commandId: string,
+  ): Record<string, unknown> {
+    const decision = store.getCommandDecision({
+      commandId,
+      principalId: "principal-1",
+      projectId: PROJECT_ID,
+    });
+    if (decision === null) throw new Error("no policy.validate decision was written");
+    const decoded = decodeBoundedJsonBytes(decision.resultBytes);
+    if (!decoded.ok) throw new Error(`decision result undecodable: ${decoded.code}`);
+    const result = decoded.value as unknown as Record<string, unknown>;
+    const record = result["record"];
+    if (record === null || typeof record !== "object" || Array.isArray(record)) {
+      throw new Error("policy.validate decision result has no record");
+    }
+    return record as Record<string, unknown>;
   }
 
   function expectRefusal(outcome: Record<string, unknown>, code: string): void {
@@ -420,6 +448,23 @@ describe("policy.validate - binds the principal and the installed slices (task-e
 
     expect(validate(store, input, 1).ok).toBe(true);
     expect(evaluatedRow(store).decision).toBe("HOLD_UNKNOWN");
+  });
+
+  it("keeps every caller-requested action fail-closed in the durable decision", () => {
+    const store = seeded([allowSlice]);
+
+    expect(CALLER_REQUESTED_ACTIONS.length).toBeGreaterThan(0);
+    CALLER_REQUESTED_ACTIONS.forEach((action, index) => {
+      const commandId = `cmd-caller-action-${index}`;
+      const outcome = validate(store, baseInput(ALLOW_REF, action), index + 1, commandId);
+      expect(outcome.ok).toBe(true);
+
+      const record = evaluatedDecision(store, commandId);
+      expect(record["action"]).toBe(action);
+      expect(record["decision"]).toBe("HOLD_UNKNOWN");
+      expect(record["reasonCodes"]).toEqual(["RISK_TIER_UNCLASSIFIABLE"]);
+      expect(record["decision"]).not.toBe("ALLOW");
+    });
   });
 });
 

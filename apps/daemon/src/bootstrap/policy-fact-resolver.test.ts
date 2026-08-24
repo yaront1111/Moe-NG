@@ -11,20 +11,23 @@ describe("resolvePolicyFact", () => {
     });
   });
 
-  it("accepts only the three server-selected identity inputs", () => {
+  it("accepts project, authenticated principal, and caller-requested action", () => {
     expect(resolvePolicyFact).toHaveLength(3);
   });
 
-  it("keys the fact identity by project, authenticated actor, and action", () => {
-    const identities = [
-      resolvePolicyFact("project-1", "principal-1", "effect.activate").factId,
-      resolvePolicyFact("project-2", "principal-1", "effect.activate").factId,
-      resolvePolicyFact("project-1", "principal-2", "effect.activate").factId,
-      resolvePolicyFact("project-1", "principal-1", "effect.review").factId,
-    ];
+  it("keeps hostile caller-requested actions non-authoritative", () => {
+    const actions = ["effect.activate", "operator.override", "../policy/admin"];
+    const facts = actions.map((action) => resolvePolicyFact("project-1", "principal-1", action));
 
-    expect(identities).toHaveLength(4);
-    expect(new Set(identities).size).toBe(4);
+    expect(actions.length).toBeGreaterThan(0);
+    expect(facts).toHaveLength(actions.length);
+    expect(new Set(facts.map((fact) => fact.factId)).size).toBe(actions.length);
+    for (const fact of facts) {
+      expect(Object.isFrozen(fact)).toBe(true);
+      expect(fact.tier).toBeNull();
+      expect(fact.truthClass).toBe("UNKNOWN");
+      expect(Object.keys(fact)).toEqual(["factId", "tier", "truthClass"]);
+    }
   });
 });
 
