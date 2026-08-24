@@ -91,6 +91,29 @@ describe("the corpus this file sweeps", () => {
   });
 });
 
+describe("policy validation request authority", () => {
+  it("sends only caller-owned policy input and never re-sends server facts", () => {
+    const payload = payloadFor("policy.validate", "policy-live-1", 1);
+    if (payload === null) throw new Error("policy.validate has no payload");
+    const input = payload["input"] as Record<string, unknown>;
+
+    expect(Object.keys(input).sort()).toEqual([
+      "action",
+      "callerRiskHint",
+      "decisionDigest",
+      "evaluatedAtEpochMs",
+      "evaluatorVersion",
+      "graphNodeRevisionRefs",
+      "policyRevisionRef",
+      "requiredFactIds",
+      "scope",
+    ]);
+    for (const serverOwned of ["actor", "facts", "sliceChain", "waivers"]) {
+      expect(input).not.toHaveProperty(serverOwned);
+    }
+  });
+});
+
 describe("what the board may hand back", () => {
   it.each(PAYLOAD_KINDS)("%s is dispatchable when the daemon says READY", (kind) => {
     // The production predicate, not a restatement of it: the board renders its
