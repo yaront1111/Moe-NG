@@ -81,6 +81,24 @@ const FORGED_GATE = Object.freeze({
   approval: null,
 });
 
+/**
+ * RETIRED ROW: `budget-settlement`. It named
+ * `["budget-settlement", "../budget/budget-settlement-fixtures.ts", "runEffectActivateCommand"]`.
+ * task-f04b6a22dfcc4581b4470dbf79b2a3b3 re-hosted that fixture on a bare unactivated store, so it
+ * no longer drives an activation by any name and cannot be a POLICY_ALLOWANCE production-path
+ * family. Re-anchoring the row on a budget-lane symbol it does contain (`applyProviderUsageToBudget`)
+ * would keep the count at five while asserting a policy claim the fixture does not make, and
+ * re-adding `runEffectActivateCommand` would be dead code existing only to satisfy `toContain`.
+ * OWNER of any successor row: task-064b97584aff4e07967738f79134a723, which owns this whole census
+ * block and is BLOCKED; it re-measures the families on resume.
+ */
+const POLICY_ALLOWANCE_HARNESS_FAMILIES = Object.freeze([
+  ["journal", "../journal/journal-test-harness.ts", "runEffectActivateCommand"],
+  ["attempt-resource", "../work/attempt-resource-test-harness.ts", "runEffectActivateCommand"],
+  ["goal-closure", "../goals/goal-closure-test-fixtures.ts", "seedActivationWorld"],
+  ["direct-activation", "./activation-world-fixtures.ts", "seedAllowingPolicyDecision"],
+] as const);
+
 function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
   const directory = mkdtempSync(join(tmpdir(), `moe-adm-gate-${name}-`));
   try {
@@ -94,6 +112,75 @@ function withStore<T>(name: string, run: (store: SqliteEventStore) => T): T {
     rmSync(directory, { force: true, maxRetries: 5, recursive: true });
   }
 }
+
+function withReopenedStore<T>(
+  name: string,
+  seed: (store: SqliteEventStore) => void,
+  run: (store: SqliteEventStore) => T,
+): T {
+  const directory = mkdtempSync(join(tmpdir(), `moe-adm-reopen-${name}-`));
+  const path = join(directory, "store.sqlite");
+  try {
+    const initial = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      seed(initial);
+    } finally {
+      initial.close();
+    }
+    const reopened = SqliteEventStore.openForProject(path, PROJECT_ID);
+    try {
+      return run(reopened);
+    } finally {
+      reopened.close();
+    }
+  } finally {
+    rmSync(directory, { force: true, maxRetries: 5, recursive: true });
+  }
+}
+
+describe("server-resolved policy facts — four production-path harness families", () => {
+  it("enumerates all four measured families", () => {
+    expect(POLICY_ALLOWANCE_HARNESS_FAMILIES).toHaveLength(4);
+  });
+
+  it.each(POLICY_ALLOWANCE_HARNESS_FAMILIES)(
+    "%s reaches the evaluator-owned non-allow reason",
+    (family, sourcePath, productionAnchor) => {
+      const source = readFileSync(new URL(sourcePath, import.meta.url), "utf8");
+      expect(source).toContain(productionAnchor);
+
+      withReopenedStore(`resolved-${family}`, (store) => {
+        driveThrough(store, "goal.create");
+        seedActivationWorldWithoutPolicyWitness(store);
+        seedAllowingPolicyDecision(store);
+      }, (store) => {
+        const decision = store.getCommandDecision({
+          commandId: "cmd-witness-policy.validate-allow",
+          principalId: "principal-1",
+          projectId: PROJECT_ID,
+        });
+        if (decision === null || decision.effectDisposition !== "EFFECTS_COMMITTED") {
+          throw new Error("policy.validate did not commit through the production writer");
+        }
+        const decoded = decodeBoundedJsonBytes(decision.resultBytes);
+        if (!decoded.ok) throw new Error(`policy result undecodable: ${decoded.code}`);
+        const record = (decoded.value as JsonObject)["record"] as JsonObject;
+
+        expect(record["decision"]).toBe("HOLD_UNKNOWN");
+        expect(record["reasonCodes"]).toStrictEqual(["RISK_TIER_UNCLASSIFIABLE"]);
+        expect(JSON.stringify(record["inputFacts"])).toBe(
+          "[{\"factId\":\"policy-risk-unclassifiable:sha256:17915477c20a992c486fe9cfbc31340d728b202e943b45c149707ced4b04c803\",\"truthClass\":\"UNKNOWN\"}]",
+        );
+
+        const consumed = resolve(store, "allowance");
+        expect(consumed.ok).toBe(true);
+        if (!consumed.ok) return;
+        expect(consumed.gate.allowance?.outcome).toBe("HOLD_UNKNOWN");
+        expect(consumed.gate.approval).toBeNull();
+      });
+    },
+  );
+});
 
 /**
  * A project that is ACTIVE and carries the activation world, driven WITHOUT `policy.install` or

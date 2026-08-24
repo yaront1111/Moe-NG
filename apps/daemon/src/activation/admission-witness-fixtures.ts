@@ -17,12 +17,11 @@
  *   `seedReadyProject` (recovery/restore-test-harness.ts) never drives `policy.install` or
  *   `policy.validate` at all, so its policy aggregate is EMPTY.
  *
- * THE ALLOW RECIPE IS PRODUCTION'S OWN, not one invented here: one tier-bearing DAEMON_VERIFIED
- * fact (without it the risk layer is unclassifiable), no required facts and no rules (nothing to
- * hold or deny), and an auto-approval opt-in naming THIS action at a tier at least as high as
- * the derived one. `orchestrator/demo-seed-payloads.ts:113-140` states the same three conditions
- * for the demo seed's own validatable policy, so a world seeded here is the world the shipped
- * seed produces.
+ * THE HISTORICAL ALLOW RECIPE IS NO LONGER AUTHORITATIVE. The installed slice still carries its
+ * old opt-in, but no durable producer is entitled to supply the tier-bearing fact it needs.
+ * `policy.validate` now supplies a null-tier UNKNOWN fact and production therefore records
+ * RISK_TIER_UNCLASSIFIABLE / HOLD_UNKNOWN. Existing helper names remain temporarily stable for
+ * their callers; task-cc3898ce owns the harness-precondition migration.
  *
  * EVERY FACT GOES IN THROUGH A COMMAND HANDLER. Nothing here folds an event by hand: the policy
  * decision rides `policy.install` + `policy.validate` and the approval rides `approval.decide`,
@@ -56,9 +55,6 @@ import { resolveAdmissionGate } from "./admission-gate-resolver.js";
 const POLICY_ACTION = "plan.approve";
 /** R0/R1 are the only tiers `assessTier` can auto-approve; R2/R3 are human-only by design 710. */
 const POLICY_TIER = "R0";
-/** Strong truth, so `assessRisk` counts the fact instead of skipping it. */
-const POLICY_TRUTH = "DAEMON_VERIFIED";
-
 export const ALLOWING_POLICY_SLICE_REF = hex64("a11007");
 
 /**
@@ -80,8 +76,8 @@ const allowingSlice = (sliceRef: string): JsonObject => ({
 /**
  * The evaluation input, tuned ONLY where the decision demands it.
  *
- * `facts` carries the single tier-bearing entry; the OPT-IN now rides the INSTALLED slice alone.
- * Before task-eb6a1fa6 this record also re-sent `sliceChain`, duplicating a fact
+ * The server supplies the honest null-tier UNKNOWN risk fact; the OPT-IN rides the INSTALLED
+ * slice alone. Before task-eb6a1fa6 this record also re-sent `sliceChain`, duplicating a fact
  * `drivePolicyDecision` had already written to the store - so the allow/hold distinction was
  * asserted twice and the caller's copy was the one core read. `validatePolicy` now composes the
  * chain from the installed bytes and refuses a caller that supplies one, which is why this
@@ -94,7 +90,6 @@ const evaluationFor = (sliceRef: string): JsonObject => ({
   decisionDigest: hex64("d1"),
   evaluatedAtEpochMs: 1_760_000_000_000,
   evaluatorVersion: "evaluator-1",
-  facts: [{ factId: "fact-admission-risk", tier: POLICY_TIER, truthClass: POLICY_TRUTH }],
   graphNodeRevisionRefs: [],
   policyRevisionRef: sliceRef,
   requiredFactIds: [],
@@ -131,12 +126,14 @@ function drivePolicyDecision(store: SqliteEventStore, optedIn: boolean): void {
 }
 
 /**
- * A durable POLICY DECISION that ALLOWS, committed by `policy.validate` itself.
+ * A durable POLICY DECISION from the historically allowing harness path, committed by
+ * `policy.validate` itself. The name is retained for its existing callers, but until a real
+ * server-held tier source lands the honest resolver makes this decision HOLD_UNKNOWN.
  *
  * NOT idempotent-by-skip and deliberately so: it appends, and the resolver reads the LATEST
  * `PolicyEvaluated`. A world that already carries the bootstrap's HOLD_UNKNOWN decision is
- * UPGRADED by this call rather than left refusing, which is the whole reason a "seed only when
- * absent" rule would be wrong here.
+ * REPLACED by this call rather than skipped, which is why a "seed only when absent" rule would
+ * be wrong here even while both evaluations honestly remain non-allowing.
  */
 export function seedAllowingPolicyDecision(store: SqliteEventStore): void {
   drivePolicyDecision(store, true);
