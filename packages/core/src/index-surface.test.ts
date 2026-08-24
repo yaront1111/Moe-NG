@@ -63,6 +63,17 @@ import type {
   PlanRevisionDigestResult, PlanRevisionDraft, PlanRevisionEncodeResult, PlanRevisionGraphBinding,
   PlanRevisionLayer, PlanRevisionRefusal, PlanRevisionStep,
 } from "@moe/core";
+import type {
+  ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
+  ProductContractAmendmentResult, ProductContractClarification,
+  ProductContractClarificationOption, ProductContractCode, ProductContractCreateResult,
+  ProductContractCriterion, ProductContractDecodeResult, ProductContractDigestResult,
+  ProductContractEncodeResult, ProductContractGate1Approval, ProductContractGate1Result,
+  ProductContractGraphBinding, ProductContractLayer, ProductContractLineage,
+  ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
+  ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
+  ProductContractRevisionDraft,
+} from "@moe/core";
 import {
   PROJECT_CONFIGURATION_LIMIT_KEYS, PROJECT_CONFIGURATION_SCHEMA_VERSION,
 } from "@moe/contracts";
@@ -106,6 +117,10 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["POLICY_OUTCOMES", "array"], ["POLICY_OUTCOME_DOMINANCE", "array"],
   ["POLICY_REASON_CODES", "array"], ["POLICY_RISK_TIERS", "array"],
   ["POLICY_RULE_EFFECTS", "array"], ["PRINCIPAL_KINDS", "array"],
+  ["PRODUCT_CONTRACT_CODES", "array"], ["PRODUCT_CONTRACT_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_LAYERS", "array"],
+  ["PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN", "string"],
+  ["PRODUCT_CONTRACT_VERSION", "string"],
   ["PROJECT_COMMAND_KINDS", "array"],
   ["PROJECT_CONFIGURATION_CODEC_CODES", "array"],
   ["PROJECT_CONFIGURATION_CODEC_LAYERS", "array"],
@@ -114,18 +129,23 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["SESSION_AUTH_LAYERS", "array"], ["SESSION_STATUSES", "array"],
   ["SUPERSESSION_DISPOSITION_KINDS", "array"], ["SUPERSESSION_KERNEL_LAYER", "string"],
   ["applyApprovalCommand", "function"], ["applyApprovalInvalidation", "function"],
-  ["approveExpansionManually", "function"], ["authenticateCommand", "function"],
+  ["approveExpansionManually", "function"], ["assessClarificationMateriality", "function"],
+  ["authenticateCommand", "function"],
   ["authenticateSession", "function"], ["canonicalizeCapabilities", "function"],
   ["createAcceptanceContract", "function"], ["createCredential", "function"],
   ["createPlanRevision", "function"], ["createPrincipal", "function"],
+  ["createProductContractRevision", "function"],
   ["createProjectConfigurationManifest", "function"], ["createSession", "function"],
   ["decideApprovalAuthority", "function"], ["decideSupersession", "function"],
   ["decodeAcceptanceContractBytes", "function"], ["decodePlanRevisionBytes", "function"],
+  ["decodeProductContractRevisionBytes", "function"],
   ["decodeProjectConfigurationManifestBytes", "function"],
   ["deriveAcceptanceContractDigest", "function"],
   ["deriveAcceptanceCriterionContent", "function"],
   ["derivePlanExecutionContent", "function"], ["derivePlanRevisionDigest", "function"],
+  ["deriveProductContractRevisionDigest", "function"],
   ["encodeAcceptanceContract", "function"], ["encodePlanRevision", "function"],
+  ["encodeProductContractRevision", "function"],
   ["encodeProjectConfigurationManifest", "function"],
   ["evaluateCarryForward", "function"], ["evaluatePolicy", "function"],
   ["grantHumanAuthority", "function"],
@@ -141,11 +161,14 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["validExpansionHoldBinding", "function"], ["validExpansionProposalIdentity", "function"],
   ["validExpansionProposeCommand", "function"], ["validExpansionSealedEvent", "function"],
   ["validPlanningRunContractState", "function"],
+  ["validateProductAcceptanceBinding", "function"],
+  ["validateProductContractAmendment", "function"],
+  ["validateProductContractGate1", "function"],
 ];
 const surface: Readonly<Record<string, unknown>> = core;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(105);
+  expect(EXPECTED_EXPORTS.length).toBe(118);
 });
 
 it("publishes exactly the reviewed root namespace, with no loss and no addition", () => {
@@ -635,6 +658,125 @@ it("refuses an obligation-free acceptance contract from the root, naming code an
     Object.isFrozen(core.ACCEPTANCE_CONTRACT_LAYERS)]).toEqual([true, true]);
 });
 
+const productRequirement = (
+  requirementId: string, statement: string, supersedesRequirementId: string | null = null,
+): ProductContractRequirement => ({ requirementId, statement, supersedesRequirementId });
+const productCriterion = (
+  criterionId: string, requirementId: string, statement: string,
+  supersedesCriterionId: string | null = null,
+): ProductContractCriterion => ({
+  criterionId, requirementId, statement, supersedesCriterionId,
+});
+const productDraft = (): ProductContractRevisionDraft => ({
+  authorRef: "principal-product", contractId: "product-contract-root",
+  criteria: [productCriterion(
+    "criterion-a", "requirement-a", "The build passes its focused verification.",
+  )],
+  lineage: null,
+  requirements: [productRequirement("requirement-a", "The focused build passes.")],
+  retiredCriterionIds: [], retiredRequirementIds: [], revisionId: "product-revision-a",
+  sourceDocumentDigests: [hex("d")],
+});
+
+it("publishes the immutable Product Contract kernel through the package root", () => {
+  const created: ProductContractCreateResult = core.createProductContractRevision(productDraft());
+  if (!created.ok) throw new Error(`unexpected refusal ${created.code}`);
+  const revision: ProductContractRevision = created.revision;
+  const digest: ProductContractDigestResult = core.deriveProductContractRevisionDigest(revision);
+  if (!digest.ok) throw new Error(`unexpected refusal ${digest.code}`);
+  const encoded: ProductContractEncodeResult = core.encodeProductContractRevision(revision);
+  if (!encoded.ok) throw new Error(`unexpected refusal ${encoded.code}`);
+  const decoded: ProductContractDecodeResult = core.decodeProductContractRevisionBytes(encoded.bytes);
+  if (!decoded.ok) throw new Error(`unexpected refusal ${decoded.code}`);
+  const projection: ProductContractProjection = {
+    criteria: productDraft().criteria, requirements: productDraft().requirements,
+  };
+  const option: ProductContractClarificationOption = {
+    label: "Baseline", optionId: "option-a", projection,
+  };
+  const clarification: ProductContractClarification = {
+    clarificationId: "clarification-a", options: [option, {
+      label: "Changed", optionId: "option-b", projection: {
+        ...projection,
+        requirements: [productRequirement("requirement-a", "The focused build is reproducible.")],
+      },
+    }], question: "Should the focused build also be reproducible?",
+  };
+  const materiality: ProductContractMaterialityResult =
+    core.assessClarificationMateriality(clarification);
+  if (!materiality.ok) throw new Error(`unexpected refusal ${materiality.code}`);
+  const projectionDigest: ProductContractProjectionDigest | undefined = materiality.optionDigests[0];
+  const approval: ProductContractGate1Approval = {
+    approvalId: "approval-product-root", approvedAtEpochMs: 1_787_516_800_000,
+    contractId: revision.contractId, principalId: "human:yaron", principalKind: "HUMAN",
+    revisionDigest: revision.revisionDigest, revisionId: revision.revisionId,
+  };
+  const gate: ProductContractGate1Result = core.validateProductContractGate1(revision, approval);
+  const graphBinding: ProductContractGraphBinding = {
+    graphContentHash: hex("a"), graphRevisionRef: "graph-revision-a",
+  };
+  const acceptanceCreated = core.createAcceptanceContract(contractDraft());
+  if (!acceptanceCreated.ok) throw new Error(`unexpected refusal ${acceptanceCreated.code}`);
+  const request: ProductAcceptanceBindingRequest = {
+    acceptanceContract: acceptanceCreated.contract, gate1Approval: approval, graphBinding,
+    productContractRevision: revision,
+  };
+  const binding: ProductAcceptanceBindingResult = core.validateProductAcceptanceBinding(request);
+
+  expect([revision.advisoryOnly, decoded.revision.revisionDigest, digest.revisionDigest])
+    .toEqual([true, revision.revisionDigest, revision.revisionDigest]);
+  expect([materiality.material, projectionDigest?.optionId]).toEqual([true, "option-a"]);
+  expect(gate.ok).toBe(true);
+  expect(binding).toEqual({
+    acceptanceCriteriaDigest: acceptanceCreated.contract.criteriaDigest, advisoryOnly: true,
+    graphBinding, ok: true, productContractRevisionDigest: revision.revisionDigest,
+  });
+  expect([
+    core.PRODUCT_CONTRACT_VERSION, core.PRODUCT_CONTRACT_DIGEST_DOMAIN,
+    core.PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN,
+  ]).toEqual([
+    "moe-product-contract-revision/1", "moe-product-contract-revision-digest/1",
+    "moe-product-contract-clarification-projection/1",
+  ]);
+});
+
+it("publishes amendment lineage and exact Product Contract refusals through the root", () => {
+  const currentResult = core.createProductContractRevision(productDraft());
+  if (!currentResult.ok) throw new Error(`unexpected refusal ${currentResult.code}`);
+  const current = currentResult.revision;
+  const lineage: ProductContractLineage = {
+    parentRevisionDigest: current.revisionDigest, parentRevisionId: current.revisionId,
+  };
+  const candidateResult = core.createProductContractRevision({
+    ...productDraft(),
+    criteria: [productCriterion(
+      "criterion-b", "requirement-b", "The build is reproducible.", "criterion-a",
+    )],
+    lineage,
+    requirements: [productRequirement(
+      "requirement-b", "The focused build is reproducible.", "requirement-a",
+    )],
+    retiredCriterionIds: ["criterion-a"], retiredRequirementIds: ["requirement-a"],
+    revisionId: "product-revision-b",
+  });
+  if (!candidateResult.ok) throw new Error(`unexpected refusal ${candidateResult.code}`);
+  const amendment: ProductContractAmendmentResult =
+    core.validateProductContractAmendment(current, candidateResult.revision);
+  expect(amendment.ok).toBe(true);
+
+  const result: ProductContractCreateResult = core.createProductContractRevision({
+    ...productDraft(), sourceDocumentDigests: [],
+  });
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected a refusal");
+  const refusal: ProductContractRefusal = result;
+  const code: ProductContractCode = "PRODUCT_CONTRACT_PROVENANCE_VACUOUS";
+  const layer: ProductContractLayer = "PROVENANCE";
+  expect([refusal.code, refusal.layer]).toEqual([code, layer]);
+  expect(core.PRODUCT_CONTRACT_CODES).toContain(code);
+  expect(core.PRODUCT_CONTRACT_LAYERS).toContain(layer);
+});
+
 const execFileAsync = promisify(execFile);
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const CHILD_TIMEOUT_MS = 30_000;
@@ -679,6 +821,12 @@ try {
     grantHumanAuthority: typeof ns.grantHumanAuthority,
     approvalPolicyKinds: [...(ns.APPROVAL_POLICY_KINDS ?? [])],
     approvalAuthorityLayers: [...(ns.APPROVAL_AUTHORITY_LAYERS ?? [])],
+    createProductContractRevision: typeof ns.createProductContractRevision,
+    assessClarificationMateriality: typeof ns.assessClarificationMateriality,
+    validateProductContractAmendment: typeof ns.validateProductContractAmendment,
+    validateProductContractGate1: typeof ns.validateProductContractGate1,
+    validateProductAcceptanceBinding: typeof ns.validateProductAcceptanceBinding,
+    productContractLayers: [...(ns.PRODUCT_CONTRACT_LAYERS ?? [])],
   });
 } catch (error) {
   report({ outcome: "FAILED", code: error.code ?? "NO_CODE" });
@@ -703,12 +851,20 @@ it("loads @moe/core in Node's strip-types runtime with the expansion closure imp
   // rather than by length: a frozen array that lost a member keeps its type.
   expect(await probe(REPORT_ROOT_ENTRY)).toEqual({
     outcome: "IMPORTED",
-    namedExportCount: 105,
+    namedExportCount: 118,
     undefinedBindingCount: 0,
     decideApprovalAuthority: "function",
     grantHumanAuthority: "function",
     approvalPolicyKinds: ["PROCEED_WITHOUT_HUMAN", "REQUIRE_HUMAN"],
     approvalAuthorityLayers: ["HUMAN_AUTHORITY_GATE", "APPROVAL_POLICY"],
+    createProductContractRevision: "function",
+    assessClarificationMateriality: "function",
+    validateProductContractAmendment: "function",
+    validateProductContractGate1: "function",
+    validateProductAcceptanceBinding: "function",
+    productContractLayers: [
+      "PROVENANCE", "LINEAGE", "MATERIALITY", "GATE_1", "ACCEPTANCE_BINDING",
+    ],
     prepareExpansion: "function",
     approveExpansionManually: "function",
     reduceExpansionPlanningHold: "function",

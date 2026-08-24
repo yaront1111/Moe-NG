@@ -122,6 +122,41 @@ export type {
   AcceptanceContractDigestResult, AcceptanceContractEncodeResult, AcceptanceCriterionContent,
   AcceptanceCriterionContentResult,
 } from "./planning/acceptance-contract-codec.js";
+
+/** Immutable advisory product truth; runtime writers and compiler authority live outside core. */
+export {
+  PRODUCT_CONTRACT_CODES, PRODUCT_CONTRACT_DIGEST_DOMAIN, PRODUCT_CONTRACT_LAYERS,
+  PRODUCT_CONTRACT_VERSION, createProductContractRevision, decodeProductContractRevisionBytes,
+  deriveProductContractRevisionDigest, encodeProductContractRevision,
+} from "./product-contract/product-contract-codec.js";
+export type {
+  ProductContractCode, ProductContractCriterion, ProductContractLayer, ProductContractLineage,
+  ProductContractRefusal, ProductContractRequirement, ProductContractRevision,
+  ProductContractRevisionDraft,
+} from "./product-contract/product-contract-codec.js";
+export type {
+  ProductContractCreateResult, ProductContractDecodeResult, ProductContractDigestResult,
+  ProductContractEncodeResult,
+} from "./product-contract/product-contract-codec.js";
+export { validateProductContractAmendment } from "./product-contract/product-contract-lineage.js";
+export type {
+  ProductContractAmendmentResult,
+} from "./product-contract/product-contract-lineage.js";
+export {
+  PRODUCT_CONTRACT_PROJECTION_DIGEST_DOMAIN, assessClarificationMateriality,
+} from "./product-contract/product-contract-materiality.js";
+export type {
+  ProductContractClarification, ProductContractClarificationOption,
+  ProductContractMaterialityResult, ProductContractProjection, ProductContractProjectionDigest,
+} from "./product-contract/product-contract-materiality.js";
+export {
+  validateProductAcceptanceBinding, validateProductContractGate1,
+} from "./product-contract/product-contract-acceptance-binding.js";
+export type {
+  ProductAcceptanceBindingRequest, ProductAcceptanceBindingResult,
+  ProductContractGate1Approval, ProductContractGate1Result, ProductContractGraphBinding,
+} from "./product-contract/product-contract-acceptance-binding.js";
+
 export {
   PLAN_REVISION_CODES, PLAN_REVISION_LAYERS, PLAN_REVISION_VERSION,
 } from "./planning/plan-revision-contract.js";
