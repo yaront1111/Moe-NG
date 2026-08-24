@@ -91,6 +91,9 @@ import {
   CONFIRMATORY_FREEZE_AUTHORITY_LAYER, readConfirmatoryFreezeAuthority,
 } from "../../packages/benchmark/src/confirmatory-freeze-authority.js";
 import {
+  PRE_FREEZE_AUDIT_LAYER, preFreezeAuditRefusal, preFreezeAuditVerdict,
+} from "../../packages/benchmark/src/pre-freeze-audit-vocabulary.js";
+import {
   validateConfirmatoryFreezeAuthorityRecord,
 } from "../../packages/benchmark/src/confirmatory-freeze-authority-contracts.js";
 import {
@@ -2717,6 +2720,51 @@ const confirmatoryFreezeAuthorityCases: readonly HostileCase[] = [
   ),
 ];
 
+// ---------------------------------------------------------------------------
+// PRE_FREEZE_AUDIT_LAYER — the pinned-spec audit's closed refusal vocabulary.
+// ---------------------------------------------------------------------------
+
+const PRE_FREEZE = "PRE_FREEZE_AUDIT_LAYER";
+const PRE_FREEZE_LAYER = soleLayer(PRE_FREEZE_AUDIT_LAYER, "PRE_FREEZE_AUDIT");
+
+const preFreezeExpectation = (code: string): RefusalExpectation => ({
+  code, layer: PRE_FREEZE_LAYER,
+});
+
+function solePreFreezeRefusal(
+  verdict: ReturnType<typeof preFreezeAuditVerdict>,
+): unknown {
+  const refusal = verdict.refusals[0];
+  if (refusal === undefined) throw new Error("pre-freeze hostile probe produced no refusal");
+  return refusal;
+}
+
+const preFreezeAuditCases: readonly HostileCase[] = [
+  before(
+    PRE_FREEZE, "zero generated audit cases refuse before any source can be trusted",
+    preFreezeExpectation("SWEEP_ZERO_CASES"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(0, [])),
+  ),
+  after(
+    PRE_FREEZE, "a positive case count cannot erase a detected ambiguous reference",
+    preFreezeExpectation("REFERENCE_AMBIGUOUS"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("REFERENCE_AMBIGUOUS", 407, "S3"),
+    ])),
+  ),
+  racingExactly(
+    PRE_FREEZE, "independent source and reference refusals race without collapsing",
+    preFreezeExpectation("SPEC_BYTES_UNPINNED"),
+    preFreezeExpectation("REFERENCE_UNRESOLVED"),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("SPEC_BYTES_UNPINNED", 0, ""),
+    ])),
+    async () => solePreFreezeRefusal(preFreezeAuditVerdict(1, [
+      preFreezeAuditRefusal("REFERENCE_UNRESOLVED", 19, "G-absent"),
+    ])),
+  ),
+];
+
 export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...codecCases, ...acceptanceContractCases, ...planRevisionCases, ...contractCases,
   ...selectionCases, ...approvalCases, ...sessionCases,
@@ -2724,4 +2772,5 @@ export const INTEGRITY_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...keyProviderCases, ...completionCases, ...coreApprovalCases, ...reducerCases,
   ...graphContentCases, ...repositoryScopeCases,
   ...nodeAuthorityCases, ...nodeRecursionCases, ...confirmatoryFreezeAuthorityCases,
+  ...preFreezeAuditCases,
 ]);

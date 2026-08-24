@@ -104,8 +104,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 15, integrity 20, durable-store 16, runtime-provider
- * 25, scheduler-activation 29 — sums to 105, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 15, integrity 21, durable-store 16, runtime-provider
+ * 25, scheduler-activation 29 — sums to 106, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -230,6 +230,10 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // withholding producer/ambient arms task-22b69ee5; contract codes and validation arms
   // task-3a10eb6b87ad4ff5b3dbc3a58f0f0631.
   { constant: "CONFIRMATORY_FREEZE_AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority.ts", axis: "integrity" },
+  // The pinned benchmark-spec audit guards document identity, references and closed
+  // verdict construction. `integrity` by SUBJECT: it creates no freeze or scheduler
+  // authority and reports only exact source-integrity refusals.
+  { constant: "PRE_FREEZE_AUDIT_LAYER", file: "packages/benchmark/src/pre-freeze-audit-vocabulary.ts", axis: "integrity" },
   { constant: "PROJECT_CONFIGURATION_REFUSAL_LAYERS", file: "packages/contracts/src/configuration/project-configuration-contract.ts", axis: "integrity" },
   { constant: "DISTRIBUTION_REFUSAL_LAYERS", file: "packages/contracts/src/distribution/distribution-contract.ts", axis: "integrity" },
   { constant: "DOCUMENT_WORK_PROPOSAL_LAYERS", file: "packages/contracts/src/document-work/document-work-proposal-contract.ts", axis: "integrity" },
@@ -365,8 +369,12 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * arms probe the one property a withheld authority can lose — that no environment variable, no
  * planted authority-record file and no concurrent mutation can flip the refusal. Withholding
  * ruling comment-b308bf89a6d24978a928eadc5bade7b1.
+ *
+ * 105 -> 106 for PRE_FREEZE_AUDIT_LAYER. The pinned-document audit answers integrity
+ * questions about exact bytes, references and verdict construction; its hostile trio lands
+ * with the roster row, so the completeness ratchet never observes a bookkeeping-only bump.
  */
-const EXPECTED_ROSTER_SIZE = 105;
+const EXPECTED_ROSTER_SIZE = 106;
 
 /**
  * The nine-way per-area split. A scanner that silently matched only one directory
@@ -375,7 +383,7 @@ const EXPECTED_ROSTER_SIZE = 105;
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "apps/daemon": 41,
-  "packages/benchmark": 2,
+  "packages/benchmark": 3,
   "packages/runner": 22,
   "packages/core": 12,
   "packages/scheduler": 10,

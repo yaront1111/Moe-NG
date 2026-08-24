@@ -120,7 +120,9 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // `integrity` by SUBJECT — it names an authority record, the same reading that put
     // NODE_AUTHORITY_LAYERS here under the human REPL ruling comment-2a7c5a33, and the reading
     // this slice's own `admitted()` net already assumes where it reads `authority !== "NONE"`.
-    expect(ROSTER_INTEGRITY).toHaveLength(20);
+    // 20 -> 21 for PRE_FREEZE_AUDIT_LAYER, the pinned-document integrity audit. Its
+    // verdict builder's BEFORE/AFTER/RACE probes land with this bump.
+    expect(ROSTER_INTEGRITY).toHaveLength(21);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {
