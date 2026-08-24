@@ -266,6 +266,39 @@ export function readEventAcknowledgeRequest(body: Uint8Array): {
   };
 }
 
+/**
+ * The resume body: the acknowledge shape PLUS the projection, because
+ * `resumeFromSnapshot` probes the port with `{projection, subscriberId}` before it
+ * compares the presented cursor. Structural only, exactly like the two guards above:
+ * the seam owns which cursor may actually resume.
+ */
+export function readEventResumeRequest(body: Uint8Array): {
+  readonly presentedCursor: { readonly generation: number; readonly position: string };
+  readonly projection: string;
+  readonly subscriberId: string;
+} | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
+  } catch {
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
+  const draft = parsed as Record<string, unknown>;
+  const cursor = draft["presentedCursor"];
+  if (typeof draft["projection"] !== "string" || typeof draft["subscriberId"] !== "string"
+    || typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) return null;
+  const fields = cursor as Record<string, unknown>;
+  if (typeof fields["generation"] !== "number" || typeof fields["position"] !== "string") {
+    return null;
+  }
+  return {
+    presentedCursor: { generation: fields["generation"], position: fields["position"] },
+    projection: draft["projection"],
+    subscriberId: draft["subscriberId"],
+  };
+}
+
 /** A presented pairing token cannot be longer than this: a UUID is 36 chars, and a
  *  wildly long value is refused as shape before it reaches the constant-time compare. */
 const PAIRING_TOKEN_MAX_CHARS = 512;

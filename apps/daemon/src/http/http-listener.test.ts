@@ -10,7 +10,12 @@ import {
 import type { ControlRoomListener } from "./http-listener.js";
 import { HTTP_INPUT_BOUNDS, WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import type { CommandAdapterDeps } from "./http-contract.js";
-import { streamPort } from "./event-stream-fixtures.js";
+import {
+  PROJECTION,
+  SNAPSHOT_CHECKPOINT,
+  SUBSCRIBER,
+  streamPort,
+} from "./event-stream-fixtures.js";
 import {
   CAPABILITY,
   GOOD_CREDENTIAL,
@@ -284,7 +289,7 @@ it("never puts a credential in a URL or a log line", async () => {
   );
 });
 
-it.each(["/events/read", "/events/ack", "/affordances/read", "/graph/get"])(
+it.each(["/events/read", "/events/ack", "/events/resume", "/affordances/read", "/graph/get"])(
   "authenticates %s before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {
@@ -307,7 +312,7 @@ it.each(["/events/read", "/events/ack", "/affordances/read", "/graph/get"])(
   },
 );
 
-it.each(["/events/read", "/events/ack", "/affordances/read", "/graph/get"])(
+it.each(["/events/read", "/events/ack", "/events/resume", "/affordances/read", "/graph/get"])(
   "checks %s protocol compatibility before revealing route availability or parsing its body",
   async (path) => {
     await withListener(async (listener) => {
@@ -396,6 +401,80 @@ it("refuses a malformed event acknowledgement before touching the subscription p
         "LISTENER_STREAM_REQUEST_INVALID",
       );
       expect(acknowledgements).toBe(0);
+    },
+    { subscriptions },
+  );
+});
+
+/**
+ * The recovery leg the CURSOR_GAP arm promises. Before this route existed, a durable
+ * subscriber whose cursor hit a gap repeated that gap on every /events/read forever:
+ * ack cannot clear it (gap frames carry no nextCursor) and restart does not reseat.
+ */
+it("resumes a gapped subscriber over POST /events/resume so the next read serves a PAGE", async () => {
+  const subscriptions = streamPort({ gap: "HISTORY_PRUNED" });
+  const readBody = JSON.stringify({ projection: PROJECTION, subscriberId: SUBSCRIBER });
+  await withListener(
+    async (listener) => {
+      // The wedge: the read answers CURSOR_GAP, and only its snapshot cursor may resume.
+      const gapped = await send(listener, { body: readBody, path: "/events/read" });
+      expect(gapped.status).toBe(200);
+      expect(gapped.body).toMatchObject({
+        outcome: "CURSOR_GAP",
+        snapshot: { checkpoint: SNAPSHOT_CHECKPOINT, generation: 1 },
+      });
+
+      const resumed = await send(listener, {
+        body: JSON.stringify({
+          presentedCursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
+          projection: PROJECTION,
+          subscriberId: SUBSCRIBER,
+        }),
+        path: "/events/resume",
+      });
+      expect(resumed.status).toBe(200);
+      expect(resumed.body).toMatchObject({
+        cursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
+        outcome: "RESEATED",
+      });
+      expect(subscriptions.reseats()).toBe(1);
+
+      // Reseated for real: the SAME durable subscriber now reads a PAGE, not the gap,
+      // starting at the first event past the verified snapshot checkpoint.
+      const after = await send(listener, { body: readBody, path: "/events/read" });
+      expect(after.status).toBe(200);
+      expect(after.body).toMatchObject({ outcome: "PAGE" });
+      const events = after.body["events"] as readonly { eventId: string }[];
+      expect(events.at(0)?.eventId).toBe("evt-05");
+    },
+    { subscriptions },
+  );
+});
+
+it("refuses a malformed resume body before touching the subscription port", async () => {
+  let reseats = 0;
+  const subscriptions = {
+    ...streamPort({ gap: "HISTORY_PRUNED" }),
+    reseat: () => {
+      reseats += 1;
+      return { code: "unreachable", detail: "unreachable", layer: "STATE", outcome: "REFUSED" as const };
+    },
+  };
+  await withListener(
+    async (listener) => {
+      // Missing projection: the resume contract requires it, so this refuses at the
+      // listener's own guard rather than reaching the port.
+      expectListenerRefusal(
+        await send(listener, {
+          body: JSON.stringify({
+            presentedCursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
+            subscriberId: SUBSCRIBER,
+          }),
+          path: "/events/resume",
+        }),
+        "LISTENER_STREAM_REQUEST_INVALID",
+      );
+      expect(reseats).toBe(0);
     },
     { subscriptions },
   );

@@ -15,7 +15,13 @@ import {
   ACTIVATION_AGGREGATE, CREDENTIAL as FOUNDATION_CREDENTIAL, DISPATCH_AGGREGATE,
   cleanupSeamHarnesses, commandRequest, dispatchPayload, seamHarness,
 } from "./http/foundation-registry-fixtures.js";
-import { streamPort } from "./http/event-stream-fixtures.js";
+import {
+  PROJECTION,
+  SNAPSHOT_CHECKPOINT,
+  STATE_DIGEST,
+  SUBSCRIBER,
+  streamPort,
+} from "./http/event-stream-fixtures.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
 import { PROJECT_ID } from "./recovery/restore-test-harness.js";
@@ -201,6 +207,71 @@ describe("createMcpDispatchPort", () => {
       sessionCredential: CREDENTIAL,
     }))));
     expect(answer).toMatchObject({ code: "EVENT_STREAM_LIMIT_INVALID", outcome: "REFUSED" });
+  });
+
+  it("serves events.resume so a gapped durable subscriber can reseat over MCP", () => {
+    // The recovery leg on THIS transport: same seam decision the HTTP route serves,
+    // reached through the same subscription port the events.read branch already holds.
+    const gapped = createMcpDispatchPort({
+      deps: provider.provide(),
+      fallbackCredential: CREDENTIAL,
+      subscriptions: streamPort({ gap: "HISTORY_PRUNED" }),
+    });
+    const answer = decode(gapped.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q-resume",
+      payload: {
+        presentedCursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
+        projection: PROJECTION,
+        subscriberId: SUBSCRIBER,
+      },
+      queryKind: "events.resume",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toEqual({
+      cursor: { generation: 1, position: SNAPSHOT_CHECKPOINT },
+      outcome: "RESEATED",
+      snapshot: {
+        checkpoint: SNAPSHOT_CHECKPOINT,
+        generation: 1,
+        projection: PROJECTION,
+        stateDigest: STATE_DIGEST,
+      },
+    });
+  });
+
+  it("forwards a no-gap resume refusal with the seam's own code over the real store", () => {
+    // The production composition: control-room-1 reads a PAGE here, so no snapshot
+    // cursor was ever issued and the seam must refuse rather than reseat blind.
+    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q-resume-nogap",
+      payload: {
+        presentedCursor: { generation: 1, position: "1" },
+        projection: "moe.board",
+        subscriberId: "control-room-1",
+      },
+      queryKind: "events.resume",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toMatchObject({
+      code: "EVENT_STREAM_CURSOR_NOT_ISSUED", outcome: "REFUSED",
+    });
+  });
+
+  it("refuses a malformed events.resume payload with the stable INPUT_INVALID", () => {
+    const answer = decode(port.dispatchQueryBytes(encoder.encode(JSON.stringify({
+      correlationId: "corr-q-resume-bad",
+      payload: {
+        presentedCursor: { generation: "1", position: 4 },
+        projection: "moe.board",
+        subscriberId: "control-room-1",
+      },
+      queryKind: "events.resume",
+      schemaVersion: "moe-runtime-query/1",
+      sessionCredential: CREDENTIAL,
+    }))));
+    expect(answer).toMatchObject({ error: { code: "INPUT_INVALID" }, ok: false });
   });
 
   it("refuses every other query kind with the stable INPUT_INVALID", () => {
