@@ -11,7 +11,6 @@ import {
   PAIRING_APPROVAL_TTL_MS,
   createPairingApprovalWindow,
 } from "./pairing-approval-window.js";
-
 const REQUEST_KEYS = ["create", "reserve"] as const;
 const OPERATOR_KEYS = ["approve"] as const;
 const HOSTILE_REQUEST_IDS: readonly unknown[] = [
@@ -20,7 +19,15 @@ const HOSTILE_REQUEST_IDS: readonly unknown[] = [
 const HOSTILE_LABELS: readonly unknown[] = [
   null, Symbol("label"), "", "abcd-ef01", "ABCD-EF01-2345", "../approval", "a".repeat(1_025),
 ];
-
+type EntropyFailureCase = readonly [string, (size: number) => Uint8Array];
+const ENTROPY_FAILURE_CASES: readonly EntropyFailureCase[] = Object.freeze([
+  ["throws", (_size: number) => { throw new Error("rng unavailable"); }],
+  ["returns the wrong length", (size: number) => new Uint8Array(Math.max(0, size - 1))],
+]);
+const COLLISION_AXES: readonly ("request id" | "confirmation label")[] =
+  Object.freeze(["request id", "confirmation label"]);
+const INVALID_CLOCK_CASES: readonly string[] =
+  Object.freeze(["NaN", "Infinity", "negative", "throw"]);
 function entropyFrom(values: readonly number[]): (size: number) => Uint8Array {
   let index = 0;
   return (size) => {
@@ -187,6 +194,12 @@ describe("pairing approval transitions", () => {
 });
 
 describe("pairing approval input and dependency failures", () => {
+  it("pins every generated failure roster to a positive denominator", () => {
+    expect(ENTROPY_FAILURE_CASES).toHaveLength(2); expect(ENTROPY_FAILURE_CASES.length).toBeGreaterThan(0);
+    expect(COLLISION_AXES).toHaveLength(2); expect(COLLISION_AXES.length).toBeGreaterThan(0);
+    expect(INVALID_CLOCK_CASES).toHaveLength(4); expect(INVALID_CLOCK_CASES.length).toBeGreaterThan(0);
+  });
+
   it("refuses every malformed request id and confirmation label exactly", () => {
     const window = createPairingApprovalWindow({ now: () => 100, randomBytes: sequenceEntropy() });
 
@@ -207,15 +220,12 @@ describe("pairing approval input and dependency failures", () => {
     expectRefusal(window.operator.approve("abcd-ef01-2345"), "PAIRING_CONFIRMATION_UNKNOWN");
   });
 
-  it.each([
-    ["throws", () => { throw new Error("rng unavailable"); }],
-    ["returns the wrong length", (size: number) => new Uint8Array(Math.max(0, size - 1))],
-  ])("fails closed when entropy %s", (_name, randomBytes) => {
+  it.each(ENTROPY_FAILURE_CASES)("fails closed when entropy %s", (_name, randomBytes) => {
     const window = createPairingApprovalWindow({ now: () => 100, randomBytes });
     expectRefusal(window.requests.create(), "PAIRING_APPROVAL_ENTROPY_UNAVAILABLE");
   });
 
-  it.each(["request id", "confirmation label"] as const)(
+  it.each(COLLISION_AXES)(
     "bounds %s collision retries",
     (axis) => {
       const window = createPairingApprovalWindow({
@@ -269,7 +279,7 @@ describe("pairing approval bounds and monotonic expiry", () => {
     expectRefusal(window.operator.approve(created.confirmationLabel), "PAIRING_APPROVAL_CLOCK_UNAVAILABLE");
   });
 
-  it.each(["NaN", "Infinity", "negative", "throw"])(
+  it.each(INVALID_CLOCK_CASES)(
     "latches an invalid or throwing %s clock",
     (kind) => {
       let first = true;
