@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { statSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -20,6 +20,7 @@ import {
   type FoundationAttemptRefused,
 } from "./foundation-attempt-contracts.js";
 import { snapshotFoundationInputPaths } from "./foundation-input-file-snapshot.js";
+import { readBoundedFoundationInputFile } from "./foundation-input-bounded-read.js";
 
 /**
  * Foundation input authority matrix (Graph Beta, input-manifest half):
@@ -162,30 +163,23 @@ function worktreeMissing(root: string): boolean {
 
 function readObservedEntry(worktreeRoot: string, path: string): ReadEntryResult {
   const absolutePath = join(worktreeRoot, path);
-  let size: number;
   try {
-    const stat = statSync(absolutePath);
-    if (!stat.isFile()) return localRefusal("FOUNDATION_INPUT_ENTRY_UNREADABLE");
-    size = stat.size;
-  } catch (error) {
-    return localRefusal(isMissing(error)
-      ? "FOUNDATION_INPUT_STALE_OBSERVATION"
-      : "FOUNDATION_INPUT_ENTRY_UNREADABLE");
-  }
-  if (size > MAX_FOUNDATION_INPUT_FILE_BYTES) {
-    return localRefusal("FOUNDATION_INPUT_ENTRY_TOO_LARGE");
-  }
-  try {
-    const bytes = readFileSync(absolutePath);
-    if (bytes.byteLength > MAX_FOUNDATION_INPUT_FILE_BYTES) {
+    const read = readBoundedFoundationInputFile(
+      absolutePath,
+      MAX_FOUNDATION_INPUT_FILE_BYTES,
+    );
+    if (read.kind === "NOT_FILE") {
+      return localRefusal("FOUNDATION_INPUT_ENTRY_UNREADABLE");
+    }
+    if (read.kind === "TOO_LARGE") {
       return localRefusal("FOUNDATION_INPUT_ENTRY_TOO_LARGE");
     }
     return Object.freeze({
       entry: Object.freeze({
-        byteLength: bytes.byteLength,
+        byteLength: read.bytes.byteLength,
         path,
         producer: Object.freeze({ kind: "BASE" as const }),
-        sha256: createHash("sha256").update(bytes).digest("hex"),
+        sha256: createHash("sha256").update(read.bytes).digest("hex"),
       }),
       ok: true as const,
     });
