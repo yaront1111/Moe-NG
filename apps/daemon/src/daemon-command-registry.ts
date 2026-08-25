@@ -1,69 +1,45 @@
 import type { SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
-import { ACTIVATION_INGRESS_SCHEMA_VERSION, EFFECT_ACTIVATE_COMMAND_KIND }
-  from "./activation/activation-ingress-contracts.js";
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
-import { BOOTSTRAP_SCHEMA_VERSION, type BootstrapCommandKind }
-  from "./bootstrap/bootstrap-contracts.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 import type { HandlerTable } from "./bootstrap/bootstrap-ledger.js";
-import { createFoundationDispatchHandler, foundationSyncHandler }
-  from "./daemon-foundation-command.js";
-import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
-import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
-import { createFoundationVerificationHandler }
-  from "./daemon-foundation-verification-command.js";
-import { FOUNDATION_VERIFICATION_COMMAND_KIND }
-  from "./evidence/foundation-verification-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
-import {
-  EVENT_STREAM_RESUME_COMMAND_KIND, runEventResumeCommand,
-} from "./http/event-resume-command.js";
-import { hasEventResumeOperatorAuthority } from "./http/event-resume-authority.js";
-import { SESSION_SCHEMA_VERSION, type SessionCommandKind } from "./identity/session-contracts.js";
-import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
-  from "./journal/journal-contracts.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
-import {
-  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND, runResourceConfirmReleasedCommand,
-} from "./work/resource-confirm-released-command.js";
-import {
-  RESOURCE_RECONCILE_COMMAND_KIND, runResourceReconcileCommand,
-} from "./work/resource-reconcile-command.js";
-import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
-import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
-import { CONTINUATION_COMMAND_KIND, runContinuationCommand }
-  from "./recovery/continuation-command.js";
-import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
-  from "./recovery/recovery-completion-digest.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
-import { REVIEW_SCHEMA_VERSION, type ReviewCommandKind } from "./review/review-contracts.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
-import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
-import { WORK_CLAIM_SCHEMA_VERSION, type WorkClaimCommandKind }
-  from "./work/work-claim-contracts.js";
+import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
+import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
 import { runWorkClaimCommand } from "./work/work-claim-services.js";
 import { buildCommandRegistry, type CommandDecisionPort, type CommandHandler,
-  type CommandRegistry, type CommandRegistryEntry, type DecisionPortResult }
+  type CommandRegistry, type CommandRegistryEntry }
   from "./http/http-contract.js";
-import { DomainRefusal, decisionOf, encoder, refusalFor } from "./daemon-command-dispatch.js";
-import { BOOTSTRAP_FAMILY, CAPABILITIES, OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
-  REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY, type WiredCommandKind }
+import { DomainRefusal, decisionOf, encoder } from "./daemon-command-dispatch.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
   from "./daemon-command-vocabulary.js";
+import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
+import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
+import {
+  runContinuationEdge, runEventResumeEdge, runResourceConfirmReleasedEdge,
+  runResourceReconcileEdge, type CommandEdgeContext,
+} from "./daemon-command-edges.js";
+import { commandFamilyFacts } from "./daemon-command-families.js";
 
 /**
- * The daemon's command registry and durable decision port. The command-specific TABLES
- * -- the capability a kind demands, the exact payload keys it admits, the family that
- * answers it and the operator-only set -- live in `./daemon-command-vocabulary.js`;
- * this module composes them into registry entries and turns a family refusal into a
- * port refusal. The HTTP seam reads only the registry, so a command is still added by
+ * The daemon's command registry. The command-specific TABLES -- the capability a kind
+ * demands, the exact payload keys it admits, the family that answers it and the
+ * operator-only set -- live in `./daemon-command-vocabulary.js`; the classification those
+ * tables imply lives in `./daemon-command-families.js`; the commands assembled at their
+ * own edge live in `./daemon-command-edges.js`; the async entries live in
+ * `./daemon-command-async-entries.js`; and the durable decision port lives in
+ * `./daemon-command-decision-port.js`. This module only COMPOSES them into registry
+ * entries. The HTTP seam reads only the registry, so a command is still added by
  * registering an entry in the vocabulary rather than by editing the boundary or the
  * composition root.
  */
@@ -147,62 +123,26 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
   });
 
-  const foundationCatalogSource = options.foundationCatalogSource ?? ((): unknown => undefined);
-  const dispatchFoundationAttempt = createFoundationDispatchHandler({
-    catalogSource: foundationCatalogSource,
-    lifecycle: options.foundationLifecycle
-      ?? createFoundationCaptureLifecycle({ catalogSource: foundationCatalogSource, store }),
-    store,
-  });
-  const verifyFoundationAttempt = createFoundationVerificationHandler({
-    projectId, store,
-    // Spread rather than assigned: under exactOptionalPropertyTypes an explicit
-    // `undefined` is a DIFFERENT thing from an absent key, and only the absent
-    // key means "no catalog configured".
-    ...(options.verificationCatalogSource === undefined
-      ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
-  });
+  const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> =
+    createAsyncCommandEntries({
+      projectId, store,
+      ...(options.foundationCatalogSource === undefined
+        ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
+      ...(options.foundationLifecycle === undefined
+        ? {} : { foundationLifecycle: options.foundationLifecycle }),
+      ...(options.verificationCatalogSource === undefined
+        ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
+    });
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each
     // carries an async handler and none of the synchronous wiring below applies to it. The
     // sync handler they share refuses; the seam refuses above it before it can be called.
-    if (kind === FOUNDATION_DISPATCH_COMMAND_KIND) {
-      return Object.freeze({
-        asyncHandler: dispatchFoundationAttempt, handler: foundationSyncHandler, kind,
-        payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
-      });
-    }
-    if (kind === FOUNDATION_VERIFICATION_COMMAND_KIND) {
-      return Object.freeze({
-        asyncHandler: verifyFoundationAttempt, handler: foundationSyncHandler, kind,
-        payloadKeys: PAYLOAD_KEYS[kind], requiredCapability: CAPABILITIES.WORK,
-      });
-    }
-    const activation = kind === EFFECT_ACTIVATE_COMMAND_KIND;
-    const confirmReleased = kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND;
-    const continuation = kind === CONTINUATION_COMMAND_KIND;
-    const eventResume = kind === EVENT_STREAM_RESUME_COMMAND_KIND;
-    const journal = kind === JOURNAL_APPEND_COMMAND_KIND;
-    const reconcile = kind === RESOURCE_RECONCILE_COMMAND_KIND;
-    const recovery = kind === RECOVERY_COMPLETION_COMMAND_KIND;
-    const review = kind in REVIEW_FAMILY;
-    const session = kind in SESSION_FAMILY;
-    const step = kind in STEP_FAMILY;
-    const work = kind in WORK_FAMILY;
-    const schemaVersion = activation
-      ? ACTIVATION_INGRESS_SCHEMA_VERSION
-      : journal
-        ? JOURNAL_APPEND_SCHEMA_VERSION
-        : recovery
-          ? RECOVERY_COMPLETION_SCHEMA_VERSION
-          : review
-            ? REVIEW_SCHEMA_VERSION
-            : session
-              ? SESSION_SCHEMA_VERSION
-              : step
-                ? STEP_LIFECYCLE_SCHEMA_VERSION
-                : work ? WORK_CLAIM_SCHEMA_VERSION : BOOTSTRAP_SCHEMA_VERSION;
+    const asyncEntry = asyncEntries[kind];
+    if (asyncEntry !== undefined) return asyncEntry;
+    const { activation, confirmReleased, continuation, eventResume, journal, reconcile,
+      recovery, requiredCapability, review, schemaVersion, session, step, work }
+      = commandFamilyFacts(kind);
     const handler: CommandHandler = ({ envelope, principal }) => {
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId) {
@@ -213,94 +153,38 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           403,
         );
       }
-      // Its request shape is exact and disjoint from `requestOf`'s envelope
-      // record, so it is assembled by its own edge rather than trimmed here.
-      if (continuation) {
-        const outcome = runContinuationCommand(store, {
-          correlationId: envelope.correlationId,
-          decidedAt: clock(),
-          payload: envelope.payload,
-          principalId: principal.principalId,
-          projectId,
-        });
-        if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.message);
-        return Object.freeze({
-          commandId: envelope.commandId,
-          disposition: outcome.replayed ? "REPLAYED" : "DECIDED",
-          effectId: outcome.bindingRef,
-          resultCode: outcome.resultCode,
-        });
+      // goal.create is the repeatable creation edge whose aggregate does not
+      // exist until the daemon offers it. Bind the payload identity to that
+      // daemon-minted envelope target before trimming the envelope into the
+      // bootstrap request. Without this comparison, a caller could hand back a
+      // valid offer while silently committing a different browser-chosen goal.
+      if (kind === "goal.create") {
+        const goalId = envelope.payload["goalId"];
+        if (typeof goalId === "string" && goalId.length > 0
+          && goalId !== envelope.targetAggregateId) {
+          throw new DomainRefusal(
+            "GOAL_CREATE_TARGET_MISMATCH",
+            "DAEMON_INGRESS",
+            "payload goalId must equal the daemon-issued targetAggregateId",
+          );
+        }
       }
-      if (eventResume) {
-        if (!hasEventResumeOperatorAuthority({
-          operatorCapabilities: OPERATOR_CAPABILITIES,
+      // The kinds whose request shape is exact and disjoint from `requestOf`'s envelope
+      // record are assembled by their own edge rather than trimmed here.
+      if (continuation || eventResume || reconcile || confirmReleased) {
+        const context: CommandEdgeContext = {
+          decidedAt: clock(),
+          envelope,
+          eventSubscriberId: options.eventSubscriberId,
           operatorPrincipalId,
           principal,
           projectId,
           store,
-        })) {
-          throw new DomainRefusal(
-            "EVENT_STREAM_RESUME_OPERATOR_AUTHORITY_REQUIRED",
-            "DAEMON_AUTHORIZATION",
-            "the shared control-room reader requires operator or approved pairing authority",
-            403,
-          );
-        }
-        return runEventResumeCommand({
-          authorizedSubscriberId: options.eventSubscriberId,
-          decidedAt: clock(), envelope, principal, projectId, store,
-        });
-      }
-      // Its request is identity plus one adapter observation, assembled from the
-      // ENVELOPE and the AUTHENTICATED principal, so it is built at its own edge
-      // rather than materialized as request bytes like the codec-backed families.
-      if (reconcile) {
-        const outcome = runResourceReconcileCommand(store, {
-          commandId: envelope.commandId,
-          correlationId: envelope.correlationId,
-          payload: envelope.payload,
-          principalId: principal.principalId,
-          projectId,
-        });
-        if (!outcome.ok) {
-          throw new DomainRefusal(
-            outcome.code, outcome.refusedBy, outcome.upstreamCode ?? outcome.code,
-          );
-        }
-        return Object.freeze({
-          commandId: envelope.commandId,
-          disposition: "DECIDED" as const,
-          effectId: outcome.attemptRef,
-          // The ANSWER's own authority word, read off the durable reader's result:
-          // a literal here would be this seam restating what the record already says.
-          resultCode: outcome.authority,
-        });
-      }
-      // ITS OWN BRANCH, never folded into `reconcile` above: that seam is the
-      // ATTEMPT's authority over its own resources, and admitting a proven release
-      // there would let an attempt clear the quarantine its own uncertainty created.
-      // Its request is identity plus a proof reference, assembled from the ENVELOPE
-      // and the AUTHENTICATED principal rather than materialized as request bytes.
-      if (confirmReleased) {
-        const outcome = runResourceConfirmReleasedCommand(store, {
-          commandId: envelope.commandId,
-          correlationId: envelope.correlationId,
-          payload: envelope.payload,
-          principalId: principal.principalId,
-          projectId,
-        });
-        if (!outcome.ok) {
-          throw new DomainRefusal(
-            outcome.code, outcome.refusedBy, outcome.upstreamCode ?? outcome.code,
-          );
-        }
-        return Object.freeze({
-          commandId: envelope.commandId,
-          disposition: "DECIDED" as const,
-          effectId: outcome.attemptRef,
-          // The ANSWER's own authority word, read off the durable reader's result.
-          resultCode: outcome.authority,
-        });
+        };
+        if (continuation) return runContinuationEdge(context);
+        if (eventResume) return runEventResumeEdge(context);
+        if (reconcile) return runResourceReconcileEdge(context);
+        return runResourceConfirmReleasedEdge(context);
       }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
@@ -334,22 +218,6 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           : undefined,
       ));
     };
-    // ADMIN is the reach fence, NOT the human-only fence. `recovery.complete`
-    // is human-only because its concrete session authority authenticates a
-    // signed, single-use HUMAN R3 step-up; an AGENT holding ADMIN reaches that
-    // gate and is refused there. A reader who mistakes
-    // this line for the R3 fence will later weaken the approval check.
-    const requiredCapability = activation || continuation || eventResume || journal || reconcile || step
-      ? CAPABILITIES.WORK
-      : confirmReleased || recovery
-        ? CAPABILITIES.ADMIN
-        : review
-          ? REVIEW_FAMILY[kind as ReviewCommandKind]
-          : session
-            ? SESSION_FAMILY[kind as SessionCommandKind]
-            : work
-              ? WORK_FAMILY[kind as WorkClaimCommandKind]
-              : BOOTSTRAP_FAMILY[kind as BootstrapCommandKind];
     return Object.freeze({
       handler, kind, payloadKeys: PAYLOAD_KEYS[kind], requiredCapability,
     });
@@ -359,24 +227,5 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     (Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf),
   );
 
-  const decisions: CommandDecisionPort = {
-    decide(_key, _requestDigest, commit): DecisionPortResult {
-      try {
-        return Object.freeze({ decision: commit(), outcome: "DECIDED" } as const);
-      } catch (error) {
-        return refusalFor(error);
-      }
-    },
-    /** The async half. `await` inside the try is what makes a rejected handler promise a
-     *  refusal instead of an unhandled rejection: a crash is not a refusal. */
-    async decideAsync(_key, _requestDigest, commit): Promise<DecisionPortResult> {
-      try {
-        return Object.freeze({ decision: await commit(), outcome: "DECIDED" } as const);
-      } catch (error) {
-        return refusalFor(error);
-      }
-    },
-  };
-
-  return Object.freeze({ decisions, registry });
+  return Object.freeze({ decisions: createCommandDecisionPort(), registry });
 }
