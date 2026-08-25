@@ -33,6 +33,10 @@ import {
   installRecoveryAnchor,
   prepareRecoveryAnchor,
 } from "./recovery-anchor.js";
+import {
+  LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+  RECOVERY_SLOT_MANIFEST_VERSION,
+} from "./recovery-slot-manifest.js";
 
 const encoder = new TextEncoder();
 /** Built from a char code so no escaping layer can collapse it to a plain name. */
@@ -91,6 +95,27 @@ function currentSlotPath(root: string, anchor: RecoveryAnchorRecord): string {
   return join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, anchor.currentSlot);
 }
 
+function slotManifestPath(root: string, slot: string): string {
+  return join(root, RECOVERY_ANCHOR_SLOTS_DIR_NAME, slot, RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
+}
+
+function readSlotManifest(root: string, slot: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(slotManifestPath(root, slot), "utf8")) as Record<string, unknown>;
+}
+
+function writeLegacySlotManifest(root: string, anchor: RecoveryAnchorRecord): void {
+  writeFileSync(
+    slotManifestPath(root, anchor.currentSlot),
+    JSON.stringify({
+      generationDigest: anchor.generationDigest,
+      incarnationRef: anchor.incarnationRef,
+      keyEpochRef: anchor.keyEpochRef,
+      payloadDigests: anchor.payloadDigests,
+      slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    }),
+  );
+}
+
 async function refusedInspect(root: string): Promise<{ code: string; layer: string }> {
   const result = await inspectRecoveryAnchor(root);
   expect(result.ok, "expected the inspection to refuse").toBe(false);
@@ -98,10 +123,16 @@ async function refusedInspect(root: string): Promise<{ code: string; layer: stri
   return { code: result.code, layer: result.layer };
 }
 
-async function inspectedFault(root: string): Promise<{ code: string; verified: boolean }> {
+async function inspectedFault(
+  root: string,
+): Promise<{ code: string; layer: string; verified: boolean }> {
   const result = await inspectRecoveryAnchor(root);
   if (!result.ok || result.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
-  return { code: result.mutatingOpenRefusal.code, verified: result.slotVerified };
+  return {
+    code: result.mutatingOpenRefusal.code,
+    layer: result.mutatingOpenRefusal.layer,
+    verified: result.slotVerified,
+  };
 }
 
 describe("recovery anchor refuses a tampered anchor", () => {
@@ -150,6 +181,7 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
   });
 
   it("reports absent persistence proof when the slot database is gone", async () => {
@@ -159,6 +191,7 @@ describe("recovery anchor refuses an unverifiable slot", () => {
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
   });
 
   it("reports unverifiable bytes when a restored artifact no longer matches", async () => {
@@ -224,6 +257,7 @@ describe("recovery anchor proves the restored database, not only the artifacts",
     const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
+    expect(manifest.slotManifestVersion).toBe(RECOVERY_SLOT_MANIFEST_VERSION);
     expect(manifest.databaseDigest).toBe(slotDatabaseDigest(root, anchor));
     // Not the anchor's digest: that one describes the payload as delivered,
     // and the install transaction rewrote pages after delivery. A proof taken
@@ -245,19 +279,215 @@ describe("recovery anchor proves the restored database, not only the artifacts",
     expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
   });
 
-  it("reports absent persistence proof when the slot manifest carries no database digest", async () => {
+  it("reports absent persistence proof when a /2 manifest carries no database digest", async () => {
     const { root, anchor } = await installedRoot("dbproofless");
     const manifestPath = join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_SLOT_MANIFEST_NAME);
     const { databaseDigest: _dropped, ...withoutProof } = JSON.parse(
       readFileSync(manifestPath, "utf8"),
     );
-    writeFileSync(manifestPath, JSON.stringify(withoutProof));
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({ ...withoutProof, slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION }),
+    );
 
     // Artifacts and the stamped incarnation still agree, so only the missing
     // database proof can answer, and "no proof" is not "bytes disagree".
     const observed = await inspectedFault(root);
     expect(observed.verified).toBe(false);
     expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+  });
+});
+
+describe("recovery anchor composes versioned slot manifests", () => {
+  it("verifies a genuine pre-digest /1 slot through the historical integrity checks", async () => {
+    const { root, anchor } = await installedRoot("legacy-v1");
+    writeLegacySlotManifest(root, anchor);
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  it("accepts the historical /1 writer's unsorted artifact insertion order", async () => {
+    const root = temporaryDirectory("legacy-v1-order");
+    const installed = await installRecoveryAnchor(
+      request(root, {
+        payload: {
+          artifacts: [
+            { bytes: encoder.encode("last"), logicalPath: "artifacts/z-last.bin" },
+            { bytes: encoder.encode("first"), logicalPath: "artifacts/a-first.bin" },
+          ],
+          databaseBytes: restoredDatabaseBytes(),
+        },
+      }),
+    );
+    expect(installed.ok).toBe(true);
+    if (!installed.ok) throw new Error("unreachable");
+    expect(Object.keys(installed.anchor.payloadDigests)).toEqual([
+      "artifacts/z-last.bin",
+      "artifacts/a-first.bin",
+    ]);
+    writeLegacySlotManifest(root, installed.anchor);
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(true);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_RECOVERY_REQUIRED");
+  });
+
+  it("retains every historical /1 artifact, selection, SQLite, and binding check", async () => {
+    const cases: readonly {
+      readonly code: string;
+      readonly label: string;
+      readonly tamper: (root: string, anchor: RecoveryAnchorRecord) => void;
+    }[] = [
+      {
+        code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE",
+        label: "artifact digest",
+        tamper: (root, anchor) => {
+          writeFileSync(join(currentSlotPath(root, anchor), "artifacts", "one.bin"), "tampered");
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_DATABASE_MISMATCH",
+        label: "selected generation",
+        tamper: (root, anchor) => {
+          const stored = readSlotManifest(root, anchor.currentSlot);
+          writeFileSync(
+            slotManifestPath(root, anchor.currentSlot),
+            JSON.stringify({ ...stored, generationDigest: "ff".repeat(32) }),
+          );
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_SLOT_UNVERIFIABLE",
+        label: "SQLite open",
+        tamper: (root, anchor) => {
+          writeFileSync(
+            join(currentSlotPath(root, anchor), RECOVERY_ANCHOR_DATABASE_NAME),
+            "invalid",
+          );
+        },
+      },
+      {
+        code: "RECOVERY_ANCHOR_DATABASE_MISMATCH",
+        label: "recovery binding",
+        tamper: (root, anchor) => {
+          const stored = readSlotManifest(root, anchor.currentSlot);
+          writeFileSync(
+            slotManifestPath(root, anchor.currentSlot),
+            JSON.stringify({ ...stored, keyEpochRef: "6f".repeat(32) }),
+          );
+        },
+      },
+    ];
+    expect(cases).toHaveLength(4);
+
+    for (const hostile of cases) {
+      const { root, anchor } = await installedRoot(`legacy-v1-${hostile.label.replace(" ", "-")}`);
+      writeLegacySlotManifest(root, anchor);
+      hostile.tamper(root, anchor);
+      const observed = await inspectedFault(root);
+      expect(observed.verified, hostile.label).toBe(false);
+      expect(observed.code, hostile.label).toBe(hostile.code);
+      expect(observed.layer, hostile.label).toBe("RECOVERY_ANCHOR");
+    }
+  });
+
+  it("does not reinterpret a digest-bearing manifest as genuine /1", async () => {
+    const { root, anchor } = await installedRoot("digest-bearing-v1");
+    const stored = readSlotManifest(root, anchor.currentSlot);
+    writeFileSync(
+      slotManifestPath(root, anchor.currentSlot),
+      JSON.stringify({ ...stored, slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION }),
+    );
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  it.each(["", "A".repeat(64), "0".repeat(63), "g".repeat(64)])(
+    "refuses a /2 database digest that is not lowercase sha256: %j",
+    async (databaseDigest) => {
+      const { root, anchor } = await installedRoot(`malformed-v2-${databaseDigest.length}`);
+      const stored = readSlotManifest(root, anchor.currentSlot);
+      writeFileSync(
+        slotManifestPath(root, anchor.currentSlot),
+        JSON.stringify({
+          ...stored,
+          databaseDigest,
+          slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION,
+        }),
+      );
+
+      const observed = await inspectedFault(root);
+      expect(observed.verified).toBe(false);
+      expect(observed.code).toBe("RECOVERY_ANCHOR_PERSISTENCE_UNPROVEN");
+      expect(observed.layer).toBe("RECOVERY_ANCHOR");
+    },
+  );
+
+  it("reports unverifiable bytes for a well-formed /2 digest that disagrees with the database", async () => {
+    const { root, anchor } = await installedRoot("mismatched-v2");
+    const stored = readSlotManifest(root, anchor.currentSlot);
+    writeFileSync(
+      slotManifestPath(root, anchor.currentSlot),
+      JSON.stringify({
+        ...stored,
+        databaseDigest: "0".repeat(64),
+        slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION,
+      }),
+    );
+
+    const observed = await inspectedFault(root);
+    expect(observed.verified).toBe(false);
+    expect(observed.code).toBe("RECOVERY_ANCHOR_SLOT_UNVERIFIABLE");
+    expect(observed.layer).toBe("RECOVERY_ANCHOR");
+  });
+
+  it("keeps the anchor-selected /1 slot live when a /2 install crashes before the switch", async () => {
+    const root = temporaryDirectory("mixed-slot-switch");
+    const first = await installRecoveryAnchor(request(root));
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error("unreachable");
+    writeLegacySlotManifest(root, first.anchor);
+
+    const second = {
+      incarnationRef: "2b".repeat(32),
+      keyEpochRef: "5e".repeat(32),
+      restoreCommandId: "restore-command-mixed-v2",
+    };
+    await expect(
+      installRecoveryAnchor(
+        request(root, {
+          ...second,
+          injectFault: (point: string) => {
+            if (point === "SWITCH") throw new Error("injected fault at SWITCH");
+          },
+        }),
+      ),
+    ).rejects.toThrow("injected fault at SWITCH");
+
+    const midWindow = await inspectRecoveryAnchor(root);
+    expect(midWindow.ok).toBe(true);
+    if (!midWindow.ok || midWindow.outcome !== "INSPECTED") throw new Error("expected INSPECTED");
+    expect(midWindow.anchor.currentSlot).toBe(first.anchor.currentSlot);
+    expect(midWindow.anchor.targetSlot).not.toBe(midWindow.anchor.currentSlot);
+    expect(midWindow.slotVerified).toBe(true);
+    expect(readSlotManifest(root, midWindow.anchor.currentSlot)["slotManifestVersion"]).toBe(
+      LEGACY_RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+    expect(readSlotManifest(root, midWindow.anchor.targetSlot)["slotManifestVersion"]).toBe(
+      RECOVERY_SLOT_MANIFEST_VERSION,
+    );
+
+    const resumed = await installRecoveryAnchor(request(root, second));
+    expect(resumed.ok).toBe(true);
+    if (!resumed.ok) throw new Error("unreachable");
+    expect(resumed.anchor.currentSlot).toBe(midWindow.anchor.targetSlot);
+    expect((await inspectedFault(root)).verified).toBe(true);
   });
 });
 

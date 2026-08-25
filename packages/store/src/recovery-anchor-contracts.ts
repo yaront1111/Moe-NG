@@ -16,30 +16,7 @@ export const RECOVERY_ANCHOR_LAYER = "RECOVERY_ANCHOR" as const;
 export const RECOVERY_ANCHOR_FILE_NAME = "recovery-anchor.json" as const;
 export const RECOVERY_ANCHOR_SLOTS_DIR_NAME = "slots" as const;
 export const RECOVERY_ANCHOR_DATABASE_NAME = "database.sqlite" as const;
-
-/**
- * Each slot carries its OWN persistence proof, because a fresh reader after a
- * crash usually has to verify the slot the install was NOT writing. This
- * manifest is not the anchor and never carries the anchor's identity.
- */
 export const RECOVERY_ANCHOR_SLOT_MANIFEST_NAME = "slot-manifest.json" as const;
-export const RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION = "moe-recovery-slot/1" as const;
-
-export interface RecoveryAnchorSlotManifest {
-  /**
-   * Digest of the database file AS IT SITS IN THE SLOT, taken after the install
-   * transaction stamped it. This is deliberately not the anchor's
-   * `databaseDigest`, which describes the payload that was delivered: the
-   * stamp rewrites pages, so a proof over the delivered bytes would fail every
-   * honest slot and prove nothing about the file a reader actually opens.
-   */
-  readonly databaseDigest: string;
-  readonly generationDigest: string;
-  readonly incarnationRef: string;
-  readonly keyEpochRef: string;
-  readonly payloadDigests: Readonly<Record<string, string>>;
-  readonly slotManifestVersion: typeof RECOVERY_ANCHOR_SLOT_MANIFEST_VERSION;
-}
 
 export const RECOVERY_ANCHOR_STATES = Object.freeze(["PREPARED", "INSTALLED"] as const);
 export type RecoveryAnchorState = (typeof RECOVERY_ANCHOR_STATES)[number];

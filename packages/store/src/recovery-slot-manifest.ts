@@ -121,13 +121,18 @@ function safePayloadPath(value: string): boolean {
   return segments.every((segment) => segment.length > 0 && segment !== "." && segment !== "..");
 }
 
-function readPayloadDigests(value: unknown, requireNonempty: boolean): Readonly<Record<string, string>> | null {
+function readPayloadDigests(
+  value: unknown,
+  requireNonempty: boolean,
+  sortPaths: boolean,
+): Readonly<Record<string, string>> | null {
   if (!isPlainRecord(value)) return null;
   const keys = Reflect.ownKeys(value);
   if (requireNonempty && keys.length === 0) return null;
   if (keys.some((key) => typeof key !== "string" || !safePayloadPath(key))) return null;
   const copy: Record<string, string> = Object.create(null) as Record<string, string>;
-  for (const key of [...keys].sort() as string[]) {
+  const paths = keys as string[];
+  for (const key of sortPaths ? [...paths].sort() : paths) {
     const descriptor = Reflect.getOwnPropertyDescriptor(value, key);
     if (descriptor === undefined || !("value" in descriptor) || !descriptor.enumerable) return null;
     if (typeof descriptor.value !== "string" || !SHA256.test(descriptor.value)) return null;
@@ -139,11 +144,16 @@ function readPayloadDigests(value: unknown, requireNonempty: boolean): Readonly<
 function readCommon(
   source: Readonly<Record<string, unknown>>,
   requirePayload: boolean,
+  sortPayloadPaths: boolean,
 ): Readonly<Omit<LegacyRecoverySlotManifest, "slotManifestVersion">> | null {
   const generationDigest = source["generationDigest"];
   const incarnationRef = source["incarnationRef"];
   const keyEpochRef = source["keyEpochRef"];
-  const payloadDigests = readPayloadDigests(source["payloadDigests"], requirePayload);
+  const payloadDigests = readPayloadDigests(
+    source["payloadDigests"],
+    requirePayload,
+    sortPayloadPaths,
+  );
   if (!boundedIdentifier(generationDigest) || !boundedIdentifier(incarnationRef) ||
       !boundedIdentifier(keyEpochRef) || incarnationRef === keyEpochRef || payloadDigests === null) return null;
   return { generationDigest, incarnationRef, keyEpochRef, payloadDigests };
@@ -152,14 +162,17 @@ function readCommon(
 function readLegacy(value: unknown): LegacyRecoverySlotManifest | null {
   const source = exactDataRecord(value, V1_KEYS);
   if (source === null || source["slotManifestVersion"] !== LEGACY_RECOVERY_SLOT_MANIFEST_VERSION) return null;
-  const common = readCommon(source, true);
+  // Historical /1 wrote artifact keys in caller insertion order. Preserve that
+  // order so the canonical round-trip accepts every byte sequence that writer
+  // could genuinely emit; only the /2 writer introduced sorted paths.
+  const common = readCommon(source, true, false);
   return common === null ? null : Object.freeze({ ...common, slotManifestVersion: LEGACY_RECOVERY_SLOT_MANIFEST_VERSION });
 }
 
 function readDigestBound(value: unknown): DigestBoundRecoverySlotManifest | null {
   const source = exactDataRecord(value, V2_KEYS);
   if (source === null || source["slotManifestVersion"] !== RECOVERY_SLOT_MANIFEST_VERSION) return null;
-  const common = readCommon(source, false);
+  const common = readCommon(source, false, true);
   const databaseDigest = source["databaseDigest"];
   if (common === null || typeof databaseDigest !== "string" || !SHA256.test(databaseDigest)) return null;
   return Object.freeze({ databaseDigest, ...common, slotManifestVersion: RECOVERY_SLOT_MANIFEST_VERSION });

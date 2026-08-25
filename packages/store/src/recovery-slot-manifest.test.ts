@@ -125,6 +125,30 @@ describe("recovery slot manifest historical compatibility", () => {
     expect(sha256(after)).toBe(FIXTURE_SHA256);
     expect(Object.keys(JSON.parse(decoder.decode(after)) as object)).toEqual(V1_KEYS);
   });
+
+  it("preserves the artifact insertion order emitted by the historical /1 writer", () => {
+    const legacy = {
+      generationDigest: HEX_1,
+      incarnationRef: HEX_2,
+      keyEpochRef: HEX_3,
+      payloadDigests: { "z-last.json": HEX_4, "artifacts/state.json": HEX_1 },
+      slotManifestVersion: "moe-recovery-slot/1",
+    };
+    const decoded = decodeRecoverySlotManifest(bytes(legacy));
+    expect(decoded.ok && decoded.kind).toBe("LEGACY_V1");
+    if (!decoded.ok) throw new Error("expected historical insertion order to decode");
+    expect(Object.keys(decoded.manifest.payloadDigests)).toEqual([
+      "z-last.json",
+      "artifacts/state.json",
+    ]);
+
+    // /2 has one canonical writer order and must not inherit the legacy rule.
+    expectRefusal(
+      decodeRecoverySlotManifest(
+        bytes(v2Stored({ payloadDigests: legacy.payloadDigests })),
+      ),
+    );
+  });
 });
 
 describe("recovery slot manifest v2 encoding", () => {
