@@ -194,6 +194,7 @@ export interface GeneratedCommandBuilders {
   readonly ["effect.observe"]: CommandBuilder<"effect.observe">;
   readonly ["effect.reconcile"]: CommandBuilder<"effect.reconcile">;
   readonly ["escalation.decide"]: CommandBuilder<"escalation.decide">;
+  readonly ["events.resume"]: CommandBuilder<"events.resume">;
   readonly ["evidence.rerun"]: CommandBuilder<"evidence.rerun">;
   readonly ["evidence.run"]: CommandBuilder<"evidence.run">;
   readonly ["expansion.decline"]: CommandBuilder<"expansion.decline">;
@@ -292,6 +293,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["effect.observe"]: commandBuilderFor("effect.observe"),
     ["effect.reconcile"]: commandBuilderFor("effect.reconcile"),
     ["escalation.decide"]: commandBuilderFor("escalation.decide"),
+    ["events.resume"]: commandBuilderFor("events.resume"),
     ["evidence.rerun"]: commandBuilderFor("evidence.rerun"),
     ["evidence.run"]: commandBuilderFor("evidence.run"),
     ["expansion.decline"]: commandBuilderFor("expansion.decline"),
@@ -880,7 +882,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "50ffa4616290b6b79f4d3d3916b66975bc8f5763c313f05c9b7b26e0d3e53fc8";
+export const GENERATED_CONTRACT_DIGEST = "f110723782b6f8f9c5b3c976e3ecc1549167b448374d496f16e30ba8c873c23a";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

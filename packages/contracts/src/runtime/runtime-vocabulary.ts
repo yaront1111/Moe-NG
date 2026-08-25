@@ -88,7 +88,7 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
   "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
-  "escalation.decide", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
+  "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
   "goal.cancel", "goal.close", "goal.create", "goal.pause",
   "goal.reopen_as_revision", "goal.resume", "graph.approve", "graph.prepare_supersession",

@@ -73,6 +73,17 @@ describe("stdio tool schema generation", () => {
     const telemetry: readonly string[] = RUNTIME_TELEMETRY_KINDS;
     expect(STDIO_TOOL_ENTRIES.filter((entry) => telemetry.includes(entry.kind))).toEqual([]);
   });
+
+  it("publishes events.resume exactly once as a generated command", () => {
+    const matches = STDIO_TOOL_ENTRIES.filter((entry) => entry.kind === "events.resume");
+
+    expect(matches).toHaveLength(1);
+    expect(matches[0]).toMatchObject({ kind: "events.resume", surface: "command" });
+    expect(matches[0]?.tool.name).toBe("events_resume");
+    expect(matches[0]?.tool.inputSchema).toBe(entryFor("goal.create").tool.inputSchema);
+    expect(RUNTIME_QUERY_KINDS).not.toContain("events.resume");
+    expect(RUNTIME_TELEMETRY_KINDS).not.toContain("events.resume");
+  });
 });
 
 describe("stdio tool name mapping", () => {
