@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT } from "../http/affordance-read.js";
+import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "../operator-identity.js";
 import type { DemoNodeSpec } from "./demo-seed-plan.js";
 
 /**
@@ -188,7 +189,7 @@ export function readSeedConfig(env: Env): SeedConfigResult {
       goalId: value(env, "MOE_GOAL_ID") || DEFAULT_GOAL_SUBJECT,
       node,
       origin,
-      principalId: value(env, "MOE_PRINCIPAL_ID") || `${projectId}-operator`,
+      principalId: value(env, "MOE_PRINCIPAL_ID") || DEFAULT_OPERATOR_PRINCIPAL_ID,
       projectId,
       runId: value(env, "MOE_RUN_ID") || DEFAULT_RUN_SUBJECT,
       stopBeforeApproval: value(env, "MOE_SEED_STOP_BEFORE_APPROVAL") !== "",

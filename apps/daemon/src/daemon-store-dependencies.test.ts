@@ -217,6 +217,7 @@ describe("createStoreDependencies", () => {
           budgetAccountRef: "budget-1", goalId: "goal-1",
           planningRunRef: "run-1", witness: {},
         },
+        targetAggregateId: "goal-1",
       }),
       expectedVersion: 0,
     });
@@ -279,6 +280,7 @@ describe("createStoreDependencies", () => {
             budgetAccountRef: "budget-1", goalId: "goal-2",
             planningRunRef: "run-1", witness: {},
           },
+          targetAggregateId: "goal-2",
         }),
         expectedVersion: 0,
       },

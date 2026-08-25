@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, DEFAULT_SUBJECTS } from "../http/affordance-read.js";
+import { DEFAULT_OPERATOR_PRINCIPAL_ID } from "../operator-identity.js";
 import { readSeedConfig } from "./demo-seed-env.js";
 
 /**
@@ -55,8 +56,22 @@ describe("seed defaults follow the dev-subject convention", () => {
     // close against the ids the seed will commit under.
     expect(DEFAULT_SUBJECTS["approval.decide"]).toBe(read.config.runId);
     expect(DEFAULT_SUBJECTS["plan.propose"]).toBe(read.config.runId);
-    expect(DEFAULT_SUBJECTS["goal.create"]).toBe(read.config.goalId);
+    // Creation identity is daemon-minted on every READY surface; unlike close,
+    // it must never fall back to the seed's fixed development goal subject.
+    expect(DEFAULT_SUBJECTS["goal.create"]).toBeUndefined();
     expect(DEFAULT_SUBJECTS["goal.close"]).toBe(read.config.goalId);
+  });
+
+  it("uses the daemon's authenticated local operator when no principal override is supplied", () => {
+    const read = readSeedConfig(BASE_ENV);
+    expect(read.ok).toBe(true);
+    if (!read.ok) throw new Error("expected a config");
+    expect(read.config.principalId).toBe(DEFAULT_OPERATOR_PRINCIPAL_ID);
+
+    const overridden = readSeedConfig({ ...BASE_ENV, MOE_PRINCIPAL_ID: "operator-explicit" });
+    expect(overridden.ok).toBe(true);
+    if (!overridden.ok) throw new Error("expected an overridden config");
+    expect(overridden.config.principalId).toBe("operator-explicit");
   });
 
   it("still honors an explicit operator override for both ids", () => {
