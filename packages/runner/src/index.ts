@@ -254,6 +254,19 @@ export {
   type ObserveMacosPlatformInput,
 } from "./platform/macos/macos-observation.js";
 
+/**
+ * The project supervisor may open one fixed Node stack host inside the Windows
+ * Job boundary. The arbitrary process boundary and its proof constructors stay
+ * private; this is the only lifecycle-facing process seam.
+ */
+export {
+  PROJECT_STACK_ENVIRONMENT_KEYS,
+  PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
+  openWindowsProjectStackBoundary,
+  type WindowsProjectStackBoundaryOptions,
+  type WindowsProjectStackRequest,
+} from "./platform/windows/windows-project-stack-boundary.js";
+
 export {
   MAX_WORKSPACE_ENTRIES,
   RUNNER_WORKSPACE_ERROR_CODES,

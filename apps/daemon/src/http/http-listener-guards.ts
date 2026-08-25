@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
 import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
@@ -145,7 +146,11 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   // The handshake statuses. UNAVAILABLE is 503 like the other absent ports;
-  // METHOD_INVALID is 405 and PROTOCOL_UNSUPPORTED is a 400 client fault.
+  // METHOD_INVALID 405 and PROTOCOL_UNSUPPORTED / REQUEST_INVALID 400 are client
+  // faults. TOKEN_REJECTED is 401 - a rejected credential attempt, uniform across
+  // wrong, reused and expired so the status leaks nothing the code hides.
+  // MINT_FAILED is 500: a valid token was accepted but the daemon could not open
+  // the session, which is a server fault and not a caller-retryable one.
   if (code === "LISTENER_PAIRING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PAIRING_METHOD_INVALID") return 405;
   if (code === "LISTENER_PAIRING_PROTOCOL_UNSUPPORTED") return 400;
@@ -287,4 +292,17 @@ export function readEventResumeRequest(body: Uint8Array): {
     projection: draft["projection"],
     subscriberId: draft["subscriberId"],
   };
+}
+
+/**
+ * Constant-time equality via digest-then-compare, the same posture the session
+ * authenticator uses for private manager state: `timingSafeEqual` demands
+ * equal-length inputs, and hashing both first makes that hold with no
+ * length-dependent branch. An empty expected value matches nothing.
+ */
+export function secretMatchesConstantTime(presented: string, expected: string): boolean {
+  if (expected.length === 0) return false;
+  const left = createHash("sha256").update(presented, "utf8").digest();
+  const right = createHash("sha256").update(expected, "utf8").digest();
+  return timingSafeEqual(left, right);
 }
