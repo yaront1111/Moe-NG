@@ -373,7 +373,7 @@ describe("events.resume authenticated command", () => {
     });
   });
 
-  it("refuses changed bytes under one command identity at the durable store", async () => {
+  it("maps changed bytes under one command identity to the resume-command boundary", async () => {
     await withHarness(async (harness) => {
       const commandId = "resume-conflict";
       const bytes = commandBytes(commandId, harness.issuedCursor);
@@ -386,7 +386,10 @@ describe("events.resume authenticated command", () => {
       const refused = decode(await harness.port.dispatchCommandBytes(changed));
 
       expect(refused).toMatchObject({
-        refusal: { code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE" },
+        refusal: {
+          code: "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT",
+          layer: "DAEMON_EVENT_STREAM_RESUME",
+        },
         stage: "DISPATCH",
       });
       expect(cursorDoc(harness.database)).toBe(before);

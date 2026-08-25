@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
@@ -31,7 +31,10 @@ const V2_KEYS = Object.freeze([
   "payloadDigests",
   "slotManifestVersion",
 ]);
-const FIXTURE_PATH = new URL("../test-fixtures/recovery-slot-manifest-v1.json", import.meta.url);
+const FIXTURE_PATH = new URL(
+  "../../../tests/fixtures/store/recovery-slot-manifest-v1.json",
+  import.meta.url,
+);
 const FIXTURE_SHA256 = "56e2189cd32aabddddc0a2bccab54a0f0bef847fcabc7ad0d08d2a1771b25892";
 
 function fixtureBytes(): Uint8Array {
@@ -183,6 +186,13 @@ function storeSourceInventory(): { readonly files: string[]; readonly recoveryJs
 }
 
 describe("recovery fixture source inventory", () => {
+  it("keeps the historical fixture outside the publishable store package root", () => {
+    const packageRoot = fileURLToPath(new URL("../", import.meta.url));
+    const fixtureFromPackageRoot = relative(packageRoot, fileURLToPath(FIXTURE_PATH));
+    expect(fixtureFromPackageRoot.startsWith(`..${sep}`)).toBe(true);
+    expect(sha256(fixtureBytes())).toBe(FIXTURE_SHA256);
+  });
+
   it("leaves no recovery fixture JSON under the store production src tree", () => {
     const { files, recoveryJson } = storeSourceInventory();
     // An empty result must not be reachable by walking the wrong tree, by walking

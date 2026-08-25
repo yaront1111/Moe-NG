@@ -3,7 +3,8 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type { JsonObject, RuntimeCommandEnvelope } from "@moe/contracts";
 import {
-  DurableStoreError, type CommandDecisionResponse, type SqliteEventStore,
+  DurableStoreError, IdempotencyConflictError, type CommandDecisionResponse,
+  type SqliteEventStore,
 } from "@moe/store";
 import { readSubscriptionPage } from "@moe/store/subscriptions/subscription-read-page.js";
 import {
@@ -24,6 +25,8 @@ export const EVENT_STREAM_RESUME_PAYLOAD_KEYS = Object.freeze([
   "presentedCursor", "projection", "subscriberId",
 ] as const);
 export const EVENT_STREAM_RESUME_LAYER = "DAEMON_EVENT_STREAM_RESUME" as const;
+export const EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT_CODE =
+  "EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT" as const;
 export const EVENT_STREAM_RESUME_LEGACY_ROUTE_REFUSAL_CODE =
   "EVENT_STREAM_RESUME_COMMAND_REQUIRED" as const;
 
@@ -163,6 +166,13 @@ function eventIdOf(input: ResumeCommandInput): string {
 }
 
 function unwrapApplyRefusal(error: unknown): never {
+  if (error instanceof IdempotencyConflictError) {
+    return domainRefusal(
+      EVENT_STREAM_RESUME_IDEMPOTENCY_CONFLICT_CODE,
+      error.message,
+      409,
+    );
+  }
   if (error instanceof DurableStoreError && error.code === "PROJECTION_APPLY_FAILED"
     && error.cause instanceof ResumeApplyRefusal) {
     const { refusal } = error.cause;
