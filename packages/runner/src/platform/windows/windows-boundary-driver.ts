@@ -7,7 +7,7 @@ export function driveBrokerBoundary(
   binary: string,
   launch: Uint8Array,
   spawn: BrokerSpawn,
-  timeoutMs: number,
+  timeoutMs: number | null,
   cancelGraceMs: number,
 ): WindowsProcessBoundary | WindowsProcessUnknown {
   try {

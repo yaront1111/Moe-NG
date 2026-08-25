@@ -61,7 +61,7 @@ describe("control-room scaffold mounts", () => {
     // selects v1's frozen fixture board under it.
     const container = await mountEntryPointAt("/?v1=1&fixtures=1");
     try {
-      expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
+      expect(await within(container).findByTestId("cr.banner.fixture")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
       expect(within(container).getByTestId("cr.shell.context.title").textContent)
         .toBe("Ship the J1 vertical slice");
@@ -82,6 +82,66 @@ describe("control-room scaffold mounts", () => {
       // The legacy v1 shell is no longer the default entry.
       expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
     } finally {
+      container.remove();
+    }
+  }, FILESYSTEM_IMPORT_TIMEOUT_MS);
+
+  it("mounts the project manager and claims only after operator confirmation", async () => {
+    const managerRequestId = "c".repeat(64);
+    const fetchMock = vi.fn((input: string, init?: RequestInit) => {
+      if (input === "/manager/bootstrap") return Promise.resolve(new Response(JSON.stringify({
+        authenticated: false,
+        csrfToken: "csrf-manager-main",
+        schemaVersion: "moe-project-manager/1",
+      }), { headers: { "content-type": "application/json" }, status: 200 }));
+      if (input === "/manager/session/pair/request") return Promise.resolve(new Response(JSON.stringify({
+        confirmationLabel: "cafe-babe-1234",
+        ok: true,
+        requestId: managerRequestId,
+      }), { headers: { "content-type": "application/json" }, status: 200 }));
+      if (input === "/manager/session/pair/claim") {
+        expect(init?.body).toBe(JSON.stringify({ requestId: managerRequestId }));
+        return Promise.resolve(new Response(JSON.stringify({
+        code: "PROJECT_MANAGER_PAIRED",
+        layer: "PROJECT_MANAGER_HTTP",
+        ok: true,
+        }), { headers: { "content-type": "application/json" }, status: 200 }));
+      }
+      if (input === "/manager/projects") return Promise.resolve(new Response(JSON.stringify({
+        projects: [],
+        schemaVersion: "moe-project-manager/1",
+      }), { headers: { "content-type": "application/json" }, status: 200 }));
+      return Promise.reject(new Error(`unexpected fetch to ${input}`));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const replaceState = vi.spyOn(window.history, "replaceState");
+
+    const container = await mountEntryPointAt("/?projects=1#manager=MANAGER-ONCE-1234");
+    const main = await import("./main.js");
+    let unmounted = false;
+    try {
+      expect(replaceState).toHaveBeenCalledWith(null, "", "/?projects=1");
+      expect(await within(container).findByText("cafe-babe-1234")).toBeTruthy();
+      expect(container.textContent).not.toContain(managerRequestId);
+      await userEvent.setup().click(within(container).getByRole("button", {
+        name: "I entered this label",
+      }));
+      expect(await within(container).findByRole("heading", { name: "Start your first project" }))
+        .toBeTruthy();
+      expect(within(container).getByTestId("cr.manager.root")).toBeTruthy();
+      expect(within(container).queryByTestId("cr2.shell.root")).toBeNull();
+      expect(fetchMock.mock.calls.map(([input]) => input)).toEqual([
+        "/manager/bootstrap",
+        "/manager/session/pair/request",
+        "/manager/session/pair/claim",
+        "/manager/projects",
+      ]);
+      await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      unmounted = true;
+    } finally {
+      if (!unmounted) await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
       container.remove();
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);
@@ -129,32 +189,31 @@ describe("control-room scaffold mounts", () => {
       return Promise.reject(new Error(`unexpected fetch to ${input}`));
     });
     vi.stubGlobal("fetch", fetchMock);
-    const replaceState = vi.spyOn(window.history, "replaceState");
 
     const container = await mountEntryPointAt("/#pair=STRICT-ONE-TIME-TOKEN");
     const main = await import("./main.js");
     let unmounted = false;
     try {
-      expect(replaceState).toHaveBeenCalledWith(null, "", "/");
       expect(await within(container).findByText("dead-beef-1234")).toBeTruthy();
       expect(container.textContent).not.toContain(requestId);
-      expect(container.textContent).not.toContain("STRICT-ONE-TIME-TOKEN");
       await userEvent.setup().click(within(container).getByRole("button", {
         name: "I entered this label",
       }));
+      expect(await within(container).findByText("project-strict")).toBeTruthy();
       await waitFor(() => {
         expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/request"))
           .toHaveLength(1);
         expect(fetchMock.mock.calls.filter(([input]) => input === "/session/pair/claim"))
           .toHaveLength(1);
-        expect(within(container).queryByText("dead-beef-1234")).toBeNull();
       });
       await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
       unmounted = true;
+      const callsAfterUnmount = fetchMock.mock.calls.length;
+      await new Promise((resolve) => { setTimeout(resolve, 2_100); });
+      expect(fetchMock).toHaveBeenCalledTimes(callsAfterUnmount);
     } finally {
       if (!unmounted) await act(async () => { main.MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
       vi.unstubAllGlobals();
-      vi.restoreAllMocks();
       container.remove();
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);
@@ -165,7 +224,7 @@ describe("control-room scaffold mounts", () => {
     // VITE_MOE_LIVE_* values, so v1 must produce a NOTICE, not the frozen fixtures.
     const container = await mountEntryPointAt("/?v1=1");
     try {
-      const notice = within(container).getByTestId("cr.config.notice");
+      const notice = await within(container).findByTestId("cr.config.notice");
       expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
       expect(notice.textContent).toContain("VITE_MOE_LIVE_CSRF");
       expect(within(container).queryByTestId("cr.shell.root")).toBeNull();

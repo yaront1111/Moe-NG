@@ -35,8 +35,9 @@ use std::cell::{Cell, RefCell};
 
 use moe_windows_job_broker::{
     ByteChannel, Completed, Completion, DiagnosticNote, Inbound, Outbound, Outcome, Precondition,
-    ProtocolReason, ProtocolStage, RefusalLayer, Session, ShutdownSignal, Stopped, Unobserved,
-    Wiring, FRAME_HEADER_BYTES, PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
+    ProtocolReason, ProtocolStage, RefusalLayer, Session, ShutdownSignal, Stopped,
+    StoreLockAuthority, StoreLockError, StoreLockReason, Unobserved, Wiring, FRAME_HEADER_BYTES,
+    PROTOCOL_VERSION, REFUSED_PAYLOAD_BYTES,
 };
 use moe_windows_job_core::{
     CreatedProcess, NativeError, NativeOp, ProcessCalls, ProcessSpec, RawHandle, UnknownExit,
@@ -339,6 +340,34 @@ impl ProcessCalls for ScriptedCalls {
     }
 }
 
+struct ScriptedStoreLocks<'a> {
+    calls: &'a ScriptedCalls,
+    failure: Option<StoreLockError>,
+}
+
+struct ScriptedStoreGuard<'a> {
+    calls: &'a ScriptedCalls,
+}
+
+impl Drop for ScriptedStoreGuard<'_> {
+    fn drop(&mut self) {
+        self.calls.log.borrow_mut().push("drop-store-lock");
+    }
+}
+
+impl<'a> StoreLockAuthority for ScriptedStoreLocks<'a> {
+    type Guard = ScriptedStoreGuard<'a>;
+
+    fn acquire(&self, store_path: &str) -> Result<Self::Guard, StoreLockError> {
+        assert_eq!(store_path, "C:\\projects\\alpha\\store.sqlite");
+        self.calls.log.borrow_mut().push("acquire-store-lock");
+        match self.failure {
+            Some(error) => Err(error),
+            None => Ok(ScriptedStoreGuard { calls: self.calls }),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum PollStep {
     Pending,
@@ -521,6 +550,17 @@ fn a_launch_frame() -> Vec<u8> {
     )
 }
 
+fn a_project_stack_launch_frame() -> Vec<u8> {
+    let mut payload = text("C:\\projects\\alpha\\store.sqlite");
+    payload.extend_from_slice(&launch_payload(
+        LAUNCH_EXECUTABLE,
+        &[LAUNCH_ARGUMENT],
+        LAUNCH_CWD,
+        &[(LAUNCH_ENV_KEY, LAUNCH_ENV_VALUE)],
+    ));
+    frame(Inbound::ProjectStackLaunch.opcode(), &payload)
+}
+
 fn a_cancel_frame() -> Vec<u8> {
     frame(Inbound::Cancel.opcode(), &[])
 }
@@ -647,6 +687,93 @@ fn completion(outcome: &Outcome) -> Completion {
 // DoD 1 — STARTED is earned. Five proof arms, five tests, each asserting
 // ABSENCE FROM THE fd1 STREAM rather than that an error was returned.
 // ---------------------------------------------------------------------------
+
+#[test]
+fn project_store_lock_is_acquired_before_any_job_or_process_and_outlives_the_session() {
+    let calls = ScriptedCalls::healthy();
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut wired = wiring(a_project_stack_launch_frame());
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Natural, _)));
+    let log = calls.calls();
+    assert_eq!(log.first(), Some(&"acquire-store-lock"));
+    assert!(log.iter().position(|call| *call == "acquire-store-lock")
+        < log.iter().position(|call| *call == "create-job"));
+    assert!(log.iter().position(|call| *call == "acquire-store-lock")
+        < log.iter().position(|call| *call == "create-process"));
+    assert_eq!(calls.count("drop-store-lock"), 0, "the broker still owns the lock");
+
+    drop(locked);
+    assert_eq!(calls.count("drop-store-lock"), 1);
+}
+
+#[test]
+fn active_duplicate_store_refuses_at_store_lock_layer_without_creating_a_host() {
+    let calls = ScriptedCalls::healthy();
+    let locks = ScriptedStoreLocks {
+        calls: &calls,
+        failure: Some(StoreLockError::new(StoreLockReason::Contended, 32)),
+    };
+    let mut wired = wiring(a_project_stack_launch_frame());
+    let locked = Session::new(&calls, PROVIDERS, PATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::NotLaunched(_)));
+    assert_eq!(calls.count("create-job"), 0);
+    assert_eq!(calls.count("create-process"), 0);
+    assert_eq!(count_of(&wired.status.written, Outbound::Started), 0);
+    assert_eq!(
+        only_protocol_refusal(&wired.status.written),
+        (RefusalLayer::StoreLock.wire(), StoreLockReason::Contended.ordinal() as u16, 32),
+    );
+    let status = String::from_utf8_lossy(&wired.status.written);
+    assert!(!status.contains("C:\\projects\\alpha\\store.sqlite"));
+    assert!(!status.contains(LAUNCH_ENV_VALUE));
+}
+
+#[test]
+fn project_stack_has_no_provider_deadline_but_still_polls_control_every_slice() {
+    let provider_calls = ScriptedCalls::healthy();
+    provider_calls.waiting(&[WaitOutcome::TimedOut]);
+    let (provider, _) = run_with(
+        &provider_calls,
+        wiring(a_launch_frame()),
+        IMPATIENT_TIMEOUT_MS,
+    );
+    assert!(matches!(provider, Outcome::Ran(Stopped::TimedOut, _)));
+    assert_eq!(provider_calls.observed_wait_timeouts().first(), Some(&1));
+
+    let calls = ScriptedCalls::healthy();
+    calls.waiting(&[WaitOutcome::TimedOut, WaitOutcome::Signalled]);
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let control = Pipe::of(&a_project_stack_launch_frame()).with_poll_steps(&[PollStep::Pending]);
+    let mut wired = wiring_with_control(control);
+
+    let locked = Session::new(&calls, PROVIDERS, IMPATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Natural, _)));
+    assert_eq!(calls.observed_wait_timeouts(), vec![50, 50]);
+}
+
+#[test]
+fn project_stack_cancel_remains_bounded_by_the_control_poll_slice() {
+    let calls = patient_calls();
+    let locks = ScriptedStoreLocks { calls: &calls, failure: None };
+    let mut control = a_project_stack_launch_frame();
+    control.extend_from_slice(&a_cancel_frame());
+    let mut wired = wiring(control);
+
+    let locked = Session::new(&calls, PROVIDERS, IMPATIENT_TIMEOUT_MS)
+        .run_with_store_lock(&mut wired, &RunToCompletion, &locks);
+
+    assert!(matches!(locked.outcome(), Outcome::Ran(Stopped::Cancelled, _)));
+    assert_eq!(calls.observed_wait_timeouts().first(), Some(&50));
+    assert_eq!(calls.count("terminate-job"), 1);
+    assert_eq!(calls.count("accounting"), 1);
+}
 
 #[test]
 fn started_is_absent_when_the_exact_job_limit_flags_are_not_proved() {

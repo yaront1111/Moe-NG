@@ -36,14 +36,18 @@ use moe_windows_job_core::{
 };
 
 use crate::completion::{Completion, Outcome};
-use crate::control::{AcceptState, Accepted, LaunchRequest};
+use crate::control::AcceptState;
 use crate::diagnostics::{Diagnostic, DiagnosticNote};
-use crate::frames::{read_frame, ByteChannel, ChannelKind};
+use crate::frames::ByteChannel;
 use crate::launch::LaunchPlan;
-use crate::protocol::{ProtocolError, ProtocolReason};
+use crate::protocol::ProtocolError;
 use crate::refusal::Refused;
+use crate::session_accept::accept_launch;
 use crate::settle::settle;
 use crate::status::{Started, Status};
+use crate::store_lock::{
+    StoreLockAuthority, StoreLockError, StoreLockedOutcome, UnavailableStoreLocks,
+};
 use crate::watch::watch;
 
 /// Whether the helper has been asked to stop.
@@ -104,29 +108,66 @@ impl<'c, C: Win32Calls + ProcessCalls> Session<'c, C> {
         wiring: &mut Wiring<B>,
         shutdown: &S,
     ) -> Outcome {
+        self.run_with_store_lock(wiring, shutdown, &UnavailableStoreLocks).outcome()
+    }
+
+    /// Runs with the authority required by opcode 3 and returns the guard with
+    /// the outcome so the broker can retain it until its own final teardown.
+    pub fn run_with_store_lock<B, S, L>(
+        &self,
+        wiring: &mut Wiring<B>,
+        shutdown: &S,
+        locks: &L,
+    ) -> StoreLockedOutcome<L::Guard>
+    where
+        B: ByteChannel,
+        S: ShutdownSignal,
+        L: StoreLockAuthority,
+    {
         let mut accept = AcceptState::new();
         let request = match accept_launch(wiring, &mut accept) {
             Ok(Some(request)) => request,
-            Ok(None) => return Outcome::NoInstruction,
-            Err(refused) => return Outcome::NotLaunched(refused),
+            Ok(None) => return StoreLockedOutcome::new(Outcome::NoInstruction, None),
+            Err(refused) => return StoreLockedOutcome::new(Outcome::NotLaunched(refused), None),
         };
+        let guard = match request.store_path() {
+            Some(path) => match locks.acquire(path) {
+                Ok(guard) => Some(guard),
+                Err(error) => return StoreLockedOutcome::new(
+                    Outcome::NotLaunched(refuse_store_lock(wiring, error)), None,
+                ),
+            },
+            None => None,
+        };
+        let deadline_ms = request.store_path().is_none().then_some(self.timeout_ms);
         let plan = match LaunchPlan::from_request(&request, self.inherited) {
             Ok(plan) => plan,
-            Err(error) => return Outcome::NotLaunched(refuse_native(wiring, error)),
+            Err(error) => return StoreLockedOutcome::new(
+                Outcome::NotLaunched(refuse_native(wiring, error)), guard,
+            ),
         };
 
         // THE FIVE PROOF ARMS. Both constructors refuse unless every fact they
         // establish held, so reaching the line after them IS the proof.
         let job = match Job::create(self.calls) {
             Ok(job) => job,
-            Err(error) => return Outcome::NotLaunched(refuse_native(wiring, error)),
+            Err(error) => return StoreLockedOutcome::new(
+                Outcome::NotLaunched(refuse_native(wiring, error)), guard,
+            ),
         };
         let contained = match ContainedProcess::create(self.calls, &job, &plan.spec()) {
             Ok(contained) => contained,
-            Err(error) => return Outcome::NotLaunched(refuse_native(wiring, error)),
+            Err(error) => return StoreLockedOutcome::new(
+                Outcome::NotLaunched(refuse_native(wiring, error)), guard,
+            ),
         };
 
-        self.announce_and_settle(wiring, shutdown, &job, &contained, &mut accept)
+        StoreLockedOutcome::new(
+            self.announce_and_settle(
+                wiring, shutdown, &job, &contained, &mut accept, deadline_ms,
+            ),
+            guard,
+        )
     }
 
     /// Everything after all five arms are proved: announce, watch, settle.
@@ -137,53 +178,18 @@ impl<'c, C: Win32Calls + ProcessCalls> Session<'c, C> {
         job: &Job<'c, C>,
         contained: &ContainedProcess<'_, C>,
         accept: &mut AcceptState,
+        deadline_ms: Option<u32>,
     ) -> Outcome {
         let started = Started::new(contained.pid(), contained.creation_time());
         let _ = Status::Started(started).emit(&mut wiring.status);
 
         let (stopped, observed) =
-            watch(self.calls, wiring, shutdown, contained, accept, self.timeout_ms);
+            watch(self.calls, wiring, shutdown, contained, accept, deadline_ms);
         let completion = settle(self.calls, job, contained, stopped, observed);
         if let Completion::Completed(completed) = completion {
             let _ = Status::Completed(completed).emit(&mut wiring.status);
         }
         Outcome::Ran(stopped, completion)
-    }
-}
-
-/// Reads fd0 for the one launch this session serves.
-///
-/// `Ok(None)` is fd0 ENDING BEFORE IT ASKED FOR ANYTHING, and it deliberately
-/// writes no frame. A parent that says nothing has violated no rule, and there
-/// is nobody left on fd1 to hear a refusal about it — the peer that would read
-/// it is the peer that just closed. Every other failure IS a refusal and is
-/// published.
-fn accept_launch<B: ByteChannel>(
-    wiring: &mut Wiring<B>,
-    accept: &mut AcceptState,
-) -> Result<Option<LaunchRequest>, Refused> {
-    let frame = match read_frame(&mut wiring.control, ChannelKind::Control) {
-        Ok(frame) => frame,
-        Err(error) if error.reason() == ProtocolReason::FrameTruncated => {
-            note(wiring, DiagnosticNote::ChannelEnded, error.code());
-            return Ok(None);
-        }
-        Err(error) => return Err(refuse_protocol(wiring, error)),
-    };
-    match accept.accept(&frame) {
-        Ok(Accepted::Launch(request)) => {
-            note(wiring, DiagnosticNote::FrameAccepted, u32::from(frame.opcode()));
-            Ok(Some(request))
-        }
-        // Unreachable: `AcceptState` refuses a CANCEL before any launch as
-        // `FrameOutOfOrder`. Spelled out rather than `_` so a change to the
-        // accept state machine has to be decided here too. There is nothing to
-        // cancel and, critically, no Job to reap — none has been created.
-        Ok(Accepted::Cancel) => Err(refuse_protocol(
-            wiring,
-            ProtocolError::refused(ProtocolReason::FrameOutOfOrder),
-        )),
-        Err(error) => Err(refuse_protocol(wiring, error)),
     }
 }
 
@@ -198,6 +204,10 @@ pub(crate) fn refuse_protocol<B: ByteChannel>(
 /// Emits a native refusal on fd1 and notes it on fd2.
 pub(crate) fn refuse_native<B: ByteChannel>(w: &mut Wiring<B>, error: NativeError) -> Refused {
     publish(w, Refused::native(error))
+}
+
+fn refuse_store_lock<B: ByteChannel>(w: &mut Wiring<B>, error: StoreLockError) -> Refused {
+    publish(w, Refused::store_lock(error))
 }
 
 /// The one place a refusal reaches the wire.

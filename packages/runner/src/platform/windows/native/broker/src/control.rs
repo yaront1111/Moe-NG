@@ -1,9 +1,8 @@
 //! The CLOSED inbound control vocabulary on fd0, and the minimal accept state
 //! that makes sequence violations visible.
 //!
-//! EXACTLY TWO COMMANDS EXIST: one launch request shape and CANCEL. There is no
-//! catch-all variant and no open string command space — a command is an opcode
-//! byte that maps to [`Inbound`] or it maps to nothing at all.
+//! EXACTLY THREE COMMANDS EXIST: ordinary launch, CANCEL, and the curated
+//! project-stack launch whose payload also carries the store-lock path.
 //!
 //! # Why a state at all, when this task creates no process
 //!
@@ -33,21 +32,25 @@ pub enum Inbound {
     Launch,
     /// Stop what was launched. Terminal.
     Cancel,
+    /// Launch the reviewed project stack while holding its exclusive store lock.
+    ProjectStackLaunch,
 }
 
 impl Inbound {
     /// Every variant, in declaration order. The length is part of the type, so
     /// a new command cannot be added without listing it — and
-    /// `the_inbound_vocabulary_is_exactly_launch_and_cancel` round-trips every
+    /// `the_inbound_vocabulary_includes_the_curated_project_stack_launch` round-trips every
     /// entry through [`Self::opcode`] and [`Self::from_opcode`], so a command
     /// that is unreachable from the wire fails the suite.
-    pub const ALL: [Inbound; 2] = [Inbound::Launch, Inbound::Cancel];
+    pub const ALL: [Inbound; 3] =
+        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch];
 
     /// The frozen wire byte for this command.
     pub const fn opcode(self) -> u8 {
         match self {
             Self::Launch => 1,
             Self::Cancel => 2,
+            Self::ProjectStackLaunch => 3,
         }
     }
 
@@ -60,6 +63,7 @@ impl Inbound {
         match byte {
             1 => Some(Self::Launch),
             2 => Some(Self::Cancel),
+            3 => Some(Self::ProjectStackLaunch),
             _ => None,
         }
     }
@@ -76,6 +80,7 @@ pub struct LaunchRequest {
     argv: Vec<String>,
     cwd: String,
     environment: Vec<(String, String)>,
+    store_path: Option<String>,
 }
 
 impl LaunchRequest {
@@ -93,6 +98,11 @@ impl LaunchRequest {
 
     pub fn environment(&self) -> &[(String, String)] {
         &self.environment
+    }
+
+    /// Present only for opcode 3. Its contents are deliberately absent from Debug.
+    pub fn store_path(&self) -> Option<&str> {
+        self.store_path.as_deref()
     }
 }
 
@@ -167,17 +177,22 @@ impl AcceptState {
         match (self.phase, command) {
             // Spelled out rather than `_`, so adding a command forces a decision
             // here instead of silently inheriting this arm.
-            (Phase::Terminated, Inbound::Launch | Inbound::Cancel) => {
+            (Phase::Terminated, Inbound::Launch | Inbound::Cancel | Inbound::ProjectStackLaunch) => {
                 Err(ProtocolError::refused(ProtocolReason::FrameAfterTerminal))
             }
             (Phase::ExpectingLaunch, Inbound::Cancel) => {
                 Err(ProtocolError::refused(ProtocolReason::FrameOutOfOrder))
             }
-            (Phase::Launched, Inbound::Launch) => {
+            (Phase::Launched, Inbound::Launch | Inbound::ProjectStackLaunch) => {
                 Err(ProtocolError::refused(ProtocolReason::DuplicateLaunch))
             }
             (Phase::ExpectingLaunch, Inbound::Launch) => {
-                let request = decode_launch(frame.payload())?;
+                let request = decode_launch(frame.payload(), false)?;
+                self.phase = Phase::Launched;
+                Ok(Accepted::Launch(request))
+            }
+            (Phase::ExpectingLaunch, Inbound::ProjectStackLaunch) => {
+                let request = decode_launch(frame.payload(), true)?;
                 self.phase = Phase::Launched;
                 Ok(Accepted::Launch(request))
             }
@@ -192,13 +207,14 @@ impl AcceptState {
     }
 }
 
-/// executable, argv, cwd, environment — in that order, consumed exactly.
-fn decode_launch(payload: &[u8]) -> Result<LaunchRequest, ProtocolError> {
+/// Optional project store path, then executable, argv, cwd and environment.
+fn decode_launch(payload: &[u8], project_stack: bool) -> Result<LaunchRequest, ProtocolError> {
     let mut cursor = Cursor::new(payload);
+    let store_path = if project_stack { Some(cursor.text()?) } else { None };
     let executable = cursor.text()?;
     let argv = cursor.list()?;
     let cwd = cursor.text()?;
     let environment = cursor.pairs()?;
     cursor.finish()?;
-    Ok(LaunchRequest { executable, argv, cwd, environment })
+    Ok(LaunchRequest { executable, argv, cwd, environment, store_path })
 }

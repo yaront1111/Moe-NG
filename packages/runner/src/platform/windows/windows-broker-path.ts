@@ -16,10 +16,12 @@ import { unknownOutcome, type WindowsProcessUnknown } from "./windows-process-co
  * this module adds the two things that pin does NOT provide — finding the
  * artefact, and failing when it is absent.
  *
- * NO PREBUILT BINARY IS VENDORED. `dist/` is git-ignored (.gitignore:4), so the
- * artefact never enters a commit; it is produced by
+ * NO PREBUILT BINARY IS VENDORED IN THE SOURCE TREE. `dist/` is git-ignored
+ * (.gitignore:4), so the checkout artefact never enters a commit; it is produced by
  * `cargo build --locked --release --manifest-path <native>/Cargo.toml
- *  --target-dir dist/windows-job-native -p moe-windows-job-broker`.
+ *  --target-dir dist/windows-job-native -p moe-windows-job-broker`. The Windows
+ * pack copies those exact bytes to `packages/runner/bin/` in the extracted
+ * artifact, where this module can resolve them without a workspace marker.
  *
  * AN ABSENT BROKER FAILS. It does not fall back to a shell, to `taskkill`, or
  * to PID enumeration — none of those can prove a process tree dead, which is
@@ -33,6 +35,9 @@ export const BROKER_RELATIVE_PATH = join(
   "release",
   "moe-windows-job-broker.exe",
 );
+
+/** Relative to `packages/runner`, the stable location in an extracted artifact. */
+export const PACKAGED_BROKER_RELATIVE_PATH = join("bin", "moe-windows-job-broker.exe");
 
 /** The file that marks the workspace root. Searched for, never hop-counted. */
 const ROOT_MARKER = "pnpm-workspace.yaml";
@@ -84,17 +89,41 @@ function unresolved(message: string): WindowsProcessUnknown {
 /**
  * The absolute path of the built broker, or a typed UNKNOWN.
  *
- * `root` exists so a test can point at a directory that provably has no broker;
- * left out, the workspace root is discovered from this module's own location.
+ * `root` exists so a test can point at either a checkout root (identified by its
+ * workspace marker) or an extracted artifact root. Left out, this module checks
+ * only the checkout root structurally adjacent to its own runner package; if that
+ * exact root has no marker, it resolves from the package. An unrelated ancestor
+ * workspace is never launch authority.
+ * Exactly one layout is selected. A malformed expected path never falls through
+ * to the other layout.
  */
-export function resolveBrokerBinary(root?: string): string | WindowsProcessUnknown {
-  const discovered = root ?? findWorkspaceRoot(dirname(fileURLToPath(import.meta.url)));
-  if (discovered === null) {
-    return unresolved("the workspace root could not be located from this module");
+export function resolveBrokerBinary(
+  root?: string,
+  modulePath: string = fileURLToPath(import.meta.url),
+): string | WindowsProcessUnknown {
+  let binary: string;
+  let missing: string;
+  if (root !== undefined) {
+    const checkout = isFile(join(root, ROOT_MARKER));
+    binary = checkout
+      ? join(root, BROKER_RELATIVE_PATH)
+      : join(root, "packages", "runner", PACKAGED_BROKER_RELATIVE_PATH);
+    missing = checkout
+      ? "the release broker binary has not been built or is not a regular file"
+      : "the shipped broker is missing or is not a regular file";
+  } else {
+    const runnerPackage = resolve(dirname(modulePath), "..", "..", "..");
+    const adjacentRoot = resolve(runnerPackage, "..", "..");
+    if (isFile(join(adjacentRoot, ROOT_MARKER))) {
+      binary = join(adjacentRoot, BROKER_RELATIVE_PATH);
+      missing = "the release broker binary has not been built or is not a regular file";
+    } else {
+      binary = join(runnerPackage, PACKAGED_BROKER_RELATIVE_PATH);
+      missing = "the shipped broker is missing or is not a regular file";
+    }
   }
-  const binary = join(discovered, BROKER_RELATIVE_PATH);
   if (!isFile(binary)) {
-    return unresolved("the release broker binary has not been built");
+    return unresolved(missing);
   }
   return binary;
 }

@@ -123,7 +123,7 @@ function decodeRefused(payload: Uint8Array): BrokerStatus | WindowsProcessUnknow
   if (layer === null) {
     // Without a layer the ordinal is meaningless: descriptor reason 0 and
     // protocol reason 0 are different refusals.
-    return malformed("the refusal layer byte is not one of the broker's three layers");
+    return malformed("the refusal layer byte is not one of the broker's four layers");
   }
   const refusal: BrokerRefusal = {
     layer,

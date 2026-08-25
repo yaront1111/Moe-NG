@@ -100,9 +100,10 @@ function readArgv(argv: unknown): readonly string[] | WindowsProcessUnknown {
  */
 function readEnvironment(
   environment: unknown,
+  allowedNames: readonly string[],
 ): readonly (readonly [string, string])[] | WindowsProcessUnknown {
   try {
-    return readEnvironmentRecord(environment);
+    return readEnvironmentRecord(environment, allowedNames);
   } catch {
     return refuse(
       "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
@@ -113,6 +114,7 @@ function readEnvironment(
 
 function readEnvironmentRecord(
   environment: unknown,
+  allowedNames: readonly string[],
 ): readonly (readonly [string, string])[] | WindowsProcessUnknown {
   if (typeof environment !== "object" || environment === null || Array.isArray(environment)) {
     return refuse("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", "the environment is not a record");
@@ -132,7 +134,7 @@ function readEnvironmentRecord(
     // Windows collapses `PATH` and `Path` into one variable, so a record
     // carrying both is ambiguous about which value wins; refusing is the only
     // answer that does not silently pick one.
-    if (seen.has(upper) || !(ALLOWED_ENVIRONMENT_KEYS as readonly string[]).includes(upper)) {
+    if (seen.has(upper) || !allowedNames.includes(upper)) {
       return refuse(
         "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
         "an environment name is duplicated or outside the allowlist",
@@ -159,8 +161,21 @@ function readEnvironmentRecord(
  * by leaving a field out than by supplying a bad one.
  */
 export function encodeLaunchPayload(request: unknown): Uint8Array | WindowsProcessUnknown {
+  return encodeLaunchPayloadWithAllowedEnvironment(request, ALLOWED_ENVIRONMENT_KEYS);
+}
+
+/**
+ * Internal policy seam for another curated Windows boundary. Callers must pass
+ * a frozen reviewed roster; the provider entry above always keeps its original
+ * roster and cannot be widened through its public signature.
+ */
+export function encodeLaunchPayloadWithAllowedEnvironment(
+  request: unknown,
+  allowedNames: readonly string[],
+  injectedEnvironment: readonly (readonly [string, string])[] = [],
+): Uint8Array | WindowsProcessUnknown {
   try {
-    return encodeChecked(request);
+    return encodeChecked(request, allowedNames, injectedEnvironment);
   } catch {
     return refuse(
       "PROCESS_BOUNDARY_REQUEST_MALFORMED",
@@ -169,7 +184,11 @@ export function encodeLaunchPayload(request: unknown): Uint8Array | WindowsProce
   }
 }
 
-function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
+function encodeChecked(
+  request: unknown,
+  allowedNames: readonly string[],
+  injectedEnvironment: readonly (readonly [string, string])[],
+): Uint8Array | WindowsProcessUnknown {
   const snapshot = snapshotExactRecord(request, REQUEST_KEYS);
   if (snapshot === null) {
     return refuse(
@@ -195,11 +214,29 @@ function encodeChecked(request: unknown): Uint8Array | WindowsProcessUnknown {
       "the working directory is not a bounded local drive-absolute path",
     );
   }
-  const environment = readEnvironment(snapshot["environment"]);
+  const environment = readEnvironment(snapshot["environment"], allowedNames);
   if (!Array.isArray(environment)) {
     return environment as WindowsProcessUnknown;
   }
-  return sized(encode(executable, argv, cwd, environment));
+  const augmented = [...environment];
+  const seen = new Set(augmented.map(([name]) => name.toUpperCase()));
+  for (const [name, value] of injectedEnvironment) {
+    const upper = name.toUpperCase();
+    if (seen.has(upper) || !allowedNames.includes(upper)
+      || !isBoundedText(name, MAX_ARGUMENT_CHARS)
+      || !isBoundedText(value, MAX_ENVIRONMENT_VALUE_CHARS)) {
+      return refuse(
+        "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED",
+        "an injected environment entry is invalid or duplicates caller data",
+      );
+    }
+    seen.add(upper);
+    augmented.push([name, value]);
+  }
+  if (augmented.length > MAX_ENVIRONMENT_ENTRIES) {
+    return refuse("PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", "the environment is oversized");
+  }
+  return sized(encode(executable, argv, cwd, augmented));
 }
 
 function sized(payload: Uint8Array): Uint8Array | WindowsProcessUnknown {

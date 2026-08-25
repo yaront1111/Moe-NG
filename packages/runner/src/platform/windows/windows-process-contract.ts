@@ -21,7 +21,7 @@ export const WINDOWS_PROCESS_BOUNDARY_VERSION = "moe-windows-process-boundary/1"
 
 /**
  * Which layer refused. The first three are THIS side of the pipe; the last
- * three mirror the broker's `RefusalLayer` (native/broker/src/refusal.rs:39) so
+ * four mirror the broker's `RefusalLayer` (native/broker/src/refusal.rs:39) so
  * a refusal that crossed the wire keeps its identity instead of flattening into
  * "the boundary refused". Flattening is the defect this vocabulary exists to
  * prevent: a check migrating from TypeScript into the broker, or the reverse,
@@ -40,6 +40,8 @@ export const WINDOWS_PROCESS_LAYERS = Object.freeze([
   "BROKER_PROTOCOL",
   /** Broker `RefusalLayer::Native` — a Win32 call in the Job lifecycle core. */
   "BROKER_NATIVE",
+  /** Broker `RefusalLayer::StoreLock` — exclusive per-store ownership. */
+  "BROKER_STORE_LOCK",
 ] as const);
 export type WindowsProcessLayer = (typeof WINDOWS_PROCESS_LAYERS)[number];
 
@@ -53,7 +55,7 @@ export type WindowsProcessTruthClass = (typeof WINDOWS_PROCESS_TRUTH_CLASSES)[nu
  * same rail `ProtocolError` enforces on the Rust side.
  *
  * THERE IS ONE CODE FOR EVERY BROKER REFUSAL, deliberately. Re-spelling the
- * broker's three reason vocabularies here would duplicate authority that
+ * broker's four reason vocabularies here would duplicate authority that
  * already has a frozen definition and one owner; the exact reason travels as
  * `brokerReason`, whose ordinal is only meaningful paired with its layer.
  */

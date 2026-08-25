@@ -15,6 +15,7 @@ import {
 import type { InitInputs, InitResolution } from "./moe-init.js";
 
 const TARGET = "D:/demos/Moe Demo";
+const TARGET_PROJECT_ID = "moe-demo-b02c5451986d";
 
 /** The resolver's only nondeterministic input, pinned so a plan is comparable. */
 const fixedHex = (bytes: number): string => "7f".repeat(bytes);
@@ -54,12 +55,14 @@ describe("planInit produces the config the start command reads back", () => {
     expect(planned().credential).toBe(fixedHex(32));
   });
 
-  it("derives the project id from the target directory leaf", () => {
-    expect(planned().projectId).toBe("moe-demo");
+  it("derives a readable, collision-resistant project id from the canonical Windows path", () => {
+    expect(planned().projectId).toMatch(/^moe-demo-[0-9a-f]{12}$/u);
+    expect(planned({ targetDir: "D:/other/Moe Demo" }).projectId).not.toBe(planned().projectId);
+    expect(planned({ targetDir: "d:\\DEMOS\\Moe Demo" }).projectId).toBe(planned().projectId);
   });
 
-  it("falls back to a fixed project id when the leaf sanitizes to nothing", () => {
-    expect(planned({ targetDir: "D:/___" }).projectId).toBe("moe-local");
+  it("keeps the collision suffix when the leaf sanitizes to nothing", () => {
+    expect(planned({ targetDir: "D:/___" }).projectId).toMatch(/^moe-local-[0-9a-f]{12}$/u);
   });
 
   it("writes exactly one file, the config, with the planned bytes", () => {
@@ -70,7 +73,7 @@ describe("planInit produces the config the start command reads back", () => {
     expect(file.contents.endsWith("\n")).toBe(true);
     expect(JSON.parse(file.contents)).toEqual({
       credential: fixedHex(32),
-      projectId: "moe-demo",
+      projectId: TARGET_PROJECT_ID,
       schemaVersion: "moe-cli-config/1",
       storePath: plan.storePath,
     });
@@ -101,7 +104,7 @@ describe("planInit refusals name the exact fault", () => {
 
   it("accepts a non-empty target with --force", () => {
     expect(planned({ force: true, probe: { entries: ["notes.txt"], writable: true } }).projectId)
-      .toBe("moe-demo");
+      .toBe(TARGET_PROJECT_ID);
   });
 
   it("refuses an existing config even with --force, and names the file", () => {
@@ -132,7 +135,7 @@ describe("parseMoeConfig reads back what planInit wrote", () => {
     if (!parsed.ok) throw new Error(`expected a config, got ${parsed.code}`);
     expect(parsed.config).toEqual({
       credential: fixedHex(32),
-      projectId: "moe-demo",
+      projectId: TARGET_PROJECT_ID,
       schemaVersion: "moe-cli-config/1",
       storePath: planned().storePath,
     });

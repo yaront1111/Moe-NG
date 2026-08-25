@@ -3,9 +3,9 @@
 //!
 //! # Why the layer has to be ON THE WIRE
 //!
-//! THREE LAYERS CAN REFUSE. Descriptor acquisition (`descriptors.rs`), the
-//! protocol (`protocol.rs`), and the native core, whose failures reach the wire
-//! through the session sibling. Each numbers its own reasons from zero, so
+//! FOUR LAYERS CAN REFUSE. Descriptor acquisition (`descriptors.rs`), the
+//! protocol (`protocol.rs`), the native core, and exclusive store ownership.
+//! Each numbers its own reasons from zero, so
 //! `DescriptorReason::BlockAbsent` and `ProtocolReason::VersionMismatch` are
 //! BOTH ordinal 0. A refusal frame carrying only a number is therefore
 //! ambiguous, and a reader could not tell a hostile parent's bad descriptor
@@ -30,11 +30,12 @@ use moe_windows_job_core::{NativeError, NativeOp};
 
 use crate::descriptors::DescriptorError;
 use crate::protocol::ProtocolError;
+use crate::store_lock::StoreLockError;
 
 /// layer, reason ordinal, numeric code.
 pub const REFUSED_PAYLOAD_BYTES: usize = 1 + 2 + 4;
 
-/// Which of the broker's three refusing layers spoke. Closed, no catch-all.
+/// Which of the broker's four refusing layers spoke. Closed, no catch-all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RefusalLayer {
     /// Descriptor acquisition refused: the parent's `lpReserved2` block.
@@ -43,12 +44,18 @@ pub enum RefusalLayer {
     Protocol,
     /// A Win32 call in the native core failed.
     Native,
+    /// The curated project store could not be owned exclusively.
+    StoreLock,
 }
 
 impl RefusalLayer {
     /// Every variant, in declaration order. The length is part of the type.
-    pub const ALL: [RefusalLayer; 3] =
-        [RefusalLayer::Descriptor, RefusalLayer::Protocol, RefusalLayer::Native];
+    pub const ALL: [RefusalLayer; 4] = [
+        RefusalLayer::Descriptor,
+        RefusalLayer::Protocol,
+        RefusalLayer::Native,
+        RefusalLayer::StoreLock,
+    ];
 
     /// The frozen wire byte. Deliberately 1-based: a zero byte is then an
     /// unrecognised layer rather than an accidentally-valid one.
@@ -57,6 +64,7 @@ impl RefusalLayer {
             Self::Descriptor => 1,
             Self::Protocol => 2,
             Self::Native => 3,
+            Self::StoreLock => 4,
         }
     }
 
@@ -67,6 +75,7 @@ impl RefusalLayer {
             1 => Some(Self::Descriptor),
             2 => Some(Self::Protocol),
             3 => Some(Self::Native),
+            4 => Some(Self::StoreLock),
             _ => None,
         }
     }
@@ -110,6 +119,15 @@ impl Refused {
         Self {
             layer: RefusalLayer::Native,
             reason: ordinal(position.unwrap_or(NativeOp::ALL.len())),
+            code: error.code(),
+        }
+    }
+
+    /// A project store-lock refusal, with no path-bearing field available.
+    pub fn store_lock(error: StoreLockError) -> Self {
+        Self {
+            layer: RefusalLayer::StoreLock,
+            reason: ordinal(error.reason().ordinal()),
             code: error.code(),
         }
     }

@@ -55,6 +55,22 @@ describe("parseCliArgv accepts the shipped roster", () => {
     });
   });
 
+  it("admits an explicit non-secret operator stdin pipe for start", () => {
+    expect(accepted(["start", "demo", "--operator-stdin"])).toEqual({
+      command: "start", ok: true, operatorStdin: true, targetDir: "demo",
+    });
+  });
+
+  it("accepts the project manager as an argument-free command", () => {
+    expect(accepted(["projects"])).toEqual({ command: "projects", ok: true });
+  });
+
+  it("admits an explicit non-secret operator stdin pipe for the manager", () => {
+    expect(accepted(["projects", "--operator-stdin"])).toEqual({
+      command: "projects", ok: true, operatorStdin: true,
+    });
+  });
+
   it("answers --version and the bare version word alike", () => {
     expect(accepted(["--version"]).command).toBe("version");
     expect(accepted(["-v"]).command).toBe("version");
@@ -90,6 +106,11 @@ describe("parseCliArgv refuses by name", () => {
     const parsed = refused(["start", "--force"]);
     expect(parsed.code).toBe(MOE_CLI_UNKNOWN_OPTION);
     expect(parsed.detail).toBe("--force");
+  });
+
+  it("refuses arguments and options on the project manager command", () => {
+    expect(refused(["projects", "demo"]).code).toBe(MOE_CLI_TOO_MANY_ARGUMENTS);
+    expect(refused(["projects", "--port=7"]).code).toBe(MOE_CLI_UNKNOWN_OPTION);
   });
 
   it("refuses a second positional argument rather than silently ignoring it", () => {

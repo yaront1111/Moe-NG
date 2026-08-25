@@ -8,7 +8,7 @@
 //! # Why the wait is sliced
 //!
 //! The session is single-threaded by construction, so a CANCEL can only be
-//! noticed between waits. Waiting for the whole instructed timeout in one call
+//! noticed between waits. Waiting for a whole finite provider timeout in one call
 //! would make four of the five termination paths unreachable; polling fd0 in a
 //! tight loop would burn a core. A bounded slice is the honest middle: it caps
 //! how long an instruction waits to be seen without turning the wait into a spin.
@@ -27,7 +27,7 @@
 //! LAUNCH and then holds fd0 open and silent — which is what an ordinary
 //! provider run looks like — would strand this loop there, and a child exiting
 //! meanwhile would not be observed until the parent wrote or closed. The run
-//! then died at the instructed timeout with the child's real exit unseen.
+//! then died at its finite deadline with the child's real exit unseen.
 //!
 //! So this loop uses `poll_read` and NEVER `read`. Its three answers are kept
 //! distinct here: `Pending` is a silent open fd0 and continues the loop with no
@@ -71,14 +71,16 @@ pub(crate) fn watch<C, B, S>(
     shutdown: &S,
     contained: &ContainedProcess<'_, C>,
     accept: &mut AcceptState,
-    timeout_ms: u32,
+    deadline_ms: Option<u32>,
 ) -> (Stopped, Option<Waited>)
 where
     C: Win32Calls + ProcessCalls,
     B: ByteChannel,
     S: ShutdownSignal,
 {
-    let mut remaining = timeout_ms;
+    // Project stacks pass no deadline: the same bounded wait slices keep
+    // CANCEL, fd0 closure and helper shutdown responsive for their full life.
+    let mut remaining = deadline_ms;
     // BUILT ONCE, OUTSIDE THE LOOP. See the module docs: a per-turn accumulator
     // would lose the half of a frame that arrived in the previous turn.
     let mut frames = PolledFrames::on(ChannelKind::Control);
@@ -89,7 +91,8 @@ where
             return (Stopped::Shutdown, None);
         }
 
-        let slice = remaining.min(CONTROL_POLL_SLICE_MS);
+        let slice = remaining
+            .map_or(CONTROL_POLL_SLICE_MS, |left| left.min(CONTROL_POLL_SLICE_MS));
         let Ok(waited) = wait_for_process(calls, contained, slice) else {
             return (Stopped::WaitFailed, None);
         };
@@ -102,9 +105,11 @@ where
             return (Stopped::WaitFailed, Some(waited));
         }
 
-        remaining = remaining.saturating_sub(slice);
-        if remaining == 0 {
-            return (Stopped::TimedOut, Some(waited));
+        if let Some(left) = remaining.as_mut() {
+            *left = left.saturating_sub(slice);
+            if *left == 0 {
+                return (Stopped::TimedOut, Some(waited));
+            }
         }
         if let Some(stopped) = take_instruction(wiring, &mut frames, accept) {
             return (stopped, Some(waited));

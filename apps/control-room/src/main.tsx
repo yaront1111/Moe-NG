@@ -1,19 +1,29 @@
-import { StrictMode } from "react";
-import type { JSX } from "react";
+/// <reference types="vite/client" />
+
+import { lazy, StrictMode, Suspense } from "react";
+import type { ComponentType, JSX } from "react";
 import { createRoot } from "react-dom/client";
 import type { Root } from "react-dom/client";
 
-import { resolveLiveSetupFromBuild } from "./live/live-app.js";
+import { gateDevelopmentQuery } from "./entry-route.js";
 import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
 import type { LiveHandshakeResult } from "./live/live-handshake.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
-import { resolveShellMode } from "./shell-mode.js";
-import { ShellModeRoot } from "./shell-mode-view.js";
 import { CordumApp } from "./v2/cordum-app.js";
+import { ProjectManagerApp } from "./v2/projects/project-manager-app.js";
+import { connectProjectManager } from "./v2/projects/project-manager-client.js";
+import type { ProjectManagerConnection } from "./v2/projects/project-manager-client.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
+
+const DEVELOPMENT_LEGACY_MODULE_PATH = "./development-legacy-root.js";
+const DevelopmentLegacyRoot = import.meta.env.DEV
+  ? lazy(async () => await import(
+    /* @vite-ignore */ DEVELOPMENT_LEGACY_MODULE_PATH
+  ) as { default: ComponentType<{ readonly search: string }> })
+  : null;
 
 /**
  * The application's one real time source. This is the composition root, and it is the
@@ -36,53 +46,83 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
 
 /**
  * The Cordum v2 rebuild is the DEFAULT front door: it acquires its credential at
- * RUNTIME through the daemon handshake (no baked secret), and `?fixtures=1` renders
- * its frozen design view under a banner. The legacy v1 shell-mode board is demoted
- * behind an explicit `?v1=1`, kept so its build-time LIVE / FIXTURES / CONFIG_NOTICE
- * arms and the daemon e2e lane still have a home while the rebuild finishes.
+ * RUNTIME through the daemon handshake (no baked secret). Development-only query
+ * switches retain the frozen design view and legacy v1 board for local evidence;
+ * production always mounts this v2 front door.
  *
- * No URL flag carries a secret; v2 credentials arrive via the handshake and v1's
- * via Vite env into headers only. See `shell-mode.ts` for the v1 decision.
+ * No query or fragment carries authority. Legacy authority-bearing locations are
+ * scrubbed before React, v2 credentials arrive only in the approved claim response,
+ * and v1 credentials travel in headers only.
+ * See `shell-mode.ts` for the v1 decision.
  */
-function chooseRoot(
-  search: string,
+function chooseRoot(search: string, managerMode: boolean,
   liveSetup: Promise<LiveHandshakeResult> | undefined,
-): JSX.Element {
-  if (new URLSearchParams(search).get("v1") === "1") {
-    const setup = resolveLiveSetupFromBuild();
-    const mode = resolveShellMode(search, setup);
-    return <ShellModeRoot mode={mode} setup={setup} />;
+  managerSetup: Promise<ProjectManagerConnection> | undefined): JSX.Element {
+  if (managerMode && managerSetup !== undefined)
+    return <ProjectManagerApp prepared={managerSetup} />;
+  if (import.meta.env.DEV && DevelopmentLegacyRoot !== null
+    && new URLSearchParams(search).get("v1") === "1") {
+    return (
+      <Suspense fallback={<p>Loading development shell…</p>}>
+        <DevelopmentLegacyRoot search={search} />
+      </Suspense>
+    );
   }
   return <CordumApp liveSetup={liveSetup} search={search} />;
 }
 
 /**
  * Starts one browser-created pairing request before React can replay a lifecycle.
- * Both StrictMode effect passes observe this same promise, while fixtures and the
- * legacy v1 route retain their exact pre-pairing composition.
+ * The resulting promise is safe for both StrictMode effect passes to observe;
+ * its request id remains closure-private until the operator-approved claim.
  */
-function prepareV2LiveSetup(search: string): Promise<LiveHandshakeResult> | undefined {
+function prepareV2LiveSetup(
+  search: string,
+  managerMode: boolean,
+): Promise<LiveHandshakeResult> | undefined {
   const params = new URLSearchParams(search);
-  if (params.get("v1") === "1" || params.get("fixtures") === "1") return undefined;
+  if (managerMode || (import.meta.env.DEV
+    && (params.get("v1") === "1" || params.get("fixtures") === "1"))) return undefined;
   return resolveLiveSetupFromHandshake({
     fetchImpl: (input, init) => fetch(input, init),
   });
 }
 
+/** Prepares the manager cookie session once; no manager secret enters React state. */
+function prepareProjectManager(managerMode: boolean): Promise<ProjectManagerConnection> | undefined {
+  if (!managerMode) return undefined;
+  return connectProjectManager({
+    fetchImpl: (input, init) => fetch(input, init),
+  });
+}
+
+/** The fixed manager host makes the plain origin itself the route selector. */
+export function isProjectManagerLocation(
+  hostname: string,
+  search: string,
+  development: boolean,
+): boolean {
+  return hostname === "127.0.0.2"
+    || (development && new URLSearchParams(search).get("projects") === "1");
+}
+
 /** Mounts the application into a caller-supplied container and returns its root. */
 export function mountControlRoom(container: Element, clock: Clock = BROWSER_CLOCK): Root {
-  const search = globalThis.location?.search ?? "";
-  // Fragments carry no authority. Remove any stale fragment before preparing
-  // the request or constructing renderable state, without parsing or retaining it.
+  const rawSearch = globalThis.location?.search ?? "";
+  const search = gateDevelopmentQuery(rawSearch, import.meta.env.DEV);
+  // Fragments carry no authority in this release. Scrub any stale fragment
+  // without parsing or retaining it before creating renderable state.
   if (window.location.hash !== "") {
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
   }
-  const liveSetup = prepareV2LiveSetup(search);
+  const managerMode = isProjectManagerLocation(window.location.hostname, search, import.meta.env.DEV);
+  const liveSetup = prepareV2LiveSetup(search, managerMode);
+  const managerSetup = prepareProjectManager(managerMode);
   const root = createRoot(container);
   root.render(
     <StrictMode>
       <ClockProvider clock={clock}>
-        {chooseRoot(search, liveSetup)}
+        {chooseRoot(search, managerMode, liveSetup, managerSetup)}
       </ClockProvider>
     </StrictMode>,
   );
@@ -97,5 +137,5 @@ if (container === null) {
     `CONTROL_ROOM_ROOT_MISSING: the served document must supply #${CONTROL_ROOM_ROOT_ELEMENT_ID}`,
   );
 }
-/** Exported so integration tests can dispose the production root and its live polling. */
+/** The production mount, exported so integration tests can dispose live polling. */
 export const MOUNTED_CONTROL_ROOM_ROOT = mountControlRoom(container);
